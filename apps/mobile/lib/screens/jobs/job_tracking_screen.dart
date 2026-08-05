@@ -9,19 +9,19 @@ import 'package:latlong2/latlong.dart';
 
 class JobTrackingScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
+  final DocumentSnapshot zone;
 
   const JobTrackingScreen({
     super.key,
     required this.campaign,
+    required this.zone,
   });
 
   @override
-  State<JobTrackingScreen> createState() =>
-      _JobTrackingScreenState();
+  State<JobTrackingScreen> createState() => _JobTrackingScreenState();
 }
 
-class _JobTrackingScreenState
-    extends State<JobTrackingScreen> {
+class _JobTrackingScreenState extends State<JobTrackingScreen> {
   final MapController _mapController = MapController();
 
   StreamSubscription<Position>? _positionSubscription;
@@ -43,8 +43,7 @@ class _JobTrackingScreenState
 
   int _pointsSinceLastSave = 0;
 
-  late final DocumentReference<Map<String, dynamic>>
-      _routeReference;
+  late final DocumentReference<Map<String, dynamic>> _routeReference;
 
   @override
   void initState() {
@@ -52,7 +51,7 @@ class _JobTrackingScreenState
 
     _routeReference = FirebaseFirestore.instance
         .collection('campaignRoutes')
-        .doc(widget.campaign.id);
+        .doc(widget.zone.id);
 
     _initialize();
   }
@@ -65,35 +64,41 @@ class _JobTrackingScreenState
 
   Future<void> _initialize() async {
     try {
-      final campaignSnapshot =
-          await widget.campaign.reference.get();
+      final user = FirebaseAuth.instance.currentUser;
 
-      if (!campaignSnapshot.exists) {
-        throw Exception(
-          "This campaign no longer exists.",
-        );
+      if (user == null) {
+        throw Exception('You must be logged in.');
       }
 
-      final campaignData =
-          campaignSnapshot.data() as Map<String, dynamic>;
+      final zoneSnapshot = await widget.zone.reference.get();
 
-      final serviceArea = _parsePoints(
-        campaignData['serviceArea'],
-      );
+      if (!zoneSnapshot.exists) {
+        throw Exception('This zone no longer exists.');
+      }
 
-      final routeSnapshot =
-          await _routeReference.get();
+      final zoneData = zoneSnapshot.data() as Map<String, dynamic>;
+
+      final assignedScalerId = zoneData['assignedScalerId']?.toString();
+
+      if (assignedScalerId != user.uid) {
+        throw Exception('This zone is not assigned to you.');
+      }
+
+      final serviceArea = _parsePoints(zoneData['serviceArea']);
+
+      final routeSnapshot = await _routeReference.get();
 
       final existingRoute = routeSnapshot.exists
-          ? _parsePoints(
-              routeSnapshot.data()?['points'],
-            )
+          ? _parsePoints(routeSnapshot.data()?['points'])
           : <LatLng>[];
 
-      final routeIsSimulated =
-          routeSnapshot.data()?['simulated'] == true;
+      final routeIsSimulated = routeSnapshot.data()?['simulated'] == true;
 
-      if (!mounted) return;
+      final routeTracking = routeSnapshot.data()?['tracking'] == true;
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _serviceArea = serviceArea;
@@ -102,32 +107,44 @@ class _JobTrackingScreenState
           ..clear()
           ..addAll(existingRoute);
 
-        _routeIsSimulated =
-            routeIsSimulated;
+        _routeIsSimulated = routeIsSimulated;
 
-        if (_routeIsSimulated &&
-            _routePoints.isNotEmpty) {
-          _simulatedPosition =
-              _routePoints.last;
+        _tracking = routeTracking;
+
+        if (_routeIsSimulated && _routePoints.isNotEmpty) {
+          _simulatedPosition = _routePoints.last;
         }
 
         _loading = false;
       });
+
+      if (_serviceArea.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+
+          try {
+            _mapController.move(_calculateCenter(_serviceArea), 16);
+          } catch (_) {
+            // Map may not yet be attached.
+          }
+        });
+      }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
-        _errorMessage =
-            "Unable to load tracking data: $e";
+        _errorMessage = 'Unable to load tracking data: $e';
 
         _loading = false;
       });
     }
   }
 
-  List<LatLng> _parsePoints(
-    dynamic rawPoints,
-  ) {
+  List<LatLng> _parsePoints(dynamic rawPoints) {
     if (rawPoints is! List) {
       return [];
     }
@@ -139,45 +156,30 @@ class _JobTrackingScreenState
         continue;
       }
 
-      final latitude =
-          item['latitude'];
+      final latitude = item['latitude'];
 
-      final longitude =
-          item['longitude'];
+      final longitude = item['longitude'];
 
-      if (latitude is num &&
-          longitude is num) {
-        points.add(
-          LatLng(
-            latitude.toDouble(),
-            longitude.toDouble(),
-          ),
-        );
+      if (latitude is num && longitude is num) {
+        points.add(LatLng(latitude.toDouble(), longitude.toDouble()));
       }
     }
 
     return points;
   }
 
-  LatLng _calculateCenter(
-    List<LatLng> points,
-  ) {
+  LatLng _calculateCenter(List<LatLng> points) {
     if (points.isEmpty) {
-      return const LatLng(
-        39.2904,
-        -76.6122,
-      );
+      return const LatLng(39.2904, -76.6122);
     }
 
     double totalLatitude = 0;
     double totalLongitude = 0;
 
     for (final point in points) {
-      totalLatitude +=
-          point.latitude;
+      totalLatitude += point.latitude;
 
-      totalLongitude +=
-          point.longitude;
+      totalLongitude += point.longitude;
     }
 
     return LatLng(
@@ -186,17 +188,28 @@ class _JobTrackingScreenState
     );
   }
 
+  String _zoneName() {
+    final data = widget.zone.data();
+
+    if (data is Map<String, dynamic>) {
+      return data['zoneName']?.toString() ?? 'Assigned Zone';
+    }
+
+    return 'Assigned Zone';
+  }
+
   Future<bool> _checkLocationPermission() async {
-    final serviceEnabled =
-        await Geolocator.isLocationServiceEnabled();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
     if (!serviceEnabled) {
-      if (!mounted) return false;
+      if (!mounted) {
+        return false;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Location services are disabled. Turn on location services and try again.",
+            'Location services are disabled. Turn on location services and try again.',
           ),
         ),
       );
@@ -204,38 +217,33 @@ class _JobTrackingScreenState
       return false;
     }
 
-    var permission =
-        await Geolocator.checkPermission();
+    var permission = await Geolocator.checkPermission();
 
-    if (permission ==
-        LocationPermission.denied) {
-      permission =
-          await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
     }
 
-    if (permission ==
-        LocationPermission.denied) {
-      if (!mounted) return false;
+    if (permission == LocationPermission.denied) {
+      if (!mounted) {
+        return false;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Location permission was denied.",
-          ),
-        ),
+        const SnackBar(content: Text('Location permission was denied.')),
       );
 
       return false;
     }
 
-    if (permission ==
-        LocationPermission.deniedForever) {
-      if (!mounted) return false;
+    if (permission == LocationPermission.deniedForever) {
+      if (!mounted) {
+        return false;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Location permission is permanently denied. Enable it in your device settings.",
+            'Location permission is permanently denied. Enable it in your device settings.',
           ),
         ),
       );
@@ -247,149 +255,149 @@ class _JobTrackingScreenState
   }
 
   Future<void> _startTracking() async {
-    if (_tracking) return;
+    if (_tracking) {
+      return;
+    }
 
-    final allowed =
-        await _checkLocationPermission();
+    final allowed = await _checkLocationPermission();
 
-    if (!allowed) return;
+    if (!allowed) {
+      return;
+    }
 
     try {
-      final user =
-          FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
-        throw Exception(
-          "You must be logged in to track a job.",
-        );
+        throw Exception('You must be logged in to track a zone.');
       }
 
-      final currentPosition =
-          await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(
+      final zoneSnapshot = await widget.zone.reference.get();
+
+      if (!zoneSnapshot.exists) {
+        throw Exception('This zone no longer exists.');
+      }
+
+      final zoneData = zoneSnapshot.data() as Map<String, dynamic>;
+
+      if (zoneData['assignedScalerId']?.toString() != user.uid) {
+        throw Exception('This zone is not assigned to you.');
+      }
+
+      final zoneStatus = zoneData['status']?.toString() ?? 'assigned';
+
+      if (zoneStatus != 'in_progress') {
+        throw Exception('Start the zone before starting GPS tracking.');
+      }
+
+      final currentPosition = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
         ),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      final currentPoint =
-          LatLng(
+      final currentPoint = LatLng(
         currentPosition.latitude,
         currentPosition.longitude,
       );
 
       setState(() {
-        _currentPosition =
-            currentPosition;
+        _currentPosition = currentPosition;
 
-        _simulatedPosition =
-            null;
+        _simulatedPosition = null;
 
         _tracking = true;
+
         _routeIsSimulated = false;
+
         _errorMessage = null;
       });
 
-      _addRoutePoint(
-        currentPoint,
-      );
+      _addRoutePoint(currentPoint);
 
       try {
-        _mapController.move(
-          currentPoint,
-          17,
-        );
+        _mapController.move(currentPoint, 17);
       } catch (_) {
         // Map may not yet be attached.
       }
 
-      await _routeReference.set(
-        {
-          'campaignId':
-              widget.campaign.id,
-          'scalerId':
-              user.uid,
-          'scalerEmail':
-              user.email,
-          'tracking':
-              true,
-          'simulated':
-              false,
-          'startedAt':
-              FieldValue.serverTimestamp(),
-          'updatedAt':
-              FieldValue.serverTimestamp(),
-          'points':
-              _serializePoints(),
-          'pointCount':
-              _routePoints.length,
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
+      final batch = FirebaseFirestore.instance.batch();
 
-      const settings =
-          LocationSettings(
-        accuracy:
-            LocationAccuracy.high,
+      batch.set(_routeReference, {
+        'campaignId': widget.campaign.id,
+        'zoneId': widget.zone.id,
+        'zoneName': zoneData['zoneName'],
+        'scalerId': user.uid,
+        'scalerEmail': user.email,
+        'tracking': true,
+        'simulated': false,
+        'startedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'points': _serializePoints(),
+        'pointCount': _routePoints.length,
+      }, SetOptions(merge: true));
+
+      batch.update(widget.zone.reference, {
+        'routeId': _routeReference.id,
+        'gpsTracking': true,
+        'gpsTrackingStartedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+
+      const settings = LocationSettings(
+        accuracy: LocationAccuracy.high,
         distanceFilter: 5,
       );
 
       _positionSubscription =
-          Geolocator.getPositionStream(
-        locationSettings: settings,
-      ).listen(
-        (position) {
-          if (!mounted) return;
+          Geolocator.getPositionStream(locationSettings: settings).listen(
+            (position) {
+              if (!mounted) {
+                return;
+              }
 
-          final point =
-              LatLng(
-            position.latitude,
-            position.longitude,
+              final point = LatLng(position.latitude, position.longitude);
+
+              setState(() {
+                _currentPosition = position;
+              });
+
+              _addRoutePoint(point);
+            },
+            onError: (error) {
+              if (!mounted) {
+                return;
+              }
+
+              setState(() {
+                _errorMessage = 'GPS error: $error';
+              });
+            },
           );
-
-          setState(() {
-            _currentPosition =
-                position;
-          });
-
-          _addRoutePoint(
-            point,
-          );
-        },
-        onError: (error) {
-          if (!mounted) return;
-
-          setState(() {
-            _errorMessage =
-                "GPS error: $error";
-          });
-        },
-      );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _tracking = false;
 
-        _errorMessage =
-            "Unable to start GPS tracking: $e";
+        _errorMessage = 'Unable to start GPS tracking: $e';
       });
     }
   }
 
-  void _addRoutePoint(
-    LatLng point,
-  ) {
+  void _addRoutePoint(LatLng point) {
     if (_routePoints.isNotEmpty) {
-      final lastPoint =
-          _routePoints.last;
+      final lastPoint = _routePoints.last;
 
-      final distance =
-          Geolocator.distanceBetween(
+      final distance = Geolocator.distanceBetween(
         lastPoint.latitude,
         lastPoint.longitude,
         point.latitude,
@@ -402,9 +410,7 @@ class _JobTrackingScreenState
     }
 
     setState(() {
-      _routePoints.add(
-        point,
-      );
+      _routePoints.add(point);
     });
 
     _pointsSinceLastSave++;
@@ -420,16 +426,16 @@ class _JobTrackingScreenState
     if (!_tracking) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            "Start GPS tracking before simulating movement.",
-          ),
+          content: Text('Start GPS tracking before simulating movement.'),
         ),
       );
 
       return;
     }
 
-    if (_simulating) return;
+    if (_simulating) {
+      return;
+    }
 
     setState(() {
       _simulating = true;
@@ -440,97 +446,69 @@ class _JobTrackingScreenState
 
       _positionSubscription = null;
 
-      final user =
-          FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
-        throw Exception(
-          "You must be logged in.",
-        );
+        throw Exception('You must be logged in.');
       }
 
-      final simulatedRoute =
-          _buildSimulatedRoute();
+      final simulatedRoute = _buildSimulatedRoute();
 
       if (simulatedRoute.length < 2) {
-        throw Exception(
-          "Unable to create a simulated route.",
-        );
+        throw Exception('Unable to create a simulated route.');
       }
 
       setState(() {
         _routePoints
           ..clear()
-          ..addAll(
-            simulatedRoute,
-          );
+          ..addAll(simulatedRoute);
 
-        _simulatedPosition =
-            simulatedRoute.last;
+        _simulatedPosition = simulatedRoute.last;
 
-        _routeIsSimulated =
-            true;
+        _routeIsSimulated = true;
 
-        _currentPosition =
-            null;
+        _currentPosition = null;
 
-        _pointsSinceLastSave =
-            0;
+        _pointsSinceLastSave = 0;
       });
 
-      await _routeReference.set(
-        {
-          'campaignId':
-              widget.campaign.id,
-          'scalerId':
-              user.uid,
-          'scalerEmail':
-              user.email,
-          'tracking':
-              true,
-          'simulated':
-              true,
-          'points':
-              _serializePoints(),
-          'pointCount':
-              _routePoints.length,
-          'updatedAt':
-              FieldValue.serverTimestamp(),
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
+      await _routeReference.set({
+        'campaignId': widget.campaign.id,
+        'zoneId': widget.zone.id,
+        'zoneName': _zoneName(),
+        'scalerId': user.uid,
+        'scalerEmail': user.email,
+        'tracking': true,
+        'simulated': true,
+        'points': _serializePoints(),
+        'pointCount': _routePoints.length,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       try {
-        _mapController.move(
-          _calculateCenter(
-            simulatedRoute,
-          ),
-          16,
-        );
+        _mapController.move(_calculateCenter(simulatedRoute), 16);
       } catch (_) {
-        // Ignore if map is not ready.
+        // Map may not yet be attached.
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "Simulated ${_routePoints.length} GPS route points.",
+            'Simulated ${_routePoints.length} GPS route points for ${_zoneName()}.',
           ),
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Unable to simulate movement: $e",
-          ),
-        ),
+        SnackBar(content: Text('Unable to simulate movement: $e')),
       );
     } finally {
       if (mounted) {
@@ -543,76 +521,38 @@ class _JobTrackingScreenState
 
   List<LatLng> _buildSimulatedRoute() {
     if (_serviceArea.length >= 3) {
-      final center =
-          _calculateCenter(
-        _serviceArea,
-      );
+      final center = _calculateCenter(_serviceArea);
 
-      final innerPoints =
-          _serviceArea.map(
-        (boundaryPoint) {
-          return LatLng(
-            center.latitude +
-                (
-                  boundaryPoint.latitude -
-                      center.latitude
-                ) *
-                    0.65,
-            center.longitude +
-                (
-                  boundaryPoint.longitude -
-                      center.longitude
-                ) *
-                    0.65,
-          );
-        },
-      ).toList();
+      final innerPoints = _serviceArea.map((boundaryPoint) {
+        return LatLng(
+          center.latitude + (boundaryPoint.latitude - center.latitude) * 0.65,
+          center.longitude +
+              (boundaryPoint.longitude - center.longitude) * 0.65,
+        );
+      }).toList();
 
-      final route =
-          <LatLng>[];
+      final route = <LatLng>[];
 
-      for (int i = 0;
-          i < innerPoints.length;
-          i++) {
-        final start =
-            innerPoints[i];
+      for (int i = 0; i < innerPoints.length; i++) {
+        final start = innerPoints[i];
 
-        final end =
-            innerPoints[
-              (i + 1) %
-                  innerPoints.length
-            ];
+        final end = innerPoints[(i + 1) % innerPoints.length];
 
         const steps = 4;
 
-        for (int step = 0;
-            step < steps;
-            step++) {
-          final fraction =
-              step / steps;
+        for (int step = 0; step < steps; step++) {
+          final fraction = step / steps;
 
           route.add(
             LatLng(
-              start.latitude +
-                  (
-                    end.latitude -
-                        start.latitude
-                  ) *
-                      fraction,
-              start.longitude +
-                  (
-                    end.longitude -
-                        start.longitude
-                  ) *
-                      fraction,
+              start.latitude + (end.latitude - start.latitude) * fraction,
+              start.longitude + (end.longitude - start.longitude) * fraction,
             ),
           );
         }
       }
 
-      route.add(
-        innerPoints.first,
-      );
+      route.add(innerPoints.first);
 
       return route;
     }
@@ -620,95 +560,51 @@ class _JobTrackingScreenState
     LatLng center;
 
     if (_currentPosition != null) {
-      center =
-          LatLng(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-      );
+      center = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
     } else {
-      center =
-          const LatLng(
-        39.2904,
-        -76.6122,
-      );
+      center = const LatLng(39.2904, -76.6122);
     }
 
     return [
-      LatLng(
-        center.latitude,
-        center.longitude,
-      ),
-      LatLng(
-        center.latitude + 0.00010,
-        center.longitude,
-      ),
-      LatLng(
-        center.latitude + 0.00015,
-        center.longitude + 0.00010,
-      ),
-      LatLng(
-        center.latitude + 0.00010,
-        center.longitude + 0.00020,
-      ),
-      LatLng(
-        center.latitude,
-        center.longitude + 0.00020,
-      ),
-      LatLng(
-        center.latitude - 0.00005,
-        center.longitude + 0.00010,
-      ),
-      LatLng(
-        center.latitude,
-        center.longitude,
-      ),
+      LatLng(center.latitude, center.longitude),
+      LatLng(center.latitude + 0.00010, center.longitude),
+      LatLng(center.latitude + 0.00015, center.longitude + 0.00010),
+      LatLng(center.latitude + 0.00010, center.longitude + 0.00020),
+      LatLng(center.latitude, center.longitude + 0.00020),
+      LatLng(center.latitude - 0.00005, center.longitude + 0.00010),
+      LatLng(center.latitude, center.longitude),
     ];
   }
 
   Future<void> _saveRouteProgress() async {
     try {
-      await _routeReference.set(
-        {
-          'campaignId':
-              widget.campaign.id,
-          'tracking':
-              true,
-          'simulated':
-              _routeIsSimulated,
-          'points':
-              _serializePoints(),
-          'pointCount':
-              _routePoints.length,
-          'updatedAt':
-              FieldValue.serverTimestamp(),
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
+      await _routeReference.set({
+        'campaignId': widget.campaign.id,
+        'zoneId': widget.zone.id,
+        'zoneName': _zoneName(),
+        'tracking': true,
+        'simulated': _routeIsSimulated,
+        'points': _serializePoints(),
+        'pointCount': _routePoints.length,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     } catch (e) {
-      debugPrint(
-        "Unable to save route progress: $e",
-      );
+      debugPrint('Unable to save route progress: $e');
     }
   }
 
-  List<Map<String, dynamic>>
-      _serializePoints() {
+  List<Map<String, dynamic>> _serializePoints() {
     return _routePoints
         .map(
-          (point) => {
-            'latitude':
-                point.latitude,
-            'longitude':
-                point.longitude,
-          },
+          (point) => {'latitude': point.latitude, 'longitude': point.longitude},
         )
         .toList();
   }
 
   Future<void> _stopTracking() async {
-    if (!_tracking) return;
+    if (!_tracking) {
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -719,29 +615,34 @@ class _JobTrackingScreenState
 
       _positionSubscription = null;
 
-      await _routeReference.set(
-        {
-          'campaignId':
-              widget.campaign.id,
-          'tracking':
-              false,
-          'simulated':
-              _routeIsSimulated,
-          'points':
-              _serializePoints(),
-          'pointCount':
-              _routePoints.length,
-          'endedAt':
-              FieldValue.serverTimestamp(),
-          'updatedAt':
-              FieldValue.serverTimestamp(),
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
+      final batch = FirebaseFirestore.instance.batch();
 
-      if (!mounted) return;
+      batch.set(_routeReference, {
+        'campaignId': widget.campaign.id,
+        'zoneId': widget.zone.id,
+        'zoneName': _zoneName(),
+        'tracking': false,
+        'simulated': _routeIsSimulated,
+        'points': _serializePoints(),
+        'pointCount': _routePoints.length,
+        'endedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      batch.update(widget.zone.reference, {
+        'routeId': _routeReference.id,
+        'gpsTracking': false,
+        'gpsRoutePointCount': _routePoints.length,
+        'gpsRouteSimulated': _routeIsSimulated,
+        'gpsTrackingEndedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _tracking = false;
@@ -750,20 +651,18 @@ class _JobTrackingScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "Route saved with ${_routePoints.length} GPS points.",
+            '${_zoneName()} route saved with ${_routePoints.length} GPS points.',
           ),
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Unable to save route: $e",
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to save route: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -777,52 +676,33 @@ class _JobTrackingScreenState
     if (_tracking) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            "Stop tracking before clearing the route.",
-          ),
+          content: Text('Stop tracking before clearing the route.'),
         ),
       );
 
       return;
     }
 
-    final confirmed =
-        await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (
-        dialogContext,
-      ) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            "Clear Test Route",
-          ),
-          content: const Text(
-            "Delete the currently recorded GPS route for this campaign?",
+          title: const Text('Clear Test Route'),
+          content: Text(
+            'Delete the currently recorded GPS route for ${_zoneName()}?',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
+                Navigator.pop(dialogContext, false);
               },
-              child:
-                  const Text(
-                "Cancel",
-              ),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
+                Navigator.pop(dialogContext, true);
               },
-              child:
-                  const Text(
-                "Clear",
-              ),
+              child: const Text('Clear'),
             ),
           ],
         );
@@ -834,192 +714,146 @@ class _JobTrackingScreenState
     }
 
     try {
-      await _routeReference.delete();
+      final batch = FirebaseFirestore.instance.batch();
 
-      if (!mounted) return;
+      batch.delete(_routeReference);
+
+      batch.update(widget.zone.reference, {
+        'routeId': FieldValue.delete(),
+        'gpsTracking': false,
+        'gpsRoutePointCount': 0,
+        'gpsRouteSimulated': FieldValue.delete(),
+        'gpsTrackingStartedAt': FieldValue.delete(),
+        'gpsTrackingEndedAt': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _routePoints.clear();
 
-        _currentPosition =
-            null;
+        _currentPosition = null;
 
-        _simulatedPosition =
-            null;
+        _simulatedPosition = null;
 
-        _routeIsSimulated =
-            false;
+        _routeIsSimulated = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Test route cleared.",
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Test route cleared.')));
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Unable to clear route: $e",
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to clear route: $e')));
     }
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(
-          child:
-              CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (_errorMessage != null &&
-        _serviceArea.isEmpty) {
+    if (_errorMessage != null && _serviceArea.isEmpty) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            "GPS Tracking",
-          ),
-        ),
+        appBar: AppBar(title: const Text('Zone GPS Tracking')),
         body: Center(
           child: Padding(
-            padding:
-                const EdgeInsets.all(
-              20,
-            ),
-            child: Text(
-              _errorMessage!,
-              textAlign:
-                  TextAlign.center,
-            ),
+            padding: const EdgeInsets.all(20),
+            child: Text(_errorMessage!, textAlign: TextAlign.center),
           ),
         ),
       );
     }
 
-    final mapPoints =
-        _serviceArea.isNotEmpty
-            ? _serviceArea
-            : _routePoints;
+    final mapPoints = _serviceArea.isNotEmpty ? _serviceArea : _routePoints;
 
     LatLng center;
 
     if (_simulatedPosition != null) {
-      center =
-          _simulatedPosition!;
+      center = _simulatedPosition!;
     } else if (_currentPosition != null) {
-      center =
-          LatLng(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-      );
+      center = LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
     } else {
-      center =
-          _calculateCenter(
-        mapPoints,
-      );
+      center = _calculateCenter(mapPoints);
     }
 
     final currentMapPoint =
         _simulatedPosition ??
-            (
-              _currentPosition != null
-                  ? LatLng(
-                      _currentPosition!.latitude,
-                      _currentPosition!.longitude,
-                    )
-                  : null
-            );
+        (_currentPosition != null
+            ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+            : null);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          "Campaign GPS Tracking",
-        ),
+        title: Text('${_zoneName()} GPS Tracking'),
         centerTitle: true,
       ),
       body: Column(
         children: [
           Container(
-            width:
-                double.infinity,
-            padding:
-                const EdgeInsets.all(
-              14,
-            ),
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
             child: Column(
               children: [
-                Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      _tracking
-                          ? Icons.gps_fixed
-                          : Icons.gps_not_fixed,
-                    ),
+                Text(
+                  _zoneName(),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
 
-                    const SizedBox(
-                      width: 8,
-                    ),
+                const SizedBox(height: 8),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(_tracking ? Icons.gps_fixed : Icons.gps_not_fixed),
+
+                    const SizedBox(width: 8),
 
                     Text(
                       _tracking
-                          ? "GPS Tracking Active"
-                          : "GPS Tracking Stopped",
-                      style:
-                          const TextStyle(
-                        fontWeight:
-                            FontWeight.bold,
+                          ? 'GPS Tracking Active'
+                          : 'GPS Tracking Stopped',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
                         fontSize: 17,
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(
-                  height: 6,
-                ),
+                const SizedBox(height: 6),
 
                 Text(
-                  "${_routePoints.length} route point${_routePoints.length == 1 ? '' : 's'} recorded",
+                  '${_routePoints.length} route point${_routePoints.length == 1 ? '' : 's'} recorded',
                 ),
 
                 if (_routeIsSimulated) ...[
-                  const SizedBox(
-                    height: 6,
-                  ),
+                  const SizedBox(height: 6),
 
                   const Text(
-                    "Development simulation route",
-                    style: TextStyle(
-                      fontWeight:
-                          FontWeight.w600,
-                    ),
+                    'Development simulation route',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ],
 
                 if (_errorMessage != null) ...[
-                  const SizedBox(
-                    height: 6,
-                  ),
+                  const SizedBox(height: 6),
 
-                  Text(
-                    _errorMessage!,
-                    textAlign:
-                        TextAlign.center,
-                  ),
+                  Text(_errorMessage!, textAlign: TextAlign.center),
                 ],
               ],
             ),
@@ -1027,35 +861,22 @@ class _JobTrackingScreenState
 
           Expanded(
             child: FlutterMap(
-              mapController:
-                  _mapController,
-              options:
-                  MapOptions(
-                initialCenter:
-                    center,
-                initialZoom: 16,
-              ),
+              mapController: _mapController,
+              options: MapOptions(initialCenter: center, initialZoom: 16),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                  userAgentPackageName:
-                      "com.scaledcircle.app",
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.scaledcircle.app',
                 ),
 
                 if (_serviceArea.length >= 3)
                   PolygonLayer(
                     polygons: [
                       Polygon(
-                        points:
-                            _serviceArea,
-                        borderStrokeWidth:
-                            3,
-                        color: Colors.blue.withValues(
-                          alpha: 0.15,
-                        ),
-                        borderColor:
-                            Colors.blue,
+                        points: _serviceArea,
+                        borderStrokeWidth: 3,
+                        color: Colors.blue.withValues(alpha: 0.15),
+                        borderColor: Colors.blue,
                       ),
                     ],
                   ),
@@ -1064,12 +885,9 @@ class _JobTrackingScreenState
                   PolylineLayer(
                     polylines: [
                       Polyline(
-                        points:
-                            _routePoints,
-                        strokeWidth:
-                            5,
-                        color:
-                            Colors.green,
+                        points: _routePoints,
+                        strokeWidth: 5,
+                        color: Colors.green,
                       ),
                     ],
                   ),
@@ -1078,18 +896,15 @@ class _JobTrackingScreenState
                   markers: [
                     if (currentMapPoint != null)
                       Marker(
-                        point:
-                            currentMapPoint,
+                        point: currentMapPoint,
                         width: 48,
                         height: 48,
-                        child:
-                            Icon(
+                        child: Icon(
                           _routeIsSimulated
                               ? Icons.location_on
                               : Icons.my_location,
                           size: 38,
-                          color:
-                              Colors.red,
+                          color: Colors.red,
                         ),
                       ),
                   ],
@@ -1099,123 +914,71 @@ class _JobTrackingScreenState
           ),
 
           Container(
-            padding:
-                const EdgeInsets.all(
-              16,
-            ),
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 if (!_tracking)
                   SizedBox(
-                    width:
-                        double.infinity,
+                    width: double.infinity,
                     height: 55,
-                    child:
-                        ElevatedButton.icon(
-                      onPressed:
-                          _saving
-                              ? null
-                              : _startTracking,
-                      icon: const Icon(
-                        Icons.play_arrow,
-                      ),
-                      label:
-                          const Text(
-                        "Start GPS Tracking",
-                      ),
+                    child: ElevatedButton.icon(
+                      onPressed: _saving ? null : _startTracking,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Start GPS Tracking'),
                     ),
                   ),
 
                 if (_tracking) ...[
                   SizedBox(
-                    width:
-                        double.infinity,
+                    width: double.infinity,
                     height: 55,
-                    child:
-                        ElevatedButton.icon(
-                      onPressed:
-                          _simulating ||
-                                  _saving
-                              ? null
-                              : _simulateMovement,
+                    child: ElevatedButton.icon(
+                      onPressed: _simulating || _saving
+                          ? null
+                          : _simulateMovement,
                       icon: _simulating
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child:
-                                  CircularProgressIndicator(
-                                strokeWidth:
-                                    2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(
-                              Icons
-                                  .directions_walk,
-                            ),
+                          : const Icon(Icons.directions_walk),
                       label: Text(
-                        _simulating
-                            ? "Simulating..."
-                            : "Simulate Movement",
+                        _simulating ? 'Simulating...' : 'Simulate Movement',
                       ),
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 10,
-                  ),
+                  const SizedBox(height: 10),
 
                   SizedBox(
-                    width:
-                        double.infinity,
+                    width: double.infinity,
                     height: 55,
-                    child:
-                        OutlinedButton.icon(
-                      onPressed:
-                          _saving
-                              ? null
-                              : _stopTracking,
+                    child: OutlinedButton.icon(
+                      onPressed: _saving ? null : _stopTracking,
                       icon: _saving
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child:
-                                  CircularProgressIndicator(
-                                strokeWidth:
-                                    2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(
-                              Icons.stop,
-                            ),
+                          : const Icon(Icons.stop),
                       label: Text(
-                        _saving
-                            ? "Saving Route..."
-                            : "Stop & Save Route",
+                        _saving ? 'Saving Route...' : 'Stop & Save Route',
                       ),
                     ),
                   ),
                 ],
 
-                if (!_tracking &&
-                    _routePoints.isNotEmpty) ...[
-                  const SizedBox(
-                    height: 10,
-                  ),
+                if (!_tracking && _routePoints.isNotEmpty) ...[
+                  const SizedBox(height: 10),
 
                   SizedBox(
-                    width:
-                        double.infinity,
-                    child:
-                        OutlinedButton.icon(
-                      onPressed:
-                          _clearTestRoute,
-                      icon: const Icon(
-                        Icons.delete_outline,
-                      ),
-                      label:
-                          const Text(
-                        "Clear Test Route",
-                      ),
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _clearTestRoute,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Clear Test Route'),
                     ),
                   ),
                 ],

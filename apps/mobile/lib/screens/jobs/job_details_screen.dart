@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'job_tracking_screen.dart';
+
 class JobDetailsScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
 
@@ -20,7 +22,6 @@ class JobDetailsScreen extends StatelessWidget {
           content: Text('You must be logged in to apply for a campaign.'),
         ),
       );
-
       return;
     }
 
@@ -206,7 +207,13 @@ class JobDetailsScreen extends StatelessWidget {
         throw Exception('You do not have an assigned zone for this campaign.');
       }
 
-      final zoneData = zone.data();
+      final zoneSnapshot = await zone.reference.get();
+
+      if (!zoneSnapshot.exists) {
+        throw Exception('This zone no longer exists.');
+      }
+
+      final zoneData = zoneSnapshot.data()!;
 
       if (zoneData['assignedScalerId']?.toString() != user.uid) {
         throw Exception('This zone is not assigned to you.');
@@ -216,6 +223,59 @@ class JobDetailsScreen extends StatelessWidget {
 
       if (zoneStatus != 'in_progress') {
         throw Exception('Start the zone before submitting completion.');
+      }
+
+      final gpsTracking = zoneData['gpsTracking'] == true;
+
+      if (gpsTracking) {
+        throw Exception(
+          'Stop and save GPS tracking before submitting this zone.',
+        );
+      }
+
+      final routeId = zoneData['routeId']?.toString();
+
+      if (routeId == null || routeId.isEmpty) {
+        throw Exception(
+          'A saved GPS route is required before submitting this zone.',
+        );
+      }
+
+      final gpsRoutePointCount =
+          (zoneData['gpsRoutePointCount'] as num?)?.toInt() ?? 0;
+
+      if (gpsRoutePointCount < 2) {
+        throw Exception(
+          'Your GPS route does not contain enough recorded points. Record and save your route before submitting.',
+        );
+      }
+
+      final routeReference = firestore
+          .collection('campaignRoutes')
+          .doc(routeId);
+
+      final routeSnapshot = await routeReference.get();
+
+      if (!routeSnapshot.exists) {
+        throw Exception(
+          'The saved GPS route could not be found. Open the GPS tracker and save the route again.',
+        );
+      }
+
+      final routeData = routeSnapshot.data();
+
+      if (routeData == null) {
+        throw Exception('The saved GPS route is invalid.');
+      }
+
+      if (routeData['zoneId']?.toString() != zone.id) {
+        throw Exception('The saved GPS route does not belong to this zone.');
+      }
+
+      final routePointCount = (routeData['pointCount'] as num?)?.toInt() ?? 0;
+
+      if (routePointCount < 2) {
+        throw Exception('The saved GPS route does not contain enough points.');
       }
 
       final campaignSnapshot = await campaign.reference.get();
@@ -235,11 +295,16 @@ class JobDetailsScreen extends StatelessWidget {
 
       final scalerEmail = user.email ?? 'Scaler';
 
+      final routeIsSimulated = routeData['simulated'] == true;
+
       final batch = firestore.batch();
 
       batch.update(zone.reference, {
         'status': 'submitted',
         'submittedAt': FieldValue.serverTimestamp(),
+        'submittedRouteId': routeId,
+        'submittedRoutePointCount': routePointCount,
+        'submittedRouteSimulated': routeIsSimulated,
         'reviewFeedback': FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -258,6 +323,9 @@ class JobDetailsScreen extends StatelessWidget {
           'campaignName': campaignName,
           'zoneId': zone.id,
           'zoneName': zoneName,
+          'routeId': routeId,
+          'routePointCount': routePointCount,
+          'routeSimulated': routeIsSimulated,
           'scalerId': user.uid,
           'scalerEmail': scalerEmail,
           'read': false,
@@ -272,7 +340,11 @@ class JobDetailsScreen extends StatelessWidget {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$zoneName submitted for review.')),
+        SnackBar(
+          content: Text(
+            '$zoneName submitted for review with $routePointCount GPS points.',
+          ),
+        ),
       );
     } catch (e) {
       if (!context.mounted) {
@@ -345,9 +417,7 @@ class JobDetailsScreen extends StatelessWidget {
                 Row(
                   children: [
                     const CircleAvatar(child: Icon(Icons.map_outlined)),
-
                     const SizedBox(width: 12),
-
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,9 +426,7 @@ class JobDetailsScreen extends StatelessWidget {
                             'Your Assigned Zone',
                             style: TextStyle(fontSize: 13),
                           ),
-
                           const SizedBox(height: 3),
-
                           Text(
                             zoneName,
                             style: const TextStyle(
@@ -369,13 +437,10 @@ class JobDetailsScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-
                     Chip(label: Text(_statusLabel(zoneStatus))),
                   ],
                 ),
-
                 const SizedBox(height: 16),
-
                 Row(
                   children: [
                     Expanded(
@@ -387,9 +452,7 @@ class JobDetailsScreen extends StatelessWidget {
                             : 'Pending',
                       ),
                     ),
-
                     const SizedBox(width: 12),
-
                     Expanded(
                       child: _zoneSummaryMetric(
                         icon: Icons.directions_walk,
@@ -401,9 +464,7 @@ class JobDetailsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
                 Row(
                   children: [
                     Expanded(
@@ -415,9 +476,7 @@ class JobDetailsScreen extends StatelessWidget {
                             : _formatDuration(estimatedMinutes),
                       ),
                     ),
-
                     const SizedBox(width: 12),
-
                     Expanded(
                       child: _zoneSummaryMetric(
                         icon: Icons.payments_outlined,
@@ -451,16 +510,12 @@ class JobDetailsScreen extends StatelessWidget {
       child: Column(
         children: [
           Icon(icon, size: 22),
-
           const SizedBox(height: 6),
-
           Text(
             value,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-
           const SizedBox(height: 3),
-
           Text(
             label,
             textAlign: TextAlign.center,
@@ -505,7 +560,8 @@ class JobDetailsScreen extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        final data = zones.first.data();
+        final zone = zones.first;
+        final data = zone.data();
 
         final zoneName = data['zoneName']?.toString() ?? 'Assigned Zone';
 
@@ -515,6 +571,7 @@ class JobDetailsScreen extends StatelessWidget {
 
         if (zoneStatus == 'assigned' || zoneStatus == 'accepted') {
           return SizedBox(
+            width: double.infinity,
             height: 55,
             child: ElevatedButton.icon(
               onPressed: () {
@@ -550,15 +607,12 @@ class JobDetailsScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 12),
-
                         Text(reviewFeedback),
                       ],
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 12),
               ],
 
@@ -567,10 +621,8 @@ class JobDetailsScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      const Icon(Icons.location_on, size: 42),
-
+                      const Icon(Icons.gps_fixed, size: 42),
                       const SizedBox(height: 10),
-
                       Text(
                         '$zoneName In Progress',
                         style: const TextStyle(
@@ -578,12 +630,30 @@ class JobDetailsScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-
                       const SizedBox(height: 8),
-
                       const Text(
-                        'Your assigned zone is active. GPS tracking will be connected to this zone next.',
+                        'Record your GPS route while working this assigned zone.',
                         textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => JobTrackingScreen(
+                                  campaign: campaign,
+                                  zone: zone,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.my_location),
+                          label: const Text('Open GPS Tracker'),
+                        ),
                       ),
                     ],
                   ),
@@ -618,9 +688,7 @@ class JobDetailsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   const Icon(Icons.hourglass_top, size: 42),
-
                   const SizedBox(height: 10),
-
                   Text(
                     '$zoneName Submitted',
                     style: const TextStyle(
@@ -628,9 +696,7 @@ class JobDetailsScreen extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 8),
-
                   const Text(
                     'The business is reviewing your zone.',
                     textAlign: TextAlign.center,
@@ -648,9 +714,7 @@ class JobDetailsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   const Icon(Icons.verified, size: 42),
-
                   const SizedBox(height: 10),
-
                   Text(
                     '$zoneName Completed',
                     style: const TextStyle(
@@ -755,9 +819,7 @@ class JobDetailsScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-
                       const SizedBox(height: 10),
-
                       Text(description),
                     ],
                   ),
@@ -775,9 +837,7 @@ class JobDetailsScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             const Icon(Icons.attach_money),
-
                             const SizedBox(height: 8),
-
                             Text(
                               '\$$basePay',
                               style: const TextStyle(
@@ -785,7 +845,6 @@ class JobDetailsScreen extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-
                             const Text('Campaign Base Pay'),
                           ],
                         ),
@@ -802,9 +861,7 @@ class JobDetailsScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             const Icon(Icons.card_giftcard),
-
                             const SizedBox(height: 8),
-
                             Text(
                               '\$$bonus',
                               style: const TextStyle(
@@ -812,7 +869,6 @@ class JobDetailsScreen extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-
                             const Text('Bonus'),
                           ],
                         ),
@@ -910,16 +966,12 @@ class JobDetailsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   Icon(Icons.hourglass_top, size: 40),
-
                   SizedBox(height: 10),
-
                   Text(
                     'Application Pending',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-
                   SizedBox(height: 8),
-
                   Text(
                     'The business is reviewing your application.',
                     textAlign: TextAlign.center,
@@ -937,9 +989,7 @@ class JobDetailsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   Icon(Icons.cancel_outlined, size: 40),
-
                   SizedBox(height: 10),
-
                   Text(
                     'Application Not Selected',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -957,18 +1007,14 @@ class JobDetailsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   const Icon(Icons.verified, size: 40),
-
                   const SizedBox(height: 10),
-
                   const Text(
                     'Application Accepted',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-
                   if (assignedZoneName != null &&
                       assignedZoneName.isNotEmpty) ...[
                     const SizedBox(height: 8),
-
                     Text('Assigned to $assignedZoneName'),
                   ],
                 ],
