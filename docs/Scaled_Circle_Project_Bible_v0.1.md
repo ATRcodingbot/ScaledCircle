@@ -307,3 +307,32 @@ Phase 5
 * Territory Optimization
 * Analytics
 * National Expansion
+
+
+
+---
+
+# Current Product Architecture — Milestone 2
+
+## Marketplace Roles
+
+Scaled Circle currently supports two account types:
+
+### Business
+Businesses create and manage local marketing campaigns and hire Scalers to perform campaign work.
+
+### Scaler
+Scalers discover local marketing opportunities, apply to campaigns, perform accepted work, and submit work for business approval.
+
+---
+
+## Campaign Lifecycle
+
+Canonical campaign states:
+
+```text
+open
+accepted
+in_progress
+submitted
+completed

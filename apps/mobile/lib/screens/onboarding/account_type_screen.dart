@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../business/business_dashboard.dart';
+import '../jobs/jobs_marketplace_screen.dart';
 
 class AccountTypeScreen extends StatelessWidget {
   const AccountTypeScreen({super.key});
@@ -28,15 +29,18 @@ class AccountTypeScreen extends StatelessWidget {
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .set({
-        'uid': user.uid,
-        'email': user.email,
-        'accountType': accountType,
-        'createdAt': FieldValue.serverTimestamp(),
-        'completedJobs': 0,
-        'rating': 5.0,
-        'verified': false,
-      });
+          .set(
+        {
+          'uid': user.uid,
+          'email': user.email,
+          'accountType': accountType,
+          'createdAt': FieldValue.serverTimestamp(),
+          'completedJobs': 0,
+          'rating': 5.0,
+          'verified': false,
+        },
+        SetOptions(merge: true),
+      );
 
       if (!context.mounted) return;
 
@@ -47,10 +51,11 @@ class AccountTypeScreen extends StatelessWidget {
             builder: (_) => const BusinessDashboard(),
           ),
         );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Marketer dashboard coming soon!"),
+      } else if (accountType == "marketer") {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const JobsMarketplaceScreen(),
           ),
         );
       }
@@ -61,7 +66,9 @@ class AccountTypeScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString()),
+          content: Text(
+            "Unable to save account type: $e",
+          ),
         ),
       );
     }
@@ -91,10 +98,22 @@ class AccountTypeScreen extends StatelessWidget {
                   ),
                 ),
 
+                const SizedBox(height: 12),
+
+                const Text(
+                  "Choose the account type that best matches how you plan to use the platform.",
+                  textAlign: TextAlign.center,
+                ),
+
                 const SizedBox(height: 40),
 
                 GestureDetector(
-                  onTap: () => saveAccountType(context, "business"),
+                  onTap: () {
+                    saveAccountType(
+                      context,
+                      "business",
+                    );
+                  },
                   child: Card(
                     elevation: 5,
                     shape: RoundedRectangleBorder(
@@ -104,7 +123,10 @@ class AccountTypeScreen extends StatelessWidget {
                       padding: EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          Icon(Icons.business, size: 60),
+                          Icon(
+                            Icons.business,
+                            size: 60,
+                          ),
                           SizedBox(height: 15),
                           Text(
                             "Business",
@@ -115,7 +137,7 @@ class AccountTypeScreen extends StatelessWidget {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            "Create marketing campaigns and hire local marketers.",
+                            "Create marketing campaigns, hire Scalers, and track campaign results.",
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -127,7 +149,12 @@ class AccountTypeScreen extends StatelessWidget {
                 const SizedBox(height: 25),
 
                 GestureDetector(
-                  onTap: () => saveAccountType(context, "marketer"),
+                  onTap: () {
+                    saveAccountType(
+                      context,
+                      "marketer",
+                    );
+                  },
                   child: Card(
                     elevation: 5,
                     shape: RoundedRectangleBorder(
@@ -137,10 +164,13 @@ class AccountTypeScreen extends StatelessWidget {
                       padding: EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          Icon(Icons.directions_walk, size: 60),
+                          Icon(
+                            Icons.directions_walk,
+                            size: 60,
+                          ),
                           SizedBox(height: 15),
                           Text(
-                            "Marketer",
+                            "Scaler",
                             style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -148,7 +178,7 @@ class AccountTypeScreen extends StatelessWidget {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            "Find local marketing jobs and earn money on your schedule.",
+                            "Browse available local marketing jobs, accept work, and earn money.",
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -156,6 +186,8 @@ class AccountTypeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+
+                const SizedBox(height: 20),
               ],
             ),
           ),
