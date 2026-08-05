@@ -5,22 +5,18 @@ import 'package:flutter/material.dart';
 class JobDetailsScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
 
-  const JobDetailsScreen({
-    super.key,
-    required this.campaign,
-  });
+  const JobDetailsScreen({super.key, required this.campaign});
+  CollectionReference<Map<String, dynamic>> get _zonesCollection {
+    return FirebaseFirestore.instance.collection('campaignZones');
+  }
 
-  Future<void> applyForCampaign(
-    BuildContext context,
-  ) async {
+  Future<void> applyForCampaign(BuildContext context) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            "You must be logged in to apply for a campaign.",
-          ),
+          content: Text("You must be logged in to apply for a campaign."),
         ),
       );
       return;
@@ -28,296 +24,181 @@ class JobDetailsScreen extends StatelessWidget {
 
     final firestore = FirebaseFirestore.instance;
 
-    final applicationId =
-        "${campaign.id}_${user.uid}";
+    final applicationId = "${campaign.id}_${user.uid}";
 
     final applicationReference = firestore
         .collection('applications')
         .doc(applicationId);
 
     try {
-      await firestore.runTransaction(
-        (transaction) async {
-          final campaignSnapshot =
-              await transaction.get(
-            campaign.reference,
-          );
+      await firestore.runTransaction((transaction) async {
+        final campaignSnapshot = await transaction.get(campaign.reference);
 
-          final applicationSnapshot =
-              await transaction.get(
-            applicationReference,
-          );
+        final applicationSnapshot = await transaction.get(applicationReference);
 
-          if (!campaignSnapshot.exists) {
-            throw Exception(
-              "This campaign no longer exists.",
-            );
-          }
+        if (!campaignSnapshot.exists) {
+          throw Exception("This campaign no longer exists.");
+        }
 
-          final campaignData =
-              campaignSnapshot.data()
-                  as Map<String, dynamic>;
+        final campaignData = campaignSnapshot.data() as Map<String, dynamic>;
 
-          final campaignStatus =
-              campaignData['status']
-                      ?.toString() ??
-                  'open';
+        final campaignStatus = campaignData['status']?.toString() ?? 'open';
 
-          if (campaignStatus != 'open') {
-            throw Exception(
-              "This campaign is no longer accepting applications.",
-            );
-          }
+        if (campaignStatus != 'open') {
+          throw Exception("This campaign is no longer accepting applications.");
+        }
 
-          if (applicationSnapshot.exists) {
-            throw Exception(
-              "You already applied for this campaign.",
-            );
-          }
+        if (applicationSnapshot.exists) {
+          throw Exception("You already applied for this campaign.");
+        }
 
-          final campaignName =
-              campaignData['campaignName']
-                      ?.toString() ??
-                  'Untitled Campaign';
+        final campaignName =
+            campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
 
-          final businessId =
-              campaignData['businessId']
-                  ?.toString();
+        final businessId = campaignData['businessId']?.toString();
 
-          final scalerEmail =
-              user.email ?? 'Scaler';
+        final scalerEmail = user.email ?? 'Scaler';
 
-          transaction.set(
-            applicationReference,
-            {
-              'campaignId': campaign.id,
-              'campaignName': campaignName,
-              'businessId': businessId,
-              'businessEmail':
-                  campaignData['businessEmail'],
-              'scalerId': user.uid,
-              'scalerEmail': scalerEmail,
-              'status': 'pending',
-              'appliedAt':
-                  FieldValue.serverTimestamp(),
-            },
-          );
+        transaction.set(applicationReference, {
+          'campaignId': campaign.id,
+          'campaignName': campaignName,
+          'businessId': businessId,
+          'businessEmail': campaignData['businessEmail'],
+          'scalerId': user.uid,
+          'scalerEmail': scalerEmail,
+          'status': 'pending',
+          'appliedAt': FieldValue.serverTimestamp(),
+        });
 
-          transaction.update(
-            campaign.reference,
-            {
-              'applications':
-                  FieldValue.increment(1),
-            },
-          );
+        transaction.update(campaign.reference, {
+          'applications': FieldValue.increment(1),
+        });
 
-          if (businessId != null &&
-              businessId.isNotEmpty) {
-            final notificationReference =
-                firestore
-                    .collection(
-                      'notifications',
-                    )
-                    .doc();
+        if (businessId != null && businessId.isNotEmpty) {
+          final notificationReference = firestore
+              .collection('notifications')
+              .doc();
 
-            transaction.set(
-              notificationReference,
-              {
-                'userId': businessId,
-                'type':
-                    'application_received',
-                'title':
-                    'New Scaler Application',
-                'message':
-                    '$scalerEmail applied to $campaignName.',
-                'campaignId':
-                    campaign.id,
-                'campaignName':
-                    campaignName,
-                'scalerId':
-                    user.uid,
-                'scalerEmail':
-                    scalerEmail,
-                'read': false,
-                'createdAt':
-                    FieldValue
-                        .serverTimestamp(),
-              },
-            );
-          }
-        },
-      );
-
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Application submitted successfully.",
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Unable to apply: $e",
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> startJob(
-    BuildContext context,
-  ) async {
-    final user =
-        FirebaseAuth.instance.currentUser;
-
-    if (user == null) return;
-
-    try {
-      final snapshot =
-          await campaign.reference.get();
-
-      if (!snapshot.exists) {
-        throw Exception(
-          "This campaign no longer exists.",
-        );
-      }
-
-      final data =
-          snapshot.data()
-              as Map<String, dynamic>;
-
-      if (data['assignedWorkerId'] !=
-          user.uid) {
-        throw Exception(
-          "This campaign is not assigned to you.",
-        );
-      }
-
-      await campaign.reference.update({
-        'status': 'in_progress',
-        'startedAt':
-            FieldValue.serverTimestamp(),
+          transaction.set(notificationReference, {
+            'userId': businessId,
+            'type': 'application_received',
+            'title': 'New Scaler Application',
+            'message': '$scalerEmail applied to $campaignName.',
+            'campaignId': campaign.id,
+            'campaignName': campaignName,
+            'scalerId': user.uid,
+            'scalerEmail': scalerEmail,
+            'read': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
       });
 
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Job started.",
-          ),
-        ),
+        const SnackBar(content: Text("Application submitted successfully.")),
       );
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Unable to apply: $e")));
+    }
+  }
+
+  Future<void> startJob(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) return;
+
+    try {
+      final snapshot = await campaign.reference.get();
+
+      if (!snapshot.exists) {
+        throw Exception("This campaign no longer exists.");
+      }
+
+      final data = snapshot.data() as Map<String, dynamic>;
+
+      if (data['assignedWorkerId'] != user.uid) {
+        throw Exception("This campaign is not assigned to you.");
+      }
+
+      await campaign.reference.update({
+        'status': 'in_progress',
+        'startedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Job started.")));
 
       Navigator.pop(context);
     } catch (e) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Unable to start job: $e",
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Unable to start job: $e")));
     }
   }
 
-  Future<void> submitJob(
-    BuildContext context,
-  ) async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+  Future<void> submitJob(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return;
 
-    final firestore =
-        FirebaseFirestore.instance;
+    final firestore = FirebaseFirestore.instance;
 
     try {
-      final snapshot =
-          await campaign.reference.get();
+      final snapshot = await campaign.reference.get();
 
       if (!snapshot.exists) {
-        throw Exception(
-          "This campaign no longer exists.",
-        );
+        throw Exception("This campaign no longer exists.");
       }
 
-      final data =
-          snapshot.data()
-              as Map<String, dynamic>;
+      final data = snapshot.data() as Map<String, dynamic>;
 
-      if (data['assignedWorkerId'] !=
-          user.uid) {
-        throw Exception(
-          "This campaign is not assigned to you.",
-        );
+      if (data['assignedWorkerId'] != user.uid) {
+        throw Exception("This campaign is not assigned to you.");
       }
 
-      final businessId =
-          data['businessId']?.toString();
+      final businessId = data['businessId']?.toString();
 
       final campaignName =
-          data['campaignName']
-                  ?.toString() ??
-              'Untitled Campaign';
+          data['campaignName']?.toString() ?? 'Untitled Campaign';
 
-      final scalerEmail =
-          user.email ?? 'Scaler';
+      final scalerEmail = user.email ?? 'Scaler';
 
-      final batch =
-          firestore.batch();
+      final batch = firestore.batch();
 
-      batch.update(
-        campaign.reference,
-        {
-          'status': 'submitted',
-          'submittedAt':
-              FieldValue.serverTimestamp(),
-          'reviewFeedback':
-              FieldValue.delete(),
-        },
-      );
+      batch.update(campaign.reference, {
+        'status': 'submitted',
+        'submittedAt': FieldValue.serverTimestamp(),
+        'reviewFeedback': FieldValue.delete(),
+      });
 
-      if (businessId != null &&
-          businessId.isNotEmpty) {
-        final notificationReference =
-            firestore
-                .collection(
-                  'notifications',
-                )
-                .doc();
+      if (businessId != null && businessId.isNotEmpty) {
+        final notificationReference = firestore
+            .collection('notifications')
+            .doc();
 
-        batch.set(
-          notificationReference,
-          {
-            'userId': businessId,
-            'type':
-                'completion_submitted',
-            'title':
-                'Completion Submitted',
-            'message':
-                '$scalerEmail submitted $campaignName for review.',
-            'campaignId':
-                campaign.id,
-            'campaignName':
-                campaignName,
-            'scalerId':
-                user.uid,
-            'scalerEmail':
-                scalerEmail,
-            'read': false,
-            'createdAt':
-                FieldValue.serverTimestamp(),
-          },
-        );
+        batch.set(notificationReference, {
+          'userId': businessId,
+          'type': 'completion_submitted',
+          'title': 'Completion Submitted',
+          'message': '$scalerEmail submitted $campaignName for review.',
+          'campaignId': campaign.id,
+          'campaignName': campaignName,
+          'scalerId': user.uid,
+          'scalerEmail': scalerEmail,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
 
       await batch.commit();
@@ -325,150 +206,226 @@ class JobDetailsScreen extends StatelessWidget {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Job submitted for review.",
-          ),
-        ),
+        const SnackBar(content: Text("Job submitted for review.")),
       );
 
       Navigator.pop(context);
     } catch (e) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Unable to submit job: $e",
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Unable to submit job: $e")));
     }
+  }
+
+  Widget _assignedZoneSummary(User? currentUser) {
+    if (currentUser == null) {
+      return const SizedBox.shrink();
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _zonesCollection
+          .where('campaignId', isEqualTo: campaign.id)
+          .where('assignedScalerId', isEqualTo: currentUser.uid)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Unable to load assigned zone: ${snapshot.error}'),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final zones = snapshot.data?.docs ?? [];
+
+        if (zones.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final data = zones.first.data();
+
+        final zoneName = data['zoneName']?.toString() ?? 'Assigned Zone';
+
+        final zoneStatus = data['status']?.toString() ?? 'assigned';
+
+        final estimatedHomes = (data['estimatedHomes'] as num?)?.toInt() ?? 0;
+
+        final walkingMiles = (data['estimatedWalkingMiles'] as num?)
+            ?.toDouble();
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const CircleAvatar(child: Icon(Icons.map_outlined)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Your Assigned Zone',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            zoneName,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Chip(label: Text(_statusLabel(zoneStatus))),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _zoneSummaryMetric(
+                        icon: Icons.home_outlined,
+                        label: 'Estimated Homes',
+                        value: estimatedHomes > 0
+                            ? estimatedHomes.toString()
+                            : 'Pending',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _zoneSummaryMetric(
+                        icon: Icons.directions_walk,
+                        label: 'Walking Distance',
+                        value: walkingMiles == null
+                            ? 'Pending'
+                            : '${walkingMiles.toStringAsFixed(1)} mi',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _zoneSummaryMetric({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 22),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentUser =
-        FirebaseAuth.instance.currentUser;
+    final currentUser = FirebaseAuth.instance.currentUser;
 
     return StreamBuilder<DocumentSnapshot>(
-      stream:
-          campaign.reference.snapshots(),
-      builder: (
-        context,
-        snapshot,
-      ) {
+      stream: campaign.reference.snapshots(),
+      builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text(
-                "Job Details",
-              ),
-            ),
-            body: Center(
-              child: Text(
-                snapshot.error.toString(),
-              ),
-            ),
+            appBar: AppBar(title: const Text("Job Details")),
+            body: Center(child: Text(snapshot.error.toString())),
           );
         }
 
         if (!snapshot.hasData) {
           return const Scaffold(
-            body: Center(
-              child:
-                  CircularProgressIndicator(),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        final liveCampaign =
-            snapshot.data!;
+        final liveCampaign = snapshot.data!;
 
         if (!liveCampaign.exists) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text(
-                "Job Details",
-              ),
-            ),
-            body: const Center(
-              child: Text(
-                "This job no longer exists.",
-              ),
-            ),
+            appBar: AppBar(title: const Text("Job Details")),
+            body: const Center(child: Text("This job no longer exists.")),
           );
         }
 
-        final data =
-            liveCampaign.data()
-                as Map<String, dynamic>;
+        final data = liveCampaign.data() as Map<String, dynamic>;
 
         final campaignName =
-            data['campaignName']
-                    ?.toString() ??
-                'Untitled Campaign';
+            data['campaignName']?.toString() ?? 'Untitled Campaign';
 
-        final description =
-            data['description']
-                    ?.toString() ??
-                '';
+        final description = data['description']?.toString() ?? '';
 
         final businessEmail =
-            data['businessEmail']
-                    ?.toString() ??
-                'Not provided';
+            data['businessEmail']?.toString() ?? 'Not provided';
 
-        final homes =
-            data['homes']?.toString() ??
-                '0';
+        final homes = data['homes']?.toString() ?? '0';
 
-        final basePay =
-            data['basePay']?.toString() ??
-                '0';
+        final basePay = data['basePay']?.toString() ?? '0';
 
-        final bonus =
-            data['bonus']?.toString() ??
-                '0';
+        final bonus = data['bonus']?.toString() ?? '0';
 
-        final status =
-            data['status']?.toString() ??
-                'open';
+        final status = data['status']?.toString() ?? 'open';
 
-        final deadline =
-            data['deadline']?.toString() ??
-                'Not specified';
+        final deadline = data['deadline']?.toString() ?? 'Not specified';
 
-        final reviewFeedback =
-            data['reviewFeedback']
-                ?.toString();
+        final reviewFeedback = data['reviewFeedback']?.toString();
 
-        final assignedWorkerId =
-            data['assignedWorkerId']
-                ?.toString();
+        final assignedWorkerId = data['assignedWorkerId']?.toString();
 
         final isAssignedScaler =
-            currentUser != null &&
-            assignedWorkerId ==
-                currentUser.uid;
+            currentUser != null && assignedWorkerId == currentUser.uid;
 
         return Scaffold(
-          appBar: AppBar(
-            title: const Text(
-              "Job Details",
-            ),
-            centerTitle: true,
-          ),
+          appBar: AppBar(title: const Text("Job Details"), centerTitle: true),
           body: ListView(
-            padding:
-                const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
             children: [
               Text(
                 campaignName,
                 style: const TextStyle(
                   fontSize: 28,
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
 
@@ -476,37 +433,29 @@ class JobDetailsScreen extends StatelessWidget {
 
               Text(
                 businessEmail,
-                style: TextStyle(
-                  color:
-                      Colors.grey.shade700,
-                ),
+                style: TextStyle(color: Colors.grey.shade700),
               ),
+
+              const SizedBox(height: 16),
+
+              _assignedZoneSummary(currentUser),
 
               const SizedBox(height: 24),
 
               Card(
                 child: Padding(
-                  padding:
-                      const EdgeInsets.all(
-                    20,
-                  ),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
                         "Job Description",
                         style: TextStyle(
                           fontSize: 18,
-                          fontWeight:
-                              FontWeight
-                                  .bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(
-                        height: 10,
-                      ),
+                      const SizedBox(height: 10),
                       Text(description),
                     ],
                   ),
@@ -520,31 +469,19 @@ class JobDetailsScreen extends StatelessWidget {
                   Expanded(
                     child: Card(
                       child: Padding(
-                        padding:
-                            const EdgeInsets
-                                .all(18),
+                        padding: const EdgeInsets.all(18),
                         child: Column(
                           children: [
-                            const Icon(
-                              Icons
-                                  .attach_money,
-                            ),
-                            const SizedBox(
-                              height: 8,
-                            ),
+                            const Icon(Icons.attach_money),
+                            const SizedBox(height: 8),
                             Text(
                               "\$$basePay",
-                              style:
-                                  const TextStyle(
+                              style: const TextStyle(
                                 fontSize: 24,
-                                fontWeight:
-                                    FontWeight
-                                        .bold,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text(
-                              "Base Pay",
-                            ),
+                            const Text("Base Pay"),
                           ],
                         ),
                       ),
@@ -556,31 +493,19 @@ class JobDetailsScreen extends StatelessWidget {
                   Expanded(
                     child: Card(
                       child: Padding(
-                        padding:
-                            const EdgeInsets
-                                .all(18),
+                        padding: const EdgeInsets.all(18),
                         child: Column(
                           children: [
-                            const Icon(
-                              Icons
-                                  .card_giftcard,
-                            ),
-                            const SizedBox(
-                              height: 8,
-                            ),
+                            const Icon(Icons.card_giftcard),
+                            const SizedBox(height: 8),
                             Text(
                               "\$$bonus",
-                              style:
-                                  const TextStyle(
+                              style: const TextStyle(
                                 fontSize: 24,
-                                fontWeight:
-                                    FontWeight
-                                        .bold,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text(
-                              "Bonus",
-                            ),
+                            const Text("Bonus"),
                           ],
                         ),
                       ),
@@ -593,12 +518,9 @@ class JobDetailsScreen extends StatelessWidget {
 
               Card(
                 child: ListTile(
-                  leading:
-                      const Icon(Icons.home),
-                  title:
-                      const Text("Homes"),
-                  subtitle:
-                      Text(homes),
+                  leading: const Icon(Icons.home),
+                  title: const Text("Homes"),
+                  subtitle: Text(homes),
                 ),
               ),
 
@@ -606,14 +528,9 @@ class JobDetailsScreen extends StatelessWidget {
 
               Card(
                 child: ListTile(
-                  leading: const Icon(
-                    Icons.calendar_today,
-                  ),
-                  title: const Text(
-                    "Deadline",
-                  ),
-                  subtitle:
-                      Text(deadline),
+                  leading: const Icon(Icons.calendar_today),
+                  title: const Text("Deadline"),
+                  subtitle: Text(deadline),
                 ),
               ),
 
@@ -621,87 +538,53 @@ class JobDetailsScreen extends StatelessWidget {
 
               Card(
                 child: ListTile(
-                  leading:
-                      const Icon(Icons.flag),
-                  title:
-                      const Text("Status"),
-                  subtitle: Text(
-                    _statusLabel(status),
-                  ),
+                  leading: const Icon(Icons.flag),
+                  title: const Text("Status"),
+                  subtitle: Text(_statusLabel(status)),
                 ),
               ),
 
-              if (status ==
-                      'in_progress' &&
+              if (status == 'in_progress' &&
                   reviewFeedback != null &&
-                  reviewFeedback
-                      .isNotEmpty) ...[
+                  reviewFeedback.isNotEmpty) ...[
                 const SizedBox(height: 20),
 
                 Card(
-                  color:
-                      Colors.orange.shade50,
+                  color: Colors.orange.shade50,
                   child: Padding(
-                    padding:
-                        const EdgeInsets
-                            .all(20),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Row(
                           children: [
-                            Icon(
-                              Icons
-                                  .feedback_outlined,
-                              color:
-                                  Colors.orange,
-                            ),
-                            SizedBox(
-                              width: 10,
-                            ),
+                            Icon(Icons.feedback_outlined, color: Colors.orange),
+                            SizedBox(width: 10),
                             Text(
                               "Changes Requested",
-                              style:
-                                  TextStyle(
+                              style: TextStyle(
                                 fontSize: 20,
-                                fontWeight:
-                                    FontWeight
-                                        .bold,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
                         ),
 
-                        const SizedBox(
-                          height: 12,
-                        ),
+                        const SizedBox(height: 12),
 
                         const Text(
                           "The business owner asked you to make these changes:",
-                          style: TextStyle(
-                            fontWeight:
-                                FontWeight
-                                    .w600,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
 
-                        const SizedBox(
-                          height: 10,
-                        ),
+                        const SizedBox(height: 10),
 
                         Text(
                           reviewFeedback,
-                          style:
-                              const TextStyle(
-                            fontSize: 16,
-                          ),
+                          style: const TextStyle(fontSize: 16),
                         ),
 
-                        const SizedBox(
-                          height: 12,
-                        ),
+                        const SizedBox(height: 12),
 
                         const Text(
                           "Complete the requested changes, then submit the job again for review.",
@@ -714,65 +597,38 @@ class JobDetailsScreen extends StatelessWidget {
 
               const SizedBox(height: 30),
 
-              if (status == 'open' &&
-                  currentUser != null)
-                _applicationSection(
-                  context,
-                  liveCampaign,
-                  currentUser,
-                ),
+              if (status == 'open' && currentUser != null)
+                _applicationSection(context, liveCampaign, currentUser),
 
-              if (status == 'accepted' &&
-                  isAssignedScaler)
+              if (status == 'accepted' && isAssignedScaler)
                 SizedBox(
                   height: 55,
-                  child:
-                      ElevatedButton.icon(
-                    onPressed: () =>
-                        startJob(context),
-                    icon: const Icon(
-                      Icons.play_arrow,
-                    ),
-                    label: const Text(
-                      "Start Job",
-                    ),
+                  child: ElevatedButton.icon(
+                    onPressed: () => startJob(context),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text("Start Job"),
                   ),
                 ),
 
-              if (status ==
-                      'in_progress' &&
-                  isAssignedScaler) ...[
+              if (status == 'in_progress' && isAssignedScaler) ...[
                 Card(
                   child: Padding(
-                    padding:
-                        const EdgeInsets
-                            .all(20),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        const Icon(
-                          Icons.location_on,
-                          size: 42,
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
+                        const Icon(Icons.location_on, size: 42),
+                        const SizedBox(height: 10),
                         const Text(
                           "Job In Progress",
                           style: TextStyle(
                             fontSize: 20,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(
-                          height: 8,
-                        ),
+                        const SizedBox(height: 8),
                         const Text(
                           "GPS tracking and proof-of-work verification will be added here next.",
-                          textAlign:
-                              TextAlign
-                                  .center,
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
@@ -783,18 +639,11 @@ class JobDetailsScreen extends StatelessWidget {
 
                 SizedBox(
                   height: 55,
-                  child:
-                      ElevatedButton.icon(
-                    onPressed: () =>
-                        submitJob(context),
-                    icon: const Icon(
-                      Icons.upload_file,
-                    ),
+                  child: ElevatedButton.icon(
+                    onPressed: () => submitJob(context),
+                    icon: const Icon(Icons.upload_file),
                     label: Text(
-                      reviewFeedback !=
-                                  null &&
-                              reviewFeedback
-                                  .isNotEmpty
+                      reviewFeedback != null && reviewFeedback.isNotEmpty
                           ? "Resubmit Completion"
                           : "Submit Completion",
                     ),
@@ -802,69 +651,44 @@ class JobDetailsScreen extends StatelessWidget {
                 ),
               ],
 
-              if (status ==
-                      'submitted' &&
-                  isAssignedScaler)
+              if (status == 'submitted' && isAssignedScaler)
                 const Card(
                   child: Padding(
-                    padding:
-                        EdgeInsets.all(20),
+                    padding: EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        Icon(
-                          Icons
-                              .hourglass_top,
-                          size: 42,
-                        ),
-                        SizedBox(
-                          height: 10,
-                        ),
+                        Icon(Icons.hourglass_top, size: 42),
+                        SizedBox(height: 10),
                         Text(
                           "Submitted for Review",
                           style: TextStyle(
                             fontSize: 20,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(
-                          height: 8,
-                        ),
+                        SizedBox(height: 8),
                         Text(
                           "The business will review the completed work before the job is marked complete.",
-                          textAlign:
-                              TextAlign
-                                  .center,
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
                   ),
                 ),
 
-              if (status ==
-                      'completed' &&
-                  isAssignedScaler)
+              if (status == 'completed' && isAssignedScaler)
                 const Card(
                   child: Padding(
-                    padding:
-                        EdgeInsets.all(20),
+                    padding: EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        Icon(
-                          Icons.verified,
-                          size: 42,
-                        ),
-                        SizedBox(
-                          height: 10,
-                        ),
+                        Icon(Icons.verified, size: 42),
+                        SizedBox(height: 10),
                         Text(
                           "Job Completed",
                           style: TextStyle(
                             fontSize: 20,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
@@ -883,97 +707,58 @@ class JobDetailsScreen extends StatelessWidget {
     DocumentSnapshot liveCampaign,
     User user,
   ) {
-    final applicationId =
-        "${liveCampaign.id}_${user.uid}";
+    final applicationId = "${liveCampaign.id}_${user.uid}";
 
-    final applicationReference =
-        FirebaseFirestore.instance
-            .collection(
-              'applications',
-            )
-            .doc(applicationId);
+    final applicationReference = FirebaseFirestore.instance
+        .collection('applications')
+        .doc(applicationId);
 
     return StreamBuilder<DocumentSnapshot>(
-      stream:
-          applicationReference.snapshots(),
-      builder: (
-        context,
-        snapshot,
-      ) {
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+      stream: applicationReference.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             height: 55,
-            child: Center(
-              child:
-                  CircularProgressIndicator(),
-            ),
+            child: Center(child: CircularProgressIndicator()),
           );
         }
 
         if (snapshot.hasError) {
-          return Text(
-            snapshot.error.toString(),
-          );
+          return Text(snapshot.error.toString());
         }
 
-        if (!snapshot.hasData ||
-            !snapshot.data!.exists) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
           return SizedBox(
             height: 55,
-            child:
-                ElevatedButton.icon(
-              onPressed: () =>
-                  applyForCampaign(context),
-              icon: const Icon(
-                Icons.send,
-              ),
-              label: const Text(
-                "Apply for Campaign",
-              ),
+            child: ElevatedButton.icon(
+              onPressed: () => applyForCampaign(context),
+              icon: const Icon(Icons.send),
+              label: const Text("Apply for Campaign"),
             ),
           );
         }
 
-        final applicationData =
-            snapshot.data!.data()
-                as Map<String, dynamic>;
+        final applicationData = snapshot.data!.data() as Map<String, dynamic>;
 
         final applicationStatus =
-            applicationData['status']
-                    ?.toString() ??
-                'pending';
+            applicationData['status']?.toString() ?? 'pending';
 
-        if (applicationStatus ==
-            'pending') {
+        if (applicationStatus == 'pending') {
           return const Card(
             child: Padding(
-              padding:
-                  EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Icon(
-                    Icons.hourglass_top,
-                    size: 40,
-                  ),
-                  SizedBox(
-                    height: 10,
-                  ),
+                  Icon(Icons.hourglass_top, size: 40),
+                  SizedBox(height: 10),
                   Text(
                     "Application Pending",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  SizedBox(
-                    height: 8,
-                  ),
+                  SizedBox(height: 8),
                   Text(
                     "The business is reviewing your application.",
-                    textAlign:
-                        TextAlign.center,
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
@@ -981,28 +766,17 @@ class JobDetailsScreen extends StatelessWidget {
           );
         }
 
-        if (applicationStatus ==
-            'rejected') {
+        if (applicationStatus == 'rejected') {
           return const Card(
             child: Padding(
-              padding:
-                  EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Icon(
-                    Icons.cancel_outlined,
-                    size: 40,
-                  ),
-                  SizedBox(
-                    height: 10,
-                  ),
+                  Icon(Icons.cancel_outlined, size: 40),
+                  SizedBox(height: 10),
                   Text(
                     "Application Not Selected",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -1010,28 +784,17 @@ class JobDetailsScreen extends StatelessWidget {
           );
         }
 
-        if (applicationStatus ==
-            'accepted') {
+        if (applicationStatus == 'accepted') {
           return const Card(
             child: Padding(
-              padding:
-                  EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Icon(
-                    Icons.verified,
-                    size: 40,
-                  ),
-                  SizedBox(
-                    height: 10,
-                  ),
+                  Icon(Icons.verified, size: 40),
+                  SizedBox(height: 10),
                   Text(
                     "Application Accepted",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -1044,9 +807,7 @@ class JobDetailsScreen extends StatelessWidget {
     );
   }
 
-  String _statusLabel(
-    String status,
-  ) {
+  String _statusLabel(String status) {
     switch (status) {
       case 'open':
         return 'Open';
@@ -1062,6 +823,9 @@ class JobDetailsScreen extends StatelessWidget {
 
       case 'completed':
         return 'Completed';
+
+      case 'assigned':
+        return 'Assigned';
 
       default:
         return status;
