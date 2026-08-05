@@ -6,6 +6,7 @@ class JobDetailsScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
 
   const JobDetailsScreen({super.key, required this.campaign});
+
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
   }
@@ -16,15 +17,16 @@ class JobDetailsScreen extends StatelessWidget {
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("You must be logged in to apply for a campaign."),
+          content: Text('You must be logged in to apply for a campaign.'),
         ),
       );
+
       return;
     }
 
     final firestore = FirebaseFirestore.instance;
 
-    final applicationId = "${campaign.id}_${user.uid}";
+    final applicationId = '${campaign.id}_${user.uid}';
 
     final applicationReference = firestore
         .collection('applications')
@@ -37,7 +39,7 @@ class JobDetailsScreen extends StatelessWidget {
         final applicationSnapshot = await transaction.get(applicationReference);
 
         if (!campaignSnapshot.exists) {
-          throw Exception("This campaign no longer exists.");
+          throw Exception('This campaign no longer exists.');
         }
 
         final campaignData = campaignSnapshot.data() as Map<String, dynamic>;
@@ -45,11 +47,11 @@ class JobDetailsScreen extends StatelessWidget {
         final campaignStatus = campaignData['status']?.toString() ?? 'open';
 
         if (campaignStatus != 'open') {
-          throw Exception("This campaign is no longer accepting applications.");
+          throw Exception('This campaign is no longer accepting applications.');
         }
 
         if (applicationSnapshot.exists) {
-          throw Exception("You already applied for this campaign.");
+          throw Exception('You already applied for this campaign.');
         }
 
         final campaignName =
@@ -68,6 +70,7 @@ class JobDetailsScreen extends StatelessWidget {
           'scalerEmail': scalerEmail,
           'status': 'pending',
           'appliedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
 
         transaction.update(campaign.reference, {
@@ -94,92 +97,151 @@ class JobDetailsScreen extends StatelessWidget {
         }
       });
 
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Application submitted successfully.")),
+        const SnackBar(content: Text('Application submitted successfully.')),
       );
     } catch (e) {
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Unable to apply: $e")));
+      ).showSnackBar(SnackBar(content: Text('Unable to apply: $e')));
     }
+  }
+
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
+  _getAssignedZone() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return null;
+    }
+
+    final snapshot = await _zonesCollection
+        .where('campaignId', isEqualTo: campaign.id)
+        .where('assignedScalerId', isEqualTo: user.uid)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      return null;
+    }
+
+    return snapshot.docs.first;
   }
 
   Future<void> startJob(BuildContext context) async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+    if (user == null) {
+      return;
+    }
 
     try {
-      final snapshot = await campaign.reference.get();
+      final zone = await _getAssignedZone();
 
-      if (!snapshot.exists) {
-        throw Exception("This campaign no longer exists.");
+      if (zone == null) {
+        throw Exception('You do not have an assigned zone for this campaign.');
       }
 
-      final data = snapshot.data() as Map<String, dynamic>;
+      final zoneData = zone.data();
 
-      if (data['assignedWorkerId'] != user.uid) {
-        throw Exception("This campaign is not assigned to you.");
+      final assignedScalerId = zoneData['assignedScalerId']?.toString();
+
+      if (assignedScalerId != user.uid) {
+        throw Exception('This zone is not assigned to you.');
       }
 
-      await campaign.reference.update({
+      final zoneStatus = zoneData['status']?.toString() ?? 'assigned';
+
+      if (zoneStatus != 'assigned' && zoneStatus != 'accepted') {
+        throw Exception('This zone cannot be started from its current status.');
+      }
+
+      await zone.reference.update({
         'status': 'in_progress',
         'startedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
+
+      final zoneName = zoneData['zoneName']?.toString() ?? 'Zone';
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Job started.")));
-
-      Navigator.pop(context);
+      ).showSnackBar(SnackBar(content: Text('$zoneName started.')));
     } catch (e) {
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Unable to start job: $e")));
+      ).showSnackBar(SnackBar(content: Text('Unable to start zone: $e')));
     }
   }
 
   Future<void> submitJob(BuildContext context) async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+    if (user == null) {
+      return;
+    }
 
     final firestore = FirebaseFirestore.instance;
 
     try {
-      final snapshot = await campaign.reference.get();
+      final zone = await _getAssignedZone();
 
-      if (!snapshot.exists) {
-        throw Exception("This campaign no longer exists.");
+      if (zone == null) {
+        throw Exception('You do not have an assigned zone for this campaign.');
       }
 
-      final data = snapshot.data() as Map<String, dynamic>;
+      final zoneData = zone.data();
 
-      if (data['assignedWorkerId'] != user.uid) {
-        throw Exception("This campaign is not assigned to you.");
+      if (zoneData['assignedScalerId']?.toString() != user.uid) {
+        throw Exception('This zone is not assigned to you.');
       }
 
-      final businessId = data['businessId']?.toString();
+      final zoneStatus = zoneData['status']?.toString() ?? 'assigned';
+
+      if (zoneStatus != 'in_progress') {
+        throw Exception('Start the zone before submitting completion.');
+      }
+
+      final campaignSnapshot = await campaign.reference.get();
+
+      if (!campaignSnapshot.exists) {
+        throw Exception('This campaign no longer exists.');
+      }
+
+      final campaignData = campaignSnapshot.data() as Map<String, dynamic>;
+
+      final businessId = campaignData['businessId']?.toString();
 
       final campaignName =
-          data['campaignName']?.toString() ?? 'Untitled Campaign';
+          campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
+
+      final zoneName = zoneData['zoneName']?.toString() ?? 'Assigned Zone';
 
       final scalerEmail = user.email ?? 'Scaler';
 
       final batch = firestore.batch();
 
-      batch.update(campaign.reference, {
+      batch.update(zone.reference, {
         'status': 'submitted',
         'submittedAt': FieldValue.serverTimestamp(),
         'reviewFeedback': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       if (businessId != null && businessId.isNotEmpty) {
@@ -189,11 +251,13 @@ class JobDetailsScreen extends StatelessWidget {
 
         batch.set(notificationReference, {
           'userId': businessId,
-          'type': 'completion_submitted',
-          'title': 'Completion Submitted',
-          'message': '$scalerEmail submitted $campaignName for review.',
+          'type': 'zone_completion_submitted',
+          'title': 'Zone Completion Submitted',
+          'message': '$scalerEmail submitted $zoneName for review.',
           'campaignId': campaign.id,
           'campaignName': campaignName,
+          'zoneId': zone.id,
+          'zoneName': zoneName,
           'scalerId': user.uid,
           'scalerEmail': scalerEmail,
           'read': false,
@@ -203,19 +267,21 @@ class JobDetailsScreen extends StatelessWidget {
 
       await batch.commit();
 
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Job submitted for review.")),
+        SnackBar(content: Text('$zoneName submitted for review.')),
       );
-
-      Navigator.pop(context);
     } catch (e) {
-      if (!context.mounted) return;
+      if (!context.mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Unable to submit job: $e")));
+      ).showSnackBar(SnackBar(content: Text('Unable to submit zone: $e')));
     }
   }
 
@@ -266,6 +332,10 @@ class JobDetailsScreen extends StatelessWidget {
         final walkingMiles = (data['estimatedWalkingMiles'] as num?)
             ?.toDouble();
 
+        final estimatedMinutes = (data['estimatedMinutes'] as num?)?.toInt();
+
+        final suggestedPay = (data['suggestedBasePay'] as num?)?.toDouble();
+
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(18),
@@ -275,7 +345,9 @@ class JobDetailsScreen extends StatelessWidget {
                 Row(
                   children: [
                     const CircleAvatar(child: Icon(Icons.map_outlined)),
+
                     const SizedBox(width: 12),
+
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,7 +356,9 @@ class JobDetailsScreen extends StatelessWidget {
                             'Your Assigned Zone',
                             style: TextStyle(fontSize: 13),
                           ),
+
                           const SizedBox(height: 3),
+
                           Text(
                             zoneName,
                             style: const TextStyle(
@@ -295,10 +369,13 @@ class JobDetailsScreen extends StatelessWidget {
                         ],
                       ),
                     ),
+
                     Chip(label: Text(_statusLabel(zoneStatus))),
                   ],
                 ),
+
                 const SizedBox(height: 16),
+
                 Row(
                   children: [
                     Expanded(
@@ -310,7 +387,9 @@ class JobDetailsScreen extends StatelessWidget {
                             : 'Pending',
                       ),
                     ),
+
                     const SizedBox(width: 12),
+
                     Expanded(
                       child: _zoneSummaryMetric(
                         icon: Icons.directions_walk,
@@ -318,6 +397,34 @@ class JobDetailsScreen extends StatelessWidget {
                         value: walkingMiles == null
                             ? 'Pending'
                             : '${walkingMiles.toStringAsFixed(1)} mi',
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _zoneSummaryMetric(
+                        icon: Icons.schedule,
+                        label: 'Estimated Time',
+                        value: estimatedMinutes == null
+                            ? 'Pending'
+                            : _formatDuration(estimatedMinutes),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    Expanded(
+                      child: _zoneSummaryMetric(
+                        icon: Icons.payments_outlined,
+                        label: 'Recommended Pay',
+                        value: suggestedPay == null
+                            ? 'Pending'
+                            : '\$${suggestedPay.toStringAsFixed(0)}',
                       ),
                     ),
                   ],
@@ -344,12 +451,16 @@ class JobDetailsScreen extends StatelessWidget {
       child: Column(
         children: [
           Icon(icon, size: 22),
+
           const SizedBox(height: 6),
+
           Text(
             value,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
+
           const SizedBox(height: 3),
+
           Text(
             label,
             textAlign: TextAlign.center,
@@ -357,6 +468,204 @@ class JobDetailsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _assignedZoneActions(BuildContext context, User? currentUser) {
+    if (currentUser == null) {
+      return const SizedBox.shrink();
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _zonesCollection
+          .where('campaignId', isEqualTo: campaign.id)
+          .where('assignedScalerId', isEqualTo: currentUser.uid)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Unable to load zone controls: ${snapshot.error}'),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 55,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final zones = snapshot.data?.docs ?? [];
+
+        if (zones.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final data = zones.first.data();
+
+        final zoneName = data['zoneName']?.toString() ?? 'Assigned Zone';
+
+        final zoneStatus = data['status']?.toString() ?? 'assigned';
+
+        final reviewFeedback = data['reviewFeedback']?.toString();
+
+        if (zoneStatus == 'assigned' || zoneStatus == 'accepted') {
+          return SizedBox(
+            height: 55,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                startJob(context);
+              },
+              icon: const Icon(Icons.play_arrow),
+              label: Text('Start $zoneName'),
+            ),
+          );
+        }
+
+        if (zoneStatus == 'in_progress') {
+          return Column(
+            children: [
+              if (reviewFeedback != null && reviewFeedback.isNotEmpty) ...[
+                Card(
+                  color: Colors.orange.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.feedback_outlined, color: Colors.orange),
+                            SizedBox(width: 10),
+                            Text(
+                              'Changes Requested',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        Text(reviewFeedback),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+              ],
+
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.location_on, size: 42),
+
+                      const SizedBox(height: 10),
+
+                      Text(
+                        '$zoneName In Progress',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      const Text(
+                        'Your assigned zone is active. GPS tracking will be connected to this zone next.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    submitJob(context);
+                  },
+                  icon: const Icon(Icons.upload_file),
+                  label: Text(
+                    reviewFeedback != null && reviewFeedback.isNotEmpty
+                        ? 'Resubmit $zoneName'
+                        : 'Submit $zoneName',
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        if (zoneStatus == 'submitted') {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Icon(Icons.hourglass_top, size: 42),
+
+                  const SizedBox(height: 10),
+
+                  Text(
+                    '$zoneName Submitted',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  const Text(
+                    'The business is reviewing your zone.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (zoneStatus == 'completed') {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Icon(Icons.verified, size: 42),
+
+                  const SizedBox(height: 10),
+
+                  Text(
+                    '$zoneName Completed',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
     );
   }
 
@@ -369,7 +678,7 @@ class JobDetailsScreen extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text("Job Details")),
+            appBar: AppBar(title: const Text('Job Details')),
             body: Center(child: Text(snapshot.error.toString())),
           );
         }
@@ -384,8 +693,8 @@ class JobDetailsScreen extends StatelessWidget {
 
         if (!liveCampaign.exists) {
           return Scaffold(
-            appBar: AppBar(title: const Text("Job Details")),
-            body: const Center(child: Text("This job no longer exists.")),
+            appBar: AppBar(title: const Text('Job Details')),
+            body: const Center(child: Text('This job no longer exists.')),
           );
         }
 
@@ -399,25 +708,16 @@ class JobDetailsScreen extends StatelessWidget {
         final businessEmail =
             data['businessEmail']?.toString() ?? 'Not provided';
 
-        final homes = data['homes']?.toString() ?? '0';
-
         final basePay = data['basePay']?.toString() ?? '0';
 
         final bonus = data['bonus']?.toString() ?? '0';
 
         final status = data['status']?.toString() ?? 'open';
 
-        final deadline = data['deadline']?.toString() ?? 'Not specified';
-
-        final reviewFeedback = data['reviewFeedback']?.toString();
-
-        final assignedWorkerId = data['assignedWorkerId']?.toString();
-
-        final isAssignedScaler =
-            currentUser != null && assignedWorkerId == currentUser.uid;
+        final deadline = _deadlineLabel(data);
 
         return Scaffold(
-          appBar: AppBar(title: const Text("Job Details"), centerTitle: true),
+          appBar: AppBar(title: const Text('Job Details'), centerTitle: true),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -449,13 +749,15 @@ class JobDetailsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        "Job Description",
+                        'Job Description',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+
                       const SizedBox(height: 10),
+
                       Text(description),
                     ],
                   ),
@@ -473,15 +775,18 @@ class JobDetailsScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             const Icon(Icons.attach_money),
+
                             const SizedBox(height: 8),
+
                             Text(
-                              "\$$basePay",
+                              '\$$basePay',
                               style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text("Base Pay"),
+
+                            const Text('Campaign Base Pay'),
                           ],
                         ),
                       ),
@@ -497,15 +802,18 @@ class JobDetailsScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             const Icon(Icons.card_giftcard),
+
                             const SizedBox(height: 8),
+
                             Text(
-                              "\$$bonus",
+                              '\$$bonus',
                               style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text("Bonus"),
+
+                            const Text('Bonus'),
                           ],
                         ),
                       ),
@@ -518,18 +826,8 @@ class JobDetailsScreen extends StatelessWidget {
 
               Card(
                 child: ListTile(
-                  leading: const Icon(Icons.home),
-                  title: const Text("Homes"),
-                  subtitle: Text(homes),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              Card(
-                child: ListTile(
                   leading: const Icon(Icons.calendar_today),
-                  title: const Text("Deadline"),
+                  title: const Text('Deadline'),
                   subtitle: Text(deadline),
                 ),
               ),
@@ -539,162 +837,19 @@ class JobDetailsScreen extends StatelessWidget {
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.flag),
-                  title: const Text("Status"),
+                  title: const Text('Campaign Status'),
                   subtitle: Text(_statusLabel(status)),
                 ),
               ),
-
-              if (status == 'in_progress' &&
-                  reviewFeedback != null &&
-                  reviewFeedback.isNotEmpty) ...[
-                const SizedBox(height: 20),
-
-                Card(
-                  color: Colors.orange.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.feedback_outlined, color: Colors.orange),
-                            SizedBox(width: 10),
-                            Text(
-                              "Changes Requested",
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        const Text(
-                          "The business owner asked you to make these changes:",
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        Text(
-                          reviewFeedback,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        const Text(
-                          "Complete the requested changes, then submit the job again for review.",
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
 
               const SizedBox(height: 30),
 
               if (status == 'open' && currentUser != null)
                 _applicationSection(context, liveCampaign, currentUser),
 
-              if (status == 'accepted' && isAssignedScaler)
-                SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: () => startJob(context),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text("Start Job"),
-                  ),
-                ),
+              const SizedBox(height: 12),
 
-              if (status == 'in_progress' && isAssignedScaler) ...[
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.location_on, size: 42),
-                        const SizedBox(height: 10),
-                        const Text(
-                          "Job In Progress",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          "GPS tracking and proof-of-work verification will be added here next.",
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: () => submitJob(context),
-                    icon: const Icon(Icons.upload_file),
-                    label: Text(
-                      reviewFeedback != null && reviewFeedback.isNotEmpty
-                          ? "Resubmit Completion"
-                          : "Submit Completion",
-                    ),
-                  ),
-                ),
-              ],
-
-              if (status == 'submitted' && isAssignedScaler)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Icon(Icons.hourglass_top, size: 42),
-                        SizedBox(height: 10),
-                        Text(
-                          "Submitted for Review",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          "The business will review the completed work before the job is marked complete.",
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              if (status == 'completed' && isAssignedScaler)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Icon(Icons.verified, size: 42),
-                        SizedBox(height: 10),
-                        Text(
-                          "Job Completed",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              _assignedZoneActions(context, currentUser),
             ],
           ),
         );
@@ -707,7 +862,7 @@ class JobDetailsScreen extends StatelessWidget {
     DocumentSnapshot liveCampaign,
     User user,
   ) {
-    final applicationId = "${liveCampaign.id}_${user.uid}";
+    final applicationId = '${liveCampaign.id}_${user.uid}';
 
     final applicationReference = FirebaseFirestore.instance
         .collection('applications')
@@ -731,9 +886,11 @@ class JobDetailsScreen extends StatelessWidget {
           return SizedBox(
             height: 55,
             child: ElevatedButton.icon(
-              onPressed: () => applyForCampaign(context),
+              onPressed: () {
+                applyForCampaign(context);
+              },
               icon: const Icon(Icons.send),
-              label: const Text("Apply for Campaign"),
+              label: const Text('Apply for Campaign'),
             ),
           );
         }
@@ -743,6 +900,9 @@ class JobDetailsScreen extends StatelessWidget {
         final applicationStatus =
             applicationData['status']?.toString() ?? 'pending';
 
+        final assignedZoneName = applicationData['assignedZoneName']
+            ?.toString();
+
         if (applicationStatus == 'pending') {
           return const Card(
             child: Padding(
@@ -750,14 +910,18 @@ class JobDetailsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   Icon(Icons.hourglass_top, size: 40),
+
                   SizedBox(height: 10),
+
                   Text(
-                    "Application Pending",
+                    'Application Pending',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
+
                   SizedBox(height: 8),
+
                   Text(
-                    "The business is reviewing your application.",
+                    'The business is reviewing your application.',
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -773,9 +937,11 @@ class JobDetailsScreen extends StatelessWidget {
               child: Column(
                 children: [
                   Icon(Icons.cancel_outlined, size: 40),
+
                   SizedBox(height: 10),
+
                   Text(
-                    "Application Not Selected",
+                    'Application Not Selected',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -785,17 +951,26 @@ class JobDetailsScreen extends StatelessWidget {
         }
 
         if (applicationStatus == 'accepted') {
-          return const Card(
+          return Card(
             child: Padding(
-              padding: EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Icon(Icons.verified, size: 40),
-                  SizedBox(height: 10),
-                  Text(
-                    "Application Accepted",
+                  const Icon(Icons.verified, size: 40),
+
+                  const SizedBox(height: 10),
+
+                  const Text(
+                    'Application Accepted',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
+
+                  if (assignedZoneName != null &&
+                      assignedZoneName.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+
+                    Text('Assigned to $assignedZoneName'),
+                  ],
                 ],
               ),
             ),
@@ -807,10 +982,51 @@ class JobDetailsScreen extends StatelessWidget {
     );
   }
 
+  String _deadlineLabel(Map<String, dynamic> data) {
+    final deadlineAt = data['deadlineAt'];
+
+    if (deadlineAt is Timestamp) {
+      final date = deadlineAt.toDate();
+
+      final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+
+      final minute = date.minute.toString().padLeft(2, '0');
+
+      final period = date.hour >= 12 ? 'PM' : 'AM';
+
+      return '${date.month}/${date.day}/${date.year} '
+          '$hour:$minute $period';
+    }
+
+    return data['deadline']?.toString() ?? 'Not specified';
+  }
+
+  String _formatDuration(int minutes) {
+    if (minutes < 60) {
+      return '$minutes min';
+    }
+
+    final hours = minutes ~/ 60;
+
+    final remainingMinutes = minutes % 60;
+
+    if (remainingMinutes == 0) {
+      return '$hours hr';
+    }
+
+    return '$hours hr $remainingMinutes min';
+  }
+
   String _statusLabel(String status) {
     switch (status) {
       case 'open':
         return 'Open';
+
+      case 'unassigned':
+        return 'Unassigned';
+
+      case 'assigned':
+        return 'Assigned';
 
       case 'accepted':
         return 'Accepted';
@@ -823,9 +1039,6 @@ class JobDetailsScreen extends StatelessWidget {
 
       case 'completed':
         return 'Completed';
-
-      case 'assigned':
-        return 'Assigned';
 
       default:
         return status;
