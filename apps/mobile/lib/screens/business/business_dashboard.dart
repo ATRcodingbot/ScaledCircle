@@ -2,12 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/subscription_plan_service.dart';
 import '../../services/wallet_service.dart';
 import '../campaigns/campaign_details_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'create_campaign_screen.dart';
 import 'subscription_screen.dart';
-import '../../services/subscription_plan_service.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -22,9 +22,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
   final SubscriptionPlanService _planService = SubscriptionPlanService();
 
   bool _walletLoading = true;
+
   String? _walletError;
 
   double _availableCredits = 0.0;
+
   double _reservedCredits = 0.0;
 
   @override
@@ -125,29 +127,29 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
           .doc(userId)
           .get();
 
-      final walletData = walletSnapshot.data();
-
-      final subscriptionStatus = walletData?['subscriptionStatus']?.toString();
-
-      final subscriptionPlan = walletData?['subscriptionPlan']?.toString();
-
-      final expiresAt = walletData?['subscriptionExpiresAt'];
-
-      final subscriptionActive =
-          subscriptionStatus == 'active' &&
-          subscriptionPlan != null &&
-          subscriptionPlan.isNotEmpty &&
-          expiresAt is Timestamp &&
-          expiresAt.toDate().isAfter(DateTime.now());
-
       if (!context.mounted) {
         return;
       }
 
-      /*
-     * No active subscription:
-     * send business to plan selection.
-     */
+      final walletData = walletSnapshot.data();
+
+      final subscriptionStatus = walletData?['subscriptionStatus']
+          ?.toString()
+          .toLowerCase();
+
+      final planId = walletData?['subscriptionPlan']?.toString().toLowerCase();
+
+      final expiresAt = walletData?['subscriptionExpiresAt'];
+
+      final subscriptionActive =
+          walletSnapshot.exists &&
+          subscriptionStatus == 'active' &&
+          planId != null &&
+          planId.isNotEmpty &&
+          (expiresAt == null ||
+              (expiresAt is Timestamp &&
+                  expiresAt.toDate().isAfter(DateTime.now())));
+
       if (!subscriptionActive) {
         final subscribed = await Navigator.push<bool>(
           context,
@@ -160,66 +162,79 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
         await _loadWallet();
 
+        if (!context.mounted) {
+          return;
+        }
+
         if (subscribed != true) {
           return;
         }
 
-        /*
-       * Re-enter this method so subscription,
-       * plan, and campaign limits are all
-       * checked again using fresh Firestore data.
-       */
         await _openCreateCampaign(context, userId);
 
         return;
       }
 
-      /*
-     * Count operating campaigns.
-     *
-     * Drafts do not count against the plan.
-     * Completed campaigns do not count either.
-     */
       final campaignsSnapshot = await FirebaseFirestore.instance
           .collection('campaigns')
           .where('businessId', isEqualTo: userId)
           .get();
+
+      if (!context.mounted) {
+        return;
+      }
 
       int activeCampaignCount = 0;
 
       for (final campaign in campaignsSnapshot.docs) {
         final data = campaign.data();
 
-        final status = data['status']?.toString() ?? '';
+        final status = data['status']?.toString().toLowerCase() ?? '';
 
-        if (status != 'draft' && status != 'completed') {
+        if (status != 'draft' &&
+            status != 'completed' &&
+            status != 'cancelled' &&
+            status != 'canceled') {
           activeCampaignCount++;
         }
       }
 
       final canCreateCampaign = _planService.canCreateCampaign(
-        plan: subscriptionPlan,
+        plan: planId,
         currentActiveCampaigns: activeCampaignCount,
       );
 
       if (!canCreateCampaign) {
-        final maximum = _planService.getMaxActiveCampaigns(subscriptionPlan);
-
-        final planName = _planService.getPlanName(subscriptionPlan);
+        final campaignLimit = _planService.getMaxActiveCampaigns(planId);
 
         if (!context.mounted) {
           return;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '$planName allows a maximum of '
-              '$maximum active campaigns. '
-              'Complete an existing campaign or '
-              'upgrade your subscription.',
-            ),
-          ),
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('Campaign Limit Reached'),
+              content: Text(
+                campaignLimit == null
+                    ? 'Your current plan does not allow another campaign.'
+                    : 'Your ${_planService.getPlanName(planId)} plan allows '
+                          '$campaignLimit active '
+                          'campaign${campaignLimit == 1 ? '' : 's'}. '
+                          'Complete an existing campaign or upgrade your plan '
+                          'before creating another one.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
         );
 
         return;
@@ -234,6 +249,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
       );
 
+      if (!context.mounted) {
+        return;
+      }
+
       await _loadWallet();
     } catch (e) {
       if (!context.mounted) {
@@ -241,7 +260,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to open campaign creation: $e')),
+        SnackBar(content: Text('Unable to open campaign creator: $e')),
       );
     }
   }
@@ -285,7 +304,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     },
                     icon: const Icon(Icons.notifications_outlined),
                   ),
-
                   if (unreadCount > 0)
                     Positioned(
                       right: 5,
@@ -316,7 +334,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               );
             },
           ),
-
           const SizedBox(width: 8),
         ],
       ),
@@ -346,13 +363,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             final activeCampaigns = campaigns.where((campaign) {
               final data = campaign.data() as Map<String, dynamic>;
 
-              final status = data['status']?.toString() ?? '';
+              final status = data['status']?.toString().toLowerCase() ?? '';
 
-              /*
-                 * Draft campaigns are not counted
-                 * as active operating campaigns.
-                 */
-              return status != 'completed' && status != 'draft';
+              return status != 'completed' &&
+                  status != 'draft' &&
+                  status != 'cancelled' &&
+                  status != 'canceled';
             }).toList();
 
             /*
@@ -365,7 +381,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             final submittedCampaigns = campaigns.where((campaign) {
               final data = campaign.data() as Map<String, dynamic>;
 
-              return data['status'] == 'submitted';
+              final status = data['status']?.toString().toLowerCase() ?? '';
+
+              return status == 'submitted';
             }).toList();
 
             return ListView(
@@ -376,7 +394,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   'Welcome Back!',
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
-
                 const SizedBox(height: 20),
 
                 _buildWalletSection(),
@@ -415,9 +432,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-
                               const SizedBox(height: 8),
-
                               const Text(
                                 'Active Campaigns',
                                 textAlign: TextAlign.center,
@@ -427,9 +442,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         ),
                       ),
                     ),
-
                     const SizedBox(width: 12),
-
                     Expanded(
                       child: Card(
                         child: Padding(
@@ -443,9 +456,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-
                               const SizedBox(height: 8),
-
                               const Text(
                                 'Needs Review',
                                 textAlign: TextAlign.center,
@@ -460,14 +471,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
                 if (submittedCampaigns.isNotEmpty) ...[
                   const SizedBox(height: 25),
-
                   const Text(
                     'Needs Review',
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
-
                   const SizedBox(height: 15),
-
                   ...submittedCampaigns.map((campaign) {
                     final data = campaign.data() as Map<String, dynamic>;
 
@@ -520,7 +528,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 ...campaigns.map((campaign) {
                   final data = campaign.data() as Map<String, dynamic>;
 
-                  final status = data['status']?.toString() ?? '';
+                  final status = data['status']?.toString().toLowerCase() ?? '';
 
                   final applications =
                       (data['applications'] as num?)?.toInt() ?? 0;
@@ -553,25 +561,20 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 5),
-
                           Text(
                             data['description']?.toString() ?? '',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-
                           const SizedBox(height: 5),
-
                           Text(
                             '$estimatedHomes homes • '
                             '\$${basePay.toStringAsFixed(2)} base pay'
                             '${bonus > 0 ? ' • \$${bonus.toStringAsFixed(2)} bonus' : ''}',
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
-
                           if (platformFee != null) ...[
                             const SizedBox(height: 4),
-
                             Text(
                               'Platform fee: '
                               '\$${platformFee.toStringAsFixed(2)}',
@@ -581,17 +584,13 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                               ),
                             ),
                           ],
-
                           const SizedBox(height: 4),
-
                           Text(
                             'Status: ${_statusLabel(status)}',
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
-
                           if (status == 'open' && applications > 0) ...[
                             const SizedBox(height: 5),
-
                             Text(
                               '$applications Scaler${applications == 1 ? '' : 's'} applied',
                               style: const TextStyle(
@@ -641,13 +640,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
           child: Column(
             children: [
               const Icon(Icons.error_outline, size: 38),
-
               const SizedBox(height: 10),
-
               Text(_walletError!, textAlign: TextAlign.center),
-
               const SizedBox(height: 12),
-
               ElevatedButton(
                 onPressed: _initializeWallet,
                 child: const Text('Retry Wallet'),
@@ -665,9 +660,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
           'Campaign Funding',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
-
         const SizedBox(height: 12),
-
         Row(
           children: [
             Expanded(
@@ -677,9 +670,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 amount: _availableCredits,
               ),
             ),
-
             const SizedBox(width: 12),
-
             Expanded(
               child: _walletCard(
                 icon: Icons.lock_outline,
@@ -689,9 +680,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             ),
           ],
         ),
-
         const SizedBox(height: 12),
-
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -699,9 +688,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.science_outlined),
-
                 const SizedBox(width: 10),
-
                 Expanded(
                   child: Text(
                     'Development wallet: promotional credits are being used for testing. '
@@ -736,9 +723,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
         final data = snapshot.data?.data();
 
-        final status = data?['subscriptionStatus']?.toString() ?? 'inactive';
+        final status =
+            data?['subscriptionStatus']?.toString().toLowerCase() ?? 'inactive';
 
-        final plan = data?['subscriptionPlan']?.toString();
+        final plan = data?['subscriptionPlan']?.toString().toLowerCase();
 
         final expiresAt = data?['subscriptionExpiresAt'];
 
@@ -771,9 +759,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       isActive ? Icons.workspace_premium : Icons.lock_outline,
                       size: 30,
                     ),
-
                     const SizedBox(width: 12),
-
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -785,9 +771,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-
                           const SizedBox(height: 4),
-
                           Text(
                             isActive
                                 ? '$planLabel Plan'
@@ -800,37 +784,27 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         ],
                       ),
                     ),
-
                     if (isActive)
-                      Chip(
-                        avatar: const Icon(
-                          Icons.check_circle_outline,
-                          size: 18,
-                        ),
-                        label: const Text('Active'),
+                      const Chip(
+                        avatar: Icon(Icons.check_circle_outline, size: 18),
+                        label: Text('Active'),
                       ),
                   ],
                 ),
-
                 const SizedBox(height: 14),
-
                 if (isActive) ...[
                   if (price != null)
                     Text(
                       '${price.toStringAsFixed(0)} credits / month',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-
                   if (price != null) const SizedBox(height: 4),
-
                   Text(
                     expirationLabel.isEmpty
                         ? 'Subscription active'
                         : 'Active until $expirationLabel',
                   ),
-
                   const SizedBox(height: 8),
-
                   Text(
                     _subscriptionDescription(plan),
                     style: TextStyle(color: Colors.grey.shade700),
@@ -839,17 +813,13 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   const Text(
                     'Choose a monthly plan before creating or publishing campaigns.',
                   ),
-
                   const SizedBox(height: 8),
-
                   const Text(
                     'Starter: 99 credits • Growth: 299 credits • Scale: 499 credits',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ],
-
                 const SizedBox(height: 16),
-
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -860,6 +830,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                           builder: (_) => const SubscriptionScreen(),
                         ),
                       );
+
+                      if (!mounted) {
+                        return;
+                      }
 
                       await _loadWallet();
                     },
@@ -888,16 +862,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         child: Column(
           children: [
             Icon(icon, size: 30),
-
             const SizedBox(height: 8),
-
             Text(
               '\$${amount.toStringAsFixed(2)}',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 4),
-
             Text(title, textAlign: TextAlign.center),
           ],
         ),
@@ -924,13 +894,16 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
   String _subscriptionDescription(String? plan) {
     switch (plan) {
       case 'starter':
-        return 'Core campaigns, zone mapping, GPS verification, Scaler access, payouts, and basic analytics.';
+        return 'Core campaigns, zone mapping, GPS verification, '
+            'Scaler access, payouts, and basic analytics.';
 
       case 'growth':
-        return 'Higher campaign limits plus lead tracking, landing pages, AI marketing tools, and advanced analytics.';
+        return 'Higher campaign limits plus lead tracking, landing pages, '
+            'AI marketing tools, and advanced analytics.';
 
       case 'scale':
-        return 'High-volume access with unlimited operations, teams, priority matching, integrations, and advanced reporting.';
+        return 'High-volume access with unlimited operations, teams, '
+            'priority matching, integrations, and advanced reporting.';
 
       default:
         return 'Choose a Scaled Circle subscription plan.';
@@ -959,6 +932,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
       case 'completed':
         return 'Completed';
+
+      case 'cancelled':
+      case 'canceled':
+        return 'Cancelled';
 
       default:
         return status.isEmpty ? 'Unknown' : status;

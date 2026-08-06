@@ -13,6 +13,12 @@ class PlatformBillingService {
     'scale': 499.0,
   };
 
+  static const Map<String, int> _subscriptionRanks = {
+    'starter': 1,
+    'growth': 2,
+    'scale': 3,
+  };
+
   double calculateCampaignFee(double workerBudget) {
     if (workerBudget <= 0.0) {
       return 0.0;
@@ -26,13 +32,59 @@ class PlatformBillingService {
   }
 
   double subscriptionPrice(String plan) {
-    final price = subscriptionPrices[plan];
+    final normalizedPlan = plan.toLowerCase();
+
+    final price = subscriptionPrices[normalizedPlan];
 
     if (price == null) {
       throw Exception('Unknown subscription plan.');
     }
 
     return price;
+  }
+
+  int subscriptionRank(String plan) {
+    final normalizedPlan = plan.toLowerCase();
+
+    final rank = _subscriptionRanks[normalizedPlan];
+
+    if (rank == null) {
+      throw Exception('Unknown subscription plan.');
+    }
+
+    return rank;
+  }
+
+  bool isUpgrade({required String currentPlan, required String targetPlan}) {
+    return subscriptionRank(targetPlan) > subscriptionRank(currentPlan);
+  }
+
+  double calculateUpgradePrice({
+    required String currentPlan,
+    required String targetPlan,
+  }) {
+    final normalizedCurrentPlan = currentPlan.toLowerCase();
+
+    final normalizedTargetPlan = targetPlan.toLowerCase();
+
+    if (normalizedCurrentPlan == normalizedTargetPlan) {
+      return 0.0;
+    }
+
+    if (!isUpgrade(
+      currentPlan: normalizedCurrentPlan,
+      targetPlan: normalizedTargetPlan,
+    )) {
+      throw Exception(
+        'Downgrading an active subscription is not currently supported.',
+      );
+    }
+
+    final currentPrice = subscriptionPrice(normalizedCurrentPlan);
+
+    final targetPrice = subscriptionPrice(normalizedTargetPlan);
+
+    return targetPrice - currentPrice;
   }
 
   Future<bool> hasActiveSubscription({required String businessId}) async {
@@ -64,14 +116,117 @@ class PlatformBillingService {
     return expiresAt.toDate().isAfter(DateTime.now());
   }
 
+  Future<Map<String, dynamic>> getSubscriptionQuote({
+    required String businessId,
+    required String targetPlan,
+  }) async {
+    final normalizedTargetPlan = targetPlan.toLowerCase();
+
+    final targetPrice = subscriptionPrice(normalizedTargetPlan);
+
+    final walletSnapshot = await _firestore
+        .collection('wallets')
+        .doc(businessId)
+        .get();
+
+    if (!walletSnapshot.exists) {
+      return {
+        'targetPlan': normalizedTargetPlan,
+        'targetPrice': targetPrice,
+        'charge': targetPrice,
+        'isUpgrade': false,
+        'isCurrentPlan': false,
+        'isDowngrade': false,
+        'currentPlan': null,
+        'expiresAt': null,
+      };
+    }
+
+    final data = walletSnapshot.data() ?? {};
+
+    final currentPlan = data['subscriptionPlan']?.toString().toLowerCase();
+
+    final status = data['subscriptionStatus']?.toString().toLowerCase();
+
+    final expiresAt = data['subscriptionExpiresAt'];
+
+    final active =
+        status == 'active' &&
+        expiresAt is Timestamp &&
+        expiresAt.toDate().isAfter(DateTime.now());
+
+    if (!active ||
+        currentPlan == null ||
+        currentPlan.isEmpty ||
+        !_subscriptionRanks.containsKey(currentPlan)) {
+      return {
+        'targetPlan': normalizedTargetPlan,
+        'targetPrice': targetPrice,
+        'charge': targetPrice,
+        'isUpgrade': false,
+        'isCurrentPlan': false,
+        'isDowngrade': false,
+        'currentPlan': currentPlan,
+        'expiresAt': expiresAt,
+      };
+    }
+
+    final currentRank = subscriptionRank(currentPlan);
+
+    final targetRank = subscriptionRank(normalizedTargetPlan);
+
+    if (currentRank == targetRank) {
+      return {
+        'targetPlan': normalizedTargetPlan,
+        'targetPrice': targetPrice,
+        'charge': 0.0,
+        'isUpgrade': false,
+        'isCurrentPlan': true,
+        'isDowngrade': false,
+        'currentPlan': currentPlan,
+        'expiresAt': expiresAt,
+      };
+    }
+
+    if (targetRank < currentRank) {
+      return {
+        'targetPlan': normalizedTargetPlan,
+        'targetPrice': targetPrice,
+        'charge': 0.0,
+        'isUpgrade': false,
+        'isCurrentPlan': false,
+        'isDowngrade': true,
+        'currentPlan': currentPlan,
+        'expiresAt': expiresAt,
+      };
+    }
+
+    return {
+      'targetPlan': normalizedTargetPlan,
+      'targetPrice': targetPrice,
+      'charge': targetPrice - subscriptionPrice(currentPlan),
+      'isUpgrade': true,
+      'isCurrentPlan': false,
+      'isDowngrade': false,
+      'currentPlan': currentPlan,
+      'expiresAt': expiresAt,
+    };
+  }
+
   Future<void> purchaseSubscription({
     required String businessId,
     required String plan,
   }) async {
-    final price = subscriptionPrice(plan);
+    final normalizedPlan = plan.toLowerCase();
+
+    final targetPrice = subscriptionPrice(normalizedPlan);
 
     final businessWalletReference = _firestore
         .collection('wallets')
+        .doc(businessId);
+
+    final businessSubscriptionReference = _firestore
+        .collection('businessSubscriptions')
         .doc(businessId);
 
     final adminWalletReference = _firestore
@@ -108,8 +263,75 @@ class PlatformBillingService {
       final availableCredits =
           (businessData['availableCredits'] as num?)?.toDouble() ?? 0.0;
 
-      if (availableCredits < price) {
-        throw Exception('Not enough credits to purchase this subscription.');
+      final currentPlan = businessData['subscriptionPlan']
+          ?.toString()
+          .toLowerCase();
+
+      final currentStatus = businessData['subscriptionStatus']
+          ?.toString()
+          .toLowerCase();
+
+      final currentExpiresAt = businessData['subscriptionExpiresAt'];
+
+      final currentlyActive =
+          currentStatus == 'active' &&
+          currentExpiresAt is Timestamp &&
+          currentExpiresAt.toDate().isAfter(DateTime.now());
+
+      double amountToCharge = targetPrice;
+
+      bool upgrading = false;
+
+      Timestamp expirationTimestamp;
+
+      if (currentlyActive &&
+          currentPlan != null &&
+          currentPlan.isNotEmpty &&
+          _subscriptionRanks.containsKey(currentPlan)) {
+        final currentRank = subscriptionRank(currentPlan);
+
+        final targetRank = subscriptionRank(normalizedPlan);
+
+        if (currentRank == targetRank) {
+          throw Exception(
+            'The ${_planName(normalizedPlan)} plan is already active.',
+          );
+        }
+
+        if (targetRank < currentRank) {
+          throw Exception(
+            'Downgrading an active subscription is not currently supported.',
+          );
+        }
+
+        upgrading = true;
+
+        amountToCharge = targetPrice - subscriptionPrice(currentPlan);
+
+        expirationTimestamp = currentExpiresAt;
+      } else {
+        final now = DateTime.now();
+
+        final expirationDate = DateTime(
+          now.year,
+          now.month + 1,
+          now.day,
+          now.hour,
+          now.minute,
+        );
+
+        expirationTimestamp = Timestamp.fromDate(expirationDate);
+      }
+
+      if (amountToCharge <= 0.0) {
+        throw Exception('The subscription charge is invalid.');
+      }
+
+      if (availableCredits < amountToCharge) {
+        throw Exception(
+          'Not enough credits. '
+          '${amountToCharge.toStringAsFixed(0)} credits are required.',
+        );
       }
 
       final adminData = adminSnapshot.data();
@@ -117,62 +339,87 @@ class PlatformBillingService {
       final adminRevenue =
           (adminData?['availableBalance'] as num?)?.toDouble() ?? 0.0;
 
-      final newBusinessBalance = availableCredits - price;
+      final newBusinessBalance = availableCredits - amountToCharge;
 
-      final newAdminBalance = adminRevenue + price;
+      final newAdminBalance = adminRevenue + amountToCharge;
 
-      final now = DateTime.now();
-
-      final expirationDate = DateTime(
-        now.year,
-        now.month + 1,
-        now.day,
-        now.hour,
-        now.minute,
-      );
-
-      transaction.update(businessWalletReference, {
+      final walletUpdate = <String, dynamic>{
         'availableCredits': newBusinessBalance,
         'balance': newBusinessBalance,
-        'subscriptionPlan': plan,
-        'subscriptionPrice': price,
+        'subscriptionPlan': normalizedPlan,
+        'subscriptionPrice': targetPrice,
         'subscriptionStatus': 'active',
-        'subscriptionStartedAt': FieldValue.serverTimestamp(),
-        'subscriptionExpiresAt': Timestamp.fromDate(expirationDate),
+        'subscriptionExpiresAt': expirationTimestamp,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (upgrading) {
+        walletUpdate['subscriptionUpgradedAt'] = FieldValue.serverTimestamp();
+
+        walletUpdate['previousSubscriptionPlan'] = currentPlan;
+      } else {
+        walletUpdate['subscriptionStartedAt'] = FieldValue.serverTimestamp();
+      }
+
+      transaction.update(businessWalletReference, walletUpdate);
+
+      transaction.set(businessSubscriptionReference, {
+        'businessId': businessId,
+        'plan': normalizedPlan,
+        'planId': normalizedPlan,
+        'price': targetPrice,
+        'status': 'active',
+        'expiresAt': expirationTimestamp,
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (upgrading) 'upgradedAt': FieldValue.serverTimestamp(),
+        if (upgrading) 'previousPlan': currentPlan,
+        if (!upgrading) 'startedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       transaction.set(adminWalletReference, {
         'ownerId': adminWalletId,
         'ownerType': 'admin',
         'availableBalance': newAdminBalance,
         'balance': newAdminBalance,
+        'subscriptionRevenue': FieldValue.increment(amountToCharge),
         'updatedAt': FieldValue.serverTimestamp(),
         if (!adminSnapshot.exists) 'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       transaction.set(businessTransactionReference, {
-        'type': 'subscription_payment',
-        'amount': price,
-        'subscriptionPlan': plan,
-        'description': 'Scaled Circle monthly subscription.',
+        'type': upgrading ? 'subscription_upgrade' : 'subscription_payment',
+        'amount': amountToCharge,
+        'subscriptionPlan': normalizedPlan,
+        'subscriptionFullPrice': targetPrice,
+        'previousSubscriptionPlan': currentPlan,
+        'description': upgrading
+            ? 'Scaled Circle subscription upgrade.'
+            : 'Scaled Circle monthly subscription.',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       transaction.set(adminTransactionReference, {
-        'type': 'subscription_revenue',
-        'amount': price,
+        'type': upgrading
+            ? 'subscription_upgrade_revenue'
+            : 'subscription_revenue',
+        'amount': amountToCharge,
         'businessId': businessId,
-        'subscriptionPlan': plan,
-        'description': 'Scaled Circle subscription revenue.',
+        'subscriptionPlan': normalizedPlan,
+        'subscriptionFullPrice': targetPrice,
+        'previousSubscriptionPlan': currentPlan,
+        'description': upgrading
+            ? 'Scaled Circle subscription upgrade revenue.'
+            : 'Scaled Circle subscription revenue.',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       transaction.set(platformTransactionReference, {
-        'type': 'subscription_revenue',
+        'type': upgrading ? 'subscription_upgrade' : 'subscription_revenue',
         'businessId': businessId,
-        'amount': price,
-        'subscriptionPlan': plan,
+        'amount': amountToCharge,
+        'subscriptionPlan': normalizedPlan,
+        'subscriptionFullPrice': targetPrice,
+        'previousSubscriptionPlan': currentPlan,
         'status': 'completed',
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -195,7 +442,8 @@ class PlatformBillingService {
 
     if (!activeSubscription) {
       throw Exception(
-        'An active Scaled Circle subscription is required to publish campaigns.',
+        'An active Scaled Circle subscription is required '
+        'to publish campaigns.',
       );
     }
 
@@ -239,7 +487,7 @@ class PlatformBillingService {
       final businessData = businessSnapshot.data();
 
       if (businessData == null) {
-        throw Exception('Business wallet data is invalid.');
+        throw Exception('Business wallet is invalid.');
       }
 
       final availableCredits =
@@ -327,5 +575,21 @@ class PlatformBillingService {
       'platformFee': platformFee,
       'totalCharge': totalCharge,
     };
+  }
+
+  String _planName(String plan) {
+    switch (plan) {
+      case 'starter':
+        return 'Starter';
+
+      case 'growth':
+        return 'Growth';
+
+      case 'scale':
+        return 'Scale';
+
+      default:
+        return plan;
+    }
   }
 }
