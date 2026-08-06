@@ -241,15 +241,6 @@ class JobDetailsScreen extends StatelessWidget {
         );
       }
 
-      final gpsRoutePointCount =
-          (zoneData['gpsRoutePointCount'] as num?)?.toInt() ?? 0;
-
-      if (gpsRoutePointCount < 2) {
-        throw Exception(
-          'Your GPS route does not contain enough recorded points. Record and save your route before submitting.',
-        );
-      }
-
       final routeReference = firestore
           .collection('campaignRoutes')
           .doc(routeId);
@@ -278,6 +269,8 @@ class JobDetailsScreen extends StatelessWidget {
         throw Exception('The saved GPS route does not contain enough points.');
       }
 
+      final routeIsSimulated = routeData['simulated'] == true;
+
       final campaignSnapshot = await campaign.reference.get();
 
       if (!campaignSnapshot.exists) {
@@ -295,19 +288,31 @@ class JobDetailsScreen extends StatelessWidget {
 
       final scalerEmail = user.email ?? 'Scaler';
 
-      final routeIsSimulated = routeData['simulated'] == true;
-
       final batch = firestore.batch();
 
       batch.update(zone.reference, {
         'status': 'submitted',
         'submittedAt': FieldValue.serverTimestamp(),
-        'submittedRouteId': routeId,
+        'routeId': routeReference.id,
+        'gpsTracking': false,
+        'gpsRoutePointCount': routePointCount,
+        'gpsRouteSimulated': routeIsSimulated,
+        'gpsTrackingEndedAt': FieldValue.serverTimestamp(),
+        'submittedRouteId': routeReference.id,
         'submittedRoutePointCount': routePointCount,
         'submittedRouteSimulated': routeIsSimulated,
         'reviewFeedback': FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      batch.set(routeReference, {
+        'tracking': false,
+        'submitted': true,
+        'submittedAt': FieldValue.serverTimestamp(),
+        'pointCount': routePointCount,
+        'simulated': routeIsSimulated,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       if (businessId != null && businessId.isNotEmpty) {
         final notificationReference = firestore
@@ -323,7 +328,7 @@ class JobDetailsScreen extends StatelessWidget {
           'campaignName': campaignName,
           'zoneId': zone.id,
           'zoneName': zoneName,
-          'routeId': routeId,
+          'routeId': routeReference.id,
           'routePointCount': routePointCount,
           'routeSimulated': routeIsSimulated,
           'scalerId': user.uid,
@@ -342,7 +347,8 @@ class JobDetailsScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$zoneName submitted for review with $routePointCount GPS points.',
+            '$zoneName submitted for review with '
+            '$routePointCount GPS points.',
           ),
         ),
       );
@@ -561,6 +567,7 @@ class JobDetailsScreen extends StatelessWidget {
         }
 
         final zone = zones.first;
+
         final data = zone.data();
 
         final zoneName = data['zoneName']?.toString() ?? 'Assigned Zone';
@@ -615,7 +622,6 @@ class JobDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
-
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -659,9 +665,7 @@ class JobDetailsScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -792,20 +796,14 @@ class JobDetailsScreen extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Text(
                 businessEmail,
                 style: TextStyle(color: Colors.grey.shade700),
               ),
-
               const SizedBox(height: 16),
-
               _assignedZoneSummary(currentUser),
-
               const SizedBox(height: 24),
-
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -825,9 +823,7 @@ class JobDetailsScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 15),
-
               Row(
                 children: [
                   Expanded(
@@ -851,9 +847,7 @@ class JobDetailsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   const SizedBox(width: 12),
-
                   Expanded(
                     child: Card(
                       child: Padding(
@@ -877,9 +871,7 @@ class JobDetailsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-
               const SizedBox(height: 15),
-
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.calendar_today),
@@ -887,9 +879,7 @@ class JobDetailsScreen extends StatelessWidget {
                   subtitle: Text(deadline),
                 ),
               ),
-
               const SizedBox(height: 12),
-
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.flag),
@@ -897,14 +887,10 @@ class JobDetailsScreen extends StatelessWidget {
                   subtitle: Text(_statusLabel(status)),
                 ),
               ),
-
               const SizedBox(height: 30),
-
               if (status == 'open' && currentUser != null)
                 _applicationSection(context, liveCampaign, currentUser),
-
               const SizedBox(height: 12),
-
               _assignedZoneActions(context, currentUser),
             ],
           ),
