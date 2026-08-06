@@ -1,11 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
 
-import '../../services/completion_payout_service.dart';
-import '../../services/completion_tracking_service.dart';
-import '../../widgets/home_completion_counter.dart';
 import 'job_tracking_screen.dart';
 
 class JobDetailsScreen extends StatelessWidget {
@@ -141,7 +137,7 @@ class JobDetailsScreen extends StatelessWidget {
     return snapshot.docs.first;
   }
 
-  Future<void> startZoneJob(BuildContext context) async {
+  Future<void> startJob(BuildContext context) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -245,6 +241,15 @@ class JobDetailsScreen extends StatelessWidget {
         );
       }
 
+      final gpsRoutePointCount =
+          (zoneData['gpsRoutePointCount'] as num?)?.toInt() ?? 0;
+
+      if (gpsRoutePointCount < 2) {
+        throw Exception(
+          'Your GPS route does not contain enough recorded points. Record and save your route before submitting.',
+        );
+      }
+
       final routeReference = firestore
           .collection('campaignRoutes')
           .doc(routeId);
@@ -253,8 +258,7 @@ class JobDetailsScreen extends StatelessWidget {
 
       if (!routeSnapshot.exists) {
         throw Exception(
-          'The saved GPS route could not be found. '
-          'Open the GPS tracker and save the route again.',
+          'The saved GPS route could not be found. Open the GPS tracker and save the route again.',
         );
       }
 
@@ -270,52 +274,9 @@ class JobDetailsScreen extends StatelessWidget {
 
       final routePointCount = (routeData['pointCount'] as num?)?.toInt() ?? 0;
 
-      final rawRoutePoints = routeData['points'];
-
-      if (rawRoutePoints is! List) {
-        throw Exception(
-          'The saved GPS route does not contain valid route points.',
-        );
-      }
-
-      final routePoints = <LatLng>[];
-
-      for (final point in rawRoutePoints) {
-        if (point is! Map) {
-          continue;
-        }
-
-        final latitude = point['latitude'];
-
-        final longitude = point['longitude'];
-
-        if (latitude is num && longitude is num) {
-          routePoints.add(LatLng(latitude.toDouble(), longitude.toDouble()));
-        }
-      }
-
-      if (routePointCount < 2 || routePoints.length < 2) {
+      if (routePointCount < 2) {
         throw Exception('The saved GPS route does not contain enough points.');
       }
-
-      final routeIsSimulated = routeData['simulated'] == true;
-
-      final completionService = CompletionTrackingService();
-
-      final completion = await completionService.calculateCompletion(
-        zoneId: zone.id,
-        routePoints: routePoints,
-      );
-
-      final assignedHomes = (completion['assignedHomes'] as num?)?.toInt() ?? 0;
-
-      final completedHomes =
-          (completion['completedHomes'] as num?)?.toInt() ?? 0;
-
-      final completionPercentage =
-          (completion['completionPercentage'] as num?)?.toDouble() ?? 0.0;
-
-      final eligibleForPayment = completion['eligibleForPayment'] == true;
 
       final campaignSnapshot = await campaign.reference.get();
 
@@ -327,10 +288,6 @@ class JobDetailsScreen extends StatelessWidget {
 
       final businessId = campaignData['businessId']?.toString();
 
-      if (businessId == null || businessId.isEmpty) {
-        throw Exception('This campaign is missing its business account.');
-      }
-
       final campaignName =
           campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
 
@@ -338,145 +295,43 @@ class JobDetailsScreen extends StatelessWidget {
 
       final scalerEmail = user.email ?? 'Scaler';
 
-      final basePay =
-          double.tryParse(zoneData['suggestedBasePay']?.toString() ?? '') ??
-          double.tryParse(campaignData['basePay']?.toString() ?? '') ??
-          0.0;
-
-      final completionBonus =
-          double.tryParse(zoneData['completionBonus']?.toString() ?? '') ??
-          double.tryParse(campaignData['bonus']?.toString() ?? '') ??
-          0.0;
-
-      if (assignedHomes <= 0) {
-        throw Exception('This zone does not have a valid assigned home count.');
-      }
-
-      final completionPayoutService = CompletionPayoutService();
-
-      final pendingPayout = await completionPayoutService.createPendingPayout(
-        businessId: businessId,
-        scalerId: user.uid,
-        campaignId: campaign.id,
-        zoneId: zone.id,
-        assignedHomes: assignedHomes,
-        completedHomes: completedHomes,
-        basePay: basePay,
-        completionBonus: completionBonus,
-      );
-
-      final payoutAmount =
-          (pendingPayout['totalPayout'] as num?)?.toDouble() ?? 0.0;
-
-      final payoutId = pendingPayout['payoutId']?.toString() ?? zone.id;
+      final routeIsSimulated = routeData['simulated'] == true;
 
       final batch = firestore.batch();
 
       batch.update(zone.reference, {
         'status': 'submitted',
-
         'submittedAt': FieldValue.serverTimestamp(),
-
-        'routeId': routeReference.id,
-
-        'gpsTracking': false,
-
-        'gpsRoutePointCount': routePointCount,
-
-        'gpsRouteSimulated': routeIsSimulated,
-
-        'gpsTrackingEndedAt': FieldValue.serverTimestamp(),
-
-        'submittedRouteId': routeReference.id,
-
+        'submittedRouteId': routeId,
         'submittedRoutePointCount': routePointCount,
-
         'submittedRouteSimulated': routeIsSimulated,
-
-        'assignedHomes': assignedHomes,
-
-        'completedHomes': completedHomes,
-
-        'completionPercentage': completionPercentage,
-
-        'eligibleForPayment': eligibleForPayment,
-
-        'paymentStatus': 'pending_review',
-
-        'pendingPayoutId': payoutId,
-
-        'payoutAmount': payoutAmount,
-
         'reviewFeedback': FieldValue.delete(),
-
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      batch.set(routeReference, {
-        'tracking': false,
+      if (businessId != null && businessId.isNotEmpty) {
+        final notificationReference = firestore
+            .collection('notifications')
+            .doc();
 
-        'submitted': true,
-
-        'submittedAt': FieldValue.serverTimestamp(),
-
-        'pointCount': routePointCount,
-
-        'simulated': routeIsSimulated,
-
-        'completionPercentage': completionPercentage,
-
-        'completedHomes': completedHomes,
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      final notificationReference = firestore.collection('notifications').doc();
-
-      batch.set(notificationReference, {
-        'userId': businessId,
-
-        'type': 'zone_completion_submitted',
-
-        'title': 'Zone Completion Submitted',
-
-        'message':
-            '$scalerEmail submitted $zoneName at '
-            '${completionPercentage.toStringAsFixed(1)}% completion '
-            'with a proposed payout of '
-            '\$${payoutAmount.toStringAsFixed(2)}.',
-
-        'campaignId': campaign.id,
-
-        'campaignName': campaignName,
-
-        'zoneId': zone.id,
-
-        'zoneName': zoneName,
-
-        'routeId': routeReference.id,
-
-        'payoutId': payoutId,
-
-        'routePointCount': routePointCount,
-
-        'routeSimulated': routeIsSimulated,
-
-        'completionPercentage': completionPercentage,
-
-        'completedHomes': completedHomes,
-
-        'assignedHomes': assignedHomes,
-
-        'payoutAmount': payoutAmount,
-
-        'scalerId': user.uid,
-
-        'scalerEmail': scalerEmail,
-
-        'read': false,
-
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+        batch.set(notificationReference, {
+          'userId': businessId,
+          'type': 'zone_completion_submitted',
+          'title': 'Zone Completion Submitted',
+          'message': '$scalerEmail submitted $zoneName for review.',
+          'campaignId': campaign.id,
+          'campaignName': campaignName,
+          'zoneId': zone.id,
+          'zoneName': zoneName,
+          'routeId': routeId,
+          'routePointCount': routePointCount,
+          'routeSimulated': routeIsSimulated,
+          'scalerId': user.uid,
+          'scalerEmail': scalerEmail,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
 
       await batch.commit();
 
@@ -487,10 +342,7 @@ class JobDetailsScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$zoneName submitted for review. '
-            '${completionPercentage.toStringAsFixed(1)}% complete • '
-            'proposed payout '
-            '\$${payoutAmount.toStringAsFixed(2)}.',
+            '$zoneName submitted for review with $routePointCount GPS points.',
           ),
         ),
       );
@@ -709,7 +561,6 @@ class JobDetailsScreen extends StatelessWidget {
         }
 
         final zone = zones.first;
-
         final data = zone.data();
 
         final zoneName = data['zoneName']?.toString() ?? 'Assigned Zone';
@@ -724,7 +575,7 @@ class JobDetailsScreen extends StatelessWidget {
             height: 55,
             child: ElevatedButton.icon(
               onPressed: () {
-                startZoneJob(context);
+                startJob(context);
               },
               icon: const Icon(Icons.play_arrow),
               label: Text('Start $zoneName'),
@@ -735,16 +586,6 @@ class JobDetailsScreen extends StatelessWidget {
         if (zoneStatus == 'in_progress') {
           return Column(
             children: [
-              HomeCompletionCounter(
-                zoneId: zone.id,
-                assignedHomes: (data['estimatedHomes'] as num?)?.toInt() ?? 0,
-
-                completedHomes: (data['completedHomes'] as num?)?.toInt() ?? 0,
-
-                basePay: (data['suggestedBasePay'] as num?)?.toDouble() ?? 0,
-              ),
-
-              const SizedBox(height: 20),
               if (reviewFeedback != null && reviewFeedback.isNotEmpty) ...[
                 Card(
                   color: Colors.orange.shade50,
@@ -774,6 +615,7 @@ class JobDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
               ],
+
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -817,7 +659,9 @@ class JobDetailsScreen extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 20),
+
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -948,14 +792,20 @@ class JobDetailsScreen extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+
               const SizedBox(height: 8),
+
               Text(
                 businessEmail,
                 style: TextStyle(color: Colors.grey.shade700),
               ),
+
               const SizedBox(height: 16),
+
               _assignedZoneSummary(currentUser),
+
               const SizedBox(height: 24),
+
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -975,7 +825,9 @@ class JobDetailsScreen extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 15),
+
               Row(
                 children: [
                   Expanded(
@@ -999,7 +851,9 @@ class JobDetailsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+
                   const SizedBox(width: 12),
+
                   Expanded(
                     child: Card(
                       child: Padding(
@@ -1023,7 +877,9 @@ class JobDetailsScreen extends StatelessWidget {
                   ),
                 ],
               ),
+
               const SizedBox(height: 15),
+
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.calendar_today),
@@ -1031,7 +887,9 @@ class JobDetailsScreen extends StatelessWidget {
                   subtitle: Text(deadline),
                 ),
               ),
+
               const SizedBox(height: 12),
+
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.flag),
@@ -1039,10 +897,14 @@ class JobDetailsScreen extends StatelessWidget {
                   subtitle: Text(_statusLabel(status)),
                 ),
               ),
+
               const SizedBox(height: 30),
+
               if (status == 'open' && currentUser != null)
                 _applicationSection(context, liveCampaign, currentUser),
+
               const SizedBox(height: 12),
+
               _assignedZoneActions(context, currentUser),
             ],
           ),

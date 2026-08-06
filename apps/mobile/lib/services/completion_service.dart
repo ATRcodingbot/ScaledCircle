@@ -1,61 +1,99 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'payment_service.dart';
+import '../models/job_completion.dart';
 
 class CompletionService {
-  static Future<void> submitCompletion({
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  JobCompletion calculateCompletion({
+    required String id,
+
     required String campaignId,
 
     required String zoneId,
 
-    required String workerId,
+    required String scalerId,
 
-    required int assignedUnits,
+    required String scalerEmail,
 
-    required int completedUnits,
+    required String businessId,
+
+    required int assignedHomes,
+
+    required int completedHomes,
 
     required double basePay,
 
-    required double bonusPay,
+    required double bonus,
 
-    required bool gpsVerified,
-  }) async {
-    final firestore = FirebaseFirestore.instance;
+    String? routeId,
+  }) {
+    double percentage = 0;
 
-    final percentage = (completedUnits / assignedUnits) * 100;
+    if (assignedHomes > 0) {
+      percentage = (completedHomes / assignedHomes) * 100;
+    }
 
-    final payment = PaymentService.calculatePayment(
+    double earnedPay = 0;
+
+    if (percentage >= 30 && percentage < 100) {
+      earnedPay = basePay * (percentage / 100);
+    }
+
+    if (percentage >= 100) {
+      earnedPay = basePay;
+    }
+
+    bool fullCompletion = percentage >= 100;
+
+    double earnedBonus = 0;
+
+    if (fullCompletion) {
+      earnedBonus = bonus;
+    }
+
+    return JobCompletion(
+      id: id,
+
+      campaignId: campaignId,
+
+      zoneId: zoneId,
+
+      scalerId: scalerId,
+
+      scalerEmail: scalerEmail,
+
+      businessId: businessId,
+
+      assignedHomes: assignedHomes,
+
+      completedHomes: completedHomes,
+
       completionPercentage: percentage,
+
       basePay: basePay,
-      bonusPay: bonusPay,
+
+      earnedPay: earnedPay,
+
+      bonus: earnedBonus,
+
+      fullCompletion: fullCompletion,
+
+      status:
+        percentage < 30
+          ? 'needs_redo'
+          : percentage >= 100
+             ? 'completed'
+             : 'pending_payment',
+
+      routeId: routeId,
     );
+  }
 
-    final status = PaymentService.getCompletionStatus(percentage);
-
-    await firestore.collection('jobCompletions').add({
-      'campaignId': campaignId,
-
-      'zoneId': zoneId,
-
-      'workerId': workerId,
-
-      'assignedUnits': assignedUnits,
-
-      'completedUnits': completedUnits,
-
-      'completionPercentage': percentage,
-
-      'basePay': basePay,
-
-      'bonusPay': bonusPay,
-
-      'calculatedPay': payment,
-
-      'gpsVerified': gpsVerified,
-
-      'status': status,
-
-      'submittedAt': FieldValue.serverTimestamp(),
-    });
+  Future<void> saveCompletion(JobCompletion completion) async {
+    await _firestore
+        .collection('jobCompletions')
+        .doc(completion.id)
+        .set(completion.toFirestore());
   }
 }

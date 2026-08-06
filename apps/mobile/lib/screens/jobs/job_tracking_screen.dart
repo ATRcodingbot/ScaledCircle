@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -521,42 +521,184 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
   List<LatLng> _buildSimulatedRoute() {
     if (_serviceArea.length >= 3) {
-      final center = _calculateCenter(_serviceArea);
+      final latitudes = _serviceArea.map((point) => point.latitude).toList();
 
-      final innerPoints = _serviceArea.map((boundaryPoint) {
-        return LatLng(
-          center.latitude + (boundaryPoint.latitude - center.latitude) * 0.65,
-          center.longitude +
-              (boundaryPoint.longitude - center.longitude) * 0.65,
-        );
-      }).toList();
+      final minLat = latitudes.reduce((a, b) => a < b ? a : b);
+
+      final maxLat = latitudes.reduce((a, b) => a > b ? a : b);
+
+      /*
+     * Sweep spacing for simulation.
+     *
+     * Around 20 meters between passes gives us
+     * a more realistic canvassing-style path
+     * than simply walking around the perimeter.
+     */
+      const targetSweepSpacingMeters = 20.0;
+
+      const metersPerDegreeLatitude = 111320.0;
+
+      final centerLatitude = (minLat + maxLat) / 2.0;
+
+      final metersPerDegreeLongitude =
+          111320.0 * math.cos(centerLatitude * math.pi / 180.0);
+
+      final sweepSpacingLatitude =
+          targetSweepSpacingMeters / metersPerDegreeLatitude;
 
       final route = <LatLng>[];
 
-      for (int i = 0; i < innerPoints.length; i++) {
-        final start = innerPoints[i];
+      int rowIndex = 0;
 
-        final end = innerPoints[(i + 1) % innerPoints.length];
+      /*
+     * Sweep horizontally across the mapped polygon.
+     *
+     * Each latitude row is intersected with the
+     * polygon boundary. The resulting inside
+     * sections become simulated walking paths.
+     */
+      for (
+        double latitude = minLat;
+        latitude <= maxLat;
+        latitude += sweepSpacingLatitude
+      ) {
+        final intersections = <double>[];
 
-        const steps = 4;
+        /*
+       * Find every place this latitude row crosses
+       * the service-area polygon.
+       */
+        for (int i = 0; i < _serviceArea.length; i++) {
+          final current = _serviceArea[i];
 
-        for (int step = 0; step < steps; step++) {
-          final fraction = step / steps;
+          final next = _serviceArea[(i + 1) % _serviceArea.length];
 
-          route.add(
-            LatLng(
-              start.latitude + (end.latitude - start.latitude) * fraction,
-              start.longitude + (end.longitude - start.longitude) * fraction,
-            ),
+          final minEdgeLat = math.min(current.latitude, next.latitude);
+
+          final maxEdgeLat = math.max(current.latitude, next.latitude);
+
+          /*
+         * Horizontal polygon edges do not produce
+         * a useful scan-line intersection.
+         */
+          if (current.latitude == next.latitude) {
+            continue;
+          }
+
+          /*
+         * Skip polygon edges that this latitude
+         * row does not cross.
+         */
+          if (latitude < minEdgeLat || latitude >= maxEdgeLat) {
+            continue;
+          }
+
+          final fraction =
+              (latitude - current.latitude) /
+              (next.latitude - current.latitude);
+
+          final longitude =
+              current.longitude +
+              (next.longitude - current.longitude) * fraction;
+
+          intersections.add(longitude);
+        }
+
+        intersections.sort();
+
+        if (intersections.length < 2) {
+          continue;
+        }
+
+        /*
+       * Irregular polygons can produce more than
+       * two intersections on a single scan line.
+       *
+       * Every pair represents a section that is
+       * inside the service area.
+       */
+        for (int i = 0; i + 1 < intersections.length; i += 2) {
+          var startLongitude = intersections[i];
+
+          var endLongitude = intersections[i + 1];
+
+          /*
+         * Pull both ends about 2 meters inward.
+         *
+         * This prevents floating-point rounding
+         * near the polygon boundary from causing
+         * route segments to be considered outside
+         * the assigned zone.
+         */
+          final edgePaddingDegrees = metersPerDegreeLongitude <= 0.0
+              ? 0.0
+              : 2.0 / metersPerDegreeLongitude;
+
+          startLongitude += edgePaddingDegrees;
+
+          endLongitude -= edgePaddingDegrees;
+
+          if (endLongitude <= startLongitude) {
+            continue;
+          }
+
+          final left = LatLng(latitude, startLongitude);
+
+          final right = LatLng(latitude, endLongitude);
+
+          /*
+         * Alternate direction on each row so the
+         * simulated route moves back and forth
+         * through the neighborhood instead of
+         * repeatedly jumping to the same side.
+         */
+          final start = rowIndex.isEven ? left : right;
+
+          final end = rowIndex.isEven ? right : left;
+
+          /*
+         * Add GPS samples approximately every
+         * 10 meters along this sweep.
+         */
+          final segmentDistanceMeters = Distance().as(
+            LengthUnit.Meter,
+            start,
+            end,
           );
+
+          final steps = math.max(1, (segmentDistanceMeters / 10.0).ceil());
+
+          for (int step = 0; step <= steps; step++) {
+            final fraction = step / steps;
+
+            route.add(
+              LatLng(
+                start.latitude + (end.latitude - start.latitude) * fraction,
+                start.longitude + (end.longitude - start.longitude) * fraction,
+              ),
+            );
+          }
+
+          rowIndex++;
         }
       }
 
-      route.add(innerPoints.first);
-
-      return route;
+      /*
+     * If the polygon sweep produced a usable
+     * simulated route, use it.
+     */
+      if (route.length >= 2) {
+        return route;
+      }
     }
 
+    /*
+   * Development fallback.
+   *
+   * This should normally only be reached when
+   * the zone does not contain a valid mapped
+   * service area.
+   */
     LatLng center;
 
     if (_currentPosition != null) {
@@ -627,6 +769,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
         'pointCount': _routePoints.length,
         'endedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        'completedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       batch.update(widget.zone.reference, {

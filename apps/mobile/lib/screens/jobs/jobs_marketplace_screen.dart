@@ -5,17 +5,16 @@ import 'package:flutter/material.dart';
 import '../notifications/notifications_screen.dart';
 import 'job_details_screen.dart';
 import 'my_jobs_screen.dart';
+import 'scaler_wallet_screen.dart';
 
 class JobsMarketplaceScreen extends StatefulWidget {
   const JobsMarketplaceScreen({super.key});
 
   @override
-  State<JobsMarketplaceScreen> createState() =>
-      _JobsMarketplaceScreenState();
+  State<JobsMarketplaceScreen> createState() => _JobsMarketplaceScreenState();
 }
 
-class _JobsMarketplaceScreenState
-    extends State<JobsMarketplaceScreen> {
+class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
   final searchController = TextEditingController();
 
   String search = '';
@@ -33,34 +32,29 @@ class _JobsMarketplaceScreenState
 
     if (user == null) {
       return const Scaffold(
-        body: Center(
-          child: Text("You must be logged in."),
-        ),
+        body: Center(child: Text("You must be logged in.")),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          currentIndex == 0 ? 'Available Jobs' : 'My Jobs',
+          currentIndex == 0
+              ? 'Available Jobs'
+              : currentIndex == 1
+              ? 'My Jobs'
+              : 'My Earnings',
         ),
         centerTitle: true,
         actions: [
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('notifications')
-                .where(
-                  'userId',
-                  isEqualTo: user.uid,
-                )
-                .where(
-                  'read',
-                  isEqualTo: false,
-                )
+                .where('userId', isEqualTo: user.uid)
+                .where('read', isEqualTo: false)
                 .snapshots(),
             builder: (context, snapshot) {
-              final unreadCount =
-                  snapshot.data?.docs.length ?? 0;
+              final unreadCount = snapshot.data?.docs.length ?? 0;
 
               return Stack(
                 clipBehavior: Clip.none,
@@ -71,14 +65,11 @@ class _JobsMarketplaceScreenState
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              const NotificationsScreen(),
+                          builder: (_) => const NotificationsScreen(),
                         ),
                       );
                     },
-                    icon: const Icon(
-                      Icons.notifications_outlined,
-                    ),
+                    icon: const Icon(Icons.notifications_outlined),
                   ),
                   if (unreadCount > 0)
                     Positioned(
@@ -89,19 +80,14 @@ class _JobsMarketplaceScreenState
                           minWidth: 18,
                           minHeight: 18,
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
                         decoration: BoxDecoration(
                           color: Colors.red,
-                          borderRadius:
-                              BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Center(
                           child: Text(
-                            unreadCount > 99
-                                ? '99+'
-                                : unreadCount.toString(),
+                            unreadCount > 99 ? '99+' : unreadCount.toString(),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -120,7 +106,9 @@ class _JobsMarketplaceScreenState
       ),
       body: currentIndex == 0
           ? _buildMarketplace()
-          : const MyJobsScreen(),
+          : currentIndex == 1
+          ? const MyJobsScreen()
+          : const ScalerWalletScreen(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
         onDestinationSelected: (index) {
@@ -138,6 +126,11 @@ class _JobsMarketplaceScreenState
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment),
             label: 'My Jobs',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'Earnings',
           ),
         ],
       ),
@@ -169,14 +162,8 @@ class _JobsMarketplaceScreenState
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('campaigns')
-                  .where(
-                    'status',
-                    isEqualTo: 'open',
-                  )
-                  .orderBy(
-                    'createdAt',
-                    descending: true,
-                  )
+                  .where('status', isEqualTo: 'open')
+                  .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -191,35 +178,26 @@ class _JobsMarketplaceScreenState
                   );
                 }
 
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
-                final docs =
-                    snapshot.data?.docs ?? [];
+                final docs = snapshot.data?.docs ?? [];
 
                 final campaigns = docs.where((doc) {
-                  final data =
-                      doc.data()
-                          as Map<String, dynamic>;
+                  final data = doc.data() as Map<String, dynamic>;
 
-                  final campaignName =
-                      (data['campaignName'] ?? '')
-                          .toString()
-                          .toLowerCase();
+                  final campaignName = (data['campaignName'] ?? '')
+                      .toString()
+                      .toLowerCase();
 
-                  final description =
-                      (data['description'] ?? '')
-                          .toString()
-                          .toLowerCase();
+                  final description = (data['description'] ?? '')
+                      .toString()
+                      .toLowerCase();
 
-                  final businessEmail =
-                      (data['businessEmail'] ?? '')
-                          .toString()
-                          .toLowerCase();
+                  final businessEmail = (data['businessEmail'] ?? '')
+                      .toString()
+                      .toLowerCase();
 
                   if (search.isEmpty) {
                     return true;
@@ -233,27 +211,21 @@ class _JobsMarketplaceScreenState
                 if (campaigns.isEmpty) {
                   return const Center(
                     child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.work_off_outlined,
-                          size: 64,
-                        ),
+                        Icon(Icons.work_off_outlined, size: 64),
                         SizedBox(height: 15),
                         Text(
                           'No available jobs.',
                           style: TextStyle(
                             fontSize: 20,
-                            fontWeight:
-                                FontWeight.bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                         SizedBox(height: 8),
                         Text(
                           'New campaigns will appear here automatically.',
-                          textAlign:
-                              TextAlign.center,
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
@@ -263,115 +235,74 @@ class _JobsMarketplaceScreenState
                 return ListView.builder(
                   itemCount: campaigns.length,
                   itemBuilder: (context, index) {
-                    final campaign =
-                        campaigns[index];
+                    final campaign = campaigns[index];
 
-                    final data =
-                        campaign.data()
-                            as Map<String, dynamic>;
+                    final data = campaign.data() as Map<String, dynamic>;
 
                     final campaignName =
-                        data['campaignName']
-                                ?.toString() ??
-                            'Untitled Campaign';
+                        data['campaignName']?.toString() ?? 'Untitled Campaign';
 
-                    final description =
-                        data['description']
-                                ?.toString() ??
-                            '';
+                    final description = data['description']?.toString() ?? '';
 
-                    final homes =
-                        data['homes']?.toString() ??
-                            '0';
+                    final homes = data['homes']?.toString() ?? '0';
 
-                    final basePay =
-                        data['basePay']
-                                ?.toString() ??
-                            '0';
+                    final basePay = data['basePay']?.toString() ?? '0';
 
-                    final bonus =
-                        data['bonus']?.toString() ??
-                            '0';
+                    final bonus = data['bonus']?.toString() ?? '0';
 
                     final businessEmail =
-                        data['businessEmail']
-                                ?.toString() ??
-                            '';
+                        data['businessEmail']?.toString() ?? '';
 
                     final applications =
-                        (data['applications'] as num?)
-                                ?.toInt() ??
-                            0;
+                        (data['applications'] as num?)?.toInt() ?? 0;
 
                     return Card(
-                      margin: const EdgeInsets.only(
-                        bottom: 16,
-                      ),
+                      margin: const EdgeInsets.only(bottom: 16),
                       child: InkWell(
-                        borderRadius:
-                            BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(12),
                         onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) =>
-                                  JobDetailsScreen(
-                                campaign: campaign,
-                              ),
+                                  JobDetailsScreen(campaign: campaign),
                             ),
                           );
                         },
                         child: Padding(
-                          padding:
-                              const EdgeInsets.all(18),
+                          padding: const EdgeInsets.all(18),
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
                                   const CircleAvatar(
-                                    child: Icon(
-                                      Icons.campaign,
-                                    ),
+                                    child: Icon(Icons.campaign),
                                   ),
-                                  const SizedBox(
-                                    width: 12,
-                                  ),
+                                  const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment
-                                              .start,
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           campaignName,
-                                          style:
-                                              const TextStyle(
+                                          style: const TextStyle(
                                             fontSize: 20,
-                                            fontWeight:
-                                                FontWeight
-                                                    .bold,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                        if (businessEmail
-                                            .isNotEmpty)
+                                        if (businessEmail.isNotEmpty)
                                           Text(
                                             businessEmail,
-                                            style:
-                                                TextStyle(
-                                              color: Colors
-                                                  .grey
-                                                  .shade700,
+                                            style: TextStyle(
+                                              color: Colors.grey.shade700,
                                             ),
                                           ),
                                       ],
                                     ),
                                   ),
-                                  const Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 18,
-                                  ),
+                                  const Icon(Icons.arrow_forward_ios, size: 18),
                                 ],
                               ),
 
@@ -380,8 +311,7 @@ class _JobsMarketplaceScreenState
                               Text(
                                 description,
                                 maxLines: 3,
-                                overflow:
-                                    TextOverflow.ellipsis,
+                                overflow: TextOverflow.ellipsis,
                               ),
 
                               const SizedBox(height: 15),
@@ -391,31 +321,22 @@ class _JobsMarketplaceScreenState
                                 runSpacing: 8,
                                 children: [
                                   Chip(
-                                    avatar: const Icon(
-                                      Icons.home,
-                                      size: 18,
-                                    ),
-                                    label: Text(
-                                      '$homes Homes',
-                                    ),
+                                    avatar: const Icon(Icons.home, size: 18),
+                                    label: Text('$homes Homes'),
                                   ),
                                   Chip(
                                     avatar: const Icon(
                                       Icons.attach_money,
                                       size: 18,
                                     ),
-                                    label: Text(
-                                      '\$$basePay Pay',
-                                    ),
+                                    label: Text('\$$basePay Pay'),
                                   ),
                                   Chip(
                                     avatar: const Icon(
                                       Icons.card_giftcard,
                                       size: 18,
                                     ),
-                                    label: Text(
-                                      '\$$bonus Bonus',
-                                    ),
+                                    label: Text('\$$bonus Bonus'),
                                   ),
                                   if (applications > 0)
                                     Chip(
@@ -433,28 +354,20 @@ class _JobsMarketplaceScreenState
                               const SizedBox(height: 10),
 
                               Align(
-                                alignment:
-                                    Alignment.centerRight,
+                                alignment: Alignment.centerRight,
                                 child: TextButton.icon(
                                   onPressed: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) =>
-                                            JobDetailsScreen(
-                                          campaign:
-                                              campaign,
+                                        builder: (_) => JobDetailsScreen(
+                                          campaign: campaign,
                                         ),
                                       ),
                                     );
                                   },
-                                  icon: const Icon(
-                                    Icons
-                                        .visibility_outlined,
-                                  ),
-                                  label: const Text(
-                                    'View Job',
-                                  ),
+                                  icon: const Icon(Icons.visibility_outlined),
+                                  label: const Text('View Job'),
                                 ),
                               ),
                             ],
