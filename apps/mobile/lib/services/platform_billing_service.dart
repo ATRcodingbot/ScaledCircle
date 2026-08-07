@@ -19,22 +19,12 @@ class PlatformBillingService {
     'scale': 3,
   };
 
-  double calculateCampaignFee(double workerBudget) {
-    if (workerBudget <= 0.0) {
-      return 0.0;
-    }
-
-    return workerBudget * campaignFeeRate;
-  }
-
-  double calculateCampaignTotal(double workerBudget) {
-    return workerBudget + calculateCampaignFee(workerBudget);
-  }
+  // -----------------------------
+  // SUBSCRIPTION HELPERS
+  // -----------------------------
 
   double subscriptionPrice(String plan) {
-    final normalizedPlan = plan.toLowerCase();
-
-    final price = subscriptionPrices[normalizedPlan];
+    final price = subscriptionPrices[plan.toLowerCase()];
 
     if (price == null) {
       throw Exception('Unknown subscription plan.');
@@ -44,9 +34,7 @@ class PlatformBillingService {
   }
 
   int subscriptionRank(String plan) {
-    final normalizedPlan = plan.toLowerCase();
-
-    final rank = _subscriptionRanks[normalizedPlan];
+    final rank = _subscriptionRanks[plan.toLowerCase()];
 
     if (rank == null) {
       throw Exception('Unknown subscription plan.');
@@ -63,367 +51,211 @@ class PlatformBillingService {
     required String currentPlan,
     required String targetPlan,
   }) {
-    final normalizedCurrentPlan = currentPlan.toLowerCase();
-
-    final normalizedTargetPlan = targetPlan.toLowerCase();
-
-    if (normalizedCurrentPlan == normalizedTargetPlan) {
-      return 0.0;
+    if (!isUpgrade(currentPlan: currentPlan, targetPlan: targetPlan)) {
+      throw Exception('Only upgrades are supported.');
     }
 
-    if (!isUpgrade(
-      currentPlan: normalizedCurrentPlan,
-      targetPlan: normalizedTargetPlan,
-    )) {
-      throw Exception(
-        'Downgrading an active subscription is not currently supported.',
-      );
-    }
-
-    final currentPrice = subscriptionPrice(normalizedCurrentPlan);
-
-    final targetPrice = subscriptionPrice(normalizedTargetPlan);
-
-    return targetPrice - currentPrice;
+    return subscriptionPrice(targetPlan) - subscriptionPrice(currentPlan);
   }
 
-  Future<bool> hasActiveSubscription({required String businessId}) async {
-    final walletSnapshot = await _firestore
-        .collection('wallets')
-        .doc(businessId)
-        .get();
-
-    if (!walletSnapshot.exists) {
-      return false;
-    }
-
-    final data = walletSnapshot.data();
-
-    if (data == null) {
-      return false;
-    }
-
-    if (data['subscriptionStatus']?.toString() != 'active') {
-      return false;
-    }
-
-    final expiresAt = data['subscriptionExpiresAt'];
-
-    if (expiresAt is! Timestamp) {
-      return false;
-    }
-
-    return expiresAt.toDate().isAfter(DateTime.now());
-  }
-
-  Future<Map<String, dynamic>> getSubscriptionQuote({
-    required String businessId,
-    required String targetPlan,
-  }) async {
-    final normalizedTargetPlan = targetPlan.toLowerCase();
-
-    final targetPrice = subscriptionPrice(normalizedTargetPlan);
-
-    final walletSnapshot = await _firestore
-        .collection('wallets')
-        .doc(businessId)
-        .get();
-
-    if (!walletSnapshot.exists) {
-      return {
-        'targetPlan': normalizedTargetPlan,
-        'targetPrice': targetPrice,
-        'charge': targetPrice,
-        'isUpgrade': false,
-        'isCurrentPlan': false,
-        'isDowngrade': false,
-        'currentPlan': null,
-        'expiresAt': null,
-      };
-    }
-
-    final data = walletSnapshot.data() ?? {};
-
-    final currentPlan = data['subscriptionPlan']?.toString().toLowerCase();
-
-    final status = data['subscriptionStatus']?.toString().toLowerCase();
-
-    final expiresAt = data['subscriptionExpiresAt'];
-
-    final active =
-        status == 'active' &&
-        expiresAt is Timestamp &&
-        expiresAt.toDate().isAfter(DateTime.now());
-
-    if (!active ||
-        currentPlan == null ||
-        currentPlan.isEmpty ||
-        !_subscriptionRanks.containsKey(currentPlan)) {
-      return {
-        'targetPlan': normalizedTargetPlan,
-        'targetPrice': targetPrice,
-        'charge': targetPrice,
-        'isUpgrade': false,
-        'isCurrentPlan': false,
-        'isDowngrade': false,
-        'currentPlan': currentPlan,
-        'expiresAt': expiresAt,
-      };
-    }
-
-    final currentRank = subscriptionRank(currentPlan);
-
-    final targetRank = subscriptionRank(normalizedTargetPlan);
-
-    if (currentRank == targetRank) {
-      return {
-        'targetPlan': normalizedTargetPlan,
-        'targetPrice': targetPrice,
-        'charge': 0.0,
-        'isUpgrade': false,
-        'isCurrentPlan': true,
-        'isDowngrade': false,
-        'currentPlan': currentPlan,
-        'expiresAt': expiresAt,
-      };
-    }
-
-    if (targetRank < currentRank) {
-      return {
-        'targetPlan': normalizedTargetPlan,
-        'targetPrice': targetPrice,
-        'charge': 0.0,
-        'isUpgrade': false,
-        'isCurrentPlan': false,
-        'isDowngrade': true,
-        'currentPlan': currentPlan,
-        'expiresAt': expiresAt,
-      };
-    }
-
-    return {
-      'targetPlan': normalizedTargetPlan,
-      'targetPrice': targetPrice,
-      'charge': targetPrice - subscriptionPrice(currentPlan),
-      'isUpgrade': true,
-      'isCurrentPlan': false,
-      'isDowngrade': false,
-      'currentPlan': currentPlan,
-      'expiresAt': expiresAt,
-    };
-  }
+  // -----------------------------
+  // SUBSCRIPTION PURCHASE
+  // -----------------------------
 
   Future<void> purchaseSubscription({
     required String businessId,
     required String plan,
   }) async {
-    final normalizedPlan = plan.toLowerCase();
+    final newPlan = plan.toLowerCase();
 
-    final targetPrice = subscriptionPrice(normalizedPlan);
+    final targetPrice = subscriptionPrice(newPlan);
 
-    final businessWalletReference = _firestore
-        .collection('wallets')
-        .doc(businessId);
+    final walletRef = _firestore.collection('wallets').doc(businessId);
 
-    final businessSubscriptionReference = _firestore
+    final subscriptionRef = _firestore
         .collection('businessSubscriptions')
         .doc(businessId);
 
-    final adminWalletReference = _firestore
-        .collection('wallets')
-        .doc(adminWalletId);
-
-    final businessTransactionReference = businessWalletReference
-        .collection('transactions')
-        .doc();
-
-    final adminTransactionReference = adminWalletReference
-        .collection('transactions')
-        .doc();
-
-    final platformTransactionReference = _firestore
-        .collection('platformTransactions')
-        .doc();
+    final adminWalletRef = _firestore.collection('wallets').doc(adminWalletId);
 
     await _firestore.runTransaction((transaction) async {
-      final businessSnapshot = await transaction.get(businessWalletReference);
+      final walletSnapshot = await transaction.get(walletRef);
 
-      final adminSnapshot = await transaction.get(adminWalletReference);
-
-      if (!businessSnapshot.exists) {
+      if (!walletSnapshot.exists) {
         throw Exception('Business wallet does not exist.');
       }
 
-      final businessData = businessSnapshot.data();
+      final wallet = walletSnapshot.data();
 
-      if (businessData == null) {
-        throw Exception('Business wallet data is invalid.');
+      if (wallet == null) {
+        throw Exception('Invalid wallet data.');
       }
 
-      final availableCredits =
-          (businessData['availableCredits'] as num?)?.toDouble() ?? 0.0;
+      final credits = (wallet['availableCredits'] as num?)?.toDouble() ?? 0.0;
 
-      final currentPlan = businessData['subscriptionPlan']
-          ?.toString()
-          .toLowerCase();
+      final currentPlan = wallet['subscriptionPlan']?.toString().toLowerCase();
 
-      final currentStatus = businessData['subscriptionStatus']
-          ?.toString()
-          .toLowerCase();
+      final status = wallet['subscriptionStatus']?.toString().toLowerCase();
 
-      final currentExpiresAt = businessData['subscriptionExpiresAt'];
+      final expires = wallet['subscriptionExpiresAt'];
 
-      final currentlyActive =
-          currentStatus == 'active' &&
-          currentExpiresAt is Timestamp &&
-          currentExpiresAt.toDate().isAfter(DateTime.now());
+      final active =
+          status == 'active' &&
+          expires is Timestamp &&
+          expires.toDate().isAfter(DateTime.now());
 
-      double amountToCharge = targetPrice;
+      double charge = targetPrice;
 
-      bool upgrading = false;
+      bool upgrade = false;
 
-      Timestamp expirationTimestamp;
-
-      if (currentlyActive &&
-          currentPlan != null &&
-          currentPlan.isNotEmpty &&
-          _subscriptionRanks.containsKey(currentPlan)) {
+      if (active && currentPlan != null) {
         final currentRank = subscriptionRank(currentPlan);
 
-        final targetRank = subscriptionRank(normalizedPlan);
+        final targetRank = subscriptionRank(newPlan);
 
-        if (currentRank == targetRank) {
-          throw Exception(
-            'The ${_planName(normalizedPlan)} plan is already active.',
-          );
+        if (targetRank == currentRank) {
+          throw Exception('This plan is already active.');
         }
 
         if (targetRank < currentRank) {
-          throw Exception(
-            'Downgrading an active subscription is not currently supported.',
-          );
+          throw Exception('Downgrades are not available.');
         }
 
-        upgrading = true;
-
-        amountToCharge = targetPrice - subscriptionPrice(currentPlan);
-
-        expirationTimestamp = currentExpiresAt;
-      } else {
-        final now = DateTime.now();
-
-        final expirationDate = DateTime(
-          now.year,
-          now.month + 1,
-          now.day,
-          now.hour,
-          now.minute,
+        charge = calculateUpgradePrice(
+          currentPlan: currentPlan,
+          targetPlan: newPlan,
         );
 
-        expirationTimestamp = Timestamp.fromDate(expirationDate);
+        upgrade = true;
       }
 
-      if (amountToCharge <= 0.0) {
-        throw Exception('The subscription charge is invalid.');
-      }
-
-      if (availableCredits < amountToCharge) {
+      if (credits < charge) {
         throw Exception(
-          'Not enough credits. '
-          '${amountToCharge.toStringAsFixed(0)} credits are required.',
+          'Insufficient credits. '
+          '${charge.toStringAsFixed(0)} required.',
         );
       }
 
-      final adminData = adminSnapshot.data();
+      final expiration = active
+          ? expires
+          : Timestamp.fromDate(DateTime.now().add(const Duration(days: 30)));
 
-      final adminRevenue =
-          (adminData?['availableBalance'] as num?)?.toDouble() ?? 0.0;
+      final remaining = credits - charge;
 
-      final newBusinessBalance = availableCredits - amountToCharge;
+      transaction.update(walletRef, {
+        'availableCredits': remaining,
 
-      final newAdminBalance = adminRevenue + amountToCharge;
+        'balance': remaining,
 
-      final walletUpdate = <String, dynamic>{
-        'availableCredits': newBusinessBalance,
-        'balance': newBusinessBalance,
-        'subscriptionPlan': normalizedPlan,
+        'subscriptionPlan': newPlan,
+
         'subscriptionPrice': targetPrice,
+
         'subscriptionStatus': 'active',
-        'subscriptionExpiresAt': expirationTimestamp,
+
+        'subscriptionExpiresAt': expiration,
+
+        if (upgrade) 'previousSubscriptionPlan': currentPlan,
+
+        if (upgrade) 'subscriptionUpgradedAt': FieldValue.serverTimestamp(),
+
+        if (!upgrade) 'subscriptionStartedAt': FieldValue.serverTimestamp(),
+
         'updatedAt': FieldValue.serverTimestamp(),
-      };
+      });
 
-      if (upgrading) {
-        walletUpdate['subscriptionUpgradedAt'] = FieldValue.serverTimestamp();
-
-        walletUpdate['previousSubscriptionPlan'] = currentPlan;
-      } else {
-        walletUpdate['subscriptionStartedAt'] = FieldValue.serverTimestamp();
-      }
-
-      transaction.update(businessWalletReference, walletUpdate);
-
-      transaction.set(businessSubscriptionReference, {
+      transaction.set(subscriptionRef, {
         'businessId': businessId,
-        'plan': normalizedPlan,
-        'planId': normalizedPlan,
+
+        'plan': newPlan,
+
+        'planId': newPlan,
+
         'price': targetPrice,
+
         'status': 'active',
-        'expiresAt': expirationTimestamp,
+
+        'expiresAt': expiration,
+
+        if (upgrade) 'previousPlan': currentPlan,
+
         'updatedAt': FieldValue.serverTimestamp(),
-        if (upgrading) 'upgradedAt': FieldValue.serverTimestamp(),
-        if (upgrading) 'previousPlan': currentPlan,
-        if (!upgrading) 'startedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      transaction.set(adminWalletReference, {
+      final transactionRef = walletRef.collection('transactions').doc();
+
+      transaction.set(transactionRef, {
+        'type': upgrade ? 'subscription_upgrade' : 'subscription_payment',
+
+        'amount': charge,
+
+        'subscriptionPlan': newPlan,
+
+        'subscriptionFullPrice': targetPrice,
+
+        'previousSubscriptionPlan': currentPlan,
+
+        'description': upgrade
+            ? 'Scaled Circle subscription upgrade'
+            : 'Scaled Circle subscription purchase',
+
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final adminSnapshot = await transaction.get(adminWalletRef);
+
+      final adminBalance =
+          (adminSnapshot.data()?['availableBalance'] as num?)?.toDouble() ??
+          0.0;
+
+      transaction.set(adminWalletRef, {
         'ownerId': adminWalletId,
+
         'ownerType': 'admin',
-        'availableBalance': newAdminBalance,
-        'balance': newAdminBalance,
-        'subscriptionRevenue': FieldValue.increment(amountToCharge),
+
+        'availableBalance': adminBalance + charge,
+
+        'balance': adminBalance + charge,
+
         'updatedAt': FieldValue.serverTimestamp(),
-        if (!adminSnapshot.exists) 'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-
-      transaction.set(businessTransactionReference, {
-        'type': upgrading ? 'subscription_upgrade' : 'subscription_payment',
-        'amount': amountToCharge,
-        'subscriptionPlan': normalizedPlan,
-        'subscriptionFullPrice': targetPrice,
-        'previousSubscriptionPlan': currentPlan,
-        'description': upgrading
-            ? 'Scaled Circle subscription upgrade.'
-            : 'Scaled Circle monthly subscription.',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(adminTransactionReference, {
-        'type': upgrading
-            ? 'subscription_upgrade_revenue'
-            : 'subscription_revenue',
-        'amount': amountToCharge,
-        'businessId': businessId,
-        'subscriptionPlan': normalizedPlan,
-        'subscriptionFullPrice': targetPrice,
-        'previousSubscriptionPlan': currentPlan,
-        'description': upgrading
-            ? 'Scaled Circle subscription upgrade revenue.'
-            : 'Scaled Circle subscription revenue.',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(platformTransactionReference, {
-        'type': upgrading ? 'subscription_upgrade' : 'subscription_revenue',
-        'businessId': businessId,
-        'amount': amountToCharge,
-        'subscriptionPlan': normalizedPlan,
-        'subscriptionFullPrice': targetPrice,
-        'previousSubscriptionPlan': currentPlan,
-        'status': 'completed',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
     });
+  }
+
+  // -----------------------------
+  // CAMPAIGN FEES
+  // -----------------------------
+
+  double calculateCampaignFee(double workerBudget) {
+    return workerBudget * campaignFeeRate;
+  }
+
+  double calculateCampaignTotal(double workerBudget) {
+    return workerBudget + calculateCampaignFee(workerBudget);
+  }
+
+  Future<bool> hasActiveSubscription({required String businessId}) async {
+    final snap = await _firestore.collection('wallets').doc(businessId).get();
+
+    final data = snap.data();
+
+    if (data == null) {
+      return false;
+    }
+
+    final status = data['subscriptionStatus']?.toString().toLowerCase();
+
+    final expires = data['subscriptionExpiresAt'];
+
+    if (status != 'active') {
+      return false;
+    }
+
+    if (expires is! Timestamp) {
+      return false;
+    }
+
+    return expires.toDate().isAfter(DateTime.now());
   }
 
   Future<Map<String, double>> fundCampaign({
@@ -432,18 +264,15 @@ class PlatformBillingService {
     required double workerBudget,
     required String description,
   }) async {
-    if (workerBudget <= 0.0) {
+    if (workerBudget <= 0) {
       throw Exception('Worker budget must be greater than zero.');
     }
 
-    final activeSubscription = await hasActiveSubscription(
-      businessId: businessId,
-    );
+    final active = await hasActiveSubscription(businessId: businessId);
 
-    if (!activeSubscription) {
+    if (!active) {
       throw Exception(
-        'An active Scaled Circle subscription is required '
-        'to publish campaigns.',
+        'An active subscription is required to publish campaigns.',
       );
     }
 
@@ -451,145 +280,75 @@ class PlatformBillingService {
 
     final totalCharge = workerBudget + platformFee;
 
-    final businessWalletReference = _firestore
-        .collection('wallets')
-        .doc(businessId);
+    final walletRef = _firestore.collection('wallets').doc(businessId);
 
-    final adminWalletReference = _firestore
-        .collection('wallets')
-        .doc(adminWalletId);
-
-    final reserveTransactionReference = businessWalletReference
-        .collection('transactions')
-        .doc();
-
-    final feeTransactionReference = businessWalletReference
-        .collection('transactions')
-        .doc();
-
-    final adminTransactionReference = adminWalletReference
-        .collection('transactions')
-        .doc();
-
-    final platformTransactionReference = _firestore
-        .collection('platformTransactions')
-        .doc();
+    final adminRef = _firestore.collection('wallets').doc(adminWalletId);
 
     await _firestore.runTransaction((transaction) async {
-      final businessSnapshot = await transaction.get(businessWalletReference);
+      final walletSnap = await transaction.get(walletRef);
 
-      final adminSnapshot = await transaction.get(adminWalletReference);
+      final wallet = walletSnap.data();
 
-      if (!businessSnapshot.exists) {
+      if (wallet == null) {
         throw Exception('Business wallet does not exist.');
       }
 
-      final businessData = businessSnapshot.data();
+      final available = (wallet['availableCredits'] as num?)?.toDouble() ?? 0.0;
 
-      if (businessData == null) {
-        throw Exception('Business wallet is invalid.');
+      final reserved = (wallet['reservedCredits'] as num?)?.toDouble() ?? 0.0;
+
+      if (available < totalCharge) {
+        throw Exception('Insufficient credits.');
       }
 
-      final availableCredits =
-          (businessData['availableCredits'] as num?)?.toDouble() ?? 0.0;
+      transaction.update(walletRef, {
+        'availableCredits': available - totalCharge,
 
-      final reservedCredits =
-          (businessData['reservedCredits'] as num?)?.toDouble() ?? 0.0;
+        'reservedCredits': reserved + workerBudget,
 
-      if (availableCredits < totalCharge) {
-        throw Exception(
-          'Insufficient credits. '
-          '${totalCharge.toStringAsFixed(2)} credits are required.',
-        );
-      }
+        'balance': available - totalCharge,
 
-      final adminData = adminSnapshot.data();
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      final transactionRef = walletRef.collection('transactions').doc();
+
+      transaction.set(transactionRef, {
+        'type': 'campaign_reserve',
+
+        'amount': workerBudget,
+
+        'campaignId': campaignId,
+
+        'description': description,
+
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final adminSnap = await transaction.get(adminRef);
 
       final adminBalance =
-          (adminData?['availableBalance'] as num?)?.toDouble() ?? 0.0;
+          (adminSnap.data()?['availableBalance'] as num?)?.toDouble() ?? 0.0;
 
-      final newAvailableCredits = availableCredits - totalCharge;
-
-      final newReservedCredits = reservedCredits + workerBudget;
-
-      final newAdminBalance = adminBalance + platformFee;
-
-      transaction.update(businessWalletReference, {
-        'availableCredits': newAvailableCredits,
-        'reservedCredits': newReservedCredits,
-        'balance': newAvailableCredits,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(adminWalletReference, {
+      transaction.set(adminRef, {
         'ownerId': adminWalletId,
+
         'ownerType': 'admin',
-        'availableBalance': newAdminBalance,
-        'balance': newAdminBalance,
-        'campaignRevenue': FieldValue.increment(platformFee),
+
+        'availableBalance': adminBalance + platformFee,
+
+        'balance': adminBalance + platformFee,
+
         'updatedAt': FieldValue.serverTimestamp(),
-        if (!adminSnapshot.exists) 'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-
-      transaction.set(reserveTransactionReference, {
-        'type': 'campaign_reserve',
-        'amount': workerBudget,
-        'campaignId': campaignId,
-        'description': description,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(feeTransactionReference, {
-        'type': 'campaign_platform_fee',
-        'amount': platformFee,
-        'campaignId': campaignId,
-        'feeRate': campaignFeeRate,
-        'description': 'Scaled Circle campaign fee.',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(adminTransactionReference, {
-        'type': 'campaign_fee_revenue',
-        'amount': platformFee,
-        'businessId': businessId,
-        'campaignId': campaignId,
-        'feeRate': campaignFeeRate,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(platformTransactionReference, {
-        'type': 'campaign_fee',
-        'businessId': businessId,
-        'campaignId': campaignId,
-        'workerBudget': workerBudget,
-        'feeRate': campaignFeeRate,
-        'platformFee': platformFee,
-        'totalCharged': totalCharge,
-        'status': 'completed',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
     });
 
     return {
       'workerBudget': workerBudget,
+
       'platformFee': platformFee,
+
       'totalCharge': totalCharge,
     };
-  }
-
-  String _planName(String plan) {
-    switch (plan) {
-      case 'starter':
-        return 'Starter';
-
-      case 'growth':
-        return 'Growth';
-
-      case 'scale':
-        return 'Scale';
-
-      default:
-        return plan;
-    }
   }
 }
