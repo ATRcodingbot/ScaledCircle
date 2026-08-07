@@ -73,7 +73,6 @@ class CampaignService {
     String businessId,
   ) {
 
-
     return _firestore
         .collection("campaigns")
 
@@ -109,5 +108,57 @@ class CampaignService {
         );
 
   }
+
+
+
+
+
+  Future<void> applyToCampaign({
+
+    required String campaignId,
+
+    required String scalerId,
+
+  }) async {
+
+
+    await _firestore
+
+        .collection("campaigns")
+
+        .doc(campaignId)
+
+        .collection("applications")
+
+        .doc(scalerId)
+
+        .set({
+
+
+      "scalerId":
+          scalerId,
+
+
+      "campaignId":
+          campaignId,
+
+
+      "status":
+          "pending",
+
+
+      "createdAt":
+          FieldValue.serverTimestamp(),
+
+
+      "updatedAt":
+          FieldValue.serverTimestamp(),
+
+
+    });
+
+
+  }
+
 
 }
