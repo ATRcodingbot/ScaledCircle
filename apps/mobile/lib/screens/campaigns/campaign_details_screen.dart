@@ -1268,6 +1268,7 @@ final routeReference = _routesCollection.doc(
             (routeData['pointCount'] as num?)?.toInt() ?? routePoints.length;
 
         final verification = _calculateVerification(serviceArea, routePoints);
+        
 
         final allPoints = <LatLng>[...serviceArea, ...routePoints];
 
