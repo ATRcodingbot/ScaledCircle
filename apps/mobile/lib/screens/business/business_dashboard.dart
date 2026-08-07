@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../services/wallet_service.dart';
 import '../campaigns/campaign_details_screen.dart';
+import 'campaign/sc_campaign_applicants_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'create/campaign_type_screen.dart';
 import 'subscription_screen.dart';
@@ -246,9 +247,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
       await Navigator.push(
         context,
-        MaterialPageRoute(
-  builder: (_) => const CampaignTypeScreen(),
-),
+        MaterialPageRoute(builder: (_) => const CampaignTypeScreen()),
       );
 
       if (!context.mounted) {
@@ -602,7 +601,28 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                           ],
                         ],
                       ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 18),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (applications > 0)
+                            IconButton(
+                              icon: const Icon(Icons.people_alt_outlined),
+                              tooltip: "View Applicants",
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ScCampaignApplicantsScreen(
+                                      campaignId: campaign.id,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+
+                          const Icon(Icons.arrow_forward_ios, size: 18),
+                        ],
+                      ),
                       onTap: () async {
                         await Navigator.push(
                           context,
