@@ -79,7 +79,13 @@ class PlatformBillingService {
     final adminWalletRef = _firestore.collection('wallets').doc(adminWalletId);
 
     await _firestore.runTransaction((transaction) async {
+      // -----------------------------
+      // ALL READS FIRST
+      // -----------------------------
+
       final walletSnapshot = await transaction.get(walletRef);
+
+      final adminSnapshot = await transaction.get(adminWalletRef);
 
       if (!walletSnapshot.exists) {
         throw Exception('Business wallet does not exist.');
@@ -142,43 +148,35 @@ class PlatformBillingService {
 
       final remaining = credits - charge;
 
+      final adminBalance =
+          (adminSnapshot.data()?['availableBalance'] as num?)?.toDouble() ??
+          0.0;
+
+      // -----------------------------
+      // WRITES AFTER ALL READS
+      // -----------------------------
+
       transaction.update(walletRef, {
         'availableCredits': remaining,
-
         'balance': remaining,
-
         'subscriptionPlan': newPlan,
-
         'subscriptionPrice': targetPrice,
-
         'subscriptionStatus': 'active',
-
         'subscriptionExpiresAt': expiration,
-
         if (upgrade) 'previousSubscriptionPlan': currentPlan,
-
         if (upgrade) 'subscriptionUpgradedAt': FieldValue.serverTimestamp(),
-
         if (!upgrade) 'subscriptionStartedAt': FieldValue.serverTimestamp(),
-
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
       transaction.set(subscriptionRef, {
         'businessId': businessId,
-
         'plan': newPlan,
-
         'planId': newPlan,
-
         'price': targetPrice,
-
         'status': 'active',
-
         'expiresAt': expiration,
-
         if (upgrade) 'previousPlan': currentPlan,
-
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -186,37 +184,21 @@ class PlatformBillingService {
 
       transaction.set(transactionRef, {
         'type': upgrade ? 'subscription_upgrade' : 'subscription_payment',
-
         'amount': charge,
-
         'subscriptionPlan': newPlan,
-
         'subscriptionFullPrice': targetPrice,
-
         'previousSubscriptionPlan': currentPlan,
-
         'description': upgrade
             ? 'Scaled Circle subscription upgrade'
             : 'Scaled Circle subscription purchase',
-
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      final adminSnapshot = await transaction.get(adminWalletRef);
-
-      final adminBalance =
-          (adminSnapshot.data()?['availableBalance'] as num?)?.toDouble() ??
-          0.0;
-
       transaction.set(adminWalletRef, {
         'ownerId': adminWalletId,
-
         'ownerType': 'admin',
-
         'availableBalance': adminBalance + charge,
-
         'balance': adminBalance + charge,
-
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     });
@@ -258,6 +240,10 @@ class PlatformBillingService {
     return expires.toDate().isAfter(DateTime.now());
   }
 
+  // -----------------------------
+  // CAMPAIGN FUNDING
+  // -----------------------------
+
   Future<Map<String, double>> fundCampaign({
     required String businessId,
     required String campaignId,
@@ -285,7 +271,13 @@ class PlatformBillingService {
     final adminRef = _firestore.collection('wallets').doc(adminWalletId);
 
     await _firestore.runTransaction((transaction) async {
+      // -----------------------------
+      // ALL READS FIRST
+      // -----------------------------
+
       final walletSnap = await transaction.get(walletRef);
+
+      final adminSnap = await transaction.get(adminRef);
 
       final wallet = walletSnap.data();
 
@@ -298,16 +290,26 @@ class PlatformBillingService {
       final reserved = (wallet['reservedCredits'] as num?)?.toDouble() ?? 0.0;
 
       if (available < totalCharge) {
-        throw Exception('Insufficient credits.');
+        throw Exception(
+          'Insufficient credits. '
+          '${totalCharge.toStringAsFixed(2)} required, '
+          '${available.toStringAsFixed(2)} available.',
+        );
       }
 
+      final adminBalance =
+          (adminSnap.data()?['availableBalance'] as num?)?.toDouble() ?? 0.0;
+
+      final remainingCredits = available - totalCharge;
+
+      // -----------------------------
+      // WRITES AFTER ALL READS
+      // -----------------------------
+
       transaction.update(walletRef, {
-        'availableCredits': available - totalCharge,
-
+        'availableCredits': remainingCredits,
         'reservedCredits': reserved + workerBudget,
-
-        'balance': available - totalCharge,
-
+        'balance': remainingCredits,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -315,39 +317,26 @@ class PlatformBillingService {
 
       transaction.set(transactionRef, {
         'type': 'campaign_reserve',
-
         'amount': workerBudget,
-
+        'platformFee': platformFee,
+        'totalCharge': totalCharge,
         'campaignId': campaignId,
-
         'description': description,
-
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      final adminSnap = await transaction.get(adminRef);
-
-      final adminBalance =
-          (adminSnap.data()?['availableBalance'] as num?)?.toDouble() ?? 0.0;
-
       transaction.set(adminRef, {
         'ownerId': adminWalletId,
-
         'ownerType': 'admin',
-
         'availableBalance': adminBalance + platformFee,
-
         'balance': adminBalance + platformFee,
-
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     });
 
     return {
       'workerBudget': workerBudget,
-
       'platformFee': platformFee,
-
       'totalCharge': totalCharge,
     };
   }

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../services/completion_payout_service.dart';
@@ -8,120 +10,153 @@ import '../../services/completion_tracking_service.dart';
 import '../../widgets/home_completion_counter.dart';
 import 'job_tracking_screen.dart';
 
-class JobDetailsScreen extends StatelessWidget {
+class JobDetailsScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
 
-  const JobDetailsScreen({super.key, required this.campaign});
+  const JobDetailsScreen({
+    super.key,
+    required this.campaign,
+  });
 
+  @override
+  State<JobDetailsScreen> createState() => _JobDetailsScreenState();
+}
+
+class _JobDetailsScreenState extends State<JobDetailsScreen> {
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
   }
 
-  Future<void> applyForCampaign(BuildContext context) async {
+  Future<void> applyForCampaign() async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('You must be logged in to apply for a campaign.'),
+          content: Text('You must be logged in to apply.'),
         ),
       );
+
       return;
     }
 
     final firestore = FirebaseFirestore.instance;
 
-    final applicationId = '${campaign.id}_${user.uid}';
-
-    final applicationReference = firestore
+    final applicationRef = firestore
         .collection('applications')
-        .doc(applicationId);
+        .doc('${widget.campaign.id}_${user.uid}');
 
     try {
-      await firestore.runTransaction((transaction) async {
-        final campaignSnapshot = await transaction.get(campaign.reference);
+      await firestore.runTransaction(
+        (transaction) async {
+          final campaignSnapshot = await transaction.get(
+            widget.campaign.reference,
+          );
 
-        final applicationSnapshot = await transaction.get(applicationReference);
+          final applicationSnapshot = await transaction.get(
+            applicationRef,
+          );
 
-        if (!campaignSnapshot.exists) {
-          throw Exception('This campaign no longer exists.');
-        }
+          if (!campaignSnapshot.exists) {
+            throw Exception('Campaign no longer exists.');
+          }
 
-        final campaignData = campaignSnapshot.data() as Map<String, dynamic>;
+          final data =
+              campaignSnapshot.data() as Map<String, dynamic>;
 
-        final campaignStatus = campaignData['status']?.toString() ?? 'open';
+          final status =
+              data['status']?.toString() ?? 'open';
 
-        if (campaignStatus != 'open') {
-          throw Exception('This campaign is no longer accepting applications.');
-        }
+          if (status != 'open') {
+            throw Exception(
+              'Campaign is not accepting applications.',
+            );
+          }
 
-        if (applicationSnapshot.exists) {
-          throw Exception('You already applied for this campaign.');
-        }
+          if (applicationSnapshot.exists) {
+            throw Exception(
+              'You already applied.',
+            );
+          }
 
-        final campaignName =
-            campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
+          final campaignName =
+              data['campaignName']?.toString() ??
+                  'Untitled Campaign';
 
-        final businessId = campaignData['businessId']?.toString();
+          final businessId =
+              data['businessId']?.toString();
 
-        final scalerEmail = user.email ?? 'Scaler';
+          transaction.set(
+            applicationRef,
+            {
+              'campaignId': widget.campaign.id,
+              'campaignName': campaignName,
+              'businessId': businessId,
+              'businessEmail': data['businessEmail'],
+              'scalerId': user.uid,
+              'scalerEmail': user.email ?? 'Scaler',
+              'status': 'pending',
+              'appliedAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+          );
 
-        transaction.set(applicationReference, {
-          'campaignId': campaign.id,
-          'campaignName': campaignName,
-          'businessId': businessId,
-          'businessEmail': campaignData['businessEmail'],
-          'scalerId': user.uid,
-          'scalerEmail': scalerEmail,
-          'status': 'pending',
-          'appliedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+          transaction.update(
+            widget.campaign.reference,
+            {
+              'applications': FieldValue.increment(1),
+            },
+          );
 
-        transaction.update(campaign.reference, {
-          'applications': FieldValue.increment(1),
-        });
+          if (businessId != null &&
+              businessId.isNotEmpty) {
+            final notification =
+                firestore.collection('notifications').doc();
 
-        if (businessId != null && businessId.isNotEmpty) {
-          final notificationReference = firestore
-              .collection('notifications')
-              .doc();
+            transaction.set(
+              notification,
+              {
+                'userId': businessId,
+                'type': 'application_received',
+                'title': 'New Scaler Application',
+                'message':
+                    '${user.email ?? 'Scaler'} applied to $campaignName',
+                'campaignId': widget.campaign.id,
+                'campaignName': campaignName,
+                'scalerId': user.uid,
+                'scalerEmail': user.email ?? 'Scaler',
+                'read': false,
+                'createdAt': FieldValue.serverTimestamp(),
+              },
+            );
+          }
+        },
+      );
 
-          transaction.set(notificationReference, {
-            'userId': businessId,
-            'type': 'application_received',
-            'title': 'New Scaler Application',
-            'message': '$scalerEmail applied to $campaignName.',
-            'campaignId': campaign.id,
-            'campaignName': campaignName,
-            'scalerId': user.uid,
-            'scalerEmail': scalerEmail,
-            'read': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-      });
-
-      if (!context.mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Application submitted successfully.')),
+        const SnackBar(
+          content: Text('Application submitted successfully.'),
+        ),
       );
     } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to apply: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to apply: $e',
+          ),
+        ),
+      );
     }
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
-  _getAssignedZone() async {
+      _getAssignedZone() async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -129,8 +164,14 @@ class JobDetailsScreen extends StatelessWidget {
     }
 
     final snapshot = await _zonesCollection
-        .where('campaignId', isEqualTo: campaign.id)
-        .where('assignedScalerId', isEqualTo: user.uid)
+        .where(
+          'campaignId',
+          isEqualTo: widget.campaign.id,
+        )
+        .where(
+          'assignedScalerId',
+          isEqualTo: user.uid,
+        )
         .limit(1)
         .get();
 
@@ -141,7 +182,7 @@ class JobDetailsScreen extends StatelessWidget {
     return snapshot.docs.first;
   }
 
-  Future<void> startZoneJob(BuildContext context) async {
+  Future<void> startZoneJob() async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -152,489 +193,543 @@ class JobDetailsScreen extends StatelessWidget {
       final zone = await _getAssignedZone();
 
       if (zone == null) {
-        throw Exception('You do not have an assigned zone for this campaign.');
-      }
-
-      final zoneData = zone.data();
-
-      final assignedScalerId = zoneData['assignedScalerId']?.toString();
-
-      if (assignedScalerId != user.uid) {
-        throw Exception('This zone is not assigned to you.');
-      }
-
-      final zoneStatus = zoneData['status']?.toString() ?? 'assigned';
-
-      if (zoneStatus != 'assigned' && zoneStatus != 'accepted') {
-        throw Exception('This zone cannot be started from its current status.');
-      }
-
-      await zone.reference.update({
-        'status': 'in_progress',
-        'startedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!context.mounted) {
-        return;
-      }
-
-      final zoneName = zoneData['zoneName']?.toString() ?? 'Zone';
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$zoneName started.')));
-    } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to start zone: $e')));
-    }
-  }
-
-  Future<void> submitJob(BuildContext context) async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return;
-    }
-
-    final firestore = FirebaseFirestore.instance;
-
-    try {
-      final zone = await _getAssignedZone();
-
-      if (zone == null) {
-        throw Exception('You do not have an assigned zone for this campaign.');
-      }
-
-      final zoneSnapshot = await zone.reference.get();
-
-      if (!zoneSnapshot.exists) {
-        throw Exception('This zone no longer exists.');
-      }
-
-      final zoneData = zoneSnapshot.data()!;
-
-      if (zoneData['assignedScalerId']?.toString() != user.uid) {
-        throw Exception('This zone is not assigned to you.');
-      }
-
-      final zoneStatus = zoneData['status']?.toString() ?? 'assigned';
-
-      if (zoneStatus != 'in_progress') {
-        throw Exception('Start the zone before submitting completion.');
-      }
-
-      final gpsTracking = zoneData['gpsTracking'] == true;
-
-      if (gpsTracking) {
         throw Exception(
-          'Stop and save GPS tracking before submitting this zone.',
+          'No assigned zone found.',
         );
       }
 
-      final routeId = zoneData['routeId']?.toString();
+      final data = zone.data();
 
-      if (routeId == null || routeId.isEmpty) {
+      final assignedScaler =
+          data['assignedScalerId']?.toString();
+
+      if (assignedScaler != user.uid) {
         throw Exception(
-          'A saved GPS route is required before submitting this zone.',
+          'Zone is not assigned to you.',
         );
       }
 
-      final routeReference = firestore
-          .collection('campaignRoutes')
-          .doc(routeId);
+      final status =
+          data['status']?.toString() ?? 'assigned';
 
-      final routeSnapshot = await routeReference.get();
-
-      if (!routeSnapshot.exists) {
+      if (status != 'assigned' &&
+          status != 'accepted') {
         throw Exception(
-          'The saved GPS route could not be found. '
-          'Open the GPS tracker and save the route again.',
+          'Zone cannot be started.',
         );
       }
 
-      final routeData = routeSnapshot.data();
-
-      if (routeData == null) {
-        throw Exception('The saved GPS route is invalid.');
-      }
-
-      if (routeData['zoneId']?.toString() != zone.id) {
-        throw Exception('The saved GPS route does not belong to this zone.');
-      }
-
-      final routePointCount = (routeData['pointCount'] as num?)?.toInt() ?? 0;
-
-      final rawRoutePoints = routeData['points'];
-
-      if (rawRoutePoints is! List) {
-        throw Exception(
-          'The saved GPS route does not contain valid route points.',
-        );
-      }
-
-      final routePoints = <LatLng>[];
-
-      for (final point in rawRoutePoints) {
-        if (point is! Map) {
-          continue;
-        }
-
-        final latitude = point['latitude'];
-
-        final longitude = point['longitude'];
-
-        if (latitude is num && longitude is num) {
-          routePoints.add(LatLng(latitude.toDouble(), longitude.toDouble()));
-        }
-      }
-
-      if (routePointCount < 2 || routePoints.length < 2) {
-        throw Exception('The saved GPS route does not contain enough points.');
-      }
-
-      final routeIsSimulated = routeData['simulated'] == true;
-
-      final completionService = CompletionTrackingService();
-
-      final completion = await completionService.calculateCompletion(
-        zoneId: zone.id,
-        routePoints: routePoints,
+      await zone.reference.update(
+        {
+          'status': 'in_progress',
+          'startedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
       );
 
-      final assignedHomes = (completion['assignedHomes'] as num?)?.toInt() ?? 0;
-
-      final completedHomes =
-          (completion['completedHomes'] as num?)?.toInt() ?? 0;
-
-      final completionPercentage =
-          (completion['completionPercentage'] as num?)?.toDouble() ?? 0.0;
-
-      final eligibleForPayment = completion['eligibleForPayment'] == true;
-
-      final campaignSnapshot = await campaign.reference.get();
-
-      if (!campaignSnapshot.exists) {
-        throw Exception('This campaign no longer exists.');
-      }
-
-      final campaignData = campaignSnapshot.data() as Map<String, dynamic>;
-
-      final businessId = campaignData['businessId']?.toString();
-
-      if (businessId == null || businessId.isEmpty) {
-        throw Exception('This campaign is missing its business account.');
-      }
-
-      final campaignName =
-          campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
-
-      final zoneName = zoneData['zoneName']?.toString() ?? 'Assigned Zone';
-
-      final scalerEmail = user.email ?? 'Scaler';
-
-      final basePay =
-          double.tryParse(zoneData['suggestedBasePay']?.toString() ?? '') ??
-          double.tryParse(campaignData['basePay']?.toString() ?? '') ??
-          0.0;
-
-      final completionBonus =
-          double.tryParse(zoneData['completionBonus']?.toString() ?? '') ??
-          double.tryParse(campaignData['bonus']?.toString() ?? '') ??
-          0.0;
-
-      if (assignedHomes <= 0) {
-        throw Exception('This zone does not have a valid assigned home count.');
-      }
-
-      final completionPayoutService = CompletionPayoutService();
-
-      final pendingPayout = await completionPayoutService.createPendingPayout(
-        businessId: businessId,
-        scalerId: user.uid,
-        campaignId: campaign.id,
-        zoneId: zone.id,
-        assignedHomes: assignedHomes,
-        completedHomes: completedHomes,
-        basePay: basePay,
-        completionBonus: completionBonus,
-      );
-
-      final payoutAmount =
-          (pendingPayout['totalPayout'] as num?)?.toDouble() ?? 0.0;
-
-      final payoutId = pendingPayout['payoutId']?.toString() ?? zone.id;
-
-      final batch = firestore.batch();
-
-      batch.update(zone.reference, {
-        'status': 'submitted',
-
-        'submittedAt': FieldValue.serverTimestamp(),
-
-        'routeId': routeReference.id,
-
-        'gpsTracking': false,
-
-        'gpsRoutePointCount': routePointCount,
-
-        'gpsRouteSimulated': routeIsSimulated,
-
-        'gpsTrackingEndedAt': FieldValue.serverTimestamp(),
-
-        'submittedRouteId': routeReference.id,
-
-        'submittedRoutePointCount': routePointCount,
-
-        'submittedRouteSimulated': routeIsSimulated,
-
-        'assignedHomes': assignedHomes,
-
-        'completedHomes': completedHomes,
-
-        'completionPercentage': completionPercentage,
-
-        'eligibleForPayment': eligibleForPayment,
-
-        'paymentStatus': 'pending_review',
-
-        'pendingPayoutId': payoutId,
-
-        'payoutAmount': payoutAmount,
-
-        'reviewFeedback': FieldValue.delete(),
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      batch.set(routeReference, {
-        'tracking': false,
-
-        'submitted': true,
-
-        'submittedAt': FieldValue.serverTimestamp(),
-
-        'pointCount': routePointCount,
-
-        'simulated': routeIsSimulated,
-
-        'completionPercentage': completionPercentage,
-
-        'completedHomes': completedHomes,
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      final notificationReference = firestore.collection('notifications').doc();
-
-      batch.set(notificationReference, {
-        'userId': businessId,
-
-        'type': 'zone_completion_submitted',
-
-        'title': 'Zone Completion Submitted',
-
-        'message':
-            '$scalerEmail submitted $zoneName at '
-            '${completionPercentage.toStringAsFixed(1)}% completion '
-            'with a proposed payout of '
-            '\$${payoutAmount.toStringAsFixed(2)}.',
-
-        'campaignId': campaign.id,
-
-        'campaignName': campaignName,
-
-        'zoneId': zone.id,
-
-        'zoneName': zoneName,
-
-        'routeId': routeReference.id,
-
-        'payoutId': payoutId,
-
-        'routePointCount': routePointCount,
-
-        'routeSimulated': routeIsSimulated,
-
-        'completionPercentage': completionPercentage,
-
-        'completedHomes': completedHomes,
-
-        'assignedHomes': assignedHomes,
-
-        'payoutAmount': payoutAmount,
-
-        'scalerId': user.uid,
-
-        'scalerEmail': scalerEmail,
-
-        'read': false,
-
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
-
-      if (!context.mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$zoneName submitted for review. '
-            '${completionPercentage.toStringAsFixed(1)}% complete • '
-            'proposed payout '
-            '\$${payoutAmount.toStringAsFixed(2)}.',
+            '${data['zoneName'] ?? 'Zone'} started.',
           ),
         ),
       );
     } catch (e) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to submit zone: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to start zone: $e',
+          ),
+        ),
+      );
     }
   }
 
-  Widget _assignedZoneSummary(User? currentUser) {
-    if (currentUser == null) {
+  Future<XFile?> pickInstallationPhoto() async {
+    if (!mounted) {
+      return null;
+    }
+
+    final picker = ImagePicker();
+
+    final source =
+        await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.pop(
+                    sheetContext,
+                    ImageSource.camera,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose From Gallery'),
+                onTap: () {
+                  Navigator.pop(
+                    sheetContext,
+                    ImageSource.gallery,
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || source == null) {
+      return null;
+    }
+
+    return picker.pickImage(
+      source: source,
+      imageQuality: 85,
+    );
+  }
+  Future<void> submitJob({
+    required XFile installationPhoto,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return;
+    }
+
+    try {
+      final storage = FirebaseStorage.instance;
+
+      final photoRef = storage
+          .ref()
+          .child('installation_proofs')
+          .child(widget.campaign.id)
+          .child(
+            '${DateTime.now().millisecondsSinceEpoch}.jpg',
+          );
+
+      await photoRef.putData(
+        await installationPhoto.readAsBytes(),
+        SettableMetadata(
+          contentType: 'image/jpeg',
+        ),
+      );
+
+      final photoUrl =
+          await photoRef.getDownloadURL();
+
+      final firestore =
+          FirebaseFirestore.instance;
+
+      final zone =
+          await _getAssignedZone();
+
+      if (zone == null) {
+        throw Exception(
+          'No assigned zone found.',
+        );
+      }
+
+      final zoneSnapshot =
+          await zone.reference.get();
+
+      if (!zoneSnapshot.exists) {
+        throw Exception(
+          'Zone no longer exists.',
+        );
+      }
+
+      final zoneData =
+          zoneSnapshot.data()!;
+
+      if (zoneData['assignedScalerId']
+              ?.toString() !=
+          user.uid) {
+        throw Exception(
+          'This zone is not assigned to you.',
+        );
+      }
+
+      final zoneStatus =
+          zoneData['status']?.toString() ??
+              'assigned';
+
+      if (zoneStatus != 'in_progress') {
+        throw Exception(
+          'Start the zone before submitting.',
+        );
+      }
+
+      if (zoneData['gpsTracking'] == true) {
+        throw Exception(
+          'Stop GPS tracking before submitting.',
+        );
+      }
+
+      final routeId =
+          zoneData['routeId']?.toString();
+
+      if (routeId == null ||
+          routeId.isEmpty) {
+        throw Exception(
+          'GPS route required.',
+        );
+      }
+
+      final routeReference =
+          firestore
+              .collection('campaignRoutes')
+              .doc(routeId);
+
+      final routeSnapshot =
+          await routeReference.get();
+
+      if (!routeSnapshot.exists) {
+        throw Exception(
+          'GPS route not found.',
+        );
+      }
+
+      final routeData =
+          routeSnapshot.data();
+
+      if (routeData == null) {
+        throw Exception(
+          'Invalid GPS route.',
+        );
+      }
+
+      final rawPoints =
+          routeData['points'];
+
+      if (rawPoints is! List) {
+        throw Exception(
+          'Invalid route points.',
+        );
+      }
+
+      final routePoints =
+          <LatLng>[];
+
+      for (final point in rawPoints) {
+        if (point is Map) {
+          final latitude =
+              point['latitude'];
+
+          final longitude =
+              point['longitude'];
+
+          if (latitude is num &&
+              longitude is num) {
+            routePoints.add(
+              LatLng(
+                latitude.toDouble(),
+                longitude.toDouble(),
+              ),
+            );
+          }
+        }
+      }
+
+      if (routePoints.length < 2) {
+        throw Exception(
+          'Not enough GPS points.',
+        );
+      }
+
+      final completion =
+          await CompletionTrackingService()
+              .calculateCompletion(
+        zoneId: zone.id,
+        routePoints: routePoints,
+      );
+
+      final assignedHomes =
+          (completion['assignedHomes']
+                  as num?)
+              ?.toInt() ??
+              0;
+
+      final completedHomes =
+          (completion['completedHomes']
+                  as num?)
+              ?.toInt() ??
+              0;
+
+      final completionPercentage =
+          (completion['completionPercentage']
+                  as num?)
+              ?.toDouble() ??
+              0;
+
+      final eligible =
+          completion['eligibleForPayment'] ==
+              true;
+
+      if (assignedHomes <= 0) {
+        throw Exception(
+          'Invalid home count.',
+        );
+      }
+
+      final campaignSnapshot =
+          await widget.campaign.reference.get();
+
+      if (!campaignSnapshot.exists) {
+        throw Exception(
+          'Campaign no longer exists.',
+        );
+      }
+
+      final campaignData =
+          campaignSnapshot.data()
+              as Map<String, dynamic>;
+
+      final businessId =
+          campaignData['businessId']
+              ?.toString();
+
+      if (businessId == null ||
+          businessId.isEmpty) {
+        throw Exception(
+          'Missing business account.',
+        );
+      }
+
+      final zoneName =
+          zoneData['zoneName']
+              ?.toString() ??
+              'Zone';
+
+      final payout =
+          await CompletionPayoutService()
+              .createPendingPayout(
+        businessId: businessId,
+        scalerId: user.uid,
+        campaignId: widget.campaign.id,
+        zoneId: zone.id,
+        assignedHomes: assignedHomes,
+        completedHomes: completedHomes,
+        basePay:
+            double.tryParse(
+                  zoneData['suggestedBasePay']
+                          ?.toString() ??
+                      '0',
+                ) ??
+                0,
+        completionBonus:
+            double.tryParse(
+                  campaignData['bonus']
+                          ?.toString() ??
+                      '0',
+                ) ??
+                0,
+      );
+
+      final payoutAmount =
+          (payout['totalPayout']
+                  as num?)
+              ?.toDouble() ??
+              0;
+
+      final payoutId =
+          payout['payoutId']
+              ?.toString() ??
+              zone.id;
+
+      final batch =
+          firestore.batch();
+
+      batch.update(
+        zone.reference,
+        {
+          'status': 'submitted',
+
+          'installationPhotoUrl':
+              photoUrl,
+
+          'installationPhotoSubmittedAt':
+              FieldValue.serverTimestamp(),
+
+          'submittedAt':
+              FieldValue.serverTimestamp(),
+
+          'routeId':
+              routeReference.id,
+
+          'completedHomes':
+              completedHomes,
+
+          'assignedHomes':
+              assignedHomes,
+
+          'completionPercentage':
+              completionPercentage,
+
+          'eligibleForPayment':
+              eligible,
+
+          'paymentStatus':
+              'pending_review',
+
+          'pendingPayoutId':
+              payoutId,
+
+          'payoutAmount':
+              payoutAmount,
+
+          'gpsTracking':
+              false,
+
+          'updatedAt':
+              FieldValue.serverTimestamp(),
+        },
+      );
+
+      batch.set(
+        firestore
+            .collection('notifications')
+            .doc(),
+        {
+          'userId':
+              businessId,
+
+          'type':
+              'zone_completion_submitted',
+
+          'title':
+              'Zone Completion Submitted',
+
+          'message':
+              '${user.email ?? 'Scaler'} submitted $zoneName',
+
+          'campaignId':
+              widget.campaign.id,
+
+          'zoneId':
+              zone.id,
+
+          'payoutId':
+              payoutId,
+
+          'payoutAmount':
+              payoutAmount,
+
+          'read':
+              false,
+
+          'createdAt':
+              FieldValue.serverTimestamp(),
+        },
+      );
+
+      await batch.commit();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$zoneName submitted successfully.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Submit failed: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+
+  Widget _assignedZoneSummary(User? user) {
+    if (user == null) {
       return const SizedBox.shrink();
     }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<
+        QuerySnapshot<Map<String, dynamic>>>(
       stream: _zonesCollection
-          .where('campaignId', isEqualTo: campaign.id)
-          .where('assignedScalerId', isEqualTo: currentUser.uid)
+          .where(
+            'campaignId',
+            isEqualTo: widget.campaign.id,
+          )
+          .where(
+            'assignedScalerId',
+            isEqualTo: user.uid,
+          )
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Unable to load assigned zone: ${snapshot.error}'),
-            ),
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
           );
         }
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        }
-
-        final zones = snapshot.data?.docs ?? [];
+        final zones =
+            snapshot.data?.docs ?? [];
 
         if (zones.isEmpty) {
           return const SizedBox.shrink();
         }
 
-        final data = zones.first.data();
-
-        final zoneName = data['zoneName']?.toString() ?? 'Assigned Zone';
-
-        final zoneStatus = data['status']?.toString() ?? 'assigned';
-
-        final estimatedHomes = (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-
-        final walkingMiles = (data['estimatedWalkingMiles'] as num?)
-            ?.toDouble();
-
-        final estimatedMinutes = (data['estimatedMinutes'] as num?)?.toInt();
-
-        final suggestedPay = (data['suggestedBasePay'] as num?)?.toDouble();
+        final data =
+            zones.first.data();
 
         return Card(
           child: Padding(
-            padding: const EdgeInsets.all(18),
+            padding:
+                const EdgeInsets.all(18),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const CircleAvatar(child: Icon(Icons.map_outlined)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Your Assigned Zone',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            zoneName,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Chip(label: Text(_statusLabel(zoneStatus))),
-                  ],
+                Text(
+                  data['zoneName']
+                          ?.toString() ??
+                      'Assigned Zone',
+                  style:
+                      const TextStyle(
+                    fontSize: 22,
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _zoneSummaryMetric(
-                        icon: Icons.home_outlined,
-                        label: 'Estimated Homes',
-                        value: estimatedHomes > 0
-                            ? estimatedHomes.toString()
-                            : 'Pending',
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _zoneSummaryMetric(
-                        icon: Icons.directions_walk,
-                        label: 'Walking Distance',
-                        value: walkingMiles == null
-                            ? 'Pending'
-                            : '${walkingMiles.toStringAsFixed(1)} mi',
-                      ),
-                    ),
-                  ],
+
+                const SizedBox(height: 10),
+
+                Text(
+                  'Homes: ${data['estimatedHomes'] ?? 0}',
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _zoneSummaryMetric(
-                        icon: Icons.schedule,
-                        label: 'Estimated Time',
-                        value: estimatedMinutes == null
-                            ? 'Pending'
-                            : _formatDuration(estimatedMinutes),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _zoneSummaryMetric(
-                        icon: Icons.payments_outlined,
-                        label: 'Recommended Pay',
-                        value: suggestedPay == null
-                            ? 'Pending'
-                            : '\$${suggestedPay.toStringAsFixed(0)}',
-                      ),
-                    ),
-                  ],
+
+                Text(
+                  'Distance: ${data['estimatedWalkingMiles'] ?? 0} miles',
+                ),
+
+                Text(
+                  'Status: ${_statusLabel(
+                    data['status']
+                            ?.toString() ??
+                        'assigned',
+                  )}',
                 ),
               ],
             ),
@@ -643,407 +738,390 @@ class JobDetailsScreen extends StatelessWidget {
       },
     );
   }
-
-  Widget _zoneSummaryMetric({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 22),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _assignedZoneActions(BuildContext context, User? currentUser) {
-    if (currentUser == null) {
+  Widget _assignedZoneActions(User? user) {
+    if (user == null) {
       return const SizedBox.shrink();
     }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<
+        QuerySnapshot<Map<String, dynamic>>>(
       stream: _zonesCollection
-          .where('campaignId', isEqualTo: campaign.id)
-          .where('assignedScalerId', isEqualTo: currentUser.uid)
+          .where(
+            'campaignId',
+            isEqualTo: widget.campaign.id,
+          )
+          .where(
+            'assignedScalerId',
+            isEqualTo: user.uid,
+          )
           .limit(1)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Unable to load zone controls: ${snapshot.error}'),
-            ),
-          );
-        }
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 55,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final zones = snapshot.data?.docs ?? [];
+        final zones =
+            snapshot.data?.docs ?? [];
 
         if (zones.isEmpty) {
           return const SizedBox.shrink();
         }
 
-        final zone = zones.first;
+        final zone =
+            zones.first;
 
-        final data = zone.data();
+        final data =
+            zone.data();
 
-        final zoneName = data['zoneName']?.toString() ?? 'Assigned Zone';
+        final status =
+            data['status']
+                    ?.toString() ??
+                'assigned';
 
-        final zoneStatus = data['status']?.toString() ?? 'assigned';
+        final zoneName =
+            data['zoneName']
+                    ?.toString() ??
+                'Zone';
 
-        final reviewFeedback = data['reviewFeedback']?.toString();
 
-        if (zoneStatus == 'assigned' || zoneStatus == 'accepted') {
+        if (status == 'assigned' ||
+            status == 'accepted') {
           return SizedBox(
-            width: double.infinity,
-            height: 55,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                startZoneJob(context);
-              },
-              icon: const Icon(Icons.play_arrow),
-              label: Text('Start $zoneName'),
+            width:
+                double.infinity,
+            height:
+                55,
+            child:
+                ElevatedButton.icon(
+              onPressed:
+                  startZoneJob,
+              icon:
+                  const Icon(
+                    Icons.play_arrow,
+                  ),
+              label:
+                  Text(
+                    'Start $zoneName',
+                  ),
             ),
           );
         }
 
-        if (zoneStatus == 'in_progress') {
+
+        if (status == 'in_progress') {
           return Column(
             children: [
+
               HomeCompletionCounter(
-                zoneId: zone.id,
-                assignedHomes: (data['estimatedHomes'] as num?)?.toInt() ?? 0,
+                zoneId:
+                    zone.id,
 
-                completedHomes: (data['completedHomes'] as num?)?.toInt() ?? 0,
+                assignedHomes:
+                    (data['estimatedHomes']
+                            as num?)
+                        ?.toInt() ??
+                    0,
 
-                basePay: (data['suggestedBasePay'] as num?)?.toDouble() ?? 0,
+                completedHomes:
+                    (data['completedHomes']
+                            as num?)
+                        ?.toInt() ??
+                    0,
+
+                basePay:
+                    (data['suggestedBasePay']
+                            as num?)
+                        ?.toDouble() ??
+                    0,
               ),
 
-              const SizedBox(height: 20),
-              if (reviewFeedback != null && reviewFeedback.isNotEmpty) ...[
-                Card(
-                  color: Colors.orange.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.feedback_outlined, color: Colors.orange),
-                            SizedBox(width: 10),
-                            Text(
-                              'Changes Requested',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(reviewFeedback),
-                      ],
+              const SizedBox(
+                height: 20,
+              ),
+              ElevatedButton.icon(
+  style: ElevatedButton.styleFrom(
+    minimumSize: const Size(
+      double.infinity,
+      55,
+    ),
+  ),
+
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JobTrackingScreen(
+          campaign: widget.campaign,
+          zone: zone,
+        ),
+      ),
+    );
+  },
+
+  icon: const Icon(
+    Icons.my_location,
+  ),
+
+  label: const Text(
+    'Open GPS Tracker',
+  ),
+),
+
+const SizedBox(
+  height: 20,
+),
+
+
+              ElevatedButton.icon(
+                style:
+                    ElevatedButton.styleFrom(
+                  minimumSize:
+                      const Size(
+                    double.infinity,
+                    55,
+                  ),
+                ),
+
+                onPressed:
+                    () async {
+                  final photo =
+                      await pickInstallationPhoto();
+
+                  if (!mounted ||
+                      photo == null) {
+                    return;
+                  }
+
+                  await submitJob(
+                    installationPhoto:
+                        photo,
+                  );
+                },
+
+                icon:
+                    const Icon(
+                      Icons.upload,
                     ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.gps_fixed, size: 42),
-                      const SizedBox(height: 10),
-                      Text(
-                        '$zoneName In Progress',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Record your GPS route while working this assigned zone.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 18),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => JobTrackingScreen(
-                                  campaign: campaign,
-                                  zone: zone,
-                                ),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.my_location),
-                          label: const Text('Open GPS Tracker'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    submitJob(context);
-                  },
-                  icon: const Icon(Icons.upload_file),
-                  label: Text(
-                    reviewFeedback != null && reviewFeedback.isNotEmpty
-                        ? 'Resubmit $zoneName'
-                        : 'Submit $zoneName',
-                  ),
-                ),
+
+                label:
+                    Text(
+                      'Submit $zoneName',
+                    ),
               ),
             ],
           );
         }
 
-        if (zoneStatus == 'submitted') {
+
+        if (status == 'submitted') {
           return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const Icon(Icons.hourglass_top, size: 42),
-                  const SizedBox(height: 10),
+            child:
+                ListTile(
+              leading:
+                  const Icon(
+                    Icons.hourglass_top,
+                  ),
+
+              title:
                   Text(
                     '$zoneName Submitted',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
-                  const SizedBox(height: 8),
+
+              subtitle:
                   const Text(
-                    'The business is reviewing your zone.',
-                    textAlign: TextAlign.center,
+                    'Waiting for business review.',
                   ),
-                ],
-              ),
             ),
           );
         }
 
-        if (zoneStatus == 'completed') {
+
+        if (status == 'completed') {
           return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const Icon(Icons.verified, size: 42),
-                  const SizedBox(height: 10),
+            child:
+                ListTile(
+              leading:
+                  const Icon(
+                    Icons.verified,
+                  ),
+
+              title:
                   Text(
                     '$zoneName Completed',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
-                ],
-              ),
             ),
           );
         }
+
 
         return const SizedBox.shrink();
       },
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser =
+        FirebaseAuth.instance.currentUser;
+
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: campaign.reference.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Job Details')),
-            body: Center(child: Text(snapshot.error.toString())),
-          );
-        }
+      stream:
+          widget.campaign.reference.snapshots(),
+
+      builder:
+          (context, snapshot) {
 
         if (!snapshot.hasData) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body:
+                Center(
+              child:
+                  CircularProgressIndicator(),
+            ),
           );
         }
 
-        final liveCampaign = snapshot.data!;
 
-        if (!liveCampaign.exists) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Job Details')),
-            body: const Center(child: Text('This job no longer exists.')),
+        final campaign =
+            snapshot.data!;
+
+
+        if (!campaign.exists) {
+          return const Scaffold(
+            body:
+                Center(
+              child:
+                  Text(
+                'Campaign no longer exists.',
+              ),
+            ),
           );
         }
 
-        final data = liveCampaign.data() as Map<String, dynamic>;
+
+        final data =
+            campaign.data()
+                as Map<String, dynamic>;
+
 
         final campaignName =
-            data['campaignName']?.toString() ?? 'Untitled Campaign';
+            data['campaignName']
+                    ?.toString() ??
+                'Untitled Campaign';
 
-        final description = data['description']?.toString() ?? '';
 
-        final businessEmail =
-            data['businessEmail']?.toString() ?? 'Not provided';
+        final description =
+            data['description']
+                    ?.toString() ??
+                '';
 
-        final basePay = data['basePay']?.toString() ?? '0';
 
-        final bonus = data['bonus']?.toString() ?? '0';
+        final status =
+            data['status']
+                    ?.toString() ??
+                'open';
 
-        final status = data['status']?.toString() ?? 'open';
-
-        final deadline = _deadlineLabel(data);
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Job Details'), centerTitle: true),
-          body: ListView(
-            padding: const EdgeInsets.all(20),
+          appBar:
+              AppBar(
+            title:
+                const Text(
+              'Job Details',
+            ),
+          ),
+
+          body:
+              ListView(
+            padding:
+                const EdgeInsets.all(20),
+
             children: [
+
               Text(
                 campaignName,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                style:
+                    const TextStyle(
+                  fontSize:
+                      28,
+                  fontWeight:
+                      FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                businessEmail,
-                style: TextStyle(color: Colors.grey.shade700),
+
+
+              const SizedBox(
+                height: 20,
               ),
-              const SizedBox(height: 16),
-              _assignedZoneSummary(currentUser),
-              const SizedBox(height: 24),
+
+
+              _assignedZoneSummary(
+                currentUser,
+              ),
+
+
+              const SizedBox(
+                height: 20,
+              ),
+
+
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                child:
+                    Padding(
+                  padding:
+                      const EdgeInsets.all(18),
+
+                  child:
+                      Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+
                     children: [
+
                       const Text(
-                        'Job Description',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                        'Description',
+                        style:
+                            TextStyle(
+                          fontSize:
+                              18,
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Text(description),
+
+                      const SizedBox(
+                        height: 10,
+                      ),
+
+                      Text(
+                        description,
+                      ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 15),
-              Row(
-                children: [
-                  Expanded(
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.attach_money),
-                            const SizedBox(height: 8),
-                            Text(
-                              '\$$basePay',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const Text('Campaign Base Pay'),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.card_giftcard),
-                            const SizedBox(height: 8),
-                            Text(
-                              '\$$bonus',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const Text('Bonus'),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+
+
+              const SizedBox(
+                height: 20,
               ),
-              const SizedBox(height: 15),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.calendar_today),
-                  title: const Text('Deadline'),
-                  subtitle: Text(deadline),
+
+
+              if (status == 'open' &&
+                  currentUser != null)
+                _applicationSection(
+                  campaign,
+                  currentUser,
                 ),
+
+
+              const SizedBox(
+                height: 15,
               ),
-              const SizedBox(height: 12),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.flag),
-                  title: const Text('Campaign Status'),
-                  subtitle: Text(_statusLabel(status)),
-                ),
+
+
+              _assignedZoneActions(
+                currentUser,
               ),
-              const SizedBox(height: 30),
-              if (status == 'open' && currentUser != null)
-                _applicationSection(context, liveCampaign, currentUser),
-              const SizedBox(height: 12),
-              _assignedZoneActions(context, currentUser),
             ],
           ),
         );
@@ -1051,163 +1129,76 @@ class JobDetailsScreen extends StatelessWidget {
     );
   }
 
+
   Widget _applicationSection(
-    BuildContext context,
-    DocumentSnapshot liveCampaign,
+    DocumentSnapshot campaign,
     User user,
   ) {
-    final applicationId = '${liveCampaign.id}_${user.uid}';
+    final ref =
+        FirebaseFirestore.instance
+            .collection('applications')
+            .doc(
+              '${campaign.id}_${user.uid}',
+            );
 
-    final applicationReference = FirebaseFirestore.instance
-        .collection('applications')
-        .doc(applicationId);
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: applicationReference.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 55,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
+      stream:
+          ref.snapshots(),
 
-        if (snapshot.hasError) {
-          return Text(snapshot.error.toString());
-        }
+      builder:
+          (context, snapshot) {
 
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return SizedBox(
-            height: 55,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                applyForCampaign(context);
-              },
-              icon: const Icon(Icons.send),
-              label: const Text('Apply for Campaign'),
+        if (!snapshot.hasData ||
+            !snapshot.data!.exists) {
+          return ElevatedButton(
+            onPressed:
+                applyForCampaign,
+
+            child:
+                const Text(
+              'Apply For Campaign',
             ),
           );
         }
 
-        final applicationData = snapshot.data!.data() as Map<String, dynamic>;
 
-        final applicationStatus =
-            applicationData['status']?.toString() ?? 'pending';
+        final data =
+            snapshot.data!.data()
+                as Map<String, dynamic>;
 
-        final assignedZoneName = applicationData['assignedZoneName']
-            ?.toString();
 
-        if (applicationStatus == 'pending') {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Icon(Icons.hourglass_top, size: 40),
-                  SizedBox(height: 10),
-                  Text(
-                    'Application Pending',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'The business is reviewing your application.',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
+        final status =
+            data['status']
+                    ?.toString() ??
+                'pending';
+
+
+        return Card(
+          child:
+              ListTile(
+            leading:
+                Icon(
+              status == 'accepted'
+                  ? Icons.verified
+                  : Icons.hourglass_top,
             ),
-          );
-        }
 
-        if (applicationStatus == 'rejected') {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Icon(Icons.cancel_outlined, size: 40),
-                  SizedBox(height: 10),
-                  Text(
-                    'Application Not Selected',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+            title:
+                Text(
+              'Application ${_statusLabel(status)}',
             ),
-          );
-        }
-
-        if (applicationStatus == 'accepted') {
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const Icon(Icons.verified, size: 40),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Application Accepted',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  if (assignedZoneName != null &&
-                      assignedZoneName.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text('Assigned to $assignedZoneName'),
-                  ],
-                ],
-              ),
-            ),
-          );
-        }
-
-        return const SizedBox.shrink();
+          ),
+        );
       },
     );
   }
 
-  String _deadlineLabel(Map<String, dynamic> data) {
-    final deadlineAt = data['deadlineAt'];
-
-    if (deadlineAt is Timestamp) {
-      final date = deadlineAt.toDate();
-
-      final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
-
-      final minute = date.minute.toString().padLeft(2, '0');
-
-      final period = date.hour >= 12 ? 'PM' : 'AM';
-
-      return '${date.month}/${date.day}/${date.year} '
-          '$hour:$minute $period';
-    }
-
-    return data['deadline']?.toString() ?? 'Not specified';
-  }
-
-  String _formatDuration(int minutes) {
-    if (minutes < 60) {
-      return '$minutes min';
-    }
-
-    final hours = minutes ~/ 60;
-
-    final remainingMinutes = minutes % 60;
-
-    if (remainingMinutes == 0) {
-      return '$hours hr';
-    }
-
-    return '$hours hr $remainingMinutes min';
-  }
 
   String _statusLabel(String status) {
     switch (status) {
       case 'open':
         return 'Open';
-
-      case 'unassigned':
-        return 'Unassigned';
 
       case 'assigned':
         return 'Assigned';
@@ -1219,7 +1210,7 @@ class JobDetailsScreen extends StatelessWidget {
         return 'In Progress';
 
       case 'submitted':
-        return 'Submitted for Review';
+        return 'Submitted';
 
       case 'completed':
         return 'Completed';

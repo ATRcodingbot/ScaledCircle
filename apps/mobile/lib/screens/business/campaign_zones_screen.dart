@@ -112,10 +112,14 @@ class CampaignZonesScreen extends StatelessWidget {
         'campaignId': campaign.id,
         'businessId': businessId,
         'zoneName': zoneName,
-        'shapeType': 'polygon',
-        'serviceAreaType': 'polygon',
-        'serviceArea': [],
-        'serviceAreaPointCount': 0,
+        'shapeType': campaignData['shapeType'] ?? 'polygon',
+        'serviceAreaType': campaignData['serviceAreaType'] ?? 'polygon',
+        'serviceArea': campaignData['serviceArea'] ?? [],
+        'serviceAreaPointCount':
+            campaignData['serviceAreaPointCount'] ?? 0,
+        'serviceAreaCenter': campaignData['serviceAreaCenter'],
+        'serviceAreaRadiusMeters':
+            campaignData['serviceAreaRadiusMeters'],
         'estimatedHomes': 0,
         'homeCountStatus': 'pending',
         'homeCountMethod': null,

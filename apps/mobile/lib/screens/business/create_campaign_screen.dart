@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/platform_billing_service.dart';
 import 'campaign_zones_screen.dart';
+import 'campaign/campaign_locations_screen.dart';
 
 class CreateCampaignScreen extends StatefulWidget {
   const CreateCampaignScreen({super.key});
@@ -16,36 +17,77 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final campaignNameController = TextEditingController();
-
   final descriptionController = TextEditingController();
-
   final payController = TextEditingController();
-
   final bonusController = TextEditingController();
-
   final scalerCountController = TextEditingController(text: '1');
+
+  final materialAddressController = TextEditingController();
+  final materialInstructionsController = TextEditingController();
+  final materialQuantityController = TextEditingController();
 
   final PlatformBillingService _billingService = PlatformBillingService();
 
   DateTime? _marketingDate;
 
   TimeOfDay? _startTime;
-
   TimeOfDay? _deadlineTime;
 
+  String _campaignType = 'flyer_distribution';
+
+  String _materialSource = 'business_provided';
+
+  String _materialHandoffMethod = 'business_pickup';
+
+  bool _trackingEnabled = false;
+
   bool publishing = false;
+
+  static const Set<String> _distributionCampaignTypes = {
+    'flyer_distribution',
+    'door_hanger_distribution',
+    'business_card_distribution',
+  };
+
+  static const Set<String> _marketingMaterialCampaignTypes = {
+    'flyer_distribution',
+    'door_hanger_distribution',
+    'business_card_distribution',
+    'yard_sign_installation',
+  };
+
+  bool get _usesCampaignZones {
+    return _distributionCampaignTypes.contains(_campaignType);
+  }
+
+  bool get _usesMarketingMaterials {
+    return _marketingMaterialCampaignTypes.contains(_campaignType);
+  }
+
+  bool get _usesBusinessProvidedMaterials {
+    return _usesMarketingMaterials && _materialSource == 'business_provided';
+  }
+
+  bool get _requiresExactLocations {
+    return _campaignType == 'yard_sign_installation' ||
+        _campaignType == 'dump_run' ||
+        _campaignType == 'event_marketing';
+  }
+
+  bool get _canPublishThroughCurrentWorkflow {
+    return _usesCampaignZones;
+  }
 
   @override
   void dispose() {
     campaignNameController.dispose();
-
     descriptionController.dispose();
-
     payController.dispose();
-
     bonusController.dispose();
-
     scalerCountController.dispose();
+    materialAddressController.dispose();
+    materialInstructionsController.dispose();
+    materialQuantityController.dispose();
 
     super.dispose();
   }
@@ -62,7 +104,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       lastDate: DateTime(now.year + 3),
     );
 
-    if (selected == null) {
+    if (selected == null || !mounted) {
       return;
     }
 
@@ -77,7 +119,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       initialTime: _startTime ?? const TimeOfDay(hour: 9, minute: 0),
     );
 
-    if (selected == null) {
+    if (selected == null || !mounted) {
       return;
     }
 
@@ -92,7 +134,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       initialTime: _deadlineTime ?? const TimeOfDay(hour: 17, minute: 0),
     );
 
-    if (selected == null) {
+    if (selected == null || !mounted) {
       return;
     }
 
@@ -125,6 +167,85 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
     return time.format(context);
   }
 
+  String _campaignTypeLabel(String type) {
+    switch (type) {
+      case 'flyer_distribution':
+        return 'Flyer Distribution';
+
+      case 'door_hanger_distribution':
+        return 'Door Hanger Distribution';
+
+      case 'business_card_distribution':
+        return 'Business Card Distribution';
+
+      case 'yard_sign_installation':
+        return 'Yard Sign Installation';
+
+      case 'dump_run':
+        return 'Dump Run';
+
+      case 'event_marketing':
+        return 'Event Marketing';
+
+      default:
+        return type;
+    }
+  }
+
+  String _campaignTypeDescription(String type) {
+    switch (type) {
+      case 'flyer_distribution':
+        return 'Scalers distribute flyers throughout mapped neighborhoods.';
+
+      case 'door_hanger_distribution':
+        return 'Scalers distribute door hangers throughout mapped neighborhoods.';
+
+      case 'business_card_distribution':
+        return 'Scalers distribute business cards in the selected campaign area.';
+
+      case 'yard_sign_installation':
+        return 'Install signs at exact addresses or map pins specified by the business.';
+
+      case 'dump_run':
+        return 'Pickup and haul material from one location to a designated disposal location.';
+
+      case 'event_marketing':
+        return 'Send Scalers to a specific event or venue for local promotion.';
+
+      default:
+        return '';
+    }
+  }
+
+  String _materialSourceLabel(String source) {
+    switch (source) {
+      case 'business_provided':
+        return 'I Already Have My Materials';
+
+      case 'scaled_circle_generated':
+        return 'Create Tracked Materials with Scaled Circle';
+
+      case 'printed_by_scaled_circle':
+        return 'Scaled Circle Printing';
+
+      default:
+        return source;
+    }
+  }
+
+  String _handoffLabel(String value) {
+    switch (value) {
+      case 'business_pickup':
+        return 'Scaler Picks Up from Business';
+
+      case 'business_dropoff':
+        return 'Business Drops Off Materials';
+
+      default:
+        return value;
+    }
+  }
+
   Future<void> publishCampaign() async {
     if (publishing) {
       return;
@@ -137,7 +258,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
     if (_marketingDate == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Choose a marketing date.')));
+      ).showSnackBar(const SnackBar(content: Text('Choose a campaign date.')));
 
       return;
     }
@@ -190,21 +311,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
     final completionBonus = double.tryParse(bonusController.text.trim()) ?? 0.0;
 
-    /*
-     * Worker budget is the maximum amount
-     * that can ultimately be paid to Scalers.
-     *
-     * Example:
-     *
-     * $100 base
-     * $150 bonus
-     * 1 Scaler
-     *
-     * Worker budget = $250.
-     */
     final maximumWorkerBudget = (basePay + completionBonus) * scalerCount;
 
-    if (maximumWorkerBudget <= 0.0) {
+    if (maximumWorkerBudget <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Campaign worker budget must be greater than zero.'),
@@ -214,13 +323,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       return;
     }
 
-    /*
-     * Platform fee is currently 10%.
-     *
-     * $250 worker budget
-     * = $25 platform fee
-     * = $275 total campaign cost.
-     */
     final platformFee = _billingService.calculateCampaignFee(
       maximumWorkerBudget,
     );
@@ -242,11 +344,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         throw Exception('You must be logged in to create a campaign.');
       }
 
-      /*
-       * Scaled Circle requires an active
-       * subscription before a business can
-       * create/run campaigns.
-       */
       final hasActiveSubscription = await _billingService.hasActiveSubscription(
         businessId: user.uid,
       );
@@ -264,56 +361,39 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
           .collection('campaigns')
           .doc();
 
-      /*
-       * Create the draft.
-       *
-       * Nothing has been charged yet.
-       */
-      await campaignReference.set({
+      final materialQuantity =
+          int.tryParse(materialQuantityController.text.trim()) ?? 0;
+
+      final initialData = <String, dynamic>{
         'businessId': user.uid,
-
         'businessEmail': user.email,
-
         'campaignName': campaignName,
-
         'description': descriptionController.text.trim(),
 
-        /*
-         * Compensation advertised to the
-         * Scaler.
-         */
-        'basePay': basePay,
+        'campaignType': _campaignType,
+        'campaignTypeLabel': _campaignTypeLabel(_campaignType),
 
+        'configurationMode': _usesCampaignZones ? 'zones' : 'exact_locations',
+
+        'requiresExactLocations': _requiresExactLocations,
+
+        'basePay': basePay,
         'bonus': completionBonus,
 
         'requestedScalerCount': scalerCount,
-
         'assignedScalerCount': 0,
 
-        /*
-         * Worker compensation.
-         */
         'maximumWorkerBudget': maximumWorkerBudget,
-
         'workerBudget': maximumWorkerBudget,
-
         'reservedWorkerBudget': 0.0,
 
-        /*
-         * Scaled Circle revenue.
-         */
         'platformFeeRate': PlatformBillingService.campaignFeeRate,
 
         'platformFee': platformFee,
 
-        /*
-         * Total credits required from
-         * the business.
-         */
         'totalCampaignCost': totalCampaignCost,
 
         'fundingStatus': 'not_reserved',
-
         'platformFeeStatus': 'not_charged',
 
         'marketingDate': Timestamp.fromDate(_marketingDate!),
@@ -322,36 +402,200 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
         'deadlineAt': Timestamp.fromDate(deadlineDateTime),
 
-        /*
-         * Draft campaigns are invisible
-         * to Scalers.
-         */
         'status': 'draft',
 
         'applications': 0,
-
         'zoneCount': 0,
-
         'mappedZoneCount': 0,
 
         'estimatedHomes': 0,
-
         'estimatedWalkingMiles': 0.0,
-
         'estimatedMinutes': 0,
-
         'suggestedBasePayTotal': 0.0,
-
         'recommendedScalerCount': 0,
+
+        'trackingEnabled': _trackingEnabled,
 
         'createdAt': FieldValue.serverTimestamp(),
 
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (_usesMarketingMaterials) {
+        initialData.addAll({
+          'materialSource': _materialSource,
+          'materialQuantity': materialQuantity,
+        });
+      }
+
+      if (_usesBusinessProvidedMaterials) {
+        initialData.addAll({
+          'materialHandoffMethod': _materialHandoffMethod,
+
+          'materialHandoffAddress': materialAddressController.text.trim(),
+
+          'materialHandoffInstructions': materialInstructionsController.text
+              .trim(),
+        });
+      }
+
+      await campaignReference.set(initialData);
 
       final campaignSnapshot = await campaignReference.get();
 
       if (!mounted) {
+        return;
+      }
+
+      /*
+       * Exact-location campaigns remain drafts
+       * until the location configuration screen
+       * is connected.
+       *
+       * We intentionally do not reserve money
+       * or publish them without their required
+       * addresses / map pins.
+       */
+      if (!_canPublishThroughCurrentWorkflow) {
+        await campaignReference.update({
+          'status': 'draft',
+          'setupStatus': 'locations_required',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        if (!mounted) {
+          return;
+        }
+
+        final locationsConfigured = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CampaignLocationsScreen(
+              campaignReference: campaignReference!,
+              campaignType: _campaignType,
+            ),
+          ),
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        if (locationsConfigured != true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Campaign saved as a draft. '
+                'No campaign funding was charged.',
+              ),
+            ),
+          );
+
+          Navigator.pop(context);
+
+          return;
+        }
+
+        final locationsSnapshot = await FirebaseFirestore.instance
+            .collection('campaignLocations')
+            .where('campaignId', isEqualTo: campaignReference.id)
+            .get();
+
+        if (locationsSnapshot.docs.isEmpty) {
+          throw Exception('Add at least one location before publishing.');
+        }
+
+        await campaignReference.update({
+          'locationCount': locationsSnapshot.docs.length,
+          'setupStatus': 'configured',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        final latestCampaignSnapshot = await campaignReference.get();
+
+        if (!latestCampaignSnapshot.exists) {
+          throw Exception('Campaign no longer exists.');
+        }
+
+        final latestCampaignData = latestCampaignSnapshot.data();
+
+        if (latestCampaignData == null) {
+          throw Exception('Campaign data is invalid.');
+        }
+
+        final fundingStatus = latestCampaignData['fundingStatus']?.toString();
+
+        final existingReservedBudget =
+            (latestCampaignData['reservedWorkerBudget'] as num?)?.toDouble() ??
+            0.0;
+
+        final alreadyFunded =
+            fundingStatus == 'reserved' && existingReservedBudget > 0.0;
+
+        Map<String, double> funding = {
+          'workerBudget': maximumWorkerBudget,
+          'platformFee': platformFee,
+          'totalCharge': totalCampaignCost,
+        };
+
+        if (!alreadyFunded) {
+          funding = await _billingService.fundCampaign(
+            businessId: user.uid,
+            campaignId: campaignReference.id,
+            workerBudget: maximumWorkerBudget,
+            description: 'Worker funding reserved for $campaignName.',
+          );
+        }
+
+        final chargedWorkerBudget =
+            funding['workerBudget'] ?? maximumWorkerBudget;
+
+        final chargedPlatformFee = funding['platformFee'] ?? platformFee;
+
+        final chargedTotal = funding['totalCharge'] ?? totalCampaignCost;
+
+        await campaignReference.update({
+          'status': 'open',
+
+          'fundingStatus': 'reserved',
+
+          'platformFeeStatus': 'charged',
+
+          'workerBudget': chargedWorkerBudget,
+
+          'reservedWorkerBudget': alreadyFunded
+              ? existingReservedBudget
+              : chargedWorkerBudget,
+
+          'platformFee': chargedPlatformFee,
+
+          'totalCampaignCost': chargedTotal,
+
+          'fundedAt':
+              latestCampaignData['fundedAt'] ?? FieldValue.serverTimestamp(),
+
+          'publishedAt': FieldValue.serverTimestamp(),
+
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        if (!mounted) {
+          return;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_campaignTypeLabel(_campaignType)} published. '
+              '\$${chargedWorkerBudget.toStringAsFixed(2)} secured for Scaler pay '
+              '+ \$${chargedPlatformFee.toStringAsFixed(2)} Scaled Circle fee '
+              '= \$${chargedTotal.toStringAsFixed(2)} total credits.',
+            ),
+          ),
+        );
+
+        Navigator.pop(context);
+
         return;
       }
 
@@ -366,9 +610,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         ),
       );
 
-      /*
-       * Business now defines zones.
-       */
       final zonesConfigured = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
@@ -380,9 +621,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         return;
       }
 
-      /*
-       * Backing out leaves an unpaid draft.
-       */
       if (zonesConfigured != true) {
         await campaignReference.update({
           'status': 'draft',
@@ -409,9 +647,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         return;
       }
 
-      /*
-       * Load campaign zones.
-       */
       final zonesSnapshot = await FirebaseFirestore.instance
           .collection('campaignZones')
           .where('campaignId', isEqualTo: campaignReference.id)
@@ -434,16 +669,13 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         throw Exception('Map at least one zone before publishing.');
       }
 
-      /*
-       * Campaign intelligence totals.
-       */
       int totalEstimatedHomes = 0;
 
-      double totalWalkingMiles = 0.0;
+      double totalWalkingMiles = 0;
 
       int totalEstimatedMinutes = 0;
 
-      double totalSuggestedBasePay = 0.0;
+      double totalSuggestedBasePay = 0;
 
       int totalRecommendedScalers = 0;
 
@@ -453,13 +685,13 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         totalEstimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
 
         totalWalkingMiles +=
-            (data['estimatedWalkingMiles'] as num?)?.toDouble() ?? 0.0;
+            (data['estimatedWalkingMiles'] as num?)?.toDouble() ?? 0;
 
         totalEstimatedMinutes +=
             (data['estimatedMinutes'] as num?)?.toInt() ?? 0;
 
         totalSuggestedBasePay +=
-            (data['suggestedBasePay'] as num?)?.toDouble() ?? 0.0;
+            (data['suggestedBasePay'] as num?)?.toDouble() ?? 0;
 
         totalRecommendedScalers +=
             (data['recommendedScalerCount'] as num?)?.toInt() ?? 0;
@@ -476,25 +708,15 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
         'estimatedMinutes': totalEstimatedMinutes,
 
-        /*
-         * Recommendation only.
-         *
-         * IMPORTANT:
-         * This must NOT silently replace
-         * campaign basePay when the Scaler
-         * is paid.
-         */
         'suggestedBasePayTotal': totalSuggestedBasePay,
 
         'recommendedScalerCount': totalRecommendedScalers,
 
+        'setupStatus': 'configured',
+
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      /*
-       * Make sure we did not already fund
-       * this campaign.
-       */
       final latestCampaignSnapshot = await campaignReference.get();
 
       if (!latestCampaignSnapshot.exists) {
@@ -510,11 +732,10 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       final fundingStatus = latestCampaignData['fundingStatus']?.toString();
 
       final existingReservedBudget =
-          (latestCampaignData['reservedWorkerBudget'] as num?)?.toDouble() ??
-          0.0;
+          (latestCampaignData['reservedWorkerBudget'] as num?)?.toDouble() ?? 0;
 
       final alreadyFunded =
-          fundingStatus == 'reserved' && existingReservedBudget > 0.0;
+          fundingStatus == 'reserved' && existingReservedBudget > 0;
 
       Map<String, double> funding = {
         'workerBudget': maximumWorkerBudget,
@@ -522,21 +743,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         'totalCharge': totalCampaignCost,
       };
 
-      /*
-       * Charge campaign.
-       *
-       * fundCampaign():
-       *
-       * Business available credits:
-       * - worker budget
-       * - platform fee
-       *
-       * Business reserved credits:
-       * + worker budget
-       *
-       * Admin wallet:
-       * + platform fee
-       */
       if (!alreadyFunded) {
         funding = await _billingService.fundCampaign(
           businessId: user.uid,
@@ -553,12 +759,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
       final chargedTotal = funding['totalCharge'] ?? totalCampaignCost;
 
-      /*
-       * Funding succeeded.
-       *
-       * Campaign can now become visible
-       * to Scalers.
-       */
       await campaignReference.update({
         'status': 'open',
 
@@ -601,10 +801,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
       Navigator.pop(context);
     } catch (e) {
-      /*
-       * Campaigns that fail before successful
-       * funding/publication remain drafts.
-       */
       if (campaignReference != null) {
         try {
           final snapshot = await campaignReference.get();
@@ -614,18 +810,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
             final fundingStatus = data?['fundingStatus']?.toString();
 
-            /*
-             * If no money moved, safely
-             * restore draft status.
-             *
-             * If money DID move, we do not
-             * blindly reverse it here because
-             * the worker reserve and platform
-             * revenue must be reversed together.
-             *
-             * We will put that reversal inside
-             * PlatformBillingService.
-             */
             if (fundingStatus != 'reserved') {
               await campaignReference.update({
                 'status': 'draft',
@@ -661,9 +845,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final previewBasePay = double.tryParse(payController.text.trim()) ?? 0.0;
+    final previewBasePay = double.tryParse(payController.text.trim()) ?? 0;
 
-    final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0.0;
+    final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0;
 
     final previewScalers = int.tryParse(scalerCountController.text.trim()) ?? 1;
 
@@ -679,324 +863,572 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Create Campaign'), centerTitle: true),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              children: [
-                const Text(
-                  'New Marketing Campaign',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              const Text(
+                'Create Campaign',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
 
-                const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-                const Text(
-                  'Set the schedule, staffing, and compensation. '
-                  'Next, define one or more canvassing zones.',
-                ),
+              const Text(
+                'Choose the kind of field work, configure materials, '
+                'schedule the campaign, and secure Scaler compensation.',
+              ),
 
-                const SizedBox(height: 30),
+              const SizedBox(height: 28),
 
-                TextFormField(
-                  controller: campaignNameController,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Required';
-                    }
+              const Text(
+                'Campaign Type',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
 
-                    return null;
-                  },
-                  decoration: const InputDecoration(
-                    labelText: 'Campaign Name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
+              const SizedBox(height: 12),
 
-                const SizedBox(height: 20),
+              RadioGroup<String>(
+                groupValue: _campaignType,
+                onChanged: (value) {
+                  if (publishing || value == null) {
+                    return;
+                  }
 
-                TextFormField(
-                  controller: descriptionController,
-                  maxLines: 4,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Required';
-                    }
-
-                    return null;
-                  },
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                const Text(
-                  'Campaign Schedule',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 12),
-
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.calendar_month),
-                    title: const Text('Marketing Date'),
-                    subtitle: Text(_formatDate(_marketingDate)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _pickMarketingDate,
-                  ),
-                ),
-
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.play_circle_outline),
-                    title: const Text('Start Time'),
-                    subtitle: Text(_formatTime(_startTime)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _pickStartTime,
-                  ),
-                ),
-
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.timer_outlined),
-                    title: const Text('Completion Deadline'),
-                    subtitle: Text(_formatTime(_deadlineTime)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _pickDeadlineTime,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                const Text(
-                  'Staffing',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextFormField(
-                  controller: scalerCountController,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) {
-                    setState(() {});
-                  },
-                  validator: (value) {
-                    final count = int.tryParse(value?.trim() ?? '');
-
-                    if (count == null || count < 1) {
-                      return 'Enter at least 1 Scaler';
-                    }
-
-                    if (count > 100) {
-                      return 'Enter 100 or fewer for now';
-                    }
-
-                    return null;
-                  },
-                  decoration: const InputDecoration(
-                    labelText: 'Scalers Needed',
-                    helperText:
-                        'How many Scalers do you want working this campaign?',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.groups_outlined),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                const Text(
-                  'Compensation',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 12),
-
-                TextFormField(
-                  controller: payController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) {
-                    setState(() {});
-                  },
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Required';
-                    }
-
-                    final pay = double.tryParse(value.trim());
-
-                    if (pay == null || pay <= 0) {
-                      return 'Enter an amount greater than zero';
-                    }
-
-                    return null;
-                  },
-                  decoration: const InputDecoration(
-                    labelText: 'Base Pay per Scaler (\$)',
-                    helperText: 'Guaranteed base compensation for each Scaler.',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                TextFormField(
-                  controller: bonusController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) {
-                    setState(() {});
-                  },
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return null;
-                    }
-
-                    final bonus = double.tryParse(value.trim());
-
-                    if (bonus == null || bonus < 0) {
-                      return 'Enter a valid amount';
-                    }
-
-                    return null;
-                  },
-                  decoration: const InputDecoration(
-                    labelText: 'Completion Bonus per Scaler (\$)',
-                    helperText:
-                        'Paid when the completion requirements are met.',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.receipt_long_outlined),
-                            SizedBox(width: 10),
-                            Text(
-                              'Campaign Cost',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                  setState(() {
+                    _campaignType = value;
+                  });
+                },
+                child: Column(
+                  children:
+                      [
+                        'flyer_distribution',
+                        'door_hanger_distribution',
+                        'business_card_distribution',
+                        'yard_sign_installation',
+                        'dump_run',
+                        'event_marketing',
+                      ].map((type) {
+                        return Card(
+                          child: RadioListTile<String>(
+                            value: type,
+                            title: Text(
+                              _campaignTypeLabel(type),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        _costRow('Scaler compensation', previewWorkerBudget),
-
-                        const SizedBox(height: 8),
-
-                        _costRow('Scaled Circle fee (10%)', previewPlatformFee),
-
-                        const Divider(height: 24),
-
-                        _costRow(
-                          'Total credits required',
-                          previewTotal,
-                          bold: true,
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        const Text(
-                          '1 credit = \$1. An active monthly subscription '
-                          'is required to publish campaigns.',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
+                            subtitle: Text(_campaignTypeDescription(type)),
+                          ),
+                        );
+                      }).toList(),
                 ),
+              ),
 
-                const SizedBox(height: 12),
+              if (_requiresExactLocations) ...[
+                const SizedBox(height: 10),
 
-                const Card(
-                  child: Padding(
+                Card(
+                  color: Colors.blue.shade50,
+                  child: const Padding(
                     padding: EdgeInsets.all(16),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.account_balance_wallet_outlined),
+                        Icon(Icons.location_on_outlined),
                         SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Worker compensation is secured before the '
-                            'campaign becomes visible to Scalers. The '
-                            'Scaled Circle campaign fee is transferred '
-                            'to platform revenue when the campaign launches.',
+                            'This campaign uses exact locations rather than '
+                            'a canvassing zone. After this screen we will '
+                            'configure addresses and map pins.',
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.home_work_outlined),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'You do not need to enter a home count. '
-                            'Scaled Circle estimates the homes in each '
-                            'mapped zone.',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: publishing ? null : publishCampaign,
-                    icon: publishing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.map_outlined),
-                    label: Text(
-                      publishing
-                          ? 'Creating Campaign...'
-                          : 'Create & Define Zones',
                     ),
                   ),
                 ),
               ],
-            ),
+
+              if (_usesMarketingMaterials) ...[
+                const SizedBox(height: 28),
+
+                const Text(
+                  'Marketing Materials',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 12),
+
+                DropdownButtonFormField<String>(
+                  initialValue: _materialSource,
+                  decoration: const InputDecoration(
+                    labelText: 'Material Source',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'business_provided',
+                      child: Text('I Already Have My Materials'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'scaled_circle_generated',
+                      child: Text(
+                        'Create Tracked Materials with Scaled Circle',
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'printed_by_scaled_circle',
+                      child: Text('Scaled Circle Printing'),
+                    ),
+                  ],
+                  onChanged: publishing
+                      ? null
+                      : (value) {
+                          if (value == null) {
+                            return;
+                          }
+
+                          setState(() {
+                            _materialSource = value;
+                          });
+                        },
+                ),
+
+                const SizedBox(height: 10),
+
+                Text(
+                  _materialSourceLabel(_materialSource),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+
+                const SizedBox(height: 18),
+
+                TextFormField(
+                  controller: materialQuantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Material Quantity',
+                    hintText: 'Example: 500',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (!_usesMarketingMaterials) {
+                      return null;
+                    }
+
+                    if (value == null || value.trim().isEmpty) {
+                      return null;
+                    }
+
+                    final quantity = int.tryParse(value.trim());
+
+                    if (quantity == null || quantity < 1) {
+                      return 'Enter a valid quantity';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                if (_usesBusinessProvidedMaterials) ...[
+                  const SizedBox(height: 20),
+
+                  DropdownButtonFormField<String>(
+                    initialValue: _materialHandoffMethod,
+                    decoration: const InputDecoration(
+                      labelText: 'Material Handoff',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'business_pickup',
+                        child: Text('Scaler Picks Up from Business'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'business_dropoff',
+                        child: Text('Business Drops Off Materials'),
+                      ),
+                    ],
+                    onChanged: publishing
+                        ? null
+                        : (value) {
+                            if (value == null) {
+                              return;
+                            }
+
+                            setState(() {
+                              _materialHandoffMethod = value;
+                            });
+                          },
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Text(_handoffLabel(_materialHandoffMethod)),
+
+                  const SizedBox(height: 18),
+
+                  TextFormField(
+                    controller: materialAddressController,
+                    decoration: const InputDecoration(
+                      labelText: 'Pickup / Drop-off Address',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.location_on_outlined),
+                    ),
+                    validator: (value) {
+                      if (!_usesBusinessProvidedMaterials) {
+                        return null;
+                      }
+
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Enter the material handoff address';
+                      }
+
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  TextFormField(
+                    controller: materialInstructionsController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Material Handoff Instructions',
+                      hintText: 'Example: Ask for Mike at the front desk.',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+
+                if (_materialSource == 'scaled_circle_generated') ...[
+                  const SizedBox(height: 16),
+
+                  Card(
+                    color: Colors.green.shade50,
+                    child: const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.auto_awesome_outlined),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Scaled Circle-created materials can eventually '
+                              'include campaign QR codes, tracking phone '
+                              'numbers, landing pages, and forwarding email '
+                              'addresses so leads can be attributed to this '
+                              'campaign.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable Campaign Tracking'),
+                  subtitle: const Text(
+                    'Prepare this campaign for QR, phone, website, '
+                    'landing-page, and email attribution.',
+                  ),
+                  value: _trackingEnabled,
+                  onChanged: publishing
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _trackingEnabled = value;
+                          });
+                        },
+                ),
+              ],
+
+              const SizedBox(height: 28),
+
+              TextFormField(
+                controller: campaignNameController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Campaign Name',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Required';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 20),
+
+              TextFormField(
+                controller: descriptionController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Required';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 28),
+
+              const Text(
+                'Campaign Schedule',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 12),
+
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.calendar_month),
+                  title: const Text('Campaign Date'),
+                  subtitle: Text(_formatDate(_marketingDate)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: publishing ? null : _pickMarketingDate,
+                ),
+              ),
+
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.play_circle_outline),
+                  title: const Text('Start Time'),
+                  subtitle: Text(_formatTime(_startTime)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: publishing ? null : _pickStartTime,
+                ),
+              ),
+
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.timer_outlined),
+                  title: const Text('Completion Deadline'),
+                  subtitle: Text(_formatTime(_deadlineTime)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: publishing ? null : _pickDeadlineTime,
+                ),
+              ),
+
+              const SizedBox(height: 28),
+
+              const Text(
+                'Staffing',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 12),
+
+              TextFormField(
+                controller: scalerCountController,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) {
+                  setState(() {});
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Scalers Needed',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.groups_outlined),
+                ),
+                validator: (value) {
+                  final count = int.tryParse(value?.trim() ?? '');
+
+                  if (count == null || count < 1) {
+                    return 'Enter at least 1 Scaler';
+                  }
+
+                  if (count > 100) {
+                    return 'Enter 100 or fewer for now';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 28),
+
+              const Text(
+                'Compensation',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 12),
+
+              TextFormField(
+                controller: payController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textInputAction: TextInputAction.next,
+                onChanged: (_) {
+                  setState(() {});
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Base Pay per Scaler (\$)',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Required';
+                  }
+
+                  final amount = double.tryParse(value.trim());
+
+                  if (amount == null || amount <= 0) {
+                    return 'Enter an amount greater than zero';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 20),
+
+              TextFormField(
+                controller: bonusController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textInputAction: TextInputAction.done,
+                onChanged: (_) {
+                  setState(() {});
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Completion Bonus per Scaler (\$)',
+                  helperText: 'Paid when completion requirements are met.',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return null;
+                  }
+
+                  final bonus = double.tryParse(value.trim());
+
+                  if (bonus == null || bonus < 0) {
+                    return 'Enter a valid amount';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 22),
+
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.receipt_long_outlined),
+                          SizedBox(width: 10),
+                          Text(
+                            'Campaign Cost',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      _costRow('Scaler compensation', previewWorkerBudget),
+
+                      const SizedBox(height: 8),
+
+                      _costRow('Scaled Circle fee (10%)', previewPlatformFee),
+
+                      const Divider(height: 24),
+
+                      _costRow(
+                        'Total credits required',
+                        previewTotal,
+                        bold: true,
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      const Text(
+                        '1 credit = \$1. An active monthly subscription '
+                        'is required to publish campaigns.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.account_balance_wallet_outlined),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Worker compensation is secured before the '
+                          'campaign becomes visible to Scalers. '
+                          'The campaign platform fee is charged when '
+                          'the campaign launches.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              SizedBox(
+                height: 55,
+                child: ElevatedButton.icon(
+                  onPressed: publishing ? null : publishCampaign,
+                  icon: publishing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          _usesCampaignZones
+                              ? Icons.map_outlined
+                              : Icons.location_on_outlined,
+                        ),
+                  label: Text(
+                    publishing
+                        ? 'Creating Campaign...'
+                        : _usesCampaignZones
+                        ? 'Create & Define Zones'
+                        : 'Create & Define Locations',
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

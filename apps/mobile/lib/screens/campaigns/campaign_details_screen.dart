@@ -94,38 +94,105 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         throw Exception('This campaign is already published and funded.');
       }
 
-      final zonesSnapshot = await _zonesCollection
-          .where('campaignId', isEqualTo: liveCampaign.id)
-          .get();
+      final campaignType = campaignData['campaignType']?.toString() ?? '';
 
-      if (zonesSnapshot.docs.isEmpty) {
-        throw Exception('Create at least one zone before publishing.');
-      }
-
-      final mappedZones = zonesSnapshot.docs.where((zone) {
-        final data = zone.data();
-
-        final pointCount =
-            (data['serviceAreaPointCount'] as num?)?.toInt() ?? 0;
-
-        return pointCount >= 3;
-      }).toList();
-
-      if (mappedZones.isEmpty) {
-        throw Exception('Map at least one zone before publishing.');
-      }
+      final exactLocationCampaign =
+          campaignType == 'yard_sign_installation' ||
+          campaignType == 'dump_run' ||
+          campaignType == 'event_marketing';
 
       int estimatedHomes = 0;
-
       double suggestedZonePayTotal = 0.0;
 
-      for (final zone in mappedZones) {
-        final data = zone.data();
+      int zoneCount = 0;
+      int mappedZoneCount = 0;
 
-        estimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
+      int locationCount = 0;
+      int totalLocationQuantity = 0;
 
-        suggestedZonePayTotal +=
-            (data['suggestedBasePay'] as num?)?.toDouble() ?? 0.0;
+      if (exactLocationCampaign) {
+        final locationsSnapshot = await FirebaseFirestore.instance
+            .collection('campaignLocations')
+            .where('campaignId', isEqualTo: liveCampaign.id)
+            .get();
+
+        if (locationsSnapshot.docs.isEmpty) {
+          throw Exception('Add at least one location before publishing.');
+        }
+
+        if (campaignType == 'dump_run') {
+          final hasPickup = locationsSnapshot.docs.any((location) {
+            return location.data()['locationType']?.toString() == 'dump_pickup';
+          });
+
+          final hasDropoff = locationsSnapshot.docs.any((location) {
+            return location.data()['locationType']?.toString() ==
+                'dump_dropoff';
+          });
+
+          if (!hasPickup || !hasDropoff) {
+            throw Exception(
+              'A dump run requires both a pickup location and a dump location.',
+            );
+          }
+        }
+
+        for (final location in locationsSnapshot.docs) {
+          final data = location.data();
+
+          final latitude = (data['latitude'] as num?)?.toDouble() ?? 0.0;
+          final longitude = (data['longitude'] as num?)?.toDouble() ?? 0.0;
+
+          final validCoordinates =
+              latitude >= -90 &&
+              latitude <= 90 &&
+              longitude >= -180 &&
+              longitude <= 180 &&
+              !(latitude == 0.0 && longitude == 0.0);
+
+          if (!validCoordinates) {
+            throw Exception(
+              'Every campaign location must have a valid map position before publishing.',
+            );
+          }
+
+          totalLocationQuantity += (data['quantity'] as num?)?.toInt() ?? 1;
+        }
+
+        locationCount = locationsSnapshot.docs.length;
+      } else {
+        final zonesSnapshot = await _zonesCollection
+            .where('campaignId', isEqualTo: liveCampaign.id)
+            .get();
+
+        if (zonesSnapshot.docs.isEmpty) {
+          throw Exception('Create at least one zone before publishing.');
+        }
+
+        final mappedZones = zonesSnapshot.docs.where((zone) {
+          final data = zone.data();
+
+          final pointCount =
+              (data['serviceAreaPointCount'] as num?)?.toInt() ?? 0;
+
+          return pointCount >= 3;
+        }).toList();
+
+        if (mappedZones.isEmpty) {
+          throw Exception('Map at least one zone before publishing.');
+        }
+
+        zoneCount = zonesSnapshot.docs.length;
+        mappedZoneCount = mappedZones.length;
+
+        for (final zone in mappedZones) {
+          final data = zone.data();
+
+          estimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
+
+          suggestedZonePayTotal +=
+              (data['suggestedBasePay'] as num?)?.toDouble() ?? 0.0;
+        }
       }
 
       final basePay = (campaignData['basePay'] as num?)?.toDouble() ?? 0.0;
@@ -191,12 +258,13 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
             ? existingReservedBudget
             : workerBudget,
 
-        'zoneCount': zonesSnapshot.docs.length,
+        'zoneCount': zoneCount,
+        'mappedZoneCount': mappedZoneCount,
 
-        'mappedZoneCount': mappedZones.length,
+        'locationCount': locationCount,
+        'totalLocationQuantity': totalLocationQuantity,
 
         'estimatedHomes': estimatedHomes,
-
         'suggestedBasePayTotal': suggestedZonePayTotal,
 
         if (campaignData['fundedAt'] == null)
@@ -1155,7 +1223,11 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     QueryDocumentSnapshot<Map<String, dynamic>> zone,
     List<LatLng> serviceArea,
   ) {
-    final routeReference = _routesCollection.doc(zone.id);
+    final routeId = zone.data()['routeId']?.toString();
+
+final routeReference = _routesCollection.doc(
+  routeId ?? zone.id,
+);
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: routeReference.snapshots(),

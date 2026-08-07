@@ -2,10 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../scaler/campaigns/exact_location_job_screen.dart';
 import 'job_details_screen.dart';
 
 class MyJobsScreen extends StatelessWidget {
   const MyJobsScreen({super.key});
+
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -19,98 +22,196 @@ class MyJobsScreen extends StatelessWidget {
 
     return Scaffold(
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
+        stream: _firestore
             .collection('campaignZones')
             .where('assignedScalerId', isEqualTo: user.uid)
             .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  snapshot.error.toString(),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+        builder: (context, zoneSnapshot) {
+          if (zoneSnapshot.hasError) {
+            return _errorView(
+              'Unable to load assigned zones: ${zoneSnapshot.error}',
             );
           }
 
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _firestore
+                .collection('campaignLocations')
+                .where('assignedScalerId', isEqualTo: user.uid)
+                .snapshots(),
+            builder: (context, locationSnapshot) {
+              if (locationSnapshot.hasError) {
+                return _errorView(
+                  'Unable to load assigned locations: '
+                  '${locationSnapshot.error}',
+                );
+              }
 
-          final zones = snapshot.data?.docs ?? [];
+              final zonesLoading =
+                  zoneSnapshot.connectionState == ConnectionState.waiting &&
+                  !zoneSnapshot.hasData;
 
-          final activeZones = zones.where((zone) {
-            final data = zone.data();
+              final locationsLoading =
+                  locationSnapshot.connectionState == ConnectionState.waiting &&
+                  !locationSnapshot.hasData;
 
-            final status = data['status']?.toString() ?? '';
+              if (zonesLoading || locationsLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-            return status == 'assigned' ||
-                status == 'accepted' ||
-                status == 'in_progress' ||
-                status == 'submitted';
-          }).toList();
+              final zones = zoneSnapshot.data?.docs ?? [];
 
-          final completedZones = zones.where((zone) {
-            final data = zone.data();
+              final locations = locationSnapshot.data?.docs ?? [];
 
-            return data['status']?.toString() == 'completed';
-          }).toList();
+              final activeZones = zones.where((zone) {
+                final status = zone.data()['status']?.toString() ?? '';
 
-          activeZones.sort(_sortZonesNewestFirst);
+                return _isActiveStatus(status);
+              }).toList();
 
-          completedZones.sort(_sortZonesNewestFirst);
+              final completedZones = zones.where((zone) {
+                return zone.data()['status']?.toString() == 'completed';
+              }).toList();
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const Text(
-                'Active Jobs',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-              ),
+              activeZones.sort(_sortDocumentsNewestFirst);
 
-              const SizedBox(height: 15),
+              completedZones.sort(_sortDocumentsNewestFirst);
 
-              if (activeZones.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text(
-                      "You don't have any active assigned zones yet.",
+              final exactLocationGroups = _groupLocationsByCampaign(locations);
+
+              final activeExactCampaignIds = <String>[];
+
+              final completedExactCampaignIds = <String>[];
+
+              for (final entry in exactLocationGroups.entries) {
+                final campaignLocations = entry.value;
+
+                if (campaignLocations.isEmpty) {
+                  continue;
+                }
+
+                final allCompleted = campaignLocations.every(
+                  (location) =>
+                      location.data()['status']?.toString() == 'completed',
+                );
+
+                final hasActive = campaignLocations.any((location) {
+                  final status = location.data()['status']?.toString() ?? '';
+
+                  return _isActiveStatus(status);
+                });
+
+                if (allCompleted) {
+                  completedExactCampaignIds.add(entry.key);
+                } else if (hasActive) {
+                  activeExactCampaignIds.add(entry.key);
+                }
+              }
+
+              return ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  const Text(
+                    'Active Jobs',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  if (activeZones.isEmpty && activeExactCampaignIds.isEmpty)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          "You don't have any active assigned jobs yet.",
+                        ),
+                      ),
+                    ),
+
+                  ...activeZones.map((zone) => _zoneJobCard(context, zone)),
+
+                  ...activeExactCampaignIds.map(
+                    (campaignId) => _exactLocationJobCard(
+                      context,
+                      campaignId,
+                      exactLocationGroups[campaignId] ?? [],
                     ),
                   ),
-                ),
 
-              ...activeZones.map((zone) => _zoneJobCard(context, zone)),
+                  const SizedBox(height: 30),
 
-              const SizedBox(height: 30),
-
-              const Text(
-                'Completed Jobs',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 15),
-
-              if (completedZones.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text('No completed zones yet.'),
+                  const Text(
+                    'Completed Jobs',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
-                ),
 
-              ...completedZones.map((zone) => _zoneJobCard(context, zone)),
-            ],
+                  const SizedBox(height: 15),
+
+                  if (completedZones.isEmpty &&
+                      completedExactCampaignIds.isEmpty)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text('No completed jobs yet.'),
+                      ),
+                    ),
+
+                  ...completedZones.map((zone) => _zoneJobCard(context, zone)),
+
+                  ...completedExactCampaignIds.map(
+                    (campaignId) => _exactLocationJobCard(
+                      context,
+                      campaignId,
+                      exactLocationGroups[campaignId] ?? [],
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
 
-  int _sortZonesNewestFirst(
+  Widget _errorView(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text(message, textAlign: TextAlign.center),
+      ),
+    );
+  }
+
+  Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+  _groupLocationsByCampaign(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> locations,
+  ) {
+    final grouped =
+        <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+
+    for (final location in locations) {
+      final campaignId = location.data()['campaignId']?.toString() ?? '';
+
+      if (campaignId.isEmpty) {
+        continue;
+      }
+
+      grouped.putIfAbsent(campaignId, () => []);
+
+      grouped[campaignId]!.add(location);
+    }
+
+    return grouped;
+  }
+
+  bool _isActiveStatus(String status) {
+    return status == 'assigned' ||
+        status == 'accepted' ||
+        status == 'in_progress' ||
+        status == 'submitted';
+  }
+
+  int _sortDocumentsNewestFirst(
     QueryDocumentSnapshot<Map<String, dynamic>> a,
     QueryDocumentSnapshot<Map<String, dynamic>> b,
   ) {
@@ -146,16 +247,16 @@ class MyJobsScreen extends StatelessWidget {
     final campaignId = zoneData['campaignId']?.toString();
 
     if (campaignId == null || campaignId.isEmpty) {
-      return Card(
-        margin: const EdgeInsets.only(bottom: 15),
-        child: const Padding(
+      return const Card(
+        margin: EdgeInsets.only(bottom: 15),
+        child: Padding(
           padding: EdgeInsets.all(18),
           child: Text('This assigned zone is missing its campaign reference.'),
         ),
       );
     }
 
-    final campaignReference = FirebaseFirestore.instance
+    final campaignReference = _firestore
         .collection('campaigns')
         .doc(campaignId);
 
@@ -167,7 +268,10 @@ class MyJobsScreen extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 15),
             child: Padding(
               padding: const EdgeInsets.all(18),
-              child: Text('Unable to load campaign: ${campaignSnapshot.error}'),
+              child: Text(
+                'Unable to load campaign: '
+                '${campaignSnapshot.error}',
+              ),
             ),
           );
         }
@@ -185,12 +289,13 @@ class MyJobsScreen extends StatelessWidget {
         final campaign = campaignSnapshot.data!;
 
         if (!campaign.exists) {
-          return Card(
-            margin: const EdgeInsets.only(bottom: 15),
+          return const Card(
+            margin: EdgeInsets.only(bottom: 15),
             child: Padding(
-              padding: const EdgeInsets.all(18),
+              padding: EdgeInsets.all(18),
               child: Text(
-                '${zoneData['zoneName'] ?? 'Assigned Zone'} belongs to a campaign that no longer exists.',
+                'This assigned zone belongs to a campaign '
+                'that no longer exists.',
               ),
             ),
           );
@@ -380,7 +485,241 @@ class MyJobsScreen extends StatelessWidget {
                             ? Icons.feedback_outlined
                             : Icons.arrow_forward,
                       ),
-                      label: Text(_actionLabel(status, hasChangesRequested)),
+                      label: Text(
+                        _zoneActionLabel(status, hasChangesRequested),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _exactLocationJobCard(
+    BuildContext context,
+    String campaignId,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> locations,
+  ) {
+    final campaignReference = _firestore
+        .collection('campaigns')
+        .doc(campaignId);
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: campaignReference.snapshots(),
+      builder: (context, campaignSnapshot) {
+        if (campaignSnapshot.hasError) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 15),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Text(
+                'Unable to load campaign: '
+                '${campaignSnapshot.error}',
+              ),
+            ),
+          );
+        }
+
+        if (!campaignSnapshot.hasData) {
+          return const Card(
+            margin: EdgeInsets.only(bottom: 15),
+            child: Padding(
+              padding: EdgeInsets.all(18),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final campaign = campaignSnapshot.data!;
+
+        if (!campaign.exists) {
+          return const Card(
+            margin: EdgeInsets.only(bottom: 15),
+            child: Padding(
+              padding: EdgeInsets.all(18),
+              child: Text(
+                'This assigned job belongs to a campaign '
+                'that no longer exists.',
+              ),
+            ),
+          );
+        }
+
+        final campaignData = campaign.data()!;
+
+        final campaignName =
+            campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
+
+        final campaignType = campaignData['campaignType']?.toString() ?? '';
+
+        final description = campaignData['description']?.toString() ?? '';
+
+        final businessEmail = campaignData['businessEmail']?.toString() ?? '';
+
+        final totalQuantity = locations.fold<int>(
+          0,
+          (total, location) =>
+              total + ((location.data()['quantity'] as num?)?.toInt() ?? 1),
+        );
+
+        final completedLocations = locations.where((location) {
+          return location.data()['status']?.toString() == 'completed';
+        }).length;
+
+        final allCompleted =
+            locations.isNotEmpty && completedLocations == locations.length;
+
+        final hasInProgress = locations.any((location) {
+          return location.data()['status']?.toString() == 'in_progress';
+        });
+
+        final hasSubmitted = locations.any((location) {
+          return location.data()['status']?.toString() == 'submitted';
+        });
+
+        final status = allCompleted
+            ? 'completed'
+            : hasSubmitted
+            ? 'submitted'
+            : hasInProgress
+            ? 'in_progress'
+            : 'assigned';
+
+        final typeLabel = _campaignTypeLabel(campaignType);
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 15),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ExactLocationJobScreen(campaign: campaign),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        child: Icon(_campaignTypeIcon(campaignType)),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              campaignName,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+
+                            const SizedBox(height: 4),
+
+                            Text(
+                              typeLabel,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+
+                            if (businessEmail.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+
+                              Text(
+                                businessEmail,
+                                style: TextStyle(color: Colors.grey.shade700),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: 10),
+
+                      _statusChip(status, false),
+                    ],
+                  ),
+
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+
+                    Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+
+                  const SizedBox(height: 15),
+
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Chip(
+                        avatar: const Icon(
+                          Icons.location_on_outlined,
+                          size: 18,
+                        ),
+                        label: Text(
+                          '${locations.length} Location'
+                          '${locations.length == 1 ? '' : 's'}',
+                        ),
+                      ),
+
+                      Chip(
+                        avatar: const Icon(
+                          Icons.inventory_2_outlined,
+                          size: 18,
+                        ),
+                        label: Text('Quantity $totalQuantity'),
+                      ),
+
+                      Chip(
+                        avatar: const Icon(
+                          Icons.check_circle_outline,
+                          size: 18,
+                        ),
+                        label: Text(
+                          '$completedLocations/${locations.length} Complete',
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ExactLocationJobScreen(campaign: campaign),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.arrow_forward),
+                      label: Text(_exactLocationActionLabel(status)),
                     ),
                   ),
                 ],
@@ -424,7 +763,7 @@ class MyJobsScreen extends StatelessWidget {
     }
   }
 
-  String _actionLabel(String status, bool hasChangesRequested) {
+  String _zoneActionLabel(String status, bool hasChangesRequested) {
     if (hasChangesRequested) {
       return 'Changes Requested';
     }
@@ -445,6 +784,58 @@ class MyJobsScreen extends StatelessWidget {
 
       default:
         return 'View Zone';
+    }
+  }
+
+  String _exactLocationActionLabel(String status) {
+    switch (status) {
+      case 'assigned':
+      case 'accepted':
+        return 'Start Job';
+
+      case 'in_progress':
+        return 'Continue Job';
+
+      case 'submitted':
+        return 'View Submission';
+
+      case 'completed':
+        return 'View Completed Job';
+
+      default:
+        return 'Open Job';
+    }
+  }
+
+  String _campaignTypeLabel(String campaignType) {
+    switch (campaignType) {
+      case 'yard_sign_installation':
+        return 'Yard Sign Installation';
+
+      case 'dump_run':
+        return 'Dump Run';
+
+      case 'event_marketing':
+        return 'Event Marketing';
+
+      default:
+        return 'Exact Location Job';
+    }
+  }
+
+  IconData _campaignTypeIcon(String campaignType) {
+    switch (campaignType) {
+      case 'yard_sign_installation':
+        return Icons.signpost_outlined;
+
+      case 'dump_run':
+        return Icons.local_shipping_outlined;
+
+      case 'event_marketing':
+        return Icons.event_outlined;
+
+      default:
+        return Icons.location_on_outlined;
     }
   }
 

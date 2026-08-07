@@ -16,14 +16,15 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  if (kDebugMode) {
-    await _connectToFirebaseEmulators();
-  }
+  //if (kDebugMode) {
+  //  await _connectToFirebaseEmulators();
+  //}
 
   runApp(const ScaledCircleApp());
 }
 
-Future<void> _connectToFirebaseEmulators() async {
+// ignore: unused_element
+Future _connectToFirebaseEmulators() async {
   final emulatorHost = _firebaseEmulatorHost();
 
   try {
@@ -56,11 +57,8 @@ Future<void> _connectToFirebaseEmulators() async {
     debugPrint(
       'Unable to connect to Firebase emulators: $error',
     );
-
-    rethrow;
   }
 }
-
 String _firebaseEmulatorHost() {
   if (kIsWeb) {
     return '127.0.0.1';

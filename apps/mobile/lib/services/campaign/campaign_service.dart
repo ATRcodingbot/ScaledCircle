@@ -1,0 +1,682 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../models/campaign/campaign.dart';
+import '../../models/campaign/campaign_completion.dart';
+import '../../models/campaign/campaign_location.dart';
+import '../../models/campaign/marketing_asset.dart';
+
+class CampaignService {
+  CampaignService({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _campaigns =>
+      _firestore.collection('campaigns');
+
+  CollectionReference<Map<String, dynamic>> get _campaignLocations =>
+      _firestore.collection('campaignLocations');
+
+  CollectionReference<Map<String, dynamic>> get _marketingAssets =>
+      _firestore.collection('marketingAssets');
+
+  CollectionReference<Map<String, dynamic>> get _campaignCompletions =>
+      _firestore.collection('campaignCompletions');
+
+  // ------------------------------------------------------------
+  // CAMPAIGNS
+  // ------------------------------------------------------------
+
+  Future<String> createCampaign({required Campaign campaign}) async {
+    final document = campaign.id.isNotEmpty
+        ? _campaigns.doc(campaign.id)
+        : _campaigns.doc();
+
+    final data = Map<String, dynamic>.from(campaign.toMap());
+
+    data['createdAt'] = FieldValue.serverTimestamp();
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await document.set(data);
+
+    return document.id;
+  }
+
+  Future<void> updateCampaign({
+    required String campaignId,
+    required Map<String, dynamic> updates,
+  }) async {
+    if (campaignId.trim().isEmpty) {
+      throw Exception('Campaign ID is required.');
+    }
+
+    final data = Map<String, dynamic>.from(updates);
+
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await _campaigns.doc(campaignId).update(data);
+  }
+
+  Future<Campaign?> getCampaign(String campaignId) async {
+    if (campaignId.trim().isEmpty) {
+      return null;
+    }
+
+    final snapshot = await _campaigns.doc(campaignId).get();
+
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    return Campaign.fromDocument(snapshot);
+  }
+
+  Stream<Campaign?> watchCampaign(String campaignId) {
+    return _campaigns.doc(campaignId).snapshots().map((snapshot) {
+      if (!snapshot.exists) {
+        return null;
+      }
+
+      return Campaign.fromDocument(snapshot);
+    });
+  }
+
+  Stream<List<Campaign>> watchBusinessCampaigns({required String businessId}) {
+    return _campaigns
+        .where('businessId', isEqualTo: businessId)
+        .snapshots()
+        .map((snapshot) {
+          final campaigns = snapshot.docs.map(Campaign.fromDocument).toList();
+
+          campaigns.sort(
+            (a, b) => _compareDatesDescending(a.createdAt, b.createdAt),
+          );
+
+          return campaigns;
+        });
+  }
+
+  Stream<List<Campaign>> watchAvailableCampaigns() {
+    return _campaigns.where('status', isEqualTo: 'published').snapshots().map((
+      snapshot,
+    ) {
+      final campaigns = snapshot.docs.map(Campaign.fromDocument).toList();
+
+      campaigns.sort(
+        (a, b) => _compareDatesDescending(a.createdAt, b.createdAt),
+      );
+
+      return campaigns;
+    });
+  }
+
+  Future<void> publishCampaign(String campaignId) async {
+    await updateCampaign(
+      campaignId: campaignId,
+      updates: {
+        'status': 'published',
+        'publishedAt': FieldValue.serverTimestamp(),
+      },
+    );
+  }
+
+  Future<void> pauseCampaign(String campaignId) async {
+    await updateCampaign(campaignId: campaignId, updates: {'status': 'paused'});
+  }
+
+  Future<void> completeCampaign(String campaignId) async {
+    await updateCampaign(
+      campaignId: campaignId,
+      updates: {
+        'status': 'completed',
+        'completedAt': FieldValue.serverTimestamp(),
+      },
+    );
+  }
+
+  Future<void> cancelCampaign(String campaignId) async {
+    await updateCampaign(
+      campaignId: campaignId,
+      updates: {
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+      },
+    );
+  }
+
+  // ------------------------------------------------------------
+  // CAMPAIGN LOCATIONS
+  //
+  // Used for exact-location work such as:
+  // yard signs
+  // dump-run pickup/dropoff points
+  // event locations
+  // material pickup/dropoff locations
+  // ------------------------------------------------------------
+
+  Future<String> createLocation({required CampaignLocation location}) async {
+    final document = location.id.isNotEmpty
+        ? _campaignLocations.doc(location.id)
+        : _campaignLocations.doc();
+
+    final data = Map<String, dynamic>.from(location.toMap());
+
+    data['createdAt'] = FieldValue.serverTimestamp();
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await document.set(data);
+
+    return document.id;
+  }
+
+  Future<void> updateLocation({
+    required String locationId,
+    required Map<String, dynamic> updates,
+  }) async {
+    if (locationId.trim().isEmpty) {
+      throw Exception('Location ID is required.');
+    }
+
+    final data = Map<String, dynamic>.from(updates);
+
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await _campaignLocations.doc(locationId).update(data);
+  }
+
+  Future<void> deleteLocation(String locationId) async {
+    if (locationId.trim().isEmpty) {
+      throw Exception('Location ID is required.');
+    }
+
+    await _campaignLocations.doc(locationId).delete();
+  }
+
+  Stream<List<CampaignLocation>> watchCampaignLocations({
+    required String campaignId,
+  }) {
+    return _campaignLocations
+        .where('campaignId', isEqualTo: campaignId)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map(CampaignLocation.fromDocument).toList();
+        });
+  }
+
+  Future<List<CampaignLocation>> getCampaignLocations({
+    required String campaignId,
+  }) async {
+    final snapshot = await _campaignLocations
+        .where('campaignId', isEqualTo: campaignId)
+        .get();
+
+    return snapshot.docs.map(CampaignLocation.fromDocument).toList();
+  }
+
+  // ------------------------------------------------------------
+  // MARKETING ASSETS
+  //
+  // This supports both:
+  //
+  // 1. Business-provided physical materials
+  //    - flyers
+  //    - door hangers
+  //    - yard signs
+  //    - business cards
+  //
+  // 2. Scaled Circle generated/tracked materials
+  //    - QR codes
+  //    - tracking URLs
+  //    - tracking phone numbers
+  //    - landing pages
+  //    - tracked email aliases
+  // ------------------------------------------------------------
+
+  Future<String> createMarketingAsset({required MarketingAsset asset}) async {
+    final document = asset.id.isNotEmpty
+        ? _marketingAssets.doc(asset.id)
+        : _marketingAssets.doc();
+
+    final data = Map<String, dynamic>.from(asset.toMap());
+
+    data['createdAt'] = FieldValue.serverTimestamp();
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await document.set(data);
+
+    return document.id;
+  }
+
+  Future<void> updateMarketingAsset({
+    required String assetId,
+    required Map<String, dynamic> updates,
+  }) async {
+    if (assetId.trim().isEmpty) {
+      throw Exception('Marketing asset ID is required.');
+    }
+
+    final data = Map<String, dynamic>.from(updates);
+
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await _marketingAssets.doc(assetId).update(data);
+  }
+
+  Future<void> deleteMarketingAsset(String assetId) async {
+    if (assetId.trim().isEmpty) {
+      throw Exception('Marketing asset ID is required.');
+    }
+
+    await _marketingAssets.doc(assetId).delete();
+  }
+
+  Stream<List<MarketingAsset>> watchCampaignMarketingAssets({
+    required String campaignId,
+  }) {
+    return _marketingAssets
+        .where('campaignId', isEqualTo: campaignId)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map(MarketingAsset.fromDocument).toList();
+        });
+  }
+
+  Future<List<MarketingAsset>> getCampaignMarketingAssets({
+    required String campaignId,
+  }) async {
+    final snapshot = await _marketingAssets
+        .where('campaignId', isEqualTo: campaignId)
+        .get();
+
+    return snapshot.docs.map(MarketingAsset.fromDocument).toList();
+  }
+
+  // ------------------------------------------------------------
+  // COMPLETION / PROOF
+  // ------------------------------------------------------------
+
+  Future<String> createCompletion({
+    required CampaignCompletion completion,
+  }) async {
+    final document = completion.id.isNotEmpty
+        ? _campaignCompletions.doc(completion.id)
+        : _campaignCompletions.doc();
+
+    final data = Map<String, dynamic>.from(completion.toMap());
+
+    data['createdAt'] = FieldValue.serverTimestamp();
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await document.set(data);
+
+    return document.id;
+  }
+
+  Future<void> updateCompletion({
+    required String completionId,
+    required Map<String, dynamic> updates,
+  }) async {
+    if (completionId.trim().isEmpty) {
+      throw Exception('Completion ID is required.');
+    }
+
+    final data = Map<String, dynamic>.from(updates);
+
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await _campaignCompletions.doc(completionId).update(data);
+  }
+
+  Future<CampaignCompletion?> getCompletion(String completionId) async {
+    if (completionId.trim().isEmpty) {
+      return null;
+    }
+
+    final snapshot = await _campaignCompletions.doc(completionId).get();
+
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    return CampaignCompletion.fromDocument(snapshot);
+  }
+
+  Stream<List<CampaignCompletion>> watchCampaignCompletions({
+    required String campaignId,
+  }) {
+    return _campaignCompletions
+        .where('campaignId', isEqualTo: campaignId)
+        .snapshots()
+        .map((snapshot) {
+          final completions = snapshot.docs
+              .map(CampaignCompletion.fromDocument)
+              .toList();
+
+          completions.sort(
+            (a, b) => _compareDatesDescending(
+              a.submittedAt ?? a.createdAt,
+              b.submittedAt ?? b.createdAt,
+            ),
+          );
+
+          return completions;
+        });
+  }
+
+  Stream<List<CampaignCompletion>> watchScalerCompletions({
+    required String scalerId,
+  }) {
+    return _campaignCompletions
+        .where('scalerId', isEqualTo: scalerId)
+        .snapshots()
+        .map((snapshot) {
+          final completions = snapshot.docs
+              .map(CampaignCompletion.fromDocument)
+              .toList();
+
+          completions.sort(
+            (a, b) => _compareDatesDescending(
+              a.submittedAt ?? a.createdAt,
+              b.submittedAt ?? b.createdAt,
+            ),
+          );
+
+          return completions;
+        });
+  }
+
+  Future<void> submitCompletion({
+    required String completionId,
+    String? scalerNotes,
+  }) async {
+    final updates = <String, dynamic>{
+      'status': 'submitted',
+      'submittedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (scalerNotes != null) {
+      updates['scalerNotes'] = scalerNotes;
+    }
+
+    await updateCompletion(completionId: completionId, updates: updates);
+  }
+
+  Future<void> approveCompletion({
+    required String completionId,
+    String? businessFeedback,
+  }) async {
+    final updates = <String, dynamic>{
+      'status': 'approved',
+      'approvedAt': FieldValue.serverTimestamp(),
+      'completedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (businessFeedback != null) {
+      updates['businessFeedback'] = businessFeedback;
+    }
+
+    await updateCompletion(completionId: completionId, updates: updates);
+  }
+
+  Future<void> requestCompletionChanges({
+    required String completionId,
+    required String feedback,
+  }) async {
+    if (feedback.trim().isEmpty) {
+      throw Exception('Feedback is required when requesting changes.');
+    }
+
+    await updateCompletion(
+      completionId: completionId,
+      updates: {
+        'status': 'changes_requested',
+        'businessFeedback': feedback.trim(),
+        'changesRequestedAt': FieldValue.serverTimestamp(),
+      },
+    );
+  }
+
+  Future<void> rejectCompletion({
+    required String completionId,
+    required String feedback,
+  }) async {
+    if (feedback.trim().isEmpty) {
+      throw Exception('Feedback is required when rejecting completion.');
+    }
+
+    await updateCompletion(
+      completionId: completionId,
+      updates: {
+        'status': 'rejected',
+        'businessFeedback': feedback.trim(),
+        'reviewedAt': FieldValue.serverTimestamp(),
+      },
+    );
+  }
+
+  // ------------------------------------------------------------
+  // PROOF HELPERS
+  // ------------------------------------------------------------
+
+  Future<void> addCompletionProof({
+    required String completionId,
+    required CompletionProof proof,
+  }) async {
+    if (completionId.trim().isEmpty) {
+      throw Exception('Completion ID is required.');
+    }
+
+    await _campaignCompletions.doc(completionId).update({
+      'proofs': FieldValue.arrayUnion([proof.toMap()]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> replaceCompletionProofs({
+    required String completionId,
+    required List<CompletionProof> proofs,
+  }) async {
+    await updateCompletion(
+      completionId: completionId,
+      updates: {'proofs': proofs.map((proof) => proof.toMap()).toList()},
+    );
+  }
+
+  // ------------------------------------------------------------
+  // YARD SIGN COMPLETION
+  //
+  // Every sign can be associated with an exact campaignLocationId.
+  // That lets the business specify the location and later see the
+  // photo proof associated with that exact requested sign location.
+  // ------------------------------------------------------------
+
+  Future<void> addYardSignProof({
+    required String completionId,
+    required String campaignLocationId,
+    required String photoUrl,
+    required double latitude,
+    required double longitude,
+    String? note,
+  }) async {
+    if (campaignLocationId.trim().isEmpty) {
+      throw Exception('Campaign location ID is required for yard sign proof.');
+    }
+
+    if (photoUrl.trim().isEmpty) {
+      throw Exception('A photo is required for yard sign proof.');
+    }
+
+    final proof = CompletionProof(
+      id: _campaignCompletions.doc().id,
+      type: CompletionProofType.installationPhoto,
+      fileUrl: photoUrl,
+      note: note,
+      campaignLocationId: campaignLocationId,
+      latitude: latitude,
+      longitude: longitude,
+      capturedAt: DateTime.now(),
+    );
+
+    await addCompletionProof(completionId: completionId, proof: proof);
+  }
+
+  // ------------------------------------------------------------
+  // DUMP RUN PROOF
+  //
+  // Dump runs can eventually require:
+  // - before photo
+  // - loaded vehicle/trailer photo
+  // - dump receipt/photo
+  // - after photo
+  // ------------------------------------------------------------
+
+  Future<void> addDumpRunPhoto({
+    required String completionId,
+    required CompletionProofType proofType,
+    required String photoUrl,
+    double? latitude,
+    double? longitude,
+    String? note,
+  }) async {
+    const allowedTypes = {
+      CompletionProofType.beforePhoto,
+      CompletionProofType.loadedPhoto,
+      CompletionProofType.receiptPhoto,
+      CompletionProofType.afterPhoto,
+    };
+
+    if (!allowedTypes.contains(proofType)) {
+      throw Exception('Invalid proof type for a dump run.');
+    }
+
+    if (photoUrl.trim().isEmpty) {
+      throw Exception('A photo is required.');
+    }
+
+    final proof = CompletionProof(
+      id: _campaignCompletions.doc().id,
+      type: proofType,
+      fileUrl: photoUrl,
+      note: note,
+      latitude: latitude,
+      longitude: longitude,
+      capturedAt: DateTime.now(),
+    );
+
+    await addCompletionProof(completionId: completionId, proof: proof);
+  }
+
+  // ------------------------------------------------------------
+  // MATERIAL HANDOFF
+  //
+  // Physical marketing materials cannot literally be digitally
+  // delivered. Instead, the campaign records the handoff workflow:
+  //
+  // business pickup
+  // business dropoff
+  // shipping
+  // Scaled Circle generated/printed materials
+  //
+  // These fields let the UI manage that workflow without pretending
+  // the physical item itself is digital.
+  // ------------------------------------------------------------
+
+  Future<void> updateMaterialHandoff({
+    required String campaignId,
+    required String method,
+    String? address,
+    double? latitude,
+    double? longitude,
+    DateTime? scheduledAt,
+    String? instructions,
+  }) async {
+    const supportedMethods = {
+      'business_pickup',
+      'business_dropoff',
+      'shipping',
+      'scaled_circle_generated',
+      'none',
+    };
+
+    if (!supportedMethods.contains(method)) {
+      throw Exception('Unknown material handoff method.');
+    }
+
+    await updateCampaign(
+      campaignId: campaignId,
+      updates: {
+        'materialHandoffMethod': method,
+        'materialHandoffAddress': address,
+        'materialHandoffLatitude': latitude,
+        'materialHandoffLongitude': longitude,
+        if (scheduledAt != null)
+          'materialHandoffScheduledAt': Timestamp.fromDate(scheduledAt),
+        'materialHandoffInstructions': instructions,
+      },
+    );
+  }
+
+  // ------------------------------------------------------------
+  // TRACKING
+  //
+  // These fields give us one campaign-level place to attach the
+  // attribution infrastructure later:
+  //
+  // QR -> tracking URL
+  // phone -> forwarding number
+  // email -> forwarding alias
+  // landing page -> campaign landing page
+  // ------------------------------------------------------------
+
+  Future<void> updateCampaignTracking({
+    required String campaignId,
+    String? trackingUrl,
+    String? qrCodeUrl,
+    String? trackingPhoneNumber,
+    String? forwardingPhoneNumber,
+    String? trackingEmail,
+    String? forwardingEmail,
+    String? landingPageUrl,
+  }) async {
+    await updateCampaign(
+      campaignId: campaignId,
+      updates: {
+        'trackingEnabled': true,
+        'trackingUrl': trackingUrl,
+        'qrCodeUrl': qrCodeUrl,
+        'trackingPhoneNumber': trackingPhoneNumber,
+        'forwardingPhoneNumber': forwardingPhoneNumber,
+        'trackingEmail': trackingEmail,
+        'forwardingEmail': forwardingEmail,
+        'landingPageUrl': landingPageUrl,
+      },
+    );
+  }
+
+  Future<void> disableCampaignTracking({required String campaignId}) async {
+    await updateCampaign(
+      campaignId: campaignId,
+      updates: {'trackingEnabled': false},
+    );
+  }
+
+  // ------------------------------------------------------------
+  // INTERNAL HELPERS
+  // ------------------------------------------------------------
+
+  int _compareDatesDescending(DateTime? first, DateTime? second) {
+    if (first == null && second == null) {
+      return 0;
+    }
+
+    if (first == null) {
+      return 1;
+    }
+
+    if (second == null) {
+      return -1;
+    }
+
+    return second.compareTo(first);
+  }
+}
