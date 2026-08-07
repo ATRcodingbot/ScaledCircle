@@ -6,7 +6,7 @@ import '../../services/subscription_plan_service.dart';
 import '../../services/wallet_service.dart';
 import '../campaigns/campaign_details_screen.dart';
 import '../notifications/notifications_screen.dart';
-import 'create_campaign_screen.dart';
+import 'create/campaign_type_screen.dart';
 import 'subscription_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
@@ -246,7 +246,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
+        MaterialPageRoute(
+  builder: (_) => const CampaignTypeScreen(),
+),
       );
 
       if (!context.mounted) {

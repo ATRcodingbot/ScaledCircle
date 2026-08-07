@@ -2,18 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../services/platform_billing_service.dart';
-import 'campaign_zones_screen.dart';
-import 'campaign/campaign_locations_screen.dart';
+import '../../../services/platform_billing_service.dart';
+import '../campaign_zones_screen.dart';
+import '../campaign/campaign_locations_screen.dart';
 
-class CreateCampaignScreen extends StatefulWidget {
-  const CreateCampaignScreen({super.key});
+class FlyerCampaignScreen extends StatefulWidget {
+  const FlyerCampaignScreen({super.key});
 
-  @override
-  State<CreateCampaignScreen> createState() => _CreateCampaignScreenState();
+@override
+State<FlyerCampaignScreen> createState() =>
+    _FlyerCampaignScreenState();
 }
 
-class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
+class _FlyerCampaignScreenState
+    extends State<FlyerCampaignScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final campaignNameController = TextEditingController();
@@ -861,7 +863,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
     final previewTotal = previewWorkerBudget + previewPlatformFee;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Campaign'), centerTitle: true),
+      appBar: AppBar(title: const Text('Create Flyer Campaign'), centerTitle: true),
       body: SafeArea(
         child: Form(
           key: _formKey,
