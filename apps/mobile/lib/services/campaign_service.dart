@@ -2,263 +2,139 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/campaign_model.dart';
 
-
 class CampaignService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
-
-
-
-  Future<String> createCampaign(
-    Map<String, dynamic> data,
-  ) async {
-
-    final doc =
-        await _firestore
-            .collection("campaigns")
-            .add(data);
+  Future<String> createCampaign(Map<String, dynamic> data) async {
+    final doc = await _firestore.collection("campaigns").add(data);
 
     return doc.id;
-
   }
-
-
-
 
   Stream<List<CampaignModel>> getOpenCampaigns() {
-
     return _firestore
         .collection("campaigns")
-
-        .where(
-          "status",
-          isEqualTo: "open",
-        )
-
-        .orderBy(
-          "createdAt",
-          descending: true,
-        )
-
+        .where("status", isEqualTo: "open")
+        .orderBy("createdAt", descending: true)
         .snapshots()
-
-        .map(
-
-          (snapshot) {
-
-            return snapshot.docs
-                .map(
-
-                  (doc) =>
-                      CampaignModel.fromFirestore(doc),
-
-                )
-                .toList();
-
-          },
-
-        );
-
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => CampaignModel.fromFirestore(doc))
+              .toList();
+        });
   }
 
-
-
-
-
-  Stream<List<CampaignModel>> getBusinessCampaigns(
-    String businessId,
-  ) {
-
+  Stream<List<CampaignModel>> getBusinessCampaigns(String businessId) {
     return _firestore
         .collection("campaigns")
-
-        .where(
-          "businessId",
-          isEqualTo: businessId,
-        )
-
-        .orderBy(
-          "createdAt",
-          descending: true,
-        )
-
+        .where("businessId", isEqualTo: businessId)
+        .orderBy("createdAt", descending: true)
         .snapshots()
-
-        .map(
-
-          (snapshot) {
-
-            return snapshot.docs
-                .map(
-
-                  (doc) =>
-                      CampaignModel.fromFirestore(doc),
-
-                )
-                .toList();
-
-          },
-
-        );
-
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => CampaignModel.fromFirestore(doc))
+              .toList();
+        });
   }
-
-
-
-
 
   Future<void> applyToCampaign({
-
     required String campaignId,
-
     required String scalerId,
-
   }) async {
-
-
-    await _firestore
-
+    final applicationRef = _firestore
         .collection("campaigns")
-
         .doc(campaignId)
-
         .collection("applications")
+        .doc(scalerId);
 
-        .doc(scalerId)
+    await applicationRef.set({
+      "scalerId": scalerId,
 
-        .set({
+      "campaignId": campaignId,
 
-      "scalerId":
-          scalerId,
+      "status": "pending",
 
-      "campaignId":
-          campaignId,
+      "createdAt": FieldValue.serverTimestamp(),
 
-      "status":
-          "pending",
-
-      "createdAt":
-          FieldValue.serverTimestamp(),
-
-      "updatedAt":
-          FieldValue.serverTimestamp(),
-
+      "updatedAt": FieldValue.serverTimestamp(),
     });
-
   }
-
-
-
-
 
   Stream<QuerySnapshot<Map<String, dynamic>>> getCampaignApplications(
     String campaignId,
   ) {
-
     return _firestore
-
         .collection("campaigns")
-
         .doc(campaignId)
-
         .collection("applications")
-
-        .orderBy(
-          "createdAt",
-          descending: true,
-        )
-
+        .orderBy("createdAt", descending: true)
         .snapshots();
-
   }
 
-
-
-
-
   Future<void> acceptScalerApplication({
-
     required String campaignId,
 
     required String scalerId,
-
   }) async {
+    final batch = _firestore.batch();
 
+    final applicationRef = _firestore
+        .collection("campaigns")
+        .doc(campaignId)
+        .collection("applications")
+        .doc(scalerId);
 
-    final batch =
-        _firestore.batch();
+    final assignedRef = _firestore
+        .collection("campaigns")
+        .doc(campaignId)
+        .collection("assignedScalers")
+        .doc(scalerId);
 
+    batch.update(applicationRef, {
+      "status": "accepted",
 
+      "updatedAt": FieldValue.serverTimestamp(),
+    });
 
-    final applicationRef =
-        _firestore
+    batch.set(assignedRef, {
+      "scalerId": scalerId,
 
-            .collection("campaigns")
+      "assignedAt": FieldValue.serverTimestamp(),
 
-            .doc(campaignId)
-
-            .collection("applications")
-
-            .doc(scalerId);
-
-
-
-    final assignedRef =
-        _firestore
-
-            .collection("campaigns")
-
-            .doc(campaignId)
-
-            .collection("assignedScalers")
-
-            .doc(scalerId);
-
-
-
-    batch.update(
-
-      applicationRef,
-
-      {
-
-        "status":
-            "accepted",
-
-        "updatedAt":
-            FieldValue.serverTimestamp(),
-
-      },
-
-    );
-
-
-
-    batch.set(
-
-      assignedRef,
-
-      {
-
-        "scalerId":
-            scalerId,
-
-        "assignedAt":
-            FieldValue.serverTimestamp(),
-
-        "status":
-            "assigned",
-
-      },
-
-    );
-
-
+      "status": "assigned",
+    });
 
     await batch.commit();
-
   }
 
+  Future<void> completeCampaign({
+    required String campaignId,
 
+    required String scalerId,
+  }) async {
+    final batch = _firestore.batch();
+
+    final campaignRef = _firestore.collection("campaigns").doc(campaignId);
+
+    final scalerRef = campaignRef.collection("assignedScalers").doc(scalerId);
+
+    batch.update(campaignRef, {
+      "status": "completed",
+
+      "completedBy": scalerId,
+
+      "completedAt": FieldValue.serverTimestamp(),
+
+      // unlock reviews
+      "reviewsUnlocked": true,
+    });
+
+    batch.update(scalerRef, {
+      "status": "completed",
+
+      "completedAt": FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+  }
 }

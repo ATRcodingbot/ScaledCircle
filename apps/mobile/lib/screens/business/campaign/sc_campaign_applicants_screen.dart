@@ -16,14 +16,45 @@ class _ScCampaignApplicantsScreenState
     extends State<ScCampaignApplicantsScreen> {
   final CampaignService _campaignService = CampaignService();
 
+  String? _processingScalerId;
+
+  Future<void> _acceptScaler(String scalerId) async {
+    setState(() {
+      _processingScalerId = scalerId;
+    });
+
+    try {
+      await _campaignService.acceptScalerApplication(
+        campaignId: widget.campaignId,
+        scalerId: scalerId,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Scaler accepted successfully.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Unable to accept scaler: $e")));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingScalerId = null;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Campaign Applicants")),
-
       body: StreamBuilder(
         stream: _campaignService.getCampaignApplications(widget.campaignId),
-
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -37,15 +68,15 @@ class _ScCampaignApplicantsScreenState
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-
             itemCount: applicants.length,
-
             itemBuilder: (context, index) {
               final applicant = applicants[index].data();
 
               final scalerId = applicant["scalerId"] ?? "";
 
               final status = applicant["status"] ?? "pending";
+
+              final isProcessing = _processingScalerId == scalerId;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -59,10 +90,8 @@ class _ScCampaignApplicantsScreenState
                     children: [
                       Text(
                         "Scaler: $scalerId",
-
                         style: const TextStyle(
                           fontSize: 18,
-
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -78,15 +107,19 @@ class _ScCampaignApplicantsScreenState
                           width: double.infinity,
 
                           child: ElevatedButton(
-                            onPressed: () async {
-                              await _campaignService.acceptScalerApplication(
-                                campaignId: widget.campaignId,
+                            onPressed: isProcessing
+                                ? null
+                                : () => _acceptScaler(scalerId),
 
-                                scalerId: scalerId,
-                              );
-                            },
-
-                            child: const Text("Accept Scaler"),
+                            child: isProcessing
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text("Accept Scaler"),
                           ),
                         ),
                     ],

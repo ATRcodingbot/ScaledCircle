@@ -9,6 +9,8 @@ import '../../services/wallet_service.dart';
 import '../business/campaign_zones_screen.dart';
 import '../business/edit_campaign_screen.dart';
 import 'campaign_applicants_screen.dart';
+import '../reviews/user_reviews_screen.dart';
+import '../reviews/create_review_screen.dart';
 
 class CampaignDetailsScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
@@ -23,6 +25,12 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   final GlobalKey _zoneReviewKey = GlobalKey();
 
   final WalletService _walletService = WalletService();
+  Future<void> _openScalerReviews(BuildContext context, String scalerId) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => UserReviewsScreen(userId: scalerId)),
+    );
+  }
 
   bool _publishingDraft = false;
 
@@ -1225,9 +1233,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   ) {
     final routeId = zone.data()['routeId']?.toString();
 
-final routeReference = _routesCollection.doc(
-  routeId ?? zone.id,
-);
+    final routeReference = _routesCollection.doc(routeId ?? zone.id);
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: routeReference.snapshots(),
@@ -1268,7 +1274,6 @@ final routeReference = _routesCollection.doc(
             (routeData['pointCount'] as num?)?.toInt() ?? routePoints.length;
 
         final verification = _calculateVerification(serviceArea, routePoints);
-        
 
         final allPoints = <LatLng>[...serviceArea, ...routePoints];
 
@@ -1863,31 +1868,99 @@ final routeReference = _routesCollection.doc(
               if (status == 'completed') ...[
                 const SizedBox(height: 20),
 
-                const Card(
+                Card(
                   child: Padding(
-                    padding: EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        Icon(Icons.verified, size: 46),
-                        SizedBox(height: 10),
-                        Text(
+                        const Icon(Icons.verified, size: 46),
+
+                        const SizedBox(height: 10),
+
+                        const Text(
                           'Campaign Completed',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 8),
-                        Text(
+
+                        const SizedBox(height: 8),
+
+                        const Text(
                           'All campaign zones have been approved.',
                           textAlign: TextAlign.center,
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.rate_review),
+                          label: const Text('Review Scalers'),
+
+                          onPressed: () async {
+                            final data =
+                                liveCampaign.data() as Map<String, dynamic>;
+
+                            final scalerId = data['completedBy']?.toString();
+
+                            if (scalerId == null || scalerId.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'No Scaler found for this campaign.',
+                                  ),
+                                ),
+                              );
+
+                              return;
+                            }
+
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CreateReviewScreen(
+                                  campaignId: liveCampaign.id,
+                                  reviewerId:
+                                      FirebaseAuth.instance.currentUser!.uid,
+                                  reviewerType: 'business',
+                                  targetId: scalerId,
+                                  targetType: 'scaler',
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
                   ),
                 ),
-              ],
 
+                const SizedBox(height: 10),
+
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.rate_review_outlined),
+                  label: const Text('View Scaler Reviews'),
+
+                  onPressed: () async {
+                    final data = liveCampaign.data() as Map<String, dynamic>;
+
+                    final scalerId = data['completedBy']?.toString();
+
+                    if (scalerId == null || scalerId.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No completed scaler found.'),
+                        ),
+                      );
+
+                      return;
+                    }
+
+                    await _openScalerReviews(context, scalerId);
+                  },
+                ),
+              ],
               const SizedBox(height: 30),
 
               if (status != 'completed') ...[
