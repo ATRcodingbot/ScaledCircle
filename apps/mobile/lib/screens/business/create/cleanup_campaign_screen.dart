@@ -11,6 +11,7 @@ import '../../../widgets/scaled_circle/campaign/sc_photo_requirement_card.dart';
 
 import 'cleanup_location_picker_screen.dart';
 import '../../../widgets/scaled_circle/campaign/sc_campaign_summary_card.dart';
+import '../../../services/campaign_service.dart';
 
 class CleanupCampaignScreen extends StatefulWidget {
   const CleanupCampaignScreen({super.key});
@@ -30,6 +31,8 @@ class _CleanupCampaignScreenState
   final addressController = TextEditingController();
   final payController = TextEditingController();
   final bonusController = TextEditingController();
+  final CampaignService _campaignService =
+    CampaignService();
   final scalerController =
       TextEditingController(text: "1");
 
@@ -142,9 +145,7 @@ class _CleanupCampaignScreenState
     try {
 
 
-      await FirebaseFirestore.instance
-          .collection("campaigns")
-          .add({
+      await _campaignService.createCampaign({
 
         "businessId": user.uid,
 
