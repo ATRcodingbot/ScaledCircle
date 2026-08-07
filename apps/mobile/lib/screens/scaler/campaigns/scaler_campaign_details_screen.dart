@@ -19,9 +19,9 @@ class _ScalerCampaignDetailsScreenState
     extends State<ScalerCampaignDetailsScreen> {
   final CampaignService _campaignService = CampaignService();
 
-  bool applying = false;
+  bool _applying = false;
 
-  Future<void> applyForCampaign() async {
+  Future<void> _applyForCampaign() async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -33,7 +33,7 @@ class _ScalerCampaignDetailsScreenState
     }
 
     setState(() {
-      applying = true;
+      _applying = true;
     });
 
     try {
@@ -58,7 +58,7 @@ class _ScalerCampaignDetailsScreenState
     } finally {
       if (mounted) {
         setState(() {
-          applying = false;
+          _applying = false;
         });
       }
     }
@@ -86,10 +86,14 @@ class _ScalerCampaignDetailsScreenState
       MaterialPageRoute(
         builder: (_) => CreateReviewScreen(
           campaignId: widget.campaign.id,
+
           reviewerId: user.uid,
-          reviewerType: 'scaler',
+
+          reviewerType: "scaler",
+
           targetId: businessId,
-          targetType: 'business',
+
+          targetType: "business",
         ),
       ),
     );
@@ -101,11 +105,14 @@ class _ScalerCampaignDetailsScreenState
 
     return Scaffold(
       appBar: AppBar(title: const Text("Campaign Details")),
+
       body: ListView(
         padding: const EdgeInsets.all(20),
+
         children: [
           Text(
             campaign.campaignName,
+
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
 
@@ -133,6 +140,7 @@ class _ScalerCampaignDetailsScreenState
 
           const Text(
             "Verification Requirements",
+
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
 
@@ -146,22 +154,31 @@ class _ScalerCampaignDetailsScreenState
 
           const SizedBox(height: 40),
 
-          if (campaign.status == 'completed')
+          if (campaign.status == "completed")
             SizedBox(
               height: 55,
+
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.star_outline),
+
                 label: const Text("Review Business"),
+
                 onPressed: _openBusinessReview,
               ),
             )
           else
             SizedBox(
               height: 55,
+
               child: ElevatedButton(
-                onPressed: applying ? null : applyForCampaign,
-                child: applying
-                    ? const CircularProgressIndicator()
+                onPressed: _applying ? null : _applyForCampaign,
+
+                child: _applying
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Text("Apply For Campaign"),
               ),
             ),
@@ -173,10 +190,13 @@ class _ScalerCampaignDetailsScreenState
   Widget _info(IconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
+
       child: Row(
         children: [
           Icon(icon),
+
           const SizedBox(width: 12),
+
           Expanded(child: Text(text)),
         ],
       ),
@@ -187,7 +207,9 @@ class _ScalerCampaignDetailsScreenState
     return Row(
       children: [
         Icon(enabled ? Icons.check_circle : Icons.cancel),
+
         const SizedBox(width: 10),
+
         Text(label),
       ],
     );

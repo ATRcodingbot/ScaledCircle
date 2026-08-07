@@ -28,7 +28,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   Future<void> _openScalerReviews(BuildContext context, String scalerId) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => UserReviewsScreen(userId: scalerId)),
+      MaterialPageRoute(
+        builder: (_) => UserReviewsScreen(userId: scalerId, userType: "scaler"),
+      ),
     );
   }
 
