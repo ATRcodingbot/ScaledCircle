@@ -9,6 +9,7 @@ import 'campaign/sc_campaign_applicants_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'create/campaign_type_screen.dart';
 import 'subscription_screen.dart';
+import '../../widgets/reputation_card.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -398,6 +399,14 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 const SizedBox(height: 20),
 
                 _buildWalletSection(),
+
+                const SizedBox(height: 18),
+
+                ReputationCard(
+                  userId: user.uid,
+                  userType: "business",
+                  title: "Business Reputation",
+                ),
 
                 const SizedBox(height: 18),
 

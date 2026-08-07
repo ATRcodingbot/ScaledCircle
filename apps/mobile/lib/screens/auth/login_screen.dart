@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../business/business_dashboard.dart';
-import '../jobs/jobs_marketplace_screen.dart';
+import '../scaler/dashboard/scaler_dashboard_screen.dart';
+
 import '../notifications/notifications_screen.dart';
 import '../onboarding/account_type_screen.dart';
 import 'register_screen.dart';
@@ -34,8 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final credential =
-          await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
@@ -59,20 +59,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!userDocument.exists) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const AccountTypeScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const AccountTypeScreen()),
         );
         return;
       }
 
       final userData = userDocument.data();
 
-      final accountType =
-          userData?['accountType']?.toString();
+      final accountType = userData?['accountType']?.toString();
 
-      final loginNotification =
-          await _buildLoginNotification(
+      final loginNotification = await _buildLoginNotification(
         userId: user.uid,
         accountType: accountType,
       );
@@ -99,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (_) => LoginNotificationWrapper(
               notification: loginNotification,
-              child: const JobsMarketplaceScreen(),
+              child: const ScalerDashboardScreen(),
             ),
           ),
         );
@@ -109,9 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => const AccountTypeScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const AccountTypeScreen()),
       );
     } on FirebaseAuthException catch (e) {
       String message = 'Login failed.';
@@ -134,13 +128,11 @@ class _LoginScreenState extends State<LoginScreen> {
           break;
 
         case 'too-many-requests':
-          message =
-              'Too many login attempts. Please try again later.';
+          message = 'Too many login attempts. Please try again later.';
           break;
 
         case 'network-request-failed':
-          message =
-              'Network error. Check your internet connection.';
+          message = 'Network error. Check your internet connection.';
           break;
 
         default:
@@ -149,21 +141,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to log in: $e',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to log in: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -180,74 +166,49 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('notifications')
-          .where(
-            'userId',
-            isEqualTo: userId,
-          )
-          .where(
-            'read',
-            isEqualTo: false,
-          )
+          .where('userId', isEqualTo: userId)
+          .where('read', isEqualTo: false)
           .get();
 
       if (snapshot.docs.isEmpty) {
         return null;
       }
 
-      final notifications =
-          List<QueryDocumentSnapshot>.from(
-        snapshot.docs,
-      );
+      final notifications = List<QueryDocumentSnapshot>.from(snapshot.docs);
 
-      notifications.sort(
-        (a, b) {
-          final aData =
-              a.data() as Map<String, dynamic>;
+      notifications.sort((a, b) {
+        final aData = a.data() as Map<String, dynamic>;
 
-          final bData =
-              b.data() as Map<String, dynamic>;
+        final bData = b.data() as Map<String, dynamic>;
 
-          final aTimestamp =
-              aData['createdAt'] as Timestamp?;
+        final aTimestamp = aData['createdAt'] as Timestamp?;
 
-          final bTimestamp =
-              bData['createdAt'] as Timestamp?;
+        final bTimestamp = bData['createdAt'] as Timestamp?;
 
-          if (aTimestamp == null &&
-              bTimestamp == null) {
-            return 0;
-          }
+        if (aTimestamp == null && bTimestamp == null) {
+          return 0;
+        }
 
-          if (aTimestamp == null) {
-            return 1;
-          }
+        if (aTimestamp == null) {
+          return 1;
+        }
 
-          if (bTimestamp == null) {
-            return -1;
-          }
+        if (bTimestamp == null) {
+          return -1;
+        }
 
-          return bTimestamp.compareTo(
-            aTimestamp,
-          );
-        },
-      );
+        return bTimestamp.compareTo(aTimestamp);
+      });
 
       if (accountType == 'business') {
-        final applicationNotifications =
-            notifications.where(
-          (notification) {
-            final data =
-                notification.data()
-                    as Map<String, dynamic>;
+        final applicationNotifications = notifications.where((notification) {
+          final data = notification.data() as Map<String, dynamic>;
 
-            return data['type'] ==
-                'application_received';
-          },
-        ).toList();
+          return data['type'] == 'application_received';
+        }).toList();
 
         if (applicationNotifications.isNotEmpty) {
-          final count =
-              applicationNotifications.length;
+          final count = applicationNotifications.length;
 
           return LoginNotificationData(
             title: count == 1
@@ -256,28 +217,18 @@ class _LoginScreenState extends State<LoginScreen> {
             message: count == 1
                 ? '1 Scaler has applied to one of your campaigns.'
                 : '$count Scalers have applied to your campaigns.',
-            notifications:
-                applicationNotifications,
+            notifications: applicationNotifications,
           );
         }
 
-        final newest =
-            notifications.first;
+        final newest = notifications.first;
 
-        final data =
-            newest.data()
-                as Map<String, dynamic>;
+        final data = newest.data() as Map<String, dynamic>;
 
         return LoginNotificationData(
-          title:
-              data['title']?.toString() ??
-                  'New Notification',
-          message:
-              data['message']?.toString() ??
-                  '',
-          notifications: [
-            newest,
-          ],
+          title: data['title']?.toString() ?? 'New Notification',
+          message: data['message']?.toString() ?? '',
+          notifications: [newest],
         );
       }
 
@@ -291,72 +242,46 @@ class _LoginScreenState extends State<LoginScreen> {
           'application_received',
         ];
 
-        QueryDocumentSnapshot?
-            selectedNotification;
+        QueryDocumentSnapshot? selectedNotification;
 
         for (final type in priorityTypes) {
-          for (final notification
-              in notifications) {
-            final data =
-                notification.data()
-                    as Map<String, dynamic>;
+          for (final notification in notifications) {
+            final data = notification.data() as Map<String, dynamic>;
 
             if (data['type'] == type) {
-              selectedNotification =
-                  notification;
+              selectedNotification = notification;
 
               break;
             }
           }
 
-          if (selectedNotification !=
-              null) {
+          if (selectedNotification != null) {
             break;
           }
         }
 
-        selectedNotification ??=
-            notifications.first;
+        selectedNotification ??= notifications.first;
 
-        final data =
-            selectedNotification.data()
-                as Map<String, dynamic>;
+        final data = selectedNotification.data() as Map<String, dynamic>;
 
         return LoginNotificationData(
-          title:
-              data['title']?.toString() ??
-                  'New Notification',
-          message:
-              data['message']?.toString() ??
-                  '',
-          notifications: [
-            selectedNotification,
-          ],
+          title: data['title']?.toString() ?? 'New Notification',
+          message: data['message']?.toString() ?? '',
+          notifications: [selectedNotification],
         );
       }
 
-      final newest =
-          notifications.first;
+      final newest = notifications.first;
 
-      final data =
-          newest.data()
-              as Map<String, dynamic>;
+      final data = newest.data() as Map<String, dynamic>;
 
       return LoginNotificationData(
-        title:
-            data['title']?.toString() ??
-                'New Notification',
-        message:
-            data['message']?.toString() ??
-                '',
-        notifications: [
-          newest,
-        ],
+        title: data['title']?.toString() ?? 'New Notification',
+        message: data['message']?.toString() ?? '',
+        notifications: [newest],
       );
     } catch (e) {
-      debugPrint(
-        'Unable to load login notifications: $e',
-      );
+      debugPrint('Unable to load login notifications: $e');
 
       return null;
     }
@@ -365,10 +290,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scaled Circle'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Scaled Circle'), centerTitle: true),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -378,31 +300,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const Text(
                 'Welcome Back',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 8),
 
-              const Text(
-                'Log in to continue to Scaled Circle.',
-              ),
+              const Text('Log in to continue to Scaled Circle.'),
 
               const SizedBox(height: 30),
 
               TextField(
                 controller: emailController,
-                keyboardType:
-                    TextInputType.emailAddress,
-                textInputAction:
-                    TextInputAction.next,
-                decoration:
-                    const InputDecoration(
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
                   labelText: 'Email',
-                  border:
-                      OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                 ),
               ),
 
@@ -411,18 +324,15 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: passwordController,
                 obscureText: true,
-                textInputAction:
-                    TextInputAction.done,
+                textInputAction: TextInputAction.done,
                 onSubmitted: (_) {
                   if (!loading) {
                     login();
                   }
                 },
-                decoration:
-                    const InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Password',
-                  border:
-                      OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                 ),
               ),
 
@@ -431,20 +341,14 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 height: 55,
                 child: ElevatedButton(
-                  onPressed:
-                      loading ? null : login,
+                  onPressed: loading ? null : login,
                   child: loading
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child:
-                              CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text(
-                          'Login',
-                        ),
+                      : const Text('Login'),
                 ),
               ),
 
@@ -457,15 +361,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                const RegisterScreen(),
+                            builder: (_) => const RegisterScreen(),
                           ),
                         );
                       },
-                child:
-                    const Text(
-                  'Create Account',
-                ),
+                child: const Text('Create Account'),
               ),
             ],
           ),
@@ -487,8 +387,7 @@ class LoginNotificationData {
   });
 }
 
-class LoginNotificationWrapper
-    extends StatefulWidget {
+class LoginNotificationWrapper extends StatefulWidget {
   final Widget child;
   final LoginNotificationData? notification;
 
@@ -499,33 +398,26 @@ class LoginNotificationWrapper
   });
 
   @override
-  State<LoginNotificationWrapper>
-      createState() =>
-          _LoginNotificationWrapperState();
+  State<LoginNotificationWrapper> createState() =>
+      _LoginNotificationWrapperState();
 }
 
-class _LoginNotificationWrapperState
-    extends State<LoginNotificationWrapper> {
+class _LoginNotificationWrapperState extends State<LoginNotificationWrapper> {
   bool _popupShown = false;
 
   @override
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance
-        .addPostFrameCallback(
-      (_) {
-        _showLoginNotification();
-      },
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showLoginNotification();
+    });
   }
 
-  Future<void>
-      _showLoginNotification() async {
+  Future<void> _showLoginNotification() async {
     if (_popupShown) return;
 
-    final notification =
-        widget.notification;
+    final notification = widget.notification;
 
     if (notification == null) {
       return;
@@ -535,106 +427,70 @@ class _LoginNotificationWrapperState
 
     if (!mounted) return;
 
-    final openNotifications =
-        await showDialog<bool>(
+    final openNotifications = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          icon: const Icon(
-            Icons.notifications_active,
-            size: 42,
-          ),
-          title: Text(
-            notification.title,
-          ),
-          content: Text(
-            notification.message,
-          ),
+          icon: const Icon(Icons.notifications_active, size: 42),
+          title: Text(notification.title),
+          content: Text(notification.message),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
+                Navigator.pop(dialogContext, false);
               },
-              child: const Text(
-                'OK',
-              ),
+              child: const Text('OK'),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
+                Navigator.pop(dialogContext, true);
               },
-              child: const Text(
-                'View Notifications',
-              ),
+              child: const Text('View Notifications'),
             ),
           ],
         );
       },
     );
 
-    await _markDisplayedNotificationsRead(
-      notification.notifications,
-    );
+    await _markDisplayedNotificationsRead(notification.notifications);
 
     if (!mounted) return;
 
     if (openNotifications == true) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) =>
-              const NotificationsScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
       );
     }
   }
 
-  Future<void>
-      _markDisplayedNotificationsRead(
-    List<QueryDocumentSnapshot>
-        notifications,
+  Future<void> _markDisplayedNotificationsRead(
+    List<QueryDocumentSnapshot> notifications,
   ) async {
     if (notifications.isEmpty) {
       return;
     }
 
     try {
-      final firestore =
-          FirebaseFirestore.instance;
+      final firestore = FirebaseFirestore.instance;
 
-      final batch =
-          firestore.batch();
+      final batch = firestore.batch();
 
-      for (final notification
-          in notifications) {
-        batch.update(
-          notification.reference,
-          {
-            'read': true,
-            'readAt':
-                FieldValue.serverTimestamp(),
-          },
-        );
+      for (final notification in notifications) {
+        batch.update(notification.reference, {
+          'read': true,
+          'readAt': FieldValue.serverTimestamp(),
+        });
       }
 
       await batch.commit();
     } catch (e) {
-      debugPrint(
-        'Unable to mark login notifications read: $e',
-      );
+      debugPrint('Unable to mark login notifications read: $e');
     }
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return widget.child;
   }
 }
