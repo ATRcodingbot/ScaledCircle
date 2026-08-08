@@ -4,10 +4,7 @@ import 'package:flutter/material.dart';
 class EditCampaignScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
 
-  const EditCampaignScreen({
-    super.key,
-    required this.campaign,
-  });
+  const EditCampaignScreen({super.key, required this.campaign});
 
   @override
   State<EditCampaignScreen> createState() => _EditCampaignScreenState();
@@ -87,20 +84,16 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Campaign updated successfully."),
-        ),
+        const SnackBar(content: Text("Campaign updated successfully.")),
       );
 
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Error updating campaign: $e"),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error updating campaign: $e")));
     } finally {
       if (mounted) {
         setState(() {
@@ -120,10 +113,7 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Edit Campaign"),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text("Edit Campaign"), centerTitle: true),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -211,9 +201,7 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
                         ),
                       )
                     : const Icon(Icons.save),
-                label: Text(
-                  _saving ? "Saving..." : "Save Changes",
-                ),
+                label: Text(_saving ? "Saving..." : "Save Changes"),
               ),
             ),
           ],

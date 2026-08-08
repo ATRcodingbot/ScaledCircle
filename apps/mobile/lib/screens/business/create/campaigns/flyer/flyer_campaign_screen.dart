@@ -1,21 +1,27 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../services/platform_billing_service.dart';
-import '../campaign_zones_screen.dart';
-import '../campaign/campaign_locations_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../../../../services/platform_billing_service.dart';
+
+import '../../../campaign_zones_screen.dart';
+
+import '../../../campaign/campaign_locations_screen.dart';
 
 class FlyerCampaignScreen extends StatefulWidget {
-  const FlyerCampaignScreen({super.key});
+  final String campaignType;
 
-@override
-State<FlyerCampaignScreen> createState() =>
-    _FlyerCampaignScreenState();
+  const FlyerCampaignScreen({
+    super.key,
+    this.campaignType = 'flyer_distribution',
+  });
+
+  @override
+  State<FlyerCampaignScreen> createState() => _FlyerCampaignScreenState();
 }
 
-class _FlyerCampaignScreenState
-    extends State<FlyerCampaignScreen> {
+class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final campaignNameController = TextEditingController();
@@ -35,7 +41,7 @@ class _FlyerCampaignScreenState
   TimeOfDay? _startTime;
   TimeOfDay? _deadlineTime;
 
-  String _campaignType = 'flyer_distribution';
+  late String _campaignType;
 
   String _materialSource = 'business_provided';
 
@@ -44,6 +50,12 @@ class _FlyerCampaignScreenState
   bool _trackingEnabled = false;
 
   bool publishing = false;
+  @override
+  void initState() {
+    super.initState();
+
+    _campaignType = widget.campaignType;
+  }
 
   static const Set<String> _distributionCampaignTypes = {
     'flyer_distribution',
@@ -863,7 +875,10 @@ class _FlyerCampaignScreenState
     final previewTotal = previewWorkerBudget + previewPlatformFee;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Flyer Campaign'), centerTitle: true),
+      appBar: AppBar(
+        title: Text('Create ${_campaignTypeLabel(_campaignType)}'),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -883,13 +898,6 @@ class _FlyerCampaignScreenState
               ),
 
               const SizedBox(height: 28),
-
-              const Text(
-                'Campaign Type',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
 
               RadioGroup<String>(
                 groupValue: _campaignType,

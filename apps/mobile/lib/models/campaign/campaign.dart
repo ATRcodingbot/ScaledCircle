@@ -1,21 +1,29 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum CampaignType {
+  // Marketing campaigns
   flyerDistribution,
   doorHangerDistribution,
   businessCardDistribution,
-  yardSignInstallation,
-  dumpRun,
+  neighborhoodCanvassing,
   eventMarketing,
+
+  // Field service campaigns
+  yardSignInstallation,
+  yardCleanup,
+  dumpRun,
+  junkRemoval,
 }
 
 enum CampaignStatus {
   draft,
   funded,
+  published,
   active,
   verificationPending,
   completed,
   cancelled,
+  archived,
 }
 
 enum MaterialSource {
@@ -65,6 +73,18 @@ class Campaign {
 
   final DateTime? completedAt;
 
+  // ------------------------------------------------------------
+  // LAUNCH DATA INTEGRITY
+  // ------------------------------------------------------------
+
+  final bool archived;
+
+  final bool isTestCampaign;
+
+  final DateTime? archivedAt;
+
+  final String? archivedBy;
+
   const Campaign({
     required this.id,
     required this.businessId,
@@ -82,10 +102,16 @@ class Campaign {
     required this.zoneCount,
     required this.assignedZoneCount,
     required this.completedZoneCount,
+
     this.deadline,
     this.createdAt,
     this.updatedAt,
     this.completedAt,
+
+    this.archived = false,
+    this.isTestCampaign = false,
+    this.archivedAt,
+    this.archivedBy,
   });
 
   factory Campaign.fromDocument(
@@ -95,64 +121,117 @@ class Campaign {
 
     return Campaign(
       id: document.id,
+
       businessId: data['businessId']?.toString() ?? '',
+
       campaignName: data['campaignName']?.toString() ?? 'Untitled Campaign',
+
       description: data['description']?.toString() ?? '',
+
       type: _campaignTypeFromString(data['campaignType']?.toString()),
+
       status: _campaignStatusFromString(data['status']?.toString()),
+
       materialSource: _materialSourceFromString(
         data['materialSource']?.toString(),
       ),
+
       workerBudget:
           (data['workerBudget'] as num?)?.toDouble() ??
           (data['basePay'] as num?)?.toDouble() ??
-          0.0,
-      platformFee: (data['platformFee'] as num?)?.toDouble() ?? 0.0,
+          0,
+
+      platformFee: (data['platformFee'] as num?)?.toDouble() ?? 0,
+
       totalFunding:
           (data['totalFunding'] as num?)?.toDouble() ??
           (data['totalCharge'] as num?)?.toDouble() ??
-          0.0,
-      bonus: (data['bonus'] as num?)?.toDouble() ?? 0.0,
+          0,
+
+      bonus: (data['bonus'] as num?)?.toDouble() ?? 0,
+
       targetQuantity:
           (data['targetQuantity'] as num?)?.toInt() ??
           (data['estimatedHomes'] as num?)?.toInt() ??
           (data['homes'] as num?)?.toInt() ??
           0,
+
       applicationCount: (data['applications'] as num?)?.toInt() ?? 0,
+
       zoneCount: (data['zoneCount'] as num?)?.toInt() ?? 0,
+
       assignedZoneCount:
           (data['assignedZoneCount'] as num?)?.toInt() ??
           (data['assignedScalerCount'] as num?)?.toInt() ??
           0,
+
       completedZoneCount: (data['completedZoneCount'] as num?)?.toInt() ?? 0,
+
       deadline: _dateTimeFromValue(data['deadlineAt']),
+
       createdAt: _dateTimeFromValue(data['createdAt']),
+
       updatedAt: _dateTimeFromValue(data['updatedAt']),
+
       completedAt: _dateTimeFromValue(data['completedAt']),
+
+      archived: data['archived'] == true,
+
+      isTestCampaign: data['isTestCampaign'] == true,
+
+      archivedAt: _dateTimeFromValue(data['archivedAt']),
+
+      archivedBy: data['archivedBy']?.toString(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'businessId': businessId,
+
       'campaignName': campaignName,
+
       'description': description,
+
       'campaignType': campaignTypeValue(type),
+
       'status': campaignStatusValue(status),
+
       'materialSource': materialSourceValue(materialSource),
+
       'workerBudget': workerBudget,
+
       'platformFee': platformFee,
+
       'totalFunding': totalFunding,
+
       'bonus': bonus,
+
       'targetQuantity': targetQuantity,
+
       'applications': applicationCount,
+
       'zoneCount': zoneCount,
+
       'assignedZoneCount': assignedZoneCount,
+
       'completedZoneCount': completedZoneCount,
+
+      'archived': archived,
+
+      'isTestCampaign': isTestCampaign,
+
       if (deadline != null) 'deadlineAt': Timestamp.fromDate(deadline!),
+
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
+
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+
       if (completedAt != null) 'completedAt': Timestamp.fromDate(completedAt!),
+
+      if (archivedAt != null) 'archivedAt': Timestamp.fromDate(archivedAt!),
+
+      if (archivedBy != null) 'archivedBy': archivedBy,
     };
   }
 
@@ -161,44 +240,80 @@ class Campaign {
     String? businessId,
     String? campaignName,
     String? description,
+
     CampaignType? type,
     CampaignStatus? status,
     MaterialSource? materialSource,
+
     double? workerBudget,
     double? platformFee,
     double? totalFunding,
     double? bonus,
+
     int? targetQuantity,
     int? applicationCount,
     int? zoneCount,
     int? assignedZoneCount,
     int? completedZoneCount,
+
     DateTime? deadline,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? completedAt,
+
+    bool? archived,
+    bool? isTestCampaign,
+    DateTime? archivedAt,
+    String? archivedBy,
   }) {
     return Campaign(
       id: id ?? this.id,
+
       businessId: businessId ?? this.businessId,
+
       campaignName: campaignName ?? this.campaignName,
+
       description: description ?? this.description,
+
       type: type ?? this.type,
+
       status: status ?? this.status,
+
       materialSource: materialSource ?? this.materialSource,
+
       workerBudget: workerBudget ?? this.workerBudget,
+
       platformFee: platformFee ?? this.platformFee,
+
       totalFunding: totalFunding ?? this.totalFunding,
+
       bonus: bonus ?? this.bonus,
+
       targetQuantity: targetQuantity ?? this.targetQuantity,
+
       applicationCount: applicationCount ?? this.applicationCount,
+
       zoneCount: zoneCount ?? this.zoneCount,
+
       assignedZoneCount: assignedZoneCount ?? this.assignedZoneCount,
+
       completedZoneCount: completedZoneCount ?? this.completedZoneCount,
+
       deadline: deadline ?? this.deadline,
+
       createdAt: createdAt ?? this.createdAt,
+
       updatedAt: updatedAt ?? this.updatedAt,
+
       completedAt: completedAt ?? this.completedAt,
+
+      archived: archived ?? this.archived,
+
+      isTestCampaign: isTestCampaign ?? this.isTestCampaign,
+
+      archivedAt: archivedAt ?? this.archivedAt,
+
+      archivedBy: archivedBy ?? this.archivedBy,
     );
   }
 
@@ -219,7 +334,6 @@ class Campaign {
       case 'event_marketing':
         return CampaignType.eventMarketing;
 
-      case 'flyer_distribution':
       default:
         return CampaignType.flyerDistribution;
     }
@@ -229,6 +343,9 @@ class Campaign {
     switch (value) {
       case 'funded':
         return CampaignStatus.funded;
+
+      case 'published':
+        return CampaignStatus.published;
 
       case 'active':
       case 'open':
@@ -248,7 +365,9 @@ class Campaign {
       case 'canceled':
         return CampaignStatus.cancelled;
 
-      case 'draft':
+      case 'archived':
+        return CampaignStatus.archived;
+
       default:
         return CampaignStatus.draft;
     }
@@ -262,7 +381,6 @@ class Campaign {
       case 'printed_by_scaled_circle':
         return MaterialSource.printedByScaledCircle;
 
-      case 'business_provided':
       default:
         return MaterialSource.businessProvided;
     }
@@ -284,6 +402,15 @@ class Campaign {
     switch (type) {
       case CampaignType.flyerDistribution:
         return 'flyer_distribution';
+
+      case CampaignType.neighborhoodCanvassing:
+        return "Neighborhood Canvassing";
+
+      case CampaignType.yardCleanup:
+        return "Yard Cleanup";
+
+      case CampaignType.junkRemoval:
+        return "Junk Removal";
 
       case CampaignType.doorHangerDistribution:
         return 'door_hanger_distribution';
@@ -310,6 +437,9 @@ class Campaign {
       case CampaignStatus.funded:
         return 'funded';
 
+      case CampaignStatus.published:
+        return 'published';
+
       case CampaignStatus.active:
         return 'active';
 
@@ -321,6 +451,9 @@ class Campaign {
 
       case CampaignStatus.cancelled:
         return 'cancelled';
+
+      case CampaignStatus.archived:
+        return 'archived';
     }
   }
 

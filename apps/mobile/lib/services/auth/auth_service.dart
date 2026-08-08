@@ -1,0 +1,123 @@
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../user/user_service.dart';
+import '../../models/user/user_profile.dart';
+
+class AuthService {
+  AuthService({FirebaseAuth? auth, UserService? userService})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _userService = userService ?? UserService();
+
+  final FirebaseAuth _auth;
+
+  final UserService _userService;
+
+  // ------------------------------------------------------------
+  // CURRENT USER
+  // ------------------------------------------------------------
+
+  User? get currentUser {
+    return _auth.currentUser;
+  }
+
+  Stream<User?> get authStateChanges {
+    return _auth.authStateChanges();
+  }
+
+  // ------------------------------------------------------------
+  // SIGN UP
+  // ------------------------------------------------------------
+
+  Future<User?> signUp({
+    required String email,
+    required String password,
+    required UserRole role,
+    String? displayName,
+  }) async {
+    if (email.trim().isEmpty) {
+      throw Exception('Email is required.');
+    }
+
+    if (password.trim().isEmpty) {
+      throw Exception('Password is required.');
+    }
+
+    if (password.length < 6) {
+      throw Exception('Password must be at least 6 characters.');
+    }
+
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email.trim(),
+      password: password.trim(),
+    );
+
+    final user = credential.user;
+
+    if (user == null) {
+      throw Exception('Unable to create user account.');
+    }
+
+    await _userService.createUserProfile(
+      user: user,
+      role: role,
+      displayName: displayName,
+    );
+
+    return user;
+  }
+
+  // ------------------------------------------------------------
+  // LOGIN
+  // ------------------------------------------------------------
+
+  Future<User?> login({required String email, required String password}) async {
+    if (email.trim().isEmpty) {
+      throw Exception('Email is required.');
+    }
+
+    if (password.trim().isEmpty) {
+      throw Exception('Password is required.');
+    }
+
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password.trim(),
+    );
+
+    return credential.user;
+  }
+
+  // ------------------------------------------------------------
+  // LOGOUT
+  // ------------------------------------------------------------
+
+  Future<void> logout() async {
+    await _auth.signOut();
+  }
+
+  // ------------------------------------------------------------
+  // PASSWORD RESET
+  // ------------------------------------------------------------
+
+  Future<void> sendPasswordReset({required String email}) async {
+    if (email.trim().isEmpty) {
+      throw Exception('Email is required.');
+    }
+
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  // ------------------------------------------------------------
+  // DELETE ACCOUNT
+  // ------------------------------------------------------------
+
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw Exception('No authenticated user.');
+    }
+
+    await user.delete();
+  }
+}

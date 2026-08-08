@@ -16,13 +16,9 @@ class ScCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: padding,
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: .08),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: .08)),
       ),
       child: child,
     );

@@ -7,7 +7,7 @@ import '../../services/wallet_service.dart';
 import '../campaigns/campaign_details_screen.dart';
 import 'campaign/sc_campaign_applicants_screen.dart';
 import '../notifications/notifications_screen.dart';
-import 'create/campaign_type_screen.dart';
+import 'create/create_campaign_screen.dart';
 import 'subscription_screen.dart';
 import '../../widgets/reputation_card.dart';
 import 'profile/business_profile_screen.dart';
@@ -38,7 +38,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
     _initializeWallet();
   }
-
+  
+  
   Future<void> _initializeWallet() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -249,7 +250,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const CampaignTypeScreen()),
+        MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
       );
 
       if (!context.mounted) {

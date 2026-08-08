@@ -12,9 +12,7 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   //if (kDebugMode) {
   //  await _connectToFirebaseEmulators();
@@ -28,37 +26,24 @@ Future _connectToFirebaseEmulators() async {
   final emulatorHost = _firebaseEmulatorHost();
 
   try {
-    await FirebaseAuth.instance.useAuthEmulator(
-      emulatorHost,
-      9099,
-    );
+    await FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099);
 
-    FirebaseFirestore.instance.useFirestoreEmulator(
-      emulatorHost,
-      8080,
-    );
+    FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8080);
 
-    FirebaseFirestore.instance.settings =
-        const Settings(
+    FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: false,
     );
 
     FirebaseFunctions.instanceFor(
       region: 'us-east1',
-    ).useFunctionsEmulator(
-      emulatorHost,
-      5001,
-    );
+    ).useFunctionsEmulator(emulatorHost, 5001);
 
-    debugPrint(
-      'Connected to Firebase emulators at $emulatorHost',
-    );
+    debugPrint('Connected to Firebase emulators at $emulatorHost');
   } catch (error) {
-    debugPrint(
-      'Unable to connect to Firebase emulators: $error',
-    );
+    debugPrint('Unable to connect to Firebase emulators: $error');
   }
 }
+
 String _firebaseEmulatorHost() {
   if (kIsWeb) {
     return '127.0.0.1';
@@ -79,14 +64,10 @@ String _firebaseEmulatorHost() {
 }
 
 class ScaledCircleApp extends StatelessWidget {
-  const ScaledCircleApp({
-    super.key,
-  });
+  const ScaledCircleApp({super.key});
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Scaled Circle',

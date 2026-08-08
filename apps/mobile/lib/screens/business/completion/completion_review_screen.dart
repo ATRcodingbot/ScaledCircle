@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../models/campaign/campaign_completion.dart';
 import '../../../services/campaign/campaign_service.dart';
 
 class CompletionReviewScreen extends StatefulWidget {
@@ -56,10 +57,81 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
     }
   }
 
+  Future<void> _rejectCompletion() async {
+    setState(() {
+      _processing = true;
+    });
+
+    try {
+      await _campaignService.rejectCompletion(
+        completionId: widget.completionId,
+        feedback: "Completion rejected.",
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processing = false;
+        });
+      }
+    }
+  }
+
   Future<void> _requestChanges() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Change request workflow coming next.")),
+    setState(() {
+      _processing = true;
+    });
+
+    try {
+      await _campaignService.requestCompletionChanges(
+        completionId: widget.completionId,
+        feedback: "Please update completion proof.",
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processing = false;
+        });
+      }
+    }
+  }
+
+  Widget _proofCard(CompletionProof proof) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: const Icon(Icons.photo),
+
+        title: Text(CompletionProof.proofTypeValue(proof.type)),
+
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(proof.fileUrl ?? 'No photo URL available.'),
+
+            if (proof.latitude != null && proof.longitude != null)
+              Text("GPS: ${proof.latitude}, ${proof.longitude}"),
+          ],
+        ),
+      ),
     );
+  }
+
+  String _notesText(CampaignCompletion completion) {
+    final notes = completion.scalerNotes;
+
+    if (notes == null || notes.trim().isEmpty) {
+      return "No notes submitted.";
+    }
+
+    return notes;
   }
 
   @override
@@ -67,105 +139,126 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text("Completion Review")),
 
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+      body: FutureBuilder<CampaignCompletion?>(
+        future: _campaignService.getCompletion(widget.completionId),
 
-        children: [
-          const Icon(Icons.assignment_turned_in, size: 70),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          const SizedBox(height: 20),
+          final completion = snapshot.data;
 
-          const Text(
-            "Campaign Completion Submitted",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
+          if (completion == null) {
+            return const Center(child: Text("Completion not found."));
+          }
 
-          const SizedBox(height: 20),
+          return ListView(
+            padding: const EdgeInsets.all(20),
 
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.person),
+            children: [
+              const Icon(Icons.assignment_turned_in, size: 70),
 
-              title: const Text("Scaler"),
+              const SizedBox(height: 20),
 
-              subtitle: Text(widget.scalerId),
-            ),
-          ),
+              Text(
+                "Campaign Completion",
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
 
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.campaign),
+              const SizedBox(height: 20),
 
-              title: const Text("Campaign"),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.person),
+                  title: const Text("Scaler"),
+                  subtitle: Text(widget.scalerId),
+                ),
+              ),
 
-              subtitle: Text(widget.campaignId),
-            ),
-          ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.campaign),
+                  title: const Text("Campaign"),
+                  subtitle: Text(widget.campaignId),
+                ),
+              ),
 
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.assignment),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.info),
+                  title: const Text("Status"),
+                  subtitle: Text(completion.status.name),
+                ),
+              ),
 
-              title: const Text("Completion"),
+              const SizedBox(height: 20),
 
-              subtitle: Text(widget.completionId),
-            ),
-          ),
+              const Text(
+                "Scaler Notes",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
 
-          const SizedBox(height: 30),
+              const SizedBox(height: 8),
 
-          const Text(
-            "Completion Proof",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+              Text(_notesText(completion)),
 
-          const SizedBox(height: 10),
+              const SizedBox(height: 20),
 
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.photo),
+              const Text(
+                "Proof Photos",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
 
-              title: Text("Submitted Photos"),
+              const SizedBox(height: 10),
 
-              subtitle: Text("Proof uploaded by scaler."),
-            ),
-          ),
+              if (completion.proofs.isEmpty)
+                const Card(child: ListTile(title: Text("No proof uploaded."))),
 
-          const SizedBox(height: 40),
+              ...completion.proofs.map(_proofCard),
 
-          SizedBox(
-            height: 55,
+              const SizedBox(height: 30),
 
-            width: double.infinity,
+              SizedBox(
+                height: 55,
+                width: double.infinity,
 
-            child: ElevatedButton(
-              onPressed: _processing ? null : _approveCompletion,
+                child: ElevatedButton(
+                  onPressed: _processing ? null : _approveCompletion,
 
-              child: _processing
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
+                  child: _processing
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text("Approve Completion"),
+                ),
+              ),
 
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text("Approve Completion"),
-            ),
-          ),
+              const SizedBox(height: 15),
 
-          const SizedBox(height: 15),
+              SizedBox(
+                height: 55,
+                width: double.infinity,
 
-          SizedBox(
-            height: 55,
+                child: OutlinedButton(
+                  onPressed: _processing ? null : _requestChanges,
 
-            width: double.infinity,
+                  child: const Text("Request Changes"),
+                ),
+              ),
 
-            child: OutlinedButton(
-              onPressed: _processing ? null : _requestChanges,
+              const SizedBox(height: 15),
 
-              child: const Text("Request Changes"),
-            ),
-          ),
-        ],
+              TextButton(
+                onPressed: _processing ? null : _rejectCompletion,
+
+                child: const Text("Reject Completion"),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

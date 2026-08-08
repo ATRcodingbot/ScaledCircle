@@ -115,11 +115,9 @@ class CampaignZonesScreen extends StatelessWidget {
         'shapeType': campaignData['shapeType'] ?? 'polygon',
         'serviceAreaType': campaignData['serviceAreaType'] ?? 'polygon',
         'serviceArea': campaignData['serviceArea'] ?? [],
-        'serviceAreaPointCount':
-            campaignData['serviceAreaPointCount'] ?? 0,
+        'serviceAreaPointCount': campaignData['serviceAreaPointCount'] ?? 0,
         'serviceAreaCenter': campaignData['serviceAreaCenter'],
-        'serviceAreaRadiusMeters':
-            campaignData['serviceAreaRadiusMeters'],
+        'serviceAreaRadiusMeters': campaignData['serviceAreaRadiusMeters'],
         'estimatedHomes': 0,
         'homeCountStatus': 'pending',
         'homeCountMethod': null,

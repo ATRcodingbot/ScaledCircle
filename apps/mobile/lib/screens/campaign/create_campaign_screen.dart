@@ -6,28 +6,21 @@ class CreateCampaignScreen extends StatefulWidget {
   const CreateCampaignScreen({super.key});
 
   @override
-  State<CreateCampaignScreen> createState() =>
-      _CreateCampaignScreenState();
+  State<CreateCampaignScreen> createState() => _CreateCampaignScreenState();
 }
 
-class _CreateCampaignScreenState
-    extends State<CreateCampaignScreen> {
+class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController campaignController =
-      TextEditingController();
+  final TextEditingController campaignController = TextEditingController();
 
-  final TextEditingController descriptionController =
-      TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
 
-  final TextEditingController payController =
-      TextEditingController();
+  final TextEditingController payController = TextEditingController();
 
-  final TextEditingController bonusController =
-      TextEditingController();
+  final TextEditingController bonusController = TextEditingController();
 
-  final TextEditingController homesController =
-      TextEditingController();
+  final TextEditingController homesController = TextEditingController();
 
   DateTime? selectedDate;
 
@@ -46,9 +39,7 @@ class _CreateCampaignScreenState
 
     if (selectedDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please select a deadline."),
-        ),
+        const SnackBar(content: Text("Please select a deadline.")),
       );
       return;
     }
@@ -56,18 +47,14 @@ class _CreateCampaignScreenState
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("You must be logged in."),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("You must be logged in.")));
       return;
     }
 
     try {
-      await FirebaseFirestore.instance
-          .collection("campaigns")
-          .add({
+      await FirebaseFirestore.instance.collection("campaigns").add({
         "businessId": user.uid,
         "businessEmail": user.email,
         "campaignName": campaignController.text.trim(),
@@ -85,21 +72,17 @@ class _CreateCampaignScreenState
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Campaign Published!"),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Campaign Published!")));
 
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -121,9 +104,7 @@ class _CreateCampaignScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Create Campaign"),
-      ),
+      appBar: AppBar(title: const Text("Create Campaign")),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -137,9 +118,7 @@ class _CreateCampaignScreenState
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) =>
-                    value == null || value.isEmpty
-                        ? "Required"
-                        : null,
+                    value == null || value.isEmpty ? "Required" : null,
               ),
 
               const SizedBox(height: 20),
@@ -152,17 +131,14 @@ class _CreateCampaignScreenState
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) =>
-                    value == null || value.isEmpty
-                        ? "Required"
-                        : null,
+                    value == null || value.isEmpty ? "Required" : null,
               ),
 
               const SizedBox(height: 20),
 
               TextFormField(
                 controller: payController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(
+                keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
                 decoration: const InputDecoration(
@@ -186,8 +162,7 @@ class _CreateCampaignScreenState
 
               TextFormField(
                 controller: bonusController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(
+                keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
                 decoration: const InputDecoration(
@@ -242,9 +217,7 @@ class _CreateCampaignScreenState
                   icon: const Icon(Icons.campaign),
                   label: const Text(
                     "Publish Campaign",
-                    style: TextStyle(
-                      fontSize: 18,
-                    ),
+                    style: TextStyle(fontSize: 18),
                   ),
                 ),
               ),

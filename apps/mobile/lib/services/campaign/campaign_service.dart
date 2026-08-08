@@ -28,6 +28,15 @@ class CampaignService {
   // ------------------------------------------------------------
 
   Future<String> createCampaign({required Campaign campaign}) async {
+    final exists = await campaignExists(
+      businessId: campaign.businessId,
+      campaignName: campaign.campaignName,
+    );
+
+    if (exists) {
+      throw Exception('A campaign with this name already exists.');
+    }
+
     final document = campaign.id.isNotEmpty
         ? _campaigns.doc(campaign.id)
         : _campaigns.doc();
@@ -35,7 +44,10 @@ class CampaignService {
     final data = Map<String, dynamic>.from(campaign.toMap());
 
     data['createdAt'] = FieldValue.serverTimestamp();
+
     data['updatedAt'] = FieldValue.serverTimestamp();
+
+    data['archived'] = false;
 
     await document.set(data);
 
@@ -84,6 +96,7 @@ class CampaignService {
   Stream<List<Campaign>> watchBusinessCampaigns({required String businessId}) {
     return _campaigns
         .where('businessId', isEqualTo: businessId)
+        .where('archived', isEqualTo: false)
         .snapshots()
         .map((snapshot) {
           final campaigns = snapshot.docs.map(Campaign.fromDocument).toList();
@@ -96,18 +109,33 @@ class CampaignService {
         });
   }
 
+  Future<bool> campaignExists({
+    required String businessId,
+    required String campaignName,
+  }) async {
+    final result = await _campaigns
+        .where('businessId', isEqualTo: businessId)
+        .where('campaignName', isEqualTo: campaignName)
+        .limit(1)
+        .get();
+
+    return result.docs.isNotEmpty;
+  }
+
   Stream<List<Campaign>> watchAvailableCampaigns() {
-    return _campaigns.where('status', isEqualTo: 'published').snapshots().map((
-      snapshot,
-    ) {
-      final campaigns = snapshot.docs.map(Campaign.fromDocument).toList();
+    return _campaigns
+        .where('status', isEqualTo: 'published')
+        .where('archived', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) {
+          final campaigns = snapshot.docs.map(Campaign.fromDocument).toList();
 
-      campaigns.sort(
-        (a, b) => _compareDatesDescending(a.createdAt, b.createdAt),
-      );
+          campaigns.sort(
+            (a, b) => _compareDatesDescending(a.createdAt, b.createdAt),
+          );
 
-      return campaigns;
-    });
+          return campaigns;
+        });
   }
 
   Future<void> publishCampaign(String campaignId) async {
@@ -578,6 +606,90 @@ class CampaignService {
       'proofs': FieldValue.arrayUnion([finalProof.toMap()]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+  // ------------------------------------------------------------
+  // CAMPAIGN ARCHIVE / TEST MANAGEMENT
+  // ------------------------------------------------------------
+  //
+  // We do not permanently delete campaigns after launch.
+  //
+  // Reasons:
+  // - protects payment records
+  // - protects scaler proof history
+  // - prevents broken references
+  // - allows businesses to restore mistakes
+  //
+  // Only unused TEST campaigns may be deleted.
+  // ------------------------------------------------------------
+
+  Future<void> archiveCampaign({
+    required String campaignId,
+    required String userId,
+  }) async {
+    if (campaignId.trim().isEmpty) {
+      throw Exception('Campaign ID is required.');
+    }
+
+    await _campaigns.doc(campaignId).update({
+      'status': 'archived',
+      'archived': true,
+      'archivedBy': userId,
+      'archivedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> restoreCampaign({required String campaignId}) async {
+    if (campaignId.trim().isEmpty) {
+      throw Exception('Campaign ID is required.');
+    }
+
+    await _campaigns.doc(campaignId).update({
+      'archived': false,
+      'status': 'draft',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<bool> canDeleteCampaign(String campaignId) async {
+    final campaign = await _campaigns.doc(campaignId).get();
+
+    if (!campaign.exists) {
+      return false;
+    }
+
+    final data = campaign.data();
+
+    // Only allow deleting test campaigns
+    if (data?['isTestCampaign'] != true) {
+      return false;
+    }
+
+    final applications = await _applications(campaignId).limit(1).get();
+
+    final locations = await _campaignLocations
+        .where('campaignId', isEqualTo: campaignId)
+        .limit(1)
+        .get();
+
+    final completions = await _campaignCompletions
+        .where('campaignId', isEqualTo: campaignId)
+        .limit(1)
+        .get();
+
+    return applications.docs.isEmpty &&
+        locations.docs.isEmpty &&
+        completions.docs.isEmpty;
+  }
+
+  Future<void> deleteTestCampaign({required String campaignId}) async {
+    final allowed = await canDeleteCampaign(campaignId);
+
+    if (!allowed) {
+      throw Exception('Only unused test campaigns can be permanently deleted.');
+    }
+
+    await _campaigns.doc(campaignId).delete();
   }
 
   Future<void> replaceCompletionProofs({

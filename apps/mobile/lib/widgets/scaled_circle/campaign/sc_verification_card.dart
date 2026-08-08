@@ -21,16 +21,12 @@ class ScVerificationCard extends StatelessWidget {
     required this.onBusinessApprovalChanged,
   });
 
-
   @override
   Widget build(BuildContext context) {
-
     return Card(
       elevation: 4,
 
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
 
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -39,86 +35,56 @@ class ScVerificationCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
 
           children: [
-
             Row(
               children: [
+                const Icon(Icons.verified),
 
-                const Icon(
-                  Icons.verified,
-                ),
-
-                const SizedBox(width:10),
+                const SizedBox(width: 10),
 
                 const Text(
                   "Verification Settings",
-                  style: TextStyle(
-                    fontSize:20,
-                    fontWeight:FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-
               ],
             ),
 
-
-            const SizedBox(height:20),
-
+            const SizedBox(height: 20),
 
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
 
-              title: const Text(
-                "Before Photo Required",
-              ),
+              title: const Text("Before Photo Required"),
 
-              subtitle: const Text(
-                "Scaler must upload proof before starting.",
-              ),
+              subtitle: const Text("Scaler must upload proof before starting."),
 
               value: beforePhotoRequired,
 
-              onChanged:
-                  onBeforePhotoChanged,
+              onChanged: onBeforePhotoChanged,
             ),
-
-
 
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
 
-              title: const Text(
-                "After Photo Required",
-              ),
+              title: const Text("After Photo Required"),
 
-              subtitle: const Text(
-                "Scaler must upload completion proof.",
-              ),
+              subtitle: const Text("Scaler must upload completion proof."),
 
               value: afterPhotoRequired,
 
-              onChanged:
-                  onAfterPhotoChanged,
+              onChanged: onAfterPhotoChanged,
             ),
-
-
 
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
 
-              title: const Text(
-                "Business Approval Required",
-              ),
+              title: const Text("Business Approval Required"),
 
-              subtitle: const Text(
-                "Business approves before payout.",
-              ),
+              subtitle: const Text("Business approves before payout."),
 
               value: businessApprovalRequired,
 
-              onChanged:
-                  onBusinessApprovalChanged,
+              onChanged: onBusinessApprovalChanged,
             ),
-
           ],
         ),
       ),

@@ -234,11 +234,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   void _handleMapTap(TapPosition tapPosition, LatLng point) {
-  debugPrint(
-    'CAMPAIGN AREA TAP: ${point.latitude}, ${point.longitude}',
-  );
+    debugPrint('CAMPAIGN AREA TAP: ${point.latitude}, ${point.longitude}');
 
-  setState(() {
+    setState(() {
       _prepareForNewDrawing();
 
       switch (_selectedShape) {
@@ -985,36 +983,30 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
           ),
 
           Expanded(
-  child: FlutterMap(
-    mapController: _mapController,
+            child: FlutterMap(
+              mapController: _mapController,
 
-    options: MapOptions(
-      initialCenter: _generatedArea.isEmpty
-          ? _defaultCenter
-          : _calculateCenter(_generatedArea),
-      initialZoom: _generatedArea.isEmpty ? 13 : 15,
+              options: MapOptions(
+                initialCenter: _generatedArea.isEmpty
+                    ? _defaultCenter
+                    : _calculateCenter(_generatedArea),
+                initialZoom: _generatedArea.isEmpty ? 13 : 15,
 
-      onTap: _handleMapTap,
-    ),
+                onTap: _handleMapTap,
+              ),
 
-    children: [
-      TileLayer(
-        urlTemplate:
-            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        userAgentPackageName:
-            'com.scaledcircle.app',
-      ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.scaledcircle.app',
+                ),
 
-      PolygonLayer(
-        polygons: polygons,
-      ),
+                PolygonLayer(polygons: polygons),
 
-      MarkerLayer(
-        markers: markers,
-      ),
-    ],
-  ),
-),
+                MarkerLayer(markers: markers),
+              ],
+            ),
+          ),
 
           Container(
             constraints: const BoxConstraints(maxHeight: 285),

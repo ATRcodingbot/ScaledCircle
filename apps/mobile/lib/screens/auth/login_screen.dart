@@ -59,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!userDocument.exists) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const AccountTypeScreen()),
+          MaterialPageRoute(builder: (_) => AccountTypeScreen()),
         );
         return;
       }
@@ -105,7 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const AccountTypeScreen()),
+        MaterialPageRoute(builder: (_) => AccountTypeScreen()),
       );
     } on FirebaseAuthException catch (e) {
       String message = 'Login failed.';

@@ -1,0 +1,54 @@
+import 'package:flutter/material.dart';
+
+class DoorHangerCampaignScreen extends StatelessWidget {
+  const DoorHangerCampaignScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+
+      appBar: AppBar(
+        title: const Text("Create Door Hanger Distribution"),
+      ),
+
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+
+          children: [
+
+            const Text(
+              "Create Campaign",
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            const Text(
+              "Configure door hanger distribution, mapped neighborhoods, "
+              "materials, and Scaler compensation.",
+              style: TextStyle(fontSize: 16),
+            ),
+
+            const SizedBox(height: 40),
+
+            ElevatedButton(
+              onPressed: () {
+
+              },
+
+              child: const Text(
+                "Launch Door Hanger Campaign",
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
