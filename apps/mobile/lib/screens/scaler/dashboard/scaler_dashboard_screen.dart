@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../widgets/reputation_card.dart';
 import '../campaigns/scaler_campaign_marketplace_screen.dart';
+import '../profile/scaler_profile_screen.dart';
 import '../../jobs/scaler_wallet_screen.dart';
 
 class ScalerDashboardScreen extends StatelessWidget {
@@ -25,6 +26,7 @@ class ScalerDashboardScreen extends StatelessWidget {
         children: [
           Text(
             "Welcome Scaler",
+
             style: Theme.of(context).textTheme.headlineMedium,
           ),
 
@@ -40,6 +42,28 @@ class ScalerDashboardScreen extends StatelessWidget {
 
           Card(
             child: ListTile(
+              leading: const Icon(Icons.person),
+
+              title: const Text("My Profile"),
+
+              subtitle: const Text("View your scaler profile and reputation."),
+
+              trailing: const Icon(Icons.arrow_forward_ios),
+
+              onTap: () {
+                Navigator.push(
+                  context,
+
+                  MaterialPageRoute(
+                    builder: (_) => const ScalerProfileScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          Card(
+            child: ListTile(
               leading: const Icon(Icons.map),
 
               title: const Text("Campaign Marketplace"),
@@ -51,6 +75,7 @@ class ScalerDashboardScreen extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
+
                   MaterialPageRoute(
                     builder: (_) => ScalerCampaignMarketplaceScreen(),
                   ),
@@ -72,6 +97,7 @@ class ScalerDashboardScreen extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
+
                   MaterialPageRoute(builder: (_) => const ScalerWalletScreen()),
                 );
               },
