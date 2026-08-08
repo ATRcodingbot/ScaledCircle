@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../../../services/completion_service.dart';
+import '../../../services/campaign/campaign_service.dart';
 
 class CompletionReviewScreen extends StatefulWidget {
-  final String campaignId;
+  final String completionId;
   final String scalerId;
-  final String businessId;
+  final String campaignId;
 
   const CompletionReviewScreen({
     super.key,
-    required this.campaignId,
+    required this.completionId,
     required this.scalerId,
-    required this.businessId,
+    required this.campaignId,
   });
 
   @override
@@ -19,7 +19,7 @@ class CompletionReviewScreen extends StatefulWidget {
 }
 
 class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
-  final CompletionService _completionService = CompletionService();
+  final CampaignService _campaignService = CampaignService();
 
   bool _processing = false;
 
@@ -29,19 +29,16 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
     });
 
     try {
-      await _completionService.approveCompletion(
-        campaignId: widget.campaignId,
-
-        scalerId: widget.scalerId,
-
-        businessId: widget.businessId,
+      await _campaignService.approveCompletion(
+        completionId: widget.completionId,
+        businessFeedback: "Completion approved.",
       );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Completion approved successfully.")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Completion approved.")));
 
       Navigator.pop(context);
     } catch (e) {
@@ -61,7 +58,7 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
 
   Future<void> _requestChanges() async {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Change request feature coming next.")),
+      const SnackBar(content: Text("Change request workflow coming next.")),
     );
   }
 
@@ -80,7 +77,6 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
 
           const Text(
             "Campaign Completion Submitted",
-
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
 
@@ -106,23 +102,32 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
             ),
           ),
 
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.assignment),
+
+              title: const Text("Completion"),
+
+              subtitle: Text(widget.completionId),
+            ),
+          ),
+
           const SizedBox(height: 30),
 
           const Text(
             "Completion Proof",
-
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 10),
 
-          Card(
+          const Card(
             child: ListTile(
-              leading: const Icon(Icons.photo),
+              leading: Icon(Icons.photo),
 
-              title: const Text("Submitted Photos"),
+              title: Text("Submitted Photos"),
 
-              subtitle: const Text("Photos uploaded by scaler."),
+              subtitle: Text("Proof uploaded by scaler."),
             ),
           ),
 
@@ -131,13 +136,14 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
           SizedBox(
             height: 55,
 
+            width: double.infinity,
+
             child: ElevatedButton(
               onPressed: _processing ? null : _approveCompletion,
 
               child: _processing
                   ? const SizedBox(
                       height: 22,
-
                       width: 22,
 
                       child: CircularProgressIndicator(strokeWidth: 2),
@@ -150,6 +156,8 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
 
           SizedBox(
             height: 55,
+
+            width: double.infinity,
 
             child: OutlinedButton(
               onPressed: _processing ? null : _requestChanges,

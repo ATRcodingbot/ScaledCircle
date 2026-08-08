@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../services/completion_service.dart';
+import '../../../models/campaign/campaign_completion.dart';
+import '../../../services/campaign/campaign_service.dart';
 
 class SubmitCompletionScreen extends StatefulWidget {
   final String campaignId;
@@ -13,18 +14,17 @@ class SubmitCompletionScreen extends StatefulWidget {
 }
 
 class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
-  final CompletionService _completionService = CompletionService();
+  final CampaignService _campaignService = CampaignService();
 
   final TextEditingController _notesController = TextEditingController();
 
   bool _submitting = false;
 
-  final List<String> _photos = [];
+  final List<CompletionProof> _proofs = [];
 
   @override
   void dispose() {
     _notesController.dispose();
-
     super.dispose();
   }
 
@@ -44,14 +44,27 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
     });
 
     try {
-      await _completionService.submitCompletion(
+      final completion = CampaignCompletion(
+        id: '',
         campaignId: widget.campaignId,
-
         scalerId: user.uid,
+        businessId: '',
+        type: CampaignCompletionType.campaign,
+        status: CampaignCompletionStatus.submitted,
+        proofs: _proofs,
+        scalerNotes: _notesController.text.trim(),
+        createdAt: DateTime.now(),
+        submittedAt: DateTime.now(),
+      );
 
-        photos: _photos,
+      final completionId = await _campaignService.createCompletion(
+        completion: completion,
+      );
 
-        notes: _notesController.text.trim(),
+      await _campaignService.createApplicationCompletionLink(
+        campaignId: widget.campaignId,
+        scalerId: user.uid,
+        completionId: completionId,
       );
 
       if (!mounted) return;
@@ -76,9 +89,19 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
     }
   }
 
-  void _addPhotoPlaceholder() {
+  void _addProofPlaceholder() {
     setState(() {
-      _photos.add("photo_${_photos.length + 1}");
+      _proofs.add(
+        CompletionProof(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+
+          type: CompletionProofType.checkpointPhoto,
+
+          fileUrl: "placeholder_photo",
+
+          capturedAt: DateTime.now(),
+        ),
+      );
     });
   }
 
@@ -93,14 +116,13 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
         children: [
           const Text(
             "Completion Proof",
-
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 10),
 
           const Text(
-            "Add photos and notes showing the campaign was completed.",
+            "Upload proof and submit the campaign for business review.",
           ),
 
           const SizedBox(height: 25),
@@ -109,12 +131,12 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
             child: ListTile(
               leading: const Icon(Icons.photo_camera),
 
-              title: Text("${_photos.length} Photos Added"),
+              title: Text("${_proofs.length} Proof Items Added"),
 
               trailing: IconButton(
                 icon: const Icon(Icons.add),
 
-                onPressed: _addPhotoPlaceholder,
+                onPressed: _addProofPlaceholder,
               ),
             ),
           ),

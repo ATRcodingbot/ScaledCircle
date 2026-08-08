@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../../../models/campaign/campaign.dart';
 import '../../../services/campaign/campaign_service.dart';
 import '../completion/completion_review_screen.dart';
 import '../../scaler/profile/scaler_profile_screen.dart';
@@ -22,22 +21,9 @@ class _ScCampaignApplicantsScreenState
 
   String? _processingScalerId;
 
-  Campaign? _campaign;
-
   @override
   void initState() {
     super.initState();
-    _loadCampaign();
-  }
-
-  Future<void> _loadCampaign() async {
-    final campaign = await _campaignService.getCampaign(widget.campaignId);
-
-    if (!mounted) return;
-
-    setState(() {
-      _campaign = campaign;
-    });
   }
 
   Future<void> _acceptScaler(String scalerId) async {
@@ -80,12 +66,10 @@ class _ScCampaignApplicantsScreenState
     );
   }
 
-  void _openCompletionReview(String scalerId) {
-    final businessId = _campaign?.businessId;
-
-    if (businessId == null || businessId.isEmpty) {
+  void _openCompletionReview(String scalerId, String completionId) {
+    if (completionId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Business information unavailable.")),
+        const SnackBar(content: Text("Completion record unavailable.")),
       );
 
       return;
@@ -95,9 +79,9 @@ class _ScCampaignApplicantsScreenState
       context,
       MaterialPageRoute(
         builder: (_) => CompletionReviewScreen(
+          completionId: completionId,
           campaignId: widget.campaignId,
           scalerId: scalerId,
-          businessId: businessId,
         ),
       ),
     );
@@ -107,8 +91,10 @@ class _ScCampaignApplicantsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Campaign Applicants")),
+
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _campaignService.getCampaignApplications(widget.campaignId),
+
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -122,22 +108,29 @@ class _ScCampaignApplicantsScreenState
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
+
             itemCount: applicants.length,
+
             itemBuilder: (context, index) {
               final applicant = applicants[index].data();
 
-              final scalerId = applicant['scalerId']?.toString() ?? '';
+              final scalerId = applicant['scalerId'] ?? '';
 
-              final status = applicant['status']?.toString() ?? 'pending';
+              final status = applicant['status'] ?? 'pending';
+
+              final completionId = applicant['completionId'] ?? '';
 
               final isProcessing = _processingScalerId == scalerId;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
+
                 child: Padding(
                   padding: const EdgeInsets.all(16),
+
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+
                     children: [
                       Row(
                         children: [
@@ -148,6 +141,7 @@ class _ScCampaignApplicantsScreenState
                           const Expanded(
                             child: Text(
                               "Scaler Applicant",
+
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -165,9 +159,12 @@ class _ScCampaignApplicantsScreenState
 
                       SizedBox(
                         width: double.infinity,
+
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.person_search),
+
                           label: const Text("View Scaler Profile"),
+
                           onPressed: scalerId.isEmpty
                               ? null
                               : () => _openScalerProfile(scalerId),
@@ -179,14 +176,17 @@ class _ScCampaignApplicantsScreenState
                       if (status == "pending")
                         SizedBox(
                           width: double.infinity,
+
                           child: ElevatedButton(
                             onPressed: isProcessing
                                 ? null
                                 : () => _acceptScaler(scalerId),
+
                             child: isProcessing
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
+
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                     ),
@@ -198,10 +198,14 @@ class _ScCampaignApplicantsScreenState
                       if (status == "submitted")
                         SizedBox(
                           width: double.infinity,
+
                           child: ElevatedButton.icon(
                             icon: const Icon(Icons.assignment_turned_in),
+
                             label: const Text("Review Completion"),
-                            onPressed: () => _openCompletionReview(scalerId),
+
+                            onPressed: () =>
+                                _openCompletionReview(scalerId, completionId),
                           ),
                         ),
                     ],

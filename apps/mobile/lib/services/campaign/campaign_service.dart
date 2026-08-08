@@ -293,7 +293,17 @@ class CampaignService {
   // ------------------------------------------------------------
   // SCALER APPLICATIONS
   // ------------------------------------------------------------
-
+  Future<void> createApplicationCompletionLink({
+  required String campaignId,
+  required String scalerId,
+  required String completionId,
+}) async {
+  await _applications(campaignId).doc(scalerId).update({
+    'completionId': completionId,
+    'status': 'submitted',
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+}
   CollectionReference<Map<String, dynamic>> _applications(String campaignId) {
     return _campaigns.doc(campaignId).collection('applications');
   }
@@ -344,6 +354,19 @@ class CampaignService {
     });
 
     await batch.commit();
+  }
+  
+  
+    
+  Future<void> updateApplicationStatus({
+    required String campaignId,
+    required String scalerId,
+    required String status,
+  }) async {
+    await _applications(campaignId).doc(scalerId).update({
+      'status': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
   // ------------------------------------------------------------
   // COMPLETION / PROOF
