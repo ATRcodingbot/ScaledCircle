@@ -1,46 +1,87 @@
-import 'dart:io';
-
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
 class CompletionPhotoService {
-  final ImagePicker _imagePicker = ImagePicker();
+  CompletionPhotoService({
+    FirebaseStorage? storage,
+    ImagePicker? picker,
+  })  : _storage = storage ?? FirebaseStorage.instance,
+        _picker = picker ?? ImagePicker();
 
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final FirebaseStorage _storage;
+  final ImagePicker _picker;
 
+  /// Take a photo using device camera
   Future<XFile?> takePhoto() async {
-    return _imagePicker.pickImage(
+    return _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 85,
-      maxWidth: 2000,
     );
   }
 
+  /// Select photo from gallery
+  Future<XFile?> pickPhoto() async {
+    return _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+  }
+
+  /// Upload completion proof photo
+  ///
+  /// Storage:
+  /// completionProofs/
+  ///   campaignId/
+  ///     scalerId/
+  ///       completionId/
+  ///         proofType/
+  ///           photo.jpg
+  ///
   Future<String> uploadCompletionPhoto({
-    required XFile photo,
     required String campaignId,
     required String scalerId,
     required String completionId,
     required String proofType,
     String? campaignLocationId,
+    required XFile photo,
   }) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    if (campaignId.trim().isEmpty) {
+      throw Exception('Campaign ID is required.');
+    }
 
-    final safeLocationId =
-        campaignLocationId == null || campaignLocationId.trim().isEmpty
-        ? 'general'
-        : campaignLocationId.trim();
+    if (scalerId.trim().isEmpty) {
+      throw Exception('Scaler ID is required.');
+    }
+
+    if (completionId.trim().isEmpty) {
+      throw Exception('Completion ID is required.');
+    }
+
+    if (proofType.trim().isEmpty) {
+      throw Exception('Proof type is required.');
+    }
+
+    final timestamp =
+        DateTime.now().millisecondsSinceEpoch.toString();
+
+    final fileName = '${timestamp}_${photo.name}';
+
+    final finalFileName = campaignLocationId != null &&
+            campaignLocationId.trim().isNotEmpty
+        ? '${campaignLocationId}_$fileName'
+        : fileName;
 
     final reference = _storage
         .ref()
-        .child('campaignCompletionProofs')
+        .child('completionProofs')
         .child(campaignId)
         .child(scalerId)
         .child(completionId)
-        .child('${proofType}_${safeLocationId}_$timestamp.jpg');
+        .child(proofType)
+        .child(finalFileName);
 
-    await reference.putFile(
-      File(photo.path),
+    await reference.putData(
+      await photo.readAsBytes(),
       SettableMetadata(
         contentType: 'image/jpeg',
         customMetadata: {
@@ -48,11 +89,48 @@ class CompletionPhotoService {
           'scalerId': scalerId,
           'completionId': completionId,
           'proofType': proofType,
-          'campaignLocationId': safeLocationId,
+          if (campaignLocationId != null)
+            'campaignLocationId': campaignLocationId,
         },
       ),
     );
 
     return reference.getDownloadURL();
+  }
+
+  /// Upload multiple completion photos
+  Future<List<String>> uploadCompletionPhotos({
+    required String campaignId,
+    required String scalerId,
+    required String completionId,
+    required String proofType,
+    required List<XFile> photos,
+  }) async {
+    final urls = <String>[];
+
+    for (final photo in photos) {
+      final url = await uploadCompletionPhoto(
+        campaignId: campaignId,
+        scalerId: scalerId,
+        completionId: completionId,
+        proofType: proofType,
+        photo: photo,
+      );
+
+      urls.add(url);
+    }
+
+    return urls;
+  }
+
+  /// Delete uploaded proof photo
+  Future<void> deleteCompletionPhoto(String photoUrl) async {
+    if (photoUrl.trim().isEmpty) {
+      return;
+    }
+
+    final reference = _storage.refFromURL(photoUrl);
+
+    await reference.delete();
   }
 }

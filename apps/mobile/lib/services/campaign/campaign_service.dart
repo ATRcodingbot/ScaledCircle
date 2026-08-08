@@ -290,20 +290,22 @@ class CampaignService {
 
     return snapshot.docs.map(MarketingAsset.fromDocument).toList();
   }
+
   // ------------------------------------------------------------
   // SCALER APPLICATIONS
   // ------------------------------------------------------------
   Future<void> createApplicationCompletionLink({
-  required String campaignId,
-  required String scalerId,
-  required String completionId,
-}) async {
-  await _applications(campaignId).doc(scalerId).update({
-    'completionId': completionId,
-    'status': 'submitted',
-    'updatedAt': FieldValue.serverTimestamp(),
-  });
-}
+    required String campaignId,
+    required String scalerId,
+    required String completionId,
+  }) async {
+    await _applications(campaignId).doc(scalerId).update({
+      'completionId': completionId,
+      'status': 'submitted',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   CollectionReference<Map<String, dynamic>> _applications(String campaignId) {
     return _campaigns.doc(campaignId).collection('applications');
   }
@@ -355,9 +357,7 @@ class CampaignService {
 
     await batch.commit();
   }
-  
-  
-    
+
   Future<void> updateApplicationStatus({
     required String campaignId,
     required String scalerId,
@@ -537,14 +537,45 @@ class CampaignService {
 
   Future<void> addCompletionProof({
     required String completionId,
-    required CompletionProof proof,
+    CompletionProof? proof,
+    CompletionProofType? proofType,
+    String? campaignLocationId,
+    String? photoUrl,
+    double? latitude,
+    double? longitude,
+    String? note,
   }) async {
     if (completionId.trim().isEmpty) {
       throw Exception('Completion ID is required.');
     }
 
+    CompletionProof finalProof;
+
+    if (proof != null) {
+      finalProof = proof;
+    } else {
+      if (proofType == null) {
+        throw Exception('Proof type is required.');
+      }
+
+      if (photoUrl == null || photoUrl.trim().isEmpty) {
+        throw Exception('Photo URL is required.');
+      }
+
+      finalProof = CompletionProof(
+        id: _campaignCompletions.doc().id,
+        type: proofType,
+        fileUrl: photoUrl,
+        campaignLocationId: campaignLocationId,
+        latitude: latitude,
+        longitude: longitude,
+        note: note,
+        capturedAt: DateTime.now(),
+      );
+    }
+
     await _campaignCompletions.doc(completionId).update({
-      'proofs': FieldValue.arrayUnion([proof.toMap()]),
+      'proofs': FieldValue.arrayUnion([finalProof.toMap()]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
