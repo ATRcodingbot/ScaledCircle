@@ -336,3 +336,110 @@ accepted
 in_progress
 submitted
 completed
+
+
+
+---
+
+# Development Milestone: Campaign Marketplace Foundation
+
+Date: August 2026
+
+## Completed
+
+The first major two-sided marketplace workflow has been completed.
+
+Business workflow:
+
+Business
+→ Create Campaign
+→ Configure Materials
+→ Set Compensation
+→ Define Campaign Zones
+→ Estimate Homes
+→ Publish Campaign
+
+
+Scaler workflow:
+
+Scaler Marketplace
+→ View Available Campaigns
+→ Open Campaign Details
+→ Apply For Campaign
+
+
+## Completed Systems
+
+### Business Platform
+
+✅ Business Dashboard
+
+✅ Wallet system
+
+✅ Subscription requirements
+
+✅ Campaign creation workflow
+
+✅ Campaign types
+
+✅ Zone mapping
+
+✅ Campaign publishing
+
+
+### Scaler Platform
+
+✅ Campaign marketplace
+
+✅ Campaign detail screen
+
+✅ Business profile viewing
+
+✅ Application workflow foundation
+
+
+## Firebase Collections
+
+Current collections:
+
+- users
+- campaigns
+- campaignZones
+- wallets
+- walletTransactions
+- campaignLocations
+- campaignCompletions
+- notifications
+- marketingAssets
+- auditLogs
+
+
+## Current Development Goal
+
+Complete the first marketplace transaction:
+
+Scaler applies
+↓
+Business receives applicant
+↓
+Business approves scaler
+↓
+Campaign assigned
+↓
+Scaler completes work
+↓
+Business verifies completion
+↓
+Payment workflow
+
+
+## Current Git Milestone
+
+Completed:
+
+v0.1.0-campaign-workflow
+
+
+Next:
+
+v0.2.0-scaler-marketplace
