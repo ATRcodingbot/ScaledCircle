@@ -10,6 +10,7 @@ import '../notifications/notifications_screen.dart';
 import 'create/campaign_type_screen.dart';
 import 'subscription_screen.dart';
 import '../../widgets/reputation_card.dart';
+import 'profile/business_profile_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -399,6 +400,29 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 const SizedBox(height: 20),
 
                 _buildWalletSection(),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.business),
+
+                    title: const Text("My Business Profile"),
+
+                    subtitle: const Text(
+                      "Manage your company profile and reputation.",
+                    ),
+
+                    trailing: const Icon(Icons.arrow_forward_ios),
+
+                    onTap: () {
+                      Navigator.push(
+                        context,
+
+                        MaterialPageRoute(
+                          builder: (_) => const BusinessProfileScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
 
                 const SizedBox(height: 18),
 

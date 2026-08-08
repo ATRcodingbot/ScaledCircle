@@ -4,25 +4,25 @@ import 'package:flutter/material.dart';
 import '../../../services/profile_service.dart';
 import '../../../widgets/reputation_card.dart';
 
-class ScalerProfileScreen extends StatelessWidget {
-  final String? scalerId;
+class BusinessProfileScreen extends StatelessWidget {
+  final String? businessId;
 
-  const ScalerProfileScreen({super.key, this.scalerId});
+  const BusinessProfileScreen({super.key, this.businessId});
 
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
 
-    final userId = scalerId ?? currentUser?.uid;
+    final userId = businessId ?? currentUser?.uid;
 
     if (userId == null) {
-      return const Scaffold(body: Center(child: Text("User not found.")));
+      return const Scaffold(body: Center(child: Text("Business not found.")));
     }
 
     final profileService = ProfileService();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Scaler Profile")),
+      appBar: AppBar(title: const Text("Business Profile")),
 
       body: StreamBuilder<Map<String, dynamic>?>(
         stream: profileService.watchProfile(userId),
@@ -30,13 +30,12 @@ class ScalerProfileScreen extends StatelessWidget {
         builder: (context, snapshot) {
           final data = snapshot.data ?? {};
 
-          final firstName = data['firstName']?.toString() ?? "";
+          final businessName = data['businessName']?.toString() ?? "Business";
 
-          final lastName = data['lastName']?.toString() ?? "";
+          final description =
+              data['description']?.toString() ?? "No description added yet.";
 
-          final name = "$firstName $lastName".trim();
-
-          final bio = data['bio']?.toString() ?? "No bio added yet.";
+          final industry = data['industry']?.toString() ?? "Industry not set";
 
           final city = data['city']?.toString() ?? "";
 
@@ -53,14 +52,14 @@ class ScalerProfileScreen extends StatelessWidget {
               const CircleAvatar(
                 radius: 45,
 
-                child: Icon(Icons.person, size: 50),
+                child: Icon(Icons.business, size: 50),
               ),
 
               const SizedBox(height: 20),
 
               Center(
                 child: Text(
-                  name.isEmpty ? "Scaler" : name,
+                  businessName,
 
                   style: const TextStyle(
                     fontSize: 26,
@@ -71,14 +70,14 @@ class ScalerProfileScreen extends StatelessWidget {
 
               const SizedBox(height: 8),
 
-              Center(child: Text("Independent Marketing Professional")),
+              Center(child: Text(industry)),
 
               const SizedBox(height: 25),
 
               ReputationCard(
                 userId: userId,
-                userType: "scaler",
-                title: "Scaler Reputation",
+                userType: "business",
+                title: "Business Reputation",
               ),
 
               const SizedBox(height: 20),
@@ -102,7 +101,7 @@ class ScalerProfileScreen extends StatelessWidget {
 
                       const SizedBox(height: 10),
 
-                      Text(bio),
+                      Text(description),
                     ],
                   ),
                 ),
@@ -114,7 +113,7 @@ class ScalerProfileScreen extends StatelessWidget {
                 child: ListTile(
                   leading: const Icon(Icons.location_on),
 
-                  title: const Text("Service Area"),
+                  title: const Text("Business Location"),
 
                   subtitle: Text(location),
                 ),

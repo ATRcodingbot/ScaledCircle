@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/campaign_model.dart';
 import '../../../services/campaign_service.dart';
+import '../../business/profile/business_profile_screen.dart';
 import '../../reviews/create_review_screen.dart';
 
 class ScalerCampaignDetailsScreen extends StatefulWidget {
@@ -20,6 +21,26 @@ class _ScalerCampaignDetailsScreenState
   final CampaignService _campaignService = CampaignService();
 
   bool _applying = false;
+
+  void _openBusinessProfile() {
+    final businessId = widget.campaign.businessId;
+
+    if (businessId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Business information unavailable.")),
+      );
+
+      return;
+    }
+
+    Navigator.push(
+      context,
+
+      MaterialPageRoute(
+        builder: (_) => BusinessProfileScreen(businessId: businessId),
+      ),
+    );
+  }
 
   Future<void> _applyForCampaign() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -83,6 +104,7 @@ class _ScalerCampaignDetailsScreenState
 
     await Navigator.push(
       context,
+
       MaterialPageRoute(
         builder: (_) => CreateReviewScreen(
           campaignId: widget.campaign.id,
@@ -119,6 +141,20 @@ class _ScalerCampaignDetailsScreenState
           const SizedBox(height: 10),
 
           Text(campaign.description),
+
+          const SizedBox(height: 20),
+
+          SizedBox(
+            height: 55,
+
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.business),
+
+              label: const Text("View Business Profile"),
+
+              onPressed: _openBusinessProfile,
+            ),
+          ),
 
           const SizedBox(height: 25),
 
@@ -177,6 +213,7 @@ class _ScalerCampaignDetailsScreenState
                     ? const SizedBox(
                         height: 22,
                         width: 22,
+
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Text("Apply For Campaign"),

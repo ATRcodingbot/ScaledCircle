@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../services/campaign_service.dart';
+import '../../scaler/profile/scaler_profile_screen.dart';
 
 class ScCampaignApplicantsScreen extends StatefulWidget {
   final String campaignId;
@@ -49,12 +50,24 @@ class _ScCampaignApplicantsScreenState
     }
   }
 
+  void _openScalerProfile(String scalerId) {
+    Navigator.push(
+      context,
+
+      MaterialPageRoute(
+        builder: (_) => ScalerProfileScreen(scalerId: scalerId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Campaign Applicants")),
+
       body: StreamBuilder(
         stream: _campaignService.getCampaignApplications(widget.campaignId),
+
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -68,7 +81,9 @@ class _ScCampaignApplicantsScreenState
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
+
             itemCount: applicants.length,
+
             itemBuilder: (context, index) {
               final applicant = applicants[index].data();
 
@@ -88,12 +103,23 @@ class _ScCampaignApplicantsScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
 
                     children: [
-                      Text(
-                        "Scaler: $scalerId",
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          const CircleAvatar(child: Icon(Icons.person)),
+
+                          const SizedBox(width: 12),
+
+                          Expanded(
+                            child: Text(
+                              "Scaler Applicant",
+
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 8),
@@ -101,6 +127,22 @@ class _ScCampaignApplicantsScreenState
                       Text("Status: $status"),
 
                       const SizedBox(height: 16),
+
+                      SizedBox(
+                        width: double.infinity,
+
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.person_search),
+
+                          label: const Text("View Scaler Profile"),
+
+                          onPressed: scalerId.isEmpty
+                              ? null
+                              : () => _openScalerProfile(scalerId),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
 
                       if (status == "pending")
                         SizedBox(
@@ -115,6 +157,7 @@ class _ScCampaignApplicantsScreenState
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
+
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                     ),
