@@ -290,7 +290,61 @@ class CampaignService {
 
     return snapshot.docs.map(MarketingAsset.fromDocument).toList();
   }
+  // ------------------------------------------------------------
+  // SCALER APPLICATIONS
+  // ------------------------------------------------------------
 
+  CollectionReference<Map<String, dynamic>> _applications(String campaignId) {
+    return _campaigns.doc(campaignId).collection('applications');
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> getCampaignApplications(
+    String campaignId,
+  ) {
+    return _applications(
+      campaignId,
+    ).orderBy('createdAt', descending: true).snapshots();
+  }
+
+  Future<void> applyToCampaign({
+    required String campaignId,
+    required String scalerId,
+  }) async {
+    await _applications(campaignId).doc(scalerId).set({
+      'scalerId': scalerId,
+      'campaignId': campaignId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> acceptScalerApplication({
+    required String campaignId,
+    required String scalerId,
+  }) async {
+    final batch = _firestore.batch();
+
+    final applicationRef = _applications(campaignId).doc(scalerId);
+
+    final assignedRef = _campaigns
+        .doc(campaignId)
+        .collection('assignedScalers')
+        .doc(scalerId);
+
+    batch.update(applicationRef, {
+      'status': 'accepted',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    batch.set(assignedRef, {
+      'scalerId': scalerId,
+      'status': 'assigned',
+      'assignedAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+  }
   // ------------------------------------------------------------
   // COMPLETION / PROOF
   // ------------------------------------------------------------

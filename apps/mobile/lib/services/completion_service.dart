@@ -1,99 +1,187 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../models/job_completion.dart';
 
 class CompletionService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  JobCompletion calculateCompletion({
-    required String id,
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
+
+
+
+  Future<void> submitCompletion({
 
     required String campaignId,
 
-    required String zoneId,
+    required String scalerId,
+
+    required List<String> photos,
+
+    required String notes,
+
+  }) async {
+
+
+    await _firestore
+        .collection('campaign_completions')
+        .doc(campaignId)
+        .set({
+
+      'campaignId': campaignId,
+
+      'scalerId': scalerId,
+
+      'photos': photos,
+
+      'notes': notes,
+
+      'status': 'submitted',
+
+      'createdAt':
+          FieldValue.serverTimestamp(),
+
+    });
+
+
+
+    await _firestore
+        .collection('campaigns')
+        .doc(campaignId)
+        .update({
+
+      'status': 'submitted',
+
+    });
+
+  }
+
+
+
+
+
+  Future<void> approveCompletion({
+
+    required String campaignId,
 
     required String scalerId,
 
-    required String scalerEmail,
-
     required String businessId,
 
-    required int assignedHomes,
+  }) async {
 
-    required int completedHomes,
 
-    required double basePay,
 
-    required double bonus,
+    final batch =
+        _firestore.batch();
 
-    String? routeId,
-  }) {
-    double percentage = 0;
 
-    if (assignedHomes > 0) {
-      percentage = (completedHomes / assignedHomes) * 100;
-    }
 
-    double earnedPay = 0;
+    final campaignRef =
+        _firestore
+            .collection('campaigns')
+            .doc(campaignId);
 
-    if (percentage >= 30 && percentage < 100) {
-      earnedPay = basePay * (percentage / 100);
-    }
 
-    if (percentage >= 100) {
-      earnedPay = basePay;
-    }
 
-    bool fullCompletion = percentage >= 100;
+    final completionRef =
+        _firestore
+            .collection('campaign_completions')
+            .doc(campaignId);
 
-    double earnedBonus = 0;
 
-    if (fullCompletion) {
-      earnedBonus = bonus;
-    }
 
-    return JobCompletion(
-      id: id,
+    final scalerRef =
+        _firestore
+            .collection('users')
+            .doc(scalerId);
 
-      campaignId: campaignId,
 
-      zoneId: zoneId,
 
-      scalerId: scalerId,
+    final businessRef =
+        _firestore
+            .collection('users')
+            .doc(businessId);
 
-      scalerEmail: scalerEmail,
 
-      businessId: businessId,
 
-      assignedHomes: assignedHomes,
+    batch.update(
+      campaignRef,
+      {
 
-      completedHomes: completedHomes,
+        'status': 'completed',
 
-      completionPercentage: percentage,
+        'completedAt':
+            FieldValue.serverTimestamp(),
 
-      basePay: basePay,
-
-      earnedPay: earnedPay,
-
-      bonus: earnedBonus,
-
-      fullCompletion: fullCompletion,
-
-      status:
-        percentage < 30
-          ? 'needs_redo'
-          : percentage >= 100
-             ? 'completed'
-             : 'pending_payment',
-
-      routeId: routeId,
+      },
     );
+
+
+
+    batch.update(
+      completionRef,
+      {
+
+        'status': 'approved',
+
+        'approvedAt':
+            FieldValue.serverTimestamp(),
+
+        'approvedBy':
+            businessId,
+
+      },
+    );
+
+
+
+    batch.update(
+      scalerRef,
+      {
+
+        'completedCampaigns':
+            FieldValue.increment(1),
+
+        'successfulJobs':
+            FieldValue.increment(1),
+
+      },
+    );
+
+
+
+    batch.update(
+      businessRef,
+      {
+
+        'completedCampaigns':
+            FieldValue.increment(1),
+
+        'successfulCampaigns':
+            FieldValue.increment(1),
+
+      },
+    );
+
+
+
+    await batch.commit();
+
   }
 
-  Future<void> saveCompletion(JobCompletion completion) async {
-    await _firestore
-        .collection('jobCompletions')
-        .doc(completion.id)
-        .set(completion.toFirestore());
+
+
+
+
+  Stream<DocumentSnapshot<Map<String,dynamic>>>
+      watchCompletion(
+    String campaignId,
+  ) {
+
+    return _firestore
+        .collection('campaign_completions')
+        .doc(campaignId)
+        .snapshots();
+
   }
+
 }

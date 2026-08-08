@@ -37,6 +37,24 @@ class CampaignService {
         });
   }
 
+Future<CampaignModel?> getCampaignById(
+  String campaignId,
+) async {
+
+  final snapshot = await _firestore
+      .collection("campaigns")
+      .doc(campaignId)
+      .get();
+
+
+  if (!snapshot.exists) {
+    return null;
+  }
+
+
+  return CampaignModel.fromFirestore(snapshot);
+
+}
   Future<void> applyToCampaign({
     required String campaignId,
     required String scalerId,
