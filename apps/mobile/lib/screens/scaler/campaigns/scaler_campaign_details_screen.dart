@@ -45,7 +45,10 @@ class _ScalerCampaignDetailsScreenState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => SubmitCompletionScreen(campaignId: widget.campaign.id),
+        builder: (_) => SubmitCompletionScreen(
+          campaignId: widget.campaign.id,
+          businessId: widget.campaign.businessId,
+        ),
       ),
     );
   }

@@ -2,25 +2,40 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/campaign/campaign_completion.dart';
-import '../../../services/campaign/campaign_service.dart';
+import '../../../services/campaign/completion_submission_service.dart';
 
 class SubmitCompletionScreen extends StatefulWidget {
   final String campaignId;
+  final String businessId;
 
-  const SubmitCompletionScreen({super.key, required this.campaignId});
+  const SubmitCompletionScreen({
+    super.key,
+    required this.campaignId,
+    required this.businessId,
+  });
 
   @override
   State<SubmitCompletionScreen> createState() => _SubmitCompletionScreenState();
 }
 
 class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
-  final CampaignService _campaignService = CampaignService();
+  final CompletionSubmissionService _completionService =
+      CompletionSubmissionService();
 
   final TextEditingController _notesController = TextEditingController();
 
   bool _submitting = false;
 
+  String? _completionId;
+
   final List<CompletionProof> _proofs = [];
+
+  @override
+  void initState() {
+    super.initState();
+
+    _createDraftCompletion();
+  }
 
   @override
   void dispose() {
@@ -28,13 +43,31 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
     super.dispose();
   }
 
-  Future<void> _submitCompletion() async {
+  Future<void> _createDraftCompletion() async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("You must be logged in.")));
+      return;
+    }
+
+    final completionId = await _completionService.createDraftCompletion(
+      campaignId: widget.campaignId,
+      businessId: widget.businessId,
+      scalerId: user.uid,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _completionId = completionId;
+    });
+  }
+
+  Future<void> _submitCompletion() async {
+    if (_completionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Completion is still loading.")),
+      );
 
       return;
     }
@@ -44,27 +77,9 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
     });
 
     try {
-      final completion = CampaignCompletion(
-        id: '',
-        campaignId: widget.campaignId,
-        scalerId: user.uid,
-        businessId: '',
-        type: CampaignCompletionType.campaign,
-        status: CampaignCompletionStatus.submitted,
-        proofs: _proofs,
+      await _completionService.submitCompletion(
+        completionId: _completionId!,
         scalerNotes: _notesController.text.trim(),
-        createdAt: DateTime.now(),
-        submittedAt: DateTime.now(),
-      );
-
-      final completionId = await _campaignService.createCompletion(
-        completion: completion,
-      );
-
-      await _campaignService.createApplicationCompletionLink(
-        campaignId: widget.campaignId,
-        scalerId: user.uid,
-        completionId: completionId,
       );
 
       if (!mounted) return;
@@ -89,20 +104,27 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
     }
   }
 
-  void _addProofPlaceholder() {
+  Future<void> _addProofPlaceholder() async {
+    final proof = CompletionProof(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+
+      type: CompletionProofType.checkpointPhoto,
+
+      fileUrl: "placeholder_photo",
+
+      capturedAt: DateTime.now(),
+    );
+
     setState(() {
-      _proofs.add(
-        CompletionProof(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-
-          type: CompletionProofType.checkpointPhoto,
-
-          fileUrl: "placeholder_photo",
-
-          capturedAt: DateTime.now(),
-        ),
-      );
+      _proofs.add(proof);
     });
+
+    if (_completionId != null) {
+      await _completionService.addProof(
+        completionId: _completionId!,
+        proof: proof,
+      );
+    }
   }
 
   @override
@@ -116,13 +138,16 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
         children: [
           const Text(
             "Completion Proof",
+
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 10),
 
-          const Text(
-            "Upload proof and submit the campaign for business review.",
+          Text(
+            _completionId == null
+                ? "Creating completion record..."
+                : "Completion ready for submission.",
           ),
 
           const SizedBox(height: 25),

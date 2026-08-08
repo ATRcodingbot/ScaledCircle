@@ -792,11 +792,30 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
                   onPressed: !_tracking
                       ? () {
+                          final campaignData =
+                              widget.campaign.data() as Map<String, dynamic>;
+
+                          final businessId =
+                              campaignData['businessId']?.toString() ?? '';
+
+                          if (businessId.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Business information unavailable.',
+                                ),
+                              ),
+                            );
+
+                            return;
+                          }
+
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => SubmitCompletionScreen(
                                 campaignId: widget.campaign.id,
+                                businessId: businessId,
                               ),
                             ),
                           );
