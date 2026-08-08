@@ -5,6 +5,7 @@ import '../../../models/campaign_model.dart';
 import '../../../services/campaign_service.dart';
 import '../../business/profile/business_profile_screen.dart';
 import '../../reviews/create_review_screen.dart';
+import '../completion/submit_completion_screen.dart';
 
 class ScalerCampaignDetailsScreen extends StatefulWidget {
   final CampaignModel campaign;
@@ -29,15 +30,22 @@ class _ScalerCampaignDetailsScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Business information unavailable.")),
       );
-
       return;
     }
 
     Navigator.push(
       context,
-
       MaterialPageRoute(
         builder: (_) => BusinessProfileScreen(businessId: businessId),
+      ),
+    );
+  }
+
+  void _openSubmitCompletion() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SubmitCompletionScreen(campaignId: widget.campaign.id),
       ),
     );
   }
@@ -200,6 +208,18 @@ class _ScalerCampaignDetailsScreenState
                 label: const Text("Review Business"),
 
                 onPressed: _openBusinessReview,
+              ),
+            )
+          else if (campaign.status == "assigned")
+            SizedBox(
+              height: 55,
+
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.assignment_turned_in),
+
+                label: const Text("Submit Completion"),
+
+                onPressed: _openSubmitCompletion,
               ),
             )
           else
