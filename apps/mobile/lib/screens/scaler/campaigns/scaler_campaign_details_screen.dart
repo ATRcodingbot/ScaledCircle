@@ -76,53 +76,61 @@ class _ScalerCampaignDetailsScreenState
   // ============================================================
 
   Future<void> _applyForCampaign() async {
-    final user = FirebaseAuth.instance.currentUser;
+  final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("You must be logged in."),
+  if (user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("You must be logged in."),
+      ),
+    );
+
+    return;
+  }
+
+  setState(() {
+    _applying = true;
+  });
+
+  try {
+    await _campaignService.applyToCampaign(
+      campaignId: widget.campaign.id,
+      scalerId: user.uid,
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Application submitted! Waiting for business approval.",
         ),
-      );
+      ),
+    );
 
-      return;
-    }
-
+    // Stay on page instead of leaving
     setState(() {
-      _applying = true;
+      _applying = false;
     });
 
-    try {
-      await _campaignService.applyToCampaign(
-        campaignId: widget.campaign.id,
-        scalerId: user.uid,
-      );
+  } catch (e) {
+    if (!mounted) return;
 
-      if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(e.toString()),
+      ),
+    );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Application submitted!"),
-        ),
-      );
-
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _applying = false;
-        });
-      }
+  } finally {
+    if (mounted) {
+      setState(() {
+        _applying = false;
+      });
     }
   }
+}
+
   List<LatLng> _parseServiceArea(dynamic data) {
 
   if (data == null) {
