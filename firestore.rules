@@ -1,0 +1,411 @@
+rules_version = '2';
+
+service cloud.firestore {
+
+  match /databases/{database}/documents {
+
+
+    // ============================================================
+    // USERS
+    // ============================================================
+
+    match /users/{userId} {
+
+      allow read:
+        if isSignedIn()
+        && request.auth.uid == userId;
+
+
+      allow create:
+        if isSignedIn()
+        && request.auth.uid == userId;
+
+
+      allow update:
+        if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role;
+
+
+      allow write:
+        if isAdmin();
+
+    }
+
+
+
+    // ============================================================
+    // CAMPAIGNS
+    // ============================================================
+
+    match /campaigns/{campaignId} {
+
+      allow read:
+        if isSignedIn();
+
+
+      allow create:
+        if isSignedIn()
+        && request.resource.data.businessId == request.auth.uid;
+
+
+      allow update:
+        if isSignedIn()
+        && resource.data.businessId == request.auth.uid;
+
+
+      allow delete:
+        if false;
+
+
+
+      // ----------------------------------------------------------
+      // APPLICATIONS
+      // ----------------------------------------------------------
+
+      match /applications/{scalerId} {
+
+
+        allow create:
+          if isSignedIn()
+          && request.auth.uid == scalerId;
+
+
+        allow read:
+          if isSignedIn()
+          &&
+          (
+            request.auth.uid == scalerId
+            ||
+            get(
+              /databases/$(database)/documents/campaigns/$(campaignId)
+            ).data.businessId == request.auth.uid
+          );
+
+
+        allow update:
+          if isSignedIn()
+          &&
+          get(
+            /databases/$(database)/documents/campaigns/$(campaignId)
+          ).data.businessId == request.auth.uid;
+
+      }
+
+
+
+      // ----------------------------------------------------------
+      // ASSIGNED SCALERS
+      // ----------------------------------------------------------
+
+      match /assignedScalers/{scalerId} {
+
+
+        allow read:
+          if isSignedIn()
+          &&
+          (
+            request.auth.uid == scalerId
+            ||
+            get(
+              /databases/$(database)/documents/campaigns/$(campaignId)
+            ).data.businessId == request.auth.uid
+          );
+
+
+        allow write:
+          if isAdmin();
+
+      }
+
+    }
+
+
+
+
+    // ============================================================
+    // CAMPAIGN LOCATIONS
+    // ============================================================
+
+    match /campaignLocations/{locationId} {
+
+
+      allow read:
+        if isSignedIn();
+
+
+      allow create:
+        if isSignedIn();
+
+
+      allow update:
+        if isSignedIn();
+
+
+      allow delete:
+        if isAdmin();
+
+    }
+
+
+
+
+    // ============================================================
+    // COMPLETIONS
+    // ============================================================
+
+    match /campaignCompletions/{completionId} {
+
+
+      allow create:
+        if isSignedIn()
+        &&
+        request.resource.data.scalerId == request.auth.uid;
+
+
+      allow read:
+        if isSignedIn()
+        &&
+        (
+          resource.data.scalerId == request.auth.uid
+          ||
+          resource.data.businessId == request.auth.uid
+        );
+
+
+      allow update:
+        if isSignedIn()
+        &&
+        (
+          resource.data.scalerId == request.auth.uid
+          ||
+          resource.data.businessId == request.auth.uid
+        );
+
+
+      allow delete:
+        if isAdmin();
+
+    }
+
+
+
+
+    // ============================================================
+    // WALLETS
+    // ============================================================
+
+    match /wallets/{walletId} {
+
+
+      allow read:
+        if isSignedIn()
+        &&
+        request.auth.uid == walletId;
+
+
+      allow create:
+        if isSignedIn()
+        &&
+        request.auth.uid == walletId;
+
+
+      allow update:
+        if isSignedIn()
+        &&
+        request.auth.uid == walletId;
+
+
+      allow delete:
+        if isAdmin();
+
+
+
+      // ----------------------------------------------------------
+      // WALLET TRANSACTIONS
+      // ----------------------------------------------------------
+
+      match /transactions/{transactionId} {
+
+
+        allow read:
+          if isSignedIn()
+          &&
+          request.auth.uid == walletId;
+
+
+        allow create:
+          if isSignedIn()
+          &&
+          request.auth.uid == walletId;
+
+
+        allow update, delete:
+          if false;
+
+      }
+
+
+
+      // ----------------------------------------------------------
+      // PROMOTIONAL CREDITS
+      // ----------------------------------------------------------
+
+      match /promoRedemptions/{promoId} {
+
+
+        allow read:
+          if isSignedIn()
+          &&
+          request.auth.uid == walletId;
+
+
+        allow create:
+          if isAdmin();
+
+
+        allow update, delete:
+          if false;
+
+      }
+
+    }
+
+
+
+
+    // ============================================================
+    // GLOBAL WALLET TRANSACTIONS
+    // ============================================================
+
+    match /walletTransactions/{transactionId} {
+
+
+      allow read:
+        if isSignedIn()
+        &&
+        (
+          resource.data.businessId == request.auth.uid
+          ||
+          resource.data.scalerId == request.auth.uid
+        );
+
+
+      allow create:
+        if isSignedIn();
+
+
+      allow update, delete:
+        if false;
+
+    }
+
+
+
+
+    // ============================================================
+    // MARKETING ASSETS
+    // ============================================================
+
+    match /marketingAssets/{assetId} {
+
+
+      allow read:
+        if isSignedIn();
+
+
+      allow create, update:
+        if isSignedIn();
+
+
+      allow delete:
+        if isAdmin();
+
+    }
+
+
+
+
+    // ============================================================
+    // NOTIFICATIONS
+    // ============================================================
+
+    match /notifications/{notificationId} {
+
+
+      allow read:
+        if isSignedIn()
+        &&
+        resource.data.userId == request.auth.uid;
+
+
+      allow create:
+        if isSignedIn();
+
+
+      allow update:
+        if isSignedIn()
+        &&
+        resource.data.userId == request.auth.uid;
+
+
+      allow delete:
+        if false;
+
+    }
+
+
+
+
+    // ============================================================
+    // AUDIT LOGS
+    // ============================================================
+
+    match /auditLogs/{logId} {
+
+
+      allow read:
+        if isAdmin();
+
+
+      allow create:
+        if isSignedIn();
+
+
+      allow update, delete:
+        if false;
+
+    }
+
+
+
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    function isSignedIn() {
+
+      return request.auth != null;
+
+    }
+
+
+    function isAdmin() {
+
+      return isSignedIn()
+      &&
+      exists(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      )
+      &&
+      get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      ).data.role == "admin";
+
+    }
+
+
+  }
+
+}

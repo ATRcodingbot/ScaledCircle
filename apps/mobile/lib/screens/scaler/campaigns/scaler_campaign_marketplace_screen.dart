@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/campaign_model.dart';
 import '../../../services/campaign_service.dart';
+import 'scaler_campaign_details_screen.dart';
 
 class ScalerCampaignMarketplaceScreen extends StatelessWidget {
   ScalerCampaignMarketplaceScreen({super.key});
@@ -84,12 +85,18 @@ class ScalerCampaignMarketplaceScreen extends StatelessWidget {
                       const SizedBox(height: 12),
 
                       ElevatedButton(
-                        onPressed: () {
-                          // Job details screen next
-                        },
-
-                        child: const Text("View Job"),
-                      ),
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ScalerCampaignDetailsScreen(
+          campaign: campaign,
+        ),
+      ),
+    );
+  },
+  child: const Text("View Job"),
+),
                     ],
                   ),
                 ),
