@@ -15,6 +15,13 @@ class WeatherCoverageSettingsScreen extends StatefulWidget {
 
 class _WeatherCoverageSettingsScreenState
     extends State<WeatherCoverageSettingsScreen> {
+  static const _centralMarylandCountyIds = <String>{
+    'howard',
+    'montgomery',
+    'baltimore',
+    'anne_arundel',
+  };
+
   final MarylandWeatherService _service = MarylandWeatherService();
   Set<String> _selectedCountyIds = <String>{};
   bool _emailAlertsEnabled = true;
@@ -86,12 +93,13 @@ class _WeatherCoverageSettingsScreenState
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 48),
               children: [
                 DashboardHero(
-                  eyebrow: 'Weather alert coverage',
-                  title: 'Choose where your business works.',
+                  eyebrow: 'Your Maryland service area',
+                  title: 'Make weather intelligence personal.',
                   description:
-                      'Scaled Circle checks official National Weather Service '
-                      'alerts in the counties you select. Scale subscribers and '
-                      'approved test administrators receive matching in-app alerts.',
+                      'Choose every Maryland county or county-equivalent your '
+                      'business serves. Scaled Circle checks official National '
+                      'Weather Service alerts and only sends matches for your '
+                      'saved coverage.',
                   primaryActionLabel: 'Save Alert Coverage',
                   primaryActionIcon: Icons.save_outlined,
                   onPrimaryAction: () {
@@ -109,6 +117,61 @@ class _WeatherCoverageSettingsScreenState
                   ],
                 ),
                 const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '${_selectedCountyIds.length} of '
+                          '${MarylandWeatherService.counties.length} Maryland '
+                          'areas selected',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => setState(() {
+                                _selectedCountyIds =
+                                    MarylandWeatherService.allCountyIds;
+                              }),
+                              icon: const Icon(Icons.public_outlined),
+                              label: const Text('All Maryland'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => setState(() {
+                                _selectedCountyIds = {
+                                  ..._centralMarylandCountyIds,
+                                };
+                              }),
+                              icon: const Icon(Icons.home_work_outlined),
+                              label: const Text('Central Maryland'),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(
+                                () => _selectedCountyIds = <String>{},
+                              ),
+                              child: const Text('Clear'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'This selection belongs only to your business account. '
+                          'Changing it does not affect another Maryland business.',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Card(
                   child: Column(
                     children: MarylandWeatherService.counties.map((county) {

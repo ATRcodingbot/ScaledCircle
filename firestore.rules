@@ -97,12 +97,32 @@ service cloud.firestore {
           !request.resource.data.keys().hasAll(['weatherCoverageCountyIds'])
           || (
             request.resource.data.weatherCoverageCountyIds is list
-            && request.resource.data.weatherCoverageCountyIds.size() <= 4
+            && request.resource.data.weatherCoverageCountyIds.size() <= 24
             && request.resource.data.weatherCoverageCountyIds.hasOnly([
-              'howard',
-              'baltimore',
+              'allegany',
               'anne_arundel',
-              'montgomery'
+              'baltimore',
+              'baltimore_city',
+              'calvert',
+              'caroline',
+              'carroll',
+              'cecil',
+              'charles',
+              'dorchester',
+              'frederick',
+              'garrett',
+              'harford',
+              'howard',
+              'kent',
+              'montgomery',
+              'prince_georges',
+              'queen_annes',
+              'saint_marys',
+              'somerset',
+              'talbot',
+              'washington',
+              'wicomico',
+              'worcester'
             ])
           )
         )

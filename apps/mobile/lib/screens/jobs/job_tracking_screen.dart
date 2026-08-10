@@ -25,7 +25,8 @@ class JobTrackingScreen extends StatefulWidget {
   State<JobTrackingScreen> createState() => _JobTrackingScreenState();
 }
 
-class _JobTrackingScreenState extends State<JobTrackingScreen> {
+class _JobTrackingScreenState extends State<JobTrackingScreen>
+    with WidgetsBindingObserver {
   static const bool _allowGpsSimulation = !kReleaseMode;
 
   final MapController _mapController = MapController();
@@ -58,9 +59,17 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
   int _pointsSinceLastSave = 0;
 
+  Future<void> _routeSaveChain = Future<void>.value();
+
+  double? _lastAccuracyMeters;
+
+  DateTime? _lastSavedAt;
+
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
 
     final zoneData = widget.zone.data() as Map<String, dynamic>;
 
@@ -83,11 +92,24 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
   @override
   void dispose() {
+    if (_tracking) {
+      _queueRouteSave();
+    }
+
+    WidgetsBinding.instance.removeObserver(this);
+
     _positionSubscription?.cancel();
 
     _mapController.dispose();
 
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_tracking && state != AppLifecycleState.resumed) {
+      _queueRouteSave();
+    }
   }
 
   Future<void> _initialize() async {
@@ -149,7 +171,23 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
       final simulated = routeData?['simulated'] == true;
 
-      final tracking = routeData?['tracking'] == true;
+      var tracking = routeData?['tracking'] == true;
+
+      if (tracking) {
+        // Mobile browsers can terminate a page without letting the GPS stream
+        // finish. Preserve the recorded points and make the route resumable
+        // instead of leaving the assignment permanently stuck "tracking".
+        await _routeReference.set({
+          'tracking': false,
+          'interruptedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await widget.zone.reference.update({
+          'gpsTracking': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        tracking = false;
+      }
 
       if (!mounted) {
         return;
@@ -397,6 +435,8 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
       final point = LatLng(position.latitude, position.longitude);
 
+      _lastAccuracyMeters = position.accuracy;
+
       _addRoutePoint(point);
 
       await _routeReference.set({
@@ -414,7 +454,10 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
         'simulated': false,
 
-        'startedAt': FieldValue.serverTimestamp(),
+        if (_routePoints.length <= 1)
+          'startedAt': FieldValue.serverTimestamp()
+        else
+          'resumedAt': FieldValue.serverTimestamp(),
 
         'updatedAt': FieldValue.serverTimestamp(),
 
@@ -466,6 +509,8 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
               setState(() {
                 _currentPosition = position;
+
+                _lastAccuracyMeters = position.accuracy;
               });
 
               _addRoutePoint(point);
@@ -523,29 +568,49 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
     _pointsSinceLastSave++;
 
-    if (_pointsSinceLastSave >= 5) {
+    if (_pointsSinceLastSave >= 3) {
       _pointsSinceLastSave = 0;
 
-      _saveRouteProgress();
+      _queueRouteSave();
     }
   }
 
-  Future<void> _saveRouteProgress() async {
-    try {
-      await _routeReference.set({
-        'points': _serializePoints(),
+  void _queueRouteSave() {
+    final points = _serializePoints();
+    final tracking = _tracking;
+    final simulated = _routeIsSimulated;
+    final accuracy = _lastAccuracyMeters;
 
-        'pointCount': _routePoints.length,
+    _routeSaveChain = _routeSaveChain.then((_) async {
+      try {
+        await _routeReference.set({
+          'points': points,
+          'pointCount': points.length,
+          'tracking': tracking,
+          'simulated': simulated,
+          'lastAccuracyMeters': ?accuracy,
+          'lastPositionAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        if (mounted) {
+          setState(() => _lastSavedAt = DateTime.now());
+        }
+      } catch (error) {
+        debugPrint('Route save failed: $error');
+        if (mounted) {
+          setState(() {
+            _errorMessage =
+                'GPS is still recording, but the latest autosave failed. '
+                'Keep this page open and tap Stop & Save when connected.';
+          });
+        }
+      }
+    });
+  }
 
-        'tracking': _tracking,
-
-        'simulated': _routeIsSimulated,
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('Route save failed: $e');
-    }
+  Future<void> _flushRouteSaves() async {
+    _queueRouteSave();
+    await _routeSaveChain;
   }
 
   List<Map<String, dynamic>> _serializePoints() {
@@ -569,6 +634,8 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
       await _positionSubscription?.cancel();
 
       _positionSubscription = null;
+
+      await _flushRouteSaves();
 
       await _routeReference.set({
         'tracking': false,
@@ -881,6 +948,21 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
                 MarkerLayer(
                   markers: [
+                    if (_currentPosition != null &&
+                        _simulatedPosition == null)
+                      Marker(
+                        point: LatLng(
+                          _currentPosition!.latitude,
+                          _currentPosition!.longitude,
+                        ),
+                        width: 48,
+                        height: 48,
+                        child: const Icon(
+                          Icons.my_location,
+                          size: 38,
+                          color: Colors.blue,
+                        ),
+                      ),
                     if (_simulatedPosition != null)
                       Marker(
                         point: _simulatedPosition!,
@@ -911,6 +993,31 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
                   const SizedBox(height: 12),
                 ],
+
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      _tracking ? Icons.gps_fixed : Icons.route_outlined,
+                      color: _tracking ? Colors.green : null,
+                    ),
+                    title: Text(
+                      _tracking
+                          ? 'Live device GPS is recording'
+                          : _routePoints.isEmpty
+                          ? 'Device GPS is ready'
+                          : 'GPS route saved and ready',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      '${_routePoints.length} recorded points'
+                      '${_lastAccuracyMeters == null ? '' : ' • ±${_lastAccuracyMeters!.round()} m accuracy'}'
+                      '${_lastSavedAt == null ? '' : ' • autosaved'}\n'
+                      '${kIsWeb ? 'Keep this page open and your screen awake while working. Mobile browsers may pause GPS when the screen locks or the tab is backgrounded.' : 'Your route autosaves as you move.'}',
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
 
                 ElevatedButton(
                   onPressed: _tracking ? null : _startTracking,

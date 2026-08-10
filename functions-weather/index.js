@@ -8,10 +8,30 @@ initializeApp();
 const db = getFirestore();
 
 const COUNTIES = [
-  {id: "howard", name: "Howard County", latitude: 39.25, longitude: -76.93},
-  {id: "baltimore", name: "Baltimore County", latitude: 39.46, longitude: -76.64},
-  {id: "anne_arundel", name: "Anne Arundel County", latitude: 39.00, longitude: -76.58},
-  {id: "montgomery", name: "Montgomery County", latitude: 39.15, longitude: -77.20},
+  {id: "allegany", name: "Allegany County", latitude: 39.6215762, longitude: -78.6976934},
+  {id: "anne_arundel", name: "Anne Arundel County", latitude: 38.9939586, longitude: -76.5675565},
+  {id: "baltimore", name: "Baltimore County", latitude: 39.4429054, longitude: -76.6160576},
+  {id: "baltimore_city", name: "Baltimore City", latitude: 39.3009639, longitude: -76.6106288},
+  {id: "calvert", name: "Calvert County", latitude: 38.5345651, longitude: -76.5303934},
+  {id: "caroline", name: "Caroline County", latitude: 38.8715369, longitude: -75.8316417},
+  {id: "carroll", name: "Carroll County", latitude: 39.5627551, longitude: -77.0224938},
+  {id: "cecil", name: "Cecil County", latitude: 39.5623167, longitude: -75.9480092},
+  {id: "charles", name: "Charles County", latitude: 38.4736097, longitude: -77.0134736},
+  {id: "dorchester", name: "Dorchester County", latitude: 38.4224051, longitude: -76.0834840},
+  {id: "frederick", name: "Frederick County", latitude: 39.4720806, longitude: -77.3980370},
+  {id: "garrett", name: "Garrett County", latitude: 39.5287500, longitude: -79.2732056},
+  {id: "harford", name: "Harford County", latitude: 39.5363334, longitude: -76.2987057},
+  {id: "howard", name: "Howard County", latitude: 39.2507098, longitude: -76.9310884},
+  {id: "kent", name: "Kent County", latitude: 39.2355851, longitude: -76.0960831},
+  {id: "montgomery", name: "Montgomery County", latitude: 39.1363497, longitude: -77.2041501},
+  {id: "prince_georges", name: "Prince George's County", latitude: 38.8293082, longitude: -76.8472812},
+  {id: "queen_annes", name: "Queen Anne's County", latitude: 39.0375919, longitude: -76.0854694},
+  {id: "saint_marys", name: "St. Mary's County", latitude: 38.2157512, longitude: -76.5286105},
+  {id: "somerset", name: "Somerset County", latitude: 38.0800671, longitude: -75.8536775},
+  {id: "talbot", name: "Talbot County", latitude: 38.7490936, longitude: -76.1787218},
+  {id: "washington", name: "Washington County", latitude: 39.6037098, longitude: -77.8137988},
+  {id: "wicomico", name: "Wicomico County", latitude: 38.3694692, longitude: -75.6315726},
+  {id: "worcester", name: "Worcester County", latitude: 38.2164033, longitude: -75.2969460},
 ];
 
 exports.monitorMarylandWeatherAlerts = onSchedule(
