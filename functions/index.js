@@ -34,6 +34,7 @@ const SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD = defineSecret(
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD",
 );
 
+
 const SUBSCRIPTION_PRICES = {
   starter: 99,
   growth: 299,
@@ -780,89 +781,112 @@ exports.localOpportunityAlerts = onRequest(
       return;
     }
 
-    const roundedLatitude = Math.round(latitude * 100) / 100;
-    const roundedLongitude = Math.round(longitude * 100) / 100;
-    const cacheId = `${roundedLatitude}_${roundedLongitude}`
-      .replaceAll(".", "_")
-      .replaceAll("-", "m");
-    const cacheReference = db
-      .collection("weatherOpportunityCache")
-      .doc(cacheId);
-    const cacheSnapshot = await cacheReference.get();
-    const cache = cacheSnapshot.data() || {};
-    const fetchedAt = cache.fetchedAt instanceof Timestamp
-      ? cache.fetchedAt.toMillis() : 0;
-
-    if (Date.now() - fetchedAt < 5 * 60 * 1000 &&
-        Array.isArray(cache.alerts)) {
-      response.status(200).json({
-        source: "National Weather Service",
-        experimentalOpportunityModel: true,
-        cached: true,
-        alerts: cache.alerts,
+    try {
+      const feed = await loadWeatherOpportunityFeed({latitude, longitude});
+      response.status(200).json(feed);
+    } catch (error) {
+      logger.error("Unable to load local opportunity alerts.", {
+        latitude,
+        longitude,
+        error: error instanceof Error ? error.message : String(error),
       });
+      response.status(503).json({
+        error: "Local opportunity alerts are temporarily unavailable.",
+      });
+    }
+  },
+);
+
+/** Send queued weather emails independently so missing email credentials never
+ * stop scheduled in-app notifications from being created. */
+exports.sendWeatherAlertEmail = onDocumentCreated(
+  {
+    document: "weatherEmailQueue/{deliveryId}",
+    maxInstances: 5,
+    retry: true,
+    secrets: [SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD],
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+    const queue = snapshot.data() || {};
+    if (queue.status === "sent") return;
+
+    const deliveryId = event.params.deliveryId;
+    const alert = queue.alert && typeof queue.alert === "object" ? queue.alert : {};
+    const countyName = readText(queue.countyName, 120);
+    const destination = readText(queue.email, 320).toLowerCase();
+    if (!destination) {
+      await snapshot.ref.set({
+        status: "failed",
+        error: "A destination email is required.",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
       return;
     }
 
     try {
-      const endpoint = new URL("https://api.weather.gov/alerts/active");
-      endpoint.searchParams.set(
-        "point",
-        `${roundedLatitude},${roundedLongitude}`,
-      );
-      const nwsResponse = await fetch(endpoint, {
-        headers: {
-          "Accept": "application/geo+json",
-          "User-Agent": "ScaledCircle/1.0 (https://scaledcircle.com)",
+      const transport = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: SIGNUP_NOTIFICATION_EMAIL,
+          pass: SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD.value(),
         },
       });
-
-      if (!nwsResponse.ok) {
-        throw new Error(`NWS returned ${nwsResponse.status}.`);
-      }
-
-      const payload = await nwsResponse.json();
-      const features = Array.isArray(payload.features) ? payload.features : [];
-      const alerts = features
-        .map((feature) => weatherOpportunityFromFeature(feature))
-        .filter(Boolean)
-        .slice(0, 12);
-
-      await cacheReference.set({
-        latitude: roundedLatitude,
-        longitude: roundedLongitude,
-        source: "National Weather Service",
-        alerts,
-        fetchedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-
-      response.status(200).json({
-        source: "National Weather Service",
-        experimentalOpportunityModel: true,
-        cached: false,
-        alerts,
+      const eventName = readText(alert.event, 120) || "Weather alert";
+      const officialDescription = readText(alert.officialDescription, 1000);
+      const services = Array.isArray(alert.services) ?
+        alert.services.join(", ") : "Local outreach";
+      const low = Number(alert.leadLiftLowPercent) || 0;
+      const high = Number(alert.leadLiftHighPercent) || 0;
+      const sourceUrl = readText(alert.sourceUrl, 1000);
+      const text = `${eventName} — ${countyName}\n\n` +
+        `Official National Weather Service information:\n${officialDescription}\n\n` +
+        `Experimental Scaled Circle planning estimate: +${low}% to +${high}% ` +
+        `potential lead activity. Suggested services: ${services}.\n\n` +
+        `Review signals: https://scaledcircle.com/`;
+      const html = `
+        <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0b1725">
+          <h2>${escapeHtml(eventName)} — ${escapeHtml(countyName)}</h2>
+          <h3>Official National Weather Service information</h3>
+          <p>${escapeHtml(officialDescription).replaceAll("\n", "<br>")}</p>
+          ${sourceUrl ? `<p><a href="${escapeHtml(sourceUrl)}">View official alert</a></p>` : ""}
+          <hr>
+          <h3>Experimental planning estimate</h3>
+          <p><strong>+${low}% to +${high}%</strong> potential lead activity.</p>
+          <p>Suggested services: ${escapeHtml(services)}</p>
+          <p><em>This estimate is not a guarantee of leads or work.</em></p>
+          <p><a href="https://scaledcircle.com/">Open Scaled Circle</a></p>
+        </div>`;
+      const result = await transport.sendMail({
+        from: `Scaled Circle Weather <${SIGNUP_NOTIFICATION_EMAIL}>`,
+        to: destination,
+        subject: `[Scaled Circle Weather] ${eventName} — ${countyName}`,
+        text,
+        html,
+        headers: {"X-Scaled-Circle-Notification": `weather_${deliveryId}`},
       });
+      await Promise.all([
+        snapshot.ref.set({
+          status: "sent",
+          messageId: result.messageId || "",
+          sentAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: true}),
+        db.collection("weatherAlertDeliveries").doc(deliveryId).set({
+          emailSent: true,
+          emailMessageId: result.messageId || "",
+          emailSentAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: true}),
+      ]);
     } catch (error) {
-      logger.error("Unable to load local opportunity alerts.", {
-        latitude: roundedLatitude,
-        longitude: roundedLongitude,
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      if (Array.isArray(cache.alerts)) {
-        response.status(200).json({
-          source: "National Weather Service",
-          experimentalOpportunityModel: true,
-          cached: true,
-          stale: true,
-          alerts: cache.alerts,
-        });
-        return;
-      }
-
-      response.status(503).json({
-        error: "Local opportunity alerts are temporarily unavailable.",
-      });
+      await snapshot.ref.set({
+        status: "failed",
+        error: readText(error instanceof Error ? error.message : error, 500),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+      throw error;
     }
   },
 );
@@ -3236,6 +3260,90 @@ function publicTrackingUrl(trackingCode) {
     `campaignTracking?t=${encodeURIComponent(trackingCode)}`;
 }
 
+async function loadWeatherOpportunityFeed({
+  latitude,
+  longitude,
+  maximumCacheAgeMs = 5 * 60 * 1000,
+}) {
+  const roundedLatitude = Math.round(latitude * 100) / 100;
+  const roundedLongitude = Math.round(longitude * 100) / 100;
+  const cacheId = `${roundedLatitude}_${roundedLongitude}`
+    .replaceAll(".", "_")
+    .replaceAll("-", "m");
+  const cacheReference = db.collection("weatherOpportunityCache").doc(cacheId);
+  const cacheSnapshot = await cacheReference.get();
+  const cache = cacheSnapshot.data() || {};
+  const fetchedAt = cache.fetchedAt instanceof Timestamp ?
+    cache.fetchedAt.toMillis() : 0;
+
+  if (maximumCacheAgeMs > 0 &&
+      Date.now() - fetchedAt < maximumCacheAgeMs &&
+      Array.isArray(cache.alerts)) {
+    const cachedAlerts = cache.alerts.filter((alert) =>
+      !/\b(test message|required weekly test|practice\/demo)\b/i.test(
+        `${readText(alert?.event, 120)} ${readText(alert?.headline, 240)}`,
+      ));
+    return {
+      source: "National Weather Service",
+      experimentalOpportunityModel: true,
+      cached: true,
+      alerts: cachedAlerts,
+    };
+  }
+
+  try {
+    const endpoint = new URL("https://api.weather.gov/alerts/active");
+    endpoint.searchParams.set("point", `${roundedLatitude},${roundedLongitude}`);
+    const nwsResponse = await fetch(endpoint, {
+      headers: {
+        "Accept": "application/geo+json",
+        "User-Agent": "ScaledCircle/1.0 (https://scaledcircle.com)",
+      },
+    });
+
+    if (!nwsResponse.ok) {
+      throw new Error(`NWS returned ${nwsResponse.status}.`);
+    }
+
+    const payload = await nwsResponse.json();
+    const features = Array.isArray(payload.features) ? payload.features : [];
+    const alerts = features
+      .map((feature) => weatherOpportunityFromFeature(feature))
+      .filter(Boolean)
+      .slice(0, 12);
+
+    await cacheReference.set({
+      latitude: roundedLatitude,
+      longitude: roundedLongitude,
+      source: "National Weather Service",
+      alerts,
+      fetchedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+
+    return {
+      source: "National Weather Service",
+      experimentalOpportunityModel: true,
+      cached: false,
+      alerts,
+    };
+  } catch (error) {
+    if (Array.isArray(cache.alerts)) {
+      const cachedAlerts = cache.alerts.filter((alert) =>
+        !/\b(test message|required weekly test|practice\/demo)\b/i.test(
+          `${readText(alert?.event, 120)} ${readText(alert?.headline, 240)}`,
+        ));
+      return {
+        source: "National Weather Service",
+        experimentalOpportunityModel: true,
+        cached: true,
+        stale: true,
+        alerts: cachedAlerts,
+      };
+    }
+    throw error;
+  }
+}
+
 function weatherOpportunityFromFeature(feature) {
   if (!feature || typeof feature !== "object") {
     return null;
@@ -3245,11 +3353,22 @@ function weatherOpportunityFromFeature(feature) {
     typeof feature.properties === "object" ? feature.properties : {};
   const event = readText(properties.event, 120);
   const headline = readText(properties.headline, 240) || event;
+  const status = readText(properties.status, 40).toLowerCase();
+  const messageType = readText(properties.messageType, 40).toLowerCase();
+  const responseType = readText(properties.response, 40).toLowerCase();
   const combinedText = `${event} ${headline} ${
     readText(properties.description, 1800)
   }`.toLowerCase();
 
   if (!event && !headline) {
+    return null;
+  }
+
+  const testProduct = /\b(test message|required weekly test|practice\/demo)\b/i;
+  if (status === "test" || status === "exercise" ||
+      messageType === "test" || messageType === "cancel" ||
+      responseType === "test" || testProduct.test(`${event} ${headline}`) ||
+      event.toLowerCase() === "administrative message") {
     return null;
   }
 

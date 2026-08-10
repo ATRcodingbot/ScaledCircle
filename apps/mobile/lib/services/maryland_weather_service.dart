@@ -1,18 +1,30 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'public_site_service.dart';
 
 class MarylandCountySpec {
+  final String id;
   final String name;
   final double latitude;
   final double longitude;
 
   const MarylandCountySpec({
+    required this.id,
     required this.name,
     required this.latitude,
     required this.longitude,
+  });
+}
+
+class WeatherCoveragePreferences {
+  final Set<String> countyIds;
+  final bool emailAlertsEnabled;
+  final bool configured;
+
+  const WeatherCoveragePreferences({
+    required this.countyIds,
+    required this.emailAlertsEnabled,
+    required this.configured,
   });
 }
 
@@ -49,26 +61,33 @@ class MarylandWeatherService {
 
   static const counties = <MarylandCountySpec>[
     MarylandCountySpec(
+      id: 'howard',
       name: 'Howard County',
       latitude: 39.25,
       longitude: -76.93,
     ),
     MarylandCountySpec(
+      id: 'baltimore',
       name: 'Baltimore County',
       latitude: 39.46,
       longitude: -76.64,
     ),
     MarylandCountySpec(
+      id: 'anne_arundel',
       name: 'Anne Arundel County',
       latitude: 39.00,
       longitude: -76.58,
     ),
     MarylandCountySpec(
+      id: 'montgomery',
       name: 'Montgomery County',
       latitude: 39.15,
       longitude: -77.20,
     ),
   ];
+
+  static Set<String> get allCountyIds =>
+      counties.map((county) => county.id).toSet();
 
   Future<WeatherEntitlement> loadEntitlement(String userId) async {
     final results = await Future.wait([
@@ -95,9 +114,47 @@ class MarylandWeatherService {
     );
   }
 
-  Future<List<MarylandCountyWeather>> load() async {
+  Future<WeatherCoveragePreferences> loadCoveragePreferences(
+    String userId,
+  ) async {
+    final snapshot = await _firestore.collection('users').doc(userId).get();
+    final data = snapshot.data() ?? <String, dynamic>{};
+    final rawCountyIds = data['weatherCoverageCountyIds'];
+    final countyIds = rawCountyIds is Iterable
+        ? rawCountyIds
+              .map((value) => value.toString())
+              .where(allCountyIds.contains)
+              .toSet()
+        : <String>{};
+    return WeatherCoveragePreferences(
+      countyIds: countyIds,
+      emailAlertsEnabled: data['weatherEmailAlertsEnabled'] == true,
+      configured: data['weatherCoverageEnabled'] == true,
+    );
+  }
+
+  Future<void> saveCoveragePreferences({
+    required String userId,
+    required Set<String> countyIds,
+    required bool emailAlertsEnabled,
+  }) async {
+    final validCountyIds = countyIds.where(allCountyIds.contains).toList()
+      ..sort();
+    await _firestore.collection('users').doc(userId).update({
+      'weatherCoverageCountyIds': validCountyIds,
+      'weatherCoverageEnabled': validCountyIds.isNotEmpty,
+      'weatherEmailAlertsEnabled':
+          validCountyIds.isNotEmpty && emailAlertsEnabled,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<List<MarylandCountyWeather>> load({Set<String>? countyIds}) async {
+    final selectedCounties = countyIds == null
+        ? counties
+        : counties.where((county) => countyIds.contains(county.id));
     return Future.wait(
-      counties.map((county) async {
+      selectedCounties.map((county) async {
         try {
           final feed = await PublicSiteService.loadLocalOpportunities(
             latitude: county.latitude,
@@ -109,51 +166,5 @@ class MarylandWeatherService {
         }
       }),
     );
-  }
-
-  Future<void> syncNotifications({
-    required String userId,
-    required List<MarylandCountyWeather> counties,
-  }) async {
-    for (final countyWeather in counties) {
-      if (countyWeather.alerts.isEmpty) continue;
-
-      // One notification per county per refresh prevents a severe-weather
-      // event with several overlapping products from flooding the inbox.
-      final alert = countyWeather.alerts.first;
-      final identity = alert.id.isNotEmpty
-          ? alert.id
-          : '${countyWeather.county.name}|${alert.event}|${alert.onset}';
-      final encoded = base64Url
-          .encode(utf8.encode(identity))
-          .replaceAll('=', '');
-      final notificationId =
-          'weather_${userId}_${encoded.substring(0, encoded.length.clamp(0, 600))}';
-      final reference = _firestore
-          .collection('notifications')
-          .doc(notificationId);
-      final existing = await reference.get();
-      if (existing.exists) continue;
-
-      await reference.set({
-        'userId': userId,
-        'type': 'weather_opportunity',
-        'title': 'Maryland Weather Opportunity',
-        'message':
-            '${countyWeather.county.name}: ${alert.event}. '
-            'Experimental lead opportunity +${alert.leadLiftLowPercent}% '
-            'to +${alert.leadLiftHighPercent}%.',
-        'county': countyWeather.county.name,
-        'weatherEvent': alert.event,
-        'severity': alert.severity,
-        'services': alert.services,
-        'leadLiftLowPercent': alert.leadLiftLowPercent,
-        'leadLiftHighPercent': alert.leadLiftHighPercent,
-        'source': 'National Weather Service',
-        'experimentalOpportunityModel': true,
-        'read': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    }
   }
 }

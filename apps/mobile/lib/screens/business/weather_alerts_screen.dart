@@ -5,6 +5,7 @@ import '../../services/maryland_weather_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/scaled_circle_brand.dart';
 import 'subscription_screen.dart';
+import 'weather_coverage_settings_screen.dart';
 
 class WeatherAlertsScreen extends StatefulWidget {
   const WeatherAlertsScreen({super.key});
@@ -17,6 +18,7 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
   final MarylandWeatherService _service = MarylandWeatherService();
   late Future<List<MarylandCountyWeather>> _weather;
   WeatherEntitlement? _entitlement;
+  WeatherCoveragePreferences? _preferences;
 
   @override
   void initState() {
@@ -34,9 +36,26 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
     setState(() => _entitlement = entitlement);
     if (!entitlement.entitled) return;
 
-    final future = _service.load();
-    setState(() => _weather = future);
+    final preferences = await _service.loadCoveragePreferences(user.uid);
+    final selectedCountyIds = preferences.configured
+        ? preferences.countyIds
+        : MarylandWeatherService.allCountyIds;
+    final future = _service.load(countyIds: selectedCountyIds);
+    setState(() {
+      _preferences = preferences;
+      _weather = future;
+    });
     await future;
+  }
+
+  Future<void> _openCoverageSettings() async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const WeatherCoverageSettingsScreen(),
+      ),
+    );
+    if (saved == true) await _refresh();
   }
 
   @override
@@ -45,6 +64,12 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
       appBar: AppBar(
         title: const ScaledCircleBrand(compact: true),
         actions: [
+          if (_entitlement?.entitled == true)
+            IconButton(
+              tooltip: 'Weather coverage settings',
+              onPressed: _openCoverageSettings,
+              icon: const Icon(Icons.tune),
+            ),
           IconButton(
             tooltip: 'Refresh weather alerts',
             onPressed: _refresh,
@@ -92,9 +117,9 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
                             ? 'Weather monitored. No active signals.'
                             : '$activeCount active weather signal${activeCount == 1 ? '' : 's'}.',
                         description:
-                            'Official alerts are monitored for Howard, Baltimore, '
-                            'Anne Arundel, and Montgomery counties. Opportunity '
-                            'ranges are experimental planning estimates.',
+                            'Official alerts are monitored for your saved Maryland '
+                            'service areas. Opportunity ranges are experimental '
+                            'planning estimates.',
                         primaryActionLabel: 'Refresh Signals',
                         primaryActionIcon: Icons.refresh,
                         onPrimaryAction: _refresh,
@@ -111,6 +136,28 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
                         ],
                       ),
                       const SizedBox(height: 24),
+                      if (_preferences?.configured != true) ...[
+                        Card(
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(18),
+                            leading: const Icon(
+                              Icons.notifications_active_outlined,
+                              color: AppColors.primary,
+                            ),
+                            title: const Text(
+                              'Activate background alerts',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            subtitle: const Text(
+                              'Choose your service counties and email preference. '
+                              'Until saved, these counties are preview-only.',
+                            ),
+                            trailing: const Icon(Icons.arrow_forward),
+                            onTap: _openCoverageSettings,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       ...counties.map(_countyCard),
                       const SizedBox(height: 8),
                       const Card(

@@ -96,6 +96,12 @@ class PublicSiteService {
                   Map<String, dynamic>.from(value),
                 ),
               )
+              .where((alert) {
+                final label = '${alert.event} ${alert.headline}'.toLowerCase();
+                return !label.contains('test message') &&
+                    !label.contains('required weekly test') &&
+                    !label.contains('practice/demo');
+              })
               .toList()
         : <LocalOpportunityAlert>[];
 

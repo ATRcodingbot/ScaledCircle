@@ -68,24 +68,17 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       return;
     }
 
-    final future = _weatherService.load();
+    final preferences = await _weatherService.loadCoveragePreferences(user.uid);
+    final countyIds = preferences.configured
+        ? preferences.countyIds
+        : MarylandWeatherService.allCountyIds;
+    final future = _weatherService.load(countyIds: countyIds);
 
     if (mounted) {
       setState(() => _weather = future);
     }
 
-    final counties = await future;
-    try {
-      await _weatherService.syncNotifications(
-        userId: user.uid,
-        counties: counties,
-      );
-    } on FirebaseException catch (error) {
-      // Weather opportunity data is still useful when inbox synchronization
-      // is temporarily unavailable. Do not turn an ancillary notification
-      // failure into a wallet initialization error.
-      debugPrint('Unable to synchronize weather notifications: $error');
-    }
+    await future;
   }
 
   Future<void> _refreshDashboard() async {

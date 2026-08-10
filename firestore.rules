@@ -86,10 +86,34 @@ service cloud.firestore {
           'contactNumber',
           'accountType',
           'activeView',
+          'weatherCoverageCountyIds',
+          'weatherCoverageEnabled',
+          'weatherEmailAlertsEnabled',
           'updatedAt'
         ])
         && request.resource.data.accountType in ['business', 'scaler']
-        && request.resource.data.activeView in ['business', 'scaler'];
+        && request.resource.data.activeView in ['business', 'scaler']
+        && (
+          !request.resource.data.keys().hasAll(['weatherCoverageCountyIds'])
+          || (
+            request.resource.data.weatherCoverageCountyIds is list
+            && request.resource.data.weatherCoverageCountyIds.size() <= 4
+            && request.resource.data.weatherCoverageCountyIds.hasOnly([
+              'howard',
+              'baltimore',
+              'anne_arundel',
+              'montgomery'
+            ])
+          )
+        )
+        && (
+          !request.resource.data.keys().hasAll(['weatherCoverageEnabled'])
+          || request.resource.data.weatherCoverageEnabled is bool
+        )
+        && (
+          !request.resource.data.keys().hasAll(['weatherEmailAlertsEnabled'])
+          || request.resource.data.weatherEmailAlertsEnabled is bool
+        );
 
 
       allow write:
