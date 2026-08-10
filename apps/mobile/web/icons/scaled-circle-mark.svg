@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Scaled Circle">
+  <rect width="512" height="512" rx="112" fill="#020914"/>
+  <circle cx="256" cy="256" r="164" fill="none" stroke="#14E39A" stroke-width="54"/>
+  <circle cx="256" cy="256" r="72" fill="#0B1D30" stroke="#52A5FF" stroke-width="42"/>
+  <circle cx="256" cy="256" r="18" fill="#F4F8FC"/>
+</svg>
