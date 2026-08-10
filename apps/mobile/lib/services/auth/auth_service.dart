@@ -66,6 +66,53 @@ class AuthService {
     return user;
   }
 
+  Future<User> signUpForEarlyAccess({
+    required String email,
+    required String password,
+    required UserRole role,
+    required String displayName,
+    required String postalCode,
+    String contactNumber = '',
+    String companyName = '',
+    required String discoverySource,
+    String referrerName = '',
+  }) async {
+    if (role != UserRole.business && role != UserRole.scaler) {
+      throw ArgumentError('Choose Business or Scaler.');
+    }
+    if (email.trim().isEmpty) throw Exception('Email is required.');
+    if (password.length < 8) {
+      throw Exception('Password must be at least 8 characters.');
+    }
+
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+    final user = credential.user;
+    if (user == null) throw Exception('Unable to create user account.');
+
+    try {
+      await user.updateDisplayName(displayName.trim());
+      await _userService.createEarlyAccessProfile(
+        user: user,
+        role: role,
+        displayName: displayName,
+        postalCode: postalCode,
+        contactNumber: contactNumber,
+        companyName: companyName,
+        discoverySource: discoverySource,
+        referrerName: referrerName,
+      );
+      return user;
+    } catch (_) {
+      // Avoid an orphaned authentication account if the protected profile
+      // cannot be created.
+      await user.delete();
+      rethrow;
+    }
+  }
+
   // ------------------------------------------------------------
   // LOGIN
   // ------------------------------------------------------------

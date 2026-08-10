@@ -3,12 +3,41 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../scaler/campaigns/exact_location_job_screen.dart';
+import '../reviews/create_review_screen.dart';
 import 'job_details_screen.dart';
 
 class MyJobsScreen extends StatelessWidget {
   const MyJobsScreen({super.key});
 
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+
+  Future<void> _openBusinessReview(
+    BuildContext context,
+    DocumentSnapshot<Map<String, dynamic>> campaign,
+    String businessId,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null || businessId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Business information is unavailable.')),
+      );
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateReviewScreen(
+          campaignId: campaign.id,
+          reviewerId: user.uid,
+          reviewerType: 'scaler',
+          targetId: businessId,
+          targetType: 'business',
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -309,10 +338,16 @@ class MyJobsScreen extends StatelessWidget {
         final description = campaignData['description']?.toString() ?? '';
 
         final businessEmail = campaignData['businessEmail']?.toString() ?? '';
+        final businessId = campaignData['businessId']?.toString() ?? '';
 
         final zoneName = zoneData['zoneName']?.toString() ?? 'Assigned Zone';
 
         final status = zoneData['status']?.toString() ?? 'assigned';
+
+        final paymentComplete =
+            status == 'completed' &&
+            (zoneData['paymentStatus']?.toString() == 'paid' ||
+                zoneData['paidAt'] is Timestamp);
 
         final estimatedHomes =
             (zoneData['estimatedHomes'] as num?)?.toInt() ?? 0;
@@ -470,24 +505,42 @@ class MyJobsScreen extends StatelessWidget {
 
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                JobDetailsScreen(campaign: campaign),
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    JobDetailsScreen(campaign: campaign),
+                              ),
+                            );
+                          },
+                          icon: Icon(
+                            hasChangesRequested
+                                ? Icons.feedback_outlined
+                                : Icons.arrow_forward,
                           ),
-                        );
-                      },
-                      icon: Icon(
-                        hasChangesRequested
-                            ? Icons.feedback_outlined
-                            : Icons.arrow_forward,
-                      ),
-                      label: Text(
-                        _zoneActionLabel(status, hasChangesRequested),
-                      ),
+                          label: Text(
+                            _zoneActionLabel(status, hasChangesRequested),
+                          ),
+                        ),
+                        if (paymentComplete)
+                          FilledButton.icon(
+                            onPressed: () {
+                              _openBusinessReview(
+                                context,
+                                campaign,
+                                businessId,
+                              );
+                            },
+                            icon: const Icon(Icons.star_outline),
+                            label: const Text('Leave Review'),
+                          ),
+                      ],
                     ),
                   ),
                 ],
@@ -559,6 +612,7 @@ class MyJobsScreen extends StatelessWidget {
         final description = campaignData['description']?.toString() ?? '';
 
         final businessEmail = campaignData['businessEmail']?.toString() ?? '';
+        final businessId = campaignData['businessId']?.toString() ?? '';
 
         final totalQuantity = locations.fold<int>(
           0,
@@ -572,6 +626,14 @@ class MyJobsScreen extends StatelessWidget {
 
         final allCompleted =
             locations.isNotEmpty && completedLocations == locations.length;
+
+        final paymentComplete = locations.isNotEmpty &&
+            locations.every((location) {
+              final data = location.data();
+              return data['status']?.toString() == 'completed' &&
+                  (data['paymentStatus']?.toString() == 'paid' ||
+                      data['paidAt'] is Timestamp);
+            });
 
         final hasInProgress = locations.any((location) {
           return location.data()['status']?.toString() == 'in_progress';
@@ -708,18 +770,36 @@ class MyJobsScreen extends StatelessWidget {
 
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ExactLocationJobScreen(campaign: campaign),
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ExactLocationJobScreen(campaign: campaign),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.arrow_forward),
+                          label: Text(_exactLocationActionLabel(status)),
+                        ),
+                        if (paymentComplete)
+                          FilledButton.icon(
+                            onPressed: () {
+                              _openBusinessReview(
+                                context,
+                                campaign,
+                                businessId,
+                              );
+                            },
+                            icon: const Icon(Icons.star_outline),
+                            label: const Text('Leave Review'),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.arrow_forward),
-                      label: Text(_exactLocationActionLabel(status)),
+                      ],
                     ),
                   ),
                 ],

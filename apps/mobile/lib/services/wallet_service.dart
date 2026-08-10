@@ -25,6 +25,7 @@ class WalletService {
       // Business wallet fields.
       'availableCredits': 0.0,
       'reservedCredits': 0.0,
+      'totalPaidOut': 0.0,
 
       // Scaler wallet fields.
       'availableBalance': 0.0,
@@ -109,9 +110,7 @@ class WalletService {
 
     final data = snapshot.data();
 
-    return (data?['availableBalance'] as num?)?.toDouble() ??
-        (data?['balance'] as num?)?.toDouble() ??
-        0.0;
+    return (data?['availableBalance'] as num?)?.toDouble() ?? 0.0;
   }
 
   Future<void> addCredits({
@@ -228,6 +227,7 @@ class WalletService {
           'balance': amount,
           'availableCredits': amount,
           'reservedCredits': 0.0,
+          'totalPaidOut': 0.0,
           'availableBalance': 0.0,
           'pendingBalance': 0.0,
           'promotionalCreditsGranted': amount,

@@ -10,6 +10,8 @@ import '../../../../../services/platform_billing_service.dart';
 import '../../../campaign_zones_screen.dart';
 
 import '../../../campaign/campaign_locations_screen.dart';
+import '../../../../campaigns/campaign_details_screen.dart';
+import '../../../../../widgets/mapped_address_field.dart';
 
 class MaterialDistributionCampaignScreen extends StatefulWidget {
   final CampaignType campaignType;
@@ -50,6 +52,8 @@ class _MaterialDistributionCampaignScreenState
   String _materialSource = 'business_provided';
 
   String _materialHandoffMethod = 'business_pickup';
+  double? _materialHandoffLatitude;
+  double? _materialHandoffLongitude;
 
   bool _trackingEnabled = false;
 
@@ -461,6 +465,8 @@ class _MaterialDistributionCampaignScreenState
           'materialHandoffMethod': _materialHandoffMethod,
 
           'materialHandoffAddress': materialAddressController.text.trim(),
+          'materialHandoffLatitude': _materialHandoffLatitude,
+          'materialHandoffLongitude': _materialHandoffLongitude,
 
           'materialHandoffInstructions': materialInstructionsController.text
               .trim(),
@@ -751,83 +757,26 @@ class _MaterialDistributionCampaignScreenState
         throw Exception('Campaign no longer exists.');
       }
 
-      final latestCampaignData = latestCampaignSnapshot.data();
-
-      if (latestCampaignData == null) {
-        throw Exception('Campaign data is invalid.');
-      }
-
-      final fundingStatus = latestCampaignData['fundingStatus']?.toString();
-
-      final existingReservedBudget =
-          (latestCampaignData['reservedWorkerBudget'] as num?)?.toDouble() ?? 0;
-
-      final alreadyFunded =
-          fundingStatus == 'reserved' && existingReservedBudget > 0;
-
-      Map<String, double> funding = {
-        'workerBudget': maximumWorkerBudget,
-        'platformFee': platformFee,
-        'totalCharge': totalCampaignCost,
-      };
-
-      if (!alreadyFunded) {
-        funding = await _billingService.fundCampaign(
-          businessId: user.uid,
-          campaignId: campaignReference.id,
-          workerBudget: maximumWorkerBudget,
-          description: 'Worker funding reserved for $campaignName.',
-        );
-      }
-
-      final chargedWorkerBudget =
-          funding['workerBudget'] ?? maximumWorkerBudget;
-
-      final chargedPlatformFee = funding['platformFee'] ?? platformFee;
-
-      final chargedTotal = funding['totalCharge'] ?? totalCampaignCost;
-
-      await campaignReference.update({
-        'status': 'open',
-
-        'fundingStatus': 'reserved',
-
-        'platformFeeStatus': 'charged',
-
-        'workerBudget': chargedWorkerBudget,
-
-        'reservedWorkerBudget': alreadyFunded
-            ? existingReservedBudget
-            : chargedWorkerBudget,
-
-        'platformFee': chargedPlatformFee,
-
-        'totalCampaignCost': chargedTotal,
-
-        'fundedAt':
-            latestCampaignData['fundedAt'] ?? FieldValue.serverTimestamp(),
-
-        'publishedAt': FieldValue.serverTimestamp(),
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Campaign published. '
-            '\$${chargedWorkerBudget.toStringAsFixed(2)} secured for Scaler pay '
-            '+ \$${chargedPlatformFee.toStringAsFixed(2)} Scaled Circle fee '
-            '= \$${chargedTotal.toStringAsFixed(2)} total credits.',
+          content: const Text(
+            'Zones saved. Review the campaign data, then launch when ready. '
+            'No credits have been charged yet.',
           ),
         ),
       );
 
-      Navigator.pop(context);
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              CampaignDetailsScreen(campaign: latestCampaignSnapshot),
+        ),
+      );
     } catch (e) {
       if (campaignReference != null) {
         try {
@@ -1059,13 +1008,18 @@ class _MaterialDistributionCampaignScreenState
 
                   const SizedBox(height: 18),
 
-                  TextFormField(
+                  MappedAddressField(
                     controller: materialAddressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Pickup / Drop-off Address',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.location_on_outlined),
-                    ),
+                    labelText: 'Pickup / Drop-off Address',
+                    hintText: 'Enter the full street address',
+                    onChanged: (_) {
+                      _materialHandoffLatitude = null;
+                      _materialHandoffLongitude = null;
+                    },
+                    onSelected: (suggestion) {
+                      _materialHandoffLatitude = suggestion.latitude;
+                      _materialHandoffLongitude = suggestion.longitude;
+                    },
                     validator: (value) {
                       if (!_usesBusinessProvidedMaterials) {
                         return null;

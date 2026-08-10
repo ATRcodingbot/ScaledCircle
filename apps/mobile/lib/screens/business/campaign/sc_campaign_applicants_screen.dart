@@ -57,6 +57,38 @@ class _ScCampaignApplicantsScreenState
     }
   }
 
+  Future<void> _rejectScaler(String scalerId) async {
+    setState(() {
+      _processingScalerId = scalerId;
+    });
+
+    try {
+      await _campaignService.updateApplicationStatus(
+        campaignId: widget.campaignId,
+        scalerId: scalerId,
+        status: "rejected",
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Scaler application rejected.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Unable to reject scaler: $e")));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingScalerId = null;
+        });
+      }
+    }
+  }
+
   void _openScalerProfile(String scalerId) {
     Navigator.push(
       context,
@@ -174,25 +206,36 @@ class _ScCampaignApplicantsScreenState
                       const SizedBox(height: 10),
 
                       if (status == "pending")
-                        SizedBox(
-                          width: double.infinity,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: isProcessing
+                                    ? null
+                                    : () => _rejectScaler(scalerId),
+                                child: const Text("Reject"),
+                              ),
+                            ),
 
-                          child: ElevatedButton(
-                            onPressed: isProcessing
-                                ? null
-                                : () => _acceptScaler(scalerId),
+                            const SizedBox(width: 12),
 
-                            child: isProcessing
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text("Accept Scaler"),
-                          ),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: isProcessing
+                                    ? null
+                                    : () => _acceptScaler(scalerId),
+                                child: isProcessing
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text("Accept"),
+                              ),
+                            ),
+                          ],
                         ),
 
                       if (status == "submitted")

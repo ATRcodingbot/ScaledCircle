@@ -26,9 +26,9 @@ class CanvassingCampaignScreen extends StatelessWidget {
           _item(Icons.people, "Lead Collection", "Capture customer interest."),
 
           _item(
-            Icons.photo_camera,
+            Icons.route,
             "Field Verification",
-            "Required checkpoint photos.",
+            "Saved GPS route coverage; no photos required.",
           ),
         ],
       ),

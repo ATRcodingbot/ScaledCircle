@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 
 class PlatformBillingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -18,6 +22,64 @@ class PlatformBillingService {
     'growth': 2,
     'scale': 3,
   };
+
+  Future<Map<String, dynamic>> _callSecureFunction({
+    required String businessId,
+    required String functionName,
+    required Map<String, dynamic> data,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null || user.uid != businessId) {
+      throw Exception('You must be logged in as this business.');
+    }
+
+    final idToken = await user.getIdToken();
+
+    if (idToken == null || idToken.isEmpty) {
+      throw Exception('Unable to authenticate the request.');
+    }
+
+    final endpoint = Uri.parse(
+      'https://us-east1-scaled-circle.cloudfunctions.net/$functionName',
+    );
+
+    try {
+      final response = await http.post(
+        endpoint,
+        headers: {
+          'Authorization': 'Bearer $idToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'data': data}),
+      );
+
+      final responseBody = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body) as Map<String, dynamic>;
+      final callableError = responseBody['error'];
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          callableError != null) {
+        final message = callableError is Map
+            ? callableError['message']?.toString()
+            : null;
+
+        throw Exception(message ?? 'The secure service request failed.');
+      }
+
+      final result = responseBody['result'] ?? responseBody['data'];
+
+      return result is Map
+          ? Map<String, dynamic>.from(result)
+          : <String, dynamic>{};
+    } on FormatException {
+      throw Exception('The secure service returned an invalid response.');
+    } on http.ClientException catch (error) {
+      throw Exception('Unable to reach the secure service: $error');
+    }
+  }
 
   // -----------------------------
   // SUBSCRIPTION HELPERS
@@ -66,142 +128,11 @@ class PlatformBillingService {
     required String businessId,
     required String plan,
   }) async {
-    final newPlan = plan.toLowerCase();
-
-    final targetPrice = subscriptionPrice(newPlan);
-
-    final walletRef = _firestore.collection('wallets').doc(businessId);
-
-    final subscriptionRef = _firestore
-        .collection('businessSubscriptions')
-        .doc(businessId);
-
-    final adminWalletRef = _firestore.collection('wallets').doc(adminWalletId);
-
-    await _firestore.runTransaction((transaction) async {
-      // -----------------------------
-      // ALL READS FIRST
-      // -----------------------------
-
-      final walletSnapshot = await transaction.get(walletRef);
-
-      final adminSnapshot = await transaction.get(adminWalletRef);
-
-      if (!walletSnapshot.exists) {
-        throw Exception('Business wallet does not exist.');
-      }
-
-      final wallet = walletSnapshot.data();
-
-      if (wallet == null) {
-        throw Exception('Invalid wallet data.');
-      }
-
-      final credits = (wallet['availableCredits'] as num?)?.toDouble() ?? 0.0;
-
-      final currentPlan = wallet['subscriptionPlan']?.toString().toLowerCase();
-
-      final status = wallet['subscriptionStatus']?.toString().toLowerCase();
-
-      final expires = wallet['subscriptionExpiresAt'];
-
-      final active =
-          status == 'active' &&
-          expires is Timestamp &&
-          expires.toDate().isAfter(DateTime.now());
-
-      double charge = targetPrice;
-
-      bool upgrade = false;
-
-      if (active && currentPlan != null) {
-        final currentRank = subscriptionRank(currentPlan);
-
-        final targetRank = subscriptionRank(newPlan);
-
-        if (targetRank == currentRank) {
-          throw Exception('This plan is already active.');
-        }
-
-        if (targetRank < currentRank) {
-          throw Exception('Downgrades are not available.');
-        }
-
-        charge = calculateUpgradePrice(
-          currentPlan: currentPlan,
-          targetPlan: newPlan,
-        );
-
-        upgrade = true;
-      }
-
-      if (credits < charge) {
-        throw Exception(
-          'Insufficient credits. '
-          '${charge.toStringAsFixed(0)} required.',
-        );
-      }
-
-      final expiration = active
-          ? expires
-          : Timestamp.fromDate(DateTime.now().add(const Duration(days: 30)));
-
-      final remaining = credits - charge;
-
-      final adminBalance =
-          (adminSnapshot.data()?['availableBalance'] as num?)?.toDouble() ??
-          0.0;
-
-      // -----------------------------
-      // WRITES AFTER ALL READS
-      // -----------------------------
-
-      transaction.update(walletRef, {
-        'availableCredits': remaining,
-        'balance': remaining,
-        'subscriptionPlan': newPlan,
-        'subscriptionPrice': targetPrice,
-        'subscriptionStatus': 'active',
-        'subscriptionExpiresAt': expiration,
-        if (upgrade) 'previousSubscriptionPlan': currentPlan,
-        if (upgrade) 'subscriptionUpgradedAt': FieldValue.serverTimestamp(),
-        if (!upgrade) 'subscriptionStartedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(subscriptionRef, {
-        'businessId': businessId,
-        'plan': newPlan,
-        'planId': newPlan,
-        'price': targetPrice,
-        'status': 'active',
-        'expiresAt': expiration,
-        if (upgrade) 'previousPlan': currentPlan,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      final transactionRef = walletRef.collection('transactions').doc();
-
-      transaction.set(transactionRef, {
-        'type': upgrade ? 'subscription_upgrade' : 'subscription_payment',
-        'amount': charge,
-        'subscriptionPlan': newPlan,
-        'subscriptionFullPrice': targetPrice,
-        'previousSubscriptionPlan': currentPlan,
-        'description': upgrade
-            ? 'Scaled Circle subscription upgrade'
-            : 'Scaled Circle subscription purchase',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(adminWalletRef, {
-        'ownerId': adminWalletId,
-        'ownerType': 'admin',
-        'availableBalance': adminBalance + charge,
-        'balance': adminBalance + charge,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    });
+    await _callSecureFunction(
+      businessId: businessId,
+      functionName: 'purchaseSubscription',
+      data: {'plan': plan.toLowerCase()},
+    );
   }
 
   // -----------------------------
@@ -254,90 +185,29 @@ class PlatformBillingService {
       throw Exception('Worker budget must be greater than zero.');
     }
 
-    final active = await hasActiveSubscription(businessId: businessId);
-
-    if (!active) {
-      throw Exception(
-        'An active subscription is required to publish campaigns.',
-      );
-    }
-
-    final platformFee = calculateCampaignFee(workerBudget);
-
-    final totalCharge = workerBudget + platformFee;
-
-    final walletRef = _firestore.collection('wallets').doc(businessId);
-
-    final adminRef = _firestore.collection('wallets').doc(adminWalletId);
-
-    await _firestore.runTransaction((transaction) async {
-      // -----------------------------
-      // ALL READS FIRST
-      // -----------------------------
-
-      final walletSnap = await transaction.get(walletRef);
-
-      final adminSnap = await transaction.get(adminRef);
-
-      final wallet = walletSnap.data();
-
-      if (wallet == null) {
-        throw Exception('Business wallet does not exist.');
-      }
-
-      final available = (wallet['availableCredits'] as num?)?.toDouble() ?? 0.0;
-
-      final reserved = (wallet['reservedCredits'] as num?)?.toDouble() ?? 0.0;
-
-      if (available < totalCharge) {
-        throw Exception(
-          'Insufficient credits. '
-          '${totalCharge.toStringAsFixed(2)} required, '
-          '${available.toStringAsFixed(2)} available.',
-        );
-      }
-
-      final adminBalance =
-          (adminSnap.data()?['availableBalance'] as num?)?.toDouble() ?? 0.0;
-
-      final remainingCredits = available - totalCharge;
-
-      // -----------------------------
-      // WRITES AFTER ALL READS
-      // -----------------------------
-
-      transaction.update(walletRef, {
-        'availableCredits': remainingCredits,
-        'reservedCredits': reserved + workerBudget,
-        'balance': remainingCredits,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      final transactionRef = walletRef.collection('transactions').doc();
-
-      transaction.set(transactionRef, {
-        'type': 'campaign_reserve',
-        'amount': workerBudget,
-        'platformFee': platformFee,
-        'totalCharge': totalCharge,
+    final result = await _callSecureFunction(
+      businessId: businessId,
+      functionName: 'fundCampaign',
+      data: {
         'campaignId': campaignId,
         'description': description,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      },
+    );
 
-      transaction.set(adminRef, {
-        'ownerId': adminWalletId,
-        'ownerType': 'admin',
-        'availableBalance': adminBalance + platformFee,
-        'balance': adminBalance + platformFee,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    });
+    final fundedWorkerBudget = (result['workerBudget'] as num?)?.toDouble();
+    final fundedPlatformFee = (result['platformFee'] as num?)?.toDouble();
+    final fundedTotalCharge = (result['totalCharge'] as num?)?.toDouble();
+
+    if (fundedWorkerBudget == null ||
+        fundedPlatformFee == null ||
+        fundedTotalCharge == null) {
+      throw Exception('The campaign funding response is incomplete.');
+    }
 
     return {
-      'workerBudget': workerBudget,
-      'platformFee': platformFee,
-      'totalCharge': totalCharge,
+      'workerBudget': fundedWorkerBudget,
+      'platformFee': fundedPlatformFee,
+      'totalCharge': fundedTotalCharge,
     };
   }
 }

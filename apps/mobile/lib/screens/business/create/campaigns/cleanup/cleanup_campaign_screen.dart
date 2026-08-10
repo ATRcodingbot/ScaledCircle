@@ -12,6 +12,7 @@ import '../../../../../widgets/scaled_circle/campaign/sc_payment_card.dart';
 import '../../../../../widgets/scaled_circle/campaign/sc_photo_requirement_card.dart';
 import '../../../../../widgets/scaled_circle/campaign/sc_campaign_summary_card.dart';
 import '../../../../../models/campaign/campaign.dart';
+import '../../../../../widgets/mapped_address_field.dart';
 
 class CleanupCampaignScreen extends StatefulWidget {
   const CleanupCampaignScreen({super.key});
@@ -231,21 +232,19 @@ class _CleanupCampaignScreenState extends State<CleanupCampaignScreen> {
 
             const SizedBox(height: 20),
 
-            TextFormField(
+            MappedAddressField(
               controller: addressController,
-
               onChanged: (_) {
                 setState(() {});
               },
-
-              decoration: const InputDecoration(
-                labelText: "Job Site Address",
-
-                prefixIcon: Icon(Icons.location_on),
-
-                border: OutlineInputBorder(),
-              ),
-
+              labelText: 'Job Site Address',
+              hintText: 'Enter the full street address',
+              onSelected: (suggestion) {
+                setState(() {
+                  latitude = suggestion.latitude;
+                  longitude = suggestion.longitude;
+                });
+              },
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return "Required";

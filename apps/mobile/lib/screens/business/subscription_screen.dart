@@ -314,6 +314,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           'API and integrations',
                           'CRM integrations',
                           'Recurring campaign automation',
+                          'Maryland Weather Intelligence alerts',
                           'Franchise and multi-location management',
                           'Priority support',
                         ],

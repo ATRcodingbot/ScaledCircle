@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/campaign_model.dart';
 
@@ -12,7 +13,8 @@ class CampaignService {
   // ==============================
 
   Future<String> createCampaign(
-      Map<String, dynamic> data) async {
+    Map<String, dynamic> data,
+  ) async {
 
     final doc = await _firestore
         .collection("campaigns")
@@ -24,7 +26,7 @@ class CampaignService {
 
 
   // ==============================
-  // SCALER MARKETPLACE
+  // OPEN CAMPAIGNS
   // ==============================
 
   Stream<List<CampaignModel>> getOpenCampaigns() {
@@ -48,7 +50,70 @@ class CampaignService {
                 CampaignModel.fromFirestore(doc),
           )
           .toList();
+
     });
+
+  }
+
+
+
+  // ==============================
+  // SCALER APPLICATIONS
+  // ==============================
+
+  Stream<List<CampaignModel>> getScalerApplications() {
+
+    final user =
+        FirebaseAuth.instance.currentUser;
+
+
+    if (user == null) {
+
+      return Stream.value([]);
+
+    }
+
+
+    return _firestore
+        .collectionGroup("applications")
+        .where(
+          "scalerId",
+          isEqualTo: user.uid,
+        )
+        .snapshots()
+        .asyncMap(
+          (snapshot) async {
+
+        final List<CampaignModel> campaigns = [];
+
+
+        for(final application in snapshot.docs){
+
+          final data = application.data();
+
+          if (data["status"]?.toString() != "pending") {
+            continue;
+          }
+
+          final campaign =
+              await getCampaignById(
+                data["campaignId"],
+              );
+
+
+          if(campaign != null){
+
+            campaigns.add(campaign);
+
+          }
+
+        }
+
+
+        return campaigns;
+
+      });
+
   }
 
 
@@ -58,7 +123,8 @@ class CampaignService {
   // ==============================
 
   Stream<List<CampaignModel>> getBusinessCampaigns(
-      String businessId) {
+    String businessId,
+  ){
 
     return _firestore
         .collection("campaigns")
@@ -71,25 +137,29 @@ class CampaignService {
           descending: true,
         )
         .snapshots()
-        .map((snapshot) {
+        .map((snapshot){
 
       return snapshot.docs
           .map(
-            (doc) =>
-                CampaignModel.fromFirestore(doc),
+            (doc)=>
+              CampaignModel.fromFirestore(doc),
           )
           .toList();
+
     });
+
   }
 
 
 
   // ==============================
-  // SINGLE CAMPAIGN
+  // GET CAMPAIGN
   // ==============================
 
   Future<CampaignModel?> getCampaignById(
-      String campaignId) async {
+    String campaignId,
+  ) async {
+
 
     final snapshot =
         await _firestore
@@ -98,26 +168,29 @@ class CampaignService {
             .get();
 
 
-    if (!snapshot.exists) {
+
+    if(!snapshot.exists){
+
       return null;
+
     }
 
 
-    return CampaignModel.fromFirestore(snapshot);
+    return CampaignModel.fromFirestore(
+      snapshot,
+    );
+
   }
 
 
 
-
-
   // ==============================
-  // NEW:
   // GET CAMPAIGN ZONES
-  // USED BY SCALER DETAILS PAGE
   // ==============================
 
   Stream<List<Map<String,dynamic>>> getCampaignZones(
-      String campaignId) {
+    String campaignId,
+  ){
 
     return _firestore
         .collection("campaignZones")
@@ -141,12 +214,12 @@ class CampaignService {
 
 
   // ==============================
-  // NEW:
-  // CALCULATE ESTIMATED HOMES
+  // ESTIMATED HOMES
   // ==============================
 
   Future<int> getEstimatedHomes(
-      String campaignId) async {
+    String campaignId,
+  ) async {
 
 
     final snapshot =
@@ -159,22 +232,21 @@ class CampaignService {
             .get();
 
 
-
-    int totalHomes = 0;
+    int total = 0;
 
 
     for(final doc in snapshot.docs){
 
       final data = doc.data();
 
-
-      totalHomes +=
-          (data["estimatedHomes"] ?? 0) as int;
+      total +=
+          (data["estimatedHomes"] ?? 0)
+              as int;
 
     }
 
 
-    return totalHomes;
+    return total;
 
   }
 
@@ -185,54 +257,118 @@ class CampaignService {
   // APPLY TO CAMPAIGN
   // ==============================
 
-  Future applyToCampaign({
+  Future<void> applyToCampaign({
+  required String campaignId,
+  required String scalerId,
+}) async {
+  final campaignRef =
+      _firestore.collection("campaigns").doc(campaignId);
 
-    required String campaignId,
+  final campaignSnapshot = await campaignRef.get();
 
-    required String scalerId,
-
-  }) async {
-
-
-    final applicationRef =
-        _firestore
-            .collection("campaigns")
-            .doc(campaignId)
-            .collection("applications")
-            .doc(scalerId);
-
-
-
-    await applicationRef.set({
-
-      "scalerId": scalerId,
-
-      "campaignId": campaignId,
-
-      "status": "pending",
-
-      "createdAt":
-          FieldValue.serverTimestamp(),
-
-      "updatedAt":
-          FieldValue.serverTimestamp(),
-
-    });
-
+  if (!campaignSnapshot.exists) {
+    throw Exception("Campaign not found.");
   }
+
+  final campaignData =
+      campaignSnapshot.data() as Map<String, dynamic>;
+
+  final businessId =
+      campaignData["businessId"]?.toString() ?? "";
+
+  if (businessId.isEmpty) {
+    throw Exception(
+      "This campaign does not have a business attached.",
+    );
+  }
+
+  final applicationRef = campaignRef
+      .collection("applications")
+      .doc(scalerId);
+
+  // Check whether this scaler has already applied.
+  final existingApplication =
+      await applicationRef.get();
+
+  if (existingApplication.exists) {
+    final data =
+        existingApplication.data() ?? {};
+
+    final status =
+        data["status"]?.toString() ?? "pending";
+
+    if (status == "pending") {
+      throw Exception(
+        "You already applied for this campaign. "
+        "Your application is waiting for business approval.",
+      );
+    }
+
+    if (status == "accepted") {
+      throw Exception(
+        "You have already been accepted for this campaign.",
+      );
+    }
+
+    if (status == "rejected") {
+      throw Exception(
+        "Your previous application for this campaign was declined.",
+      );
+    }
+
+    throw Exception(
+      "You already have an application for this campaign.",
+    );
+  }
+
+  final notificationRef =
+      _firestore
+          .collection("notifications")
+          .doc();
+
+  final batch = _firestore.batch();
+
+  batch.set(
+    applicationRef,
+    {
+      "scalerId": scalerId,
+      "campaignId": campaignId,
+      "businessId": businessId,
+      "status": "pending",
+      "createdAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp(),
+    },
+  );
+
+  batch.set(
+    notificationRef,
+    {
+      "userId": businessId,
+      "campaignId": campaignId,
+      "scalerId": scalerId,
+      "type": "application_received",
+      "title": "New Scaler Application",
+      "message": "A scaler applied for your campaign.",
+      "read": false,
+      "createdAt": FieldValue.serverTimestamp(),
+    },
+  );
+
+  await batch.commit();
+}
 
 
 
 
 
   // ==============================
-  // BUSINESS REVIEW APPLICATIONS
+  // CAMPAIGN APPLICATIONS
   // ==============================
 
   Stream<QuerySnapshot<Map<String,dynamic>>>
-      getCampaignApplications(
-          String campaignId) {
-
+  getCampaignApplications(
+    String campaignId,
+  ){
 
     return _firestore
         .collection("campaigns")
@@ -254,7 +390,7 @@ class CampaignService {
   // ACCEPT SCALER
   // ==============================
 
-  Future acceptScalerApplication({
+  Future<void> acceptScalerApplication({
 
     required String campaignId,
 
@@ -328,7 +464,7 @@ class CampaignService {
   // COMPLETE CAMPAIGN
   // ==============================
 
-  Future completeCampaign({
+  Future<void> completeCampaign({
 
     required String campaignId,
 
@@ -362,12 +498,14 @@ class CampaignService {
 
         "status":"completed",
 
-        "completedBy":scalerId,
+        "completedBy":
+            scalerId,
 
         "completedAt":
             FieldValue.serverTimestamp(),
 
-        "reviewsUnlocked":true,
+        "reviewsUnlocked":
+            true,
 
       },
     );

@@ -7,6 +7,8 @@ import 'package:latlong2/latlong.dart';
 
 import '../../services/completion_payout_service.dart';
 import '../../services/completion_tracking_service.dart';
+import '../../services/campaign_service.dart';
+import '../../services/campaign/campaign_proof_policy.dart';
 import '../../widgets/home_completion_counter.dart';
 import 'job_tracking_screen.dart';
 
@@ -20,6 +22,8 @@ class JobDetailsScreen extends StatefulWidget {
 }
 
 class _JobDetailsScreenState extends State<JobDetailsScreen> {
+  final CampaignService _campaignService = CampaignService();
+
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
   }
@@ -37,74 +41,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       return;
     }
 
-    final firestore = FirebaseFirestore.instance;
-
-    final applicationRef = firestore
-        .collection('applications')
-        .doc('${widget.campaign.id}_${user.uid}');
-
     try {
-      await firestore.runTransaction((transaction) async {
-        final campaignSnapshot = await transaction.get(
-          widget.campaign.reference,
-        );
-
-        final applicationSnapshot = await transaction.get(applicationRef);
-
-        if (!campaignSnapshot.exists) {
-          throw Exception('Campaign no longer exists.');
-        }
-
-        final data = campaignSnapshot.data() as Map<String, dynamic>;
-
-        final status = data['status']?.toString() ?? 'open';
-
-        if (status != 'open') {
-          throw Exception('Campaign is not accepting applications.');
-        }
-
-        if (applicationSnapshot.exists) {
-          throw Exception('You already applied.');
-        }
-
-        final campaignName =
-            data['campaignName']?.toString() ?? 'Untitled Campaign';
-
-        final businessId = data['businessId']?.toString();
-
-        transaction.set(applicationRef, {
-          'campaignId': widget.campaign.id,
-          'campaignName': campaignName,
-          'businessId': businessId,
-          'businessEmail': data['businessEmail'],
-          'scalerId': user.uid,
-          'scalerEmail': user.email ?? 'Scaler',
-          'status': 'pending',
-          'appliedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        transaction.update(widget.campaign.reference, {
-          'applications': FieldValue.increment(1),
-        });
-
-        if (businessId != null && businessId.isNotEmpty) {
-          final notification = firestore.collection('notifications').doc();
-
-          transaction.set(notification, {
-            'userId': businessId,
-            'type': 'application_received',
-            'title': 'New Scaler Application',
-            'message': '${user.email ?? 'Scaler'} applied to $campaignName',
-            'campaignId': widget.campaign.id,
-            'campaignName': campaignName,
-            'scalerId': user.uid,
-            'scalerEmail': user.email ?? 'Scaler',
-            'read': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-      });
+      await _campaignService.applyToCampaign(
+        campaignId: widget.campaign.id,
+        scalerId: user.uid,
+      );
 
       if (!mounted) return;
 
@@ -532,6 +473,14 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
         final zoneName = data['zoneName']?.toString() ?? 'Zone';
 
+        final rawCampaignData = widget.campaign.data();
+        final campaignData = rawCampaignData is Map
+            ? Map<String, dynamic>.from(rawCampaignData)
+            : <String, dynamic>{};
+        final requiresPhotoProof = CampaignProofPolicy.requiresPhotos(
+          campaignData['campaignType']?.toString(),
+        );
+
         if (status == 'assigned' || status == 'accepted') {
           return SizedBox(
             width: double.infinity,
@@ -580,27 +529,29 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                 label: const Text('Open GPS Tracker'),
               ),
 
-              const SizedBox(height: 20),
+              if (requiresPhotoProof) ...[
+                const SizedBox(height: 20),
 
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 55),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 55),
+                  ),
+
+                  onPressed: () async {
+                    final photo = await pickInstallationPhoto();
+
+                    if (!mounted || photo == null) {
+                      return;
+                    }
+
+                    await submitJob(installationPhoto: photo);
+                  },
+
+                  icon: const Icon(Icons.upload),
+
+                  label: Text('Submit Photo Proof for $zoneName'),
                 ),
-
-                onPressed: () async {
-                  final photo = await pickInstallationPhoto();
-
-                  if (!mounted || photo == null) {
-                    return;
-                  }
-
-                  await submitJob(installationPhoto: photo);
-                },
-
-                icon: const Icon(Icons.upload),
-
-                label: Text('Submit $zoneName'),
-              ),
+              ],
             ],
           );
         }
@@ -725,8 +676,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
   Widget _applicationSection(DocumentSnapshot campaign, User user) {
     final ref = FirebaseFirestore.instance
+        .collection('campaigns')
+        .doc(campaign.id)
         .collection('applications')
-        .doc('${campaign.id}_${user.uid}');
+        .doc(user.uid);
 
     return StreamBuilder<DocumentSnapshot>(
       stream: ref.snapshots(),

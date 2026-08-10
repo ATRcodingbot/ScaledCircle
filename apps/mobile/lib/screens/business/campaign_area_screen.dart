@@ -29,6 +29,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   bool _saving = false;
   bool _loadingExistingArea = true;
   bool _hasLoadedExistingArea = false;
+  bool _mappingLocked = false;
 
   static const LatLng _defaultCenter = LatLng(39.2904, -76.6122);
 
@@ -90,12 +91,18 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
             rawData['shapeType']?.toString(),
       );
 
+      final assignedScalerId = rawData['assignedScalerId']?.toString();
+
       if (!mounted) {
         return;
       }
 
       setState(() {
         _selectedShape = existingShape;
+
+        _mappingLocked =
+            rawData['mapLocked'] == true ||
+            (assignedScalerId != null && assignedScalerId.isNotEmpty);
 
         if (existingPoints.isNotEmpty) {
           _generatedArea = List<LatLng>.from(existingPoints);
@@ -648,6 +655,33 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   Future<void> _saveArea() async {
+    final latestSnapshot = await widget.campaignReference.get();
+    if (!mounted) {
+      return;
+    }
+
+    final latestData = latestSnapshot.data() as Map<String, dynamic>?;
+    final latestAssignedScalerId = latestData?['assignedScalerId']?.toString();
+
+    if (_mappingLocked ||
+        latestData?['mapLocked'] == true ||
+        (latestAssignedScalerId != null && latestAssignedScalerId.isNotEmpty)) {
+      setState(() {
+        _mappingLocked = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This zone map is locked because the campaign was launched or a '
+            'Scaler is already assigned.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
     if (!_isAreaValid()) {
       ScaffoldMessenger.of(
         context,
@@ -937,7 +971,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Define Campaign Zone'),
+        title: Text(
+          _mappingLocked ? 'Campaign Zone (Locked)' : 'Define Campaign Zone',
+        ),
         centerTitle: true,
       ),
       body: Column(
@@ -956,12 +992,29 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                   )
                   .toList(),
               selected: {_selectedShape},
-              onSelectionChanged: (selection) {
-                _selectShape(selection.first);
-              },
+              onSelectionChanged: _mappingLocked
+                  ? null
+                  : (selection) {
+                      _selectShape(selection.first);
+                    },
               showSelectedIcon: false,
             ),
           ),
+
+          if (_mappingLocked)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
+              child: Card(
+                child: ListTile(
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('Campaign zone map is locked'),
+                  subtitle: Text(
+                    'The boundary cannot change after campaign launch or '
+                    'Scaler assignment.',
+                  ),
+                ),
+              ),
+            ),
 
           Container(
             width: double.infinity,
@@ -992,7 +1045,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                     : _calculateCenter(_generatedArea),
                 initialZoom: _generatedArea.isEmpty ? 13 : 15,
 
-                onTap: _handleMapTap,
+                onTap: _mappingLocked ? null : _handleMapTap,
               ),
 
               children: [
@@ -1107,8 +1160,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed:
-                              _inputPoints.isEmpty && _generatedArea.isEmpty
+                          onPressed: _mappingLocked ||
+                                  (_inputPoints.isEmpty && _generatedArea.isEmpty)
                               ? null
                               : _undoLastPoint,
                           icon: const Icon(Icons.undo),
@@ -1120,8 +1173,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed:
-                              _inputPoints.isEmpty && _generatedArea.isEmpty
+                          onPressed: _mappingLocked ||
+                                  (_inputPoints.isEmpty && _generatedArea.isEmpty)
                               ? null
                               : _clearArea,
                           icon: const Icon(Icons.clear),
@@ -1145,7 +1198,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton.icon(
-                      onPressed: _saving ? null : _saveArea,
+                      onPressed: _saving || _mappingLocked ? null : _saveArea,
                       icon: _saving
                           ? const SizedBox(
                               width: 20,

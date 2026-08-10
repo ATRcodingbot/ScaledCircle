@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/platform_billing_service.dart';
 import 'campaign_zones_screen.dart';
 import 'campaign/campaign_locations_screen.dart';
+import '../../widgets/mapped_address_field.dart';
 
 class CreateCampaignScreen extends StatefulWidget {
   const CreateCampaignScreen({super.key});
@@ -38,6 +39,8 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
   String _materialSource = 'business_provided';
 
   String _materialHandoffMethod = 'business_pickup';
+  double? _materialHandoffLatitude;
+  double? _materialHandoffLongitude;
 
   bool _trackingEnabled = false;
 
@@ -433,6 +436,8 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
           'materialHandoffMethod': _materialHandoffMethod,
 
           'materialHandoffAddress': materialAddressController.text.trim(),
+          'materialHandoffLatitude': _materialHandoffLatitude,
+          'materialHandoffLongitude': _materialHandoffLongitude,
 
           'materialHandoffInstructions': materialInstructionsController.text
               .trim(),
@@ -1070,13 +1075,18 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
                   const SizedBox(height: 18),
 
-                  TextFormField(
+                  MappedAddressField(
                     controller: materialAddressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Pickup / Drop-off Address',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.location_on_outlined),
-                    ),
+                    labelText: 'Pickup / Drop-off Address',
+                    hintText: 'Enter the full street address',
+                    onChanged: (_) {
+                      _materialHandoffLatitude = null;
+                      _materialHandoffLongitude = null;
+                    },
+                    onSelected: (suggestion) {
+                      _materialHandoffLatitude = suggestion.latitude;
+                      _materialHandoffLongitude = suggestion.longitude;
+                    },
                     validator: (value) {
                       if (!_usesBusinessProvidedMaterials) {
                         return null;

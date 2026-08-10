@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
 import 'package:latlong2/latlong.dart';
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
 import '../../../models/campaign/campaign_location.dart';
 import '../../../services/campaign/campaign_service.dart';
+import '../../../widgets/mapped_address_field.dart';
 
 class CampaignLocationsScreen extends StatefulWidget {
   const CampaignLocationsScreen({
@@ -45,7 +43,6 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
 
   bool _savingLocation = false;
   bool _finishing = false;
-  bool _findingAddress = false;
 
   LatLng? _selectedPoint;
 
@@ -133,115 +130,6 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
 
       _longitudeController.text = point.longitude.toStringAsFixed(7);
     });
-  }
-
-  Future<void> _findAddress() async {
-    if (_findingAddress) {
-      return;
-    }
-
-    final address = _addressController.text.trim();
-
-    if (address.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Enter an address first.')));
-
-      return;
-    }
-
-    setState(() {
-      _findingAddress = true;
-    });
-
-    try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': address,
-        'format': 'jsonv2',
-        'limit': '1',
-        'countrycodes': 'us',
-        'addressdetails': '1',
-      });
-
-      final response = await http.get(
-        uri,
-        headers: {
-          'User-Agent': 'ScaledCircle/1.0',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Address service returned status ${response.statusCode}.',
-        );
-      }
-
-      final decoded = jsonDecode(response.body);
-
-      if (decoded is! List || decoded.isEmpty) {
-        throw Exception(
-          'No matching address was found. '
-          'Try including the city, state, and ZIP code.',
-        );
-      }
-
-      final firstResult = decoded.first;
-
-      if (firstResult is! Map) {
-        throw Exception('The address service returned an invalid result.');
-      }
-
-      final latitude = double.tryParse(firstResult['lat']?.toString() ?? '');
-
-      final longitude = double.tryParse(firstResult['lon']?.toString() ?? '');
-
-      if (latitude == null || longitude == null) {
-        throw Exception(
-          'The address result did not contain valid coordinates.',
-        );
-      }
-
-      final point = LatLng(latitude, longitude);
-
-      if (!mounted) {
-        return;
-      }
-
-      _setSelectedPoint(point);
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-
-        try {
-          _mapController.move(point, 17);
-        } catch (_) {
-          // Map may still be attaching during the first frame.
-        }
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Address found. Adjust the pin if needed.'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to find address: $e')));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _findingAddress = false;
-        });
-      }
-    }
   }
 
   void _handleMainMapTap(TapPosition tapPosition, LatLng point) {
@@ -921,42 +809,27 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
 
                         const SizedBox(height: 14),
 
-                        TextFormField(
+                        MappedAddressField(
                           controller: _addressController,
-                          textInputAction: TextInputAction.search,
-                          onFieldSubmitted: (_) {
-                            _findAddress();
+                          labelText: 'Address',
+                          hintText: '123 Main St, Baltimore, MD',
+                          onSelected: (suggestion) {
+                            final point = LatLng(
+                              suggestion.latitude,
+                              suggestion.longitude,
+                            );
+                            _setSelectedPoint(point);
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) {
+                                return;
+                              }
+                              try {
+                                _mapController.move(point, 17);
+                              } catch (_) {
+                                // The map can still be attaching on first load.
+                              }
+                            });
                           },
-                          decoration: const InputDecoration(
-                            labelText: 'Address',
-                            hintText: '123 Main St, Baltimore, MD',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.location_on_outlined),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton.icon(
-                            onPressed: _findingAddress ? null : _findAddress,
-                            icon: _findingAddress
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.search),
-                            label: Text(
-                              _findingAddress
-                                  ? 'Finding Address...'
-                                  : 'Find Address',
-                            ),
-                          ),
                         ),
 
                         const SizedBox(height: 18),

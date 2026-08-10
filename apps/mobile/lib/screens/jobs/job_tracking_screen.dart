@@ -3,10 +3,12 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import '../../services/campaign/campaign_proof_policy.dart';
 import '../scaler/completion/submit_completion_screen.dart';
 
 class JobTrackingScreen extends StatefulWidget {
@@ -24,6 +26,8 @@ class JobTrackingScreen extends StatefulWidget {
 }
 
 class _JobTrackingScreenState extends State<JobTrackingScreen> {
+  static const bool _allowGpsSimulation = !kReleaseMode;
+
   final MapController _mapController = MapController();
 
   StreamSubscription<Position>? _positionSubscription;
@@ -37,6 +41,8 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
   LatLng? _simulatedPosition;
 
   late DocumentReference<Map<String, dynamic>> _routeReference;
+
+  bool _existingRouteExpected = false;
 
   bool _tracking = false;
 
@@ -64,6 +70,8 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
       _routeReference = FirebaseFirestore.instance
           .collection('campaignRoutes')
           .doc(existingRouteId);
+
+      _existingRouteExpected = true;
     } else {
       _routeReference = FirebaseFirestore.instance
           .collection('campaignRoutes')
@@ -104,17 +112,44 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
         throw Exception('This zone is not assigned to you.');
       }
 
-      final serviceArea = _parsePoints(zoneData['serviceArea']);
+      var serviceArea = _serviceAreaFromData(zoneData);
 
-      final routeSnapshot = await _routeReference.get();
+      if (serviceArea.length < 3) {
+        final campaignData = widget.campaign.data();
 
-      final existingRoute = routeSnapshot.exists
-          ? _parsePoints(routeSnapshot.data()?['points'])
-          : <LatLng>[];
+        if (campaignData is Map<String, dynamic>) {
+          serviceArea = _serviceAreaFromData(campaignData);
+        }
+      }
 
-      final simulated = routeSnapshot.data()?['simulated'] == true;
+      Map<String, dynamic>? routeData;
 
-      final tracking = routeSnapshot.data()?['tracking'] == true;
+      if (_existingRouteExpected) {
+        try {
+          final routeSnapshot = await _routeReference.get();
+
+          routeData = routeSnapshot.data();
+        } on FirebaseException catch (error) {
+          if (error.code != 'permission-denied') {
+            rethrow;
+          }
+
+          // The zone may have been reassigned while still referencing the
+          // previous Scaler's protected route. Preserve that evidence and
+          // start a fresh route for the current assignment.
+          _routeReference = FirebaseFirestore.instance
+              .collection('campaignRoutes')
+              .doc();
+
+          _existingRouteExpected = false;
+        }
+      }
+
+      final existingRoute = _parsePoints(routeData?['points']);
+
+      final simulated = routeData?['simulated'] == true;
+
+      final tracking = routeData?['tracking'] == true;
 
       if (!mounted) {
         return;
@@ -170,13 +205,19 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
     final points = <LatLng>[];
 
     for (final item in rawPoints) {
+      if (item is GeoPoint) {
+        points.add(LatLng(item.latitude, item.longitude));
+
+        continue;
+      }
+
       if (item is! Map) {
         continue;
       }
 
-      final latitude = item['latitude'];
+      final latitude = item['latitude'] ?? item['lat'];
 
-      final longitude = item['longitude'];
+      final longitude = item['longitude'] ?? item['lng'];
 
       if (latitude is num && longitude is num) {
         points.add(LatLng(latitude.toDouble(), longitude.toDouble()));
@@ -184,6 +225,54 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
     }
 
     return points;
+  }
+
+  List<LatLng> _serviceAreaFromData(Map<String, dynamic> data) {
+    final points = _parsePoints(data['serviceArea']);
+
+    if (points.length >= 3) {
+      return points;
+    }
+
+    final rawCenter = data['serviceAreaCenter'];
+
+    final radius = (data['serviceAreaRadiusMeters'] as num?)?.toDouble();
+
+    LatLng? center;
+
+    if (rawCenter is GeoPoint) {
+      center = LatLng(rawCenter.latitude, rawCenter.longitude);
+    } else if (rawCenter is Map) {
+      final latitude = rawCenter['latitude'] ?? rawCenter['lat'];
+
+      final longitude = rawCenter['longitude'] ?? rawCenter['lng'];
+
+      if (latitude is num && longitude is num) {
+        center = LatLng(latitude.toDouble(), longitude.toDouble());
+      }
+    }
+
+    if (center == null || radius == null || radius <= 0) {
+      return [];
+    }
+
+    const pointCount = 48;
+
+    const metersPerDegreeLatitude = 111320.0;
+
+    final metersPerDegreeLongitude =
+        metersPerDegreeLatitude * math.cos(center.latitude * math.pi / 180);
+
+    return List.generate(pointCount, (index) {
+      final angle = (2 * math.pi * index) / pointCount;
+
+      return LatLng(
+        center!.latitude +
+            (math.sin(angle) * radius / metersPerDegreeLatitude),
+        center.longitude +
+            (math.cos(angle) * radius / metersPerDegreeLongitude),
+      );
+    });
   }
 
   LatLng _calculateCenter(List<LatLng> points) {
@@ -308,18 +397,6 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
       final point = LatLng(position.latitude, position.longitude);
 
-      setState(() {
-        _currentPosition = position;
-
-        _simulatedPosition = null;
-
-        _tracking = true;
-
-        _routeIsSimulated = false;
-
-        _errorMessage = null;
-      });
-
       _addRoutePoint(point);
 
       await _routeReference.set({
@@ -354,6 +431,22 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
         'gpsTrackingStartedAt': FieldValue.serverTimestamp(),
 
         'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _currentPosition = position;
+
+        _simulatedPosition = null;
+
+        _tracking = true;
+
+        _routeIsSimulated = false;
+
+        _errorMessage = null;
       });
 
       _positionSubscription =
@@ -396,8 +489,12 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
       setState(() {
         _tracking = false;
 
-        _errorMessage = e.toString();
+        _errorMessage = 'Unable to start GPS tracking: $e';
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_errorMessage!)),
+      );
     }
   }
 
@@ -530,13 +627,9 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
     final latitudes = _serviceArea.map((p) => p.latitude).toList();
 
-    final longitudes = _serviceArea.map((p) => p.longitude).toList();
-
     final minLat = latitudes.reduce(math.min);
 
     final maxLat = latitudes.reduce(math.max);
-
-    final centerLat = (minLat + maxLat) / 2;
 
     const metersPerDegreeLatitude = 111320.0;
 
@@ -607,6 +700,37 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
       }
     }
 
+    if (route.length >= 2) {
+      return route;
+    }
+
+    return _buildSimulatedPerimeterRoute();
+  }
+
+  List<LatLng> _buildSimulatedPerimeterRoute() {
+    final route = <LatLng>[];
+
+    for (int i = 0; i < _serviceArea.length; i++) {
+      final start = _serviceArea[i];
+
+      final end = _serviceArea[(i + 1) % _serviceArea.length];
+
+      final distance = const Distance().as(LengthUnit.Meter, start, end);
+
+      final steps = math.max(1, (distance / 10).ceil());
+
+      for (int step = 0; step <= steps; step++) {
+        final percent = step / steps;
+
+        route.add(
+          LatLng(
+            start.latitude + (end.latitude - start.latitude) * percent,
+            start.longitude + (end.longitude - start.longitude) * percent,
+          ),
+        );
+      }
+    }
+
     return route;
   }
 
@@ -620,6 +744,12 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
     });
 
     try {
+      if (_serviceArea.length < 3) {
+        throw Exception(
+          'The assigned zone does not contain a usable mapped service area.',
+        );
+      }
+
       final simulatedRoute = _buildSimulatedRoute();
 
       if (simulatedRoute.length < 2) {
@@ -710,6 +840,15 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
             ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
             : _calculateCenter(_serviceArea));
 
+    final rawCampaignData = widget.campaign.data();
+    final campaignData = rawCampaignData is Map
+        ? Map<String, dynamic>.from(rawCampaignData)
+        : <String, dynamic>{};
+    final campaignType = campaignData['campaignType']?.toString();
+    final requiresPhotoProof = CampaignProofPolicy.requiresPhotos(
+      campaignType,
+    );
+
     return Scaffold(
       appBar: AppBar(title: Text('${_zoneName()} GPS')),
 
@@ -763,65 +902,90 @@ class _JobTrackingScreenState extends State<JobTrackingScreen> {
 
             child: Column(
               children: [
+                if (_errorMessage != null) ...[
+                  Text(
+                    _errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+
+                  const SizedBox(height: 12),
+                ],
+
                 ElevatedButton(
                   onPressed: _tracking ? null : _startTracking,
 
                   child: const Text('Start GPS Tracking'),
                 ),
 
-                ElevatedButton(
-                  onPressed: _tracking ? _simulateMovement : null,
+                if (_allowGpsSimulation)
+                  ElevatedButton(
+                    onPressed: _tracking ? _simulateMovement : null,
 
-                  child: Text(
-                    _simulating
-                        ? 'Generating Route...'
-                        : 'Simulate Walking Route',
+                    child: Text(
+                      _simulating
+                          ? 'Generating Test Route...'
+                          : 'Simulate Walking Route (Test Only)',
+                    ),
                   ),
-                ),
 
                 ElevatedButton(
-                  onPressed: _tracking ? _stopTracking : null,
+                  onPressed: _tracking && !_saving ? _stopTracking : null,
 
-                  child: const Text('Stop & Save'),
+                  child: Text(_saving ? 'Saving Route...' : 'Stop & Save'),
                 ),
 
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.assignment_turned_in),
+                if (requiresPhotoProof)
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.photo_camera_outlined),
+                      title: Text('Photo Proof Required'),
+                      subtitle: Text(
+                        'Save this GPS evidence, then use the field-service '
+                        'job screen to add the required photos.',
+                      ),
+                    ),
+                  )
+                else
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.assignment_turned_in),
 
-                  label: const Text('Submit Completion'),
+                    label: const Text('Submit GPS Completion'),
 
-                  onPressed: !_tracking
-                      ? () {
-                          final campaignData =
-                              widget.campaign.data() as Map<String, dynamic>;
+                    onPressed: !_tracking && _routePoints.length >= 2
+                        ? () {
+                            final businessId =
+                                campaignData['businessId']?.toString() ?? '';
 
-                          final businessId =
-                              campaignData['businessId']?.toString() ?? '';
+                            if (businessId.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Business information unavailable.',
+                                  ),
+                                ),
+                              );
 
-                          if (businessId.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Business information unavailable.',
+                              return;
+                            }
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => SubmitCompletionScreen(
+                                  campaignId: widget.campaign.id,
+                                  businessId: businessId,
+                                  zoneId: widget.zone.id,
+                                  zoneName: _zoneName(),
+                                  routeId: _routeReference.id,
+                                  gpsPointCount: _routePoints.length,
+                                  routeSimulated: _routeIsSimulated,
                                 ),
                               ),
                             );
-
-                            return;
                           }
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => SubmitCompletionScreen(
-                                campaignId: widget.campaign.id,
-                                businessId: businessId,
-                              ),
-                            ),
-                          );
-                        }
-                      : null,
-                ),
+                        : null,
+                  ),
 
                 OutlinedButton(
                   onPressed: _clearRoute,

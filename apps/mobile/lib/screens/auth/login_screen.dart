@@ -6,7 +6,9 @@ import '../business/business_dashboard.dart';
 import '../scaler/dashboard/scaler_dashboard_screen.dart';
 
 import '../notifications/notifications_screen.dart';
-import '../onboarding/account_type_screen.dart';
+import '../public/early_access_pending_screen.dart';
+import '../public/waitlist_screen.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -59,14 +61,45 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!userDocument.exists) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => AccountTypeScreen()),
+          MaterialPageRoute(
+            builder: (_) => EarlyAccessPendingScreen(
+              email: user.email ?? emailController.text.trim(),
+            ),
+          ),
         );
         return;
       }
 
       final userData = userDocument.data();
 
-      final accountType = userData?['accountType']?.toString();
+      final role = userData?['role']?.toString().toLowerCase();
+      final approvedForBeta =
+          role == 'admin' ||
+          userData?['active'] == true ||
+          userData?['betaAccess'] == 'approved';
+
+      if (!approvedForBeta) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EarlyAccessPendingScreen(
+              email: user.email ?? emailController.text.trim(),
+            ),
+          ),
+        );
+        return;
+      }
+
+      var accountType = (userData?['activeView'] ?? userData?['accountType'])
+          ?.toString()
+          .toLowerCase();
+
+      if (role == 'admin' &&
+          accountType != 'business' &&
+          accountType != 'scaler' &&
+          accountType != 'marketer') {
+        accountType = 'business';
+      }
 
       final loginNotification = await _buildLoginNotification(
         userId: user.uid,
@@ -89,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      if (accountType == 'marketer') {
+      if (accountType == 'scaler' || accountType == 'marketer') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -105,7 +138,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => AccountTypeScreen()),
+        MaterialPageRoute(
+          builder: (_) => EarlyAccessPendingScreen(
+            email: user.email ?? emailController.text.trim(),
+          ),
+        ),
       );
     } on FirebaseAuthException catch (e) {
       String message = 'Login failed.';
@@ -232,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      if (accountType == 'marketer') {
+      if (accountType == 'scaler' || accountType == 'marketer') {
         const priorityTypes = [
           'changes_requested',
           'application_accepted',
@@ -352,9 +389,31 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
 
-              TextButton(
+              SizedBox(
+                height: 48,
+                child: TextButton.icon(
+                  onPressed: loading
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ForgotPasswordScreen(
+                                initialEmail: emailController.text.trim(),
+                              ),
+                            ),
+                          );
+                        },
+                  icon: const Icon(Icons.lock_reset),
+                  label: const Text('Forgot your password?'),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              OutlinedButton(
                 onPressed: loading
                     ? null
                     : () {
@@ -366,6 +425,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         );
                       },
                 child: const Text('Create Account'),
+              ),
+
+              const SizedBox(height: 8),
+
+              TextButton(
+                onPressed: loading
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const WaitlistScreen(),
+                          ),
+                        );
+                      },
+                child: const Text('Get Email Alerts Without an Account'),
               ),
             ],
           ),

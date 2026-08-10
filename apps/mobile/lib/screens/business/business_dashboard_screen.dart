@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -41,18 +42,19 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
         ownerType: 'business',
       );
 
-      // DEVELOPMENT-ONLY TEST CREDITS.
-      //
-      // The promoKey makes this grant idempotent:
-      // the same account will not receive it twice.
-      //
-      // Remove this automatic grant before production.
-      await _walletService.grantPromotionalCredits(
-        businessId: user.uid,
-        amount: 10000.0,
-        promoKey: 'development-business-10000-v1',
-        description: 'Development promotional credits for marketplace testing.',
-      );
+      final userDocument = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (userDocument.data()?['developmentCreditsEnabled'] == true) {
+        await _walletService.grantPromotionalCredits(
+          businessId: user.uid,
+          amount: 10000.0,
+          promoKey: 'development-business-10000-v1',
+          description:
+              'Development promotional credits for marketplace testing.',
+        );
+      }
 
       await _loadWalletBalances();
     } catch (e) {

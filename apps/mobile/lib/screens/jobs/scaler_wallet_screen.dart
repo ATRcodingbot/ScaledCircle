@@ -44,9 +44,7 @@ class ScalerWalletScreen extends StatelessWidget {
           final walletData = walletSnapshot.data?.data() ?? <String, dynamic>{};
 
           final availableBalance =
-              (walletData['availableBalance'] as num?)?.toDouble() ??
-              (walletData['balance'] as num?)?.toDouble() ??
-              0.0;
+              (walletData['availableBalance'] as num?)?.toDouble() ?? 0.0;
 
           final pendingBalance =
               (walletData['pendingBalance'] as num?)?.toDouble() ?? 0.0;
@@ -164,7 +162,9 @@ class ScalerWalletScreen extends StatelessWidget {
                   final transactions =
                       List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
                         transactionSnapshot.data?.docs ?? [],
-                      );
+                      ).where((transaction) {
+                        return _isScalerTransaction(transaction.data());
+                      }).toList();
 
                   transactions.sort((a, b) {
                     final aCreated = a.data()['createdAt'];
@@ -281,8 +281,29 @@ class ScalerWalletScreen extends StatelessWidget {
     );
   }
 
+  bool _isScalerTransaction(Map<String, dynamic> data) {
+    final walletSide = data['walletSide']?.toString();
+
+    if (walletSide != null && walletSide.isNotEmpty) {
+      return walletSide == 'scaler';
+    }
+
+    final type = data['type']?.toString() ?? '';
+
+    // Legacy records predate walletSide. Only known Scaler ledger types are
+    // included so business reserves, subscriptions, and credits never appear
+    // as earnings when one login is used in both account views.
+    return const {
+      'scaler_earnings',
+      'scaler_payment',
+      'payout',
+      'withdrawal',
+    }.contains(type);
+  }
+
   String _transactionDescription(String type) {
     switch (type) {
+      case 'scaler_earnings':
       case 'scaler_payment':
         return 'Campaign Payment';
 
@@ -302,6 +323,7 @@ class ScalerWalletScreen extends StatelessWidget {
 
   IconData _transactionIcon(String type) {
     switch (type) {
+      case 'scaler_earnings':
       case 'scaler_payment':
       case 'payout':
       case 'deposit':

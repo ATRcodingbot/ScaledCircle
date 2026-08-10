@@ -6,7 +6,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
+import 'navigation/app_routes.dart';
+import 'screens/business/business_dashboard.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/register_screen.dart';
+import 'screens/public/public_landing_screen.dart';
+import 'screens/scaler/dashboard/scaler_dashboard_screen.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -72,7 +77,14 @@ class ScaledCircleApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Scaled Circle',
       theme: AppTheme.lightTheme,
-      home: const LoginScreen(),
+      home: const PublicLandingScreen(),
+      routes: {
+        AppRoutes.login: (_) => const LoginScreen(),
+        AppRoutes.createAccount: (_) => const RegisterScreen(),
+        AppRoutes.publicExperience: (_) => const PublicLandingScreen(),
+        AppRoutes.businessDashboard: (_) => const BusinessDashboard(),
+        AppRoutes.scalerDashboard: (_) => const ScalerDashboardScreen(),
+      },
     );
   }
 }

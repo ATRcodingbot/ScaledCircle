@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'payout_calculation_service.dart';
+import 'secure_function_service.dart';
 
 class CompletionPayoutService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final PayoutCalculationService _payoutService = PayoutCalculationService();
+
+  final SecureFunctionService _secureFunctions = const SecureFunctionService();
 
   Future<Map<String, dynamic>> createPendingPayout({
     required String businessId,
@@ -106,7 +109,8 @@ class CompletionPayoutService {
 
       transaction.set(scalerWalletReference, {
         'ownerId': scalerId,
-        'ownerType': 'scaler',
+
+        if (!scalerWalletSnapshot.exists) 'ownerType': 'scaler',
 
         'pendingBalance': adjustedPendingBalance < 0.0
             ? 0.0
@@ -129,7 +133,17 @@ class CompletionPayoutService {
     };
   }
 
-  Future<void> approvePayout({required String payoutId}) async {
+  Future<Map<String, dynamic>> approvePayout({
+    required String payoutId,
+    bool releaseBonus = false,
+  }) async {
+    return _secureFunctions.call(
+      functionName: 'approveZonePayout',
+      data: {'payoutId': payoutId, 'releaseBonus': releaseBonus},
+    );
+  }
+
+  Future<void> approvePayoutLegacy({required String payoutId}) async {
     final payoutReference = _firestore.collection('payouts').doc(payoutId);
 
     /*
@@ -278,9 +292,7 @@ class CompletionPayoutService {
       }
 
       final currentScalerBalance =
-          (scalerWalletData?['availableBalance'] as num?)?.toDouble() ??
-          (scalerWalletData?['balance'] as num?)?.toDouble() ??
-          0.0;
+          (scalerWalletData?['availableBalance'] as num?)?.toDouble() ?? 0.0;
 
       final pendingBalance =
           (scalerWalletData?['pendingBalance'] as num?)?.toDouble() ?? 0.0;
@@ -312,11 +324,14 @@ class CompletionPayoutService {
          */
       transaction.set(scalerWalletReference, {
         'ownerId': scalerId,
-        'ownerType': 'scaler',
+
+        if (!scalerWalletSnapshot.exists) 'ownerType': 'scaler',
 
         'availableBalance': newScalerBalance,
 
-        'balance': newScalerBalance,
+        if (!scalerWalletSnapshot.exists ||
+            scalerWalletData?['ownerType']?.toString() != 'business')
+          'balance': newScalerBalance,
 
         'pendingBalance': newPendingBalance < 0.0 ? 0.0 : newPendingBalance,
 
@@ -405,6 +420,8 @@ class CompletionPayoutService {
       transaction.set(businessLedgerReference, {
         'type': 'reserved_payment',
 
+        'walletSide': 'business',
+
         'payoutId': payoutId,
 
         'amount': totalPayout,
@@ -425,6 +442,8 @@ class CompletionPayoutService {
          */
       transaction.set(scalerLedgerReference, {
         'type': 'scaler_earnings',
+
+        'walletSide': 'scaler',
 
         'payoutId': payoutId,
 

@@ -32,7 +32,9 @@ class ZoneIntelligenceCard extends StatelessWidget {
     final recommendedScalers =
         (data['recommendedScalerCount'] as num?)?.toInt() ?? 1;
 
-    final gpsCoverage = (data['gpsCoveragePercent'] as num?)?.toDouble();
+    final gpsCoverage =
+        (data['gpsCoveragePercent'] as num?)?.toDouble() ??
+        (data['completionPercentage'] as num?)?.toDouble();
 
     final zoneStatus = data['status']?.toString() ?? 'unassigned';
 

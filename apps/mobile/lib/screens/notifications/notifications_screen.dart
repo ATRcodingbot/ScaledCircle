@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../campaigns/campaign_applicants_screen.dart';
 import '../campaigns/campaign_details_screen.dart';
 import '../jobs/job_details_screen.dart';
+import '../jobs/scaler_wallet_screen.dart';
+import '../business/weather_alerts_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -57,6 +59,22 @@ class NotificationsScreen extends StatelessWidget {
       }
 
       if (!context.mounted) {
+        return;
+      }
+
+      if (type == 'payout_approved') {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ScalerWalletScreen()),
+        );
+        return;
+      }
+
+      if (type == 'weather_opportunity') {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const WeatherAlertsScreen()),
+        );
         return;
       }
 
@@ -223,7 +241,12 @@ class NotificationsScreen extends StatelessWidget {
 
     final createdAt = data['createdAt'];
 
-    final action = type == 'zone_completion_submitted' ? 'Review Zone' : 'View';
+    final action = switch (type) {
+      'zone_completion_submitted' => 'Review Zone',
+      'payout_approved' => 'View Earnings',
+      'weather_opportunity' => 'View Weather',
+      _ => 'View',
+    };
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -312,6 +335,9 @@ class NotificationsScreen extends StatelessWidget {
       case 'changes_requested':
         return Colors.orange.shade100;
 
+      case 'weather_opportunity':
+        return Colors.orange.shade100;
+
       case 'application_rejected':
         return Colors.red.shade100;
 
@@ -339,6 +365,12 @@ class NotificationsScreen extends StatelessWidget {
 
       case 'campaign_completed':
         return Icons.task_alt;
+
+      case 'payout_approved':
+        return Icons.account_balance_wallet_outlined;
+
+      case 'weather_opportunity':
+        return Icons.thunderstorm;
 
       default:
         return Icons.notifications;

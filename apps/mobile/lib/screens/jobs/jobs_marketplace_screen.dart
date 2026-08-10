@@ -8,7 +8,12 @@ import 'my_jobs_screen.dart';
 import 'scaler_wallet_screen.dart';
 
 class JobsMarketplaceScreen extends StatefulWidget {
-  const JobsMarketplaceScreen({super.key});
+  const JobsMarketplaceScreen({
+    super.key,
+    this.initialIndex = 0,
+  });
+
+  final int initialIndex;
 
   @override
   State<JobsMarketplaceScreen> createState() => _JobsMarketplaceScreenState();
@@ -18,7 +23,13 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
   final searchController = TextEditingController();
 
   String search = '';
-  int currentIndex = 0;
+  late int currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    currentIndex = widget.initialIndex.clamp(0, 2);
+  }
 
   @override
   void dispose() {
@@ -42,7 +53,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
           currentIndex == 0
               ? 'Available Jobs'
               : currentIndex == 1
-              ? 'My Jobs'
+              ? 'Current Campaigns'
               : 'My Earnings',
         ),
         centerTitle: true,
@@ -125,7 +136,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
           NavigationDestination(
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment),
-            label: 'My Jobs',
+            label: 'Current',
           ),
           NavigationDestination(
             icon: Icon(Icons.account_balance_wallet_outlined),

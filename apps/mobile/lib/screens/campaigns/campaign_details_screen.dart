@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../services/completion_payout_service.dart';
+import '../../services/platform_billing_service.dart';
+import '../../services/secure_function_service.dart';
 
 import '../../services/wallet_service.dart';
 import '../business/campaign_zones_screen.dart';
 import '../business/edit_campaign_screen.dart';
 import 'campaign_applicants_screen.dart';
+import 'campaign_tracking_screen.dart';
 import '../reviews/user_reviews_screen.dart';
 import '../reviews/create_review_screen.dart';
 
@@ -24,7 +27,8 @@ class CampaignDetailsScreen extends StatefulWidget {
 class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   final GlobalKey _zoneReviewKey = GlobalKey();
 
-  final WalletService _walletService = WalletService();
+  final PlatformBillingService _billingService = PlatformBillingService();
+  final SecureFunctionService _secureFunctions = const SecureFunctionService();
   Future<void> _openScalerReviews(BuildContext context, String scalerId) async {
     await Navigator.push(
       context,
@@ -59,7 +63,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('You must be logged in to publish this campaign.'),
+          content: Text('You must be logged in to launch this campaign.'),
         ),
       );
 
@@ -92,7 +96,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       }
 
       if (businessId != user.uid) {
-        throw Exception('You do not have permission to publish this campaign.');
+        throw Exception('You do not have permission to launch this campaign.');
       }
 
       final currentStatus = campaignData['status']?.toString() ?? 'draft';
@@ -100,8 +104,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       final fundingStatus =
           campaignData['fundingStatus']?.toString() ?? 'not_reserved';
 
-      if (currentStatus != 'draft' && fundingStatus == 'reserved') {
-        throw Exception('This campaign is already published and funded.');
+      if (currentStatus != 'draft') {
+        throw Exception('This campaign has already been launched.');
       }
 
       final campaignType = campaignData['campaignType']?.toString() ?? '';
@@ -119,6 +123,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
       int locationCount = 0;
       int totalLocationQuantity = 0;
+      final zoneReferencesToLock = <DocumentReference<Map<String, dynamic>>>[];
 
       if (exactLocationCampaign) {
         final locationsSnapshot = await FirebaseFirestore.instance
@@ -194,6 +199,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         zoneCount = zonesSnapshot.docs.length;
         mappedZoneCount = mappedZones.length;
+        zoneReferencesToLock.addAll(
+          zonesSnapshot.docs.map((zone) => zone.reference),
+        );
 
         for (final zone in mappedZones) {
           final data = zone.data();
@@ -233,57 +241,76 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       final alreadyReserved =
           fundingStatus == 'reserved' && existingReservedBudget > 0.0;
 
+      await liveCampaign.reference.update({
+        'maximumWorkerBudget': workerBudget,
+        'zoneCount': zoneCount,
+        'mappedZoneCount': mappedZoneCount,
+        'locationCount': locationCount,
+        'totalLocationQuantity': totalLocationQuantity,
+        'estimatedHomes': estimatedHomes,
+        'suggestedBasePayTotal': suggestedZonePayTotal,
+        'setupStatus': 'configured',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      Map<String, double> funding = {
+        'workerBudget': existingReservedBudget > 0
+            ? existingReservedBudget
+            : workerBudget,
+        'platformFee':
+            (campaignData['platformFee'] as num?)?.toDouble() ??
+            (workerBudget * PlatformBillingService.campaignFeeRate),
+        'totalCharge':
+            (campaignData['totalCampaignCost'] as num?)?.toDouble() ??
+            (workerBudget * (1 + PlatformBillingService.campaignFeeRate)),
+      };
+
       if (!alreadyReserved) {
-        final availableCredits = await _walletService.getAvailableCredits(
-          businessId,
-        );
-
-        if (availableCredits < workerBudget) {
-          throw Exception(
-            'You need '
-            '\$${workerBudget.toStringAsFixed(2)} '
-            'in available credits to publish this campaign. '
-            'Available: '
-            '\$${availableCredits.toStringAsFixed(2)}.',
-          );
-        }
-
-        await _walletService.reserveCredits(
+        funding = await _billingService.fundCampaign(
           businessId: businessId,
-          amount: workerBudget,
-          description:
-              'Worker funding reserved for campaign ${liveCampaign.id}.',
           campaignId: liveCampaign.id,
+          workerBudget: workerBudget,
+          description:
+              'Worker funding reserved for ${campaignData['campaignName'] ?? 'campaign'}.',
         );
       }
 
-      await liveCampaign.reference.update({
+      final chargedWorkerBudget = funding['workerBudget'] ?? workerBudget;
+      final chargedPlatformFee =
+          funding['platformFee'] ??
+          (workerBudget * PlatformBillingService.campaignFeeRate);
+      final chargedTotal =
+          funding['totalCharge'] ?? chargedWorkerBudget + chargedPlatformFee;
+
+      final launchBatch = FirebaseFirestore.instance.batch();
+
+      launchBatch.update(liveCampaign.reference, {
         'status': 'open',
-
         'fundingStatus': 'reserved',
-
+        'platformFeeStatus': 'charged',
         'maximumWorkerBudget': workerBudget,
-
         'reservedWorkerBudget': alreadyReserved
             ? existingReservedBudget
-            : workerBudget,
-
-        'zoneCount': zoneCount,
-        'mappedZoneCount': mappedZoneCount,
-
-        'locationCount': locationCount,
-        'totalLocationQuantity': totalLocationQuantity,
-
-        'estimatedHomes': estimatedHomes,
-        'suggestedBasePayTotal': suggestedZonePayTotal,
-
+            : chargedWorkerBudget,
+        'workerBudget': chargedWorkerBudget,
+        'platformFee': chargedPlatformFee,
+        'totalCampaignCost': chargedTotal,
         if (campaignData['fundedAt'] == null)
           'fundedAt': FieldValue.serverTimestamp(),
-
         'publishedAt': FieldValue.serverTimestamp(),
-
+        'zonesLockedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      for (final zoneReference in zoneReferencesToLock) {
+        launchBatch.update(zoneReference, {
+          'mapLocked': true,
+          'mapLockedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await launchBatch.commit();
 
       if (!context.mounted) {
         return;
@@ -292,9 +319,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Campaign published. '
-            '\$${workerBudget.toStringAsFixed(2)} '
-            'in worker pay is secured.',
+            'Campaign launched. '
+            '\$${chargedWorkerBudget.toStringAsFixed(2)} is secured for '
+            'Scaler pay and the mapped zones are now locked.',
           ),
         ),
       );
@@ -328,9 +355,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
     final campaignData = liveCampaign.data() as Map<String, dynamic>;
 
-    final campaignName =
-        campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
-
     final payoutId = zoneData['pendingPayoutId']?.toString() ?? zone.id;
 
     final payoutAmount = (zoneData['payoutAmount'] as num?)?.toDouble() ?? 0.0;
@@ -358,38 +382,106 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final availableBonus =
+        (zoneData['availableBonus'] as num?)?.toDouble() ??
+        (campaignData['bonus'] as num?)?.toDouble() ??
+        0.0;
+
+    final bonusEarnedAutomatically = completionPercentage >= 100.0;
+
+    final campaignBasePay =
+        (campaignData['basePay'] as num?)?.toDouble() ?? 0.0;
+
+    final basePayout = _contractBasePayout(
+      campaignBasePay: campaignBasePay,
+      completionPercentage: completionPercentage,
+    );
+
+    final releaseBonus = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Approve Zone & Release Payment'),
-          content: Text(
-            'Approve $zoneName at '
-            '${completionPercentage.toStringAsFixed(1)}% completion '
-            'and release '
-            '\$${payoutAmount.toStringAsFixed(2)} '
-            'to the Scaler?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              icon: const Icon(Icons.payments_outlined),
-              label: const Text('Approve & Pay'),
-            ),
-          ],
+        var includeBonus = bonusEarnedAutomatically && availableBonus > 0.0;
+
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final approvalTotal =
+                basePayout + (includeBonus ? availableBonus : 0.0);
+
+            return AlertDialog(
+              title: const Text('Approve Zone & Release Payment'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Approve $zoneName at '
+                      '${completionPercentage.toStringAsFixed(1)}% completion.',
+                    ),
+                    const SizedBox(height: 16),
+                    _approvalAmountRow('Base payment', basePayout),
+                    if (availableBonus > 0.0) ...[
+                      const SizedBox(height: 8),
+                      if (bonusEarnedAutomatically)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(
+                            Icons.verified,
+                            color: Colors.green,
+                          ),
+                          title: Text(
+                            'Earned completion bonus '
+                            '(\$${availableBonus.toStringAsFixed(2)})',
+                          ),
+                          subtitle: const Text(
+                            '100% completion earns the bonus automatically under platform rules.',
+                          ),
+                        )
+                      else
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Release discretionary bonus '
+                            '(\$${availableBonus.toStringAsFixed(2)})',
+                          ),
+                          subtitle: const Text(
+                            'The route is below 100%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
+                          ),
+                          value: includeBonus,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              includeBonus = value;
+                            });
+                          },
+                        ),
+                    ],
+                    const Divider(height: 24),
+                    _approvalAmountRow('Total to release', approvalTotal),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(dialogContext, includeBonus);
+                  },
+                  icon: const Icon(Icons.payments_outlined),
+                  label: const Text('Approve & Pay'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
-    if (confirmed != true) {
+    if (releaseBonus == null) {
       return;
     }
 
@@ -415,33 +507,15 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
      *          ↓
      * zone marked completed
      */
-      await payoutService.approvePayout(payoutId: payoutId);
+      final approval = await payoutService.approvePayout(
+        payoutId: payoutId,
+        releaseBonus: releaseBonus,
+      );
 
-      final firestore = FirebaseFirestore.instance;
+      final releasedAmount =
+          (approval['amount'] as num?)?.toDouble() ?? payoutAmount;
 
-      if (scalerId.isNotEmpty) {
-        final notificationReference = firestore
-            .collection('notifications')
-            .doc();
-
-        await notificationReference.set({
-          'userId': scalerId,
-          'type': 'zone_completed',
-          'title': 'Zone Approved & Paid',
-          'message':
-              'Your work on $zoneName for '
-              '$campaignName was approved. '
-              '\$${payoutAmount.toStringAsFixed(2)} '
-              'was added to your Scaled Circle wallet.',
-          'campaignId': liveCampaign.id,
-          'campaignName': campaignName,
-          'zoneId': zone.id,
-          'zoneName': zoneName,
-          'amount': payoutAmount,
-          'read': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
+      final releasedBonus = (approval['bonus'] as num?)?.toDouble() ?? 0.0;
 
       await _refreshCampaignCompletion(liveCampaign);
 
@@ -453,8 +527,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         SnackBar(
           content: Text(
             '$zoneName approved. '
-            '\$${payoutAmount.toStringAsFixed(2)} '
-            'was released to the Scaler.',
+            '\$${releasedAmount.toStringAsFixed(2)} '
+            'was released to the Scaler'
+            '${releasedBonus > 0.0 ? ' including a \$${releasedBonus.toStringAsFixed(2)} bonus' : ''}.',
           ),
         ),
       );
@@ -467,6 +542,63 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Unable to approve payment: $e')));
     }
+  }
+
+  Widget _launchDraftButton(
+    BuildContext context,
+    DocumentSnapshot liveCampaign,
+  ) {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(splashFactory: NoSplash.splashFactory),
+        onPressed: _publishingDraft
+            ? null
+            : () {
+                _publishAndFundDraftCampaign(context, liveCampaign);
+              },
+        icon: _publishingDraft
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.publish),
+        label: Text(
+          _publishingDraft
+              ? 'Launching & Securing Funds...'
+              : 'Launch Campaign & Secure Worker Pay',
+        ),
+      ),
+    );
+  }
+
+  Widget _approvalAmountRow(String label, double amount) {
+    return Row(
+      children: [
+        Expanded(child: Text(label)),
+        Text(
+          '\$${amount.toStringAsFixed(2)}',
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  double _contractBasePayout({
+    required double campaignBasePay,
+    required double completionPercentage,
+  }) {
+    if (completionPercentage < 30.0 || campaignBasePay <= 0.0) {
+      return 0.0;
+    }
+
+    if (completionPercentage >= 100.0) {
+      return campaignBasePay;
+    }
+
+    return campaignBasePay * (completionPercentage / 100.0);
   }
 
   Future<void> _requestZoneChanges(
@@ -743,7 +875,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         return AlertDialog(
           title: const Text('Delete Campaign'),
           content: const Text(
-            'Are you sure you want to permanently delete this campaign?',
+            'Permanently delete this unfunded draft and its zone setup? This cannot be undone.',
           ),
           actions: [
             TextButton(
@@ -772,23 +904,10 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     }
 
     try {
-      final zonesSnapshot = await _zonesCollection
-          .where('campaignId', isEqualTo: reference.id)
-          .get();
-
-      final firestore = FirebaseFirestore.instance;
-
-      final batch = firestore.batch();
-
-      for (final zone in zonesSnapshot.docs) {
-        batch.delete(_routesCollection.doc(zone.id));
-
-        batch.delete(zone.reference);
-      }
-
-      batch.delete(reference);
-
-      await batch.commit();
+      await _secureFunctions.call(
+        functionName: 'deleteDraftCampaign',
+        data: {'campaignId': reference.id},
+      );
 
       if (!context.mounted) {
         return;
@@ -1015,9 +1134,10 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Zone Workflow',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              key: _zoneReviewKey,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
 
             const SizedBox(height: 8),
@@ -1571,10 +1691,21 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     );
   }
 
-  Future<void> _scrollToZoneReview() async {
+  Future<void> _scrollToZoneReview(DocumentSnapshot liveCampaign) async {
     final reviewContext = _zoneReviewKey.currentContext;
 
     if (reviewContext == null) {
+      if (!mounted) {
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CampaignZonesScreen(campaign: liveCampaign),
+        ),
+      );
+
       return;
     }
 
@@ -1653,7 +1784,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                   height: 50,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      _scrollToZoneReview();
+                      _scrollToZoneReview(liveCampaign);
                     },
                     icon: const Icon(Icons.rate_review_outlined),
                     label: const Text('Review Submitted Zones'),
@@ -1711,6 +1842,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         final status = data['status']?.toString() ?? 'draft';
 
+        final trackingEnabled = data['trackingEnabled'] == true;
+
         final fundingStatus =
             data['fundingStatus']?.toString() ?? 'not_reserved';
 
@@ -1719,8 +1852,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         final maximumWorkerBudget =
             (data['maximumWorkerBudget'] as num?)?.toDouble() ?? 0.0;
-
-        final applicationCount = (data['applications'] as num?)?.toInt() ?? 0;
 
         return Scaffold(
           appBar: AppBar(
@@ -1770,27 +1901,28 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
               if (status == 'draft') ...[
                 const SizedBox(height: 12),
+                _launchDraftButton(context, liveCampaign),
+              ],
 
+              if (trackingEnabled) ...[
+                const SizedBox(height: 12),
                 SizedBox(
-                  width: double.infinity,
                   height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: _publishingDraft
-                        ? null
-                        : () {
-                            _publishAndFundDraftCampaign(context, liveCampaign);
-                          },
-                    icon: _publishingDraft
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.publish),
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              CampaignTrackingScreen(campaign: liveCampaign),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.qr_code_2),
                     label: Text(
-                      _publishingDraft
-                          ? 'Publishing & Securing Funds...'
-                          : 'Publish & Secure Worker Pay',
+                      data['trackingStatus']?.toString() == 'active'
+                          ? 'View Tracking & Marketing Assets'
+                          : 'Set Up Tracking & Marketing Assets',
                     ),
                   ),
                 ),
@@ -1842,30 +1974,44 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
                 const SizedBox(height: 12),
 
-                SizedBox(
-                  height: 55,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              CampaignApplicantsScreen(campaign: liveCampaign),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.people_alt_outlined),
-                    label: Text('View Applicants ($applicationCount)'),
-                  ),
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('campaigns')
+                      .doc(liveCampaign.id)
+                      .collection('applications')
+                      .snapshots(),
+                  builder: (context, applicationSnapshot) {
+                    final applicationCount =
+                        applicationSnapshot.data?.docs.length ?? 0;
+
+                    return SizedBox(
+                      height: 55,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CampaignApplicantsScreen(
+                                campaign: liveCampaign,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.people_alt_outlined),
+                        label:
+                            applicationSnapshot.connectionState ==
+                                ConnectionState.waiting
+                            ? const Text('View Applicants')
+                            : Text('View Applicants ($applicationCount)'),
+                      ),
+                    );
+                  },
                 ),
               ],
 
               const SizedBox(height: 28),
 
-              Container(
-                key: _zoneReviewKey,
-                child: _buildZoneReviewSection(liveCampaign),
-              ),
+              _buildZoneReviewSection(liveCampaign),
 
               if (status == 'completed') ...[
                 const SizedBox(height: 20),
@@ -1986,20 +2132,26 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                 const SizedBox(height: 15),
               ],
 
-              SizedBox(
-                height: 55,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
+              if (status == 'draft') ...[
+                _launchDraftButton(context, liveCampaign),
+                const SizedBox(height: 15),
+              ],
+
+              if (status == 'draft')
+                SizedBox(
+                  height: 55,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Delete Draft'),
+                    onPressed: () {
+                      _deleteCampaign(context, liveCampaign.reference);
+                    },
                   ),
-                  icon: const Icon(Icons.delete),
-                  label: const Text('Delete Campaign'),
-                  onPressed: () {
-                    _deleteCampaign(context, liveCampaign.reference);
-                  },
                 ),
-              ),
             ],
           ),
         );

@@ -104,17 +104,22 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
   }
 
   Widget _proofCard(CompletionProof proof) {
+    final isGpsRoute = proof.type == CompletionProofType.gpsRoute;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        leading: const Icon(Icons.photo),
+        leading: Icon(isGpsRoute ? Icons.route : Icons.photo),
 
-        title: Text(CompletionProof.proofTypeValue(proof.type)),
+        title: Text(isGpsRoute ? "GPS Route" : "Photo Evidence"),
 
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(proof.fileUrl ?? 'No photo URL available.'),
+            if (isGpsRoute)
+              Text(proof.note ?? 'Saved GPS route attached.')
+            else
+              Text(proof.fileUrl ?? 'Photo unavailable.'),
 
             if (proof.latitude != null && proof.longitude != null)
               Text("GPS: ${proof.latitude}, ${proof.longitude}"),
@@ -178,6 +183,27 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
 
               Card(
                 child: ListTile(
+                  leading: const Icon(Icons.route),
+                  title: const Text("GPS Verification"),
+                  subtitle: Text(
+                    completion.hasGpsEvidence
+                        ? "${completion.gpsPointCount} recorded route points"
+                              "${completion.routeSimulated ? ' (test simulation)' : ''}"
+                        : "GPS route evidence unavailable",
+                  ),
+                  trailing: Icon(
+                    completion.hasGpsEvidence
+                        ? Icons.verified
+                        : Icons.error_outline,
+                    color: completion.hasGpsEvidence
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                ),
+              ),
+
+              Card(
+                child: ListTile(
                   leading: const Icon(Icons.campaign),
                   title: const Text("Campaign"),
                   subtitle: Text(widget.campaignId),
@@ -206,14 +232,16 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
               const SizedBox(height: 20),
 
               const Text(
-                "Proof Photos",
+                "Completion Evidence",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 10),
 
               if (completion.proofs.isEmpty)
-                const Card(child: ListTile(title: Text("No proof uploaded."))),
+                const Card(
+                  child: ListTile(title: Text("No evidence attached.")),
+                ),
 
               ...completion.proofs.map(_proofCard),
 

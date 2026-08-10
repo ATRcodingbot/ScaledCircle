@@ -14,6 +14,12 @@ class CampaignZonesScreen extends StatelessWidget {
     return FirebaseFirestore.instance.collection('campaignZones');
   }
 
+  bool get _campaignLocked {
+    final data = campaign.data() as Map<String, dynamic>?;
+    final status = data?['status']?.toString() ?? 'draft';
+    return status != 'draft';
+  }
+
   Future<String?> _askForZoneName(
     BuildContext context, {
     String initialValue = '',
@@ -232,6 +238,25 @@ class CampaignZonesScreen extends StatelessWidget {
     BuildContext context,
     QueryDocumentSnapshot<Map<String, dynamic>> zone,
   ) async {
+    final latestZone = await zone.reference.get();
+    if (!context.mounted) {
+      return;
+    }
+
+    final assignedScalerId = latestZone.data()?['assignedScalerId']?.toString();
+
+    if (assignedScalerId != null && assignedScalerId.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Remove the Scaler assignment before changing this zone map.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
     final areaSaved = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -441,40 +466,115 @@ class CampaignZonesScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Approve Zone Payment'),
-          content: Text(
-            'Approve $zoneName at '
-            '${completionPercentage.toStringAsFixed(1)}% completion '
-            'and release \$${payoutAmount.toStringAsFixed(2)} '
-            'to the assigned Scaler?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Approve Payment'),
-            ),
-          ],
+        final campaignData =
+            (campaign.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final availableBonus =
+            (data['availableBonus'] as num?)?.toDouble() ??
+            (campaignData['bonus'] as num?)?.toDouble() ??
+            0.0;
+        final bonusEarnedAutomatically = completionPercentage >= 100.0;
+        final basePayout = _contractBasePayout(completionPercentage);
+        var releaseBonus = bonusEarnedAutomatically && availableBonus > 0.0;
+
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final approvalTotal =
+                basePayout + (releaseBonus ? availableBonus : 0.0);
+
+            return AlertDialog(
+              title: const Text('Approve Zone Payment'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Approve $zoneName at '
+                      '${completionPercentage.toStringAsFixed(1)}% completion.',
+                    ),
+                    const SizedBox(height: 16),
+                    _reviewMetricRow(
+                      label: 'Base payment',
+                      value: '\$${basePayout.toStringAsFixed(2)}',
+                    ),
+                    if (availableBonus > 0.0) ...[
+                      const SizedBox(height: 8),
+                      if (bonusEarnedAutomatically)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(
+                            Icons.verified,
+                            color: Colors.green,
+                          ),
+                          title: Text(
+                            'Earned completion bonus '
+                            '(\$${availableBonus.toStringAsFixed(2)})',
+                          ),
+                          subtitle: const Text(
+                            '100% completion earns the bonus automatically under platform rules.',
+                          ),
+                        )
+                      else
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Release discretionary bonus '
+                            '(\$${availableBonus.toStringAsFixed(2)})',
+                          ),
+                          subtitle: const Text(
+                            'The route is below 100%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
+                          ),
+                          value: releaseBonus,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              releaseBonus = value;
+                            });
+                          },
+                        ),
+                    ],
+                    const Divider(height: 24),
+                    _reviewMetricRow(
+                      label: 'Total to release',
+                      value: '\$${approvalTotal.toStringAsFixed(2)}',
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext, releaseBonus);
+                  },
+                  child: const Text('Approve Payment'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
-    if (confirmed != true) {
+    if (confirmed == null) {
       return;
     }
 
     try {
       final payoutService = CompletionPayoutService();
 
-      await payoutService.approvePayout(payoutId: payoutId);
+      final approval = await payoutService.approvePayout(
+        payoutId: payoutId,
+        releaseBonus: confirmed,
+      );
+
+      final releasedAmount =
+          (approval['amount'] as num?)?.toDouble() ?? payoutAmount;
+      final releasedBonus = (approval['bonus'] as num?)?.toDouble() ?? 0.0;
 
       await _refreshCampaignTotals();
 
@@ -486,7 +586,8 @@ class CampaignZonesScreen extends StatelessWidget {
         SnackBar(
           content: Text(
             '$zoneName approved. '
-            '\$${payoutAmount.toStringAsFixed(2)} was released to the Scaler wallet.',
+            '\$${releasedAmount.toStringAsFixed(2)} was released to the Scaler wallet'
+            '${releasedBonus > 0.0 ? ' including a \$${releasedBonus.toStringAsFixed(2)} bonus' : ''}.',
           ),
         ),
       );
@@ -674,7 +775,15 @@ class CampaignZonesScreen extends StatelessWidget {
     final completionPercentage =
         (data['completionPercentage'] as num?)?.toDouble() ?? 0.0;
 
-    final payoutAmount = (data['payoutAmount'] as num?)?.toDouble() ?? 0.0;
+    final campaignData =
+        (campaign.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+
+    final availableBonus =
+        (data['availableBonus'] as num?)?.toDouble() ??
+        (campaignData['bonus'] as num?)?.toDouble() ??
+        0.0;
+
+    final basePayout = _contractBasePayout(completionPercentage);
 
     final routePointCount =
         (data['submittedRoutePointCount'] as num?)?.toInt() ??
@@ -731,9 +840,21 @@ class CampaignZonesScreen extends StatelessWidget {
             const Divider(),
 
             _reviewMetricRow(
-              label: 'Proposed Payout',
-              value: '\$${payoutAmount.toStringAsFixed(2)}',
+              label: 'Base Payment',
+              value: '\$${basePayout.toStringAsFixed(2)}',
             ),
+
+            if (availableBonus > 0.0) ...[
+              const Divider(),
+              _reviewMetricRow(
+                label: 'Optional Bonus',
+                value: '\$${availableBonus.toStringAsFixed(2)}',
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'You can release the campaign bonus after reviewing the GPS evidence, even when the automatic score is imperfect.',
+              ),
+            ],
 
             const SizedBox(height: 16),
 
@@ -839,10 +960,36 @@ class CampaignZonesScreen extends StatelessWidget {
     );
   }
 
+  double _contractBasePayout(double completionPercentage) {
+    final campaignData =
+        (campaign.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+    final campaignBasePay =
+        (campaignData['basePay'] as num?)?.toDouble() ?? 0.0;
+
+    if (completionPercentage < 30.0 || campaignBasePay <= 0.0) {
+      return 0.0;
+    }
+
+    if (completionPercentage >= 100.0) {
+      return campaignBasePay;
+    }
+
+    return campaignBasePay * (completionPercentage / 100.0);
+  }
+
   Future<void> _showZoneActions(
     BuildContext context,
     QueryDocumentSnapshot<Map<String, dynamic>> zone,
   ) async {
+    final zoneData = zone.data();
+
+    final assignedScalerId = zoneData['assignedScalerId']?.toString();
+
+    final mapLocked =
+        zoneData['mapLocked'] == true ||
+        _campaignLocked ||
+        (assignedScalerId != null && assignedScalerId.isNotEmpty);
+
     final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -852,18 +999,31 @@ class CampaignZonesScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.edit_location_alt_outlined),
-                title: const Text('Edit Zone Map'),
-                onTap: () {
-                  Navigator.pop(sheetContext, 'map');
-                },
+                leading: Icon(
+                  mapLocked
+                      ? Icons.lock_outline
+                      : Icons.edit_location_alt_outlined,
+                ),
+                title: Text(mapLocked ? 'Zone Map Locked' : 'Edit Zone Map'),
+                subtitle: mapLocked
+                    ? const Text(
+                        'Zone setup cannot change after campaign launch or assignment.',
+                      )
+                    : null,
+                onTap: mapLocked
+                    ? null
+                    : () {
+                        Navigator.pop(sheetContext, 'map');
+                      },
               ),
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('Rename Zone'),
-                onTap: () {
-                  Navigator.pop(sheetContext, 'rename');
-                },
+                onTap: mapLocked
+                    ? null
+                    : () {
+                        Navigator.pop(sheetContext, 'rename');
+                      },
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
@@ -871,9 +1031,11 @@ class CampaignZonesScreen extends StatelessWidget {
                   'Delete Zone',
                   style: TextStyle(color: Colors.red),
                 ),
-                onTap: () {
-                  Navigator.pop(sheetContext, 'delete');
-                },
+                onTap: mapLocked
+                    ? null
+                    : () {
+                        Navigator.pop(sheetContext, 'delete');
+                      },
               ),
             ],
           ),
@@ -908,6 +1070,7 @@ class CampaignZonesScreen extends StatelessWidget {
         centerTitle: true,
         actions: [
           TextButton(
+            style: TextButton.styleFrom(splashFactory: NoSplash.splashFactory),
             onPressed: () {
               Navigator.pop(context, true);
             },
@@ -915,13 +1078,33 @@ class CampaignZonesScreen extends StatelessWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          _createZone(context);
-        },
-        icon: const Icon(Icons.add_location_alt),
-        label: const Text('Add Zone'),
-      ),
+      bottomNavigationBar: _campaignLocked
+          ? null
+          : SafeArea(
+              minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: SizedBox(
+                height: 58,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    splashFactory: NoSplash.splashFactory,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context, true);
+                  },
+                  icon: const Icon(Icons.arrow_forward),
+                  label: const Text('Continue to Review & Launch'),
+                ),
+              ),
+            ),
+      floatingActionButton: _campaignLocked
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                _createZone(context);
+              },
+              icon: const Icon(Icons.add_location_alt),
+              label: const Text('Add Zone'),
+            ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _zonesCollection
             .where('campaignId', isEqualTo: campaign.id)
@@ -997,7 +1180,7 @@ class CampaignZonesScreen extends StatelessWidget {
           }
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
             children: [
               const Text(
                 'Campaign Zone Manager',
@@ -1120,9 +1303,11 @@ class CampaignZonesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 18),
                         ElevatedButton.icon(
-                          onPressed: () {
-                            _createZone(context);
-                          },
+                          onPressed: _campaignLocked
+                              ? null
+                              : () {
+                                  _createZone(context);
+                                },
                           icon: const Icon(Icons.add_location_alt),
                           label: const Text('Create First Zone'),
                         ),
@@ -1155,9 +1340,11 @@ class CampaignZonesScreen extends StatelessWidget {
                     ZoneIntelligenceCard(
                       zoneName: zoneName,
                       data: data,
-                      onTap: () {
-                        _editZoneArea(context, zone);
-                      },
+                      onTap: _campaignLocked || data['mapLocked'] == true
+                          ? null
+                          : () {
+                              _editZoneArea(context, zone);
+                            },
                     ),
 
                     if (zoneStatus == 'submitted')

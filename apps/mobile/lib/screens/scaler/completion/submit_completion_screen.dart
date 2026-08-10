@@ -1,17 +1,26 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../models/campaign/campaign_completion.dart';
 import '../../../services/campaign/completion_submission_service.dart';
 
 class SubmitCompletionScreen extends StatefulWidget {
   final String campaignId;
   final String businessId;
+  final String zoneId;
+  final String zoneName;
+  final String routeId;
+  final int gpsPointCount;
+  final bool routeSimulated;
 
   const SubmitCompletionScreen({
     super.key,
     required this.campaignId,
     required this.businessId,
+    required this.zoneId,
+    required this.zoneName,
+    required this.routeId,
+    required this.gpsPointCount,
+    required this.routeSimulated,
   });
 
   @override
@@ -28,7 +37,7 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
 
   String? _completionId;
 
-  final List<CompletionProof> _proofs = [];
+  String? _loadError;
 
   @override
   void initState() {
@@ -50,17 +59,30 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
       return;
     }
 
-    final completionId = await _completionService.createDraftCompletion(
-      campaignId: widget.campaignId,
-      businessId: widget.businessId,
-      scalerId: user.uid,
-    );
+    try {
+      final completionId = await _completionService.createDraftCompletion(
+        campaignId: widget.campaignId,
+        businessId: widget.businessId,
+        scalerId: user.uid,
+        zoneId: widget.zoneId,
+        zoneName: widget.zoneName,
+        routeId: widget.routeId,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _completionId = completionId;
-    });
+      setState(() {
+        _completionId = completionId;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _loadError = error.toString();
+      });
+    }
   }
 
   Future<void> _submitCompletion() async {
@@ -104,29 +126,6 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
     }
   }
 
-  Future<void> _addProofPlaceholder() async {
-    final proof = CompletionProof(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-
-      type: CompletionProofType.checkpointPhoto,
-
-      fileUrl: "placeholder_photo",
-
-      capturedAt: DateTime.now(),
-    );
-
-    setState(() {
-      _proofs.add(proof);
-    });
-
-    if (_completionId != null) {
-      await _completionService.addProof(
-        completionId: _completionId!,
-        proof: proof,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -144,27 +143,49 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
 
           const SizedBox(height: 10),
 
-          Text(
-            _completionId == null
-                ? "Creating completion record..."
-                : "Completion ready for submission.",
+          const Text(
+            "Marketing campaign completion is verified from the saved GPS "
+            "route. No photo is required.",
           ),
 
           const SizedBox(height: 25),
 
           Card(
             child: ListTile(
-              leading: const Icon(Icons.photo_camera),
+              leading: const Icon(Icons.route),
 
-              title: Text("${_proofs.length} Proof Items Added"),
-
-              trailing: IconButton(
-                icon: const Icon(Icons.add),
-
-                onPressed: _addProofPlaceholder,
+              title: Text(
+                _loadError != null
+                    ? "GPS Route Verification Failed"
+                    : _completionId == null
+                    ? "Verifying GPS Route..."
+                    : "GPS Route Ready",
               ),
+
+              subtitle: Text(
+                "${widget.gpsPointCount} recorded points"
+                "${widget.routeSimulated ? ' (test simulation)' : ''}",
+              ),
+
+              trailing: _loadError != null
+                  ? const Icon(Icons.error_outline, color: Colors.red)
+                  : _completionId == null
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.verified, color: Colors.green),
             ),
           ),
+
+          if (_loadError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _loadError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
 
           const SizedBox(height: 20),
 
@@ -188,7 +209,9 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
             height: 55,
 
             child: ElevatedButton(
-              onPressed: _submitting ? null : _submitCompletion,
+              onPressed: _submitting || _completionId == null
+                  ? null
+                  : _submitCompletion,
 
               child: _submitting
                   ? const SizedBox(

@@ -526,28 +526,13 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
         throw Exception('Current GPS location is required.');
       }
 
-      final photo = await _photoService.takePhoto();
-
-      if (photo == null) {
-        return;
-      }
-
-      final photoUrl = await _photoService.uploadCompletionPhoto(
-        photo: photo,
-        campaignId: _campaignId,
-        scalerId: user.uid,
-        completionId: completionId,
-        proofType: 'event_photo',
-        campaignLocationId: location.id,
-      );
-
       final proof = CompletionProof(
         id: _firestore.collection('campaignCompletions').doc().id,
-        type: CompletionProofType.eventPhoto,
-        fileUrl: photoUrl,
+        type: CompletionProofType.gpsRoute,
         campaignLocationId: location.id,
         latitude: position.latitude,
         longitude: position.longitude,
+        note: 'Event marketing location verified with device GPS.',
         capturedAt: DateTime.now(),
       );
 
@@ -571,7 +556,7 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Event proof saved.')));
+      ).showSnackBar(const SnackBar(content: Text('Event GPS proof saved.')));
     } catch (e) {
       if (!mounted) {
         return;
@@ -608,9 +593,10 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
     }
 
     return completion.proofs.any((proof) {
-      return proof.type == CompletionProofType.eventPhoto &&
+      return proof.type == CompletionProofType.gpsRoute &&
           proof.campaignLocationId == locationId &&
-          proof.hasPhoto;
+          proof.latitude != null &&
+          proof.longitude != null;
     });
   }
 
@@ -740,7 +726,7 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
       if (eventLocations.isEmpty || missingProof) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Event photo proof is required before submission.'),
+            content: Text('Event GPS verification is required before submission.'),
           ),
         );
 
@@ -1175,10 +1161,10 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
                         : Icon(
                             complete
                                 ? Icons.check_circle
-                                : Icons.camera_alt_outlined,
+                                : Icons.my_location,
                           ),
                     label: Text(
-                      complete ? 'Event Proof Saved' : 'Take Event Photo',
+                      complete ? 'Event GPS Verified' : 'Verify Event GPS',
                     ),
                   ),
                 ),

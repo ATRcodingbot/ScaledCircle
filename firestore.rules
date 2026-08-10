@@ -18,13 +18,78 @@ service cloud.firestore {
 
       allow create:
         if isSignedIn()
-        && request.auth.uid == userId;
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'email',
+          'displayName',
+          'companyName',
+          'postalCode',
+          'contactNumber',
+          'role',
+          'accountType',
+          'activeView',
+          'active',
+          'betaAccess',
+          'earlyAccessSource',
+          'discoverySource',
+          'referrerName',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'email',
+          'displayName',
+          'postalCode',
+          'role',
+          'accountType',
+          'activeView',
+          'active',
+          'betaAccess',
+          'discoverySource',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.role in ['business', 'scaler']
+        && request.resource.data.accountType == request.resource.data.role
+        && request.resource.data.activeView == request.resource.data.role
+        && request.resource.data.active == false
+        && request.resource.data.betaAccess == 'pending'
+        && (
+          !request.resource.data.keys().hasAll(['contactNumber'])
+          || request.resource.data.contactNumber is string
+        )
+        && request.resource.data.discoverySource in [
+          'personal_referral',
+          'search_engine',
+          'social_media',
+          'online_ad',
+          'event_or_group',
+          'other'
+        ]
+        && (
+          request.resource.data.discoverySource != 'personal_referral'
+          || (
+            request.resource.data.keys().hasAll(['referrerName'])
+            && request.resource.data.referrerName is string
+            && request.resource.data.referrerName.size() > 0
+          )
+        );
 
 
       allow update:
         if isSignedIn()
         && request.auth.uid == userId
-        && request.resource.data.role == resource.data.role;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName',
+          'companyName',
+          'postalCode',
+          'contactNumber',
+          'accountType',
+          'activeView',
+          'updatedAt'
+        ])
+        && request.resource.data.accountType in ['business', 'scaler']
+        && request.resource.data.activeView in ['business', 'scaler'];
 
 
       allow write:
@@ -41,16 +106,16 @@ service cloud.firestore {
     match /campaigns/{campaignId} {
 
       allow read:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow create:
-        if isSignedIn()
+        if isApprovedAccount()
         && request.resource.data.businessId == request.auth.uid;
 
 
       allow update:
-        if isSignedIn()
+        if isApprovedAccount()
         && resource.data.businessId == request.auth.uid;
 
 
@@ -67,12 +132,12 @@ service cloud.firestore {
 
 
         allow create:
-          if isSignedIn()
+          if isApprovedAccount()
           && request.auth.uid == scalerId;
 
 
         allow read:
-          if isSignedIn()
+          if isApprovedAccount()
           &&
           (
             request.auth.uid == scalerId
@@ -84,7 +149,7 @@ service cloud.firestore {
 
 
         allow update:
-          if isSignedIn()
+          if isApprovedAccount()
           &&
           get(
             /databases/$(database)/documents/campaigns/$(campaignId)
@@ -102,7 +167,7 @@ service cloud.firestore {
 
 
         allow read:
-          if isSignedIn()
+          if isApprovedAccount()
           &&
           (
             request.auth.uid == scalerId
@@ -113,10 +178,204 @@ service cloud.firestore {
           );
 
 
-        allow write:
+        allow create, update:
+          if isApprovedAccount()
+          && get(
+            /databases/$(database)/documents/campaigns/$(campaignId)
+          ).data.businessId == request.auth.uid;
+
+
+        allow delete:
           if isAdmin();
 
       }
+
+    }
+
+
+
+    // ============================================================
+    // SERVER-MANAGED PUBLIC SITE DATA
+    // ============================================================
+
+    match /campaignTrackingCodes/{trackingCode} {
+
+      // Public redirects and metrics are handled by Cloud Functions. Keeping
+      // codes off the client prevents destination tampering and raw event
+      // enumeration.
+      allow read, write:
+        if false;
+
+      match /events/{eventId} {
+        allow read, write:
+          if false;
+      }
+
+    }
+
+
+    match /waitlist/{entryId} {
+
+      // The public form writes through joinWaitlist, which validates and
+      // rate-limits the shape. Administrators may inspect launch entries.
+      allow read:
+        if isAdmin();
+
+      allow create, update, delete:
+        if false;
+
+    }
+
+
+    match /weatherOpportunityCache/{cacheId} {
+
+      allow read, write:
+        if false;
+
+    }
+
+
+
+    // ============================================================
+    // APPLICATION COLLECTION-GROUP QUERIES
+    // ============================================================
+
+    match /{path=**}/applications/{applicationId} {
+
+      allow read:
+        if isApprovedAccount()
+        && resource.data.scalerId == request.auth.uid;
+
+    }
+
+
+
+    // ============================================================
+    // CAMPAIGN ZONES
+    // ============================================================
+
+    match /campaignZones/{zoneId} {
+
+      allow read:
+        if isApprovedAccount();
+
+
+      allow create:
+        if isApprovedAccount()
+        && request.resource.data.businessId == request.auth.uid;
+
+
+      allow update:
+        if isApprovedAccount()
+        &&
+        (
+          (
+            resource.data.businessId == request.auth.uid
+            &&
+            (
+              (
+                resource.data.assignedScalerId == null
+                &&
+                (
+                  !('mapLocked' in resource.data)
+                  || resource.data.mapLocked != true
+                )
+                && get(
+                  /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+                ).data.status == 'draft'
+              )
+              || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'shapeType',
+                'serviceAreaType',
+                'serviceArea',
+                'serviceAreaPointCount',
+                'serviceAreaCenter',
+                'serviceAreaRadiusMeters',
+                'zoneAreaSquareMeters',
+                'zoneAreaAcres',
+                'zoneAreaSquareMiles',
+                'zonePerimeterMeters',
+                'estimatedWalkingMeters',
+                'estimatedWalkingMiles',
+                'estimatedMinutes',
+                'suggestedBasePay',
+                'recommendedScalerCount',
+                'estimatedHomes',
+                'homeCountStatus',
+                'homeCountMethod',
+                'homeCountConfidence',
+                'homeCountConfidenceScore',
+                'analysisStatus'
+              ])
+            )
+          )
+          ||
+          (
+            resource.data.assignedScalerId == request.auth.uid
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+              'shapeType',
+              'serviceAreaType',
+              'serviceArea',
+              'serviceAreaPointCount',
+              'serviceAreaCenter',
+              'serviceAreaRadiusMeters',
+              'zoneAreaSquareMeters',
+              'zoneAreaAcres',
+              'zoneAreaSquareMiles',
+              'zonePerimeterMeters',
+              'estimatedWalkingMeters',
+              'estimatedWalkingMiles',
+              'estimatedMinutes',
+              'suggestedBasePay',
+              'recommendedScalerCount',
+              'estimatedHomes'
+            ])
+          )
+        );
+
+
+      allow delete:
+        if isAdmin();
+
+    }
+
+
+
+    // ============================================================
+    // CAMPAIGN GPS ROUTES
+    // ============================================================
+
+    match /campaignRoutes/{routeId} {
+
+      allow create:
+        if isApprovedAccount()
+        && request.resource.data.scalerId == request.auth.uid;
+
+
+      allow read:
+        if isApprovedAccount()
+        &&
+        (
+          resource.data.scalerId == request.auth.uid
+          || get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.businessId == request.auth.uid
+        );
+
+
+      allow update:
+        if isApprovedAccount()
+        && resource.data.scalerId == request.auth.uid
+        && request.resource.data.scalerId == request.auth.uid;
+
+
+      allow delete:
+        if isApprovedAccount()
+        &&
+        (
+          resource.data.scalerId == request.auth.uid
+          || isAdmin()
+        );
 
     }
 
@@ -131,15 +390,15 @@ service cloud.firestore {
 
 
       allow read:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow create:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow update:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow delete:
@@ -158,13 +417,13 @@ service cloud.firestore {
 
 
       allow create:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         request.resource.data.scalerId == request.auth.uid;
 
 
       allow read:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         (
           resource.data.scalerId == request.auth.uid
@@ -174,7 +433,7 @@ service cloud.firestore {
 
 
       allow update:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         (
           resource.data.scalerId == request.auth.uid
@@ -199,19 +458,19 @@ service cloud.firestore {
 
 
       allow read:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         request.auth.uid == walletId;
 
 
       allow create:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         request.auth.uid == walletId;
 
 
       allow update:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         request.auth.uid == walletId;
 
@@ -229,13 +488,13 @@ service cloud.firestore {
 
 
         allow read:
-          if isSignedIn()
+          if isApprovedAccount()
           &&
           request.auth.uid == walletId;
 
 
         allow create:
-          if isSignedIn()
+          if isApprovedAccount()
           &&
           request.auth.uid == walletId;
 
@@ -255,7 +514,7 @@ service cloud.firestore {
 
 
         allow read:
-          if isSignedIn()
+          if isApprovedAccount()
           &&
           request.auth.uid == walletId;
 
@@ -282,7 +541,7 @@ service cloud.firestore {
 
 
       allow read:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         (
           resource.data.businessId == request.auth.uid
@@ -292,7 +551,7 @@ service cloud.firestore {
 
 
       allow create:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow update, delete:
@@ -311,11 +570,11 @@ service cloud.firestore {
 
 
       allow read:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow create, update:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow delete:
@@ -327,24 +586,77 @@ service cloud.firestore {
 
 
     // ============================================================
+    // VERIFIED CAMPAIGN REVIEWS
+    // ============================================================
+
+    match /reviews/{reviewId} {
+
+      allow read:
+        if isApprovedAccount();
+
+
+      // Reviews are written only by submitCampaignReview after the server
+      // verifies campaign ownership and completed participation.
+      allow create, update, delete:
+        if false;
+
+    }
+
+
+
+    // ============================================================
+    // REVIEW FRAUD / SCAM REPORTS
+    // ============================================================
+
+    match /reviewReports/{reportId} {
+
+      allow read:
+        if isApprovedAccount()
+        &&
+        (
+          resource.data.reporterId == request.auth.uid
+          ||
+          isAdmin()
+        );
+
+
+      // Reports are created only by reportCampaignReview, which enforces
+      // the 72-hour window and preserves the original locked review.
+      allow create, update, delete:
+        if false;
+
+    }
+
+
+
+    // ============================================================
     // NOTIFICATIONS
     // ============================================================
 
     match /notifications/{notificationId} {
 
+      // An owner may check whether a deterministic notification id exists
+      // before creating it. A missing document contains no private data;
+      // existing documents remain readable only by their owner.
+      allow get:
+        if isApprovedAccount()
+        && (
+          resource == null
+          || resource.data.userId == request.auth.uid
+        );
 
-      allow read:
-        if isSignedIn()
-        &&
-        resource.data.userId == request.auth.uid;
+
+      allow list:
+        if isApprovedAccount()
+        && resource.data.userId == request.auth.uid;
 
 
       allow create:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow update:
-        if isSignedIn()
+        if isApprovedAccount()
         &&
         resource.data.userId == request.auth.uid;
 
@@ -369,7 +681,7 @@ service cloud.firestore {
 
 
       allow create:
-        if isSignedIn();
+        if isApprovedAccount();
 
 
       allow update, delete:
@@ -402,6 +714,31 @@ service cloud.firestore {
       get(
         /databases/$(database)/documents/users/$(request.auth.uid)
       ).data.role == "admin";
+
+    }
+
+
+    function isApprovedAccount() {
+
+      return isSignedIn()
+      &&
+      exists(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      )
+      &&
+      (
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == "admin"
+        ||
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.active == true
+        ||
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.betaAccess == "approved"
+      );
 
     }
 

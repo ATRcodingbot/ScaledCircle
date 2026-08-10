@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -59,16 +60,85 @@ class _ScalerCampaignDetailsScreenState
   // SUBMIT COMPLETION
   // ============================================================
 
-  void _openSubmitCompletion() {
+  Future<void> _openSubmitCompletion() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return;
+    }
+
+    try {
+      final zonesSnapshot = await FirebaseFirestore.instance
+          .collection("campaignZones")
+          .where("campaignId", isEqualTo: widget.campaign.id)
+          .get();
+      final assignedZones = zonesSnapshot.docs.where((zone) {
+        return zone.data()["assignedScalerId"]?.toString() == user.uid;
+      }).toList();
+
+      if (assignedZones.isEmpty) {
+        throw Exception("No campaign zone is assigned to you.");
+      }
+
+      QueryDocumentSnapshot<Map<String, dynamic>>? selectedZone;
+
+      for (final zone in assignedZones) {
+        final routeId = zone.data()["routeId"]?.toString();
+
+        if (routeId != null && routeId.isNotEmpty) {
+          selectedZone = zone;
+          break;
+        }
+      }
+
+      if (selectedZone == null) {
+        throw Exception("Complete and save GPS tracking before submitting.");
+      }
+
+      final zoneData = selectedZone.data();
+      final routeId = zoneData["routeId"]!.toString();
+      final routeSnapshot = await FirebaseFirestore.instance
+          .collection("campaignRoutes")
+          .doc(routeId)
+          .get();
+      final routeData = routeSnapshot.data();
+      final routePoints = routeData?["points"];
+
+      if (!routeSnapshot.exists ||
+          routeData == null ||
+          routeData["tracking"] == true ||
+          routePoints is! List ||
+          routePoints.length < 2) {
+        throw Exception("Stop and save a valid GPS route before submitting.");
+      }
+
+      if (!mounted) {
+        return;
+      }
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => SubmitCompletionScreen(
           campaignId: widget.campaign.id,
           businessId: widget.campaign.businessId,
+            zoneId: selectedZone!.id,
+            zoneName: zoneData["zoneName"]?.toString() ?? "Zone",
+            routeId: routeId,
+            gpsPointCount: routePoints.length,
+            routeSimulated: routeData["simulated"] == true,
         ),
       ),
     );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Unable to submit completion: $error")),
+      );
+    }
   }
 
   // ============================================================
@@ -93,10 +163,10 @@ class _ScalerCampaignDetailsScreenState
   });
 
   try {
-    await _campaignService.applyToCampaign(
-      campaignId: widget.campaign.id,
-      scalerId: user.uid,
-    );
+await _campaignService.applyToCampaign(
+  campaignId: widget.campaign.id,
+  scalerId: user.uid,
+);
 
     if (!mounted) return;
 
@@ -131,6 +201,154 @@ class _ScalerCampaignDetailsScreenState
   }
 }
 
+  Widget _buildCampaignAction(CampaignModel campaign) {
+    if (campaign.status == "completed") {
+      return SizedBox(
+        height: 55,
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.star_outline),
+          label: const Text("Review Business"),
+          onPressed: _openBusinessReview,
+        ),
+      );
+    }
+
+    if (campaign.status == "assigned") {
+      return SizedBox(
+        height: 55,
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.assignment_turned_in),
+          label: const Text("Submit Completion"),
+          onPressed: _openSubmitCompletion,
+        ),
+      );
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return SizedBox(
+        height: 55,
+        child: ElevatedButton(
+          onPressed: _applyForCampaign,
+          child: const Text("Apply For Campaign"),
+        ),
+      );
+    }
+
+    final assignedZonesStream = FirebaseFirestore.instance
+        .collection("campaignZones")
+        .where("campaignId", isEqualTo: campaign.id)
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: assignedZonesStream,
+      builder: (context, zoneSnapshot) {
+        if (zoneSnapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 55,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final assignedToCurrentScaler = zoneSnapshot.data?.docs.any((zone) {
+              return zone.data()["assignedScalerId"]?.toString() == user.uid;
+            }) ??
+            false;
+
+        if (assignedToCurrentScaler) {
+          return SizedBox(
+            height: 55,
+            child: ElevatedButton(
+              onPressed: null,
+              child: const Text("Accepted / Assigned"),
+            ),
+          );
+        }
+
+        final applicationStream = FirebaseFirestore.instance
+            .collection("campaigns")
+            .doc(campaign.id)
+            .collection("applications")
+            .doc(user.uid)
+            .snapshots();
+
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: applicationStream,
+          builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SizedBox(
+            height: 55,
+            child: ElevatedButton(
+              onPressed: null,
+              child: const Text("Application Status Unavailable"),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 55,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final status = snapshot.data?.data()?["status"]?.toString();
+
+        switch (status) {
+          case "pending":
+            return SizedBox(
+              height: 55,
+              child: ElevatedButton(
+                onPressed: null,
+                child: const Text("Application Pending"),
+              ),
+            );
+          case "accepted":
+            return SizedBox(
+              height: 55,
+              child: ElevatedButton(
+                onPressed: null,
+                child: const Text("Accepted / Assigned"),
+              ),
+            );
+          case "rejected":
+            return SizedBox(
+              height: 55,
+              child: ElevatedButton(
+                onPressed: null,
+                child: const Text("Application Declined"),
+              ),
+            );
+          case "completed":
+            return SizedBox(
+              height: 55,
+              child: ElevatedButton(
+                onPressed: null,
+                child: const Text("Campaign Completed"),
+              ),
+            );
+          default:
+            return SizedBox(
+              height: 55,
+              child: ElevatedButton(
+                onPressed: _applying ? null : _applyForCampaign,
+                child: _applying
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text("Apply For Campaign"),
+              ),
+            );
+        }
+          },
+        );
+      },
+    );
+  }
+
   List<LatLng> _parseServiceArea(dynamic data) {
 
   if (data == null) {
@@ -163,7 +381,7 @@ class _ScalerCampaignDetailsScreenState
 
 }
 Widget _buildCampaignMap(
-    List<Map<String,dynamic>> zones,
+  List<Map<String,dynamic>> zones,
 ) {
 
   final List<LatLng> points = [];
@@ -173,7 +391,7 @@ Widget _buildCampaignMap(
 
     points.addAll(
       _parseServiceArea(
-        zone['serviceArea'],
+        zone["serviceArea"],
       ),
     );
 
@@ -186,7 +404,7 @@ Widget _buildCampaignMap(
       child: Padding(
         padding: EdgeInsets.all(18),
         child: Text(
-          "Campaign map unavailable",
+          "Campaign map unavailable.",
         ),
       ),
     );
@@ -199,23 +417,16 @@ Widget _buildCampaignMap(
 
 
   return Card(
-
     clipBehavior: Clip.antiAlias,
 
-
     child: SizedBox(
-
       height:320,
-
 
       child: FlutterMap(
 
         options: MapOptions(
-
           initialCenter:center,
-
           initialZoom:15,
-
         ),
 
 
@@ -223,50 +434,42 @@ Widget _buildCampaignMap(
 
 
           TileLayer(
-
             urlTemplate:
-            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 
             userAgentPackageName:
-            'com.scaledcircle.app',
-
+            "com.scaledcircle.app",
           ),
 
 
-
           PolygonLayer(
-
             polygons:[
 
               Polygon(
-
                 points:points,
 
                 borderStrokeWidth:3,
 
                 color:
-                Colors.blue.withValues(alpha:0.15),
+                Colors.blue.withValues(
+                  alpha:0.15,
+                ),
 
                 borderColor:
                 Colors.blue,
-
               ),
 
             ],
-
           ),
 
 
         ],
 
       ),
-
     ),
-
   );
 
 }
-
   // ============================================================
   // BUSINESS REVIEW
   // ============================================================
@@ -617,53 +820,7 @@ Widget _buildCampaignMap(
                   // implementation used by the business mapper.
                   // ============================================
 
-                  Container(
-                    width: double.infinity,
-                    constraints: const BoxConstraints(
-                      minHeight: 170,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(16),
-                      border: Border.all(
-                        color:
-                            Theme.of(context)
-                                .dividerColor,
-                      ),
-                    ),
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.all(20),
-                      child: Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.map_outlined,
-                            size: 42,
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          Text(
-                            "${zones.length} campaign ${zones.length == 1 ? "zone" : "zones"} mapped",
-                            textAlign:
-                                TextAlign.center,
-                            style:
-                                const TextStyle(
-                              fontSize: 16,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-
-                          const SizedBox(height: 6),
-
-                          _buildCampaignMap(zones),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _buildCampaignMap(zones),
 
                   const SizedBox(height: 12),
 
@@ -770,52 +927,7 @@ Widget _buildCampaignMap(
           // ACTION
           // ====================================================
 
-          if (campaign.status == "completed")
-            SizedBox(
-              height: 55,
-              child: ElevatedButton.icon(
-                icon:
-                    const Icon(Icons.star_outline),
-                label:
-                    const Text("Review Business"),
-                onPressed: _openBusinessReview,
-              ),
-            )
-          else if (campaign.status == "assigned")
-            SizedBox(
-              height: 55,
-              child: ElevatedButton.icon(
-                icon: const Icon(
-                  Icons.assignment_turned_in,
-                ),
-                label:
-                    const Text("Submit Completion"),
-                onPressed:
-                    _openSubmitCompletion,
-              ),
-            )
-          else
-            SizedBox(
-              height: 55,
-              child: ElevatedButton(
-                onPressed:
-                    _applying
-                        ? null
-                        : _applyForCampaign,
-                child: _applying
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text(
-                        "Apply For Campaign",
-                      ),
-              ),
-            ),
+          _buildCampaignAction(campaign),
 
           const SizedBox(height: 30),
         ],
@@ -913,47 +1025,79 @@ Widget _buildCampaignMap(
 
 
   Widget _zoneRow({
-    required String name,
-    required int estimatedHomes,
-  }) {
-    return Row(
-      children: [
-        const CircleAvatar(
-          radius: 18,
-          child: Icon(
-            Icons.location_on_outlined,
-            size: 20,
-          ),
+  required String name,
+  required int estimatedHomes,
+}) {
+
+  return Row(
+
+    crossAxisAlignment:
+        CrossAxisAlignment.start,
+
+    children:[
+
+
+      const CircleAvatar(
+        radius:18,
+
+        child: Icon(
+          Icons.location_on_outlined,
+          size:20,
+        ),
+      ),
+
+
+      const SizedBox(width:12),
+
+
+      Expanded(
+
+        child: Column(
+
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+
+          children:[
+
+
+            Text(
+              name,
+
+              maxLines:1,
+
+              overflow:
+                  TextOverflow.ellipsis,
+
+              style:
+                  const TextStyle(
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+            ),
+
+
+            const SizedBox(height:4),
+
+
+            Text(
+              estimatedHomes > 0
+                  ? "$estimatedHomes estimated homes"
+                  : "Estimated homes unavailable",
+            ),
+
+
+          ],
+
         ),
 
-        const SizedBox(width: 12),
+      ),
 
-        Expanded(
-          child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
 
-              const SizedBox(height: 3),
+    ],
 
-              Text(
-                estimatedHomes > 0
-                    ? "$estimatedHomes estimated homes"
-                    : "Estimated homes unavailable",
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  );
 
+}
   Widget _check(
     String label,
     bool enabled,

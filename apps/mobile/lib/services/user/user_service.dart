@@ -13,28 +13,47 @@ class UserService {
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
-  Future<void> updateUserRole({
-  required UserRole role,
-  required String accountType,
-}) async {
-  final user = _auth.currentUser;
 
-  if (user == null) {
-    throw Exception('No authenticated user.');
+  Future<void> switchAccountView({required String accountType}) async {
+    final normalizedAccountType = accountType.trim().toLowerCase();
+
+    if (normalizedAccountType != 'business' &&
+        normalizedAccountType != 'scaler') {
+      throw ArgumentError('Account view must be business or scaler.');
+    }
+
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw Exception('No authenticated user.');
+    }
+
+    await _users.doc(user.uid).set({
+      'accountType': normalizedAccountType,
+      'activeView': normalizedAccountType,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
-  await _users.doc(user.uid).set(
-    {
+  Future<void> updateUserRole({
+    required UserRole role,
+    required String accountType,
+  }) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw Exception('No authenticated user.');
+    }
+
+    await _users.doc(user.uid).set({
       'role': role.name,
       'accountType': accountType,
       'email': user.email ?? '',
       'active': true,
       'updatedAt': FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
-    },
-    SetOptions(merge: true),
-  );
-}
+    }, SetOptions(merge: true));
+  }
 
   // ------------------------------------------------------------
   // CREATE USER PROFILE
@@ -62,6 +81,60 @@ class UserService {
     );
 
     await _users.doc(user.uid).set(profile.toMap());
+  }
+
+  Future<void> createEarlyAccessProfile({
+    required User user,
+    required UserRole role,
+    required String displayName,
+    required String postalCode,
+    String contactNumber = '',
+    String companyName = '',
+    required String discoverySource,
+    String referrerName = '',
+  }) async {
+    if (role != UserRole.business && role != UserRole.scaler) {
+      throw ArgumentError('Early-access accounts must be Business or Scaler.');
+    }
+    const allowedDiscoverySources = {
+      'personal_referral',
+      'search_engine',
+      'social_media',
+      'online_ad',
+      'event_or_group',
+      'other',
+    };
+    final normalizedDiscoverySource = discoverySource.trim();
+    final normalizedReferrerName = referrerName.trim();
+    if (!allowedDiscoverySources.contains(normalizedDiscoverySource)) {
+      throw ArgumentError('Tell us how you heard about Scaled Circle.');
+    }
+    if (normalizedDiscoverySource == 'personal_referral' &&
+        normalizedReferrerName.isEmpty) {
+      throw ArgumentError('Enter the name of the person who referred you.');
+    }
+
+    final existingUser = await _users.doc(user.uid).get();
+    if (existingUser.exists) return;
+
+    final roleValue = UserProfile.roleValue(role);
+    await _users.doc(user.uid).set({
+      'email': user.email ?? '',
+      'displayName': displayName.trim(),
+      'companyName': companyName.trim(),
+      'postalCode': postalCode.trim(),
+      'contactNumber': contactNumber.trim(),
+      'role': roleValue,
+      'accountType': roleValue,
+      'activeView': roleValue,
+      'active': false,
+      'betaAccess': 'pending',
+      'earlyAccessSource': 'public_account_creation',
+      'discoverySource': normalizedDiscoverySource,
+      'referrerName': normalizedReferrerName,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ------------------------------------------------------------
@@ -116,10 +189,7 @@ class UserService {
 
     data['updatedAt'] = FieldValue.serverTimestamp();
 
-    await _users.doc(userId).set(
-  data,
-  SetOptions(merge: true),
-);
+    await _users.doc(userId).set(data, SetOptions(merge: true));
   }
 
   // ------------------------------------------------------------

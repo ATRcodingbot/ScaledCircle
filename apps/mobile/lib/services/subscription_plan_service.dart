@@ -67,6 +67,7 @@ class SubscriptionPlanService {
         'api_integrations',
         'crm_integrations',
         'recurring_campaigns',
+        'weather_intelligence',
         'franchise_management',
         'priority_support',
       ],

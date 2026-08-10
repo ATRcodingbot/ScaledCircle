@@ -7,7 +7,10 @@ class CampaignApplicantsScreen extends StatelessWidget {
   const CampaignApplicantsScreen({super.key, required this.campaign});
 
   CollectionReference<Map<String, dynamic>> get _applicationsCollection {
-    return FirebaseFirestore.instance.collection('applications');
+    return FirebaseFirestore.instance
+        .collection('campaigns')
+        .doc(campaign.id)
+        .collection('applications');
   }
 
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
@@ -30,12 +33,25 @@ class CampaignApplicantsScreen extends StatelessWidget {
         final pointCount =
             (data['serviceAreaPointCount'] as num?)?.toInt() ?? 0;
 
+        final serviceArea = data['serviceArea'];
+
+        final actualPointCount = serviceArea is List ? serviceArea.length : 0;
+
+        final center = data['serviceAreaCenter'];
+
+        final radius = (data['serviceAreaRadiusMeters'] as num?)?.toDouble();
+
+        final hasValidCircle = center != null && radius != null && radius > 0;
+
         final estimatedHomes = (data['estimatedHomes'] as num?)?.toInt() ?? 0;
 
         final isAssigned =
             assignedScalerId != null && assignedScalerId.isNotEmpty;
 
-        return !isAssigned && pointCount >= 3 && estimatedHomes > 0;
+        final hasUsableMapping =
+            (pointCount >= 3 && actualPointCount >= 3) || hasValidCircle;
+
+        return !isAssigned && hasUsableMapping && estimatedHomes > 0;
       }).toList();
 
       availableZones.sort((a, b) {
@@ -475,9 +491,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
     final requestedScalerCount =
         (campaignData['requestedScalerCount'] as num?)?.toInt() ?? 1;
 
-    final acceptedApplicationsSnapshot = await firestore
-        .collection('applications')
-        .where('campaignId', isEqualTo: campaign.id)
+    final acceptedApplicationsSnapshot = await _applicationsCollection
         .where('status', isEqualTo: 'accepted')
         .get();
 

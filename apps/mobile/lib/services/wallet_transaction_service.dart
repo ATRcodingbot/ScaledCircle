@@ -61,9 +61,7 @@ class WalletTransactionService {
       }
 
       final currentScalerBalance =
-          (scalerData?['availableBalance'] as num?)?.toDouble() ??
-          (scalerData?['balance'] as num?)?.toDouble() ??
-          0.0;
+          (scalerData?['availableBalance'] as num?)?.toDouble() ?? 0.0;
 
       final newReservedCredits = reservedCredits - amount;
 
@@ -78,11 +76,13 @@ class WalletTransactionService {
       transaction.set(scalerWalletReference, {
         'ownerId': scalerId,
 
-        'ownerType': 'scaler',
+        if (!scalerSnapshot.exists) 'ownerType': 'scaler',
 
         'availableBalance': newScalerBalance,
 
-        'balance': newScalerBalance,
+        if (!scalerSnapshot.exists ||
+            scalerData?['ownerType']?.toString() != 'business')
+          'balance': newScalerBalance,
 
         'pendingBalance': scalerData?['pendingBalance'] ?? 0.0,
 
@@ -112,6 +112,8 @@ class WalletTransactionService {
       transaction.set(businessLedgerReference, {
         'type': 'reserved_payment',
 
+        'walletSide': 'business',
+
         'amount': amount,
 
         'campaignId': campaignId,
@@ -125,6 +127,8 @@ class WalletTransactionService {
 
       transaction.set(scalerLedgerReference, {
         'type': 'scaler_earnings',
+
+        'walletSide': 'scaler',
 
         'amount': amount,
 

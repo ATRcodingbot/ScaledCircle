@@ -2,13 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/user/user_profile.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../services/wallet_service.dart';
+import '../../services/maryland_weather_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/account_mode_switch_button.dart';
+import '../../widgets/scaled_circle_brand.dart';
 import '../campaigns/campaign_details_screen.dart';
 import 'campaign/sc_campaign_applicants_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'create/create_campaign_screen.dart';
 import 'subscription_screen.dart';
+import 'business_wallet_screen.dart';
+import 'weather_alerts_screen.dart';
 import '../../widgets/reputation_card.dart';
 import 'profile/business_profile_screen.dart';
 
@@ -24,6 +31,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
   final SubscriptionPlanService _planService = SubscriptionPlanService();
 
+  final MarylandWeatherService _weatherService = MarylandWeatherService();
+
+  Future<List<MarylandCountyWeather>>? _weather;
+
+  WeatherEntitlement? _weatherEntitlement;
+
   bool _walletLoading = true;
 
   String? _walletError;
@@ -38,8 +51,47 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
     _initializeWallet();
   }
-  
-  
+
+  Future<void> _loadWeather() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final entitlement = await _weatherService.loadEntitlement(user.uid);
+    if (mounted) {
+      setState(() => _weatherEntitlement = entitlement);
+    }
+
+    if (!entitlement.entitled) {
+      if (mounted) {
+        setState(() => _weather = Future.value(const []));
+      }
+      return;
+    }
+
+    final future = _weatherService.load();
+
+    if (mounted) {
+      setState(() => _weather = future);
+    }
+
+    final counties = await future;
+    try {
+      await _weatherService.syncNotifications(
+        userId: user.uid,
+        counties: counties,
+      );
+    } on FirebaseException catch (error) {
+      // Weather opportunity data is still useful when inbox synchronization
+      // is temporarily unavailable. Do not turn an ancillary notification
+      // failure into a wallet initialization error.
+      debugPrint('Unable to synchronize weather notifications: $error');
+    }
+  }
+
+  Future<void> _refreshDashboard() async {
+    await Future.wait([_loadWallet(), _loadWeather()]);
+  }
+
   Future<void> _initializeWallet() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -53,24 +105,22 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         ownerType: 'business',
       );
 
-      /*
-       * DEVELOPMENT ONLY
-       *
-       * Grants this development business account
-       * 10,000 promotional credits one time.
-       *
-       * Remove this automatic promotional grant
-       * before production.
-       */
-      await _walletService.grantPromotionalCredits(
-        businessId: user.uid,
-        amount: 10000.0,
-        promoKey: 'development-business-10000-v1',
-        description:
-            'Development promotional credits for Scaled Circle testing.',
-      );
+      final userDocument = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (userDocument.data()?['developmentCreditsEnabled'] == true) {
+        await _walletService.grantPromotionalCredits(
+          businessId: user.uid,
+          amount: 10000.0,
+          promoKey: 'development-business-10000-v1',
+          description:
+              'Development promotional credits for Scaled Circle testing.',
+        );
+      }
 
       await _loadWallet();
+      await _loadWeather();
     } catch (e) {
       if (!mounted) {
         return;
@@ -269,6 +319,161 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
     }
   }
 
+  Widget _buildWeatherSection() {
+    final entitlement = _weatherEntitlement;
+
+    if (entitlement != null && !entitlement.entitled) {
+      return Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () async {
+            final upgraded = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+            );
+            if (upgraded == true) await _loadWeather();
+          },
+          child: const Padding(
+            padding: EdgeInsets.all(20),
+            child: Row(
+              children: [
+                _WeatherFeatureIcon(locked: true),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Maryland Weather Intelligence',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Premium weather opportunity alerts are included with '
+                        'the Scale subscription.',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'UPGRADE TO SCALE',
+                        style: TextStyle(
+                          color: AppColors.secondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios, size: 18),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<List<MarylandCountyWeather>>(
+      future: _weather,
+      builder: (context, snapshot) {
+        final counties = snapshot.data ?? const <MarylandCountyWeather>[];
+        final alerts = counties
+            .expand((county) => county.alerts.map((alert) => (county, alert)))
+            .toList();
+        final firstSignal = alerts.firstOrNull;
+
+        return Card(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WeatherAlertsScreen()),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color:
+                          (firstSignal == null
+                                  ? AppColors.primary
+                                  : AppColors.warning)
+                              .withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      firstSignal == null
+                          ? Icons.cloud_outlined
+                          : Icons.thunderstorm,
+                      color: firstSignal == null
+                          ? AppColors.primary
+                          : AppColors.warning,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Maryland Weather Opportunities',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        if (snapshot.connectionState != ConnectionState.done)
+                          const Text('Checking four Maryland counties…')
+                        else if (firstSignal == null)
+                          const Text(
+                            'Howard, Baltimore, Anne Arundel, and Montgomery '
+                            'counties are monitored. No active signal right now.',
+                            style: TextStyle(color: AppColors.textSecondary),
+                          )
+                        else
+                          Text(
+                            '${firstSignal.$1.county.name}: '
+                            '${firstSignal.$2.event} • experimental opportunity '
+                            '+${firstSignal.$2.leadLiftLowPercent}% to '
+                            '+${firstSignal.$2.leadLiftHighPercent}%',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'VIEW MARYLAND WEATHER CENTER',
+                          style: TextStyle(
+                            color: AppColors.secondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios, size: 18),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -281,9 +486,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scaled Circle'),
-        centerTitle: true,
+        title: const ScaledCircleBrand(compact: true),
         actions: [
+          const AccountModeSwitchButton(targetView: UserRole.scaler),
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('notifications')
@@ -342,7 +547,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadWallet,
+        onRefresh: _refreshDashboard,
         child: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('campaigns')
@@ -390,17 +595,56 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               return status == 'submitted';
             }).toList();
 
+            final horizontalPadding = MediaQuery.sizeOf(context).width > 1160
+                ? (MediaQuery.sizeOf(context).width - 1120) / 2
+                : 20.0;
+
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                20,
+                horizontalPadding,
+                50,
+              ),
               children: [
-                const Text(
-                  'Welcome Back!',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                DashboardHero(
+                  eyebrow: 'Business command center',
+                  title: 'Turn local opportunity into verified results.',
+                  description:
+                      'Launch mapped campaigns, fund Scaler work, and monitor '
+                      'proof from one live workspace.',
+                  primaryActionLabel: 'Launch a Campaign',
+                  primaryActionIcon: Icons.rocket_launch_outlined,
+                  onPrimaryAction: () {
+                    _openCreateCampaign(context, user.uid);
+                  },
+                  metrics: [
+                    DashboardPill(
+                      icon: Icons.campaign_outlined,
+                      label:
+                          '${activeCampaigns.length} active campaign${activeCampaigns.length == 1 ? '' : 's'}',
+                    ),
+                    DashboardPill(
+                      icon: Icons.fact_check_outlined,
+                      label: '${submittedCampaigns.length} awaiting review',
+                      accent: submittedCampaigns.isEmpty
+                          ? AppColors.primary
+                          : AppColors.warning,
+                    ),
+                    const DashboardPill(
+                      icon: Icons.gps_fixed,
+                      label: 'GPS verification ready',
+                      accent: AppColors.primary,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 28),
 
                 _buildWalletSection(),
+                const SizedBox(height: 16),
+                _buildWeatherSection(),
+                const SizedBox(height: 16),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.business),
@@ -442,8 +686,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 SizedBox(
                   height: 55,
                   child: ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create Campaign'),
+                    icon: const Icon(Icons.add_location_alt_outlined),
+                    label: const Text('Create Another Campaign'),
                     onPressed: () async {
                       await _openCreateCampaign(context, user.uid);
                     },
@@ -565,9 +809,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
                   final status = data['status']?.toString().toLowerCase() ?? '';
 
-                  final applications =
-                      (data['applications'] as num?)?.toInt() ?? 0;
-
                   final estimatedHomes =
                       (data['estimatedHomes'] as num?)?.toInt() ??
                       (data['homes'] as num?)?.toInt() ??
@@ -579,96 +820,115 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
                   final platformFee = (data['platformFee'] as num?)?.toDouble();
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 15),
-                    child: ListTile(
-                      leading: Icon(
-                        status == 'draft'
-                            ? Icons.edit_note_outlined
-                            : Icons.campaign,
-                        color: status == 'draft' ? Colors.orange : Colors.blue,
-                      ),
-                      title: Text(
-                        data['campaignName']?.toString() ?? '',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 5),
-                          Text(
-                            data['description']?.toString() ?? '',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('campaigns')
+                        .doc(campaign.id)
+                        .collection('applications')
+                        .snapshots(),
+                    builder: (context, applicationSnapshot) {
+                      final applications =
+                          applicationSnapshot.data?.docs.length ?? 0;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 15),
+                        child: ListTile(
+                          leading: Icon(
+                            status == 'draft'
+                                ? Icons.edit_note_outlined
+                                : Icons.campaign,
+                            color: status == 'draft'
+                                ? Colors.orange
+                                : Colors.blue,
                           ),
-                          const SizedBox(height: 5),
-                          Text(
-                            '$estimatedHomes homes • '
-                            '\$${basePay.toStringAsFixed(2)} base pay'
-                            '${bonus > 0 ? ' • \$${bonus.toStringAsFixed(2)} bonus' : ''}',
-                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          title: Text(
+                            data['campaignName']?.toString() ?? '',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          if (platformFee != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Platform fee: '
-                              '\$${platformFee.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                color: Colors.grey.shade700,
-                                fontSize: 12,
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 5),
+                              Text(
+                                data['description']?.toString() ?? '',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
-                          const SizedBox(height: 4),
-                          Text(
-                            'Status: ${_statusLabel(status)}',
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          if (status == 'open' && applications > 0) ...[
-                            const SizedBox(height: 5),
-                            Text(
-                              '$applications Scaler${applications == 1 ? '' : 's'} applied',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                              const SizedBox(height: 5),
+                              Text(
+                                '$estimatedHomes homes • '
+                                '\$${basePay.toStringAsFixed(2)} base pay'
+                                '${bonus > 0 ? ' • \$${bonus.toStringAsFixed(2)} bonus' : ''}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (applications > 0)
-                            IconButton(
-                              icon: const Icon(Icons.people_alt_outlined),
-                              tooltip: "View Applicants",
-                              onPressed: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ScCampaignApplicantsScreen(
-                                      campaignId: campaign.id,
-                                    ),
+                              if (platformFee != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Platform fee: '
+                                  '\$${platformFee.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12,
                                   ),
-                                );
-                              },
-                            ),
-
-                          const Icon(Icons.arrow_forward_ios, size: 18),
-                        ],
-                      ),
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                CampaignDetailsScreen(campaign: campaign),
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                'Status: ${_statusLabel(status)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (status == 'open' && applications > 0) ...[
+                                const SizedBox(height: 5),
+                                Text(
+                                  '$applications Scaler${applications == 1 ? '' : 's'} applied',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                        );
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (applications > 0)
+                                IconButton(
+                                  icon: const Icon(Icons.people_alt_outlined),
+                                  tooltip: "View Applicants",
+                                  onPressed: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            ScCampaignApplicantsScreen(
+                                              campaignId: campaign.id,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                ),
 
-                        await _loadWallet();
-                      },
-                    ),
+                              const Icon(Icons.arrow_forward_ios, size: 18),
+                            ],
+                          ),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    CampaignDetailsScreen(campaign: campaign),
+                              ),
+                            );
+
+                            await _loadWallet();
+                          },
+                        ),
+                      );
+                    },
                   );
                 }),
               ],
@@ -709,54 +969,137 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Campaign Funding',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(18),
+          child: Text('Sign in to view campaign funding.'),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _walletCard(
-                icon: Icons.account_balance_wallet_outlined,
-                title: 'Available',
-                amount: _availableCredits,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _walletCard(
-                icon: Icons.lock_outline,
-                title: 'Reserved',
-                amount: _reservedCredits,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
+      );
+    }
+
+    final walletReference = FirebaseFirestore.instance
+        .collection('wallets')
+        .doc(user.uid);
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: walletReference.snapshots(),
+      builder: (context, walletSnapshot) {
+        final wallet = walletSnapshot.data?.data();
+        final available =
+            (wallet?['availableCredits'] as num?)?.toDouble() ??
+            _availableCredits;
+        final reserved =
+            (wallet?['reservedCredits'] as num?)?.toDouble() ??
+            _reservedCredits;
+        final recordedPaidOut =
+            (wallet?['totalPaidOut'] as num?)?.toDouble() ?? 0.0;
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: walletReference
+              .collection('transactions')
+              .orderBy('createdAt', descending: true)
+              .snapshots(),
+          builder: (context, transactionSnapshot) {
+            final ledgerPaidOut =
+                transactionSnapshot.data?.docs
+                    .where(
+                      (transaction) =>
+                          transaction.data()['type']?.toString() ==
+                          'reserved_payment',
+                    )
+                    .fold<double>(
+                      0.0,
+                      (total, transaction) =>
+                          total +
+                          ((transaction.data()['amount'] as num?)?.toDouble() ??
+                              0.0),
+                    ) ??
+                0.0;
+            final paidOut = ledgerPaidOut > recordedPaidOut
+                ? ledgerPaidOut
+                : recordedPaidOut;
+
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.science_outlined),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Development wallet: promotional credits are being used for testing. '
-                    '1 credit represents \$1 in the production billing model.',
-                    style: TextStyle(color: Colors.grey.shade700),
+                const Text(
+                  'Campaign Funding',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 700 ? 3 : 2;
+                    final width =
+                        (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        _walletCard(
+                          width: width,
+                          icon: Icons.account_balance_wallet_outlined,
+                          title: 'Available',
+                          amount: available,
+                          onTap: () => _openBusinessWallet(context),
+                        ),
+                        _walletCard(
+                          width: width,
+                          icon: Icons.lock_outline,
+                          title: 'Reserved',
+                          amount: reserved,
+                          onTap: () => _openBusinessWallet(context),
+                        ),
+                        _walletCard(
+                          width: width,
+                          icon: Icons.payments_outlined,
+                          title: 'Paid Out',
+                          amount: paidOut,
+                          onTap: () => _openBusinessWallet(context),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.science_outlined),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Development wallet: promotional credits are being '
+                            'used for testing. 1 credit represents \$1 in the '
+                            'production billing model.',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
-        ),
-      ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _openBusinessWallet(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const BusinessWalletScreen()),
     );
   }
 
@@ -863,7 +1206,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   const SizedBox(height: 8),
                   Text(
                     _subscriptionDescription(plan),
-                    style: TextStyle(color: Colors.grey.shade700),
+                    style: const TextStyle(color: AppColors.textSecondary),
                   ),
                 ] else ...[
                   const Text(
@@ -908,24 +1251,46 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
   }
 
   Widget _walletCard({
+    required double width,
     required IconData icon,
     required String title,
     required double amount,
+    required VoidCallback onTap,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          children: [
-            Icon(icon, size: 30),
-            const SizedBox(height: 8),
-            Text(
-              '\$${amount.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+    return SizedBox(
+      width: width,
+      child: Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                Icon(icon, size: 30),
+                const SizedBox(height: 8),
+                Text(
+                  amount == amount.roundToDouble()
+                      ? '${amount.toStringAsFixed(0)} credits'
+                      : '${amount.toStringAsFixed(2)} credits',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(title, textAlign: TextAlign.center),
+                const SizedBox(height: 3),
+                Text(
+                  'View Wallet',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(title, textAlign: TextAlign.center),
-          ],
+          ),
         ),
       ),
     );
@@ -959,7 +1324,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
       case 'scale':
         return 'High-volume access with unlimited operations, teams, '
-            'priority matching, integrations, and advanced reporting.';
+            'priority matching, integrations, Weather Intelligence, and '
+            'advanced reporting.';
 
       default:
         return 'Choose a Scaled Circle subscription plan.';
@@ -996,5 +1362,27 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       default:
         return status.isEmpty ? 'Unknown' : status;
     }
+  }
+}
+
+class _WeatherFeatureIcon extends StatelessWidget {
+  final bool locked;
+
+  const _WeatherFeatureIcon({required this.locked});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Icon(
+        locked ? Icons.lock_outline : Icons.thunderstorm,
+        color: AppColors.secondary,
+      ),
+    );
   }
 }
