@@ -28,11 +28,11 @@ class HomeCompletionCounter extends StatelessWidget {
   double get estimatedPay {
     final percentage = completionPercentage;
 
-    if (percentage < 30.0) {
+    if (percentage < 10.0) {
       return 0.0;
     }
 
-    if (percentage >= 100.0) {
+    if (percentage >= 95.0) {
       return basePay;
     }
 
@@ -121,13 +121,13 @@ class HomeCompletionCounter extends StatelessWidget {
             const SizedBox(height: 18),
 
             Text(
-              percentage < 30.0
-                  ? 'Minimum 30% completion required for payment.'
+              percentage < 10.0
+                  ? 'Minimum 10% completion required for payment.'
                   : 'Estimated earnings: \$${estimatedPay.toStringAsFixed(2)}',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: percentage < 30.0 ? Colors.orange : Colors.green,
+                color: percentage < 10.0 ? Colors.orange : Colors.green,
               ),
             ),
           ],

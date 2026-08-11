@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/secure_function_service.dart';
+
 class CampaignApplicantsScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
 
@@ -272,127 +274,14 @@ class CampaignApplicantsScreen extends StatelessWidget {
     }
 
     try {
-      final firestore = FirebaseFirestore.instance;
-
-      await firestore.runTransaction((transaction) async {
-        final latestApplication = await transaction.get(application.reference);
-
-        final latestZone = await transaction.get(selectedZone.reference);
-
-        final latestCampaign = await transaction.get(campaign.reference);
-
-        if (!latestApplication.exists) {
-          throw Exception('This application no longer exists.');
-        }
-
-        if (!latestZone.exists) {
-          throw Exception('The selected zone no longer exists.');
-        }
-
-        if (!latestCampaign.exists) {
-          throw Exception('This campaign no longer exists.');
-        }
-
-        final latestApplicationData = latestApplication.data()!;
-
-        final applicationStatus =
-            latestApplicationData['status']?.toString() ?? 'pending';
-
-        if (applicationStatus != 'pending') {
-          throw Exception('This application has already been processed.');
-        }
-
-        final latestZoneData = latestZone.data()!;
-
-        final assignedScalerId = latestZoneData['assignedScalerId']?.toString();
-
-        if (assignedScalerId != null && assignedScalerId.isNotEmpty) {
-          throw Exception('This zone has already been assigned.');
-        }
-
-        final mappedPointCount =
-            (latestZoneData['serviceAreaPointCount'] as num?)?.toInt() ?? 0;
-
-        if (mappedPointCount < 3) {
-          throw Exception('This zone does not have a completed map.');
-        }
-
-        final assignedHomes =
-            (latestZoneData['estimatedHomes'] as num?)?.toInt() ?? 0;
-
-        if (assignedHomes <= 0) {
-          throw Exception('This zone does not have a valid home estimate yet.');
-        }
-
-        transaction.update(application.reference, {
-          'status': 'accepted',
-
-          'assignmentMode': 'zone',
-
-          'assignedZoneId': selectedZone.id,
-
-          'assignedZoneName': zoneName,
-
-          'assignedHomes': assignedHomes,
-
-          'acceptedAt': FieldValue.serverTimestamp(),
-
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        transaction.update(selectedZone.reference, {
-          'assignedScalerId': scalerId,
-
-          'assignedScalerEmail': scalerEmail,
-
-          'assignedApplicationId': application.id,
-
-          'assignedHomes': assignedHomes,
-
-          'assignedHomeCountSource': 'estimatedHomes',
-
-          'assignedHomeCountLockedAt': FieldValue.serverTimestamp(),
-
-          'status': 'assigned',
-
-          'assignedAt': FieldValue.serverTimestamp(),
-
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        final notificationReference = firestore
-            .collection('notifications')
-            .doc();
-
-        transaction.set(notificationReference, {
-          'userId': scalerId,
-
-          'type': 'application_accepted',
-
-          'title': 'Zone Assignment Accepted',
-
-          'message':
-              'You were assigned to $zoneName '
-              'for $campaignName. '
-              '$assignedHomes homes are assigned.',
-
+      await const SecureFunctionService().call(
+        functionName: 'assignScalerToZone',
+        data: {
           'campaignId': campaign.id,
-
-          'campaignName': campaignName,
-
-          'assignmentMode': 'zone',
-
           'zoneId': selectedZone.id,
-
-          'zoneName': zoneName,
-
-          'assignedHomes': assignedHomes,
-
-          'read': false,
-
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      });
+          'applicationId': application.id,
+        },
+      );
 
       await _refreshCampaignStaffing();
 

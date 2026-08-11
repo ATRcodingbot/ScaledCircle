@@ -1,42 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'secure_function_service.dart';
+
 class WalletService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SecureFunctionService _secureFunctions = const SecureFunctionService();
 
   Future<void> createWallet({
     required String userId,
     required String ownerType,
   }) async {
-    final walletReference = _firestore.collection('wallets').doc(userId);
-
-    final walletSnapshot = await walletReference.get();
-
-    if (walletSnapshot.exists) {
-      return;
-    }
-
-    await walletReference.set({
-      'ownerId': userId,
-      'ownerType': ownerType,
-
-      // General compatibility balance.
-      'balance': 0.0,
-
-      // Business wallet fields.
-      'availableCredits': 0.0,
-      'reservedCredits': 0.0,
-      'totalPaidOut': 0.0,
-
-      // Scaler wallet fields.
-      'availableBalance': 0.0,
-      'pendingBalance': 0.0,
-
-      // Promotional testing fields.
-      'promotionalCreditsGranted': 0.0,
-
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _secureFunctions.call(
+      functionName: 'ensureLegacyWalletProjection',
+      data: const {},
+    );
   }
 
   Future<double> getBalance(String userId) async {
@@ -191,105 +168,10 @@ class WalletService {
     required String promoKey,
     required String description,
   }) async {
-    if (amount <= 0.0) {
-      throw Exception('Promotional credit amount must be greater than zero.');
-    }
-
-    if (promoKey.trim().isEmpty) {
-      throw Exception('A promotional credit key is required.');
-    }
-
-    final walletReference = _firestore.collection('wallets').doc(businessId);
-
-    final redemptionReference = walletReference
-        .collection('promoRedemptions')
-        .doc(promoKey);
-
-    final transactionReference = walletReference
-        .collection('transactions')
-        .doc();
-
-    await _firestore.runTransaction((transaction) async {
-      final walletSnapshot = await transaction.get(walletReference);
-
-      final redemptionSnapshot = await transaction.get(redemptionReference);
-
-      // Prevent the same promotional grant
-      // from being redeemed twice.
-      if (redemptionSnapshot.exists) {
-        return;
-      }
-
-      if (!walletSnapshot.exists) {
-        transaction.set(walletReference, {
-          'ownerId': businessId,
-          'ownerType': 'business',
-          'balance': amount,
-          'availableCredits': amount,
-          'reservedCredits': 0.0,
-          'totalPaidOut': 0.0,
-          'availableBalance': 0.0,
-          'pendingBalance': 0.0,
-          'promotionalCreditsGranted': amount,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        final data = walletSnapshot.data();
-
-        if (data == null) {
-          throw Exception('Business wallet data is invalid.');
-        }
-
-        final ownerType = data['ownerType']?.toString();
-
-        if (ownerType != null &&
-            ownerType.isNotEmpty &&
-            ownerType != 'business') {
-          throw Exception(
-            'Promotional business credits cannot be added to this wallet.',
-          );
-        }
-
-        final availableCredits =
-            (data['availableCredits'] as num?)?.toDouble() ??
-            (data['balance'] as num?)?.toDouble() ??
-            0.0;
-
-        final promotionalCreditsGranted =
-            (data['promotionalCreditsGranted'] as num?)?.toDouble() ?? 0.0;
-
-        final newAvailableCredits = availableCredits + amount;
-
-        transaction.set(walletReference, {
-          'ownerId': businessId,
-          'ownerType': 'business',
-          'availableCredits': newAvailableCredits,
-          'balance': newAvailableCredits,
-          'promotionalCreditsGranted': promotionalCreditsGranted + amount,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-
-      transaction.set(redemptionReference, {
-        'promoKey': promoKey,
-        'amount': amount,
-        'description': description,
-        'cashValue': 0.0,
-        'developmentOnly': true,
-        'redeemedAt': FieldValue.serverTimestamp(),
-      });
-
-      transaction.set(transactionReference, {
-        'type': 'promotional_credit',
-        'amount': amount,
-        'promoKey': promoKey,
-        'description': description,
-        'cashValue': 0.0,
-        'developmentOnly': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    });
+    await _secureFunctions.call(
+      functionName: 'ensureLegacyWalletProjection',
+      data: const {},
+    );
   }
 
   Future<void> reserveCredits({

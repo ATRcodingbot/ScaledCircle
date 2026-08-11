@@ -355,13 +355,11 @@ class _MaterialDistributionCampaignScreenState
       return;
     }
 
-    final platformFee = _billingService.calculateCampaignFee(
+    final marketplaceQuote = await _billingService.campaignQuoteEstimate(
       maximumWorkerBudget,
     );
-
-    final totalCampaignCost = _billingService.calculateCampaignTotal(
-      maximumWorkerBudget,
-    );
+    final platformFee = marketplaceQuote['platformFee']!;
+    final totalCampaignCost = marketplaceQuote['totalCharge']!;
 
     setState(() {
       publishing = true;
@@ -416,17 +414,6 @@ class _MaterialDistributionCampaignScreenState
         'assignedScalerCount': 0,
 
         'maximumWorkerBudget': maximumWorkerBudget,
-        'workerBudget': maximumWorkerBudget,
-        'reservedWorkerBudget': 0.0,
-
-        'platformFeeRate': PlatformBillingService.campaignFeeRate,
-
-        'platformFee': platformFee,
-
-        'totalCampaignCost': totalCampaignCost,
-
-        'fundingStatus': 'not_reserved',
-        'platformFeeStatus': 'not_charged',
 
         'marketingDate': Timestamp.fromDate(_marketingDate!),
 
@@ -559,59 +546,18 @@ class _MaterialDistributionCampaignScreenState
 
         final fundingStatus = latestCampaignData['fundingStatus']?.toString();
 
-        final existingReservedBudget =
-            (latestCampaignData['reservedWorkerBudget'] as num?)?.toDouble() ??
-            0.0;
-
-        final alreadyFunded =
-            fundingStatus == 'reserved' && existingReservedBudget > 0.0;
-
-        Map<String, double> funding = {
-          'workerBudget': maximumWorkerBudget,
-          'platformFee': platformFee,
-          'totalCharge': totalCampaignCost,
-        };
-
-        if (!alreadyFunded) {
-          funding = await _billingService.fundCampaign(
+        if (fundingStatus != 'funded') {
+          await _billingService.fundCampaignWithCard(
             businessId: user.uid,
             campaignId: campaignReference.id,
-            workerBudget: maximumWorkerBudget,
-            description: 'Worker funding reserved for $campaignName.',
           );
+          return;
         }
 
-        final chargedWorkerBudget =
-            funding['workerBudget'] ?? maximumWorkerBudget;
-
-        final chargedPlatformFee = funding['platformFee'] ?? platformFee;
-
-        final chargedTotal = funding['totalCharge'] ?? totalCampaignCost;
-
-        await campaignReference.update({
-          'status': 'open',
-
-          'fundingStatus': 'reserved',
-
-          'platformFeeStatus': 'charged',
-
-          'workerBudget': chargedWorkerBudget,
-
-          'reservedWorkerBudget': alreadyFunded
-              ? existingReservedBudget
-              : chargedWorkerBudget,
-
-          'platformFee': chargedPlatformFee,
-
-          'totalCampaignCost': chargedTotal,
-
-          'fundedAt':
-              latestCampaignData['fundedAt'] ?? FieldValue.serverTimestamp(),
-
-          'publishedAt': FieldValue.serverTimestamp(),
-
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        await _billingService.publishFundedCampaign(
+          businessId: user.uid,
+          campaignId: campaignReference.id,
+        );
 
         if (!mounted) {
           return;
@@ -620,10 +566,8 @@ class _MaterialDistributionCampaignScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${_campaignTypeLabel(_campaignType)} published. '
-              '\$${chargedWorkerBudget.toStringAsFixed(2)} secured for Scaler pay '
-              '+ \$${chargedPlatformFee.toStringAsFixed(2)} Scaled Circle fee '
-              '= \$${chargedTotal.toStringAsFixed(2)} total credits.',
+              '${_campaignTypeLabel(_campaignType)} launched. '
+              'Funding was confirmed by Stripe and the backend.',
             ),
           ),
         );
@@ -656,13 +600,6 @@ class _MaterialDistributionCampaignScreenState
       }
 
       if (zonesConfigured != true) {
-        await campaignReference.update({
-          'status': 'draft',
-          'fundingStatus': 'not_reserved',
-          'platformFeeStatus': 'not_charged',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
         if (!mounted) {
           return;
         }
@@ -787,11 +724,9 @@ class _MaterialDistributionCampaignScreenState
 
             final fundingStatus = data?['fundingStatus']?.toString();
 
-            if (fundingStatus != 'reserved') {
+            if (fundingStatus != 'funded') {
               await campaignReference.update({
                 'status': 'draft',
-                'fundingStatus': 'not_reserved',
-                'platformFeeStatus': 'not_charged',
                 'updatedAt': FieldValue.serverTimestamp(),
               });
             }
@@ -830,12 +765,6 @@ class _MaterialDistributionCampaignScreenState
 
     final previewWorkerBudget =
         (previewBasePay + previewBonus) * previewScalers;
-
-    final previewPlatformFee = _billingService.calculateCampaignFee(
-      previewWorkerBudget,
-    );
-
-    final previewTotal = previewWorkerBudget + previewPlatformFee;
 
     return Scaffold(
       appBar: AppBar(
@@ -1300,14 +1229,9 @@ class _MaterialDistributionCampaignScreenState
 
                       const SizedBox(height: 8),
 
-                      _costRow('Scaled Circle fee (10%)', previewPlatformFee),
-
-                      const Divider(height: 24),
-
-                      _costRow(
-                        'Total credits required',
-                        previewTotal,
-                        bold: true,
+                      const Text(
+                        'The secure backend calculates the Platform Fee and '
+                        'final charge before checkout.',
                       ),
 
                       const SizedBox(height: 12),

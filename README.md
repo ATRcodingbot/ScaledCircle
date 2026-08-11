@@ -1,5 +1,9 @@
 # Scaled Circle
 
+## Stripe marketplace (sandbox only)
+
+The current marketplace payment implementation is designed for an isolated Firebase staging project plus Stripe sandbox. It uses platform-owned campaign charges and later Stripe Connect transfers; it must not be described as escrow. See [docs/stripe-marketplace.md](docs/stripe-marketplace.md) for the trust boundary, 20% platform-fee policy, Accounts v2 onboarding, state machines, refund/dispute handling, and manual sandbox checklist. Do not deploy or use live Stripe credentials without a separate approved release procedure.
+
 > The Operating System for Local Marketing.
 
 Scaled Circle is a modern platform that helps businesses plan, launch, track, and optimize real-world marketing campaigns by connecting them with verified local Scalers.

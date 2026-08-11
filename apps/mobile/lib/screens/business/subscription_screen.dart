@@ -15,6 +15,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   final PlatformBillingService _billingService = PlatformBillingService();
 
   String? _purchasingPlan;
+  bool _creatingPromotion = false;
+  String? _starterPromotionCode;
+
+  Future<void> _createStarterPromotion(String businessId) async {
+    if (_creatingPromotion) return;
+    setState(() => _creatingPromotion = true);
+    try {
+      final code = await _billingService.createStarterFreeMonthPromotion(
+        businessId: businessId,
+      );
+      if (!mounted) return;
+      setState(() => _starterPromotionCode = code);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$code is ready to share.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to create promotion: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _creatingPromotion = false);
+    }
+  }
 
   Future<void> _purchasePlan(String plan, double charge, bool upgrading) async {
     if (_purchasingPlan != null) {
@@ -38,12 +62,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           title: Text(upgrading ? 'Confirm Upgrade' : 'Confirm Subscription'),
           content: Text(
             upgrading
-                ? 'Upgrade to the ${_planName(plan)} plan '
-                      'for ${charge.toStringAsFixed(0)} credits?\n\n'
-                      'Your current subscription expiration date '
-                      'will stay the same.'
-                : 'Purchase the ${_planName(plan)} plan '
-                      'for ${charge.toStringAsFixed(0)} credits?',
+                ? 'Open the secure Stripe billing portal to manage or upgrade your subscription?'
+                : 'Subscribe to the ${_planName(plan)} plan for '
+                      '\$${charge.toStringAsFixed(0)} per month through secure Stripe Checkout?',
           ),
           actions: [
             TextButton(
@@ -72,9 +93,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     });
 
     try {
-      await _billingService.purchaseSubscription(
+      final activatedImmediately = await _billingService.purchaseSubscription(
         businessId: user.uid,
         plan: plan,
+        manageExisting: upgrading,
       );
 
       if (!mounted) {
@@ -84,14 +106,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            upgrading
-                ? '${_planName(plan)} upgrade activated successfully.'
-                : '${_planName(plan)} activated successfully.',
+            activatedImmediately
+                ? 'Your complimentary Scale plan is active.'
+                : 'Secure Stripe billing opened. Your plan updates after payment is confirmed.',
           ),
         ),
       );
 
-      Navigator.pop(context, true);
+      if (activatedImmediately) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) {
         return;
@@ -156,6 +178,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       .toLowerCase();
 
                   final expiresAt = walletData['subscriptionExpiresAt'];
+                  final adminComped =
+                      walletData['subscriptionComped'] == true &&
+                      walletData['subscriptionSource'] == 'admin_comp';
 
                   final subscriptionActive =
                       subscriptionStatus == 'active' &&
@@ -177,13 +202,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                       const Text(
                         'An active monthly subscription is required '
-                        'to publish campaigns. 1 credit = \$1.',
+                        'to publish campaigns. Subscriptions renew '
+                        'automatically through Stripe.',
                       ),
 
                       const SizedBox(height: 8),
 
                       const Text(
-                        'Campaigns also include a 10% platform fee '
+                        'Campaigns also include a 20% marketplace fee '
                         'based on worker compensation.',
                       ),
 
@@ -242,6 +268,65 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       ],
 
                       const SizedBox(height: 28),
+
+                      if (adminComped) ...[
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Starter Test Promotion',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Creates a first-time-business code for one '
+                                  'free month of the \$99 Starter plan. Stripe '
+                                  'still collects a card for automatic monthly '
+                                  'renewal. Scaler pay and campaign funding are '
+                                  'never discounted.',
+                                ),
+                                if (_starterPromotionCode != null) ...[
+                                  const SizedBox(height: 12),
+                                  SelectableText(
+                                    _starterPromotionCode!,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 12),
+                                FilledButton.icon(
+                                  onPressed: _creatingPromotion
+                                      ? null
+                                      : () => _createStarterPromotion(user.uid),
+                                  icon: _creatingPromotion
+                                      ? const SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.local_offer_outlined),
+                                  label: Text(
+                                    _starterPromotionCode == null
+                                        ? 'Create Promo Code'
+                                        : 'Confirm Promo Code',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                      ],
 
                       _planCard(
                         plan: 'starter',
@@ -334,11 +419,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                               Expanded(
                                 child: Text(
-                                  'When upgrading an active plan, '
-                                  'you pay only the difference between '
-                                  'your current plan and the higher plan. '
-                                  'Your existing renewal date remains '
-                                  'unchanged.',
+                                  'Use Stripe’s secure billing portal to '
+                                  'change or cancel an active plan. Stripe '
+                                  'shows any proration and the next renewal '
+                                  'amount before a plan change is confirmed.',
                                 ),
                               ),
                             ],
@@ -363,7 +447,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                   'Subscription fees go to Scaled Circle. '
                                   'Worker compensation remains separate '
                                   'and is reserved for Scaler payouts. '
-                                  'A 10% campaign platform fee is charged '
+                                  'A 20% campaign marketplace fee is charged '
                                   'when a campaign is funded.',
                                 ),
                               ),
@@ -471,7 +555,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
             if (isUpgrade) ...[
               Text(
-                '${charge.toStringAsFixed(0)} credits to upgrade',
+                'Manage in Stripe',
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -482,14 +566,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
               Text(
                 '$title normally costs '
-                '${price.toStringAsFixed(0)} credits / month',
+                '\$${price.toStringAsFixed(0)} / month',
                 style: TextStyle(color: Colors.grey.shade700),
               ),
 
               const SizedBox(height: 4),
 
               Text(
-                'Your current plan credit has been applied.',
+                'Stripe securely manages plan changes and automatic renewal.',
                 style: TextStyle(
                   color: Colors.green.shade800,
                   fontWeight: FontWeight.w600,
@@ -500,7 +584,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${price.toStringAsFixed(0)} credits',
+                    '\$${price.toStringAsFixed(0)}',
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -559,8 +643,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             : isDowngrade
                             ? 'Lower Plan'
                             : isUpgrade
-                            ? 'Upgrade for '
-                                  '${charge.toStringAsFixed(0)} Credits'
+                            ? 'Manage Upgrade in Stripe'
                             : 'Choose $title',
                       ),
               ),

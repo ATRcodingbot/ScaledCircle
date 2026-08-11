@@ -20,8 +20,8 @@ class ZoneCompletionService {
 
     final percentage = (completedHomes / assignedHomes) * 100;
 
-    // Less than 30% earns nothing
-    if (percentage < 30) {
+    // Less than 10% earns nothing.
+    if (percentage < 10) {
       return {
         'completionPercentage': percentage,
         'payoutAmount': 0,
@@ -30,10 +30,10 @@ class ZoneCompletionService {
       };
     }
 
-    // Full completion earns bonus
-    if (percentage >= 100) {
+    // 95%+ earns full base pay and the required bonus.
+    if (percentage >= 95) {
       return {
-        'completionPercentage': 100,
+        'completionPercentage': percentage.clamp(0, 100),
         'payoutAmount': basePay,
         'bonusAmount': bonus,
         'eligible': true,

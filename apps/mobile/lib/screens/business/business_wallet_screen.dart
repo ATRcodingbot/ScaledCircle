@@ -2,8 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class BusinessWalletScreen extends StatelessWidget {
+import '../../services/platform_billing_service.dart';
+
+class BusinessWalletScreen extends StatefulWidget {
   const BusinessWalletScreen({super.key});
+
+  @override
+  State<BusinessWalletScreen> createState() => _BusinessWalletScreenState();
+}
+
+class _BusinessWalletScreenState extends State<BusinessWalletScreen> {
+  final PlatformBillingService _billingService = PlatformBillingService();
+  bool _openingCheckout = false;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +104,22 @@ class BusinessWalletScreen extends StatelessWidget {
                     reserved: reserved,
                     paidOut: paidOut,
                   ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _openingCheckout
+                          ? null
+                          : () => _showAddCreditsDialog(user.uid),
+                      icon: _openingCheckout
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add_card_outlined),
+                      label: const Text('Add Campaign Credits with Stripe'),
+                    ),
+                  ),
                   const SizedBox(height: 26),
                   const Text(
                     'Payment Activity',
@@ -125,6 +151,74 @@ class BusinessWalletScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _showAddCreditsDialog(String businessId) async {
+    final controller = TextEditingController(text: '500');
+    final credits = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add campaign credits'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Credits fund Scaler pay and campaign fees. '
+              '1 credit equals \$1.',
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Credits',
+                helperText: 'Enter 10–10,000',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              if (value == null || value < 10 || value > 10000) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter between 10 and 10,000 credits.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Continue to Stripe'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (credits == null || !mounted) return;
+
+    setState(() => _openingCheckout = true);
+    try {
+      await _billingService.purchaseCredits(
+        businessId: businessId,
+        credits: credits,
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to open checkout: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingCheckout = false);
+    }
+  }
+
   Widget _summaryCards({
     required double available,
     required double reserved,
@@ -133,8 +227,7 @@ class BusinessWalletScreen extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 700 ? 3 : 2;
-        final width =
-            (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+        final width = (constraints.maxWidth - ((columns - 1) * 12)) / columns;
 
         return Wrap(
           spacing: 12,
@@ -234,8 +327,7 @@ class BusinessWalletScreen extends StatelessWidget {
 
     final subtitleParts = <String>[
       if (description.isNotEmpty) description,
-      if (platformFee > 0)
-        'Platform fee: \$${platformFee.toStringAsFixed(2)}',
+      if (platformFee > 0) 'Platform fee: \$${platformFee.toStringAsFixed(2)}',
       if (createdAt is Timestamp) _formatTimestamp(createdAt.toDate()),
     ];
 

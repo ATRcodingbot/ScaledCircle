@@ -1,4 +1,7 @@
 class PayoutCalculationService {
+  static const double minimumPayableCompletionPercentage = 10.0;
+  static const double automaticBonusCompletionPercentage = 95.0;
+
   Map<String, dynamic> calculatePayout({
     required double completionPercentage,
     required double basePay,
@@ -11,10 +14,10 @@ class PayoutCalculationService {
     final safeBonus = completionBonus < 0.0 ? 0.0 : completionBonus;
 
     /*
-     * Less than 30% GPS-confirmed completion:
+     * Less than 10% GPS-confirmed completion:
      * no payment.
      */
-    if (safeCompletion < 30.0) {
+    if (safeCompletion < minimumPayableCompletionPercentage) {
       return {
         'completionPercentage': safeCompletion,
         'basePayout': 0.0,
@@ -25,16 +28,16 @@ class PayoutCalculationService {
     }
 
     /*
-     * 100% GPS-confirmed completion:
+     * 95% or greater GPS-confirmed completion:
      * full base pay + completion bonus.
      */
-    if (safeCompletion >= 100.0) {
+    if (safeCompletion >= automaticBonusCompletionPercentage) {
       final basePayout = _roundMoney(safeBasePay);
 
       final bonus = _roundMoney(safeBonus);
 
       return {
-        'completionPercentage': 100.0,
+        'completionPercentage': safeCompletion,
         'basePayout': basePayout,
         'bonus': bonus,
         'totalPayout': _roundMoney(basePayout + bonus),
@@ -43,11 +46,11 @@ class PayoutCalculationService {
     }
 
     /*
-     * 30% through 99.99%:
+     * 10% through 94.99%:
      * proportional base pay.
      *
      * Completion bonus is not earned
-     * until GPS completion reaches 100%.
+     * automatically until GPS completion reaches 95%.
      */
     final basePayout = _roundMoney(safeBasePay * (safeCompletion / 100.0));
 

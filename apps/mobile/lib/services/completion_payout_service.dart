@@ -20,115 +20,22 @@ class CompletionPayoutService {
     required double basePay,
     double completionBonus = 0.0,
   }) async {
-    final double completionPercentage;
-
-    if (assignedHomes <= 0) {
-      completionPercentage = 0.0;
-    } else {
-      completionPercentage =
-          (completedHomes.toDouble() / assignedHomes.toDouble()) * 100.0;
-    }
-
+    final completionPercentage = assignedHomes <= 0
+        ? 0.0
+        : (completedHomes / assignedHomes) * 100.0;
+    // This is presentation-only. The assignment contract and final payout are
+    // recomputed by trusted backend code; no wallet or payout state is written.
     final payoutResult = _payoutService.calculatePayout(
       completionPercentage: completionPercentage,
       completionBonus: completionBonus,
       basePay: basePay,
     );
-
-    final basePayout = (payoutResult['basePayout'] as num? ?? 0).toDouble();
-
-    final bonus = (payoutResult['bonus'] as num? ?? 0).toDouble();
-
-    final totalPayout = (payoutResult['totalPayout'] as num? ?? 0).toDouble();
-
-    final payoutStatus = payoutResult['status']?.toString() ?? 'unknown';
-
-    final payoutReference = _firestore.collection('payouts').doc(zoneId);
-
-    final scalerWalletReference = _firestore
-        .collection('wallets')
-        .doc(scalerId);
-
-    await _firestore.runTransaction((transaction) async {
-      final existingPayoutSnapshot = await transaction.get(payoutReference);
-
-      final scalerWalletSnapshot = await transaction.get(scalerWalletReference);
-
-      final existingPayoutData = existingPayoutSnapshot.data();
-
-      /*
-         * A paid payout is final.
-         *
-         * Never let a later submission overwrite
-         * a payout that has already been settled.
-         */
-      if (existingPayoutSnapshot.exists &&
-          existingPayoutData?['status'] == 'paid') {
-        throw Exception('This zone has already been paid.');
-      }
-
-      final scalerWalletData = scalerWalletSnapshot.data();
-
-      final currentPendingBalance =
-          (scalerWalletData?['pendingBalance'] as num?)?.toDouble() ?? 0.0;
-
-      double previousPendingAmount = 0.0;
-
-      if (existingPayoutSnapshot.exists &&
-          existingPayoutData != null &&
-          existingPayoutData['status'] == 'pending_review') {
-        previousPendingAmount =
-            (existingPayoutData['totalPayout'] as num?)?.toDouble() ?? 0.0;
-      }
-
-      final adjustedPendingBalance =
-          currentPendingBalance - previousPendingAmount + totalPayout;
-
-      transaction.set(payoutReference, {
-        'businessId': businessId,
-        'scalerId': scalerId,
-        'campaignId': campaignId,
-        'zoneId': zoneId,
-        'assignedHomes': assignedHomes,
-        'completedHomes': completedHomes,
-        'completionPercentage': completionPercentage,
-        'basePay': basePay,
-        'basePayout': basePayout,
-        'bonus': bonus,
-        'totalPayout': totalPayout,
-        'calculationStatus': payoutStatus,
-        'status': 'pending_review',
-
-        if (existingPayoutData?['createdAt'] != null)
-          'createdAt': existingPayoutData!['createdAt']
-        else
-          'createdAt': FieldValue.serverTimestamp(),
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      transaction.set(scalerWalletReference, {
-        'ownerId': scalerId,
-
-        if (!scalerWalletSnapshot.exists) 'ownerType': 'scaler',
-
-        'pendingBalance': adjustedPendingBalance < 0.0
-            ? 0.0
-            : adjustedPendingBalance,
-
-        'updatedAt': FieldValue.serverTimestamp(),
-
-        if (!scalerWalletSnapshot.exists)
-          'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    });
-
     return {
-      'payoutId': payoutReference.id,
+      'payoutId': zoneId,
       'completionPercentage': completionPercentage,
-      'basePayout': basePayout,
-      'bonus': bonus,
-      'totalPayout': totalPayout,
+      'basePayout': (payoutResult['basePayout'] as num? ?? 0).toDouble(),
+      'bonus': (payoutResult['bonus'] as num? ?? 0).toDouble(),
+      'totalPayout': (payoutResult['totalPayout'] as num? ?? 0).toDouble(),
       'status': 'pending_review',
     };
   }
@@ -137,10 +44,19 @@ class CompletionPayoutService {
     required String payoutId,
     bool releaseBonus = false,
   }) async {
-    return _secureFunctions.call(
-      functionName: 'approveZonePayout',
-      data: {'payoutId': payoutId, 'releaseBonus': releaseBonus},
+    final review = await _secureFunctions.call(
+      functionName: 'finalizeZoneReview',
+      data: {
+        'zoneId': payoutId,
+        'decision': 'approve',
+        'releaseOptionalBonus': releaseBonus,
+      },
     );
+    final transfer = await _secureFunctions.call(
+      functionName: 'createScalerTransfer',
+      data: {'zoneId': payoutId, 'releaseOptionalBonus': releaseBonus},
+    );
+    return {...review, ...transfer};
   }
 
   Future<void> approvePayoutLegacy({required String payoutId}) async {
@@ -467,8 +383,12 @@ class CompletionPayoutService {
     required String feedback,
   }) async {
     await _secureFunctions.call(
-      functionName: 'requestZoneRedo',
-      data: {'payoutId': payoutId, 'feedback': feedback},
+      functionName: 'finalizeZoneReview',
+      data: {
+        'zoneId': payoutId,
+        'decision': 'request_redo',
+        'feedback': feedback,
+      },
     );
   }
 

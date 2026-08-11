@@ -98,20 +98,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         ownerType: 'business',
       );
 
-      final userDocument = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      if (userDocument.data()?['developmentCreditsEnabled'] == true) {
-        await _walletService.grantPromotionalCredits(
-          businessId: user.uid,
-          amount: 10000.0,
-          promoKey: 'development-business-10000-v1',
-          description:
-              'Development promotional credits for Scaled Circle testing.',
-        );
-      }
-
       await _loadWallet();
       await _loadWeather();
     } catch (e) {
@@ -1069,9 +1055,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Development wallet: promotional credits are being '
-                            'used for testing. 1 credit represents \$1 in the '
-                            'production billing model.',
+                            'Add campaign credits securely with Stripe, or pay '
+                            'the exact worker funding amount when launching a '
+                            'campaign. 1 credit equals \$1.',
                             style: const TextStyle(
                               color: AppColors.textSecondary,
                             ),
@@ -1187,7 +1173,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 if (isActive) ...[
                   if (price != null)
                     Text(
-                      '${price.toStringAsFixed(0)} credits / month',
+                      '\$${price.toStringAsFixed(0)} / month',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   if (price != null) const SizedBox(height: 4),
@@ -1207,7 +1193,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Starter: 99 credits • Growth: 299 credits • Scale: 499 credits',
+                    'Starter: \$99 • Growth: \$299 • Scale: \$499 per month',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ],

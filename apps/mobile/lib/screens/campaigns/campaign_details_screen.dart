@@ -235,12 +235,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         throw Exception('Campaign worker budget must be greater than zero.');
       }
 
-      final existingReservedBudget =
-          (campaignData['reservedWorkerBudget'] as num?)?.toDouble() ?? 0.0;
-
-      final alreadyReserved =
-          fundingStatus == 'reserved' && existingReservedBudget > 0.0;
-
       await liveCampaign.reference.update({
         'maximumWorkerBudget': workerBudget,
         'zoneCount': zoneCount,
@@ -253,64 +247,18 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      Map<String, double> funding = {
-        'workerBudget': existingReservedBudget > 0
-            ? existingReservedBudget
-            : workerBudget,
-        'platformFee':
-            (campaignData['platformFee'] as num?)?.toDouble() ??
-            (workerBudget * PlatformBillingService.campaignFeeRate),
-        'totalCharge':
-            (campaignData['totalCampaignCost'] as num?)?.toDouble() ??
-            (workerBudget * (1 + PlatformBillingService.campaignFeeRate)),
-      };
-
-      if (!alreadyReserved) {
-        funding = await _billingService.fundCampaign(
+      if (fundingStatus != 'funded') {
+        await _billingService.fundCampaignWithCard(
           businessId: businessId,
           campaignId: liveCampaign.id,
-          workerBudget: workerBudget,
-          description:
-              'Worker funding reserved for ${campaignData['campaignName'] ?? 'campaign'}.',
         );
+        return;
       }
 
-      final chargedWorkerBudget = funding['workerBudget'] ?? workerBudget;
-      final chargedPlatformFee =
-          funding['platformFee'] ??
-          (workerBudget * PlatformBillingService.campaignFeeRate);
-      final chargedTotal =
-          funding['totalCharge'] ?? chargedWorkerBudget + chargedPlatformFee;
-
-      final launchBatch = FirebaseFirestore.instance.batch();
-
-      launchBatch.update(liveCampaign.reference, {
-        'status': 'open',
-        'fundingStatus': 'reserved',
-        'platformFeeStatus': 'charged',
-        'maximumWorkerBudget': workerBudget,
-        'reservedWorkerBudget': alreadyReserved
-            ? existingReservedBudget
-            : chargedWorkerBudget,
-        'workerBudget': chargedWorkerBudget,
-        'platformFee': chargedPlatformFee,
-        'totalCampaignCost': chargedTotal,
-        if (campaignData['fundedAt'] == null)
-          'fundedAt': FieldValue.serverTimestamp(),
-        'publishedAt': FieldValue.serverTimestamp(),
-        'zonesLockedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      for (final zoneReference in zoneReferencesToLock) {
-        launchBatch.update(zoneReference, {
-          'mapLocked': true,
-          'mapLockedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      await launchBatch.commit();
+      await _billingService.publishFundedCampaign(
+        businessId: businessId,
+        campaignId: liveCampaign.id,
+      );
 
       if (!context.mounted) {
         return;
@@ -320,7 +268,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         SnackBar(
           content: Text(
             'Campaign launched. '
-            '\$${chargedWorkerBudget.toStringAsFixed(2)} is secured for '
+            '\$${workerBudget.toStringAsFixed(2)} is secured for '
             'Scaler pay and the mapped zones are now locked.',
           ),
         ),
@@ -387,7 +335,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         (campaignData['bonus'] as num?)?.toDouble() ??
         0.0;
 
-    final bonusEarnedAutomatically = completionPercentage >= 100.0;
+    final bonusEarnedAutomatically = completionPercentage >= 95.0;
 
     final campaignBasePay =
         (campaignData['basePay'] as num?)?.toDouble() ?? 0.0;
@@ -434,7 +382,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                             '(\$${availableBonus.toStringAsFixed(2)})',
                           ),
                           subtitle: const Text(
-                            '100% completion earns the bonus automatically under platform rules.',
+                            '95% or greater completion earns the bonus automatically under platform rules.',
                           ),
                         )
                       else
@@ -445,7 +393,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                             '(\$${availableBonus.toStringAsFixed(2)})',
                           ),
                           subtitle: const Text(
-                            'The route is below 100%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
+                            'The route is below 95%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
                           ),
                           value: includeBonus,
                           onChanged: (value) {
@@ -590,11 +538,11 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     required double campaignBasePay,
     required double completionPercentage,
   }) {
-    if (completionPercentage < 30.0 || campaignBasePay <= 0.0) {
+    if (completionPercentage < 10.0 || campaignBasePay <= 0.0) {
       return 0.0;
     }
 
-    if (completionPercentage >= 100.0) {
+    if (completionPercentage >= 95.0) {
       return campaignBasePay;
     }
 

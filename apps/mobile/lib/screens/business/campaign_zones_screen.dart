@@ -472,7 +472,7 @@ class CampaignZonesScreen extends StatelessWidget {
             (data['availableBonus'] as num?)?.toDouble() ??
             (campaignData['bonus'] as num?)?.toDouble() ??
             0.0;
-        final bonusEarnedAutomatically = completionPercentage >= 100.0;
+        final bonusEarnedAutomatically = completionPercentage >= 95.0;
         final basePayout = _contractBasePayout(completionPercentage);
         var releaseBonus = bonusEarnedAutomatically && availableBonus > 0.0;
 
@@ -511,7 +511,7 @@ class CampaignZonesScreen extends StatelessWidget {
                             '(\$${availableBonus.toStringAsFixed(2)})',
                           ),
                           subtitle: const Text(
-                            '100% completion earns the bonus automatically under platform rules.',
+                            '95% or greater completion earns the bonus automatically under platform rules.',
                           ),
                         )
                       else
@@ -522,7 +522,7 @@ class CampaignZonesScreen extends StatelessWidget {
                             '(\$${availableBonus.toStringAsFixed(2)})',
                           ),
                           subtitle: const Text(
-                            'The route is below 100%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
+                            'The route is below 95%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
                           ),
                           value: releaseBonus,
                           onChanged: (value) {
@@ -966,11 +966,11 @@ class CampaignZonesScreen extends StatelessWidget {
     final campaignBasePay =
         (campaignData['basePay'] as num?)?.toDouble() ?? 0.0;
 
-    if (completionPercentage < 30.0 || campaignBasePay <= 0.0) {
+    if (completionPercentage < 10.0 || campaignBasePay <= 0.0) {
       return 0.0;
     }
 
-    if (completionPercentage >= 100.0) {
+    if (completionPercentage >= 95.0) {
       return campaignBasePay;
     }
 

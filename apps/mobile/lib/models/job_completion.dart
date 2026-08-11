@@ -151,10 +151,10 @@ class JobCompletion {
   }
 
   bool qualifiesForPayment() {
-    return completionPercentage >= 30;
+    return completionPercentage >= 10;
   }
 
   bool qualifiesForBonus() {
-    return completionPercentage >= 100;
+    return completionPercentage >= 95;
   }
 }

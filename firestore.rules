@@ -155,12 +155,15 @@ service cloud.firestore {
 
       allow create:
         if isApprovedAccount()
-        && request.resource.data.businessId == request.auth.uid;
+        && request.resource.data.businessId == request.auth.uid
+        && !request.resource.data.keys().hasAny(financialCampaignFields());
 
 
       allow update:
         if isApprovedAccount()
-        && resource.data.businessId == request.auth.uid;
+        && resource.data.businessId == request.auth.uid
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(financialCampaignFields());
 
 
       allow delete:
@@ -464,7 +467,8 @@ service cloud.firestore {
       allow create:
         if isApprovedAccount()
         &&
-        request.resource.data.scalerId == request.auth.uid;
+        request.resource.data.scalerId == request.auth.uid
+        && !request.resource.data.keys().hasAny(financialCompletionFields());
 
 
       allow read:
@@ -484,7 +488,9 @@ service cloud.firestore {
           resource.data.scalerId == request.auth.uid
           ||
           resource.data.businessId == request.auth.uid
-        );
+        )
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(financialCompletionFields());
 
 
       allow delete:
@@ -508,20 +514,9 @@ service cloud.firestore {
         request.auth.uid == walletId;
 
 
-      allow create:
-        if isApprovedAccount()
-        &&
-        request.auth.uid == walletId;
-
-
-      allow update:
-        if isApprovedAccount()
-        &&
-        request.auth.uid == walletId;
-
-
-      allow delete:
-        if isAdmin();
+      // Wallets are legacy/sanitized projections only. They are never an
+      // authoritative cash ledger and all writes are trusted-backend only.
+      allow create, update, delete: if false;
 
 
 
@@ -538,14 +533,7 @@ service cloud.firestore {
           request.auth.uid == walletId;
 
 
-        allow create:
-          if isApprovedAccount()
-          &&
-          request.auth.uid == walletId;
-
-
-        allow update, delete:
-          if false;
+        allow create, update, delete: if false;
 
       }
 
@@ -595,13 +583,60 @@ service cloud.firestore {
         );
 
 
-      allow create:
-        if isApprovedAccount();
+      allow create, update, delete: if false;
 
+    }
 
-      allow update, delete:
-        if false;
+    // ============================================================
+    // SERVER-AUTHORITATIVE FINANCIAL RECORDS
+    // ============================================================
 
+    match /stripeCustomers/{businessId} {
+      allow read: if isAdmin() || (isApprovedAccount() && request.auth.uid == businessId);
+      allow create, update, delete: if false;
+    }
+
+    match /stripeConnectedAccounts/{scalerId} {
+      allow read: if isAdmin() || (isApprovedAccount() && request.auth.uid == scalerId);
+      allow create, update, delete: if false;
+    }
+
+    match /campaignPayments/{paymentId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && resource.data.businessId == request.auth.uid
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /scalerTransfers/{transferId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && (
+          resource.data.scalerId == request.auth.uid ||
+          resource.data.businessId == request.auth.uid
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /assignmentCompensations/{zoneId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && (
+          resource.data.scalerId == request.auth.uid ||
+          resource.data.businessId == request.auth.uid
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /financialOperations/{operationId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && resource.data.ownerId == request.auth.uid
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /stripeEvents/{eventId} {
+      allow read, create, update, delete: if false;
     }
 
 
@@ -760,6 +795,36 @@ service cloud.firestore {
         /databases/$(database)/documents/users/$(request.auth.uid)
       ).data.role == "admin";
 
+    }
+
+    // Stripe/payment truth is written only by trusted Cloud Functions. These
+    // lists intentionally protect legacy campaigns too, without preventing a
+    // Business from editing ordinary draft content and geometry.
+    function financialCampaignFields() {
+      return [
+        'fundingStatus', 'fundingPaymentId', 'fundingVersion', 'fundedAt',
+        'workerAmountCents', 'platformFeeRateBasisPoints',
+        'platformFeeCents', 'businessChargeCents',
+        'stripeCheckoutSessionId', 'stripePaymentIntentId', 'stripeChargeId',
+        'paymentStatus', 'refundStatus', 'refundedAt', 'cancelledAt',
+        'transferredWorkerAmountCents', 'refundedWorkerAmountCents',
+        'refundedPlatformFeeCents', 'refundedTotalCents',
+        'disputedAmountCents', 'settlementFrozen',
+        'platformFeePendingCents', 'platformFeeRecognizedCents',
+        'platformFeeRefundedCents', 'transferOperationId',
+        'stripeTransferId', 'paidAmountCents', 'payoutStatus',
+        'earningsStatus', 'settlementStatus'
+      ];
+    }
+
+    function financialCompletionFields() {
+      return [
+        'verificationPassed', 'verificationStatus', 'reviewStatus',
+        'reviewFinalizedAt', 'paymentStatus', 'payoutStatus',
+        'payoutEligible', 'paid', 'paidAt', 'paidAmountCents',
+        'transferOperationId', 'stripeTransferId', 'earningsStatus',
+        'settlementStatus', 'redoRequired', 'redoCount', 'disputeOpen'
+      ];
     }
 
 

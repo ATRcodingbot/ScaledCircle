@@ -1,15 +1,14 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+
+import 'secure_function_service.dart';
 
 class PlatformBillingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SecureFunctionService _secureFunctions = const SecureFunctionService();
 
   static const String adminWalletId = 'scaled_circle_admin';
-
-  static const double campaignFeeRate = 0.10;
 
   static const Map<String, double> subscriptionPrices = {
     'starter': 99.0,
@@ -34,51 +33,7 @@ class PlatformBillingService {
       throw Exception('You must be logged in as this business.');
     }
 
-    final idToken = await user.getIdToken();
-
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception('Unable to authenticate the request.');
-    }
-
-    final endpoint = Uri.parse(
-      'https://us-east1-scaled-circle.cloudfunctions.net/$functionName',
-    );
-
-    try {
-      final response = await http.post(
-        endpoint,
-        headers: {
-          'Authorization': 'Bearer $idToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'data': data}),
-      );
-
-      final responseBody = response.body.isEmpty
-          ? <String, dynamic>{}
-          : jsonDecode(response.body) as Map<String, dynamic>;
-      final callableError = responseBody['error'];
-
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300 ||
-          callableError != null) {
-        final message = callableError is Map
-            ? callableError['message']?.toString()
-            : null;
-
-        throw Exception(message ?? 'The secure service request failed.');
-      }
-
-      final result = responseBody['result'] ?? responseBody['data'];
-
-      return result is Map
-          ? Map<String, dynamic>.from(result)
-          : <String, dynamic>{};
-    } on FormatException {
-      throw Exception('The secure service returned an invalid response.');
-    } on http.ClientException catch (error) {
-      throw Exception('Unable to reach the secure service: $error');
-    }
+    return _secureFunctions.call(functionName: functionName, data: data);
   }
 
   // -----------------------------
@@ -124,27 +79,133 @@ class PlatformBillingService {
   // SUBSCRIPTION PURCHASE
   // -----------------------------
 
-  Future<void> purchaseSubscription({
+  Future<bool> purchaseSubscription({
     required String businessId,
     required String plan,
+    bool manageExisting = false,
   }) async {
-    await _callSecureFunction(
+    final result = await _callSecureFunction(
       businessId: businessId,
-      functionName: 'purchaseSubscription',
+      functionName: manageExisting
+          ? 'createBillingPortalSession'
+          : 'createSubscriptionCheckoutSession',
       data: {'plan': plan.toLowerCase()},
+    );
+    final url = result['url']?.toString();
+    if (url == null || url.isEmpty) return result['comped'] == true;
+    final opened = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_self',
+    );
+    if (!opened) throw Exception('Unable to open secure Stripe checkout.');
+    return false;
+  }
+
+  Future<void> purchaseCredits({
+    required String businessId,
+    required int credits,
+  }) async {
+    final result = await _callSecureFunction(
+      businessId: businessId,
+      functionName: 'createCreditCheckoutSession',
+      data: {'credits': credits},
+    );
+    await _openStripeUrl(result['url']);
+  }
+
+  Future<void> fundCampaignWithCard({
+    required String businessId,
+    required String campaignId,
+  }) async {
+    final result = await _callSecureFunction(
+      businessId: businessId,
+      functionName: 'createCampaignFundingCheckoutSession',
+      data: {'campaignId': campaignId},
+    );
+    if (result['alreadyFunded'] == true) return;
+    await _openStripeUrl(result['url']);
+  }
+
+  Future<Map<String, dynamic>> marketplacePolicy({
+    required String businessId,
+  }) {
+    return _callSecureFunction(
+      businessId: businessId,
+      functionName: 'getMarketplacePolicy',
+      data: const {},
     );
   }
 
-  // -----------------------------
-  // CAMPAIGN FEES
-  // -----------------------------
-
-  double calculateCampaignFee(double workerBudget) {
-    return workerBudget * campaignFeeRate;
+  /// Server-authoritative marketplace quote. Flutter formats returned cents;
+  /// it never owns the platform-fee policy.
+  Future<Map<String, double>> campaignQuoteEstimate(double workerBudget) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('You must be logged in.');
+    final result = await _callSecureFunction(
+      businessId: user.uid,
+      functionName: 'quoteCampaignFunding',
+      data: {'workerAmountCents': (workerBudget * 100).round()},
+    );
+    final workerAmountCents = (result['workerAmountCents'] as num?)?.toInt();
+    final platformFeeCents = (result['platformFeeCents'] as num?)?.toInt();
+    final businessChargeCents = (result['businessChargeCents'] as num?)?.toInt();
+    if (workerAmountCents == null || platformFeeCents == null ||
+        businessChargeCents == null) {
+      throw Exception('Marketplace pricing policy is unavailable.');
+    }
+    return {
+      'workerBudget': workerAmountCents / 100,
+      'platformFee': platformFeeCents / 100,
+      'totalCharge': businessChargeCents / 100,
+    };
   }
 
-  double calculateCampaignTotal(double workerBudget) {
-    return workerBudget + calculateCampaignFee(workerBudget);
+  Future<void> publishFundedCampaign({
+    required String businessId,
+    required String campaignId,
+  }) async {
+    await _callSecureFunction(
+      businessId: businessId,
+      functionName: 'publishFundedCampaign',
+      data: {'campaignId': campaignId},
+    );
+  }
+
+  Future<void> _openStripeUrl(dynamic rawUrl) async {
+    final url = rawUrl?.toString() ?? '';
+    if (url.isEmpty) throw Exception('Stripe checkout is unavailable.');
+    final opened = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_self',
+    );
+    if (!opened) throw Exception('Unable to open secure Stripe checkout.');
+  }
+
+  Future<Map<String, dynamic>> ensureBillingEntitlement({
+    required String businessId,
+  }) {
+    return _callSecureFunction(
+      businessId: businessId,
+      functionName: 'ensureBillingEntitlement',
+      data: const {},
+    );
+  }
+
+  Future<String> createStarterFreeMonthPromotion({
+    required String businessId,
+  }) async {
+    final result = await _callSecureFunction(
+      businessId: businessId,
+      functionName: 'createStarterFreeMonthPromotion',
+      data: const {},
+    );
+    final code = result['code']?.toString() ?? '';
+    if (code.isEmpty) {
+      throw Exception('Stripe did not return the promotion code.');
+    }
+    return code;
   }
 
   Future<bool> hasActiveSubscription({required String businessId}) async {
@@ -171,43 +232,4 @@ class PlatformBillingService {
     return expires.toDate().isAfter(DateTime.now());
   }
 
-  // -----------------------------
-  // CAMPAIGN FUNDING
-  // -----------------------------
-
-  Future<Map<String, double>> fundCampaign({
-    required String businessId,
-    required String campaignId,
-    required double workerBudget,
-    required String description,
-  }) async {
-    if (workerBudget <= 0) {
-      throw Exception('Worker budget must be greater than zero.');
-    }
-
-    final result = await _callSecureFunction(
-      businessId: businessId,
-      functionName: 'fundCampaign',
-      data: {
-        'campaignId': campaignId,
-        'description': description,
-      },
-    );
-
-    final fundedWorkerBudget = (result['workerBudget'] as num?)?.toDouble();
-    final fundedPlatformFee = (result['platformFee'] as num?)?.toDouble();
-    final fundedTotalCharge = (result['totalCharge'] as num?)?.toDouble();
-
-    if (fundedWorkerBudget == null ||
-        fundedPlatformFee == null ||
-        fundedTotalCharge == null) {
-      throw Exception('The campaign funding response is incomplete.');
-    }
-
-    return {
-      'workerBudget': fundedWorkerBudget,
-      'platformFee': fundedPlatformFee,
-      'totalCharge': fundedTotalCharge,
-    };
-  }
 }

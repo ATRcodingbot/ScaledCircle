@@ -56,6 +56,21 @@ beforeEach(async () => {
     await db.doc("trackingSessions/session-one/chunks/seq_000000001_000000001").set({
       scalerId: "scaler-one", points: [{latitude: 39, longitude: -76}],
     });
+    await db.doc("wallets/business-one").set({ownerId: "business-one", availableCredits: 100});
+    await db.doc("campaignPayments/payment-one").set({
+      businessId: "business-one", campaignId: "campaign-one", status: "funded",
+    });
+    await db.doc("scalerTransfers/transfer-one").set({
+      businessId: "business-one", scalerId: "scaler-one", status: "transfer_pending",
+    });
+    await db.doc("stripeConnectedAccounts/scaler-one").set({
+      scalerId: "scaler-one", stripeAccountId: "acct_test", transfersStatus: "pending",
+    });
+    await db.doc("assignmentCompensations/zone-one").set({
+      businessId: "business-one", scalerId: "scaler-one", baseAmountCents: 5000,
+    });
+    await db.doc("financialOperations/op-one").set({ownerId: "business-one", status: "succeeded"});
+    await db.doc("stripeEvents/evt_test").set({status: "processed"});
   });
 });
 
@@ -118,4 +133,30 @@ test("owning business may edit only mapped draft configuration fields", async ()
   await assertFails(ref.update({status: "assigned"}));
   await assertFails(ref.update({assignedScalerId: "scaler-one"}));
   await assertFails(store("business-two").doc("campaignZones/zone-draft").update({zoneName: "stolen"}));
+});
+
+test("clients cannot mutate wallets or authoritative financial records", async () => {
+  for (const uid of ["business-one", "scaler-one", "admin-one"]) {
+    const db = store(uid);
+    await assertFails(db.doc("wallets/business-one").update({availableCredits: 999999}));
+    await assertFails(db.doc("walletTransactions/forged").set({businessId: uid, amount: 999999}));
+    await assertFails(db.doc("campaignPayments/payment-one").update({status: "funded"}));
+    await assertFails(db.doc("scalerTransfers/transfer-one").update({status: "paid"}));
+    await assertFails(db.doc("stripeConnectedAccounts/scaler-one").update({transfersStatus: "active"}));
+    await assertFails(db.doc("assignmentCompensations/zone-one").update({baseAmountCents: 1}));
+    await assertFails(db.doc("financialOperations/op-one").update({status: "succeeded"}));
+    await assertFails(db.doc("stripeEvents/evt_test").get());
+  }
+});
+
+test("financial reads are scoped to participants and admins", async () => {
+  await assertSucceeds(store("business-one").doc("campaignPayments/payment-one").get());
+  await assertFails(store("business-two").doc("campaignPayments/payment-one").get());
+  await assertFails(store("scaler-one").doc("campaignPayments/payment-one").get());
+  await assertSucceeds(store("admin-one").doc("campaignPayments/payment-one").get());
+
+  await assertSucceeds(store("scaler-one").doc("scalerTransfers/transfer-one").get());
+  await assertSucceeds(store("business-one").doc("scalerTransfers/transfer-one").get());
+  await assertFails(store("scaler-two").doc("scalerTransfers/transfer-one").get());
+  await assertSucceeds(store("admin-one").doc("scalerTransfers/transfer-one").get());
 });

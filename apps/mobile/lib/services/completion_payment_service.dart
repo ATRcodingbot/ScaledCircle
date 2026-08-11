@@ -15,7 +15,7 @@ class CompletionPaymentService {
 
     final percentage = (completedHomes / assignedHomes) * 100;
 
-    if (percentage < 30) {
+    if (percentage < 10) {
       return {
         'percentage': percentage,
         'payment': 0,
@@ -24,9 +24,9 @@ class CompletionPaymentService {
       };
     }
 
-    if (percentage >= 100) {
+    if (percentage >= 95) {
       return {
-        'percentage': 100,
+        'percentage': percentage.clamp(0, 100),
         'payment': basePay,
         'bonus': completionBonus,
         'eligible': true,
