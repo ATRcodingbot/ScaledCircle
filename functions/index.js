@@ -26,6 +26,7 @@ const {
   serializedBytes,
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
+const {evaluateFundingCheckout, nextFundingVersion} = require("./marketplace_checkout");
 const {
   parseSnapshotEvent,
   parseThinEvent,
@@ -5167,6 +5168,103 @@ function firestoreFinancialOperationStore() {
   };
 }
 
+function campaignCheckoutOperationStore({campaignRef, paymentRef, businessId,
+  fundingVersion, operationId, quote}) {
+  const operationRef = db.collection("financialOperations").doc(operationId);
+  return {
+    async claim(input) {
+      let result;
+      await db.runTransaction(async (transaction) => {
+        const [campaignSnapshot, paymentSnapshot, operationSnapshot] = await Promise.all([
+          transaction.get(campaignRef),
+          transaction.get(paymentRef),
+          transaction.get(operationRef),
+        ]);
+        const campaign = campaignSnapshot.exists ?
+          {...(campaignSnapshot.data() || {}), id: campaignSnapshot.id} : null;
+        const payment = paymentSnapshot.exists ? paymentSnapshot.data() || {} : null;
+        const current = operationSnapshot.data() || {};
+        const eligibility = evaluateFundingCheckout({
+          campaign, payment, businessId, expectedFundingVersion: fundingVersion,
+        });
+        if (eligibility.decision === "reject") {
+          const code = eligibility.code === "campaign_not_owned" ?
+            "permission-denied" : "failed-precondition";
+          throw new HttpsError(code, "This campaign is not eligible for funding Checkout.");
+        }
+        const currentQuote = marketplace.quoteCampaignFunding(
+          marketplace.campaignWorkerAmountCents(campaign),
+        );
+        if (currentQuote.workerAmountCents !== quote.workerAmountCents ||
+            currentQuote.platformFeeRateBasisPoints !== quote.platformFeeRateBasisPoints ||
+            currentQuote.platformFeeCents !== quote.platformFeeCents ||
+            currentQuote.businessChargeCents !== quote.businessChargeCents ||
+            currentQuote.currency !== quote.currency) {
+          throw new HttpsError("failed-precondition", "Campaign pricing changed. Request a new quote.");
+        }
+        if (current.inputDigest && current.inputDigest !== input.inputDigest) {
+          result = {status: "conflict", execute: false}; return;
+        }
+        if (eligibility.decision === "recover") {
+          transaction.set(operationRef, {...input, status: "succeeded",
+            result: eligibility.result, updatedAt: FieldValue.serverTimestamp(),
+            createdAt: operationSnapshot.exists ? current.createdAt : FieldValue.serverTimestamp()},
+          {merge: true});
+          result = {status: "succeeded", execute: false, result: eligibility.result};
+          return;
+        }
+        if (current.status === "succeeded") {
+          result = {status: "succeeded", execute: false, result: current.result}; return;
+        }
+        if (current.status === "processing") {
+          result = {status: "processing", execute: false}; return;
+        }
+        if (current.status === "failed_terminal") {
+          throw new HttpsError("failed-precondition", "The funding attempt cannot be retried.");
+        }
+        transaction.set(operationRef, {...input, status: "processing",
+          attempt: Number(current.attempt || 0) + 1,
+          updatedAt: FieldValue.serverTimestamp(),
+          createdAt: operationSnapshot.exists ? current.createdAt : FieldValue.serverTimestamp()},
+        {merge: true});
+        transaction.set(paymentRef, {
+          id: paymentRef.id,
+          businessId,
+          campaignId: campaignRef.id,
+          fundingVersion,
+          ...quote,
+          status: marketplace.PAYMENT_STATES.pending,
+          updatedAt: FieldValue.serverTimestamp(),
+          createdAt: paymentSnapshot.exists ?
+            payment.createdAt : FieldValue.serverTimestamp(),
+        }, {merge: true});
+        transaction.set(campaignRef, {
+          fundingStatus: "payment_pending",
+          fundingCheckoutOperationId: operationId,
+          fundingCheckoutVersion: fundingVersion,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: true});
+        result = {status: "processing", execute: true};
+      });
+      return result;
+    },
+    async get() {
+      const snapshot = await operationRef.get();
+      return snapshot.exists ? snapshot.data() : null;
+    },
+    succeed(_operationId, result) {
+      return operationRef.set({status: "succeeded", result,
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    },
+    fail(_operationId, failure) {
+      return operationRef.set({
+        status: failure.retryable ? "failed_retryable" : "failed_terminal",
+        lastErrorCode: failure.code, updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    },
+  };
+}
+
 async function marketplaceCustomer(stripe, context) {
   const customerRef = db.collection("stripeCustomers").doc(context.uid);
   const current = await customerRef.get();
@@ -5387,11 +5485,15 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
     const campaignSnapshot = await campaignRef.get();
     if (!campaignSnapshot.exists) throw new HttpsError("not-found", "Campaign not found.");
     const campaign = campaignSnapshot.data() || {};
-    if (!context.isAdmin && campaign.businessId !== context.uid) {
+    if (campaign.businessId !== context.uid) {
       throw new HttpsError("permission-denied", "You do not own this campaign.");
     }
-    const fundingVersion = Number.isSafeInteger(campaign.fundingVersion) ?
-      campaign.fundingVersion + 1 : 1;
+    let fundingVersion;
+    try {
+      fundingVersion = nextFundingVersion(campaign);
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "Campaign funding version is invalid.");
+    }
     const quote = marketplace.quoteCampaignFunding(
       marketplace.campaignWorkerAmountCents(campaign),
     );
@@ -5399,14 +5501,12 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
       "campaign-payment", campaignId, fundingVersion,
     );
     const paymentRef = db.collection("campaignPayments").doc(paymentId);
-    const existing = await paymentRef.get();
-    if (existing.exists && existing.data()?.stripeCheckoutUrl) {
-      return {paymentId, url: existing.data().stripeCheckoutUrl, quote, recovered: true};
-    }
     const stripe = stripeClient();
     const operationId = marketplace.operationId("campaign-checkout", campaignId, fundingVersion);
     const result = await runFinancialOperation({
-      store: firestoreFinancialOperationStore(), operationId, kind: "campaign_checkout_creation",
+      store: campaignCheckoutOperationStore({campaignRef, paymentRef,
+        businessId: context.uid, fundingVersion, operationId, quote}),
+      operationId, kind: "campaign_checkout_creation",
       trustedInput: {campaignId, businessId: context.uid, fundingVersion,
         businessChargeCents: quote.businessChargeCents},
       reconcile: async () => {
@@ -6245,7 +6345,10 @@ exports.executeQueuedScalerTransfers = onSchedule(
   },
 );
 
-exports._marketplaceTest = marketplace;
+exports._marketplaceTest = {
+  ...marketplace,
+  campaignCheckoutOperationStore,
+};
 
 // Retired cash-wallet settlement callables. Keeping controlled stubs avoids a
 // silent client break while ensuring no caller can bypass the Connect transfer
