@@ -4,6 +4,7 @@ const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {defineSecret} = require("firebase-functions/params");
 const {initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
+const {getStorage} = require("firebase-admin/storage");
 const {
   getFirestore,
   FieldValue,
@@ -12,6 +13,16 @@ const {
 const logger = require("firebase-functions/logger");
 const crypto = require("node:crypto");
 const nodemailer = require("nodemailer");
+const {
+  LIMITS: TRACKING_LIMITS,
+  assertAllowedKeys,
+  canonicalChunkId,
+  compatibilityRoutePoints,
+  digestRawPoints,
+  normalizeChunk,
+  normalizePoint,
+  serializedBytes,
+} = require("./tracking_security");
 
 initializeApp();
 
@@ -21,6 +32,36 @@ setGlobalOptions({
   maxInstances: 10,
   region: "us-east1",
 });
+
+async function authenticatedUserContext(request, message) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", message);
+  }
+
+  const userReference = db.collection("users").doc(request.auth.uid);
+  const userSnapshot = await userReference.get();
+  const user = userSnapshot.data() || {};
+  const role = typeof user.role === "string" ? user.role.toLowerCase() : "";
+
+  return {
+    uid: request.auth.uid,
+    user,
+    role,
+    isAdmin: role === "admin",
+    emailVerified: request.auth.token.email_verified === true,
+  };
+}
+
+async function requireVerifiedUser(request, message) {
+  const context = await authenticatedUserContext(request, message);
+  if (!context.isAdmin && !context.emailVerified) {
+    throw new HttpsError(
+      "permission-denied",
+      "Verify your email address before using billing or receiving payments.",
+    );
+  }
+  return context;
+}
 
 const OVERPASS_URL =
   "https://overpass-api.de/api/interpreter";
@@ -2341,6 +2382,174 @@ exports.approveZonePayout = onCall(
  * 4. Fall back to residential building count.
  * 5. Fall back to area-density estimate if OSM data is sparse.
  */
+exports.requestZoneRedo = onCall(
+  {
+    enforceAppCheck: false,
+    maxInstances: 10,
+  },
+  async (request) => {
+    await requireVerifiedUser(request, "You must be logged in to review a payout.");
+    const payoutId = cleanId(request.data?.payoutId);
+    const feedback = String(request.data?.feedback || "").trim().slice(0, 2000);
+    if (!payoutId || !feedback) {
+      throw new HttpsError("invalid-argument", "Payout and review feedback are required.");
+    }
+    const businessId = request.auth.uid;
+    const payoutRef = db.collection("payouts").doc(payoutId);
+    try {
+      return await db.runTransaction(async (transaction) => {
+        const payoutSnapshot = await transaction.get(payoutRef);
+        const payout = payoutSnapshot.data() || {};
+        if (!payoutSnapshot.exists) {
+          throw new HttpsError("not-found", "The payout does not exist.");
+        }
+        if (payout.businessId !== businessId) {
+          throw new HttpsError("permission-denied", "You do not own this payout.");
+        }
+        if (payout.status === "redo_requested") {
+          return {payoutId, status: "redo_requested", alreadyProcessed: true};
+        }
+        if (payout.status !== "pending_review") {
+          throw new HttpsError("failed-precondition", "This payout cannot be returned for redo.");
+        }
+        const zoneId = cleanId(payout.zoneId);
+        const scalerId = cleanId(payout.scalerId);
+        if (!zoneId || !scalerId) {
+          throw new HttpsError("failed-precondition", "The payout assignment is incomplete.");
+        }
+        const zoneRef = db.collection("campaignZones").doc(zoneId);
+        const walletRef = db.collection("wallets").doc(scalerId);
+        const [zoneSnapshot, walletSnapshot] = await Promise.all([
+          transaction.get(zoneRef),
+          transaction.get(walletRef),
+        ]);
+        if (!zoneSnapshot.exists || zoneSnapshot.data()?.businessId !== businessId ||
+            zoneSnapshot.data()?.assignedScalerId !== scalerId) {
+          throw new HttpsError("failed-precondition", "The zone assignment has changed.");
+        }
+        const pending = moneyValue(walletSnapshot.data()?.pendingBalance);
+        const total = moneyValue(payout.totalPayout);
+        const timestamp = FieldValue.serverTimestamp();
+        transaction.set(walletRef, {
+          pendingBalance: Math.max(0, pending - total),
+          updatedAt: timestamp,
+        }, {merge: true});
+        transaction.update(payoutRef, {
+          status: "redo_requested",
+          reviewFeedback: feedback,
+          updatedAt: timestamp,
+        });
+        transaction.update(zoneRef, {
+          status: "in_progress",
+          reviewFeedback: feedback,
+          paymentStatus: "redo_requested",
+          updatedAt: timestamp,
+        });
+        return {payoutId, status: "redo_requested", alreadyProcessed: false};
+      });
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error("Zone redo request failed.", {
+        payoutId,
+        businessId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new HttpsError("internal", "Unable to request changes right now.");
+    }
+  },
+);
+
+/**
+ * Remove a Scaler from an unpaid zone. This transition is intentionally
+ * unavailable to clients because it changes assignment and payout state.
+ */
+exports.dropZoneScaler = onCall(
+  {
+    enforceAppCheck: false,
+    maxInstances: 10,
+  },
+  async (request) => {
+    await requireVerifiedUser(request, "You must be logged in to review a payout.");
+    const payoutId = cleanId(request.data?.payoutId);
+    if (!payoutId) throw new HttpsError("invalid-argument", "A valid payout is required.");
+    const businessId = request.auth.uid;
+    const payoutRef = db.collection("payouts").doc(payoutId);
+    try {
+      return await db.runTransaction(async (transaction) => {
+        const payoutSnapshot = await transaction.get(payoutRef);
+        const payout = payoutSnapshot.data() || {};
+        if (!payoutSnapshot.exists) {
+          throw new HttpsError("not-found", "The payout does not exist.");
+        }
+        if (payout.businessId !== businessId) {
+          throw new HttpsError("permission-denied", "You do not own this payout.");
+        }
+        if (payout.status === "scaler_dropped") {
+          return {payoutId, status: "scaler_dropped", alreadyProcessed: true};
+        }
+        if (!['pending_review', 'redo_requested'].includes(String(payout.status))) {
+          throw new HttpsError("failed-precondition", "This Scaler cannot be dropped now.");
+        }
+        const zoneId = cleanId(payout.zoneId);
+        const scalerId = cleanId(payout.scalerId);
+        if (!zoneId || !scalerId) {
+          throw new HttpsError("failed-precondition", "The payout assignment is incomplete.");
+        }
+        const zoneRef = db.collection("campaignZones").doc(zoneId);
+        const walletRef = db.collection("wallets").doc(scalerId);
+        const [zoneSnapshot, walletSnapshot] = await Promise.all([
+          transaction.get(zoneRef),
+          transaction.get(walletRef),
+        ]);
+        if (!zoneSnapshot.exists || zoneSnapshot.data()?.businessId !== businessId ||
+            zoneSnapshot.data()?.assignedScalerId !== scalerId) {
+          throw new HttpsError("failed-precondition", "The zone assignment has changed.");
+        }
+        const pending = moneyValue(walletSnapshot.data()?.pendingBalance);
+        const total = payout.status === "pending_review" ? moneyValue(payout.totalPayout) : 0;
+        const timestamp = FieldValue.serverTimestamp();
+        transaction.set(walletRef, {
+          pendingBalance: Math.max(0, pending - total),
+          updatedAt: timestamp,
+        }, {merge: true});
+        transaction.update(payoutRef, {
+          status: "scaler_dropped",
+          updatedAt: timestamp,
+        });
+        transaction.update(zoneRef, {
+          status: "unassigned",
+          assignedScalerId: FieldValue.delete(),
+          assignedScalerEmail: FieldValue.delete(),
+          assignedApplicationId: FieldValue.delete(),
+          reviewFeedback: FieldValue.delete(),
+          paymentStatus: "scaler_dropped",
+          updatedAt: timestamp,
+        });
+        return {payoutId, status: "scaler_dropped", alreadyProcessed: false};
+      });
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error("Drop zone Scaler failed.", {
+        payoutId,
+        businessId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new HttpsError("internal", "Unable to remove this Scaler right now.");
+    }
+  },
+);
+
+/**
+ * Analyze a mapped campaign zone.
+ *
+ * Strategy:
+ * 1. Read saved geometry.
+ * 2. Query OpenStreetMap through Overpass.
+ * 3. Prefer residential address count.
+ * 4. Fall back to residential building count.
+ * 5. Fall back to area-density estimate if OSM data is sparse.
+ */
+
 exports.analyzeCampaignZone = onCall(
   {
     enforceAppCheck: false,
@@ -3572,3 +3781,783 @@ function readInteger(
     number,
   );
 }
+
+// Native active-job tracking -------------------------------------------------
+const TRACKING_CALLABLE_OPTIONS = {
+  memory: "512MiB",
+  timeoutSeconds: 120,
+  maxInstances: 20,
+  concurrency: 40,
+};
+
+const TRACKING_SESSION_STATES = new Set([
+  "active", "finalizing", "completed", "cancelled",
+]);
+
+function trackingCallable(name, handler) {
+  return onCall(TRACKING_CALLABLE_OPTIONS, async (request) => {
+    try {
+      return await handler(request);
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error(`Unexpected ${name} failure`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        uid: request.auth?.uid || null,
+      });
+      throw new HttpsError("internal", "The tracking request could not be completed.");
+    }
+  });
+}
+
+function trackingTimestampMs(value, fallback) {
+  return value instanceof Timestamp ? value.toMillis() : fallback;
+}
+
+function firestoreTrackingPoint(point) {
+  return {...point, recordedAt: Timestamp.fromMillis(point.timestampMs)};
+}
+
+function assertTrackingPayload(data, allowed, maximumBytes) {
+  try {
+    assertAllowedKeys(data || {}, allowed, "Tracking request");
+  } catch (error) {
+    throw new HttpsError("invalid-argument", "The tracking request is malformed.");
+  }
+  if (serializedBytes(data) > maximumBytes) {
+    throw new HttpsError("invalid-argument", "The tracking request is too large.");
+  }
+}
+
+// Compatibility bridge for the development/browser GPS simulator. Client
+// writes to campaignRoutes are denied by rules; this callable is the sole
+// writer for legacy route documents and stamps an unforgeable server source.
+exports.saveLegacyTrackingRoute = trackingCallable(
+  "saveLegacyTrackingRoute",
+  async (request) => {
+    assertTrackingPayload(
+      request.data,
+      new Set([
+        "campaignId", "zoneId", "routeId", "operation", "points",
+        "tracking", "simulated", "lastAccuracyMeters",
+      ]),
+      393216,
+    );
+    const context = await requireVerifiedUser(request, "Sign in before saving GPS evidence.");
+    if (context.role !== "scaler" && !context.isAdmin) {
+      throw new HttpsError("permission-denied", "Only the assigned Scaler can save this route.");
+    }
+    const campaignId = String(request.data?.campaignId || "").trim();
+    const zoneId = String(request.data?.zoneId || "").trim();
+    const routeId = String(request.data?.routeId || "").trim();
+    const operation = String(request.data?.operation || "save");
+    if (!campaignId || !zoneId || !routeId || !["save", "clear"].includes(operation)) {
+      throw new HttpsError("invalid-argument", "The legacy route request is malformed.");
+    }
+    if (!/^[A-Za-z0-9_-]{1,160}$/.test(routeId)) {
+      throw new HttpsError("invalid-argument", "The route identifier is invalid.");
+    }
+    const rawPoints = request.data?.points ?? [];
+    if (!Array.isArray(rawPoints) || rawPoints.length > 6000) {
+      throw new HttpsError("resource-exhausted", "The legacy route contains too many points.");
+    }
+    const points = rawPoints.map((point) => {
+      try {
+        assertAllowedKeys(point || {}, new Set(["latitude", "longitude"]), "Legacy point");
+      } catch (_) {
+        throw new HttpsError("invalid-argument", "A legacy route point is malformed.");
+      }
+      const latitude = Number(point.latitude);
+      const longitude = Number(point.longitude);
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+          !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+        throw new HttpsError("invalid-argument", "A legacy route coordinate is invalid.");
+      }
+      return {latitude, longitude};
+    });
+    const zoneRef = db.collection("campaignZones").doc(zoneId);
+    const campaignRef = db.collection("campaigns").doc(campaignId);
+    const routeRef = db.collection("campaignRoutes").doc(routeId);
+    await db.runTransaction(async (transaction) => {
+      const [zoneSnapshot, campaignSnapshot, routeSnapshot] = await Promise.all([
+        transaction.get(zoneRef), transaction.get(campaignRef), transaction.get(routeRef),
+      ]);
+      if (!zoneSnapshot.exists || !campaignSnapshot.exists) {
+        throw new HttpsError("not-found", "The assigned job was not found.");
+      }
+      const zone = zoneSnapshot.data();
+      if (zone.campaignId !== campaignId ||
+          (!context.isAdmin && zone.assignedScalerId !== context.uid)) {
+        throw new HttpsError("permission-denied", "This zone is not assigned to you.");
+      }
+      const existing = routeSnapshot.data();
+      if (existing && existing.source !== "legacy_browser_v1") {
+        throw new HttpsError("failed-precondition", "Native GPS evidence cannot be changed.");
+      }
+      if (existing && existing.scalerId !== context.uid && !context.isAdmin) {
+        throw new HttpsError("permission-denied", "This route belongs to another Scaler.");
+      }
+      if (operation === "clear") {
+        if (routeSnapshot.exists) transaction.delete(routeRef);
+        transaction.update(zoneRef, {
+          routeId: FieldValue.delete(),
+          gpsTracking: false,
+          gpsRoutePointCount: 0,
+          gpsRouteSimulated: false,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+      const tracking = request.data?.tracking === true;
+      const simulated = request.data?.simulated === true;
+      transaction.set(routeRef, {
+        source: "legacy_browser_v1",
+        schemaVersion: 1,
+        campaignId,
+        zoneId,
+        zoneName: zone.zoneName || "Zone",
+        scalerId: context.uid,
+        scalerEmail: context.email || null,
+        points,
+        pointCount: points.length,
+        tracking,
+        simulated,
+        lastAccuracyMeters: Number.isFinite(Number(request.data?.lastAccuracyMeters)) ?
+          Math.max(0, Number(request.data.lastAccuracyMeters)) : null,
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: existing?.createdAt || FieldValue.serverTimestamp(),
+      }, {merge: false});
+      transaction.update(zoneRef, {
+        routeId,
+        gpsTracking: tracking,
+        gpsRoutePointCount: points.length,
+        gpsRouteSimulated: simulated,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+    return {routeId, pointCount: points.length, cleared: operation === "clear"};
+  },
+);
+
+exports.startAssignedZone = trackingCallable("startAssignedZone", async (request) => {
+  assertTrackingPayload(request.data, new Set(["campaignId", "zoneId"]), 4096);
+  const context = await requireVerifiedUser(request, "Sign in before starting this job.");
+  if (context.role !== "scaler" && !context.isAdmin) {
+    throw new HttpsError("permission-denied", "Only the assigned Scaler can start this job.");
+  }
+  const campaignId = String(request.data?.campaignId || "").trim();
+  const zoneId = String(request.data?.zoneId || "").trim();
+  const zoneRef = db.collection("campaignZones").doc(zoneId);
+  await db.runTransaction(async (transaction) => {
+    const zoneSnapshot = await transaction.get(zoneRef);
+    if (!zoneSnapshot.exists) throw new HttpsError("not-found", "The assigned zone was not found.");
+    const zone = zoneSnapshot.data();
+    if (zone.campaignId !== campaignId ||
+        (!context.isAdmin && zone.assignedScalerId !== context.uid)) {
+      throw new HttpsError("permission-denied", "This zone is not assigned to you.");
+    }
+    const status = String(zone.status || "assigned");
+    if (status === "in_progress") return;
+    if (!["assigned", "accepted"].includes(status)) {
+      throw new HttpsError("failed-precondition", "This job cannot be started in its current state.");
+    }
+    transaction.update(zoneRef, {
+      status: "in_progress",
+      startedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return {status: "in_progress"};
+});
+
+exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (request) => {
+  assertTrackingPayload(
+    request.data,
+    new Set(["campaignId", "zoneId", "applicationId"]),
+    4096,
+  );
+  const context = await requireVerifiedUser(request, "Sign in before assigning a Scaler.");
+  if (context.role !== "business" && !context.isAdmin) {
+    throw new HttpsError("permission-denied", "Only the campaign business can assign this zone.");
+  }
+  const campaignId = String(request.data?.campaignId || "").trim();
+  const zoneId = String(request.data?.zoneId || "").trim();
+  const applicationId = String(request.data?.applicationId || "").trim();
+  const campaignRef = db.collection("campaigns").doc(campaignId);
+  const zoneRef = db.collection("campaignZones").doc(zoneId);
+  const applicationRef = campaignRef.collection("applications").doc(applicationId);
+  let result = {};
+  await db.runTransaction(async (transaction) => {
+    const [campaignSnapshot, zoneSnapshot, applicationSnapshot] = await Promise.all([
+      transaction.get(campaignRef), transaction.get(zoneRef), transaction.get(applicationRef),
+    ]);
+    if (!campaignSnapshot.exists || !zoneSnapshot.exists || !applicationSnapshot.exists) {
+      throw new HttpsError("not-found", "The campaign assignment is no longer available.");
+    }
+    const campaign = campaignSnapshot.data();
+    const zone = zoneSnapshot.data();
+    const application = applicationSnapshot.data();
+    if (!context.isAdmin && campaign.businessId !== context.uid) {
+      throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+    }
+    if (zone.campaignId !== campaignId || zone.businessId !== campaign.businessId) {
+      throw new HttpsError("failed-precondition", "The zone does not belong to this campaign.");
+    }
+    if (application.status !== "pending" ||
+        (application.campaignId && application.campaignId !== campaignId)) {
+      throw new HttpsError("failed-precondition", "This application has already been processed.");
+    }
+    if (zone.assignedScalerId) {
+      throw new HttpsError("failed-precondition", "This zone has already been assigned.");
+    }
+    const scalerId = String(application.scalerId || "").trim();
+    const scalerEmail = String(application.scalerEmail || application.email || "").trim();
+    const pointCount = Number(zone.serviceAreaPointCount || 0);
+    const assignedHomes = Number(zone.estimatedHomes || 0);
+    if (!scalerId || pointCount < 3 || !Number.isSafeInteger(assignedHomes) || assignedHomes <= 0) {
+      throw new HttpsError("failed-precondition", "The mapped assignment is incomplete.");
+    }
+    const zoneName = String(zone.zoneName || "Zone");
+    transaction.update(applicationRef, {
+      status: "accepted", assignmentMode: "zone", assignedZoneId: zoneId,
+      assignedZoneName: zoneName, assignedHomes,
+      acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.update(zoneRef, {
+      assignedScalerId: scalerId, assignedScalerEmail: scalerEmail || null,
+      assignedApplicationId: applicationId, assignedHomes,
+      assignedHomeCountSource: "estimatedHomes",
+      assignedHomeCountLockedAt: FieldValue.serverTimestamp(), status: "assigned",
+      assignedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(db.collection("notifications").doc(), {
+      userId: scalerId, type: "application_accepted", title: "Zone Assignment Accepted",
+      message: `You were assigned to ${zoneName} for ${campaign.name || "this campaign"}. ` +
+        `${assignedHomes} homes are assigned.`,
+      campaignId, campaignName: campaign.name || "Campaign", assignmentMode: "zone",
+      zoneId, zoneName, assignedHomes, read: false, createdAt: FieldValue.serverTimestamp(),
+    });
+    result = {scalerId, scalerEmail, zoneName, assignedHomes};
+  });
+  return result;
+});
+
+exports.startTrackingSession = trackingCallable("startTrackingSession", async (request) => {
+  assertTrackingPayload(request.data, new Set(["campaignId", "zoneId"]), 4096);
+  const context = await requireVerifiedUser(
+    request,
+    "Sign in before starting GPS tracking.",
+  );
+  if (context.role !== "scaler" && !context.isAdmin) {
+    throw new HttpsError("permission-denied", "Only an assigned Scaler can track a job.");
+  }
+  const campaignId = String(request.data?.campaignId || "").trim();
+  const zoneId = String(request.data?.zoneId || "").trim();
+  if (!campaignId || !zoneId) {
+    throw new HttpsError("invalid-argument", "Campaign and zone are required.");
+  }
+  const campaignRef = db.collection("campaigns").doc(campaignId);
+  const zoneRef = db.collection("campaignZones").doc(zoneId);
+  const pointerRef = db.collection("activeTrackingSessions").doc(context.uid);
+  const sessionRef = db.collection("trackingSessions").doc();
+  let result = {sessionId: sessionRef.id, status: "active", recovered: false};
+  await db.runTransaction(async (transaction) => {
+    const campaignSnapshot = await transaction.get(campaignRef);
+    const zoneSnapshot = await transaction.get(zoneRef);
+    const pointerSnapshot = await transaction.get(pointerRef);
+    if (!campaignSnapshot.exists || !zoneSnapshot.exists) {
+      throw new HttpsError("not-found", "The assigned job was not found.");
+    }
+    if (pointerSnapshot.exists) {
+      const pointerSessionId = String(pointerSnapshot.data()?.sessionId || "");
+      const pointedRef = db.collection("trackingSessions").doc(pointerSessionId);
+      const pointedSnapshot = pointerSessionId ? await transaction.get(pointedRef) : null;
+      const pointed = pointedSnapshot?.data() || null;
+      if (pointed && ["active", "finalizing"].includes(String(pointed.status))) {
+        if (pointed.scalerId === context.uid && pointed.campaignId === campaignId &&
+            pointed.zoneId === zoneId && pointed.status === "active") {
+          result = {sessionId: pointerSessionId, status: "active", recovered: true};
+          return;
+        }
+        throw new HttpsError("already-exists", "Another GPS tracking session is active.");
+      }
+      transaction.delete(pointerRef);
+    }
+    const campaign = campaignSnapshot.data() || {};
+    const zone = zoneSnapshot.data() || {};
+    if (zone.campaignId !== campaignId || zone.assignedScalerId !== context.uid) {
+      throw new HttpsError("permission-denied", "This zone is not assigned to you.");
+    }
+    if (!["assigned", "accepted", "in_progress"].includes(String(zone.status))) {
+      throw new HttpsError("failed-precondition", "This job cannot be started.");
+    }
+    transaction.create(sessionRef, {
+      campaignId,
+      zoneId,
+      businessId: String(campaign.businessId || zone.businessId || ""),
+      scalerId: context.uid,
+      status: "active",
+      syncStatus: "collecting",
+      simulated: false,
+      startedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      uploadedPointCount: 0,
+      acceptedPointCount: 0,
+      rejectedPointCount: 0,
+      pointCount: 0,
+      chunkCount: 0,
+      checkpointCount: 0,
+      nextExpectedSequence: 1,
+      lastUploadedSequence: 0,
+      schemaVersion: 2,
+    });
+    transaction.create(pointerRef, {
+      sessionId: sessionRef.id,
+      campaignId,
+      zoneId,
+      scalerId: context.uid,
+      startedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.update(zoneRef, {
+      status: "in_progress",
+      activeTrackingSessionId: sessionRef.id,
+      gpsTracking: true,
+      gpsTrackingStartedAt: FieldValue.serverTimestamp(),
+      startedAt: zone.startedAt || FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return result;
+});
+
+exports.getTrackingSessionState = trackingCallable(
+  "getTrackingSessionState", async (request) => {
+    assertTrackingPayload(request.data, new Set(["sessionId"]), 4096);
+    const context = await authenticatedUserContext(request, "Sign in to check tracking.");
+    const sessionId = String(request.data?.sessionId || "").trim();
+    if (!sessionId) throw new HttpsError("invalid-argument", "Session is required.");
+    const snapshot = await db.collection("trackingSessions").doc(sessionId).get();
+    const session = snapshot.data();
+    if (!snapshot.exists || !session ||
+        (session.scalerId !== context.uid && !context.isAdmin)) {
+      throw new HttpsError("permission-denied", "The tracking session is unavailable.");
+    }
+    return {
+      sessionId,
+      status: String(session.status || "unknown"),
+      campaignId: session.campaignId,
+      zoneId: session.zoneId,
+      syncStatus: session.syncStatus,
+      lastUploadedSequence: Number(session.lastUploadedSequence || 0),
+    };
+  },
+);
+
+exports.uploadTrackingChunk = trackingCallable("uploadTrackingChunk", async (request) => {
+  const context = await requireVerifiedUser(
+    request,
+    "Sign in before syncing GPS evidence.",
+  );
+  assertTrackingPayload(request.data, new Set([
+    "sessionId", "chunkId", "startSequence", "endSequence", "points",
+  ]), TRACKING_LIMITS.maxUploadPayloadBytes);
+  const sessionId = String(request.data?.sessionId || "").trim();
+  const rawPoints = request.data?.points;
+  if (!sessionId || !Array.isArray(rawPoints) || rawPoints.length < 1 ||
+      rawPoints.length > TRACKING_LIMITS.maxPointsPerChunk) {
+    throw new HttpsError("invalid-argument", "The GPS chunk is invalid.");
+  }
+  let rawDigest;
+  try {
+    rawDigest = digestRawPoints(rawPoints);
+  } catch (_) {
+    throw new HttpsError("invalid-argument", "One or more GPS points are malformed.");
+  }
+  const startSequence = rawPoints[0]?.sequence;
+  const endSequence = rawPoints.at(-1)?.sequence;
+  if (!Number.isSafeInteger(startSequence) || !Number.isSafeInteger(endSequence) ||
+      Number(request.data?.startSequence) !== startSequence ||
+      Number(request.data?.endSequence) !== endSequence) {
+    throw new HttpsError("invalid-argument", "GPS chunk sequence does not match its points.");
+  }
+  const chunkId = canonicalChunkId(startSequence, endSequence);
+  const sessionRef = db.collection("trackingSessions").doc(sessionId);
+  const chunkRef = sessionRef.collection("chunks").doc(chunkId);
+  let duplicate = false;
+  await db.runTransaction(async (transaction) => {
+    const sessionSnapshot = await transaction.get(sessionRef);
+    const existing = await transaction.get(chunkRef);
+    const session = sessionSnapshot.data();
+    if (!sessionSnapshot.exists || !session || session.scalerId !== context.uid) {
+      throw new HttpsError("permission-denied", "This tracking session is not yours.");
+    }
+    if (existing.exists) {
+      const existingData = existing.data() || {};
+      if (existingData.payloadDigest === rawDigest &&
+          existingData.startSequence === startSequence &&
+          existingData.endSequence === endSequence) {
+        duplicate = true;
+        return;
+      }
+      throw new HttpsError("already-exists", "Conflicting GPS evidence already exists.");
+    }
+    if (session.status !== "active") {
+      throw new HttpsError("failed-precondition", "This tracking session is closed.");
+    }
+    const nowMs = Date.now();
+    const startedAtMs = trackingTimestampMs(session.startedAt, nowMs);
+    if (nowMs - startedAtMs > TRACKING_LIMITS.maxSessionDurationMs) {
+      throw new HttpsError("resource-exhausted", "This tracking session exceeded its duration limit.");
+    }
+    if (startSequence !== Number(session.nextExpectedSequence || 1)) {
+      throw new HttpsError("failed-precondition", "GPS evidence is missing or overlaps existing data.");
+    }
+    if (Number(session.chunkCount || 0) >= TRACKING_LIMITS.maxChunksPerSession ||
+        Number(session.pointCount || 0) + rawPoints.length >
+          TRACKING_LIMITS.maxPointsPerSession) {
+      throw new HttpsError("resource-exhausted", "This tracking session reached its evidence limit.");
+    }
+    let normalized;
+    try {
+      normalized = normalizeChunk(rawPoints, {
+        sessionId,
+        campaignId: session.campaignId,
+        zoneId: session.zoneId,
+        scalerId: context.uid,
+        nowMs,
+        startedAtMs,
+        previousPoint: session.lastEvidencePoint || null,
+      });
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "One or more GPS points are malformed.");
+    }
+    const points = normalized.points.map(firestoreTrackingPoint);
+    const acceptedCount = points.filter((point) => point.accepted).length;
+    transaction.create(chunkRef, {
+      sessionId,
+      campaignId: session.campaignId,
+      zoneId: session.zoneId,
+      scalerId: context.uid,
+      chunkId,
+      payloadDigest: rawDigest,
+      startSequence,
+      endSequence,
+      pointCount: points.length,
+      acceptedCount,
+      points,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    transaction.update(sessionRef, {
+      uploadedPointCount: FieldValue.increment(points.length),
+      pointCount: FieldValue.increment(points.length),
+      chunkCount: FieldValue.increment(1),
+      acceptedPointCount: FieldValue.increment(acceptedCount),
+      rejectedPointCount: FieldValue.increment(points.length - acceptedCount),
+      lastUploadedSequence: endSequence,
+      nextExpectedSequence: endSequence + 1,
+      lastEvidencePoint: normalized.lastPoint,
+      lastSyncAt: FieldValue.serverTimestamp(),
+      syncStatus: "syncing",
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return {duplicate, endSequence};
+});
+
+exports.completeTrackingSession = trackingCallable("completeTrackingSession", async (request) => {
+  assertTrackingPayload(request.data, new Set(["sessionId"]), 4096);
+  const context = await requireVerifiedUser(
+    request,
+    "Sign in before completing GPS tracking.",
+  );
+  const sessionId = String(request.data?.sessionId || "").trim();
+  if (!sessionId) throw new HttpsError("invalid-argument", "Session is required.");
+  const sessionRef = db.collection("trackingSessions").doc(sessionId);
+  let session;
+  let alreadyCompleted = false;
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(sessionRef);
+    session = snapshot.data();
+    if (!snapshot.exists || !session || session.scalerId !== context.uid) {
+      throw new HttpsError("permission-denied", "This tracking session is not yours.");
+    }
+    if (session.status === "completed") { alreadyCompleted = true; return; }
+    if (session.status === "cancelled") {
+      throw new HttpsError("failed-precondition", "This tracking session was cancelled.");
+    }
+    if (!["active", "finalizing"].includes(String(session.status))) {
+      throw new HttpsError("failed-precondition", "This tracking session cannot be completed.");
+    }
+    if (session.status === "active") {
+      transaction.update(sessionRef, {
+        status: "finalizing",
+        syncStatus: "finalizing",
+        finalizingAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  });
+  if (alreadyCompleted) {
+    return {routeId: session.routeId || sessionId, status: "completed"};
+  }
+  const chunks = await sessionRef.collection("chunks").orderBy("startSequence").get();
+  if (chunks.size !== Number(session.chunkCount || 0) ||
+      chunks.size > TRACKING_LIMITS.maxChunksPerSession) {
+    logger.error("Tracking chunk count integrity failure", {sessionId});
+    throw new HttpsError("failed-precondition", "GPS evidence failed an integrity check.");
+  }
+  const evidencePoints = [];
+  let expectedSequence = 1;
+  const digestParts = [];
+  for (const chunk of chunks.docs) {
+    const data = chunk.data() || {};
+    const points = Array.isArray(data.points) ? data.points : [];
+    if (data.startSequence !== expectedSequence ||
+        data.endSequence !== expectedSequence + points.length - 1 ||
+        data.pointCount !== points.length ||
+        chunk.id !== canonicalChunkId(data.startSequence, data.endSequence)) {
+      logger.error("Tracking sequence integrity failure", {sessionId, chunkId: chunk.id});
+      throw new HttpsError("failed-precondition", "GPS evidence failed an integrity check.");
+    }
+    for (const point of points) {
+      if (Number(point.sequence) !== expectedSequence) {
+        logger.error("Duplicate or missing GPS sequence", {sessionId, expectedSequence});
+        throw new HttpsError("failed-precondition", "GPS evidence failed an integrity check.");
+      }
+      evidencePoints.push(point);
+      expectedSequence += 1;
+    }
+    digestParts.push(`${data.startSequence}:${data.endSequence}:${data.payloadDigest}`);
+  }
+  if (evidencePoints.length !== Number(session.pointCount || 0) ||
+      evidencePoints.length > TRACKING_LIMITS.maxPointsPerSession) {
+    logger.error("Tracking point count integrity failure", {sessionId});
+    throw new HttpsError("failed-precondition", "GPS evidence failed an integrity check.");
+  }
+  const accepted = evidencePoints.filter((point) => point.accepted === true);
+  if (accepted.length < 2) {
+    throw new HttpsError("failed-precondition", "Record at least two usable GPS points.");
+  }
+  const compatible = compatibilityRoutePoints(accepted).map((point) => ({
+    latitude: point.latitude,
+    longitude: point.longitude,
+    timestampMs: point.timestampMs,
+    horizontalAccuracy: point.horizontalAccuracy,
+    speed: point.speed,
+    heading: point.heading,
+    sequence: point.sequence,
+  }));
+  const routeRef = db.collection("campaignRoutes").doc(sessionId);
+  const zoneRef = db.collection("campaignZones").doc(session.zoneId);
+  const pointerRef = db.collection("activeTrackingSessions").doc(context.uid);
+  const evidenceDigest = crypto.createHash("sha256")
+    .update(digestParts.join("|"), "utf8").digest("hex");
+  await db.runTransaction(async (transaction) => {
+    const freshSession = await transaction.get(sessionRef);
+    const freshRoute = await transaction.get(routeRef);
+    const freshZone = await transaction.get(zoneRef);
+    const freshPointer = await transaction.get(pointerRef);
+    const current = freshSession.data() || {};
+    if (current.status === "completed") return;
+    if (current.status !== "finalizing") {
+      throw new HttpsError("failed-precondition", "This tracking session changed state.");
+    }
+    if (!freshZone.exists) throw new HttpsError("not-found", "The assigned zone is unavailable.");
+    if (freshRoute.exists &&
+        (freshRoute.data()?.trackingSessionId !== sessionId ||
+         freshRoute.data()?.evidenceDigest !== evidenceDigest)) {
+      logger.error("Campaign route finalization conflict", {sessionId, routeId: routeRef.id});
+      throw new HttpsError("failed-precondition", "GPS evidence failed an integrity check.");
+    }
+    if (!freshRoute.exists) transaction.create(routeRef, {
+      campaignId: session.campaignId,
+      zoneId: session.zoneId,
+      scalerId: context.uid,
+      trackingSessionId: sessionId,
+      tracking: false,
+      simulated: false,
+      startedAt: session.startedAt || FieldValue.serverTimestamp(),
+      endedAt: FieldValue.serverTimestamp(),
+      points: compatible,
+      pointCount: compatible.length,
+      fullEvidencePointCount: evidencePoints.length,
+      rejectedPointCount: evidencePoints.length - accepted.length,
+      evidenceStorage: "trackingSessions/chunks",
+      routeSource: "native_background_v1",
+      schemaVersion: 2,
+      evidenceDigest,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.update(sessionRef, {
+      status: "completed",
+      syncStatus: "synced",
+      routeId: routeRef.id,
+      endedAt: FieldValue.serverTimestamp(),
+      finalPointCount: evidencePoints.length,
+      finalAcceptedPointCount: accepted.length,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.update(zoneRef, {
+      routeId: routeRef.id,
+      activeTrackingSessionId: FieldValue.delete(),
+      gpsTracking: false,
+      gpsRoutePointCount: compatible.length,
+      gpsRouteSimulated: false,
+      gpsTrackingEndedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (freshPointer.exists && freshPointer.data()?.sessionId === sessionId) {
+      transaction.delete(pointerRef);
+    }
+  });
+  return {routeId: routeRef.id, status: "completed", pointCount: compatible.length};
+});
+
+exports.cancelTrackingSession = trackingCallable("cancelTrackingSession", async (request) => {
+  assertTrackingPayload(request.data, new Set(["sessionId", "reason"]), 8192);
+  const context = await authenticatedUserContext(
+    request,
+    "Sign in before stopping GPS tracking.",
+  );
+  const sessionId = String(request.data?.sessionId || "").trim();
+  const reason = String(request.data?.reason || "cancelled").slice(0, 120);
+  if (!sessionId) throw new HttpsError("invalid-argument", "Session is required.");
+  const sessionRef = db.collection("trackingSessions").doc(sessionId);
+  let resultStatus = "cancelled";
+  await db.runTransaction(async (transaction) => {
+    const sessionSnapshot = await transaction.get(sessionRef);
+    const session = sessionSnapshot.data();
+    if (!sessionSnapshot.exists || !session ||
+        (session.scalerId !== context.uid && !context.isAdmin)) {
+      throw new HttpsError("permission-denied", "This tracking session is not yours.");
+    }
+    if (session.status === "completed" || session.status === "cancelled") {
+      resultStatus = session.status;
+      return;
+    }
+    if (session.status === "finalizing") {
+      throw new HttpsError("failed-precondition", "Completion is already finalizing.");
+    }
+    if (session.status !== "active") {
+      throw new HttpsError("failed-precondition", "This session cannot be cancelled.");
+    }
+    const pointerRef = db.collection("activeTrackingSessions").doc(session.scalerId);
+    const zoneRef = db.collection("campaignZones").doc(session.zoneId);
+    const pointer = await transaction.get(pointerRef);
+    const zone = await transaction.get(zoneRef);
+    transaction.update(sessionRef, {
+      status: "cancelled",
+      syncStatus: "closed",
+      stopReason: reason,
+      endedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (zone.exists) transaction.update(zoneRef, {
+      status: "accepted",
+      activeTrackingSessionId: FieldValue.delete(),
+      gpsTracking: false,
+      gpsTrackingEndedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (pointer.exists && pointer.data()?.sessionId === sessionId) {
+      transaction.delete(pointerRef);
+    }
+  });
+  return {status: resultStatus};
+});
+
+exports.registerTrackingCheckpoint = trackingCallable(
+  "registerTrackingCheckpoint", async (request) => {
+  assertTrackingPayload(request.data, new Set([
+    "sessionId", "storagePath", "location",
+  ]), TRACKING_LIMITS.maxCheckpointPayloadBytes);
+  const context = await requireVerifiedUser(
+    request,
+    "Sign in before adding a checkpoint.",
+  );
+  const sessionId = String(request.data?.sessionId || "").trim();
+  const storagePath = String(request.data?.storagePath || "").trim();
+  const expectedPrefix = `tracking_checkpoints/${context.uid}/${sessionId}/`;
+  if (!sessionId || !storagePath.startsWith(expectedPrefix) ||
+      storagePath.length <= expectedPrefix.length || storagePath.includes("..")) {
+    throw new HttpsError("invalid-argument", "Checkpoint photo is required.");
+  }
+  let photoMetadata;
+  try {
+    [photoMetadata] = await getStorage().bucket().file(storagePath).getMetadata();
+  } catch (error) {
+    logger.warn("Checkpoint object lookup failed", {sessionId, storagePath, error: String(error)});
+    throw new HttpsError("failed-precondition", "The checkpoint photo is unavailable.");
+  }
+  const contentType = String(photoMetadata.contentType || "").toLowerCase();
+  const photoSize = Number(photoMetadata.size || 0);
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(contentType) ||
+      !Number.isFinite(photoSize) || photoSize < 1 ||
+      photoSize > TRACKING_LIMITS.maxPhotoBytes) {
+    throw new HttpsError("invalid-argument", "The checkpoint photo is not an allowed image.");
+  }
+  const sessionRef = db.collection("trackingSessions").doc(sessionId);
+  const checkpointRef = sessionRef.collection("checkpoints").doc();
+  await db.runTransaction(async (transaction) => {
+    const sessionSnapshot = await transaction.get(sessionRef);
+    const session = sessionSnapshot.data();
+    if (!sessionSnapshot.exists || !session || session.scalerId !== context.uid) {
+      throw new HttpsError("permission-denied", "This active tracking session is not yours.");
+    }
+    if (session.status !== "active") {
+      throw new HttpsError("failed-precondition", "This tracking session is closed.");
+    }
+    if (Number(session.checkpointCount || 0) >=
+        TRACKING_LIMITS.maxCheckpointsPerSession) {
+      throw new HttpsError("resource-exhausted", "This session reached its checkpoint limit.");
+    }
+    const nowMs = Date.now();
+    const startedAtMs = trackingTimestampMs(session.startedAt, nowMs);
+    let point;
+    try {
+      point = normalizePoint(request.data?.location, {
+        sessionId,
+        campaignId: session.campaignId,
+        zoneId: session.zoneId,
+        scalerId: context.uid,
+        nowMs,
+        startedAtMs,
+        previousPoint: session.lastEvidencePoint || null,
+      });
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Checkpoint location is invalid.");
+    }
+    const receiptDeltaMs = Math.abs(nowMs - point.timestampMs);
+    const checkpointFlags = [...point.flags];
+    if (receiptDeltaMs > 10 * 60 * 1000) checkpointFlags.push("stale_checkpoint_time");
+    transaction.create(checkpointRef, {
+      sessionId,
+      campaignId: session.campaignId,
+      zoneId: session.zoneId,
+      scalerId: context.uid,
+      storagePath,
+      storageGeneration: String(photoMetadata.generation || ""),
+      contentType,
+      size: photoSize,
+      location: firestoreTrackingPoint({...point, flags: checkpointFlags}),
+      measurementTimestampMs: point.timestampMs,
+      receivedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    transaction.update(sessionRef, {
+      checkpointCount: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return {checkpointId: checkpointRef.id};
+});
+
+exports._trackingTest = {
+  trackingLimits: TRACKING_LIMITS,
+  normalizeChunk,
+  normalizePoint,
+  compatibilityRoutePoints,
+  canonicalChunkId,
+};

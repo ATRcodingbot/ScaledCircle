@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -9,8 +10,11 @@ import '../../services/completion_payout_service.dart';
 import '../../services/completion_tracking_service.dart';
 import '../../services/campaign_service.dart';
 import '../../services/campaign/campaign_proof_policy.dart';
+import '../../services/active_job_tracking_service.dart';
+import '../../services/secure_function_service.dart';
 import '../../widgets/home_completion_counter.dart';
 import 'job_tracking_screen.dart';
+import 'native_job_in_progress_screen.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
@@ -23,6 +27,12 @@ class JobDetailsScreen extends StatefulWidget {
 
 class _JobDetailsScreenState extends State<JobDetailsScreen> {
   final CampaignService _campaignService = CampaignService();
+  final ActiveJobTrackingService _nativeTracking = ActiveJobTrackingService();
+
+  bool get _usesNativeTracking =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
@@ -110,11 +120,52 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         throw Exception('Zone cannot be started.');
       }
 
-      await zone.reference.update({
-        'status': 'in_progress',
-        'startedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      if (_usesNativeTracking) {
+        if (!mounted) return;
+        final consented = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Start job and GPS tracking?'),
+            content: const Text(
+              'Scaled Circle will record your location only for this active job. '
+              'Tracking continues while the screen is locked or another app is open. '
+              'It stops when you complete, cancel, or explicitly stop the job.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Not Now'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Consent & Start Job'),
+              ),
+            ],
+          ),
+        );
+        if (consented != true || !mounted) return;
+        await _nativeTracking.start(
+          campaignId: widget.campaign.id,
+          zoneId: zone.id,
+          zoneName: data['zoneName']?.toString() ?? 'Zone',
+        );
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => NativeJobInProgressScreen(
+              campaign: widget.campaign,
+              zone: zone,
+            ),
+          ),
+        );
+      } else {
+        await const SecureFunctionService().call(
+          functionName: 'startAssignedZone',
+          data: {'campaignId': widget.campaign.id, 'zoneId': zone.id},
+        );
+      }
 
       if (!mounted) return;
 
@@ -184,6 +235,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           .ref()
           .child('installation_proofs')
           .child(widget.campaign.id)
+          .child(user.uid)
           .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
 
       await photoRef.putData(
@@ -516,17 +568,26 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => JobTrackingScreen(
-                        campaign: widget.campaign,
-                        zone: zone,
-                      ),
+                      builder: (_) => _usesNativeTracking
+                          ? NativeJobInProgressScreen(
+                              campaign: widget.campaign,
+                              zone: zone,
+                            )
+                          : JobTrackingScreen(
+                              campaign: widget.campaign,
+                              zone: zone,
+                            ),
                     ),
                   );
                 },
 
                 icon: const Icon(Icons.my_location),
 
-                label: const Text('Open GPS Tracker'),
+                label: Text(
+                  _usesNativeTracking
+                      ? 'Return to Active Job'
+                      : 'Open GPS Tracker',
+                ),
               ),
 
               if (requiresPhotoProof) ...[

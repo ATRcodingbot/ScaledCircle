@@ -38,6 +38,9 @@
     },
     "firestore": {
       "port": 8080
+    },
+    "storage": {
+      "port": 9199
     }
   },
   "firestore": {
@@ -45,6 +48,9 @@
     "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
   },
   "hosting": {
     "public": "apps/mobile/build/web",

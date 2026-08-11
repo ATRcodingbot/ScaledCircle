@@ -16,6 +16,14 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>flutter_app</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Scaled Circle records your route only after you start an assigned job and stops when you complete or stop that job.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>During an active job, Scaled Circle continues recording the assigned route while your screen is locked or another app is open.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

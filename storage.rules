@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && firestore.get(
+          /databases/(default)/documents/users/$(request.auth.uid)
+        ).data.role == 'admin';
+    }
+
+    function validImage() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+    }
+
+    match /tracking_checkpoints/{uid}/{sessionId}/{objectId} {
+      allow create: if resource == null
+        && signedIn()
+        && request.auth.uid == uid
+        && validImage()
+        && firestore.get(
+          /databases/(default)/documents/trackingSessions/$(sessionId)
+        ).data.scalerId == uid
+        && firestore.get(
+          /databases/(default)/documents/trackingSessions/$(sessionId)
+        ).data.status == 'active';
+      allow read: if signedIn() && (
+        request.auth.uid == uid
+        || firestore.get(
+          /databases/(default)/documents/trackingSessions/$(sessionId)
+        ).data.businessId == request.auth.uid
+        || isAdmin()
+      );
+      allow update, delete: if false;
+    }
+
+    // Existing field-service photo workflows remain private to their uploader.
+    match /completionProofs/{campaignId}/{uid}/{completionId}/{proofType}/{fileName} {
+      allow create: if signedIn() && request.auth.uid == uid && validImage();
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /installation_proofs/{campaignId}/{uid}/{fileName} {
+      allow create: if signedIn() && request.auth.uid == uid && validImage();
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

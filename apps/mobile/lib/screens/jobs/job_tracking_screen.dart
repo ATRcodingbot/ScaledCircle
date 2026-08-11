@@ -9,6 +9,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../services/campaign/campaign_proof_policy.dart';
+import '../../services/secure_function_service.dart';
 import '../scaler/completion/submit_completion_screen.dart';
 
 class JobTrackingScreen extends StatefulWidget {
@@ -64,6 +65,36 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
   double? _lastAccuracyMeters;
 
   DateTime? _lastSavedAt;
+
+  Future<void> _saveLegacyRoute({
+    String operation = 'save',
+    bool? tracking,
+    bool? simulated,
+    List<Map<String, dynamic>>? points,
+  }) async {
+    final result = await const SecureFunctionService().call(
+      functionName: 'saveLegacyTrackingRoute',
+      data: {
+        'campaignId': widget.campaign.id,
+        'zoneId': widget.zone.id,
+        'routeId': _routeReference.id,
+        'operation': operation,
+        'points': points ?? _serializePoints(),
+        'tracking': tracking ?? _tracking,
+        'simulated': simulated ?? _routeIsSimulated,
+        if (_lastAccuracyMeters != null)
+          'lastAccuracyMeters': _lastAccuracyMeters,
+      },
+    );
+    final authoritativeRouteId = result['routeId']?.toString();
+    if (authoritativeRouteId != null &&
+        authoritativeRouteId.isNotEmpty &&
+        authoritativeRouteId != _routeReference.id) {
+      _routeReference = FirebaseFirestore.instance
+          .collection('campaignRoutes')
+          .doc(authoritativeRouteId);
+    }
+  }
 
   @override
   void initState() {
@@ -177,15 +208,16 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
         // Mobile browsers can terminate a page without letting the GPS stream
         // finish. Preserve the recorded points and make the route resumable
         // instead of leaving the assignment permanently stuck "tracking".
-        await _routeReference.set({
-          'tracking': false,
-          'interruptedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        await widget.zone.reference.update({
-          'gpsTracking': false,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        await _saveLegacyRoute(
+          tracking: false,
+          simulated: simulated,
+          points: existingRoute
+              .map((point) => {
+                    'latitude': point.latitude,
+                    'longitude': point.longitude,
+                  })
+              .toList(),
+        );
         tracking = false;
       }
 
@@ -439,42 +471,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
 
       _addRoutePoint(point);
 
-      await _routeReference.set({
-        'campaignId': widget.campaign.id,
-
-        'zoneId': widget.zone.id,
-
-        'zoneName': zoneData['zoneName'],
-
-        'scalerId': user.uid,
-
-        'scalerEmail': user.email,
-
-        'tracking': true,
-
-        'simulated': false,
-
-        if (_routePoints.length <= 1)
-          'startedAt': FieldValue.serverTimestamp()
-        else
-          'resumedAt': FieldValue.serverTimestamp(),
-
-        'updatedAt': FieldValue.serverTimestamp(),
-
-        'points': _serializePoints(),
-
-        'pointCount': _routePoints.length,
-      }, SetOptions(merge: true));
-
-      await widget.zone.reference.update({
-        'routeId': _routeReference.id,
-
-        'gpsTracking': true,
-
-        'gpsTrackingStartedAt': FieldValue.serverTimestamp(),
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await _saveLegacyRoute(tracking: true, simulated: false);
 
       if (!mounted) {
         return;
@@ -579,19 +576,13 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
     final points = _serializePoints();
     final tracking = _tracking;
     final simulated = _routeIsSimulated;
-    final accuracy = _lastAccuracyMeters;
-
     _routeSaveChain = _routeSaveChain.then((_) async {
       try {
-        await _routeReference.set({
-          'points': points,
-          'pointCount': points.length,
-          'tracking': tracking,
-          'simulated': simulated,
-          'lastAccuracyMeters': ?accuracy,
-          'lastPositionAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        await _saveLegacyRoute(
+          points: points,
+          tracking: tracking,
+          simulated: simulated,
+        );
         if (mounted) {
           setState(() => _lastSavedAt = DateTime.now());
         }
@@ -637,31 +628,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
 
       await _flushRouteSaves();
 
-      await _routeReference.set({
-        'tracking': false,
-
-        'simulated': _routeIsSimulated,
-
-        'points': _serializePoints(),
-
-        'pointCount': _routePoints.length,
-
-        'endedAt': FieldValue.serverTimestamp(),
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await widget.zone.reference.update({
-        'gpsTracking': false,
-
-        'gpsRoutePointCount': _routePoints.length,
-
-        'gpsRouteSimulated': _routeIsSimulated,
-
-        'gpsTrackingEndedAt': FieldValue.serverTimestamp(),
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await _saveLegacyRoute(tracking: false);
 
       if (!mounted) {
         return;
@@ -835,17 +802,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
         _currentPosition = null;
       });
 
-      await _routeReference.set({
-        'points': _serializePoints(),
-
-        'pointCount': _routePoints.length,
-
-        'tracking': true,
-
-        'simulated': true,
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await _saveLegacyRoute(tracking: true, simulated: true);
 
       _mapController.move(_calculateCenter(simulatedRoute), 16);
 
@@ -878,15 +835,12 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
       return;
     }
 
-    await _routeReference.delete();
-
-    await widget.zone.reference.update({
-      'routeId': FieldValue.delete(),
-
-      'gpsRoutePointCount': 0,
-
-      'gpsRouteSimulated': false,
-    });
+    await _saveLegacyRoute(
+      operation: 'clear',
+      tracking: false,
+      simulated: false,
+      points: const [],
+    );
 
     setState(() {
       _routePoints.clear();

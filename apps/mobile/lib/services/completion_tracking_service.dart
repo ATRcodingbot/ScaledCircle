@@ -179,7 +179,7 @@ class CompletionTrackingService {
 
     completedHomes = completedHomes.clamp(0, assignedHomes);
 
-    final eligibleForPayment = completionPercentage >= 30.0;
+    final eligibleForPayment = completionPercentage >= 10.0;
 
     return {
       'assignedHomes': assignedHomes,

@@ -6,7 +6,11 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "node --test tracking_helpers.test.js",
+    "test:rules": "npx firebase-tools emulators:exec --project scaled-circle --only firestore \"node --test tracking_rules.test.js\"",
+    "test:storage-rules": "npx firebase-tools emulators:exec --project scaled-circle --only firestore,storage \"node --test storage_rules.test.js\"",
+    "test:tracking-backend": "npx firebase-tools emulators:exec --project scaled-circle --only firestore,auth \"node --test tracking_backend.test.js\""
   },
   "engines": {
     "node": "24"
@@ -15,9 +19,10 @@
   "dependencies": {
     "firebase-admin": "^13.6.0",
     "firebase-functions": "^7.0.0",
-    "nodemailer": "^7.0.0"
+    "nodemailer": "9.0.5"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "firebase-functions-test": "^3.4.1"
   },
   "private": true

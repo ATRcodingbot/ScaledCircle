@@ -306,76 +306,42 @@ service cloud.firestore {
 
       allow create:
         if isApprovedAccount()
-        && request.resource.data.businessId == request.auth.uid;
+        && request.resource.data.businessId == request.auth.uid
+        && request.resource.data.assignedScalerId == null
+        && request.resource.data.status == 'unassigned'
+        && request.resource.data.keys().hasOnly([
+          'campaignId', 'businessId', 'zoneName', 'shapeType',
+          'serviceAreaType', 'serviceArea', 'serviceAreaPointCount',
+          'serviceAreaCenter', 'serviceAreaRadiusMeters', 'estimatedHomes',
+          'homeCountStatus', 'homeCountMethod', 'homeCountConfidence',
+          'homeCountConfidenceScore', 'assignedScalerId',
+          'assignedScalerEmail', 'status', 'createdAt', 'updatedAt'
+        ]);
 
 
       allow update:
         if isApprovedAccount()
-        &&
-        (
-          (
-            resource.data.businessId == request.auth.uid
-            &&
-            (
-              (
-                resource.data.assignedScalerId == null
-                &&
-                (
-                  !('mapLocked' in resource.data)
-                  || resource.data.mapLocked != true
-                )
-                && get(
-                  /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
-                ).data.status == 'draft'
-              )
-              || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-                'shapeType',
-                'serviceAreaType',
-                'serviceArea',
-                'serviceAreaPointCount',
-                'serviceAreaCenter',
-                'serviceAreaRadiusMeters',
-                'zoneAreaSquareMeters',
-                'zoneAreaAcres',
-                'zoneAreaSquareMiles',
-                'zonePerimeterMeters',
-                'estimatedWalkingMeters',
-                'estimatedWalkingMiles',
-                'estimatedMinutes',
-                'suggestedBasePay',
-                'recommendedScalerCount',
-                'estimatedHomes',
-                'homeCountStatus',
-                'homeCountMethod',
-                'homeCountConfidence',
-                'homeCountConfidenceScore',
-                'analysisStatus'
-              ])
-            )
-          )
-          ||
-          (
-            resource.data.assignedScalerId == request.auth.uid
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-              'shapeType',
-              'serviceAreaType',
-              'serviceArea',
-              'serviceAreaPointCount',
-              'serviceAreaCenter',
-              'serviceAreaRadiusMeters',
-              'zoneAreaSquareMeters',
-              'zoneAreaAcres',
-              'zoneAreaSquareMiles',
-              'zonePerimeterMeters',
-              'estimatedWalkingMeters',
-              'estimatedWalkingMiles',
-              'estimatedMinutes',
-              'suggestedBasePay',
-              'recommendedScalerCount',
-              'estimatedHomes'
-            ])
-          )
-        );
+        && resource.data.businessId == request.auth.uid
+        && resource.data.assignedScalerId == null
+        && (!('mapLocked' in resource.data) || resource.data.mapLocked != true)
+        && get(
+          /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+        ).data.status == 'draft'
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.campaignId == resource.data.campaignId
+        && request.resource.data.assignedScalerId == resource.data.assignedScalerId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'zoneName', 'shapeType', 'serviceAreaType', 'serviceArea',
+          'serviceAreaPointCount', 'serviceAreaCenter',
+          'serviceAreaRadiusMeters', 'zoneAreaSquareMeters', 'zoneAreaAcres',
+          'zoneAreaSquareMiles', 'zonePerimeterMeters',
+          'estimatedWalkingMeters', 'estimatedWalkingMiles',
+          'estimatedMinutes', 'suggestedBasePay', 'recommendedScalerCount',
+          'estimatedHomes', 'homeCountStatus', 'homeCountMethod',
+          'homeCountConfidence', 'homeCountConfidenceScore',
+          'analysisStatus', 'analysisUpdatedAt', 'updatedAt'
+        ]);
 
 
       allow delete:
@@ -390,12 +356,6 @@ service cloud.firestore {
     // ============================================================
 
     match /campaignRoutes/{routeId} {
-
-      allow create:
-        if isApprovedAccount()
-        && request.resource.data.scalerId == request.auth.uid;
-
-
       allow read:
         if isApprovedAccount()
         &&
@@ -404,23 +364,64 @@ service cloud.firestore {
           || get(
             /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
           ).data.businessId == request.auth.uid
-        );
-
-
-      allow update:
-        if isApprovedAccount()
-        && resource.data.scalerId == request.auth.uid
-        && request.resource.data.scalerId == request.auth.uid;
-
-
-      allow delete:
-        if isApprovedAccount()
-        &&
-        (
-          resource.data.scalerId == request.auth.uid
           || isAdmin()
         );
 
+      // Native and legacy/simulation routes are both stamped and written by
+      // trusted backend code. A client cannot self-declare a legacy source.
+      allow create, update, delete: if false;
+
+    }
+
+    // Native tracking evidence is written only by trusted Cloud Functions.
+    // Scalers can read their own session; the campaign owner can review it.
+    // Neither party can alter uploaded evidence from a client.
+    match /trackingSessions/{sessionId} {
+      allow read:
+        if isApprovedAccount()
+        && (
+          resource.data.scalerId == request.auth.uid
+          || resource.data.businessId == request.auth.uid
+          || isAdmin()
+        );
+
+      allow create, update, delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read:
+          if isApprovedAccount()
+          && (
+            get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.scalerId == request.auth.uid
+            || get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.businessId == request.auth.uid
+            || isAdmin()
+          );
+
+        allow create, update, delete: if false;
+      }
+
+      match /checkpoints/{checkpointId} {
+        allow read:
+          if isApprovedAccount()
+          && (
+            get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.scalerId == request.auth.uid
+            || get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.businessId == request.auth.uid
+            || isAdmin()
+          );
+
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /activeTrackingSessions/{scalerId} {
+      allow read, create, update, delete: if false;
     }
 
 

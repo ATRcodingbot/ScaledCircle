@@ -40,6 +40,40 @@ To become the operating system for local marketing by making offline advertising
 
 ---
 
+## Mobile builds
+
+The Flutter client is in `apps/mobile` and supports web plus native Android/iOS shells. Active Scaler jobs use first-party native background-location bridges; see [Mobile background tracking](docs/mobile-background-tracking.md) and [Physical device testing](MANUAL_DEVICE_TESTING.md).
+
+```powershell
+cd apps/mobile
+flutter pub get
+flutter analyze
+flutter test
+flutter build web
+flutter build appbundle --release
+```
+
+An iOS release must be built and signed on macOS:
+
+```bash
+cd apps/mobile
+flutter build ios --release --no-codesign
+open ios/Runner.xcworkspace
+```
+
+Background tracking uses server-authoritative sessions, immutable canonical GPS chunks, private checkpoint Storage paths, and first-party native Android/iOS bridges. No App Check enforcement is enabled yet. On Windows, run the Android/web checks below; iOS/Xcode/signing and physical iPhone behavior remain **MANUAL / NOT YET VERIFIED**:
+
+```powershell
+cd apps/mobile
+flutter analyze
+flutter test
+flutter build apk --debug
+flutter build apk --release
+flutter build web --release
+```
+
+Do not change the current package/bundle identifiers or Firebase app registrations until the permanent `com.scaledcircle.app` migration is planned as a separate release operation.
+
 ## Status
 
 🚧 Active Development (Pre-Launch)
