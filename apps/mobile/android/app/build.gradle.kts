@@ -1,11 +1,10 @@
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
-    namespace = "com.example.flutter_app"
+    namespace = "com.scaledcircle.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,7 +14,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.flutter_app"
+        applicationId = "com.scaledcircle.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

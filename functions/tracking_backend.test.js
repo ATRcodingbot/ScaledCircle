@@ -6,10 +6,13 @@ const fftFactory = require("firebase-functions-test");
 const {getApps} = require("firebase-admin/app");
 const {getFirestore, Timestamp} = require("firebase-admin/firestore");
 
-process.env.GCLOUD_PROJECT ||= "scaled-circle";
-process.env.GOOGLE_CLOUD_PROJECT ||= "scaled-circle";
+process.env.GCLOUD_PROJECT ||= "demo-scaledcircle";
+process.env.GOOGLE_CLOUD_PROJECT ||= "demo-scaledcircle";
 
-const fft = fftFactory({projectId: "scaled-circle", storageBucket: "scaled-circle.appspot.com"});
+const fft = fftFactory({
+  projectId: "demo-scaledcircle",
+  storageBucket: "demo-scaledcircle.appspot.com",
+});
 const functions = require("./index");
 const db = getFirestore();
 

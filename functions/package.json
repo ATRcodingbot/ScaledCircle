@@ -2,15 +2,16 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "serve": "firebase emulators:start --only functions",
+    "serve": "firebase emulators:start --project demo-scaledcircle --only auth,firestore,functions,storage,hosting",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "test": "node --test tracking_helpers.test.js marketplace_finance.test.js marketplace_operations.test.js marketplace_webhook.test.js",
-    "test:rules": "npx firebase-tools emulators:exec --project scaled-circle --only firestore \"node --test tracking_rules.test.js\"",
-    "test:storage-rules": "npx firebase-tools emulators:exec --project scaled-circle --only firestore,storage \"node --test storage_rules.test.js\"",
-    "test:tracking-backend": "npx firebase-tools emulators:exec --project scaled-circle --only firestore,auth \"node --test tracking_backend.test.js\""
+    "seed:local": "node scripts/seed_local_emulator.js",
+    "test:rules": "npx firebase-tools emulators:exec --project demo-scaledcircle --only firestore \"node --test tracking_rules.test.js\"",
+    "test:storage-rules": "npx firebase-tools emulators:exec --project demo-scaledcircle --only firestore,storage \"node --test storage_rules.test.js\"",
+    "test:tracking-backend": "npx firebase-tools emulators:exec --project demo-scaledcircle --only firestore,auth \"node --test tracking_backend.test.js\""
   },
   "engines": {
     "node": "24"

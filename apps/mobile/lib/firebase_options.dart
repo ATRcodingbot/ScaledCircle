@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1010956217112',
     projectId: 'scaled-circle',
     storageBucket: 'scaled-circle.firebasestorage.app',
-    iosBundleId: 'com.example.flutterApp',
+    iosBundleId: 'com.scaledcircle.app',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(

@@ -12,7 +12,7 @@ before(async () => {
   environment = await initializeTestEnvironment({
     // Cross-service Storage rules read the Firestore emulator in the same
     // Firebase project namespace, so this must match emulators:exec.
-    projectId: "scaled-circle",
+    projectId: "demo-scaledcircle",
     firestore: {rules: fs.readFileSync(path.join(__dirname, "..", "firestore.rules"), "utf8")},
     storage: {rules: fs.readFileSync(path.join(__dirname, "..", "storage.rules"), "utf8")},
   });

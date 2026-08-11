@@ -10,7 +10,7 @@ let environment;
 
 before(async () => {
   environment = await initializeTestEnvironment({
-    projectId: "scaled-circle-tracking-rules-test",
+    projectId: "demo-scaledcircle",
     firestore: {rules: fs.readFileSync(path.join(__dirname, "..", "firestore.rules"), "utf8")},
   });
 });

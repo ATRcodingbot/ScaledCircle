@@ -5,7 +5,87 @@ const ACCOUNT_THIN_EVENTS = new Set([
   "v2.core.account[configuration.recipient].capability_status_updated",
 ]);
 
+const SNAPSHOT_EVENTS = new Set([
+  "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+  "checkout.session.async_payment_failed",
+  "payment_intent.succeeded",
+  "payment_intent.payment_failed",
+  "charge.refunded",
+  "refund.created",
+  "refund.updated",
+  "refund.failed",
+  "charge.dispute.created",
+  "charge.dispute.updated",
+  "charge.dispute.closed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "transfer.created",
+  "transfer.reversed",
+  "payout.failed",
+]);
+
 const EVENT_LEASE_MS = 5 * 60 * 1000;
+
+class UnsupportedWebhookEventError extends Error {
+  constructor(type) {
+    super(`Unsupported Stripe webhook event type: ${String(type || "missing")}`);
+    this.name = "UnsupportedWebhookEventError";
+    this.code = "unsupported_webhook_event";
+    this.retryable = false;
+  }
+}
+
+function requireAllowedEvent(event, allowedEvents) {
+  if (!event || typeof event.id !== "string" || !allowedEvents.has(event.type)) {
+    throw new UnsupportedWebhookEventError(event?.type);
+  }
+  return event;
+}
+
+function parseSnapshotEvent({stripe, rawBody, signature, secret}) {
+  return requireAllowedEvent(
+    stripe.webhooks.constructEvent(rawBody, signature, secret),
+    SNAPSHOT_EVENTS,
+  );
+}
+
+function parseThinEvent({stripe, rawBody, signature, secret}) {
+  return requireAllowedEvent(
+    stripe.parseEventNotification(rawBody, signature, secret),
+    ACCOUNT_THIN_EVENTS,
+  );
+}
+
+function stripeAccountIdFromThinEvent(event) {
+  requireAllowedEvent(event, ACCOUNT_THIN_EVENTS);
+  // Accounts v2 notifications are thin. Only Stripe's signed related-object
+  // reference identifies what is fetched; event data cannot supply account
+  // readiness or substitute a ScaledCircle owner.
+  const accountId = typeof event.related_object?.id === "string" ?
+    event.related_object.id.trim() : "";
+  if (!/^acct_[A-Za-z0-9]+$/.test(accountId)) {
+    const error = new Error("invalid_thin_account_reference");
+    error.code = "invalid_thin_account_reference";
+    error.retryable = false;
+    throw error;
+  }
+  return accountId;
+}
+
+function createSignedWebhookBoundary({parseSignedEvent, processVerifiedEvent}) {
+  return async function receive({rawBody, signature, secret}) {
+    const event = parseSignedEvent({rawBody, signature, secret});
+    return processVerifiedEvent(event);
+  };
+}
+
+function createThinAccountReconciler({reconcileCurrentAccount}) {
+  return async function reconcile(event) {
+    return reconcileCurrentAccount(stripeAccountIdFromThinEvent(event));
+  };
+}
 
 /**
  * Durable, replay-safe webhook boundary. The event store must implement an
@@ -81,8 +161,16 @@ function eventNeedsCurrentResource(type) {
 
 module.exports = {
   ACCOUNT_THIN_EVENTS,
+  SNAPSHOT_EVENTS,
   EVENT_LEASE_MS,
+  UnsupportedWebhookEventError,
+  createSignedWebhookBoundary,
+  createThinAccountReconciler,
   createMemoryEventStore,
   createWebhookProcessor,
   eventNeedsCurrentResource,
+  parseSnapshotEvent,
+  parseThinEvent,
+  requireAllowedEvent,
+  stripeAccountIdFromThinEvent,
 };

@@ -1,4 +1,4 @@
-package com.example.flutter_app
+package com.scaledcircle.app
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine

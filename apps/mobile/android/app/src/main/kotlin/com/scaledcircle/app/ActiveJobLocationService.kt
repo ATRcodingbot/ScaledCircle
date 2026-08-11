@@ -1,4 +1,4 @@
-package com.example.flutter_app
+package com.scaledcircle.app
 
 import android.Manifest
 import android.app.NotificationChannel

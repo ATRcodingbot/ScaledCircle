@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "scaled-circle"
+    "default": "scaled-circle",
+    "local": "demo-scaledcircle"
   }
 }

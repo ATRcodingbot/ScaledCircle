@@ -1,5 +1,25 @@
 # Scaled Circle
 
+## Local Firebase + Stripe sandbox
+
+The approved local test environment uses Firebase Emulator Suite project
+`demo-scaledcircle` and Stripe sandbox only. Production project `scaled-circle`
+must remain isolated. See [Local emulator and Stripe sandbox](docs/local-emulator-stripe-sandbox.md).
+
+```powershell
+cd functions
+npm run serve
+
+cd ..\apps\mobile
+flutter run -d chrome --dart-define=APP_ENV=local
+```
+
+Production builds must opt in explicitly:
+
+```powershell
+flutter build web --release --dart-define=APP_ENV=production
+```
+
 ## Stripe marketplace (sandbox only)
 
 The current marketplace payment implementation is designed for an isolated Firebase staging project plus Stripe sandbox. It uses platform-owned campaign charges and later Stripe Connect transfers; it must not be described as escrow. See [docs/stripe-marketplace.md](docs/stripe-marketplace.md) for the trust boundary, 20% platform-fee policy, Accounts v2 onboarding, state machines, refund/dispute handling, and manual sandbox checklist. Do not deploy or use live Stripe credentials without a separate approved release procedure.
@@ -76,7 +96,9 @@ flutter build apk --release
 flutter build web --release
 ```
 
-Do not change the current package/bundle identifiers or Firebase app registrations until the permanent `com.scaledcircle.app` migration is planned as a separate release operation.
+Android and iOS source identifiers are `com.scaledcircle.app`. The matching
+Firebase Android/iOS apps still need to be registered manually before a native
+production release; do not reuse the old placeholder Firebase app files.
 
 ## Status
 

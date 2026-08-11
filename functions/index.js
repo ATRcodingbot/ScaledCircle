@@ -26,7 +26,11 @@ const {
   serializedBytes,
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
-const {ACCOUNT_THIN_EVENTS} = require("./marketplace_webhook");
+const {
+  parseSnapshotEvent,
+  parseThinEvent,
+  stripeAccountIdFromThinEvent,
+} = require("./marketplace_webhook");
 const {runFinancialOperation} = require("./marketplace_operations");
 
 initializeApp();
@@ -51,6 +55,7 @@ const SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD = defineSecret(
 );
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
+const STRIPE_THIN_WEBHOOK_SECRET = defineSecret("STRIPE_THIN_WEBHOOK_SECRET");
 const STRIPE_STARTER_PRICE_ID = defineSecret("STRIPE_STARTER_PRICE_ID");
 const STRIPE_GROWTH_PRICE_ID = defineSecret("STRIPE_GROWTH_PRICE_ID");
 const STRIPE_SCALE_PRICE_ID = defineSecret("STRIPE_SCALE_PRICE_ID");
@@ -942,7 +947,7 @@ exports.sendWeatherAlertEmail = onDocumentCreated(
         `Official National Weather Service information:\n${officialDescription}\n\n` +
         `Experimental Scaled Circle planning estimate: +${low}% to +${high}% ` +
         `potential lead activity. Suggested services: ${services}.\n\n` +
-        `Review signals: https://scaledcircle.com/`;
+        `Review signals: ${publicAppBaseUrl()}/`;
       const html = `
         <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0b1725">
           <h2>${escapeHtml(eventName)} — ${escapeHtml(countyName)}</h2>
@@ -954,7 +959,7 @@ exports.sendWeatherAlertEmail = onDocumentCreated(
           <p><strong>+${low}% to +${high}%</strong> potential lead activity.</p>
           <p>Suggested services: ${escapeHtml(services)}</p>
           <p><em>This estimate is not a guarantee of leads or work.</em></p>
-          <p><a href="https://scaledcircle.com/">Open Scaled Circle</a></p>
+          <p><a href="${escapeHtml(publicAppBaseUrl())}/">Open Scaled Circle</a></p>
         </div>`;
       const result = await transport.sendMail({
         from: `Scaled Circle Weather <${SIGNUP_NOTIFICATION_EMAIL}>`,
@@ -1342,6 +1347,22 @@ function stripeClient() {
   return new Stripe(key);
 }
 
+function scaledCircleEnvironment() {
+  const value = String(process.env.SCALEDCIRCLE_ENV || "local").toLowerCase();
+  if (!["local", "staging", "production"].includes(value)) {
+    throw new HttpsError("failed-precondition", "Runtime environment is invalid.");
+  }
+  return value;
+}
+
+function publicAppBaseUrl() {
+  if (scaledCircleEnvironment() === "local") {
+    return String(process.env.PUBLIC_APP_BASE_URL || "http://127.0.0.1:5000")
+      .replace(/\/$/, "");
+  }
+  return "https://scaledcircle.com";
+}
+
 function stripePriceForPlan(plan) {
   const prices = {
     starter: STRIPE_STARTER_PRICE_ID.value(),
@@ -1557,8 +1578,8 @@ exports.createSubscriptionCheckoutSession = onCall(
       customer,
       line_items: [{price, quantity: 1}],
       allow_promotion_codes: true,
-      success_url: "https://scaledcircle.com/?billing=success",
-      cancel_url: "https://scaledcircle.com/?billing=cancelled",
+      success_url: `${publicAppBaseUrl()}/?billing=success`,
+      cancel_url: `${publicAppBaseUrl()}/?billing=cancelled`,
       metadata: {firebaseUid: context.uid, purchaseType: "subscription", plan},
       subscription_data: {metadata: {firebaseUid: context.uid, plan}},
     });
@@ -1599,8 +1620,8 @@ exports.createCreditCheckoutSession = onCall(
           product_data: {name: `${credits} Scaled Circle credits`},
         },
       }],
-      success_url: "https://scaledcircle.com/?credits=success",
-      cancel_url: "https://scaledcircle.com/?credits=cancelled",
+      success_url: `${publicAppBaseUrl()}/?credits=success`,
+      cancel_url: `${publicAppBaseUrl()}/?credits=cancelled`,
       metadata: {
         firebaseUid: context.uid,
         purchaseType: "credits",
@@ -1629,7 +1650,7 @@ exports.createBillingPortalSession = onCall(
     const customer = await getOrCreateStripeCustomer(stripe, context);
     const session = await stripe.billingPortal.sessions.create({
       customer,
-      return_url: "https://scaledcircle.com/",
+      return_url: `${publicAppBaseUrl()}/`,
     });
     return {url: session.url};
   },
@@ -3923,9 +3944,20 @@ function normalizeExternalUrl(value) {
 function publicTrackingUrl(trackingCode) {
   const projectId = process.env.GCLOUD_PROJECT ||
     process.env.GOOGLE_CLOUD_PROJECT ||
-    "scaled-circle";
+    (scaledCircleEnvironment() === "local" ? "demo-scaledcircle" : "scaled-circle");
 
-  return `https://us-east1-${projectId}.cloudfunctions.net/` +
+  if (scaledCircleEnvironment() === "local" && projectId === "scaled-circle") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Local runtime refuses the production Firebase project.",
+    );
+  }
+
+  const baseUrl = scaledCircleEnvironment() === "local" ?
+    `http://${process.env.FUNCTIONS_EMULATOR_HOST || "127.0.0.1:5001"}/` +
+      `${projectId}/us-east1` :
+    `https://us-east1-${projectId}.cloudfunctions.net`;
+  return `${baseUrl}/` +
     `campaignTracking?t=${encodeURIComponent(trackingCode)}`;
 }
 
@@ -5319,8 +5351,8 @@ exports.createScalerOnboardingLink = safeStripeCallable(
     const context = await requireFinancialRole(
       request, "scaler", "Sign in as a Scaler to continue onboarding.",
     );
-    const returnUrl = "https://scaledcircle.com/?connect=return";
-    const refreshUrl = "https://scaledcircle.com/?connect=refresh";
+    const returnUrl = `${publicAppBaseUrl()}/?connect=return`;
+    const refreshUrl = `${publicAppBaseUrl()}/?connect=refresh`;
     const stripe = stripeClient();
     const stored = await db.collection("stripeConnectedAccounts").doc(context.uid).get();
     if (!stored.exists || !stored.data()?.stripeAccountId) {
@@ -5401,8 +5433,8 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
             product_data: {name: `ScaledCircle campaign funding: ${readText(campaign.name, 80) || campaignId}`}}}],
           payment_intent_data: {transfer_group: `campaign_${campaignId}`,
             metadata: {paymentId, campaignId, businessId: context.uid}},
-          success_url: "https://scaledcircle.com/?campaignFunding=return",
-          cancel_url: "https://scaledcircle.com/?campaignFunding=cancelled",
+          success_url: `${publicAppBaseUrl()}/?campaignFunding=return`,
+          cancel_url: `${publicAppBaseUrl()}/?campaignFunding=cancelled`,
           metadata: {paymentId, campaignId, businessId: context.uid,
             purchaseType: "campaign_funding_v2"}},
         {idempotencyKey: marketplace.stripeIdempotencyKey("campaign-checkout", paymentId)});
@@ -5479,10 +5511,9 @@ async function processCampaignCheckout(stripe, event) {
   });
 }
 
-function stripeAccountIdFromEvent(event) {
+function stripeAccountIdFromSnapshotEvent(event) {
   return cleanId(
-    event.related_object?.id || event.data?.object?.account ||
-    event.account || event.context,
+    event.data?.object?.account || event.account,
   );
 }
 
@@ -5592,10 +5623,8 @@ async function processStripeEvent(stripe, event) {
         updatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
     }
-  } else if (ACCOUNT_THIN_EVENTS.has(event.type)) {
-    await reconcileScalerAccountFromStripe(stripe, stripeAccountIdFromEvent(event));
   } else if (event.type === "payout.failed") {
-    await reconcileScalerAccountFromStripe(stripe, stripeAccountIdFromEvent(event), {
+    await reconcileScalerAccountFromStripe(stripe, stripeAccountIdFromSnapshotEvent(event), {
       bankPayoutStatus: "attention_required",
       payoutAttention: {
         code: "payout_failed",
@@ -5606,7 +5635,68 @@ async function processStripeEvent(stripe, event) {
   }
 }
 
-// Canonical and only Stripe webhook export. Do not configure legacy handlers.
+async function processStripeThinEvent(stripe, event) {
+  // The signed thin payload identifies only the resource to retrieve. Current
+  // Accounts v2 state, never payload capability fields, drives sanitized state.
+  await reconcileScalerAccountFromStripe(stripe, stripeAccountIdFromThinEvent(event));
+}
+
+function stripeModeMatchesEnvironment(event) {
+  const environment = String(process.env.SCALEDCIRCLE_ENV || "local").toLowerCase();
+  // Snapshot Events include livemode. Thin Event Notifications may not; their
+  // independently configured endpoint secret is the environment boundary.
+  return typeof event.livemode !== "boolean" ||
+    (environment === "production") === (event.livemode === true);
+}
+
+async function processClaimedStripeEvent(event, processor) {
+  const {ref, claimed} = await claimStripeEvent(event);
+  if (!claimed) return {received: true, duplicate: true};
+  try {
+    await processor(event);
+    await ref.set({status: "processed", processedAt: FieldValue.serverTimestamp()}, {merge: true});
+    return {received: true};
+  } catch (error) {
+    await ref.set({
+      status: error?.retryable === false ? "failed_terminal" : "failed_retryable",
+      lastErrorCode: error?.code || "processing_failed",
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+    throw error;
+  }
+}
+
+async function handleStripeWebhook(request, response, {secret, parseEvent, processEvent, label}) {
+  if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
+  let event;
+  try {
+    const stripe = stripeClient();
+    event = parseEvent({
+      stripe,
+      rawBody: request.rawBody,
+      signature: request.headers["stripe-signature"],
+      secret: secret.value(),
+    });
+    if (!stripeModeMatchesEnvironment(event)) {
+      logger.error("Stripe webhook mode did not match the configured environment.", {
+        eventId: event.id, eventType: event.type, endpoint: label,
+      });
+      return response.status(400).send("Stripe webhook mode mismatch.");
+    }
+    const result = await processClaimedStripeEvent(event, (verified) => processEvent(stripe, verified));
+    return response.status(200).json(result);
+  } catch (error) {
+    logger.error("Stripe webhook processing failed.", {
+      eventId: event?.id || null,
+      eventType: event?.type || null,
+      endpoint: label,
+      errorCode: error?.code || "webhook_processing_failed",
+    });
+    return response.status(event ? 500 : 400).send("Stripe webhook could not be processed.");
+  }
+}
+
+// Canonical snapshot/v1 webhook. Accounts v2 thin events use stripeThinWebhook.
 exports.stripeWebhook = onRequest(
   {
     maxInstances: 10,
@@ -5615,48 +5705,29 @@ exports.stripeWebhook = onRequest(
     memory: "256MiB",
     secrets: STRIPE_CHECKOUT_SECRETS.concat([STRIPE_WEBHOOK_SECRET]),
   },
-  async (request, response) => {
-    if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
-    let event;
-    try {
-      const stripe = stripeClient();
-      event = stripe.webhooks.constructEvent(
-        request.rawBody,
-        request.headers["stripe-signature"],
-        STRIPE_WEBHOOK_SECRET.value(),
-      );
-      const environment = String(process.env.SCALEDCIRCLE_ENV || "local").toLowerCase();
-      if ((environment === "production") !== (event.livemode === true)) {
-        logger.error("Stripe webhook mode did not match the configured environment.", {
-          eventId: event.id,
-          eventType: event.type,
-          environment,
-        });
-        return response.status(400).send("Stripe webhook mode mismatch.");
-      }
-      const {ref, claimed} = await claimStripeEvent(event);
-      if (!claimed) return response.status(200).json({received: true, duplicate: true});
-      try {
-        await processStripeEvent(stripe, event);
-        await ref.set({status: "processed", processedAt: FieldValue.serverTimestamp()}, {merge: true});
-        return response.status(200).json({received: true});
-      } catch (error) {
-        await ref.set({
-          status: "failed_retryable",
-          lastErrorCode: "processing_failed",
-          updatedAt: FieldValue.serverTimestamp(),
-        }, {merge: true});
-        throw error;
-      }
-    } catch (error) {
-      logger.error("Stripe webhook processing failed.", {
-        eventId: event?.id || null,
-        eventType: event?.type || null,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return response.status(event ? 500 : 400).send("Stripe webhook could not be processed.");
-    }
+  (request, response) => handleStripeWebhook(request, response, {
+    secret: STRIPE_WEBHOOK_SECRET,
+    parseEvent: parseSnapshotEvent,
+    processEvent: processStripeEvent,
+    label: "snapshot",
+  }),
+);
+
+// Canonical Accounts v2 thin-event webhook with an independent signing secret.
+exports.stripeThinWebhook = onRequest(
+  {
+    maxInstances: 10,
+    concurrency: 20,
+    timeoutSeconds: 60,
+    memory: "256MiB",
+    secrets: [STRIPE_SECRET_KEY, STRIPE_THIN_WEBHOOK_SECRET],
   },
+  (request, response) => handleStripeWebhook(request, response, {
+    secret: STRIPE_THIN_WEBHOOK_SECRET,
+    parseEvent: parseThinEvent,
+    processEvent: processStripeThinEvent,
+    label: "accounts_v2_thin",
+  }),
 );
 
 async function queueScalerTransfer(zoneId, releaseOptionalBonus = false) {
