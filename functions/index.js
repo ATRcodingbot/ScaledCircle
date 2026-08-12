@@ -35,6 +35,7 @@ const {
 const {runFinancialOperation} = require("./marketplace_operations");
 const operations = require("./operational_layer");
 const signupNotifications = require("./signup_notifications");
+const propertyIntelligence = require("./property_intelligence");
 
 initializeApp();
 
@@ -50,6 +51,8 @@ const OVERPASS_URL =
 
 const DEVELOPMENT_HOMES_PER_ACRE = 2.5;
 
+const PROPERTY_INTELLIGENCE_CACHE_COLLECTION = "propertyIntelligenceCache";
+
 const ADMIN_WALLET_ID = "scaled_circle_admin";
 
 const SUPPORT_EMAIL = operations.SUPPORT_EMAIL;
@@ -62,6 +65,7 @@ const SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD = defineSecret(
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD",
 );
 const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
+const CENSUS_API_KEY = defineSecret("CENSUS_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const STRIPE_THIN_WEBHOOK_SECRET = defineSecret("STRIPE_THIN_WEBHOOK_SECRET");
@@ -3254,6 +3258,57 @@ exports.analyzeCampaignZone = onCall(
         "Unable to analyze the campaign zone.",
       );
     }
+  },
+);
+
+/** Server-authoritative, industry-neutral property/housing-stock analysis. */
+exports.analyzePropertyIntelligence = onCall(
+  {enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 60, memory: "512MiB", secrets: [CENSUS_API_KEY]},
+  async (request) => {
+    const context = await authenticatedUserContext(request,
+      "You must be logged in to use Property Intelligence.");
+    try { propertyIntelligence.assertBusinessAccess({uid: context.uid, role: context.role,
+      isAdmin: context.isAdmin, businessId: context.uid}); }
+    catch (_) { throw new HttpsError("permission-denied", "Property Intelligence is available to Business accounts."); }
+    const zoneId = readText(request.data?.zoneId, 160);
+    if (!zoneId) throw new HttpsError("invalid-argument", "A valid zone is required.");
+    const zoneReference = db.collection("campaignZones").doc(zoneId);
+    const zoneSnapshot = await zoneReference.get();
+    if (!zoneSnapshot.exists) throw new HttpsError("not-found", "The campaign zone does not exist.");
+    const zone = zoneSnapshot.data() || {};
+    try { propertyIntelligence.assertBusinessAccess({uid: context.uid, role: context.role,
+      isAdmin: context.isAdmin, businessId: zone.businessId}); }
+    catch (_) { throw new HttpsError("permission-denied", "You do not own this campaign zone."); }
+    let geometry;
+    try { geometry = propertyIntelligence.validateGeometry(zone.serviceArea); }
+    catch (_) { throw new HttpsError("failed-precondition", "Save a valid campaign area before requesting Property Intelligence."); }
+    const digest = propertyIntelligence.geometryDigest(geometry);
+    const cacheId = crypto.createHash("sha256").update(`${propertyIntelligence.ANALYSIS_VERSION}:${propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION}:${digest}`).digest("hex");
+    const cacheReference = db.collection(PROPERTY_INTELLIGENCE_CACHE_COLLECTION).doc(cacheId);
+    const cacheSnapshot = await cacheReference.get();
+    const cached = cacheSnapshot.data() || {};
+    if (propertyIntelligence.cacheIsReusable(cached, {digest})) {
+      await zoneReference.update({propertyIntelligenceCacheId: cacheId,
+        propertyIntelligenceGeometryDigest: digest, propertyIntelligenceStatus: "complete",
+        propertyIntelligenceSummary: cached.analysis,
+        propertyIntelligenceUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      return {success: true, zoneId, cached: true, analysis: cached.analysis,
+        aiContext: propertyIntelligence.aiGrounding(cached.analysis, request.data?.objective)};
+    }
+    const providers = [new propertyIntelligence.MarylandPropertyProvider(),
+      new propertyIntelligence.CensusPropertyProvider({apiKey: CENSUS_API_KEY.value() || ""})];
+    const analysis = await propertyIntelligence.analyzeWithFallback({geometry, providers});
+    const sanitized = {...analysis, analysisId: cacheId, geometryDigest: digest, generatedAt: new Date().toISOString()};
+    delete sanitized.providerFailures;
+    await cacheReference.set({analysisVersion: propertyIntelligence.ANALYSIS_VERSION,
+      dataSourceBundleVersion: propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION,
+      geometryDigest: digest, source: sanitized.source, sourceVersion: sanitized.sourceVersion,
+      generatedAt: FieldValue.serverTimestamp(), analysis: sanitized});
+    await zoneReference.update({propertyIntelligenceCacheId: cacheId,
+      propertyIntelligenceGeometryDigest: digest, propertyIntelligenceStatus: sanitized.confidence === "INSUFFICIENT" ? "unavailable" : "complete",
+      propertyIntelligenceSummary: sanitized, propertyIntelligenceUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    return {success: true, zoneId, cached: false, analysis: sanitized,
+      aiContext: propertyIntelligence.aiGrounding(sanitized, request.data?.objective)};
   },
 );
 

@@ -7,7 +7,7 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "test": "node --test tracking_helpers.test.js marketplace_finance.test.js marketplace_checkout.test.js marketplace_operations.test.js marketplace_webhook.test.js signup_notifications.test.js",
+    "test": "node --test tracking_helpers.test.js marketplace_finance.test.js marketplace_checkout.test.js marketplace_operations.test.js marketplace_webhook.test.js signup_notifications.test.js property_intelligence.test.js",
     "test:signup-email": "node --test signup_notifications.test.js",
     "seed:local": "node scripts/seed_local_emulator.js",
     "test:rules": "npx firebase-tools emulators:exec --project demo-scaledcircle --only firestore \"node --test tracking_rules.test.js\"",

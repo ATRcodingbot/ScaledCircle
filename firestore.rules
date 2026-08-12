@@ -364,6 +364,14 @@ service cloud.firestore {
 
 
 
+    // Shared Property Intelligence cache is written and served only by the
+    // trusted backend. Clients receive sanitized results through the callable.
+    match /propertyIntelligenceCache/{analysisId} {
+      allow read, create, update, delete: if false;
+    }
+
+
+
     // ============================================================
     // CAMPAIGN GPS ROUTES
     // ============================================================

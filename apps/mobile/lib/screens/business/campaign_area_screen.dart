@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../services/property_intelligence_service.dart';
+import '../../widgets/property_intelligence_panel.dart';
+
 enum CampaignAreaShape { polygon, rectangle, circle, triangle }
 
 class CampaignAreaScreen extends StatefulWidget {
@@ -30,6 +33,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   bool _loadingExistingArea = true;
   bool _hasLoadedExistingArea = false;
   bool _mappingLocked = false;
+  bool _propertyLayerEnabled = false;
+  bool _loadingPropertyIntelligence = false;
+  PropertyIntelligenceAnalysis? _propertyIntelligence;
 
   static const LatLng _defaultCenter = LatLng(39.2904, -76.6122);
 
@@ -595,6 +601,106 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
   }
 
+  Future<void> _loadPropertyIntelligence() async {
+    if (_generatedArea.length < 3 || _loadingPropertyIntelligence) {
+      return;
+    }
+    setState(() => _loadingPropertyIntelligence = true);
+    try {
+      final analysis = await PropertyIntelligenceService().analyzeZone(
+        widget.campaignReference.id,
+      );
+      if (mounted) {
+        setState(() => _propertyIntelligence = analysis);
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error.message ??
+                  'Property Intelligence is temporarily unavailable.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingPropertyIntelligence = false);
+      }
+    }
+  }
+
+  Color _propertySignalColor() {
+    final signal = _propertyIntelligence?.signal;
+    if (!_propertyLayerEnabled || signal == null) return Colors.blue;
+    if (signal >= 75) return const Color(0xFFE36B3D);
+    if (signal >= 50) return const Color(0xFFE3A13D);
+    if (signal >= 25) return const Color(0xFF43A7D8);
+    return const Color(0xFF19C7A2);
+  }
+
+  Future<void> _showPropertyComparison() async {
+    final zone = await widget.campaignReference.get();
+    final campaignId = (zone.data() as Map<String, dynamic>?)?['campaignId']
+        ?.toString();
+    if (campaignId == null || campaignId.isEmpty || !mounted) return;
+    final zones = await FirebaseFirestore.instance
+        .collection('campaignZones')
+        .where('campaignId', isEqualTo: campaignId)
+        .get();
+    final analyses = zones.docs
+        .map((doc) {
+          final data = doc.data();
+          final raw = data['propertyIntelligenceSummary'];
+          if (raw is! Map) return null;
+          return (
+            data['zoneName']?.toString() ?? 'Zone',
+            PropertyIntelligenceAnalysis(Map<String, dynamic>.from(raw)),
+          );
+        })
+        .whereType<(String, PropertyIntelligenceAnalysis)>()
+        .toList();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Compare Property Intelligence'),
+        content: SizedBox(
+          width: 520,
+          child: analyses.isEmpty
+              ? const Text(
+                  'Analyze additional campaign zones to compare their neutral property-age signals.',
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: analyses
+                        .map(
+                          (entry) => ListTile(
+                            leading: CircleAvatar(
+                              child: Text(entry.$2.signal?.toString() ?? '—'),
+                            ),
+                            title: Text(entry.$1),
+                            subtitle: Text(
+                              '${entry.$2.source} (${entry.$2.inputGranularity}) • ${entry.$2.predominantEra} • Pre-1980 ${entry.$2.pre1980.toStringAsFixed(0)}% • Pre-2000 ${entry.$2.pre2000.toStringAsFixed(0)}% • ${entry.$2.ageMetricsAreEstimated ? 'estimated ' : ''}30+ ${entry.$2.age30Plus.toStringAsFixed(0)}% • ${entry.$2.confidence} confidence • ${entry.$2.coverage.toStringAsFixed(0)}% coverage',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<bool> _runDevelopmentHomeEstimateFallback() async {
     try {
       final snapshot = await widget.campaignReference.get();
@@ -927,13 +1033,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final signalColor = _propertySignalColor();
     final polygons = _generatedArea.length >= 3
         ? [
             Polygon(
               points: _generatedArea,
               borderStrokeWidth: 3,
-              color: Colors.blue.withValues(alpha: 0.18),
-              borderColor: Colors.blue,
+              color: signalColor.withValues(
+                alpha: _propertyLayerEnabled ? 0.30 : 0.18,
+              ),
+              borderColor: signalColor,
             ),
           ]
         : <Polygon>[];
@@ -1016,6 +1125,23 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
               ),
             ),
 
+          SwitchListTile(
+            value: _propertyLayerEnabled,
+            secondary: const Icon(Icons.home_work_outlined),
+            title: const Text('Property Intelligence'),
+            subtitle: const Text(
+              'Optional property-age and housing-stock information',
+            ),
+            onChanged: _generatedArea.length < 3
+                ? null
+                : (enabled) {
+                    setState(() => _propertyLayerEnabled = enabled);
+                    if (enabled && _propertyIntelligence == null) {
+                      _loadPropertyIntelligence();
+                    }
+                  },
+          ),
+
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -1062,11 +1188,41 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
           ),
 
           Container(
-            constraints: const BoxConstraints(maxHeight: 285),
+            constraints: BoxConstraints(
+              maxHeight: _propertyLayerEnabled ? 520 : 285,
+            ),
             padding: const EdgeInsets.all(16),
             child: SingleChildScrollView(
               child: Column(
                 children: [
+                  if (_propertyLayerEnabled && _loadingPropertyIntelligence)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: CircularProgressIndicator(),
+                    ),
+                  if (_propertyLayerEnabled &&
+                      _propertyIntelligence != null) ...[
+                    PropertyIntelligencePanel(
+                      analysis: _propertyIntelligence!,
+                      onCreateCampaign: () =>
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'This selected area is already attached to the current campaign draft. Confirm and save the campaign when ready.',
+                              ),
+                            ),
+                          ),
+                      onCompare: _showPropertyComparison,
+                      onAskAi: () => ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Ask AI is not production ready because no model transport is configured. Property facts remain available for deterministic comparison.',
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (metrics != null)
                     Card(
                       child: Padding(
