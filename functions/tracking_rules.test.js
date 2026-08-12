@@ -87,6 +87,27 @@ test("private tracking evidence is readable only by owner, campaign business, an
   await assertFails(environment.unauthenticatedContext().firestore().doc("trackingSessions/session-one").get());
 });
 
+test("outbound email jobs cannot be read or authored by clients", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("outboundEmailJobs/welcome-user_test").set({
+      to: "user@example.test",
+      fromAddress: "support@scaledcircle.com",
+      status: "queued",
+    });
+  });
+  for (const uid of ["scaler-one", "business-one", "admin-one"]) {
+    const db = store(uid);
+    await assertFails(db.doc("outboundEmailJobs/welcome-user_test").get());
+    await assertFails(db.doc("outboundEmailJobs/arbitrary").set({
+      to: "attacker@example.test",
+      fromAddress: "spoof@example.test",
+      status: "queued",
+    }));
+  }
+  await assertFails(environment.unauthenticatedContext().firestore()
+    .doc("outboundEmailJobs/arbitrary").set({to: "attacker@example.test"}));
+});
+
 test("no client can mutate native or client-claimed legacy route evidence", async () => {
   for (const uid of ["scaler-one", "scaler-two", "business-one", "business-two", "admin-one"]) {
     const db = store(uid);

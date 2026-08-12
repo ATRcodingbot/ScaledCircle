@@ -34,6 +34,7 @@ const {
 } = require("./marketplace_webhook");
 const {runFinancialOperation} = require("./marketplace_operations");
 const operations = require("./operational_layer");
+const signupNotifications = require("./signup_notifications");
 
 initializeApp();
 
@@ -60,6 +61,7 @@ const SIGNUP_NOTIFICATION_EMAIL = EMAIL_TRANSPORT_ACCOUNT;
 const SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD = defineSecret(
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD",
 );
+const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const STRIPE_THIN_WEBHOOK_SECRET = defineSecret("STRIPE_THIN_WEBHOOK_SECRET");
@@ -173,15 +175,6 @@ const DISCOVERY_SOURCES = new Set([
   "event_or_group",
   "other",
 ]);
-
-const DISCOVERY_SOURCE_LABELS = {
-  personal_referral: "A person referred me",
-  search_engine: "Google or another search engine",
-  social_media: "Social media",
-  online_ad: "Online advertisement",
-  event_or_group: "Event or community group",
-  other: "Other",
-};
 
 /**
  * Provision the web attribution layer for a campaign.
@@ -562,7 +555,6 @@ exports.joinWaitlist = onRequest(
 exports.notifyAdminOnAccountSignup = onDocumentCreated(
   {
     document: "users/{userId}",
-    secrets: [SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD],
     retry: true,
     maxInstances: 5,
   },
@@ -571,20 +563,13 @@ exports.notifyAdminOnAccountSignup = onDocumentCreated(
     if (!data) {
       return;
     }
-
-    const notificationId = `account_${event.params.userId}`;
-    await Promise.all([
-      sendAdminSignupNotification({
-        notificationId,
-        signupType: "account",
-        data,
-      }),
-      sendSignupWelcomeEmail({
-        notificationId,
-        signupType: "account",
-        data,
-      }),
-    ]);
+    await signupNotifications.handleAccountProfileCreated({
+      uid: event.params.userId,
+      profile: data,
+      auth: getAuth(),
+      db,
+      serverTimestamp: FieldValue.serverTimestamp(),
+    });
   },
 );
 
@@ -596,7 +581,6 @@ exports.notifyAdminOnAccountSignup = onDocumentCreated(
 exports.notifyAdminOnWaitlistSignup = onDocumentCreated(
   {
     document: "waitlist/{waitlistId}",
-    secrets: [SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD],
     retry: true,
     maxInstances: 5,
   },
@@ -607,260 +591,104 @@ exports.notifyAdminOnWaitlistSignup = onDocumentCreated(
       return;
     }
 
-    try {
-      await getAuth().getUserByEmail(email);
-      logger.info("Skipping duplicate waitlist signup email", {
-        waitlistId: event.params.waitlistId,
-        email,
-      });
-      return;
-    } catch (error) {
-      if (error?.code !== "auth/user-not-found") {
-        throw error;
-      }
-    }
-
-    const notificationId = `waitlist_${event.params.waitlistId}`;
-    await Promise.all([
-      sendAdminSignupNotification({
-        notificationId,
-        signupType: "early_access",
-        data,
-      }),
-      sendSignupWelcomeEmail({
-        notificationId,
-        signupType: "early_access",
-        data,
-      }),
-    ]);
+    await signupNotifications.handleSubscriberCreated({
+      subscriber: data,
+      occurredAt: event.data?.createTime?.toDate?.().toISOString() ||
+        "server-recorded",
+      auth: getAuth(),
+      db,
+      serverTimestamp: FieldValue.serverTimestamp(),
+    });
   },
 );
 
-async function sendAdminSignupNotification({
-  notificationId,
-  signupType,
-  data,
-}) {
-  const auditReference = db
-    .collection("systemEmailNotifications")
-    .doc(notificationId);
-  const auditSnapshot = await auditReference.get();
-  if (auditSnapshot.data()?.status === "sent") {
-    return;
-  }
+/**
+ * Deliver deterministic server-authored signup and operational email jobs.
+ * This sender fails closed unless the deployed SMTP identity is the authorized
+ * support@scaledcircle.com mailbox. Clients cannot create queue records.
+ */
+exports.sendOutboundEmailJob = onDocumentCreated(
+  {
+    document: `${signupNotifications.EMAIL_JOB_COLLECTION}/{jobId}`,
+    secrets: [SUPPORT_EMAIL_SMTP_PASSWORD],
+    retry: false,
+    maxInstances: 5,
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+    const queued = snapshot.data() || {};
+    const jobId = event.params.jobId;
+    if (queued.status !== "queued") return;
 
-  const email = readText(data.email, 254).toLowerCase();
-  const roleValue = readText(data.accountType || data.role, 40);
-  const role = roleValue === "business" ? "Business" :
-    roleValue === "scaler" ? "Scaler" : "User";
-  const displayName = readText(data.displayName, 120) || "Not provided";
-  const companyName = readText(data.companyName, 160) || "Not provided";
-  const postalCode = readText(data.postalCode, 20) || "Not provided";
-  const contactNumber = readText(data.contactNumber, 40) || "Not provided";
-  const source = readText(data.source, 80) ||
-    (signupType === "account" ? "account creation" : "early-access form");
-  const discoverySource = readText(data.discoverySource, 40);
-  const discoveryLabel = DISCOVERY_SOURCE_LABELS[discoverySource] ||
-    "Not provided";
-  const referrerName = discoverySource === "personal_referral"
-    ? readText(data.referrerName, 160) || "Not provided"
-    : "Not applicable";
-  const signupLabel = signupType === "account"
-    ? "new Scaled Circle account"
-    : "new Maryland early-access signup";
+    // The queue schema is fixed by backend templates, then validated again at
+    // delivery so even an accidental server write cannot relay arbitrary mail.
+    const destination = readText(queued.to, 254).toLowerCase();
+    const fromAddress = readText(queued.fromAddress, 254).toLowerCase();
+    const template = readText(queued.template, 80);
+    const allowedTemplate = template.startsWith("welcome_") ||
+      template.startsWith("support_");
+    const recipientAllowed = destination === SUPPORT_EMAIL ||
+      template.startsWith("welcome_");
+    if (fromAddress !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed) {
+      await snapshot.ref.set({
+        status: "rejected",
+        errorCode: "invalid_server_email_job",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+      return;
+    }
 
-  await auditReference.set({
-    status: "sending",
-    notificationId,
-    signupType,
-    recipient: SIGNUP_NOTIFICATION_EMAIL,
-    signupEmail: email,
-    updatedAt: FieldValue.serverTimestamp(),
-    attempts: FieldValue.increment(1),
-  }, {merge: true});
+    const leaseId = crypto.randomUUID();
+    const claimed = await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(snapshot.ref);
+      if (current.data()?.status !== "queued") return false;
+      transaction.update(snapshot.ref, {
+        status: "sending",
+        leaseId,
+        attempts: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+    if (!claimed) return;
 
-  const transport = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: SIGNUP_NOTIFICATION_EMAIL,
-      pass: SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD.value(),
-    },
-  });
-  const subject = `[Scaled Circle] New ${role} ${
-    signupType === "account" ? "account" : "early-access signup"
-  }`;
-  const text = [
-    `Scaled Circle received a ${signupLabel}.`,
-    "",
-    `Role: ${role}`,
-    `Name: ${displayName}`,
-    `Business: ${companyName}`,
-    `Email: ${email || "Not provided"}`,
-    `ZIP / postal code: ${postalCode}`,
-    `Contact number: ${contactNumber}`,
-    `Source: ${source}`,
-    `How they heard about us: ${discoveryLabel}`,
-    `Referred by: ${referrerName}`,
-  ].join("\n");
-  const html = `
-    <div style="font-family:Arial,sans-serif;line-height:1.55;color:#102018">
-      <h2 style="color:#087f5b">New Scaled Circle signup</h2>
-      <p>Scaled Circle received a ${escapeHtml(signupLabel)}.</p>
-      <table style="border-collapse:collapse">
-        <tr><td><strong>Role</strong></td><td>${escapeHtml(role)}</td></tr>
-        <tr><td><strong>Name</strong></td><td>${escapeHtml(displayName)}</td></tr>
-        <tr><td><strong>Business</strong></td><td>${escapeHtml(companyName)}</td></tr>
-        <tr><td><strong>Email</strong></td><td>${escapeHtml(
-    email || "Not provided",
-  )}</td></tr>
-        <tr><td><strong>ZIP / postal code</strong></td><td>${escapeHtml(
-    postalCode,
-  )}</td></tr>
-        <tr><td><strong>Contact number</strong></td><td>${escapeHtml(
-    contactNumber,
-  )}</td></tr>
-        <tr><td><strong>Source</strong></td><td>${escapeHtml(source)}</td></tr>
-        <tr><td><strong>How they heard about us</strong></td><td>${escapeHtml(
-    discoveryLabel,
-  )}</td></tr>
-        <tr><td><strong>Referred by</strong></td><td>${escapeHtml(
-    referrerName,
-  )}</td></tr>
-      </table>
-    </div>`;
-
-  try {
-    const result = await transport.sendMail({
-      from: `Scaled Circle Signups <${SIGNUP_NOTIFICATION_EMAIL}>`,
-      to: SIGNUP_NOTIFICATION_EMAIL,
-      replyTo: email || undefined,
-      subject,
-      text,
-      html,
-      headers: {
-        "X-Scaled-Circle-Notification": notificationId,
+    const transport = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: SUPPORT_EMAIL,
+        pass: SUPPORT_EMAIL_SMTP_PASSWORD.value(),
       },
     });
-
-    await auditReference.set({
-      status: "sent",
-      messageId: result.messageId || "",
-      sentAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, {merge: true});
-  } catch (error) {
-    await auditReference.set({
-      status: "failed",
-      error: readText(error instanceof Error ? error.message : error, 500),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, {merge: true});
-    throw error;
-  }
-}
-
-async function sendSignupWelcomeEmail({
-  notificationId,
-  signupType,
-  data,
-}) {
-  const email = readText(data.email, 254).toLowerCase();
-  if (!email) {
-    return;
-  }
-
-  const auditReference = db
-    .collection("systemEmailNotifications")
-    .doc(`welcome_${notificationId}`);
-  const auditSnapshot = await auditReference.get();
-  if (auditSnapshot.data()?.status === "sent") {
-    return;
-  }
-
-  const roleValue = readText(data.accountType || data.role, 40);
-  const isBusiness = roleValue === "business";
-  const displayName = readText(data.displayName, 120);
-  const greeting = displayName ? `Hi ${displayName},` : "Hello,";
-  const accessLabel = signupType === "account"
-    ? "Your Scaled Circle account has been created and placed in early access."
-    : "You are now on the Scaled Circle Maryland early-access list.";
-  const roleBenefit = isBusiness
-    ? "Your Business launch benefit includes a free subscription. The 10% " +
-      "platform fee and Scaler pay still apply when you run campaigns."
-    : "As an early Scaler, you will have an opportunity to build verified " +
-      "work history before the broader launch.";
-  const text = [
-    greeting,
-    "",
-    "Welcome to Scaled Circle!",
-    accessLabel,
-    "",
-    "We plan to go live very soon and will keep you informed about launch " +
-      "updates and beta invitations.",
-    "",
-    roleBenefit,
-    "",
-    "Thank you for joining us early.",
-    "Scaled Circle",
-  ].join("\n");
-  const html = `
-    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#102018;max-width:640px">
-      <p>${escapeHtml(greeting)}</p>
-      <h1 style="color:#087f5b">Welcome to Scaled Circle!</h1>
-      <p>${escapeHtml(accessLabel)}</p>
-      <p>We plan to go live very soon and will keep you informed about launch
-        updates and beta invitations.</p>
-      <div style="padding:16px 18px;border-left:4px solid #14e39a;background:#f1fbf7">
-        ${escapeHtml(roleBenefit)}
-      </div>
-      <p>Thank you for joining us early.</p>
-      <p><strong>Scaled Circle</strong></p>
-    </div>`;
-
-  await auditReference.set({
-    status: "sending",
-    notificationId,
-    signupType,
-    recipient: email,
-    updatedAt: FieldValue.serverTimestamp(),
-    attempts: FieldValue.increment(1),
-  }, {merge: true});
-
-  const transport = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: SIGNUP_NOTIFICATION_EMAIL,
-      pass: SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD.value(),
-    },
-  });
-
-  try {
-    const result = await transport.sendMail({
-      from: `Scaled Circle <${SIGNUP_NOTIFICATION_EMAIL}>`,
-      to: email,
-      replyTo: SUPPORT_EMAIL,
-      subject: "Welcome to Scaled Circle Early Access",
-      text,
-      html,
-      headers: {
-        "X-Scaled-Circle-Notification": `welcome_${notificationId}`,
-      },
-    });
-
-    await auditReference.set({
-      status: "sent",
-      messageId: result.messageId || "",
-      sentAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, {merge: true});
-  } catch (error) {
-    await auditReference.set({
-      status: "failed",
-      error: readText(error instanceof Error ? error.message : error, 500),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, {merge: true});
-    throw error;
-  }
-}
+    try {
+      const result = await transport.sendMail({
+        from: `${signupNotifications.SUPPORT_FROM_NAME} <${SUPPORT_EMAIL}>`,
+        to: destination,
+        replyTo: SUPPORT_EMAIL,
+        subject: readText(queued.subject, 180),
+        text: String(queued.text || "").slice(0, 12000),
+        headers: {"X-Scaled-Circle-Notification": jobId},
+      });
+      await snapshot.ref.set({
+        status: "sent",
+        messageId: readText(result.messageId, 500),
+        sentAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    } catch (error) {
+      logger.error("Outbound email delivery failed.", {
+        jobId,
+        template,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await snapshot.ref.set({
+        status: "failed",
+        errorCode: "email_delivery_failed",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+  },
+);
 
 /**
  * Public, cached NWS alert feed for the Local Opportunity Alerts website

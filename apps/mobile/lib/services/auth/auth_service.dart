@@ -57,13 +57,21 @@ class AuthService {
       throw Exception('Unable to create user account.');
     }
 
-    await _userService.createUserProfile(
-      user: user,
-      role: role,
-      displayName: displayName,
-    );
-
-    return user;
+    try {
+      // The profile is the authoritative signup event. Create it only after
+      // Firebase accepts the verification-email request so a failed signup
+      // cannot leave a profile that queues welcome/operations email.
+      await user.sendEmailVerification();
+      await _userService.createUserProfile(
+        user: user,
+        role: role,
+        displayName: displayName,
+      );
+      return user;
+    } catch (_) {
+      await user.delete();
+      rethrow;
+    }
   }
 
   Future<User> signUpForEarlyAccess({
@@ -94,6 +102,7 @@ class AuthService {
 
     try {
       await user.updateDisplayName(displayName.trim());
+      await user.sendEmailVerification();
       await _userService.createEarlyAccessProfile(
         user: user,
         role: role,

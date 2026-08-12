@@ -273,6 +273,16 @@ service cloud.firestore {
 
     }
 
+    match /outboundEmailJobs/{jobId} {
+
+      // Only trusted backend code may author or inspect outbound messages.
+      // This prevents clients from choosing recipients, sender identities, or
+      // arbitrary message content.
+      allow read, create, update, delete:
+        if false;
+
+    }
+
 
     match /weatherOpportunityCache/{cacheId} {
 
