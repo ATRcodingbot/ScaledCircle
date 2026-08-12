@@ -30,6 +30,30 @@ void main() {
       expect(native.startCount, 1);
     });
 
+    test(
+      'resumed native-start failure preserves the long-lived server session',
+      () async {
+        final native = _FakeNativeBridge()..failStart = true;
+        final gateway = _FakeGateway()..resumedStart = true;
+        final service = ActiveJobTrackingService(
+          nativeBridge: native,
+          gateway: gateway,
+        );
+
+        await expectLater(
+          service.startAuthorized(
+            scalerId: 'scaler',
+            campaignId: 'campaign',
+            zoneId: 'zone',
+            zoneName: 'Zone 1',
+          ),
+          throwsException,
+        );
+
+        expect(gateway.cancelCount, 0);
+      },
+    );
+
     test('queued offline chunks upload once and are acknowledged', () async {
       final native = _FakeNativeBridge()..seedActive();
       native.chunks.add(_chunk(1, 2));
@@ -198,6 +222,7 @@ class _FakeNativeBridge implements NativeTrackingBridge {
   bool? captureFinalPoint;
   final List<TrackingChunk> chunks = [];
   int purgeCount = 0;
+  bool failStart = false;
 
   void seedActive() {
     active = true;
@@ -224,8 +249,11 @@ class _FakeNativeBridge implements NativeTrackingBridge {
     required String zoneId,
     required String scalerId,
     required String zoneName,
+    required int cutoffAtMs,
+    required bool resume,
   }) async {
     startCount++;
+    if (failStart) throw Exception('native start failed');
     active = true;
     this.sessionId = sessionId;
     this.zoneId = zoneId;
@@ -243,6 +271,7 @@ class _FakeNativeBridge implements NativeTrackingBridge {
     purgeCount++;
     return chunks.isEmpty;
   }
+
   @override
   Future<void> stop({
     required String reason,
@@ -264,13 +293,20 @@ class _FakeGateway implements TrackingSessionGateway {
   final List<String> uploadedChunkIds = [];
   String remoteStatus = 'active';
   bool failSessionLookup = false;
+  bool resumedStart = false;
   @override
   Future<Map<String, dynamic>> startSession({
     required String campaignId,
     required String zoneId,
   }) async {
     startCount++;
-    return {'sessionId': 'session'};
+    return {
+      'sessionId': 'session',
+      'workWindowCutoffAtMs': DateTime.now()
+          .add(const Duration(hours: 1))
+          .millisecondsSinceEpoch,
+      'resumed': resumedStart,
+    };
   }
 
   @override
@@ -297,6 +333,7 @@ class _FakeGateway implements TrackingSessionGateway {
     if (failSessionLookup) throw Exception('offline');
     return {'sessionId': sessionId, 'status': remoteStatus};
   }
+
   @override
   Future<void> cancelSession({
     required String sessionId,

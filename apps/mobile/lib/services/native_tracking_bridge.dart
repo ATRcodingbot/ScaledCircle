@@ -10,6 +10,8 @@ abstract interface class NativeTrackingBridge {
     required String zoneId,
     required String scalerId,
     required String zoneName,
+    required int cutoffAtMs,
+    required bool resume,
   });
   Future<TrackingLocationSample?> captureCheckpointLocation();
   Future<List<TrackingChunk>> pendingChunks({int maximumPoints = 50});
@@ -49,6 +51,8 @@ class MethodChannelNativeTrackingBridge implements NativeTrackingBridge {
     required String zoneId,
     required String scalerId,
     required String zoneName,
+    required int cutoffAtMs,
+    required bool resume,
   }) async {
     _requireNative();
     await _channel.invokeMethod<void>('start', <String, Object?>{
@@ -57,6 +61,8 @@ class MethodChannelNativeTrackingBridge implements NativeTrackingBridge {
       'zoneId': zoneId,
       'scalerId': scalerId,
       'zoneName': zoneName,
+      'cutoffAtMs': cutoffAtMs,
+      'resume': resume,
     });
   }
 

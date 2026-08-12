@@ -32,12 +32,23 @@ private final class ActiveTrackingStore {
   func start(_ config: [String: String]) {
     queue.sync {
       try? FileManager.default.createDirectory(at: pointsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      // Preserve queued evidence whenever the backend returns the same
+      // long-lived session, including retrying a reopened segment.
+      let resume = sessionId == config["sessionId"]
+      if resume {
+        defaults.set(true, forKey: "tracking.active")
+        defaults.set(Int(config["cutoffAtMs"] ?? "0") ?? 0, forKey: "tracking.cutoffAtMs")
+        defaults.removeObject(forKey: "tracking.stopReason")
+        defaults.removeObject(forKey: "tracking.stoppedAtMs")
+        return
+      }
       try? Data().write(to: pointsURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
       excludeTrackingDataFromBackup()
       let keys = ["active", "sessionId", "campaignId", "zoneId", "scalerId", "zoneName", "startedAtMs", "nextSequence", "acknowledgedSequence", "lastLocation", "lastError"]
       keys.forEach { defaults.removeObject(forKey: "tracking.\($0)") }
       defaults.set(true, forKey: "tracking.active")
       config.forEach { defaults.set($0.value, forKey: "tracking.\($0.key)") }
+      defaults.set(Int(config["cutoffAtMs"] ?? "0") ?? 0, forKey: "tracking.cutoffAtMs")
       defaults.set(Int(Date().timeIntervalSince1970 * 1000), forKey: "tracking.startedAtMs")
       defaults.set(1, forKey: "tracking.nextSequence")
       defaults.set(0, forKey: "tracking.acknowledgedSequence")
@@ -47,6 +58,10 @@ private final class ActiveTrackingStore {
   var isActive: Bool { defaults.bool(forKey: "tracking.active") }
   var sessionId: String? { defaults.string(forKey: "tracking.sessionId") }
   var zoneName: String { defaults.string(forKey: "tracking.zoneName") ?? "active job" }
+  var cutoffAtMs: Int { defaults.integer(forKey: "tracking.cutoffAtMs") }
+  var cutoffReached: Bool {
+    cutoffAtMs > 0 && Int(Date().timeIntervalSince1970 * 1000) >= cutoffAtMs
+  }
 
   func append(_ location: CLLocation, forcedFlags: [String] = []) -> [String: Any] {
     queue.sync {
@@ -157,6 +172,7 @@ private final class ActiveJobLocationManager: NSObject, CLLocationManagerDelegat
   private let store = ActiveTrackingStore.shared
   private var oneShot: (([String: Any]?) -> Void)?
   private var oneShotFlags: [String] = []
+  private var cutoffTimer: DispatchWorkItem?
 
   override init() {
     super.init()
@@ -169,30 +185,51 @@ private final class ActiveJobLocationManager: NSObject, CLLocationManagerDelegat
     manager.showsBackgroundLocationIndicator = true
   }
 
-  func restoreIfNeeded() { if store.isActive { manager.startUpdatingLocation() } }
+  func restoreIfNeeded() {
+    if store.isActive && store.cutoffReached { stopForCutoff(); return }
+    if store.isActive { manager.startUpdatingLocation(); scheduleCutoff() }
+  }
   func start(config: [String: String]) throws {
     guard CLLocationManager.locationServicesEnabled() else { throw TrackingError.locationDisabled }
     let authorization = manager.authorizationStatus
     guard authorization == .authorizedWhenInUse || authorization == .authorizedAlways else { throw TrackingError.permissionDenied }
     guard !store.isActive else { throw TrackingError.alreadyActive }
     store.start(config)
+    guard !store.cutoffReached else {
+      store.stop(reason: "work_window_cutoff")
+      throw TrackingError.workWindowClosed
+    }
     manager.startUpdatingLocation()
+    scheduleCutoff()
   }
   func capture(flags: [String] = [], completion: @escaping ([String: Any]?) -> Void) {
     oneShot = completion; oneShotFlags = flags; manager.requestLocation()
   }
   func stop(reason: String, captureFinal: Bool, completion: @escaping () -> Void) {
-    let finish = { self.manager.stopUpdatingLocation(); self.store.stop(reason: reason); completion() }
+    let finish = { self.cutoffTimer?.cancel(); self.manager.stopUpdatingLocation(); self.store.stop(reason: reason); completion() }
     if captureFinal { capture(flags: ["final_point"]) { _ in finish() } } else { finish() }
   }
   func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    if store.cutoffReached { stopForCutoff(); return }
     locations.sorted { $0.timestamp < $1.timestamp }.forEach { location in
       let point = store.append(location, forcedFlags: oneShot == nil ? [] : oneShotFlags)
       if let callback = oneShot { oneShot = nil; oneShotFlags = []; callback(point) }
     }
   }
   func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { if let callback = oneShot { oneShot = nil; callback(nil) } }
-  enum TrackingError: Error { case locationDisabled, permissionDenied, alreadyActive }
+  private func scheduleCutoff() {
+    cutoffTimer?.cancel()
+    let delay = max(0, Double(store.cutoffAtMs) / 1000 - Date().timeIntervalSince1970)
+    let work = DispatchWorkItem { [weak self] in self?.stopForCutoff() }
+    cutoffTimer = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+  private func stopForCutoff() {
+    cutoffTimer?.cancel()
+    manager.stopUpdatingLocation()
+    store.stop(reason: "work_window_cutoff")
+  }
+  enum TrackingError: Error { case locationDisabled, permissionDenied, alreadyActive, workWindowClosed }
 }
 
 private final class ActiveJobTrackingBridge: NSObject, FlutterPlugin {
@@ -209,9 +246,16 @@ private final class ActiveJobTrackingBridge: NSObject, FlutterPlugin {
       let keys = ["sessionId", "campaignId", "zoneId", "scalerId", "zoneName"]
       let config = Dictionary(uniqueKeysWithValues: keys.map { ($0, arguments[$0] as? String ?? "") })
       guard config.values.allSatisfy({ !$0.isEmpty }) else { result(FlutterError(code: "invalid_config", message: "Tracking session configuration is incomplete.", details: nil)); return }
-      do { try ActiveJobLocationManager.shared.start(config: config); ActiveJobLocationManager.shared.capture(flags: ["start_point"]) { _ in result(nil) } }
+      let cutoffAtMs = (arguments["cutoffAtMs"] as? NSNumber)?.intValue ?? 0
+      guard cutoffAtMs > Int(Date().timeIntervalSince1970 * 1000) else { result(FlutterError(code: "work_window_closed", message: "This job is outside its allowed work window.", details: nil)); return }
+      let nativeConfig = config.merging([
+        "cutoffAtMs": String(cutoffAtMs),
+        "resume": (arguments["resume"] as? Bool == true) ? "true" : "false",
+      ]) { _, new in new }
+      do { try ActiveJobLocationManager.shared.start(config: nativeConfig); ActiveJobLocationManager.shared.capture(flags: ["start_point"]) { _ in result(nil) } }
       catch ActiveJobLocationManager.TrackingError.locationDisabled { result(FlutterError(code: "location_disabled", message: "Turn on Location Services before starting this job.", details: nil)) }
       catch ActiveJobLocationManager.TrackingError.permissionDenied { result(FlutterError(code: "permission_denied", message: "Location permission is required during an active job.", details: nil)) }
+      catch ActiveJobLocationManager.TrackingError.workWindowClosed { result(FlutterError(code: "work_window_closed", message: "This job is outside its allowed work window.", details: nil)) }
       catch { result(FlutterError(code: "already_active", message: "A tracking session is already active.", details: nil)) }
     case "pendingChunks": result(store.chunks(maximumPoints: arguments["maximumPoints"] as? Int ?? 50))
     case "acknowledgeChunk": store.acknowledge(arguments["endSequence"] as? Int ?? 0); result(nil)

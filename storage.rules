@@ -25,6 +25,9 @@ service firebase.storage {
         && signedIn()
         && request.auth.uid == uid
         && validImage()
+        && firestore.exists(
+          /databases/(default)/documents/trackingSessions/$(sessionId)
+        )
         && firestore.get(
           /databases/(default)/documents/trackingSessions/$(sessionId)
         ).data.scalerId == uid
@@ -38,6 +41,45 @@ service firebase.storage {
         ).data.businessId == request.auth.uid
         || isAdmin()
       );
+      allow update, delete: if false;
+    }
+
+    // Material handoff evidence is uploaded by an assigned participant and
+    // promoted into authoritative state only after trusted Function checks.
+    match /material_handoffs/{uid}/{zoneId}/{objectId} {
+      allow create: if resource == null
+        && signedIn()
+        && request.auth.uid == uid
+        && validImage()
+        && firestore.exists(/databases/(default)/documents/materialHandoffs/$(zoneId))
+        && firestore.exists(/databases/(default)/documents/jobRooms/$(zoneId))
+        && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.zoneId == zoneId
+        && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.scalerId ==
+          firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.scalerId
+        && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.businessId ==
+          firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.businessId
+        && (
+          (
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.fulfillmentType ==
+              'third_party_pickup'
+            && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.scalerId == uid
+          )
+          || (
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.fulfillmentType !=
+              'third_party_pickup'
+            && (
+              firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.scalerId == uid
+              || firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.businessId == uid
+            )
+          )
+        );
+      allow read: if signedIn()
+        && firestore.exists(/databases/(default)/documents/jobRooms/$(zoneId))
+        && (
+          firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.scalerId == request.auth.uid
+          || firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.businessId == request.auth.uid
+          || isAdmin()
+        );
       allow update, delete: if false;
     }
 

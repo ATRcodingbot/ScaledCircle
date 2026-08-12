@@ -33,6 +33,14 @@ beforeEach(async () => {
     await db.doc("trackingSessions/session-closed").set({
       scalerId: "scaler-one", businessId: "business-one", status: "finalizing",
     });
+    await db.doc("jobRooms/zone-one").set({
+      scalerId: "scaler-one", businessId: "business-one", status: "assigned",
+    });
+    await db.doc("materialHandoffs/zone-one").set({
+      zoneId: "zone-one", campaignId: "campaign-one",
+      scalerId: "scaler-one", businessId: "business-one",
+      fulfillmentType: "third_party_pickup", status: "scheduled",
+    });
   });
 });
 
@@ -69,4 +77,28 @@ test("checkpoint objects are immutable and private to authorized reviewers", asy
   await assertFails(ref("scaler-two", ownerRef.fullPath).getDownloadURL());
   await assertFails(ownerRef.put(new Uint8Array([3]), {contentType: "image/png"}));
   await assertFails(ownerRef.delete());
+});
+
+test("material handoff proof is bounded, immutable, and participant-private", async () => {
+  const proof = ref("scaler-one", "material_handoffs/scaler-one/zone-one/proof.jpg");
+  await assertSucceeds(proof.put(new Uint8Array([1, 2, 3]), {contentType: "image/jpeg"}));
+  await assertSucceeds(proof.getDownloadURL());
+  await assertSucceeds(ref("business-one", proof.fullPath).getDownloadURL());
+  await assertSucceeds(ref("admin-one", proof.fullPath).getDownloadURL());
+  await assertFails(ref("scaler-two", proof.fullPath).getDownloadURL());
+  await assertFails(ref("scaler-two", "material_handoffs/scaler-two/zone-one/stolen.jpg")
+    .put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await assertFails(ref("scaler-one", "material_handoffs/scaler-one/zone-two/missing-room.jpg")
+    .put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("jobRooms/zone-no-handoff").set({
+      scalerId: "scaler-one", businessId: "business-one", status: "assigned",
+    });
+  });
+  await assertFails(ref("scaler-one", "material_handoffs/scaler-one/zone-no-handoff/no-record.jpg")
+    .put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await assertFails(ref("scaler-one", "material_handoffs/scaler-one/zone-one/file.txt")
+    .put(new Uint8Array([1]), {contentType: "text/plain"}));
+  await assertFails(proof.put(new Uint8Array([4]), {contentType: "image/jpeg"}));
+  await assertFails(proof.delete());
 });

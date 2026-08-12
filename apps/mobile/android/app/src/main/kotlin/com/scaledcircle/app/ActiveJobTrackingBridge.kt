@@ -50,7 +50,12 @@ class ActiveJobTrackingBridge(private val activity: Activity, messenger: BinaryM
         val fields = listOf("sessionId", "campaignId", "zoneId", "scalerId", "zoneName")
         val config = fields.associateWith { call.argument<String>(it) ?: "" }
         if (config.values.any { it.isBlank() }) { result.error("invalid_config", "Tracking session configuration is incomplete.", null); return }
-        store.start(config)
+        val cutoffAtMs = call.argument<Number>("cutoffAtMs")?.toLong() ?: 0L
+        if (cutoffAtMs <= System.currentTimeMillis()) { result.error("work_window_closed", "This job is outside its allowed work window.", null); return }
+        store.start(config + mapOf(
+            "cutoffAtMs" to cutoffAtMs.toString(),
+            "resume" to (call.argument<Boolean>("resume") == true).toString(),
+        ))
         ContextCompat.startForegroundService(activity, Intent(activity, ActiveJobLocationService::class.java))
         ActiveJobLocationService.capture(activity, listOf("start_point")) { result.success(null) }
     }

@@ -12,6 +12,16 @@ class TrackingStore(private val context: Context) {
     @Synchronized
     fun start(config: Map<String, String>) {
         pointsFile.parentFile?.mkdirs()
+        // Preserve queued evidence whenever the authoritative backend returns
+        // the same long-lived session, including a retry after native startup
+        // failed immediately after a segment was reopened.
+        val resume = sessionId() == config["sessionId"]
+        if (resume) {
+            preferences.edit().putBoolean("active", true)
+                .putLong("cutoffAtMs", config["cutoffAtMs"]?.toLongOrNull() ?: 0L)
+                .remove("stopReason").remove("stoppedAtMs").apply()
+            return
+        }
         pointsFile.writeText("")
         preferences.edit().clear()
             .putBoolean("active", true)
@@ -20,6 +30,7 @@ class TrackingStore(private val context: Context) {
             .putString("zoneId", config["zoneId"])
             .putString("scalerId", config["scalerId"])
             .putString("zoneName", config["zoneName"])
+            .putLong("cutoffAtMs", config["cutoffAtMs"]?.toLongOrNull() ?: 0L)
             .putLong("startedAtMs", System.currentTimeMillis())
             .putInt("nextSequence", 1)
             .putInt("acknowledgedSequence", 0)
@@ -29,6 +40,9 @@ class TrackingStore(private val context: Context) {
     fun isActive(): Boolean = preferences.getBoolean("active", false)
     fun sessionId(): String? = preferences.getString("sessionId", null)
     fun zoneName(): String = preferences.getString("zoneName", "active job") ?: "active job"
+    fun cutoffAtMs(): Long = preferences.getLong("cutoffAtMs", 0L)
+    fun cutoffReached(nowMs: Long = System.currentTimeMillis()): Boolean =
+        cutoffAtMs() > 0L && nowMs >= cutoffAtMs()
 
     @Synchronized
     fun append(location: Location, forcedFlags: List<String> = emptyList()): Map<String, Any?> {

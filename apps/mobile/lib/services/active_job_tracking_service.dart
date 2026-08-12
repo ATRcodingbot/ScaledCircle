@@ -185,9 +185,14 @@ class ActiveJobTrackingService {
       zoneId: zoneId,
     );
     final sessionId = session['sessionId']?.toString() ?? '';
+    final cutoffAtMs = session['workWindowCutoffAtMs'] as int? ?? 0;
     if (sessionId.isEmpty) {
       throw Exception('The tracking session was not created.');
     }
+    if (cutoffAtMs <= DateTime.now().millisecondsSinceEpoch) {
+      throw Exception('This job is outside its allowed work window.');
+    }
+    final resumed = session['resumed'] == true;
     try {
       await _native.start(
         sessionId: sessionId,
@@ -195,12 +200,20 @@ class ActiveJobTrackingService {
         zoneId: zoneId,
         scalerId: scalerId,
         zoneName: zoneName,
+        cutoffAtMs: cutoffAtMs,
+        resume: resumed,
       );
     } catch (_) {
-      await _gateway.cancelSession(
-        sessionId: sessionId,
-        reason: 'native_start_failed',
-      );
+      // A native failure on the first segment may safely close the empty
+      // session. A resumed segment belongs to a long-lived job with existing
+      // immutable evidence, so it must remain recoverable rather than be
+      // terminally cancelled.
+      if (!resumed) {
+        await _gateway.cancelSession(
+          sessionId: sessionId,
+          reason: 'native_start_failed',
+        );
+      }
       rethrow;
     }
   }

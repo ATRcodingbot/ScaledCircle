@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Looper
+import android.os.Handler
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
@@ -19,8 +20,11 @@ class ActiveJobLocationService : Service() {
     private lateinit var fused: FusedLocationProviderClient
     private lateinit var store: TrackingStore
     private val receiving = AtomicBoolean(false)
+    private val handler = Handler(Looper.getMainLooper())
+    private val cutoffRunnable = Runnable { enforceCutoff() }
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
+            if (store.cutoffReached()) { enforceCutoff(); return }
             result.locations.sortedBy { it.time }.forEach { store.append(it) }
         }
     }
@@ -35,8 +39,20 @@ class ActiveJobLocationService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!store.isActive()) { stopSelf(); return START_NOT_STICKY }
         startForeground(NOTIFICATION_ID, buildNotification())
+        scheduleCutoff()
         requestUpdates()
         return START_STICKY
+    }
+
+    private fun scheduleCutoff() {
+        handler.removeCallbacks(cutoffRunnable)
+        val delay = store.cutoffAtMs() - System.currentTimeMillis()
+        if (delay <= 0L) enforceCutoff() else handler.postDelayed(cutoffRunnable, delay)
+    }
+
+    private fun enforceCutoff() {
+        if (store.isActive()) store.stop("work_window_cutoff")
+        stopSelf()
     }
 
     private fun requestUpdates() {
@@ -54,6 +70,7 @@ class ActiveJobLocationService : Service() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(cutoffRunnable)
         if (::fused.isInitialized) fused.removeLocationUpdates(callback)
         receiving.set(false)
         super.onDestroy()

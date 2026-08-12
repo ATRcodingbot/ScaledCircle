@@ -14,6 +14,7 @@ const fft = fftFactory({
   storageBucket: "demo-scaledcircle.appspot.com",
 });
 const functions = require("./index");
+const {classifyCutoffAction} = require("./operational_layer");
 const db = getFirestore();
 
 const call = (fn, uid, data, verified = true) => fft.wrap(fn)({
@@ -50,8 +51,20 @@ async function seed() {
     db.doc("users/other").set({role: "scaler"}),
     db.doc("users/business").set({role: "business"}),
     db.doc("users/admin").set({role: "admin"}),
-    db.doc("campaigns/campaign").set({businessId: "business", status: "active"}),
-    db.doc("campaigns/otherCampaign").set({businessId: "business", status: "active"}),
+    db.doc("campaigns/campaign").set({
+      businessId: "business",
+      status: "active",
+      timeZone: "UTC",
+      workWindowStart: "00:00",
+      workWindowEnd: "23:59",
+    }),
+    db.doc("campaigns/otherCampaign").set({
+      businessId: "business",
+      status: "active",
+      timeZone: "UTC",
+      workWindowStart: "00:00",
+      workWindowEnd: "23:59",
+    }),
     db.doc("campaignZones/zone").set({
       campaignId: "campaign", businessId: "business", assignedScalerId: "scaler",
       status: "assigned", zoneName: "Zone 1",
@@ -90,6 +103,8 @@ test("anonymous, business, and unassigned scaler cannot start", async () => {
 test("duplicate and simultaneous same start recover exactly one session", async () => {
   const [a, b] = await Promise.all([start(), start()]);
   assert.equal(a.sessionId, b.sessionId);
+  assert.equal(a.workWindowCutoffAtMs > Date.now(), true);
+  assert.equal(b.workWindowCutoffAtMs > Date.now(), true);
   assert.equal((await db.collection("trackingSessions").get()).size, 1);
   assert.equal((await start()).sessionId, a.sessionId);
 });
@@ -180,4 +195,200 @@ test("transactional resource ceilings reject further evidence", async () => {
   });
   await assert.rejects(upload(sessionId, [point(1)]),
     (error) => error.code === "resource-exhausted");
+});
+
+test("work cutoff pauses one session, next window resumes a new immutable segment", async () => {
+  await db.doc("assignmentCompensations/zone").set({
+    campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
+    baseAmountCents: 10000, bonusAmountCents: 0, currency: "usd", contractVersion: 1,
+  });
+  const first = await start();
+  await upload(first.sessionId, [point(1), point(2)]);
+  await db.doc("campaignZones/zone").update({
+    workWindowWarningAt: Timestamp.fromMillis(Date.now() - 60_000),
+    workWindowCutoffAt: Timestamp.fromMillis(Date.now() - 1_000),
+  });
+  const beforeCutoff = (await db.doc("campaignZones/zone").get()).data();
+  assert.equal(beforeCutoff.status, "in_progress");
+  assert.equal(beforeCutoff.workWindowCutoffAt.toMillis() < Date.now(), true);
+  assert.equal(classifyCutoffAction({
+    status: beforeCutoff.status, now: new Date(),
+    warningAt: beforeCutoff.workWindowWarningAt,
+    cutoffAt: beforeCutoff.workWindowCutoffAt,
+  }), "pause");
+  assert.equal((await db.collection("campaignZones").where("status", "==", "in_progress").get()).size, 1);
+
+  const cutoffResult = await functions.enforceOperationalWorkCutoffs.__testRun();
+  assert.deepEqual(cutoffResult, {
+    scanned: 1, warned: 0, paused: 1, skipped: 0,
+  });
+
+  const pausedZone = (await db.doc("campaignZones/zone").get()).data();
+  const pausedSession = (await db.doc(`trackingSessions/${first.sessionId}`).get()).data();
+  assert.equal(pausedZone.status, "paused_work_window");
+  assert.equal(pausedZone.resumableTrackingSessionId, first.sessionId);
+  assert.equal(pausedZone.gpsTracking, false);
+  assert.equal(pausedSession.status, "paused");
+  assert.equal((await db.doc(`trackingSessions/${first.sessionId}/segments/segment_0001`).get())
+    .data().status, "closed_cutoff");
+  assert.equal((await db.collection("scalerTransfers").get()).size, 0);
+  assert.equal((await db.collection("campaignCompletions").get()).size, 0);
+
+  const resumed = await start();
+  assert.equal(resumed.sessionId, first.sessionId);
+  assert.equal(resumed.resumed, true);
+  assert.equal(resumed.segmentId, "segment_0002");
+  assert.equal((await start()).segmentId, undefined);
+  assert.equal((await db.doc(`trackingSessions/${first.sessionId}`).get())
+    .data().currentSegmentId, "segment_0002");
+  await upload(first.sessionId, [point(3), point(4)]);
+  const completed = await call(functions.completeTrackingSession, "scaler", {sessionId: first.sessionId});
+  assert.equal(completed.routeId, first.sessionId);
+  const route = (await db.doc(`campaignRoutes/${first.sessionId}`).get()).data();
+  assert.equal(route.points.length, 4);
+  assert.equal(route.trackingSegmentCount, 2);
+  assert.equal((await db.doc(`trackingSessions/${first.sessionId}/segments/segment_0002`).get())
+    .data().status, "completed");
+  assert.equal((await db.collection("assignmentCompensations").get()).size, 1);
+  assert.equal((await db.collection("scalerTransfers").get()).size, 0);
+});
+
+test("next-window start reconciles a missed scheduled cutoff into a new segment", async () => {
+  const first = await start();
+  await upload(first.sessionId, [point(1), point(2)]);
+  const expired = Timestamp.fromMillis(Date.now() - 1_000);
+  await Promise.all([
+    db.doc("campaignZones/zone").update({workWindowCutoffAt: expired}),
+    db.doc(`trackingSessions/${first.sessionId}`).update({workWindowCutoffAt: expired}),
+  ]);
+
+  const resumed = await start();
+  assert.equal(resumed.sessionId, first.sessionId);
+  assert.equal(resumed.resumed, true);
+  assert.equal(resumed.segmentId, "segment_0002");
+  assert.equal((await db.doc(`trackingSessions/${first.sessionId}/segments/segment_0001`).get())
+    .data().status, "closed_cutoff");
+  assert.equal((await db.doc(`trackingSessions/${first.sessionId}/segments/segment_0002`).get())
+    .data().status, "active");
+  assert.equal((await db.collection("trackingSessions").get()).size, 1);
+  assert.equal((await db.collection("campaignCompletions").get()).size, 0);
+  assert.equal((await db.collection("scalerTransfers").get()).size, 0);
+});
+
+async function seedPausedSession() {
+  await db.doc("campaignZones/zone").update({
+    status: "paused_work_window", resumableTrackingSessionId: "paused-session",
+  });
+  await db.doc("trackingSessions/paused-session").set({
+    campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
+    status: "paused", syncStatus: "paused_work_window", segmentCount: 1,
+    nextExpectedSequence: 1, pointCount: 0, chunkCount: 0, startedAt: Timestamp.now(),
+  });
+  await db.doc("trackingSessions/paused-session/segments/segment_0001").set({
+    segmentId: "segment_0001", segmentIndex: 1, status: "closed_cutoff",
+  });
+}
+
+test("paused tracking rejects early, expired, other-scaler, and cancelled resumes", async () => {
+  await seedPausedSession();
+  const nowHour = new Date().getUTCHours();
+  const pad = (value) => String(value).padStart(2, "0");
+  await db.doc("campaigns/campaign").update({
+    workWindowStart: `${pad((nowHour + 1) % 24)}:00`,
+    workWindowEnd: `${pad((nowHour + 2) % 24)}:00`,
+  });
+  await assert.rejects(start(), (error) => error.code === "failed-precondition");
+
+  await db.doc("campaigns/campaign").update({
+    workWindowStart: "00:00", workWindowEnd: "23:59",
+    deadline: Timestamp.fromMillis(Date.now() - 1_000),
+  });
+  await assert.rejects(start(), (error) => error.code === "failed-precondition");
+  await assert.rejects(start("other"), (error) => error.code === "permission-denied");
+
+  await db.doc("campaigns/campaign").update({deadline: null});
+  await db.doc("campaignZones/zone").update({status: "cancelled"});
+  await assert.rejects(start(), (error) => error.code === "failed-precondition");
+});
+
+test("business handoff fault reserves one $50/$50 split and blocks later settlement", async () => {
+  const old = Timestamp.fromMillis(Date.now() - 20 * 60 * 1000);
+  await Promise.all([
+    db.doc("campaigns/campaign").update({
+      status: "active", fundingPaymentId: "payment-one", workerAmountCents: 10000,
+    }),
+    db.doc("campaignZones/zone").update({
+      status: "accepted", fundingPaymentId: "payment-one", assignedScalerId: "scaler",
+    }),
+    db.doc("assignmentCompensations/zone").set({
+      campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
+      baseAmountCents: 10000, bonusAmountCents: 0, currency: "usd", contractVersion: 1,
+    }),
+    db.doc("materialHandoffs/zone").set({
+      zoneId: "zone", campaignId: "campaign", businessId: "business", scalerId: "scaler",
+      fulfillmentType: "business_pickup", status: "waiting_for_counterparty",
+      scheduledAt: old, arrivedAt: old, arrivalProof: {latitude: 39, longitude: -76},
+      // Deliberately false/stale: the funded campaignPayment must remain the
+      // authority for the retained fee.
+      platformFeeCents: 9999,
+    }),
+    db.doc("jobRooms/zone").set({
+      zoneId: "zone", campaignId: "campaign", businessId: "business", scalerId: "scaler",
+      status: "assigned",
+    }),
+    db.doc("campaignPayments/payment-one").set({
+      campaignId: "campaign", businessId: "business", status: "funded", currency: "usd",
+      workerAmountCents: 10000, platformFeeCents: 2000, businessChargeCents: 12000,
+      transferredWorkerAmountCents: 0, refundedWorkerAmountCents: 0,
+      reservedWorkerAmountCents: 0, platformFeeRecognizedCents: 0,
+      platformFeeRefundedCents: 0, platformFeePendingCents: 2000,
+      settlementFrozen: false,
+    }),
+  ]);
+
+  const results = await Promise.all([
+    call(functions.reportMaterialHandoffFailure, "scaler", {
+      zoneId: "zone", failureType: "failed_business", summary: "Business did not arrive.",
+    }),
+    call(functions.reportMaterialHandoffFailure, "scaler", {
+      zoneId: "zone", failureType: "failed_business", summary: "Duplicate support report.",
+    }),
+  ]);
+  assert.equal(results.length, 2);
+  const operation = (await db.doc("financialOperations/business-no-show_zone").get()).data();
+  assert.equal(operation.scalerCompensationCents, 5000);
+  assert.equal(operation.workerRefundCents, 5000);
+  assert.equal(operation.platformRetainedCents, 2000);
+  const payment = (await db.doc("campaignPayments/payment-one").get()).data();
+  assert.equal(payment.reservedWorkerAmountCents, 10000);
+  assert.equal(payment.platformFeeRecognizedCents, 2000);
+  assert.equal(payment.platformFeePendingCents, 0);
+  assert.equal(payment.transferredWorkerAmountCents + payment.refundedWorkerAmountCents +
+    payment.reservedWorkerAmountCents, payment.workerAmountCents);
+  const zone = (await db.doc("campaignZones/zone").get()).data();
+  assert.equal(zone.status, "failed_business");
+  assert.equal(zone.settlementBlocked, true);
+
+  await Promise.all([
+    db.doc("campaignRoutes/failed-route").set({
+      campaignId: "campaign", zoneId: "zone", businessId: "business",
+      scalerId: "scaler", tracking: false, points: [],
+    }),
+    db.doc("campaignCompletions/failed-completion").set({
+      campaignId: "campaign", zoneId: "zone", businessId: "business",
+      scalerId: "scaler", routeId: "failed-route", status: "draft",
+    }),
+  ]);
+  await assert.rejects(call(functions.submitZoneCompletion, "scaler", {
+    completionId: "failed-completion",
+  }), (error) => error.code === "failed-precondition");
+
+  await assert.rejects(call(functions.createScalerTransfer, "business", {zoneId: "zone"}),
+    (error) => error.code === "failed-precondition");
+  await assert.rejects(call(functions.requestCampaignCancellationRefund, "business", {
+    campaignId: "campaign",
+  }), (error) => ["failed-precondition", "internal"].includes(error.code));
+  assert.equal((await db.collection("scalerTransfers").get()).size, 0);
+  assert.equal((await db.collection("financialOperations")
+    .where("type", "==", "campaign_refund").get()).size, 0);
 });
