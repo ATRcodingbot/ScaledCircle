@@ -59,6 +59,15 @@ class CompletionPayoutService {
     return {...review, ...transfer};
   }
 
+  Future<Map<String, dynamic>> approveGroupSettlement({
+    required String zoneId,
+  }) {
+    return _secureFunctions.call(
+      functionName: 'settleZoneGroupAssignment',
+      data: {'zoneId': zoneId},
+    );
+  }
+
   Future<void> approvePayoutLegacy({required String payoutId}) async {
     final payoutReference = _firestore.collection('payouts').doc(payoutId);
 

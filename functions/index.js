@@ -36,6 +36,7 @@ const {runFinancialOperation} = require("./marketplace_operations");
 const operations = require("./operational_layer");
 const signupNotifications = require("./signup_notifications");
 const propertyIntelligence = require("./property_intelligence");
+const groupAssignment = require("./group_assignment");
 
 initializeApp();
 
@@ -2981,20 +2982,15 @@ exports.analyzeCampaignZone = onCall(
         zoneData.estimatedMinutes,
       );
 
-      const recommendedScalerCount = Math.max(
-        1,
-        readInteger(
-          zoneData.recommendedScalerCount,
-          1,
-        ),
-      );
-
-      const suggestedBasePay = readNumber(
-        zoneData.suggestedBasePay,
-      );
-
       const serverWalkingEstimate =
         operations.calculateGeometryWalkingEstimate(validPoints);
+      // Zones are intentionally bounded for one Scaler. Parallel staffing is
+      // optional, so the neutral server recommendation remains one unless a
+      // future version has a separately reviewed scheduling policy.
+      const recommendedScalerCount = 1;
+      const suggestedBasePay = groupAssignment.recommendedWorkerPoolForMinutes(
+        serverWalkingEstimate.estimatedWalkingMinutes,
+      ) / 100;
       const serverZoneGeometryDigest =
         operations.zoneGeometryDigest(validPoints);
 
@@ -4384,7 +4380,7 @@ function appendJobEvent(transaction, {campaignId, zoneId, businessId, scalerId, 
   return ref.id;
 }
 
-async function assertOperationalStart(transaction, {campaign, zone, context}) {
+async function assertOperationalStart(transaction, {campaign, zone, context, participant = null}) {
   const deadlineValue = zone.deadline || campaign.deadline || null;
   const deadline = deadlineValue instanceof Timestamp ? deadlineValue.toDate() :
     deadlineValue instanceof Date ? deadlineValue :
@@ -4399,7 +4395,8 @@ async function assertOperationalStart(transaction, {campaign, zone, context}) {
   const materialRequired = materialRequiredForCampaign(campaign);
   let handoffStatus = "not_required";
   if (materialRequired) {
-    const handoffSnapshot = await transaction.get(db.collection("materialHandoffs").doc(zone.id));
+    const handoffId = participant?.materialHandoffId || zone.id;
+    const handoffSnapshot = await transaction.get(db.collection("materialHandoffs").doc(handoffId));
     handoffStatus = String(handoffSnapshot.data()?.status || "scheduled");
   }
   const eligibility = operations.evaluateJobStart({materialRequired, handoffStatus, workWindow});
@@ -4425,26 +4422,34 @@ exports.startAssignedZone = trackingCallable("startAssignedZone", async (request
   const zoneId = String(request.data?.zoneId || "").trim();
   const zoneRef = db.collection("campaignZones").doc(zoneId);
   const campaignRef = db.collection("campaigns").doc(campaignId);
+  const participantRef = db.collection("zoneScalerParticipations")
+    .doc(groupAssignment.participantId(zoneId, context.uid));
   await db.runTransaction(async (transaction) => {
-    const [zoneSnapshot, campaignSnapshot] = await Promise.all([
-      transaction.get(zoneRef), transaction.get(campaignRef),
+    const [zoneSnapshot, campaignSnapshot, participantSnapshot] = await Promise.all([
+      transaction.get(zoneRef), transaction.get(campaignRef), transaction.get(participantRef),
     ]);
     if (!zoneSnapshot.exists || !campaignSnapshot.exists) {
       throw new HttpsError("not-found", "The assigned zone was not found.");
     }
     const zone = zoneSnapshot.data();
     const campaign = campaignSnapshot.data();
+    const participant = participantSnapshot.data() || null;
+    const groupAuthorized = participantSnapshot.exists && participant?.scalerUid === context.uid &&
+      ["accepted", "started", "participating", "paused_work_window"].includes(String(participant.status));
     if (zone.campaignId !== campaignId ||
-        (!context.isAdmin && zone.assignedScalerId !== context.uid)) {
+        (!context.isAdmin && zone.assignedScalerId !== context.uid && !groupAuthorized)) {
       throw new HttpsError("permission-denied", "This zone is not assigned to you.");
     }
     const status = String(zone.status || "assigned");
-    if (status === "in_progress") return;
+    // Another group participant may already have placed the shared zone in
+    // progress. Each participant still has to pass their own material/window
+    // gate and establish their own attendance/tracking authority.
+    if (status === "in_progress" && !participant) return;
     if (!["assigned", "accepted", "paused_work_window"].includes(status)) {
       throw new HttpsError("failed-precondition", "This job cannot be started in its current state.");
     }
     const gate = await assertOperationalStart(transaction, {
-      campaign, zone: {...zone, id: zoneId}, context,
+      campaign, zone: {...zone, id: zoneId}, context, participant,
     });
     transaction.update(zoneRef, {
       status: "in_progress",
@@ -4455,9 +4460,17 @@ exports.startAssignedZone = trackingCallable("startAssignedZone", async (request
       workWindowWarningAt: Timestamp.fromDate(gate.workWindow.warningAt),
       updatedAt: FieldValue.serverTimestamp(),
     });
+    if (participant) transaction.update(participantRef, {
+      status: "started", attendanceStatus: "started",
+      startedAt: participant.startedAt || FieldValue.serverTimestamp(),
+      workWindowCutoffAt: Timestamp.fromDate(gate.workWindow.cutoffAt),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
     appendJobEvent(transaction, {
       campaignId, zoneId, businessId: campaign.businessId,
-      scalerId: zone.assignedScalerId, actorId: context.uid, type: "job.start_authorized",
+      scalerId: participant?.scalerUid || zone.assignedScalerId,
+      participantId: participant?.participantId || null,
+      actorId: context.uid, type: "job.start_authorized",
     });
     appendJobEvent(transaction, {
       campaignId, zoneId, businessId: campaign.businessId,
@@ -4480,6 +4493,7 @@ async function enforceOperationalWorkCutoffsHandler() {
         const freshZoneSnapshot = await transaction.get(zoneRef);
         if (!freshZoneSnapshot.exists) { result.skipped += 1; return; }
         const zone = freshZoneSnapshot.data() || {};
+        if (zone.groupAssignmentId) { result.skipped += 1; return; }
         if (String(zone.status) !== "in_progress") {
           result.skipped += 1; return;
         }
@@ -4545,6 +4559,43 @@ async function enforceOperationalWorkCutoffsHandler() {
           actorId: "system", type: "job.cutoff_paused",
         });
         result.paused += 1;
+      });
+    }
+    const participants = await db.collection("zoneScalerParticipations")
+      .where("gpsTracking", "==", true).limit(250).get();
+    result.groupParticipantsScanned = participants.size;
+    for (const participantDoc of participants.docs) {
+      await db.runTransaction(async (transaction) => {
+        const participantRef = participantDoc.ref;
+        const participantSnapshot = await transaction.get(participantRef);
+        const participant = participantSnapshot.data() || {};
+        const action = operations.classifyCutoffAction({status: participant.gpsTracking ? "in_progress" : participant.status,
+          now: new Date(), warningAt: participant.workWindowWarningAt, cutoffAt: participant.workWindowCutoffAt});
+        if (action === "none") return;
+        if (action === "warn") {
+          if (!participant.cutoffWarningIssuedAt) transaction.update(participantRef, {cutoffWarningIssuedAt: FieldValue.serverTimestamp()});
+          return;
+        }
+        const sessionId = String(participant.activeTrackingSessionId || "");
+        if (!sessionId) return;
+        const sessionRef = db.collection("trackingSessions").doc(sessionId);
+        const pointerRef = db.collection("activeTrackingSessions").doc(String(participant.scalerUid || ""));
+        const [sessionSnapshot, pointerSnapshot] = await Promise.all([transaction.get(sessionRef), transaction.get(pointerRef)]);
+        const session = sessionSnapshot.data() || {}; const segmentId = String(session.currentSegmentId || "");
+        if (session.status === "active") {
+          transaction.update(sessionRef, {status: "paused", syncStatus: "paused_work_window",
+            pauseReason: "work_window_cutoff", pausedAt: FieldValue.serverTimestamp(),
+            currentSegmentId: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()});
+          if (segmentId) transaction.set(sessionRef.collection("segments").doc(segmentId), {status: "closed_cutoff",
+            closeReason: "work_window_cutoff", endedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+        }
+        transaction.update(participantRef, {status: "paused_work_window", gpsTracking: false,
+          activeTrackingSessionId: FieldValue.delete(), resumableTrackingSessionId: sessionId,
+          workWindowPausedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+        if (pointerSnapshot.exists && pointerSnapshot.data()?.sessionId === sessionId) transaction.delete(pointerRef);
+        appendJobEvent(transaction, {campaignId: participant.campaignId, zoneId: participant.zoneId,
+          businessId: participant.businessId, scalerId: participant.scalerUid,
+          actorId: "system", type: "job.cutoff_paused", metadata: {participantId: participantDoc.id}});
       });
     }
     return result;
@@ -4729,6 +4780,462 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
   return result;
 });
 
+exports.configureZoneGroupAssignment = trackingCallable(
+  "configureZoneGroupAssignment", async (request) => {
+    assertTrackingPayload(request.data, new Set(["campaignId", "zoneId", "requiredScalerCount"]), 4096);
+    const context = await requireVerifiedUser(request, "Sign in before configuring group work.");
+    if (context.role !== "business" && !context.isAdmin) throw new HttpsError("permission-denied", "Only the campaign Business can configure group work.");
+    const campaignId = String(request.data?.campaignId || "").trim();
+    const zoneId = String(request.data?.zoneId || "").trim();
+    const requested = Number(request.data?.requiredScalerCount ?? 1);
+    const campaignRef = db.collection("campaigns").doc(campaignId);
+    const zoneRef = db.collection("campaignZones").doc(zoneId);
+    const groupRef = db.collection("zoneGroupAssignments").doc(zoneId);
+    let result;
+    await db.runTransaction(async (transaction) => {
+      const [campaignSnapshot, zoneSnapshot, groupSnapshot] = await Promise.all([
+        transaction.get(campaignRef), transaction.get(zoneRef), transaction.get(groupRef),
+      ]);
+      if (!campaignSnapshot.exists || !zoneSnapshot.exists) throw new HttpsError("not-found", "Campaign zone not found.");
+      const campaign = campaignSnapshot.data() || {}; const zone = zoneSnapshot.data() || {};
+      if ((!context.isAdmin && campaign.businessId !== context.uid) || zone.campaignId !== campaignId) throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+      if (zone.assignedScalerId || groupSnapshot.exists || !["unassigned", "available"].includes(String(zone.status))) {
+        throw new HttpsError("failed-precondition", "Group size is locked after assignment begins.");
+      }
+      const estimate = operations.calculateGeometryWalkingEstimate(zone.serviceArea);
+      if (zone.serverZoneGeometryDigest !== operations.zoneGeometryDigest(zone.serviceArea) ||
+          Number(zone.serverEstimatedWalkingMinutes) !== estimate.estimatedWalkingMinutes) {
+        throw new HttpsError("failed-precondition", "Re-analyze this zone before configuring group work.");
+      }
+      operations.assertZoneDuration(estimate.estimatedWalkingMinutes);
+      const workerPoolCents = Number.isSafeInteger(zone.workerPoolCents) ? zone.workerPoolCents :
+        Number.isSafeInteger(zone.baseAmountCents) ? zone.baseAmountCents : marketplace.campaignWorkerAmountCents(campaign);
+      let policy;
+      try { policy = groupAssignment.validateGroupConfiguration({workerPoolCents,
+        requiredScalerCount: requested,
+        estimatedGroupWorkMinutes: estimate.estimatedWalkingMinutes}); }
+      catch (error) { throw new HttpsError("failed-precondition", String(error.message).startsWith("participant_share_below") ?
+        "Choose fewer Scalers or increase the group worker-pay pool." : "The group configuration is invalid."); }
+      transaction.create(groupRef, {campaignId, zoneId, businessId: campaign.businessId,
+        requestedScalerCount: policy.requiredScalerCount, requiredScalerCount: policy.requiredScalerCount,
+        workerPoolCents: policy.workerPoolCents,
+        recommendedWorkerPoolCents: policy.recommendedWorkerPoolCents,
+        estimatedIndividualShareCents: policy.estimatedIndividualShareCents,
+        minimumParticipantShareCents: policy.minimumParticipantShareCents,
+        absoluteMinimumParticipantShareCents: policy.absoluteMinimumParticipantShareCents,
+        workloadBasedMinimumParticipantShareCents: policy.workloadBasedMinimumParticipantShareCents,
+        estimatedGroupWorkMinutes: policy.estimatedGroupWorkMinutes,
+        estimatedParticipantMinutes: policy.estimatedParticipantMinutes,
+        maximumScalerCountForPool: policy.maximumScalerCountForPool,
+        initialSharesCents: policy.initialSharesCents, acceptedScalerCount: 0, acceptedScalerIds: [],
+        platformFeeRateBasisPoints: marketplace.PLATFORM_FEE_BASIS_POINTS,
+        platformFeeContractVersion: groupAssignment.PLATFORM_FEE_CONTRACT_VERSION,
+        compensationVersion: 1, status: "open", policyVersion: policy.version,
+        settlementPolicyVersion: groupAssignment.GROUP_SETTLEMENT_POLICY_VERSION,
+        substantialCompletionThresholdBps: groupAssignment.SUBSTANTIAL_COMPLETION_THRESHOLD_BPS,
+        contributionAlgorithmVersion: groupAssignment.VERIFIED_CONTRIBUTION_VERSION,
+        minimumParticipantPolicyVersion: groupAssignment.MINIMUM_PARTICIPANT_POLICY_VERSION,
+        businessPolicyDisclosure: groupAssignment.BUSINESS_GROUP_POLICY_DISCLOSURE,
+        scalerPolicyDisclosure: groupAssignment.SCALER_GROUP_POLICY_DISCLOSURE,
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      transaction.update(zoneRef, {requiredScalerCount: policy.requiredScalerCount,
+        workerPoolCents: policy.workerPoolCents, groupAssignmentId: zoneId,
+        groupAssignmentStatus: "open", updatedAt: FieldValue.serverTimestamp()});
+      result = policy;
+    });
+    return result;
+  });
+
+exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (request) => {
+  assertTrackingPayload(request.data, new Set(["campaignId", "zoneId", "applicationId"]), 4096);
+  const context = await requireVerifiedUser(request, "Sign in before accepting group work.");
+  if (!["scaler", "business"].includes(context.role) && !context.isAdmin) {
+    throw new HttpsError("permission-denied", "Only the applicant or owning Business can fill a group slot.");
+  }
+  const campaignId = String(request.data?.campaignId || "").trim(); const zoneId = String(request.data?.zoneId || "").trim();
+  const applicationId = String(request.data?.applicationId || "").trim(); const groupRef = db.collection("zoneGroupAssignments").doc(zoneId);
+  const zoneRef = db.collection("campaignZones").doc(zoneId); const applicationRef = db.collection("campaigns").doc(campaignId).collection("applications").doc(applicationId);
+  // The Scaler identity comes only from the authoritative application. The
+  // caller cannot substitute a participant ID when the Business fills a slot.
+  const applicationIdentity = (await applicationRef.get()).data() || {};
+  const scalerUid = String(applicationIdentity.scalerId || "").trim();
+  if (!scalerUid) throw new HttpsError("not-found", "The Scaler application was not found.");
+  const participantRef = db.collection("zoneScalerParticipations")
+    .doc(groupAssignment.participantId(zoneId, scalerUid));
+  const roomRef = db.collection("jobRooms").doc(zoneId);
+  let result;
+  await db.runTransaction(async (transaction) => {
+    const [groupSnapshot, zoneSnapshot, applicationSnapshot, existingParticipant,
+      participantQuery, campaignSnapshot, roomSnapshot] = await Promise.all([
+      transaction.get(groupRef), transaction.get(zoneRef), transaction.get(applicationRef), transaction.get(participantRef),
+      transaction.get(db.collection("zoneScalerParticipations").where("zoneId", "==", zoneId)),
+      transaction.get(db.collection("campaigns").doc(campaignId)), transaction.get(roomRef),
+    ]);
+    if (!groupSnapshot.exists || !zoneSnapshot.exists || !applicationSnapshot.exists) throw new HttpsError("not-found", "Group opportunity not found.");
+    const group = groupSnapshot.data() || {}; const zone = zoneSnapshot.data() || {}; const application = applicationSnapshot.data() || {};
+    const ownsGroup = group.businessId === context.uid;
+    const ownsApplication = application.scalerId === context.uid;
+    if (zone.campaignId !== campaignId || group.campaignId !== campaignId ||
+        application.scalerId !== scalerUid ||
+        (!context.isAdmin && !ownsGroup && !ownsApplication)) {
+      throw new HttpsError("permission-denied", "This group slot is not available to you.");
+    }
+    if (existingParticipant.exists) { result = existingParticipant.data(); return; }
+    const participants = participantQuery.docs.map((doc) => doc.data()); let slot;
+    try { slot = groupAssignment.assertSlotAvailable({requiredScalerCount: group.requiredScalerCount, participants, scalerUid}); }
+    catch (error) { throw new HttpsError("failed-precondition", error.message === "group_slots_full" ? "All group slots are filled." : "You already hold a slot for this zone."); }
+    const share = Number(group.initialSharesCents?.[slot - 1]);
+    const participant = groupAssignment.initialParticipant({zoneId, campaignId, businessId: group.businessId,
+      scalerUid, slotNumber: slot, shareCents: share});
+    const campaign = campaignSnapshot.data() || {}; const materialRequired = materialRequiredForCampaign(campaign);
+    const materialHandoffId = materialRequired ? `${zoneId}__${participant.participantId}` : null;
+    transaction.create(participantRef, {...participant, applicationId, materialHandoffId,
+      acceptedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    if (materialRequired) transaction.create(db.collection("materialHandoffs").doc(materialHandoffId), {
+      campaignId, zoneId, groupAssignmentId: zoneId, participantId: participant.participantId,
+      businessId: group.businessId, scalerId: scalerUid, required: true,
+      fulfillmentType: operations.normalizeFulfillmentType(String(campaign.materialFulfillmentType || campaign.materialHandoffMethod || "")),
+      status: "scheduled", workerAmountCents: share, scheduledAt: campaign.materialHandoffScheduledAt || null,
+      privateLocation: campaign.materialPickupAddress || campaign.materialDropoffAddress || null,
+      instructions: campaign.materialHandoffInstructions || null,
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), schemaVersion: 2});
+    if (roomSnapshot.exists) {
+      transaction.update(roomRef, {
+        scalerIds: FieldValue.arrayUnion(scalerUid), groupAssignmentId: zoneId,
+        updatedAt: FieldValue.serverTimestamp(), schemaVersion: 2,
+      });
+    } else {
+      transaction.create(roomRef, {
+        campaignId, zoneId, businessId: group.businessId, scalerIds: [scalerUid],
+        groupAssignmentId: zoneId, status: "open", createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(), schemaVersion: 2,
+      });
+    }
+    transaction.update(applicationRef, {status: "accepted", assignmentMode: "group_slot", assignedZoneId: zoneId,
+      participantId: participant.participantId, scheduledShareCents: share, acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    transaction.update(groupRef, {acceptedScalerCount: participants.filter((item) => !["declined", "cancelled_before_window", "replaced"].includes(item.status)).length + 1,
+      acceptedScalerIds: FieldValue.arrayUnion(scalerUid),
+      status: participants.length + 1 >= group.requiredScalerCount ? "filled" : "open", updatedAt: FieldValue.serverTimestamp()});
+    transaction.update(zoneRef, {groupAssignmentStatus: participants.length + 1 >= group.requiredScalerCount ? "filled" : "open",
+      status: "assigned", updatedAt: FieldValue.serverTimestamp()});
+    result = participant;
+  });
+  return result;
+});
+
+exports.confirmZoneGroupParticipantNoShow = trackingCallable(
+  "confirmZoneGroupParticipantNoShow", async (request) => {
+    assertTrackingPayload(request.data, new Set(["zoneId", "participantId"]), 4096);
+    const context = await requireVerifiedUser(request, "Sign in before reviewing attendance.");
+    if (!context.isAdmin) {
+      throw new HttpsError("permission-denied", "Trusted support must confirm a group no-show.");
+    }
+    const zoneId = String(request.data?.zoneId || "").trim();
+    const participantId = String(request.data?.participantId || "").trim();
+    const zoneRef = db.collection("campaignZones").doc(zoneId);
+    const participantRef = db.collection("zoneScalerParticipations").doc(participantId);
+    const operationRef = db.collection("financialOperations")
+      .doc(marketplace.operationId("group-no-show", zoneId, participantId));
+    let result;
+    await db.runTransaction(async (transaction) => {
+      const [zoneSnapshot, participantSnapshot, operationSnapshot,
+        sessionSnapshot, routeSnapshot] = await Promise.all([
+        transaction.get(zoneRef), transaction.get(participantRef), transaction.get(operationRef),
+        transaction.get(db.collection("trackingSessions")
+          .where("participantId", "==", participantId).limit(1)),
+        transaction.get(db.collection("campaignRoutes")
+          .where("participantId", "==", participantId).limit(1)),
+      ]);
+      if (operationSnapshot.exists) {
+        result = operationSnapshot.data()?.result || {participantId, attendanceStatus: "no_show"};
+        return;
+      }
+      if (!zoneSnapshot.exists || !participantSnapshot.exists) {
+        throw new HttpsError("not-found", "The group participant was not found.");
+      }
+      const zone = zoneSnapshot.data() || {};
+      const participant = participantSnapshot.data() || {};
+      if (participant.zoneId !== zoneId || zone.groupAssignmentId !== zoneId) {
+        throw new HttpsError("failed-precondition", "The participant does not belong to this group.");
+      }
+      const scheduledValue = participant.workWindowStartAt || zone.workWindowStartAt ||
+        zone.marketingDate || zone.scheduledStartAt;
+      const scheduledAt = scheduledValue instanceof Timestamp ? scheduledValue.toDate() : scheduledValue;
+      const hasWorkEvidence = sessionSnapshot.size > 0 || routeSnapshot.size > 0 ||
+        participant.startedAt != null || participant.evidencePointCount > 0;
+      const eligibility = groupAssignment.participantNoShowEligibility({
+        scheduledAt, status: participant.status, supportHold: zone.supportHold === true,
+        hasAuthoritativeWorkEvidence: hasWorkEvidence,
+      });
+      if (!eligibility.eligible) {
+        throw new HttpsError("failed-precondition",
+          eligibility.reason === "grace_period_active" ?
+            "The attendance grace period has not ended." :
+            "This participant cannot be confirmed as a no-show.");
+      }
+      result = {participantId, attendanceStatus: "no_show",
+        initialShareCents: participant.initialShareCents};
+      transaction.update(participantRef, {
+        status: "no_show", attendanceStatus: "no_show",
+        noShowConfirmedBy: context.uid, noShowConfirmedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.create(operationRef, {
+        type: "group_participant_no_show", ownerId: participant.businessId,
+        campaignId: participant.campaignId, zoneId, participantId,
+        status: "completed", result, createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      appendJobEvent(transaction, {
+        campaignId: participant.campaignId, zoneId, businessId: participant.businessId,
+        scalerId: participant.scalerUid, participantId, actorId: context.uid,
+        type: "assignment.participant_no_show",
+      });
+    });
+    return result;
+  });
+
+exports.cancelZoneGroupParticipation = trackingCallable(
+  "cancelZoneGroupParticipation", async (request) => {
+    assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
+    const context = await requireVerifiedUser(request, "Sign in before cancelling a group slot.");
+    const zoneId = String(request.data?.zoneId || "").trim();
+    const participantRef = db.collection("zoneScalerParticipations")
+      .doc(groupAssignment.participantId(zoneId, context.uid));
+    const groupRef = db.collection("zoneGroupAssignments").doc(zoneId);
+    const roomRef = db.collection("jobRooms").doc(zoneId);
+    let result;
+    await db.runTransaction(async (transaction) => {
+      const [participantSnapshot, groupSnapshot, roomSnapshot] = await Promise.all([
+        transaction.get(participantRef), transaction.get(groupRef), transaction.get(roomRef),
+      ]);
+      if (!participantSnapshot.exists || !groupSnapshot.exists) {
+        throw new HttpsError("not-found", "The group slot was not found.");
+      }
+      const participant = participantSnapshot.data() || {};
+      const group = groupSnapshot.data() || {};
+      if (participant.scalerUid !== context.uid) {
+        throw new HttpsError("permission-denied", "This slot belongs to another Scaler.");
+      }
+      if (participant.status === "cancelled_before_window") {
+        result = {participantId: participantSnapshot.id, status: participant.status,
+          replacementNeeded: true, alreadyCancelled: true}; return;
+      }
+      if (!["accepted", "scheduled"].includes(String(participant.status)) ||
+          participant.startedAt != null || participant.activeTrackingSessionId) {
+        throw new HttpsError("failed-precondition",
+          "Started group work requires trusted support cancellation.");
+      }
+      const activeCount = Math.max(0, Number(group.acceptedScalerCount || 0) - 1);
+      transaction.update(participantRef, {
+        status: "cancelled_before_window", attendanceStatus: "cancelled_before_window",
+        cancelledAt: FieldValue.serverTimestamp(), settlementStatus: "not_eligible",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.update(groupRef, {
+        acceptedScalerCount: activeCount,
+        acceptedScalerIds: FieldValue.arrayRemove(context.uid),
+        status: "replacement_needed", updatedAt: FieldValue.serverTimestamp(),
+      });
+      if (roomSnapshot.exists) transaction.update(roomRef, {
+        scalerIds: FieldValue.arrayRemove(context.uid), updatedAt: FieldValue.serverTimestamp(),
+      });
+      result = {participantId: participantSnapshot.id,
+        status: "cancelled_before_window", replacementNeeded: true, alreadyCancelled: false};
+    });
+    return result;
+  });
+
+exports.settleZoneGroupAssignment = trackingCallable("settleZoneGroupAssignment", async (request) => {
+  assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
+  const context = await requireVerifiedUser(request, "Sign in before settling group work.");
+  const zoneId = String(request.data?.zoneId || "").trim();
+  const groupRef = db.collection("zoneGroupAssignments").doc(zoneId);
+  const zoneRef = db.collection("campaignZones").doc(zoneId);
+  const operationRef = db.collection("financialOperations")
+    .doc(marketplace.operationId("group-settlement", zoneId, 1));
+  let result;
+  await db.runTransaction(async (transaction) => {
+    const [groupSnapshot, zoneSnapshot, participantsSnapshot, operationSnapshot] = await Promise.all([
+      transaction.get(groupRef), transaction.get(zoneRef),
+      transaction.get(db.collection("zoneScalerParticipations").where("zoneId", "==", zoneId)),
+      transaction.get(operationRef),
+    ]);
+    if (!groupSnapshot.exists || !zoneSnapshot.exists) throw new HttpsError("not-found", "Group assignment not found.");
+    if (operationSnapshot.exists && operationSnapshot.data()?.status === "reserved") {
+      result = operationSnapshot.data()?.result; return;
+    }
+    const group = groupSnapshot.data() || {}; const zone = zoneSnapshot.data() || {};
+    if (!context.isAdmin && group.businessId !== context.uid) {
+      throw new HttpsError("permission-denied", "Only the owning Business may approve group work.");
+    }
+    if (String(zone.reviewStatus) !== "verification_pending") {
+      throw new HttpsError("failed-precondition", "Group work is not awaiting one zone-level review.");
+    }
+    const participants = participantsSnapshot.docs.map((doc) => ({participantId: doc.id, ...doc.data()}));
+    const routeSnapshots = [];
+    for (const participant of participants) {
+      if (participant.routeId) routeSnapshots.push({participant, snapshot: await transaction.get(db.collection("campaignRoutes").doc(participant.routeId))});
+    }
+    const contributionInput = participants.map((participant) => {
+      const route = routeSnapshots.find((item) => item.participant.participantId === participant.participantId)?.snapshot.data() || {};
+      return {...participant, verifiedRoutePoints: Array.isArray(route.points) ? route.points : []};
+    });
+    const contributions = groupAssignment.calculateVerifiedContributions(contributionInput);
+    const byId = new Map(contributions.map((item) => [item.participantId, item]));
+    const enriched = participants.map((item) => ({...item, ...(byId.get(item.participantId) || {})}));
+    const completionBps = Math.max(0, Math.min(10000, Math.round(Number(zone.completionPercentage || 0) * 100)));
+    result = groupAssignment.settleGroup({workerPoolCents: group.workerPoolCents, participants: enriched,
+      verifiedZoneCompletionBps: completionBps, supportHold: zone.supportHold === true || zone.disputeOpen === true,
+      businessFault: zone.status === "failed_business" || zone.settlementBlocked === true,
+      cancelled: ["cancelled", "canceled"].includes(String(zone.status)),
+      substantialCompletionThresholdBps: Number.isSafeInteger(group.substantialCompletionThresholdBps) ?
+        group.substantialCompletionThresholdBps : groupAssignment.SUBSTANTIAL_COMPLETION_THRESHOLD_BPS,
+      settlementPolicyVersion: String(group.settlementPolicyVersion ||
+        groupAssignment.GROUP_SETTLEMENT_POLICY_VERSION)});
+    if (!result.settlementAllowed) throw new HttpsError("failed-precondition", "Group settlement requires support review or additional verified completion.");
+    const paymentId = String(zone.fundingPaymentId || group.fundingPaymentId || "");
+    const paymentRef = db.collection("campaignPayments").doc(paymentId || "missing");
+    const paymentSnapshot = await transaction.get(paymentRef);
+    if (!paymentSnapshot.exists || paymentSnapshot.data()?.status !== marketplace.PAYMENT_STATES.funded) {
+      throw new HttpsError("failed-precondition", "Authoritative campaign funding is unavailable.");
+    }
+    marketplace.assertAllocationAvailable(paymentSnapshot.data(), result.finalWorkerPayCents, 0);
+    const participantById = new Map(participants.map((item) => [item.participantId, item]));
+    const transferReservations = [];
+    for (const allocation of result.allocations) {
+      const participant = participantById.get(allocation.participantId) || {};
+      const transferId = marketplace.operationId("group-scaler-transfer", zoneId,
+        allocation.participantId, Number(group.compensationVersion || 1));
+      const transferRef = db.collection("scalerTransfers").doc(transferId);
+      const [existingTransfer, connectedSnapshot] = await Promise.all([
+        transaction.get(transferRef),
+        transaction.get(db.collection("stripeConnectedAccounts")
+          .doc(participant.scalerUid || "missing")),
+      ]);
+      const connected = connectedSnapshot.data() || {};
+      const ready = connectedSnapshot.exists && connected.transfersStatus === "active" &&
+        cleanId(connected.stripeAccountId);
+      transferReservations.push({allocation, participant, transferId, transferRef,
+        existingTransfer, ready});
+    }
+    for (const reservation of transferReservations) {
+      const {allocation, participant, transferId, transferRef, existingTransfer, ready} = reservation;
+      transaction.update(db.collection("zoneScalerParticipations").doc(allocation.participantId), {
+        finalPayCents: allocation.finalPayCents, reallocatedPayCents: allocation.reallocatedPayCents,
+        settlementStatus: ready ? marketplace.TRANSFER_STATES.pending : marketplace.TRANSFER_STATES.waitingForAccount,
+        transferOperationId: transferId,
+        verifiedContributionVersion: groupAssignment.VERIFIED_CONTRIBUTION_VERSION,
+        settlementOperationId: operationRef.id, updatedAt: FieldValue.serverTimestamp()});
+      if (!existingTransfer.exists) transaction.create(transferRef, {
+        transferOperationId: transferId, groupSettlementOperationId: operationRef.id,
+        paymentId, campaignId: group.campaignId, zoneId,
+        participantId: allocation.participantId, businessId: group.businessId,
+        scalerId: participant.scalerUid, currency: marketplace.CURRENCY,
+        amountCents: allocation.finalPayCents,
+        baseAmountCents: allocation.initialPayCents,
+        reallocatedAmountCents: allocation.reallocatedPayCents,
+        earningsVersion: 1,
+        status: ready ? marketplace.TRANSFER_STATES.pending : marketplace.TRANSFER_STATES.waitingForAccount,
+        bankPayoutStatus: "not_observed", createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    transaction.update(paymentRef, {reservedWorkerAmountCents: Number(paymentSnapshot.data()?.reservedWorkerAmountCents || 0) + result.finalWorkerPayCents,
+      updatedAt: FieldValue.serverTimestamp()});
+    transaction.update(groupRef, {status: "settlement_reserved", settlementOperationId: operationRef.id,
+      finalWorkerPayCents: result.finalWorkerPayCents, noShowReallocationPoolCents: result.noShowReallocationPoolCents,
+      verifiedZoneCompletionBps: result.verifiedZoneCompletionBps,
+      completionClassification: result.completionClassification,
+      workerPayAllocatedCents: result.finalWorkerPayCents,
+      settlementPolicyVersion: result.policyVersion, settledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    transaction.update(zoneRef, {groupSettlementStatus: "transfer_pending", groupSettlementOperationId: operationRef.id,
+      workerPayAllocatedCents: result.finalWorkerPayCents,
+      groupCompletionClassification: result.completionClassification,
+      reviewStatus: "approved", paymentStatus: "transfer_pending", updatedAt: FieldValue.serverTimestamp()});
+    transaction.create(operationRef, {type: "group_settlement", ownerId: group.businessId, campaignId: group.campaignId,
+      zoneId, paymentId, status: "reserved", result, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+  });
+  return result;
+});
+
+exports.submitZoneGroupCompletion = trackingCallable("submitZoneGroupCompletion", async (request) => {
+  assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
+  const context = await requireVerifiedUser(request, "Sign in before submitting group work.");
+  const zoneId = String(request.data?.zoneId || "").trim();
+  const zoneRef = db.collection("campaignZones").doc(zoneId);
+  const groupRef = db.collection("zoneGroupAssignments").doc(zoneId);
+  const participantRef = db.collection("zoneScalerParticipations")
+    .doc(groupAssignment.participantId(zoneId, context.uid));
+  const completionRef = db.collection("campaignCompletions").doc(`group_completion_${zoneId}`);
+  let result;
+  await db.runTransaction(async (transaction) => {
+    const [zoneSnapshot, groupSnapshot, callerParticipantSnapshot,
+      participantsSnapshot, completionSnapshot] = await Promise.all([
+      transaction.get(zoneRef), transaction.get(groupRef), transaction.get(participantRef),
+      transaction.get(db.collection("zoneScalerParticipations").where("zoneId", "==", zoneId)),
+      transaction.get(completionRef),
+    ]);
+    if (!zoneSnapshot.exists || !groupSnapshot.exists || !callerParticipantSnapshot.exists) {
+      throw new HttpsError("permission-denied", "This group completion is unavailable.");
+    }
+    const zone = zoneSnapshot.data() || {}; const group = groupSnapshot.data() || {};
+    const caller = callerParticipantSnapshot.data() || {};
+    if (caller.scalerUid !== context.uid || !["completed", "participating"].includes(caller.status)) {
+      throw new HttpsError("failed-precondition", "Finish and save your tracking evidence first.");
+    }
+    if (zone.supportHold === true || zone.disputeOpen === true ||
+        ["cancelled", "canceled", "failed_business"].includes(String(zone.status))) {
+      throw new HttpsError("failed-precondition", "This group completion requires support review.");
+    }
+    if (completionSnapshot.exists && ["verification_pending", "approved"].includes(
+      String(completionSnapshot.data()?.reviewStatus))) {
+      result = {completionId: completionRef.id,
+        completionPercentage: completionSnapshot.data()?.completionPercentage,
+        alreadySubmitted: true}; return;
+    }
+    const participants = participantsSnapshot.docs.map((doc) => ({participantId: doc.id, ...doc.data()}));
+    const routes = [];
+    for (const participant of participants) {
+      if (participant.routeId) {
+        const routeSnapshot = await transaction.get(db.collection("campaignRoutes").doc(participant.routeId));
+        const route = routeSnapshot.data() || {};
+        if (route.zoneId === zoneId && route.scalerId === participant.scalerUid && route.tracking !== true) {
+          routes.push({...participant, verifiedRoutePoints: validRoutePoints(route.points)});
+        }
+      }
+    }
+    const allPoints = routes.flatMap((item) => item.verifiedRoutePoints);
+    if (allPoints.length < 2) throw new HttpsError("failed-precondition", "Verified group route evidence is incomplete.");
+    const trackingResult = calculateRouteCompletion(zone, allPoints);
+    const contributions = groupAssignment.calculateVerifiedContributions(routes);
+    const timestamp = FieldValue.serverTimestamp();
+    const data = {
+      completionId: completionRef.id, campaignId: group.campaignId, zoneId,
+      businessId: group.businessId, groupAssignmentId: zoneId,
+      participantCount: participants.length, contributingParticipantCount: routes.length,
+      status: "submitted", reviewStatus: "verification_pending", gpsVerified: true,
+      completionPercentage: trackingResult.completionPercentage,
+      completedHomes: trackingResult.completedHomes, assignedHomes: trackingResult.assignedHomes,
+      contributionVersion: groupAssignment.VERIFIED_CONTRIBUTION_VERSION,
+      participantContributions: contributions, submittedAt: timestamp, updatedAt: timestamp,
+      schemaVersion: 2,
+    };
+    transaction.set(completionRef, {...data, createdAt: completionSnapshot.exists ?
+      completionSnapshot.data()?.createdAt || timestamp : timestamp}, {merge: true});
+    transaction.update(zoneRef, {
+      status: "submitted", verificationPassed: true, reviewStatus: "verification_pending",
+      completionSubmittedAt: timestamp, submittedCompletionId: completionRef.id,
+      completionPercentage: trackingResult.completionPercentage,
+      groupContributionVersion: groupAssignment.VERIFIED_CONTRIBUTION_VERSION,
+      paymentStatus: "verification_pending", updatedAt: timestamp,
+    });
+    result = {completionId: completionRef.id,
+      completionPercentage: trackingResult.completionPercentage, alreadySubmitted: false};
+  });
+  return result;
+});
+
 exports.getCampaignDiscovery = trackingCallable("getCampaignDiscovery", async (request) => {
   assertTrackingPayload(request.data, new Set(["campaignId"]), 4096);
   await requireVerifiedUser(request, "Verify your email to browse campaigns.");
@@ -4813,15 +5320,22 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   const roomRef = db.collection("jobRooms").doc(zoneId);
   const roomSnapshot = await roomRef.get();
   const room = roomSnapshot.data() || {};
+  const roomScalerIds = Array.isArray(room.scalerIds) ? room.scalerIds : [];
   if (!roomSnapshot.exists ||
-      (!context.isAdmin && ![room.businessId, room.scalerId].includes(context.uid))) {
+      (!context.isAdmin && ![room.businessId, room.scalerId, ...roomScalerIds].includes(context.uid))) {
     throw new HttpsError("permission-denied", "This private Job Room is unavailable.");
   }
+  const participantId = roomScalerIds.includes(context.uid) ?
+    groupAssignment.participantId(zoneId, context.uid) : null;
+  const participantSnapshot = participantId ?
+    await db.collection("zoneScalerParticipations").doc(participantId).get() : null;
+  const participant = participantSnapshot?.data() || null;
+  const handoffId = participant?.materialHandoffId || zoneId;
   const [campaignSnapshot, zoneSnapshot, handoffSnapshot, compensationSnapshot,
     messagesSnapshot, eventsSnapshot] = await Promise.all([
     db.collection("campaigns").doc(room.campaignId).get(),
     db.collection("campaignZones").doc(zoneId).get(),
-    db.collection("materialHandoffs").doc(zoneId).get(),
+    db.collection("materialHandoffs").doc(handoffId).get(),
     db.collection("assignmentCompensations").doc(zoneId).get(),
     db.collection("jobMessages").where("roomId", "==", zoneId).limit(100).get(),
     db.collection("jobEvents").where("zoneId", "==", zoneId).limit(100).get(),
@@ -4844,7 +5358,15 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
       (context.uid === room.businessId ? "business" : "scaler"),
     room: {...room, id: zoneId}, campaign: {...campaign, id: room.campaignId},
     zone: {...zone, id: zoneId}, handoff,
-    compensation: compensationSnapshot.data() || null,
+    compensation: participant ? {
+      compensationVersion: participant.compensationVersion,
+      initialShareCents: participant.initialShareCents,
+      finalPayCents: participant.finalPayCents,
+      reallocatedPayCents: participant.reallocatedPayCents,
+      immutable: participant.immutableCompensation === true,
+      groupAssignmentId: zoneId,
+    } : compensationSnapshot.data() || null,
+    participant,
     messages, events,
     startEligibility: {...gate, workWindow},
   };
@@ -4863,14 +5385,17 @@ exports.sendJobMessage = trackingCallable("sendJobMessage", async (request) => {
   await db.runTransaction(async (transaction) => {
     const roomSnapshot = await transaction.get(roomRef);
     const room = roomSnapshot.data() || {};
+    const roomScalerIds = Array.isArray(room.scalerIds) ? room.scalerIds : [];
     if (!roomSnapshot.exists ||
-        (!context.isAdmin && ![room.businessId, room.scalerId].includes(context.uid))) {
+        (!context.isAdmin && ![room.businessId, room.scalerId, ...roomScalerIds].includes(context.uid))) {
       throw new HttpsError("permission-denied", "This private Job Room is unavailable.");
     }
     if (room.status !== "open") throw new HttpsError("failed-precondition", "This Job Room is closed.");
     transaction.create(messageRef, {
       roomId: zoneId, zoneId, campaignId: room.campaignId,
-      businessId: room.businessId, scalerId: room.scalerId,
+      businessId: room.businessId,
+      scalerId: context.role === "scaler" ? context.uid : (room.scalerId || null),
+      groupAssignmentId: room.groupAssignmentId || null,
       senderId: context.uid, senderRole: context.role, text,
       createdAt: FieldValue.serverTimestamp(), schemaVersion: 1,
     });
@@ -5359,26 +5884,32 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
   const campaignRef = db.collection("campaigns").doc(campaignId);
   const zoneRef = db.collection("campaignZones").doc(zoneId);
   const pointerRef = db.collection("activeTrackingSessions").doc(context.uid);
+  const participantRef = db.collection("zoneScalerParticipations")
+    .doc(groupAssignment.participantId(zoneId, context.uid));
   const sessionRef = db.collection("trackingSessions").doc();
   let result = {sessionId: sessionRef.id, status: "active", recovered: false};
   await db.runTransaction(async (transaction) => {
     const campaignSnapshot = await transaction.get(campaignRef);
     const zoneSnapshot = await transaction.get(zoneRef);
     const pointerSnapshot = await transaction.get(pointerRef);
+    const participantSnapshot = await transaction.get(participantRef);
     if (!campaignSnapshot.exists || !zoneSnapshot.exists) {
       throw new HttpsError("not-found", "The assigned job was not found.");
     }
     const campaign = campaignSnapshot.data() || {};
     const zone = zoneSnapshot.data() || {};
+    const participant = participantSnapshot.data() || null;
+    const groupAuthorized = participantSnapshot.exists && participant?.scalerUid === context.uid &&
+      ["accepted", "started", "participating", "paused_work_window"].includes(String(participant.status));
     if (zone.campaignId !== campaignId ||
-        (!context.isAdmin && zone.assignedScalerId !== context.uid)) {
+        (!context.isAdmin && zone.assignedScalerId !== context.uid && !groupAuthorized)) {
       throw new HttpsError("permission-denied", "This zone is not assigned to you.");
     }
     if (!["assigned", "accepted", "in_progress", "paused_work_window"].includes(String(zone.status))) {
       throw new HttpsError("failed-precondition", "This job cannot be started.");
     }
     const gate = await assertOperationalStart(transaction, {
-      campaign, zone: {...zone, id: zoneId}, context,
+      campaign, zone: {...zone, id: zoneId}, context, participant,
     });
     if (pointerSnapshot.exists) {
       const pointerSessionId = String(pointerSnapshot.data()?.sessionId || "");
@@ -5460,8 +5991,9 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
       }
       transaction.delete(pointerRef);
     }
-    const resumableSessionId = String(zone.resumableTrackingSessionId || "");
-    if (String(zone.status) === "paused_work_window" && resumableSessionId) {
+    const resumableSessionId = String(participant?.resumableTrackingSessionId || zone.resumableTrackingSessionId || "");
+    const resumeRequested = participant ? String(participant.status) === "paused_work_window" : String(zone.status) === "paused_work_window";
+    if (resumeRequested && resumableSessionId) {
       const resumableRef = db.collection("trackingSessions").doc(resumableSessionId);
       const resumableSnapshot = await transaction.get(resumableRef);
       const resumable = resumableSnapshot.data() || {};
@@ -5490,7 +6022,9 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
         sessionId: resumableSessionId, campaignId, zoneId, scalerId: context.uid,
         startedAt: FieldValue.serverTimestamp(),
       });
-      transaction.update(zoneRef, {
+      transaction.update(zoneRef, participant ? {
+        status: "in_progress", updatedAt: FieldValue.serverTimestamp(),
+      } : {
         status: "in_progress", activeTrackingSessionId: resumableSessionId,
         resumableTrackingSessionId: FieldValue.delete(), gpsTracking: true,
         gpsTrackingStartedAt: FieldValue.serverTimestamp(),
@@ -5499,6 +6033,10 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
         workWindowWarningAt: Timestamp.fromDate(gate.workWindow.warningAt),
         updatedAt: FieldValue.serverTimestamp(),
       });
+      if (participant) transaction.update(participantRef, {status: "participating", attendanceStatus: "started",
+        activeTrackingSessionId: resumableSessionId, resumableTrackingSessionId: FieldValue.delete(), gpsTracking: true,
+        workWindowCutoffAt: Timestamp.fromDate(gate.workWindow.cutoffAt), workWindowWarningAt: Timestamp.fromDate(gate.workWindow.warningAt),
+        updatedAt: FieldValue.serverTimestamp()});
       result = {sessionId: resumableSessionId, status: "active", recovered: true,
         resumed: true, segmentId, workWindowCutoffAtMs: gate.workWindow.cutoffAt.getTime()};
       appendJobEvent(transaction, {
@@ -5514,6 +6052,8 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
       zoneId,
       businessId: String(campaign.businessId || zone.businessId || ""),
       scalerId: context.uid,
+      participantId: participant?.participantId || null,
+      groupAssignmentId: participant ? zoneId : null,
       status: "active",
       syncStatus: "collecting",
       simulated: false,
@@ -5550,14 +6090,19 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
     });
     transaction.update(zoneRef, {
       status: "in_progress",
-      activeTrackingSessionId: sessionRef.id,
-      gpsTracking: true,
-      gpsTrackingStartedAt: FieldValue.serverTimestamp(),
+      ...(participant ? {} : {activeTrackingSessionId: sessionRef.id,
+        gpsTracking: true, gpsTrackingStartedAt: FieldValue.serverTimestamp()}),
       startedAt: zone.startedAt || FieldValue.serverTimestamp(),
       workWindowEnd: gate.workWindow.end,
       workTimeZone: gate.workWindow.timeZone,
       workWindowCutoffAt: Timestamp.fromDate(gate.workWindow.cutoffAt),
       workWindowWarningAt: Timestamp.fromDate(gate.workWindow.warningAt),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (participant) transaction.update(participantRef, {
+      status: "participating", attendanceStatus: "started",
+      activeTrackingSessionId: sessionRef.id, gpsTracking: true,
+      startedAt: participant.startedAt || FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
     appendJobEvent(transaction, {
@@ -5797,6 +6342,8 @@ exports.completeTrackingSession = trackingCallable("completeTrackingSession", as
   }));
   const routeRef = db.collection("campaignRoutes").doc(sessionId);
   const zoneRef = db.collection("campaignZones").doc(session.zoneId);
+  const participantRef = session.participantId ?
+    db.collection("zoneScalerParticipations").doc(String(session.participantId)) : null;
   const pointerRef = db.collection("activeTrackingSessions").doc(context.uid);
   const evidenceDigest = crypto.createHash("sha256")
     .update(digestParts.join("|"), "utf8").digest("hex");
@@ -5853,15 +6400,18 @@ exports.completeTrackingSession = trackingCallable("completeTrackingSession", as
       currentSegmentId: FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
     });
-    transaction.update(zoneRef, {
-      routeId: routeRef.id,
-      activeTrackingSessionId: FieldValue.delete(),
-      gpsTracking: false,
-      gpsRoutePointCount: compatible.length,
-      trackingSegmentCount: Number(current.segmentCount || 1),
-      gpsRouteSimulated: false,
-      gpsTrackingEndedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
+    transaction.update(zoneRef, session.participantId ? {
+      groupEvidenceUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    } : {
+      routeId: routeRef.id, activeTrackingSessionId: FieldValue.delete(), gpsTracking: false,
+      gpsRoutePointCount: compatible.length, trackingSegmentCount: Number(current.segmentCount || 1),
+      gpsRouteSimulated: false, gpsTrackingEndedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (participantRef) transaction.update(participantRef, {
+      status: "completed", attendanceStatus: "completed", routeId: routeRef.id,
+      activeTrackingSessionId: FieldValue.delete(), gpsTracking: false,
+      evidencePointCount: compatible.length, trackingSegmentCount: Number(current.segmentCount || 1),
+      completedTrackingAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     });
     if (freshPointer.exists && freshPointer.data()?.sessionId === sessionId) {
       transaction.delete(pointerRef);
@@ -5900,6 +6450,8 @@ exports.cancelTrackingSession = trackingCallable("cancelTrackingSession", async 
     }
     const pointerRef = db.collection("activeTrackingSessions").doc(session.scalerId);
     const zoneRef = db.collection("campaignZones").doc(session.zoneId);
+    const participantRef = session.participantId ?
+      db.collection("zoneScalerParticipations").doc(String(session.participantId)) : null;
     const pointer = await transaction.get(pointerRef);
     const zone = await transaction.get(zoneRef);
     transaction.update(sessionRef, {
@@ -5909,13 +6461,13 @@ exports.cancelTrackingSession = trackingCallable("cancelTrackingSession", async 
       endedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
-    if (zone.exists) transaction.update(zoneRef, {
-      status: "accepted",
-      activeTrackingSessionId: FieldValue.delete(),
-      gpsTracking: false,
-      gpsTrackingEndedAt: FieldValue.serverTimestamp(),
+    if (zone.exists) transaction.update(zoneRef, session.participantId ? {
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    } : {status: "accepted", activeTrackingSessionId: FieldValue.delete(), gpsTracking: false,
+      gpsTrackingEndedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    if (participantRef) transaction.update(participantRef, {status: "accepted", attendanceStatus: "accepted",
+      activeTrackingSessionId: FieldValue.delete(), gpsTracking: false,
+      gpsTrackingEndedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     if (pointer.exists && pointer.data()?.sessionId === sessionId) {
       transaction.delete(pointerRef);
     }
@@ -6774,6 +7326,12 @@ async function queueScalerTransfer(zoneId, releaseOptionalBonus = false) {
   const zoneSnapshot = await zoneRef.get();
   if (!zoneSnapshot.exists) throw new HttpsError("not-found", "Zone not found.");
   const zone = zoneSnapshot.data() || {};
+  if (zone.groupAssignmentId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Group work must use the authoritative group settlement path.",
+    );
+  }
   if (zone.settlementBlocked === true || zone.status === "failed_business") {
     throw new HttpsError("failed-precondition", "This assignment is closed to normal settlement.");
   }
@@ -6959,6 +7517,12 @@ exports.finalizeZoneReview = safeStripeCallable("finalizeZoneReview", async (req
     const zoneSnapshot = await transaction.get(zoneRef);
     if (!zoneSnapshot.exists) throw new HttpsError("not-found", "Zone not found.");
     const zone = zoneSnapshot.data() || {};
+    if (zone.groupAssignmentId) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Group work has one zone-level review and group settlement path.",
+      );
+    }
     if (!context.isAdmin && zone.businessId !== context.uid) {
       throw new HttpsError("permission-denied", "Only the campaign Business may review this work.");
     }

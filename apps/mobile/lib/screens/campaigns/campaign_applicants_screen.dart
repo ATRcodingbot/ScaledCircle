@@ -274,8 +274,23 @@ class CampaignApplicantsScreen extends StatelessWidget {
     }
 
     try {
+      final requiredScalerCount =
+          (selectedZoneData['requiredScalerCount'] as num?)?.round() ?? 1;
+      if (requiredScalerCount > 1 &&
+          selectedZoneData['groupAssignmentId'] == null) {
+        await const SecureFunctionService().call(
+          functionName: 'configureZoneGroupAssignment',
+          data: {
+            'campaignId': campaign.id,
+            'zoneId': selectedZone.id,
+            'requiredScalerCount': requiredScalerCount,
+          },
+        );
+      }
       await const SecureFunctionService().call(
-        functionName: 'assignScalerToZone',
+        functionName: requiredScalerCount > 1
+            ? 'acceptZoneGroupSlot'
+            : 'assignScalerToZone',
         data: {
           'campaignId': campaign.id,
           'zoneId': selectedZone.id,

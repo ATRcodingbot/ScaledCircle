@@ -131,6 +131,13 @@ class CampaignZonesScreen extends StatelessWidget {
         'homeCountConfidenceScore': null,
         'assignedScalerId': null,
         'assignedScalerEmail': null,
+        'requiredScalerCount':
+            (campaignData['requiredScalerCount'] as num?)?.round() ??
+            (campaignData['requestedScalerCount'] as num?)?.round() ??
+            1,
+        'workerPoolCents':
+            (campaignData['workerPoolCents'] as num?)?.round() ??
+            (((campaignData['maximumWorkerBudget'] ?? 0) as num) * 100).round(),
         'status': 'unassigned',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -460,8 +467,17 @@ class CampaignZonesScreen extends StatelessWidget {
 
     final payoutAmount = (data['payoutAmount'] as num?)?.toDouble() ?? 0.0;
 
+    final isGroup = data['groupAssignmentId'] != null;
+    final workerPayAllocatedCents = (data['workerPayAllocatedCents'] as num?)
+        ?.round();
+    final workerPoolCents = (data['workerPoolCents'] as num?)?.round();
+
     final completionPercentage =
         (data['completionPercentage'] as num?)?.toDouble() ?? 0.0;
+
+    final displayedGroupAllocationCents =
+        workerPayAllocatedCents ??
+        (completionPercentage >= 75 ? workerPoolCents : null);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -492,12 +508,39 @@ class CampaignZonesScreen extends StatelessWidget {
                       'Approve $zoneName at '
                       '${completionPercentage.toStringAsFixed(1)}% completion.',
                     ),
+                    if (isGroup) ...[
+                      const SizedBox(height: 12),
+                      _reviewMetricRow(
+                        label: 'Verified completion',
+                        value: '${completionPercentage.toStringAsFixed(1)}%',
+                      ),
+                      _reviewMetricRow(
+                        label: 'Completion classification',
+                        value: completionPercentage >= 100
+                            ? 'Full verified completion'
+                            : completionPercentage >= 75
+                            ? 'Substantial verified completion'
+                            : 'Incomplete / support review',
+                      ),
+                      if (displayedGroupAllocationCents != null)
+                        _reviewMetricRow(
+                          label: workerPayAllocatedCents == null
+                              ? 'Proposed worker pay allocation'
+                              : 'Worker pay allocated',
+                          value:
+                              '\$${(displayedGroupAllocationCents / 100).toStringAsFixed(2)}',
+                        ),
+                      const Text(
+                        'Worker settlement does not change the evidence-based completion percentage.',
+                      ),
+                    ],
                     const SizedBox(height: 16),
-                    _reviewMetricRow(
-                      label: 'Base payment',
-                      value: '\$${basePayout.toStringAsFixed(2)}',
-                    ),
-                    if (availableBonus > 0.0) ...[
+                    if (!isGroup)
+                      _reviewMetricRow(
+                        label: 'Base payment',
+                        value: '\$${basePayout.toStringAsFixed(2)}',
+                      ),
+                    if (!isGroup && availableBonus > 0.0) ...[
                       const SizedBox(height: 8),
                       if (bonusEarnedAutomatically)
                         ListTile(
@@ -532,11 +575,13 @@ class CampaignZonesScreen extends StatelessWidget {
                           },
                         ),
                     ],
-                    const Divider(height: 24),
-                    _reviewMetricRow(
-                      label: 'Total to release',
-                      value: '\$${approvalTotal.toStringAsFixed(2)}',
-                    ),
+                    if (!isGroup) ...[
+                      const Divider(height: 24),
+                      _reviewMetricRow(
+                        label: 'Total to release',
+                        value: '\$${approvalTotal.toStringAsFixed(2)}',
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -567,10 +612,12 @@ class CampaignZonesScreen extends StatelessWidget {
     try {
       final payoutService = CompletionPayoutService();
 
-      final approval = await payoutService.approvePayout(
-        payoutId: payoutId,
-        releaseBonus: confirmed,
-      );
+      final approval = isGroup
+          ? await payoutService.approveGroupSettlement(zoneId: zone.id)
+          : await payoutService.approvePayout(
+              payoutId: payoutId,
+              releaseBonus: confirmed,
+            );
 
       final releasedAmount =
           (approval['amount'] as num?)?.toDouble() ?? payoutAmount;
@@ -585,9 +632,11 @@ class CampaignZonesScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$zoneName approved. '
-            '\$${releasedAmount.toStringAsFixed(2)} was released to the Scaler wallet'
-            '${releasedBonus > 0.0 ? ' including a \$${releasedBonus.toStringAsFixed(2)} bonus' : ''}.',
+            isGroup
+                ? '$zoneName group settlement was reserved from the funded worker pool.'
+                : '$zoneName approved. '
+                      '\$${releasedAmount.toStringAsFixed(2)} was released to the Scaler wallet'
+                      '${releasedBonus > 0.0 ? ' including a \$${releasedBonus.toStringAsFixed(2)} bonus' : ''}.',
           ),
         ),
       );
@@ -795,6 +844,7 @@ class CampaignZonesScreen extends StatelessWidget {
         data['gpsRouteSimulated'] == true;
 
     final eligibleForPayment = data['eligibleForPayment'] == true;
+    final isGroup = data['groupAssignmentId'] != null;
 
     return Card(
       margin: const EdgeInsets.only(top: 12, bottom: 18),
@@ -898,7 +948,7 @@ class CampaignZonesScreen extends StatelessWidget {
 
             const SizedBox(height: 18),
 
-            if (eligibleForPayment)
+            if (eligibleForPayment && (!isGroup || completionPercentage >= 75))
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -911,7 +961,8 @@ class CampaignZonesScreen extends StatelessWidget {
                 ),
               ),
 
-            if (eligibleForPayment) const SizedBox(height: 10),
+            if (eligibleForPayment && (!isGroup || completionPercentage >= 75))
+              const SizedBox(height: 10),
 
             SizedBox(
               width: double.infinity,

@@ -221,6 +221,7 @@ test("work cutoff pauses one session, next window resumes a new immutable segmen
   const cutoffResult = await functions.enforceOperationalWorkCutoffs.__testRun();
   assert.deepEqual(cutoffResult, {
     scanned: 1, warned: 0, paused: 1, skipped: 0,
+    groupParticipantsScanned: 0,
   });
 
   const pausedZone = (await db.doc("campaignZones/zone").get()).data();

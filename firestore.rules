@@ -646,6 +646,22 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /zoneGroupAssignments/{zoneId} {
+      allow read: if isAdmin() || (isApprovedAccount() && (
+        resource.data.businessId == request.auth.uid ||
+        (resource.data.acceptedScalerIds is list && request.auth.uid in resource.data.acceptedScalerIds)
+      ));
+      allow create, update, delete: if false;
+    }
+
+    match /zoneScalerParticipations/{participantId} {
+      allow read: if isAdmin() || (isApprovedAccount() && (
+        resource.data.businessId == request.auth.uid ||
+        resource.data.scalerUid == request.auth.uid
+      ));
+      allow create, update, delete: if false;
+    }
+
     match /financialOperations/{operationId} {
       allow read: if isAdmin() || (
         isApprovedAccount() && resource.data.ownerId == request.auth.uid

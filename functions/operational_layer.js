@@ -264,6 +264,10 @@ function zoneGeometryDigest(points) {
 }
 
 function safeDiscoveryProjection(campaign) {
+  const requestedScalerCount = Number.isSafeInteger(campaign.requiredScalerCount) ?
+    campaign.requiredScalerCount : Number.isSafeInteger(campaign.requestedScalerCount) ? campaign.requestedScalerCount : 1;
+  const workerPoolCents = Number.isSafeInteger(campaign.workerPoolCents) ? campaign.workerPoolCents :
+    Number.isSafeInteger(campaign.workerAmountCents) ? campaign.workerAmountCents : null;
   return {
     campaignId: campaign.id || null,
     title: campaign.name || campaign.title || "Campaign",
@@ -273,7 +277,13 @@ function safeDiscoveryProjection(campaign) {
     zoneName: campaign.zoneName || null,
     zoneSummary: campaign.zoneSummary || null,
     estimatedWalkingMinutes: campaign.estimatedWalkingMinutes || null,
-    estimatedPayCents: campaign.workerAmountCents || null,
+    estimatedPayCents: workerPoolCents,
+    workerPoolCents,
+    requiredScalerCount: requestedScalerCount,
+    acceptedScalerCount: Number.isSafeInteger(campaign.acceptedScalerCount) ?
+      campaign.acceptedScalerCount : Number.isSafeInteger(campaign.assignedScalerCount) ?
+        campaign.assignedScalerCount : 0,
+    scheduledShareCents: workerPoolCents ? Math.floor(workerPoolCents / requestedScalerCount) : null,
     bonusAmountCents: campaign.bonusAmountCents || null,
     materialsRequired: campaign.materialsRequired === true,
     materialFulfillmentType: campaign.materialFulfillmentType || null,

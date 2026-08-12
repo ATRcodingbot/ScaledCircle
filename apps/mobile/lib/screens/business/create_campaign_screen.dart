@@ -314,7 +314,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
     final completionBonus = double.tryParse(bonusController.text.trim()) ?? 0.0;
 
-    final maximumWorkerBudget = (basePay + completionBonus) * scalerCount;
+    final maximumWorkerBudget = basePay + completionBonus;
 
     if (maximumWorkerBudget <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -382,9 +382,13 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         'bonus': completionBonus,
 
         'requestedScalerCount': scalerCount,
+        'requiredScalerCount': scalerCount,
         'assignedScalerCount': 0,
 
         'maximumWorkerBudget': maximumWorkerBudget,
+        'workerPoolCents': (maximumWorkerBudget * 100).round(),
+        'estimatedIndividualShareCents':
+            (maximumWorkerBudget * 100 / scalerCount).floor(),
 
         'marketingDate': Timestamp.fromDate(_marketingDate!),
 
@@ -748,8 +752,10 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
     final previewScalers = int.tryParse(scalerCountController.text.trim()) ?? 1;
 
-    final previewWorkerBudget =
-        (previewBasePay + previewBonus) * previewScalers;
+    final previewWorkerBudget = previewBasePay + previewBonus;
+    final previewIndividualShare = previewScalers > 0
+        ? previewWorkerBudget / previewScalers
+        : previewWorkerBudget;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create Campaign'), centerTitle: true),
@@ -1138,7 +1144,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                   setState(() {});
                 },
                 decoration: const InputDecoration(
-                  labelText: 'Scalers Needed',
+                  labelText: 'Scalers for this area',
+                  helperText:
+                      'Defaults to 1. More Scalers share the same worker-pay pool.',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.groups_outlined),
                 ),
@@ -1149,8 +1157,8 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                     return 'Enter at least 1 Scaler';
                   }
 
-                  if (count > 100) {
-                    return 'Enter 100 or fewer for now';
+                  if (count > 12) {
+                    return 'Enter 12 or fewer for now';
                   }
 
                   return null;
@@ -1176,7 +1184,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                   setState(() {});
                 },
                 decoration: const InputDecoration(
-                  labelText: 'Base Pay per Scaler (\$)',
+                  labelText: 'Group worker pay (\$)',
+                  helperText:
+                      'Total compensation reserved for this area—not multiplied by Scaler count.',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
@@ -1206,8 +1216,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                   setState(() {});
                 },
                 decoration: const InputDecoration(
-                  labelText: 'Completion Bonus per Scaler (\$)',
-                  helperText: 'Paid when completion requirements are met.',
+                  labelText: 'Group completion bonus (\$)',
+                  helperText:
+                      'Part of the total worker-pay pool and divided among the group.',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
@@ -1249,14 +1260,25 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
                       const SizedBox(height: 14),
 
-                      _costRow('Scaler compensation', previewWorkerBudget),
+                      _costRow('Group worker pay', previewWorkerBudget),
+                      _valueRow('Scalers', '$previewScalers'),
+                      _costRow(
+                        'Estimated initial pay per Scaler',
+                        previewIndividualShare,
+                      ),
 
                       const SizedBox(height: 8),
 
                       const Text(
-                        'The secure backend calculates the Platform Fee and '
-                        'final charge before checkout.',
+                        'The worker-pay amount is the total compensation reserved for completing this area. Selecting multiple Scalers divides the worker pool among the group rather than multiplying the total price. The secure backend calculates the Platform Fee and final charge before checkout.',
                       ),
+
+                      if (previewScalers > 1) ...[
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Group jobs reserve one total worker-pay amount. If an assigned Scaler does not participate and the remaining team substantially completes at least 75% of the verified area, the absent Scaler’s reserved share may be redistributed to the Scalers who performed the work. This does not increase your funded worker-pay amount.',
+                        ),
+                      ],
 
                       const SizedBox(height: 12),
 
@@ -1346,4 +1368,11 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       ],
     );
   }
+
+  Widget _valueRow(String label, String value) => Row(
+    children: [
+      Expanded(child: Text(label)),
+      Text(value),
+    ],
+  );
 }

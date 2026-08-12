@@ -638,23 +638,60 @@ Widget _buildCampaignMap(
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
-                  _info(
-                    Icons.payments,
-                    "\$${campaign.basePay.toStringAsFixed(2)} Base Pay",
-                  ),
+                  if (campaign.scalerCount > 1) ...[
+                    _info(
+                      Icons.groups_outlined,
+                      "GROUP OPPORTUNITY",
+                      bold: true,
+                    ),
+                    _info(
+                      Icons.account_balance_wallet_outlined,
+                      "\$${(campaign.workerPoolCents / 100).toStringAsFixed(2)} Total group worker pool",
+                    ),
+                    _info(
+                      Icons.group_add_outlined,
+                      "${campaign.scalerCount} Scalers requested",
+                    ),
+                    _info(
+                      Icons.groups_2_outlined,
+                      "${campaign.assignedScalerCount} / ${campaign.scalerCount} group slots filled",
+                    ),
+                    _info(
+                      Icons.payments_outlined,
+                      "\$${((campaign.scheduledShareCents > 0 ? campaign.scheduledShareCents : campaign.workerPoolCents ~/ campaign.scalerCount) / 100).toStringAsFixed(2)} Initial scheduled share",
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        'Your scheduled share is fixed before acceptance. No-show pay is not guaranteed; final pay may increase only after verified contribution and settlement, and total group pay cannot exceed the funded worker pool.',
+                      ),
+                    ),
+                    const Divider(height: 28),
+                  ],
+                  if (campaign.scalerCount == 1) ...[
+                    _info(
+                      Icons.payments,
+                      "\$${campaign.basePay.toStringAsFixed(2)} Base Pay",
+                    ),
+                    _info(
+                      Icons.card_giftcard,
+                      "\$${campaign.bonus.toStringAsFixed(2)} Completion Bonus",
+                    ),
+                    const Divider(height: 28),
+                    _info(
+                      Icons.account_balance_wallet,
+                      "\$${(campaign.basePay + campaign.bonus).toStringAsFixed(2)} Potential Earnings",
+                      bold: true,
+                    ),
+                  ],
 
-                  _info(
-                    Icons.card_giftcard,
-                    "\$${campaign.bonus.toStringAsFixed(2)} Completion Bonus",
-                  ),
-
-                  const Divider(height: 28),
-
-                  _info(
-                    Icons.account_balance_wallet,
-                    "\$${(campaign.basePay + campaign.bonus).toStringAsFixed(2)} Potential Earnings",
-                    bold: true,
-                  ),
+                  if (campaign.estimatedMinutes > 0 &&
+                      campaign.scalerCount == 1)
+                    _info(
+                      Icons.schedule_outlined,
+                      "\$${(campaign.basePay / (campaign.estimatedMinutes / 60)).toStringAsFixed(2)} Estimated Hourly Wage",
+                      bold: true,
+                    ),
                 ],
               ),
             ),

@@ -15,9 +15,12 @@ class CampaignModel {
   final double longitude;
 
   final int scalerCount;
+  final int estimatedMinutes;
 
   final double basePay;
   final double bonus;
+  final int workerPoolCents;
+  final int scheduledShareCents;
 
   final bool beforePhotoRequired;
   final bool afterPhotoRequired;
@@ -55,10 +58,13 @@ class CampaignModel {
     required this.longitude,
 
     required this.scalerCount,
+    required this.estimatedMinutes,
 
     required this.basePay,
 
     required this.bonus,
+    required this.workerPoolCents,
+    required this.scheduledShareCents,
 
     required this.beforePhotoRequired,
 
@@ -86,8 +92,12 @@ class CampaignModel {
   factory CampaignModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
+    return CampaignModel.fromMap(doc.id, data);
+  }
+
+  factory CampaignModel.fromMap(String id, Map<String, dynamic> data) {
     return CampaignModel(
-      id: doc.id,
+      id: id,
 
       businessId: data["businessId"] ?? "",
 
@@ -105,11 +115,24 @@ class CampaignModel {
 
       longitude: (data["location"]?["longitude"] ?? 0).toDouble(),
 
-      scalerCount: data["requestedScalerCount"] ?? 1,
+      scalerCount:
+          data["requiredScalerCount"] ?? data["requestedScalerCount"] ?? 1,
+
+      estimatedMinutes:
+          (data["estimatedMinutes"] as num?)?.round() ??
+          (data["preliminaryEstimatedMinutes"] as num?)?.round() ??
+          0,
 
       basePay: (data["basePay"] ?? 0).toDouble(),
 
       bonus: (data["bonus"] ?? 0).toDouble(),
+      workerPoolCents:
+          (data["workerPoolCents"] as num?)?.round() ??
+          (((data["maximumWorkerBudget"] ?? data["basePay"] ?? 0) as num)
+                      .toDouble() *
+                  100)
+              .round(),
+      scheduledShareCents: (data["scheduledShareCents"] as num?)?.round() ?? 0,
 
       beforePhotoRequired:
           data["verification"]?["beforePhotoRequired"] ?? false,
@@ -134,6 +157,46 @@ class CampaignModel {
       createdAt: _timestampToDate(data["createdAt"]),
 
       updatedAt: _timestampToDate(data["updatedAt"]),
+    );
+  }
+
+  factory CampaignModel.fromDiscovery(Map<String, dynamic> data) {
+    DateTime? date(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value);
+      return null;
+    }
+
+    final workerCents = (data['estimatedPayCents'] as num?)?.round() ?? 0;
+    final bonusCents = (data['bonusAmountCents'] as num?)?.round() ?? 0;
+    return CampaignModel(
+      id: data['campaignId']?.toString() ?? '',
+      businessId: '',
+      campaignType: data['campaignType']?.toString() ?? '',
+      campaignName: data['title']?.toString() ?? 'Campaign',
+      description: data['zoneSummary']?.toString() ?? '',
+      address: data['zoneName']?.toString() ?? 'Mapped zone',
+      latitude: 0,
+      longitude: 0,
+      scalerCount: 1,
+      estimatedMinutes: (data['estimatedWalkingMinutes'] as num?)?.round() ?? 0,
+      basePay: workerCents / 100,
+      bonus: bonusCents / 100,
+      workerPoolCents: workerCents,
+      scheduledShareCents:
+          (data['scheduledShareCents'] as num?)?.round() ?? workerCents,
+      beforePhotoRequired: false,
+      afterPhotoRequired: false,
+      businessApprovalRequired: true,
+      gpsRequired: true,
+      locationRequired: true,
+      status: 'available',
+      applications: 0,
+      assignedScalerCount:
+          (data['acceptedScalerCount'] as num?)?.round() ??
+          (data['assignedScalerCount'] as num?)?.round() ??
+          0,
+      deadline: date(data['deadline']),
     );
   }
 

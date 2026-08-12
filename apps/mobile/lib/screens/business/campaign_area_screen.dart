@@ -49,9 +49,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
   static const double _walkingMetersPerMinute = 75;
 
-  static const int _productiveMinutesPerScaler = 240;
-
-  static const double _preliminaryHourlyRate = 18;
+  static const double _preliminaryHourlyRate = 25;
 
   @override
   void initState() {
@@ -463,10 +461,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       (estimatedWalkingMeters / _walkingMetersPerMinute).ceil(),
     );
 
-    final recommendedScalerCount = math.max(
-      1,
-      (estimatedMinutes / _productiveMinutesPerScaler).ceil(),
-    );
+    // Maps remain intentionally sized for one Scaler. Extra Scalers are an
+    // optional Business speed/coordination choice, not a default multiplier.
+    const recommendedScalerCount = 1;
 
     final totalHours = estimatedMinutes / 60;
 
