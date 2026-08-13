@@ -4,6 +4,27 @@ Property Intelligence is an industry-neutral Business map layer. It describes
 property and housing-stock characteristics; it does not diagnose the condition
 of a property, roof, HVAC system, window, appliance, component, or structure.
 
+## Scale entitlement and public positioning
+
+Live analysis is a Scale-plan capability. The public website may explain the
+feature, show example metrics and official sources, and link to account/plan
+selection, but it does not invoke analysis for anonymous visitors. The displayed
+price is **$499/month**; authorization uses the existing `scale` plan identifier,
+not the displayed price.
+
+`analyzePropertyIntelligence` reads the trusted
+`businessSubscriptions/{businessId}` record and requires `planId`/`plan` =
+`scale`, `status` = `active`, and a future `expiresAt`. It performs this check
+before zone reads, cache reads, Census-secret access, or Maryland/Census provider
+requests. Request payloads and the client-readable wallet projection cannot grant
+access. Expired, cancelled, inactive, Starter, and Growth records are denied.
+
+Flutter uses the backend-written `wallets/{businessId}` projection only to show
+the Open or Upgrade UX. Direct navigation by a non-Scale Business renders a
+premium screen rather than the operational map; backend authorization remains
+the final authority. Local manual staging uses only `local_staging_synthetic`
+emulator records for its comped Scale Business and non-Scale control.
+
 ## Existing architecture reused
 
 - `campaignZones.serviceArea` and the current FlutterMap/OpenStreetMap zone UI.
@@ -53,7 +74,8 @@ the Census API can also service low-volume requests without a key.
 
 ## Provider and cache flow
 
-The callable validates Business authentication and ownership, canonicalizes
+The callable validates Business authentication and active Scale entitlement,
+then validates ownership, canonicalizes
 the saved server-side zone geometry, calculates a SHA-256 digest, and checks
 `propertyIntelligenceCache/{sha256(analysisVersion:sourceBundleVersion:geometryDigest)}`. Cache
 documents are backend-only under Firestore Rules and expire after 30 days.
@@ -149,3 +171,11 @@ The `analyzePropertyIntelligence` callable binds a server-side
 `CENSUS_API_KEY` Firebase secret. It is never returned to Flutter or stored in
 Firestore. Configure it before deploying this callable. No provider credential
 or production deployment was performed as part of this implementation.
+
+Pre-deployment review must confirm existing production Scale subscriptions have
+the authoritative `businessSubscriptions` projection maintained by the Stripe
+subscription sync. A targeted Functions release would update
+`analyzePropertyIntelligence`; the public marketing change is a separate Hosting
+release. Neither should be deployed until explicitly approved. No Firestore Rules
+deployment is required for the entitlement gate because clients already cannot
+read or write `businessSubscriptions`, and wallet writes remain backend-only.
