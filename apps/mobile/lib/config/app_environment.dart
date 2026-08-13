@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import '../firebase_options.dart';
+import 'firebase_options_local.dart';
 
 enum AppEnvironment { local, production }
 
@@ -15,6 +16,9 @@ abstract final class AppEnvironmentConfig {
     'FIREBASE_EMULATOR_HOST',
   );
 
+  static const bool isLocal = _rawEnvironment == 'local';
+  static const bool isProduction = _rawEnvironment == 'production';
+
   static AppEnvironment get environment => switch (_rawEnvironment) {
     'local' => AppEnvironment.local,
     'production' => AppEnvironment.production,
@@ -24,8 +28,6 @@ abstract final class AppEnvironmentConfig {
     ),
   };
 
-  static bool get isProduction => environment == AppEnvironment.production;
-  static bool get isLocal => environment == AppEnvironment.local;
   static String get diagnosticsLabel => isLocal ? 'LOCAL / TEST' : 'PRODUCTION';
   static String get firebaseProjectId =>
       isLocal ? 'demo-scaledcircle' : 'scaled-circle';
@@ -34,7 +36,9 @@ abstract final class AppEnvironmentConfig {
       Uri.parse(isLocal ? 'http://127.0.0.1:5000' : 'https://scaledcircle.com');
 
   static FirebaseOptions get firebaseOptions =>
-      isLocal ? _localFirebaseOptions : DefaultFirebaseOptions.currentPlatform;
+      isLocal
+      ? LocalFirebaseOptions.currentPlatform
+      : DefaultFirebaseOptions.currentPlatform;
 
   static String get emulatorHost {
     if (!isLocal) {
@@ -74,13 +78,4 @@ abstract final class AppEnvironmentConfig {
       );
     }
   }
-
-  static const FirebaseOptions _localFirebaseOptions = FirebaseOptions(
-    apiKey: 'fake-api-key',
-    appId: '1:000000000000:web:local-scaledcircle',
-    messagingSenderId: '000000000000',
-    projectId: 'demo-scaledcircle',
-    authDomain: 'demo-scaledcircle.firebaseapp.com',
-    storageBucket: 'demo-scaledcircle.appspot.com',
-  );
 }

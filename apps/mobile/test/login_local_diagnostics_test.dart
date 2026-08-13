@@ -30,8 +30,11 @@ void main() {
   });
 
   test('local Firebase options are complete and demo-project isolated', () {
-    final source = File(
+    final environmentSource = File(
       'lib/config/app_environment.dart',
+    ).readAsStringSync();
+    final source = File(
+      'lib/config/firebase_options_local.dart',
     ).readAsStringSync();
 
     expect(source, contains("apiKey: 'fake-api-key'"));
@@ -39,9 +42,9 @@ void main() {
     expect(source, contains("projectId: 'demo-scaledcircle'"));
     expect(source, contains("authDomain: 'demo-scaledcircle.firebaseapp.com'"));
     expect(source, contains("storageBucket: 'demo-scaledcircle.appspot.com'"));
-    expect(source, contains("actual == 'scaled-circle'"));
+    expect(environmentSource, contains("actual == 'scaled-circle'"));
     expect(
-      source,
+      environmentSource,
       contains('APP_ENV=local must never connect to production project'),
     );
   });
