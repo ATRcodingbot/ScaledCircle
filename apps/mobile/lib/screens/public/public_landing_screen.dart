@@ -137,9 +137,10 @@ class _PublicLandingScreenState extends State<PublicLandingScreen> {
                         const SizedBox(height: 70),
                         _SectionHeading(
                           eyebrow: 'LIVE LOCAL INTELLIGENCE',
-                          title: 'Weather signals that help you act sooner.',
+                          title:
+                              'AI Weather Intelligence that helps you act sooner.',
                           subtitle:
-                              'Official alert facts come from the National Weather Service. Lead-lift ranges are experimental Scaled Circle estimates, never weather facts or guarantees.',
+                              'Official alert facts come from the National Weather Service. Scale adds qualified AI interpretation while keeping experimental lead-lift estimates, limitations, and authoritative weather facts separate.',
                           action: IconButton(
                             tooltip: 'Refresh alerts',
                             onPressed: () {
@@ -181,6 +182,128 @@ class _PublicLandingScreenState extends State<PublicLandingScreen> {
                                   .toList(),
                             );
                           },
+                        ),
+                        const SizedBox(height: 70),
+                        _Panel(
+                          child: Padding(
+                            padding: const EdgeInsets.all(30),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) => Wrap(
+                                spacing: 28,
+                                runSpacing: 24,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  const SizedBox(
+                                    width: 690,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'AI PROPERTY INTELLIGENCE',
+                                          style: TextStyle(
+                                            color: green,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                        SizedBox(height: 10),
+                                        Text(
+                                          'Know your market before you spend.',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 30,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        SizedBox(height: 10),
+                                        Text(
+                                          'ScaledCircle combines official property and Census information with qualified AI analysis to help you understand target areas and turn insights into verified local marketing campaigns. Sources, freshness, confidence, coverage, and limitations stay visible.',
+                                          style: TextStyle(
+                                            color: Color(0xFFB8C9D8),
+                                            height: 1.5,
+                                          ),
+                                        ),
+                                        SizedBox(height: 10),
+                                        Text(
+                                          'Included with Scale — \$499/month. Live analysis requires an authenticated Business with an active Scale subscription.',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    children: [
+                                      FilledButton(
+                                        onPressed: _openCreateAccount,
+                                        child: const Text(
+                                          'Explore Property Intelligence',
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: _openCreateAccount,
+                                        child: const Text(
+                                          'Unlock with Scale — \$499/month',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 70),
+                        const _Panel(
+                          child: Padding(
+                            padding: EdgeInsets.all(30),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'MANAGED GROWTH — LIMITED BETA',
+                                  style: TextStyle(
+                                    color: green,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                SizedBox(height: 10),
+                                Text(
+                                  'Your marketing shouldn’t stop when you’re busy.',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                SizedBox(height: 10),
+                                Text(
+                                  'ScaledCircle combines AI intelligence, digital marketing strategy, direct mail, and real-world campaign execution in one growth system. Know where to market. Know when to act. Know what to say. Then execute.',
+                                  style: TextStyle(
+                                    color: Color(0xFFB8C9D8),
+                                    height: 1.5,
+                                  ),
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Managed Growth — \$999/month. Everything in Scale plus AI-powered marketing planning and managed campaign coordination.',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Advertising spend, printing, postage, and third-party media or vendor costs are separate. Limited beta does not include unlimited agency labor or revisions.',
+                                  style: TextStyle(color: Color(0xFFB8C9D8)),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 70),
                         const _SectionHeading(
@@ -372,7 +495,7 @@ class _HeroCopy extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'AI-ASSISTED LOCAL CAMPAIGNS • VERIFIED IN THE FIELD',
+          'DATA-INFORMED LOCAL CAMPAIGNS • VERIFIED IN THE FIELD',
           style: TextStyle(
             color: Color(0xFF14E39A),
             fontSize: 12,
@@ -391,7 +514,7 @@ class _HeroCopy extends StatelessWidget {
               letterSpacing: -2.4,
             ),
             children: [
-              TextSpan(text: 'AI plans the campaign.\nYou '),
+              TextSpan(text: 'ScaledCircle helps plan the campaign.\nYou '),
               TextSpan(
                 text: 'choose',
                 style: TextStyle(color: Color(0xFF14E39A)),

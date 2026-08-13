@@ -9,14 +9,12 @@ import '../../reviews/create_review_screen.dart';
 import '../completion/submit_completion_screen.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import '../../jobs/job_room_screen.dart';
 
 class ScalerCampaignDetailsScreen extends StatefulWidget {
   final CampaignModel campaign;
 
-  const ScalerCampaignDetailsScreen({
-    super.key,
-    required this.campaign,
-  });
+  const ScalerCampaignDetailsScreen({super.key, required this.campaign});
 
   @override
   State<ScalerCampaignDetailsScreen> createState() =>
@@ -38,9 +36,7 @@ class _ScalerCampaignDetailsScreenState
 
     if (businessId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Business information unavailable."),
-        ),
+        const SnackBar(content: Text("Business information unavailable.")),
       );
 
       return;
@@ -49,9 +45,7 @@ class _ScalerCampaignDetailsScreenState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BusinessProfileScreen(
-          businessId: businessId,
-        ),
+        builder: (_) => BusinessProfileScreen(businessId: businessId),
       ),
     );
   }
@@ -116,20 +110,20 @@ class _ScalerCampaignDetailsScreenState
         return;
       }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SubmitCompletionScreen(
-          campaignId: widget.campaign.id,
-          businessId: widget.campaign.businessId,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SubmitCompletionScreen(
+            campaignId: widget.campaign.id,
+            businessId: widget.campaign.businessId,
             zoneId: selectedZone!.id,
             zoneName: zoneData["zoneName"]?.toString() ?? "Zone",
             routeId: routeId,
             gpsPointCount: routePoints.length,
             routeSimulated: routeData["simulated"] == true,
+          ),
         ),
-      ),
-    );
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -146,60 +140,54 @@ class _ScalerCampaignDetailsScreenState
   // ============================================================
 
   Future<void> _applyForCampaign() async {
-  final user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
-  if (user == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("You must be logged in."),
-      ),
-    );
+    if (user == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("You must be logged in.")));
 
-    return;
-  }
+      return;
+    }
 
-  setState(() {
-    _applying = true;
-  });
-
-  try {
-await _campaignService.applyToCampaign(
-  campaignId: widget.campaign.id,
-  scalerId: user.uid,
-);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          "Application submitted! Waiting for business approval.",
-        ),
-      ),
-    );
-
-    // Stay on page instead of leaving
     setState(() {
-      _applying = false;
+      _applying = true;
     });
 
-  } catch (e) {
-    if (!mounted) return;
+    try {
+      await _campaignService.applyToCampaign(
+        campaignId: widget.campaign.id,
+        scalerId: user.uid,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(e.toString()),
-      ),
-    );
+      if (!mounted) return;
 
-  } finally {
-    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Application submitted! Waiting for business approval.",
+          ),
+        ),
+      );
+
+      // Stay on page instead of leaving
       setState(() {
         _applying = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _applying = false;
+        });
+      }
     }
   }
-}
 
   Widget _buildCampaignAction(CampaignModel campaign) {
     if (campaign.status == "completed") {
@@ -251,7 +239,8 @@ await _campaignService.applyToCampaign(
           );
         }
 
-        final assignedToCurrentScaler = zoneSnapshot.data?.docs.any((zone) {
+        final assignedToCurrentScaler =
+            zoneSnapshot.data?.docs.any((zone) {
               return zone.data()["assignedScalerId"]?.toString() == user.uid;
             }) ??
             false;
@@ -276,73 +265,117 @@ await _campaignService.applyToCampaign(
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: applicationStream,
           builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return SizedBox(
-            height: 55,
-            child: ElevatedButton(
-              onPressed: null,
-              child: const Text("Application Status Unavailable"),
-            ),
-          );
-        }
+            if (snapshot.hasError) {
+              return SizedBox(
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: null,
+                  child: const Text("Application Status Unavailable"),
+                ),
+              );
+            }
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 55,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 55,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
 
-        final status = snapshot.data?.data()?["status"]?.toString();
+            final status = snapshot.data?.data()?["status"]?.toString();
+            final assignedZoneId = snapshot.data
+                ?.data()?['assignedZoneId']
+                ?.toString();
+            QueryDocumentSnapshot<Map<String, dynamic>>? assignedGroupZone;
+            if (assignedZoneId != null) {
+              for (final zone in zoneSnapshot.data?.docs ?? const []) {
+                if (zone.id == assignedZoneId &&
+                    zone.data()['groupAssignmentId'] != null) {
+                  assignedGroupZone = zone;
+                  break;
+                }
+              }
+            }
 
-        switch (status) {
-          case "pending":
-            return SizedBox(
-              height: 55,
-              child: ElevatedButton(
-                onPressed: null,
-                child: const Text("Application Pending"),
-              ),
-            );
-          case "accepted":
-            return SizedBox(
-              height: 55,
-              child: ElevatedButton(
-                onPressed: null,
-                child: const Text("Accepted / Assigned"),
-              ),
-            );
-          case "rejected":
-            return SizedBox(
-              height: 55,
-              child: ElevatedButton(
-                onPressed: null,
-                child: const Text("Application Declined"),
-              ),
-            );
-          case "completed":
-            return SizedBox(
-              height: 55,
-              child: ElevatedButton(
-                onPressed: null,
-                child: const Text("Campaign Completed"),
-              ),
-            );
-          default:
-            return SizedBox(
-              height: 55,
-              child: ElevatedButton(
-                onPressed: _applying ? null : _applyForCampaign,
-                child: _applying
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text("Apply For Campaign"),
-              ),
-            );
-        }
+            switch (status) {
+              case "pending":
+                return SizedBox(
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: null,
+                    child: const Text("Application Pending"),
+                  ),
+                );
+              case "accepted":
+                if (assignedGroupZone != null) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'YOUR GROUP JOB',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Total worker pool: \$${(campaign.workerPoolCents / 100).toStringAsFixed(2)}',
+                      ),
+                      Text(
+                        'Your scheduled share: \$${((campaign.scheduledShareCents > 0 ? campaign.scheduledShareCents : campaign.workerPoolCents ~/ campaign.scalerCount) / 100).toStringAsFixed(2)}',
+                      ),
+                      const Text(
+                        'Open the private Job Room for meetup, materials, chat, and readiness.',
+                      ),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                JobRoomScreen(zoneId: assignedGroupZone!.id),
+                          ),
+                        ),
+                        icon: const Icon(Icons.meeting_room_outlined),
+                        label: const Text('Open Job Room'),
+                      ),
+                    ],
+                  );
+                }
+                return const SizedBox(
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: null,
+                    child: Text("Accepted / Assigned"),
+                  ),
+                );
+              case "rejected":
+                return SizedBox(
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: null,
+                    child: const Text("Application Declined"),
+                  ),
+                );
+              case "completed":
+                return SizedBox(
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: null,
+                    child: const Text("Campaign Completed"),
+                  ),
+                );
+              default:
+                return SizedBox(
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: _applying ? null : _applyForCampaign,
+                    child: _applying
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text("Apply For Campaign"),
+                  ),
+                );
+            }
           },
         );
       },
@@ -350,126 +383,81 @@ await _campaignService.applyToCampaign(
   }
 
   List<LatLng> _parseServiceArea(dynamic data) {
-
-  if (data == null) {
-    return [];
-  }
-
-
-  if (data is! List) {
-    return [];
-  }
-
-
-  return data.map((point) {
-
-    if (point is Map) {
-
-      return LatLng(
-        (point['latitude'] ?? point['lat']).toDouble(),
-        (point['longitude'] ?? point['lng']).toDouble(),
-      );
-
+    if (data == null) {
+      return [];
     }
 
+    if (data is! List) {
+      return [];
+    }
 
-    return null;
+    return data
+        .map((point) {
+          if (point is Map) {
+            return LatLng(
+              (point['latitude'] ?? point['lat']).toDouble(),
+              (point['longitude'] ?? point['lng']).toDouble(),
+            );
+          }
 
-  })
-  .whereType<LatLng>()
-  .toList();
-
-}
-Widget _buildCampaignMap(
-  List<Map<String,dynamic>> zones,
-) {
-
-  final List<LatLng> points = [];
-
-
-  for(final zone in zones){
-
-    points.addAll(
-      _parseServiceArea(
-        zone["serviceArea"],
-      ),
-    );
-
+          return null;
+        })
+        .whereType<LatLng>()
+        .toList();
   }
 
+  Widget _buildCampaignMap(List<Map<String, dynamic>> zones) {
+    final List<LatLng> points = [];
 
-  if(points.length < 3){
+    for (final zone in zones) {
+      points.addAll(_parseServiceArea(zone["serviceArea"]));
+    }
 
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(18),
-        child: Text(
-          "Campaign map unavailable.",
+    if (points.length < 3) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(18),
+          child: Text("Campaign map unavailable."),
         ),
-      ),
-    );
+      );
+    }
 
-  }
+    final center = points[points.length ~/ 2];
 
+    return Card(
+      clipBehavior: Clip.antiAlias,
 
-  final center =
-      points[points.length ~/ 2];
+      child: SizedBox(
+        height: 320,
 
+        child: FlutterMap(
+          options: MapOptions(initialCenter: center, initialZoom: 15),
 
-  return Card(
-    clipBehavior: Clip.antiAlias,
+          children: [
+            TileLayer(
+              urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 
-    child: SizedBox(
-      height:320,
+              userAgentPackageName: "com.scaledcircle.app",
+            ),
 
-      child: FlutterMap(
+            PolygonLayer(
+              polygons: [
+                Polygon(
+                  points: points,
 
-        options: MapOptions(
-          initialCenter:center,
-          initialZoom:15,
-        ),
+                  borderStrokeWidth: 3,
 
+                  color: Colors.blue.withValues(alpha: 0.15),
 
-        children:[
-
-
-          TileLayer(
-            urlTemplate:
-            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-
-            userAgentPackageName:
-            "com.scaledcircle.app",
-          ),
-
-
-          PolygonLayer(
-            polygons:[
-
-              Polygon(
-                points:points,
-
-                borderStrokeWidth:3,
-
-                color:
-                Colors.blue.withValues(
-                  alpha:0.15,
+                  borderColor: Colors.blue,
                 ),
-
-                borderColor:
-                Colors.blue,
-              ),
-
-            ],
-          ),
-
-
-        ],
-
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-
-}
+    );
+  }
   // ============================================================
   // BUSINESS REVIEW
   // ============================================================
@@ -485,9 +473,7 @@ Widget _buildCampaignMap(
 
     if (businessId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Business information unavailable."),
-        ),
+        const SnackBar(content: Text("Business information unavailable.")),
       );
 
       return;
@@ -537,31 +523,21 @@ Widget _buildCampaignMap(
     return 0;
   }
 
-  String _getZoneName(
-    Map<String, dynamic> zone,
-    int index,
-  ) {
+  String _getZoneName(Map<String, dynamic> zone, int index) {
     final value =
-        zone["zoneName"] ??
-        zone["name"] ??
-        zone["label"] ??
-        zone["title"];
+        zone["zoneName"] ?? zone["name"] ?? zone["label"] ?? zone["title"];
 
-    if (value != null &&
-        value.toString().trim().isNotEmpty) {
+    if (value != null && value.toString().trim().isNotEmpty) {
       return value.toString();
     }
 
     return "Zone ${index + 1}";
   }
 
-  int _totalHomes(
-    List<Map<String, dynamic>> zones,
-  ) {
+  int _totalHomes(List<Map<String, dynamic>> zones) {
     return zones.fold<int>(
       0,
-      (total, zone) =>
-          total + _getEstimatedHomes(zone),
+      (total, zone) => total + _getEstimatedHomes(zone),
     );
   }
 
@@ -574,9 +550,7 @@ Widget _buildCampaignMap(
     final campaign = widget.campaign;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Campaign Details"),
-      ),
+      appBar: AppBar(title: const Text("Campaign Details")),
 
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -584,38 +558,32 @@ Widget _buildCampaignMap(
           // ====================================================
           // CAMPAIGN HEADER
           // ====================================================
-
           Text(
             campaign.campaignName,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 10),
 
           Text(
             campaign.description,
-            style: const TextStyle(
-              fontSize: 16,
-              height: 1.4,
-            ),
+            style: const TextStyle(fontSize: 16, height: 1.4),
           ),
+          if (campaign.materialLogistics.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _materialPlanCard(campaign.materialLogistics),
+          ],
 
           const SizedBox(height: 20),
 
           // ====================================================
           // BUSINESS PROFILE
           // ====================================================
-
           SizedBox(
             height: 55,
             child: OutlinedButton.icon(
               icon: const Icon(Icons.business),
-              label: const Text(
-                "View Business Profile",
-              ),
+              label: const Text("View Business Profile"),
               onPressed: _openBusinessProfile,
             ),
           ),
@@ -625,11 +593,7 @@ Widget _buildCampaignMap(
           // ====================================================
           // EARNINGS
           // ====================================================
-
-          _sectionTitle(
-            Icons.payments_outlined,
-            "Earnings",
-          ),
+          _sectionTitle(Icons.payments_outlined, "Earnings"),
 
           const SizedBox(height: 12),
 
@@ -702,40 +666,25 @@ Widget _buildCampaignMap(
           // ====================================================
           // CAMPAIGN AREA / WORKLOAD
           // ====================================================
-
-          _sectionTitle(
-            Icons.map_outlined,
-            "Campaign Area",
-          ),
+          _sectionTitle(Icons.map_outlined, "Campaign Area"),
 
           const SizedBox(height: 12),
 
-          _info(
-            Icons.location_on,
-            campaign.address,
-          ),
+          _info(Icons.location_on, campaign.address),
 
-          _info(
-            Icons.groups,
-            "${campaign.scalerCount} Scalers Needed",
-          ),
+          _info(Icons.groups, "${campaign.scalerCount} Scalers Needed"),
 
           const SizedBox(height: 8),
 
           StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _campaignService.getCampaignZones(
-              campaign.id,
-            ),
+            stream: _campaignService.getCampaignZones(campaign.id),
 
             builder: (context, snapshot) {
-              if (snapshot.connectionState ==
-                  ConnectionState.waiting) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Card(
                   child: Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
                 );
               }
@@ -745,12 +694,9 @@ Widget _buildCampaignMap(
                   child: Padding(
                     padding: const EdgeInsets.all(18),
                     child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.warning_amber,
-                        ),
+                        const Icon(Icons.warning_amber),
 
                         const SizedBox(width: 12),
 
@@ -765,9 +711,7 @@ Widget _buildCampaignMap(
                 );
               }
 
-              final zones =
-                  snapshot.data ??
-                  <Map<String, dynamic>>[];
+              final zones = snapshot.data ?? <Map<String, dynamic>>[];
 
               if (zones.isEmpty) {
                 return const Card(
@@ -780,9 +724,7 @@ Widget _buildCampaignMap(
                         SizedBox(width: 12),
 
                         Expanded(
-                          child: Text(
-                            "No campaign zones are available.",
-                          ),
+                          child: Text("No campaign zones are available."),
                         ),
                       ],
                     ),
@@ -790,55 +732,41 @@ Widget _buildCampaignMap(
                 );
               }
 
-              final estimatedHomes =
-                  _totalHomes(zones);
+              final estimatedHomes = _totalHomes(zones);
 
               return Column(
                 children: [
                   // ============================================
                   // WORKLOAD SUMMARY
                   // ============================================
-
                   Card(
                     child: Padding(
-                      padding:
-                          const EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(18),
                       child: Column(
                         children: [
                           Row(
                             children: [
                               Expanded(
                                 child: _stat(
-                                  icon:
-                                      Icons.home_outlined,
-                                  value:
-                                      estimatedHomes > 0
-                                          ? estimatedHomes
-                                                .toString()
-                                          : "—",
-                                  label:
-                                      "Estimated Homes",
+                                  icon: Icons.home_outlined,
+                                  value: estimatedHomes > 0
+                                      ? estimatedHomes.toString()
+                                      : "—",
+                                  label: "Estimated Homes",
                                 ),
                               ),
 
                               Container(
                                 height: 55,
                                 width: 1,
-                                color:
-                                    Theme.of(context)
-                                        .dividerColor,
+                                color: Theme.of(context).dividerColor,
                               ),
 
                               Expanded(
                                 child: _stat(
-                                  icon:
-                                      Icons.layers_outlined,
-                                  value:
-                                      zones.length
-                                          .toString(),
-                                  label: zones.length == 1
-                                      ? "Zone"
-                                      : "Zones",
+                                  icon: Icons.layers_outlined,
+                                  value: zones.length.toString(),
+                                  label: zones.length == 1 ? "Zone" : "Zones",
                                 ),
                               ),
                             ],
@@ -856,7 +784,6 @@ Widget _buildCampaignMap(
                   // We will replace this with the SAME map
                   // implementation used by the business mapper.
                   // ============================================
-
                   _buildCampaignMap(zones),
 
                   const SizedBox(height: 12),
@@ -864,48 +791,29 @@ Widget _buildCampaignMap(
                   // ============================================
                   // ZONE LIST
                   // ============================================
-
                   Card(
                     child: Padding(
-                      padding:
-                          const EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(18),
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
                             "Posted Zones",
                             style: TextStyle(
                               fontSize: 17,
-                              fontWeight:
-                                  FontWeight.bold,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
 
                           const SizedBox(height: 12),
 
-                          for (
-                            int i = 0;
-                            i < zones.length;
-                            i++
-                          ) ...[
+                          for (int i = 0; i < zones.length; i++) ...[
                             _zoneRow(
-                              name:
-                                  _getZoneName(
-                                zones[i],
-                                i,
-                              ),
-                              estimatedHomes:
-                                  _getEstimatedHomes(
-                                zones[i],
-                              ),
+                              name: _getZoneName(zones[i], i),
+                              estimatedHomes: _getEstimatedHomes(zones[i]),
                             ),
 
-                            if (i <
-                                zones.length - 1)
-                              const Divider(
-                                height: 22,
-                              ),
+                            if (i < zones.length - 1) const Divider(height: 22),
                           ],
                         ],
                       ),
@@ -921,11 +829,7 @@ Widget _buildCampaignMap(
           // ====================================================
           // VERIFICATION
           // ====================================================
-
-          _sectionTitle(
-            Icons.verified_outlined,
-            "Verification Requirements",
-          ),
+          _sectionTitle(Icons.verified_outlined, "Verification Requirements"),
 
           const SizedBox(height: 14),
 
@@ -934,24 +838,17 @@ Widget _buildCampaignMap(
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
-                  _check(
-                    "Before Photo",
-                    campaign.beforePhotoRequired,
-                  ),
+                  _check("Before Photo", campaign.beforePhotoRequired),
 
                   const SizedBox(height: 12),
 
-                  _check(
-                    "After Photo",
-                    campaign.afterPhotoRequired,
-                  ),
+                  _check("After Photo", campaign.afterPhotoRequired),
 
                   const SizedBox(height: 12),
 
                   _check(
                     "Business Approval",
-                    campaign
-                        .businessApprovalRequired,
+                    campaign.businessApprovalRequired,
                   ),
                 ],
               ),
@@ -963,7 +860,6 @@ Widget _buildCampaignMap(
           // ====================================================
           // ACTION
           // ====================================================
-
           _buildCampaignAction(campaign),
 
           const SizedBox(height: 30),
@@ -976,10 +872,7 @@ Widget _buildCampaignMap(
   // UI HELPERS
   // ============================================================
 
-  Widget _sectionTitle(
-    IconData icon,
-    String title,
-  ) {
+  Widget _sectionTitle(IconData icon, String title) {
     return Row(
       children: [
         Icon(icon),
@@ -988,24 +881,15 @@ Widget _buildCampaignMap(
 
         Text(
           title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
       ],
     );
   }
 
-  Widget _info(
-    IconData icon,
-    String text, {
-    bool bold = false,
-  }) {
+  Widget _info(IconData icon, String text, {bool bold = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: 8,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           Icon(icon),
@@ -1016,10 +900,7 @@ Widget _buildCampaignMap(
             child: Text(
               text,
               style: TextStyle(
-                fontWeight:
-                    bold
-                        ? FontWeight.bold
-                        : FontWeight.normal,
+                fontWeight: bold ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ),
@@ -1041,10 +922,7 @@ Widget _buildCampaignMap(
 
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
 
         const SizedBox(height: 3),
@@ -1052,106 +930,125 @@ Widget _buildCampaignMap(
         Text(
           label,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 12,
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _zoneRow({required String name, required int estimatedHomes}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+
+      children: [
+        const CircleAvatar(
+          radius: 18,
+
+          child: Icon(Icons.location_on_outlined, size: 20),
+        ),
+
+        const SizedBox(width: 12),
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+
+            children: [
+              Text(
+                name,
+
+                maxLines: 1,
+
+                overflow: TextOverflow.ellipsis,
+
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 4),
+
+              Text(
+                estimatedHomes > 0
+                    ? "$estimatedHomes estimated homes"
+                    : "Estimated homes unavailable",
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-
-  Widget _zoneRow({
-  required String name,
-  required int estimatedHomes,
-}) {
-
-  return Row(
-
-    crossAxisAlignment:
-        CrossAxisAlignment.start,
-
-    children:[
-
-
-      const CircleAvatar(
-        radius:18,
-
-        child: Icon(
-          Icons.location_on_outlined,
-          size:20,
-        ),
-      ),
-
-
-      const SizedBox(width:12),
-
-
-      Expanded(
-
+  Widget _materialPlanCard(Map<String, dynamic> logistics) {
+    final type =
+        logistics['fulfillmentType']?.toString() ?? 'no_materials_required';
+    final label = switch (type) {
+      'scaler_pickup_print_shop' => 'Printing Shop Pickup',
+      'scaler_pickup_business' => 'Business Pickup',
+      'business_delivery' => 'Business Delivery',
+      _ => 'No Physical Materials Required',
+    };
+    final location = logistics['location']?.toString();
+    final shop = logistics['printingShopName']?.toString();
+    final instructions = logistics['instructions']?.toString();
+    final scheduled = _materialDate(logistics['scheduledAt']);
+    final scheduleLabel = scheduled == null
+        ? null
+        : '${scheduled.month}/${scheduled.day}/${scheduled.year} '
+              '${scheduled.hour.toString().padLeft(2, '0')}:'
+              '${scheduled.minute.toString().padLeft(2, '0')}';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-
-          children:[
-
-
-            Text(
-              name,
-
-              maxLines:1,
-
-              overflow:
-                  TextOverflow.ellipsis,
-
-              style:
-                  const TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'MATERIALS',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
-
-
-            const SizedBox(height:4),
-
-
-            Text(
-              estimatedHomes > 0
-                  ? "$estimatedHomes estimated homes"
-                  : "Estimated homes unavailable",
+            const SizedBox(height: 8),
+            Text('Fulfillment: $label'),
+            if (shop != null && shop.isNotEmpty) Text('Printing shop: $shop'),
+            if (location != null && location.isNotEmpty)
+              Text('Location: $location'),
+            if (scheduleLabel != null) Text('Date/time: $scheduleLabel'),
+            if (instructions != null && instructions.isNotEmpty)
+              Text('Instructions: $instructions'),
+            const SizedBox(height: 8),
+            const Text(
+              'These material terms become locked when you accept the assignment.',
             ),
-
-
           ],
-
         ),
-
       ),
+    );
+  }
 
+  DateTime? _materialDate(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    if (value is Map) {
+      final seconds = value['seconds'] ?? value['_seconds'];
+      if (seconds is num) {
+        return DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000);
+      }
+    }
+    try {
+      final dynamic date = value?.toDate();
+      return date is DateTime ? date : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
-    ],
-
-  );
-
-}
-  Widget _check(
-    String label,
-    bool enabled,
-  ) {
+  Widget _check(String label, bool enabled) {
     return Row(
       children: [
-        Icon(
-          enabled
-              ? Icons.check_circle
-              : Icons.cancel,
-        ),
+        Icon(enabled ? Icons.check_circle : Icons.cancel),
 
         const SizedBox(width: 10),
 
-        Expanded(
-          child: Text(label),
-        ),
+        Expanded(child: Text(label)),
       ],
     );
   }

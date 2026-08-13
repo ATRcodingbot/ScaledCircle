@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
-import '../../widgets/mapped_address_field.dart';
+import '../../models/material_logistics.dart';
+import '../../widgets/material_fulfillment_form.dart';
 
 class EditCampaignScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
@@ -21,20 +23,13 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
   late final TextEditingController _basePayController;
   late final TextEditingController _bonusController;
   late final TextEditingController _deadlineController;
-  late final TextEditingController _materialAddressController;
-
-  late final bool _supportsMaterialHandoff;
-  late final String _originalMaterialHandoffMethod;
-  late final String _originalMaterialHandoffAddress;
-  late String _materialHandoffMethod;
-  double? _materialHandoffLatitude;
-  double? _materialHandoffLongitude;
-
-  bool _checkingMaterialHandoffLock = true;
-  bool _hasAcceptedOrAssignedScaler = false;
-  String? _materialHandoffLockError;
+  late final TextEditingController _changeReasonController;
+  late MaterialLogisticsDraft _materialLogistics;
+  late final String _originalMaterialLogistics;
 
   bool _saving = false;
+  bool _proposalMode = false;
+  late final bool _materialLocked;
 
   @override
   void initState() {
@@ -65,30 +60,11 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
     _deadlineController = TextEditingController(
       text: data['deadline']?.toString() ?? '',
     );
+    _changeReasonController = TextEditingController();
+    _materialLocked = data['materialLogisticsLockedAt'] != null;
 
-    _supportsMaterialHandoff =
-        data['materialSource']?.toString() == 'business_provided' ||
-        data.containsKey('materialHandoffMethod');
-    _originalMaterialHandoffMethod =
-        data['materialHandoffMethod']?.toString() == 'business_dropoff'
-        ? 'business_dropoff'
-        : 'business_pickup';
-    _materialHandoffMethod = _originalMaterialHandoffMethod;
-    _originalMaterialHandoffAddress =
-        data['materialHandoffAddress']?.toString() ?? '';
-    _materialAddressController = TextEditingController(
-      text: _originalMaterialHandoffAddress,
-    );
-    _materialHandoffLatitude = (data['materialHandoffLatitude'] as num?)
-        ?.toDouble();
-    _materialHandoffLongitude = (data['materialHandoffLongitude'] as num?)
-        ?.toDouble();
-
-    if (_supportsMaterialHandoff) {
-      _refreshMaterialHandoffLock();
-    } else {
-      _checkingMaterialHandoffLock = false;
-    }
+    _materialLogistics = MaterialLogisticsDraft.fromCampaign(data);
+    _originalMaterialLogistics = _materialLogistics.toCallableData().toString();
   }
 
   @override
@@ -99,82 +75,23 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
     _basePayController.dispose();
     _bonusController.dispose();
     _deadlineController.dispose();
-    _materialAddressController.dispose();
+    _changeReasonController.dispose();
     super.dispose();
   }
 
-  Future<bool> _campaignHasAcceptedOrAssignedScaler() async {
-    final firestore = FirebaseFirestore.instance;
-    final campaignId = widget.campaign.id;
-    final results = await Future.wait([
-      firestore
-          .collection('campaigns')
-          .doc(campaignId)
-          .collection('applications')
-          .where('status', isEqualTo: 'accepted')
-          .limit(1)
-          .get(),
-      firestore
-          .collection('campaignZones')
-          .where('campaignId', isEqualTo: campaignId)
-          .get(),
-    ]);
-
-    final acceptedApplications = results[0];
-    final campaignZones = results[1];
-    final hasAssignedZone = campaignZones.docs.any((zone) {
-      final data = zone.data();
-      return data['assignedScalerId']?.toString().trim().isNotEmpty == true;
-    });
-
-    return acceptedApplications.docs.isNotEmpty || hasAssignedZone;
-  }
-
-  Future<void> _refreshMaterialHandoffLock() async {
-    if (mounted) {
-      setState(() {
-        _checkingMaterialHandoffLock = true;
-        _materialHandoffLockError = null;
-      });
-    }
-
-    try {
-      final locked = await _campaignHasAcceptedOrAssignedScaler();
-      if (!mounted) return;
-      setState(() {
-        _hasAcceptedOrAssignedScaler = locked;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _materialHandoffLockError =
-            'Unable to verify applicant assignments. Handoff changes are '
-            'locked until this check succeeds.';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _checkingMaterialHandoffLock = false;
-        });
-      }
-    }
-  }
-
-  bool get _canEditMaterialHandoff {
-    return _supportsMaterialHandoff &&
-        !_checkingMaterialHandoffLock &&
-        _materialHandoffLockError == null &&
-        !_hasAcceptedOrAssignedScaler;
-  }
-
-  bool get _materialHandoffChanged {
-    return _materialHandoffMethod != _originalMaterialHandoffMethod ||
-        _materialAddressController.text.trim() !=
-            _originalMaterialHandoffAddress;
-  }
+  bool get _materialLogisticsChanged =>
+      _materialLogistics.toCallableData().toString() !=
+      _originalMaterialLogistics;
 
   Future<void> _saveCampaign() async {
     if (!_formKey.currentState!.validate()) return;
+    final materialError = _materialLogistics.validate();
+    if (materialError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(materialError)));
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -190,27 +107,58 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
         'deadline': _deadlineController.text.trim(),
       };
 
-      if (_supportsMaterialHandoff && _materialHandoffChanged) {
-        final locked = await _campaignHasAcceptedOrAssignedScaler();
-        if (locked) {
-          if (mounted) {
-            setState(() {
-              _hasAcceptedOrAssignedScaler = true;
-            });
+      if (_materialLogisticsChanged) {
+        late final HttpsCallable callable;
+        late final Map<String, dynamic> payload;
+        if (_materialLocked) {
+          final zones = await FirebaseFirestore.instance
+              .collection('campaignZones')
+              .where('campaignId', isEqualTo: widget.campaign.id)
+              .limit(20)
+              .get();
+          final assigned = zones.docs.where((zone) {
+            final data = zone.data();
+            return data['assignedScalerId'] != null ||
+                (data['assignedScalerIds'] as List?)?.isNotEmpty == true;
+          }).toList();
+          if (assigned.isEmpty) {
+            throw Exception('The locked assignment zone could not be found.');
           }
-          throw Exception(
-            'Material handoff is locked because a Scaler has already been '
-            'accepted or assigned.',
+          if (_changeReasonController.text.trim().length < 3) {
+            throw Exception(
+              'Explain why the locked material plan must change.',
+            );
+          }
+          callable = FirebaseFunctions.instanceFor(
+            region: 'us-east1',
+          ).httpsCallable('proposeMaterialLogisticsChange');
+          payload = {
+            ..._materialLogistics.toCallableData(),
+            'zoneId': assigned.first.id,
+            'reason': _changeReasonController.text.trim(),
+          };
+        } else {
+          callable = FirebaseFunctions.instanceFor(
+            region: 'us-east1',
+          ).httpsCallable('updateCampaignMaterialLogistics');
+          payload = _materialLogistics.toCallableData(
+            campaignId: widget.campaign.id,
           );
         }
-
-        updates.addAll({
-          'materialHandoffMethod': _materialHandoffMethod,
-          'materialHandoffAddress': _materialAddressController.text.trim(),
-          'materialHandoffLatitude': _materialHandoffLatitude,
-          'materialHandoffLongitude': _materialHandoffLongitude,
-          'materialHandoffUpdatedAt': FieldValue.serverTimestamp(),
-        });
+        final response = await callable.call(payload);
+        final result = Map<String, dynamic>.from(response.data as Map);
+        final lockedCount =
+            (result['lockedHandoffCount'] as num?)?.round() ?? 0;
+        if (mounted && lockedCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$lockedCount completed or terminal participant handoff'
+                '${lockedCount == 1 ? ' was' : 's were'} preserved.',
+              ),
+            ),
+          );
+        }
       }
 
       updates['updatedAt'] = FieldValue.serverTimestamp();
@@ -242,107 +190,6 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
     return InputDecoration(
       labelText: label,
       border: const OutlineInputBorder(),
-    );
-  }
-
-  Widget _buildMaterialHandoffSection() {
-    final colorScheme = Theme.of(context).colorScheme;
-    final locked = _hasAcceptedOrAssignedScaler;
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.inventory_2_outlined),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Marketing Material Handoff',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              locked
-                  ? 'Locked because a Scaler has already been accepted or '
-                        'assigned.'
-                  : 'Choose how the selected Scaler will receive the '
-                        'materials. This remains editable until a Scaler is '
-                        'accepted.',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            if (_checkingMaterialHandoffLock)
-              const LinearProgressIndicator()
-            else if (_materialHandoffLockError != null) ...[
-              Text(
-                _materialHandoffLockError!,
-                style: TextStyle(color: colorScheme.error),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _refreshMaterialHandoffLock,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry assignment check'),
-              ),
-            ] else ...[
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'business_pickup',
-                    icon: Icon(Icons.storefront_outlined),
-                    label: Text('Scaler pickup'),
-                  ),
-                  ButtonSegment(
-                    value: 'business_dropoff',
-                    icon: Icon(Icons.handshake_outlined),
-                    label: Text('Meet up'),
-                  ),
-                ],
-                selected: {_materialHandoffMethod},
-                onSelectionChanged: _canEditMaterialHandoff
-                    ? (selection) {
-                        setState(() {
-                          _materialHandoffMethod = selection.first;
-                        });
-                      }
-                    : null,
-              ),
-              const SizedBox(height: 16),
-              MappedAddressField(
-                controller: _materialAddressController,
-                enabled: _canEditMaterialHandoff,
-                labelText: _materialHandoffMethod == 'business_dropoff'
-                    ? 'Meet-up / drop-off address'
-                    : 'Material pickup address',
-                hintText: 'Search a complete street address',
-                onChanged: (_) {
-                  _materialHandoffLatitude = null;
-                  _materialHandoffLongitude = null;
-                },
-                onSelected: (suggestion) {
-                  _materialHandoffLatitude = suggestion.latitude;
-                  _materialHandoffLongitude = suggestion.longitude;
-                },
-                validator: (value) {
-                  if (_canEditMaterialHandoff &&
-                      (value == null || value.trim().isEmpty)) {
-                    return 'Choose the pickup or meeting address.';
-                  }
-                  return null;
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 
@@ -421,9 +268,38 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
               decoration: _decoration("Deadline"),
             ),
 
-            if (_supportsMaterialHandoff) ...[
-              const SizedBox(height: 24),
-              _buildMaterialHandoffSection(),
+            const SizedBox(height: 24),
+            MaterialFulfillmentForm(
+              value: _materialLogistics,
+              enabled: !_materialLocked || _proposalMode,
+              onChanged: (value) {
+                setState(() => _materialLogistics = value);
+              },
+              lockMessage: _materialLocked
+                  ? 'Material logistics are locked because a Scaler accepted this job. '
+                        'The accepted plan remains authoritative unless every affected '
+                        'assigned Scaler accepts a proposed change.'
+                  : 'Editable until the first Scaler accepts an assignment.',
+            ),
+            if (_materialLocked && !_proposalMode) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _proposalMode = true),
+                icon: const Icon(Icons.rule_folder_outlined),
+                label: const Text('Propose Logistics Change'),
+              ),
+            ],
+            if (_materialLocked && _proposalMode) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _changeReasonController,
+                decoration: _decoration('Reason for proposed change'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'The original plan stays authoritative until every affected assigned Scaler accepts.',
+              ),
             ],
 
             const SizedBox(height: 35),

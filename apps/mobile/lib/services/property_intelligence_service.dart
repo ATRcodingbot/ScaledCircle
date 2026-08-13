@@ -54,6 +54,10 @@ class PropertyIntelligenceAnalysis {
   Map<String, num> get propertyTypes => Map<String, dynamic>.from(
     data['propertyTypeDistribution'] as Map? ?? const {},
   ).map((key, value) => MapEntry(key, value is num ? value : 0));
+  Map<String, dynamic> get physicalChannelSuitability =>
+      Map<String, dynamic>.from(
+        data['physicalChannelSuitability'] as Map? ?? const {},
+      );
 }
 
 class PropertyIntelligenceService {
@@ -78,4 +82,32 @@ class PropertyIntelligenceService {
       Map<String, dynamic>.from(payload['analysis'] as Map),
     );
   }
+
+  Future<PropertyIntelligenceAnalysis> analyzeArea(
+    List<Map<String, double>> geometry, {
+    String objective = '',
+  }) async {
+    final response = await _functions
+        .httpsCallable('analyzePropertyIntelligence')
+        .call(buildExploratoryRequest(geometry, objective: objective));
+    final payload = Map<String, dynamic>.from(response.data as Map);
+    return PropertyIntelligenceAnalysis(
+      Map<String, dynamic>.from(payload['analysis'] as Map),
+    );
+  }
+
+  static Map<String, dynamic> buildExploratoryRequest(
+    List<Map<String, double>> geometry, {
+    String objective = '',
+  }) => <String, dynamic>{
+    'geometry': geometry
+        .map(
+          (point) => <String, double>{
+            'latitude': point['latitude']!,
+            'longitude': point['longitude']!,
+          },
+        )
+        .toList(growable: false),
+    if (objective.trim().isNotEmpty) 'objective': objective.trim(),
+  };
 }

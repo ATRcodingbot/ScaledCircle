@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import '../../models/campaign_card_compensation.dart';
+import '../../models/material_logistics.dart';
 import '../../services/completion_payout_service.dart';
 import '../../services/platform_billing_service.dart';
 import '../../services/secure_function_service.dart';
@@ -10,6 +12,7 @@ import '../../services/secure_function_service.dart';
 import '../../services/wallet_service.dart';
 import '../business/campaign_zones_screen.dart';
 import '../business/edit_campaign_screen.dart';
+import '../jobs/job_room_screen.dart';
 import 'campaign_applicants_screen.dart';
 import 'campaign_tracking_screen.dart';
 import '../reviews/user_reviews_screen.dart';
@@ -558,13 +561,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
     final zoneName = zoneData['zoneName']?.toString() ?? 'Assigned Zone';
 
-    final scalerId = zoneData['assignedScalerId']?.toString();
-
-    final campaignData = liveCampaign.data() as Map<String, dynamic>;
-
-    final campaignName =
-        campaignData['campaignName']?.toString() ?? 'Untitled Campaign';
-
     final feedbackController = TextEditingController();
 
     final feedback = await showDialog<String>(
@@ -624,25 +620,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         'changesRequestedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      if (scalerId != null && scalerId.isNotEmpty) {
-        final notificationReference = firestore
-            .collection('notifications')
-            .doc();
-
-        batch.set(notificationReference, {
-          'userId': scalerId,
-          'type': 'zone_changes_requested',
-          'title': 'Changes Requested',
-          'message': 'Changes were requested for $zoneName: $feedback',
-          'campaignId': liveCampaign.id,
-          'campaignName': campaignName,
-          'zoneId': zone.id,
-          'zoneName': zoneName,
-          'read': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
 
       await batch.commit();
 
@@ -1800,6 +1777,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         final maximumWorkerBudget =
             (data['maximumWorkerBudget'] as num?)?.toDouble() ?? 0.0;
+        final compensation = CampaignCardCompensation.fromCampaign(data);
 
         return Scaffold(
           appBar: AppBar(
@@ -1890,15 +1868,28 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                 estimatedHomes > 0 ? estimatedHomes.toString() : 'Pending',
               ),
 
-              _infoCard(
-                Icons.attach_money,
-                'Campaign Base Pay',
-                '\$${basePay.toStringAsFixed(2)}',
-              ),
+              if (compensation.isGroupCampaign)
+                _infoCard(
+                  Icons.groups_outlined,
+                  'GROUP WORKER PAY',
+                  [
+                    compensation.primaryText,
+                    if (compensation.secondaryText != null)
+                      compensation.secondaryText!,
+                  ].join('\n'),
+                )
+              else
+                _infoCard(
+                  Icons.attach_money,
+                  'Campaign Base Pay',
+                  '\$${basePay.toStringAsFixed(2)}',
+                ),
 
               _infoCard(Icons.star, 'Bonus', '\$${bonus.toStringAsFixed(2)}'),
 
               _infoCard(Icons.calendar_today, 'Deadline', deadline),
+
+              _materialPlanCard(context, liveCampaign, data),
 
               const SizedBox(height: 10),
 
@@ -2118,8 +2109,107 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     );
   }
 
+  Widget _materialPlanCard(
+    BuildContext context,
+    DocumentSnapshot liveCampaign,
+    Map<String, dynamic> data,
+  ) {
+    final logistics = MaterialLogisticsDraft.fromCampaign(data);
+    final locked = data['materialLogisticsLockedAt'] != null;
+    final label = switch (logistics.fulfillmentType) {
+      MaterialLogisticsDraft.scalerPickupPrintShop => 'Printing Shop Pickup',
+      MaterialLogisticsDraft.scalerPickupBusiness => 'Business Pickup',
+      MaterialLogisticsDraft.businessDelivery => 'Business Delivery',
+      _ => 'No Physical Materials Required',
+    };
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.inventory_2_outlined),
+                SizedBox(width: 10),
+                Text(
+                  'MATERIAL FULFILLMENT',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(label, style: Theme.of(context).textTheme.titleMedium),
+            if (logistics.printingShopName.isNotEmpty)
+              Text('Printing shop: ${logistics.printingShopName}'),
+            if (logistics.location.isNotEmpty)
+              Text('Location: ${logistics.location}'),
+            if (logistics.scheduledAt != null)
+              Text('Date/time: ${_formatDateTime(logistics.scheduledAt!)}'),
+            if (logistics.windowEndAt != null)
+              Text('Window ends: ${_formatDateTime(logistics.windowEndAt!)}'),
+            if (logistics.instructions.isNotEmpty)
+              Text('Instructions: ${logistics.instructions}'),
+            const SizedBox(height: 8),
+            Text(
+              locked
+                  ? 'Locked — a Scaler accepted these terms'
+                  : 'Editable until a Scaler is assigned',
+            ),
+            const SizedBox(height: 8),
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('campaignZones')
+                  .where('campaignId', isEqualTo: liveCampaign.id)
+                  .limit(10)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                QueryDocumentSnapshot<Map<String, dynamic>>? assigned;
+                for (final zone in snapshot.data?.docs ?? const []) {
+                  final zoneData = zone.data();
+                  if (zoneData['assignedScalerId'] != null ||
+                      (zoneData['assignedScalerIds'] as List?)?.isNotEmpty ==
+                          true) {
+                    assigned = zone;
+                    break;
+                  }
+                }
+                if (locked && assigned != null) {
+                  return FilledButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => JobRoomScreen(zoneId: assigned!.id),
+                      ),
+                    ),
+                    icon: const Icon(Icons.meeting_room_outlined),
+                    label: const Text('Open Job Room'),
+                  );
+                }
+                return OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          EditCampaignScreen(campaign: liveCampaign),
+                    ),
+                  ),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(
+                    locked ? 'View Material Plan' : 'Edit Material Plan',
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _deadlineLabel(Map<String, dynamic> data) {
-    final deadlineAt = data['deadlineAt'];
+    final deadlineAt = data['deadlineAt'] ?? data['deadline'];
 
     if (deadlineAt is Timestamp) {
       final date = deadlineAt.toDate();
@@ -2134,7 +2224,36 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           '$hour:$minute $period';
     }
 
-    return data['deadline']?.toString() ?? 'No deadline';
+    if (deadlineAt is DateTime) return _formatDateTime(deadlineAt);
+    if (deadlineAt is String) {
+      final parsed = DateTime.tryParse(deadlineAt);
+      if (parsed != null) return _formatDateTime(parsed);
+      final match = RegExp(
+        r'Timestamp\(seconds=(\d+), nanoseconds=\d+\)',
+      ).firstMatch(deadlineAt);
+      if (match != null) {
+        return _formatDateTime(
+          DateTime.fromMillisecondsSinceEpoch(
+            int.parse(match.group(1)!) * 1000,
+          ),
+        );
+      }
+    }
+    if (deadlineAt is Map) {
+      final seconds = deadlineAt['seconds'] ?? deadlineAt['_seconds'];
+      if (seconds is num) {
+        return _formatDateTime(
+          DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000),
+        );
+      }
+    }
+    return 'No deadline';
+  }
+
+  String _formatDateTime(DateTime date) {
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    return '${date.month}/${date.day}/${date.year} $hour:'
+        '${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
   }
 
   String _formatTimestamp(dynamic value) {

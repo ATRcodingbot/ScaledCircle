@@ -142,6 +142,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       case 'scale':
         return 'Scale';
 
+      case 'managed_growth':
+        return 'Managed Growth';
+
       default:
         return plan;
     }
@@ -399,9 +402,37 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           'API and integrations',
                           'CRM integrations',
                           'Recurring campaign automation',
-                          'Maryland Weather Intelligence alerts',
+                          'AI Property Intelligence',
+                          'AI Weather Intelligence and Maryland alerts',
+                          'Combined Property + Weather opportunity analysis',
                           'Franchise and multi-location management',
                           'Priority support',
+                        ],
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      _planCard(
+                        plan: 'managed_growth',
+                        title: 'Managed Growth — Beta',
+                        price: 999,
+                        subtitle:
+                            'For 3–5 initial Businesses building one coordinated digital + physical growth system.',
+                        currentPlan: currentPlan,
+                        subscriptionActive: subscriptionActive,
+                        availableForPurchase: false,
+                        features: const [
+                          'Everything in Scale',
+                          'AI Business Growth Analysis',
+                          '30-Day Marketing Plan',
+                          'Social Content Plan',
+                          'Paid Advertising Creative & Strategy',
+                          'SEO Action Plan',
+                          '30-Day Email Campaign',
+                          'Postcard Campaign Management',
+                          'Unified campaign measurement',
+                          'Advertising spend, printing, postage, and vendor costs are separate',
+                          'Limited beta — no unlimited agency revisions',
                         ],
                       ),
 
@@ -472,6 +503,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     required String? currentPlan,
     required bool subscriptionActive,
     bool recommended = false,
+    bool availableForPurchase = true,
   }) {
     final purchasing = _purchasingPlan == plan;
 
@@ -626,7 +658,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               height: 52,
               child: ElevatedButton(
                 onPressed:
-                    _purchasingPlan != null || isCurrentPlan || isDowngrade
+                    !availableForPurchase ||
+                        _purchasingPlan != null ||
+                        isCurrentPlan ||
+                        isDowngrade
                     ? null
                     : () {
                         _purchasePlan(plan, charge, isUpgrade);
@@ -640,6 +675,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     : Text(
                         isCurrentPlan
                             ? 'Current Plan'
+                            : !availableForPurchase
+                            ? 'Limited Beta — Contact ScaledCircle'
                             : isDowngrade
                             ? 'Lower Plan'
                             : isUpgrade

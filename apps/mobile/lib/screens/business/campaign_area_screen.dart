@@ -6,10 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../models/campaign_area_geometry.dart';
 import '../../services/property_intelligence_service.dart';
+import '../../services/scaled_circle_intelligence_service.dart';
 import '../../widgets/property_intelligence_panel.dart';
-
-enum CampaignAreaShape { polygon, rectangle, circle, triangle }
 
 class CampaignAreaScreen extends StatefulWidget {
   final DocumentReference campaignReference;
@@ -300,67 +300,21 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   List<LatLng> _autoOrderPolygon(List<LatLng> points) {
-    if (points.length < 3) {
-      return List<LatLng>.from(points);
-    }
-
-    double centerLatitude = 0;
-    double centerLongitude = 0;
-
-    for (final point in points) {
-      centerLatitude += point.latitude;
-
-      centerLongitude += point.longitude;
-    }
-
-    centerLatitude /= points.length;
-
-    centerLongitude /= points.length;
-
-    final ordered = List<LatLng>.from(points);
-
-    ordered.sort((a, b) {
-      final angleA = math.atan2(
-        a.latitude - centerLatitude,
-        a.longitude - centerLongitude,
-      );
-
-      final angleB = math.atan2(
-        b.latitude - centerLatitude,
-        b.longitude - centerLongitude,
-      );
-
-      return angleA.compareTo(angleB);
-    });
-
-    return ordered;
+    return CampaignAreaGeometry.fromInput(CampaignAreaShape.polygon, points);
   }
 
   List<LatLng> _buildRectangle(LatLng first, LatLng second) {
-    return [
-      LatLng(first.latitude, first.longitude),
-      LatLng(first.latitude, second.longitude),
-      LatLng(second.latitude, second.longitude),
-      LatLng(second.latitude, first.longitude),
-    ];
+    return CampaignAreaGeometry.fromInput(CampaignAreaShape.rectangle, [
+      first,
+      second,
+    ]);
   }
 
   List<LatLng> _buildCirclePolygon(LatLng center, LatLng edge) {
-    final distance = const Distance();
-
-    final radiusMeters = distance.as(LengthUnit.Meter, center, edge);
-
-    const pointCount = 48;
-
-    final points = <LatLng>[];
-
-    for (int index = 0; index < pointCount; index++) {
-      final bearing = (360 / pointCount) * index;
-
-      points.add(distance.offset(center, radiusMeters, bearing));
-    }
-
-    return points;
+    return CampaignAreaGeometry.fromInput(CampaignAreaShape.circle, [
+      center,
+      edge,
+    ]);
   }
 
   double? _circleRadiusMeters() {
@@ -698,6 +652,92 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     );
   }
 
+  Future<void> _askPropertyAi() async {
+    final analysis = _propertyIntelligence;
+    final analysisId = analysis?.data['analysisId']?.toString() ?? '';
+    final geometryDigest = analysis?.data['geometryDigest']?.toString() ?? '';
+    if (analysis == null || analysisId.isEmpty || geometryDigest.isEmpty) {
+      return;
+    }
+    final objective = TextEditingController();
+    final question = TextEditingController();
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ask AI About This Area'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: objective,
+                decoration: const InputDecoration(
+                  labelText: 'Business objective',
+                ),
+              ),
+              TextField(
+                controller: question,
+                maxLength: 1200,
+                decoration: const InputDecoration(labelText: 'Question'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Analyze'),
+          ),
+        ],
+      ),
+    );
+    if (submitted != true || !mounted) {
+      objective.dispose();
+      question.dispose();
+      return;
+    }
+    try {
+      final result = await ScaledCircleIntelligenceService().analyzeProperty(
+        analysisId: analysisId,
+        geometryDigest: geometryDigest,
+        businessObjective: objective.text,
+        question: question.text,
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('AI Opportunity Analysis'),
+          content: SingleChildScrollView(child: Text(result.summary)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error.message ?? 'AI analysis is temporarily unavailable.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      objective.dispose();
+      question.dispose();
+    }
+  }
+
   Future<bool> _runDevelopmentHomeEstimateFallback() async {
     try {
       final snapshot = await widget.campaignReference.get();
@@ -944,35 +984,11 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   String _shapeLabel(CampaignAreaShape shape) {
-    switch (shape) {
-      case CampaignAreaShape.polygon:
-        return 'Polygon';
-
-      case CampaignAreaShape.rectangle:
-        return 'Rectangle';
-
-      case CampaignAreaShape.circle:
-        return 'Circle';
-
-      case CampaignAreaShape.triangle:
-        return 'Triangle';
-    }
+    return CampaignAreaGeometry.label(shape);
   }
 
   String _shapeValue(CampaignAreaShape shape) {
-    switch (shape) {
-      case CampaignAreaShape.polygon:
-        return 'polygon';
-
-      case CampaignAreaShape.rectangle:
-        return 'rectangle';
-
-      case CampaignAreaShape.circle:
-        return 'circle';
-
-      case CampaignAreaShape.triangle:
-        return 'triangle';
-    }
+    return CampaignAreaGeometry.value(shape);
   }
 
   CampaignAreaShape _shapeFromValue(String? value) {
@@ -1210,13 +1226,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                             ),
                           ),
                       onCompare: _showPropertyComparison,
-                      onAskAi: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Ask AI is not production ready because no model transport is configured. Property facts remain available for deterministic comparison.',
-                          ),
-                        ),
-                      ),
+                      onAskAi: _askPropertyAi,
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -1313,8 +1323,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _mappingLocked ||
-                                  (_inputPoints.isEmpty && _generatedArea.isEmpty)
+                          onPressed:
+                              _mappingLocked ||
+                                  (_inputPoints.isEmpty &&
+                                      _generatedArea.isEmpty)
                               ? null
                               : _undoLastPoint,
                           icon: const Icon(Icons.undo),
@@ -1326,8 +1338,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _mappingLocked ||
-                                  (_inputPoints.isEmpty && _generatedArea.isEmpty)
+                          onPressed:
+                              _mappingLocked ||
+                                  (_inputPoints.isEmpty &&
+                                      _generatedArea.isEmpty)
                               ? null
                               : _clearArea,
                           icon: const Icon(Icons.clear),

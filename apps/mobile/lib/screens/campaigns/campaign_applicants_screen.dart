@@ -578,28 +578,6 @@ class CampaignApplicantsScreen extends StatelessWidget {
           'acceptedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-
-        final notificationReference = firestore
-            .collection('notifications')
-            .doc();
-
-        transaction.set(notificationReference, {
-          'userId': scalerId,
-          'type': 'application_accepted',
-          'title': 'Campaign Assignment Accepted',
-          'message':
-              'You were assigned ${claimedLocationIds.length} '
-              '$jobLabel for $campaignName.',
-          'campaignId': campaign.id,
-          'campaignName': campaignName,
-          'campaignType': campaignType,
-          'assignmentMode': 'exact_locations',
-          'assignedLocationIds': claimedLocationIds,
-          'assignedLocationCount': claimedLocationIds.length,
-          'assignedQuantity': claimedQuantity,
-          'read': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
       });
 
       await _refreshCampaignStaffing();
@@ -631,13 +609,6 @@ class CampaignApplicantsScreen extends StatelessWidget {
     BuildContext context,
     QueryDocumentSnapshot<Map<String, dynamic>> application,
   ) async {
-    final applicationData = application.data();
-
-    final scalerId = applicationData['scalerId']?.toString();
-
-    final campaignName =
-        applicationData['campaignName']?.toString() ?? 'this campaign';
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -676,23 +647,6 @@ class CampaignApplicantsScreen extends StatelessWidget {
         'rejectedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      if (scalerId != null && scalerId.isNotEmpty) {
-        final notificationReference = firestore
-            .collection('notifications')
-            .doc();
-
-        batch.set(notificationReference, {
-          'userId': scalerId,
-          'type': 'application_rejected',
-          'title': 'Application Update',
-          'message': 'Your application for $campaignName was not selected.',
-          'campaignId': campaign.id,
-          'campaignName': campaignName,
-          'read': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
 
       await batch.commit();
 

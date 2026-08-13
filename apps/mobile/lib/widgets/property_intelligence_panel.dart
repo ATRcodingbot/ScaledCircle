@@ -180,7 +180,7 @@ class PropertyIntelligencePanel extends StatelessWidget {
                 ),
                 OutlinedButton(
                   onPressed: onAskAi,
-                  child: const Text('Ask AI (Coming Soon)'),
+                  child: const Text('Ask AI About This Area'),
                 ),
               ],
             ),

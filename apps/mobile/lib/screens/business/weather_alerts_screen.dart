@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../services/maryland_weather_service.dart';
+import '../../services/scaled_circle_intelligence_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/scaled_circle_brand.dart';
 import 'subscription_screen.dart';
@@ -16,6 +18,10 @@ class WeatherAlertsScreen extends StatefulWidget {
 
 class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
   final MarylandWeatherService _service = MarylandWeatherService();
+  final ScaledCircleIntelligenceService _aiService =
+      ScaledCircleIntelligenceService();
+  final Map<String, ScaledCircleAiInterpretation> _aiResults = {};
+  final Set<String> _aiLoading = {};
   late Future<List<MarylandCountyWeather>> _weather;
   WeatherEntitlement? _entitlement;
   WeatherCoveragePreferences? _preferences;
@@ -51,11 +57,82 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
   Future<void> _openCoverageSettings() async {
     final saved = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => const WeatherCoverageSettingsScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const WeatherCoverageSettingsScreen()),
     );
     if (saved == true) await _refresh();
+  }
+
+  Future<void> _askWeatherAi(MarylandCountyWeather county) async {
+    final objective = TextEditingController();
+    final question = TextEditingController();
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('AI Weather Analysis — ${county.county.name}'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: objective,
+                decoration: const InputDecoration(
+                  labelText: 'Business objective',
+                  hintText: 'Example: I run an HVAC company.',
+                ),
+              ),
+              TextField(
+                controller: question,
+                maxLength: 1200,
+                decoration: const InputDecoration(
+                  labelText: 'Question',
+                  hintText: 'How might this weather affect outreach timing?',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Analyze'),
+          ),
+        ],
+      ),
+    );
+    if (submitted != true || !mounted) {
+      objective.dispose();
+      question.dispose();
+      return;
+    }
+    setState(() => _aiLoading.add(county.county.id));
+    try {
+      final result = await _aiService.analyzeWeather(
+        latitude: county.county.latitude,
+        longitude: county.county.longitude,
+        businessObjective: objective.text,
+        question: question.text,
+      );
+      if (mounted) setState(() => _aiResults[county.county.id] = result);
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error.message ?? 'AI analysis is temporarily unavailable.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      objective.dispose();
+      question.dispose();
+      if (mounted) setState(() => _aiLoading.remove(county.county.id));
+    }
   }
 
   @override
@@ -332,6 +409,34 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
                 children: alert.services
                     .map((service) => Chip(label: Text(service)))
                     .toList(),
+              ),
+            ],
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _aiLoading.contains(county.county.id)
+                  ? null
+                  : () => _askWeatherAi(county),
+              icon: _aiLoading.contains(county.county.id)
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome_outlined),
+              label: const Text('Ask AI About This Weather'),
+            ),
+            if (_aiResults[county.county.id] case final result?) ...[
+              const Divider(height: 24),
+              const Text(
+                'AI OPPORTUNITY ANALYSIS',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(result.summary),
+              const SizedBox(height: 6),
+              const Text(
+                'AI interpretation is advisory. National Weather Service facts and deterministic opportunity estimates remain authoritative.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ],
           ],

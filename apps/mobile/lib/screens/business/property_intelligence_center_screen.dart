@@ -1,0 +1,674 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../../models/campaign_area_geometry.dart';
+import '../../services/address_search_service.dart';
+import '../../services/property_intelligence_service.dart';
+import '../../services/scaled_circle_intelligence_service.dart';
+import '../../services/subscription_plan_service.dart';
+import '../../widgets/mapped_address_field.dart';
+import '../../widgets/property_intelligence_panel.dart';
+import 'create_campaign_screen.dart';
+import 'subscription_screen.dart';
+import 'managed_growth_screen.dart';
+
+class PropertyIntelligenceCenterScreen extends StatefulWidget {
+  const PropertyIntelligenceCenterScreen({super.key});
+
+  @override
+  State<PropertyIntelligenceCenterScreen> createState() =>
+      _PropertyIntelligenceCenterScreenState();
+}
+
+class _PropertyIntelligenceCenterScreenState
+    extends State<PropertyIntelligenceCenterScreen> {
+  static const _defaultCenter = LatLng(38.9784, -76.4922);
+
+  final _mapController = MapController();
+  final _searchController = TextEditingController();
+  final _objectiveController = TextEditingController();
+  final _questionController = TextEditingController();
+  final _service = PropertyIntelligenceService();
+  final _aiService = ScaledCircleIntelligenceService();
+  final _planService = SubscriptionPlanService();
+  final List<LatLng> _inputPoints = [];
+  List<LatLng> _area = [];
+  CampaignAreaShape _shape = CampaignAreaShape.polygon;
+  final List<_ExploratoryAnalysis> _analyses = [];
+
+  PropertyIntelligenceAnalysis? _analysis;
+  bool _analyzing = false;
+  bool _askingAi = false;
+  ScaledCircleAiInterpretation? _aiInterpretation;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _objectiveController.dispose();
+    _questionController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, double>> get _geometry => _area
+      .map(
+        (point) => <String, double>{
+          'latitude': point.latitude,
+          'longitude': point.longitude,
+        },
+      )
+      .toList(growable: false);
+
+  void _selectLocation(AddressSuggestion suggestion) {
+    _mapController.move(LatLng(suggestion.latitude, suggestion.longitude), 14);
+  }
+
+  void _addPoint(TapPosition _, LatLng point) {
+    setState(() {
+      if (_inputPoints.length >=
+          CampaignAreaGeometry.maximumInputPoints(_shape)) {
+        _inputPoints.clear();
+      }
+      _inputPoints.add(point);
+      _area = CampaignAreaGeometry.fromInput(_shape, _inputPoints);
+      _analysis = null;
+      _aiInterpretation = null;
+    });
+  }
+
+  void _selectShape(CampaignAreaShape shape) {
+    setState(() {
+      _shape = shape;
+      _inputPoints.clear();
+      _area = [];
+      _analysis = null;
+      _aiInterpretation = null;
+    });
+  }
+
+  void _clearArea() {
+    setState(() {
+      _area.clear();
+      _inputPoints.clear();
+      _analysis = null;
+      _aiInterpretation = null;
+    });
+  }
+
+  Future<void> _analyzeArea() async {
+    if (_area.length < 3 || _analyzing) return;
+    setState(() => _analyzing = true);
+    try {
+      final analysis = await _service.analyzeArea(_geometry);
+      if (!mounted) return;
+      setState(() {
+        _analysis = analysis;
+        _aiInterpretation = null;
+        final analysisId = analysis.data['analysisId']?.toString();
+        _analyses.removeWhere(
+          (entry) => analysisId != null && entry.analysisId == analysisId,
+        );
+        _analyses.add(
+          _ExploratoryAnalysis(
+            label: _searchController.text.trim().isEmpty
+                ? 'Analysis ${_analyses.length + 1}'
+                : _searchController.text.trim(),
+            geometry: List<Map<String, double>>.from(_geometry),
+            analysis: analysis,
+          ),
+        );
+      });
+    } on FirebaseFunctionsException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.message ??
+                'Property Intelligence is temporarily unavailable.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _analyzing = false);
+    }
+  }
+
+  Future<void> _askAi({bool combineWithWeather = false}) async {
+    final analysis = _analysis;
+    final analysisId = analysis?.data['analysisId']?.toString() ?? '';
+    final geometryDigest = analysis?.data['geometryDigest']?.toString() ?? '';
+    if (analysis == null ||
+        analysisId.isEmpty ||
+        geometryDigest.isEmpty ||
+        _askingAi) {
+      return;
+    }
+    setState(() => _askingAi = true);
+    try {
+      final result = combineWithWeather
+          ? await _aiService.analyzeCombined(
+              analysisId: analysisId,
+              geometryDigest: geometryDigest,
+              latitude:
+                  _area.map((point) => point.latitude).reduce((a, b) => a + b) /
+                  _area.length,
+              longitude:
+                  _area
+                      .map((point) => point.longitude)
+                      .reduce((a, b) => a + b) /
+                  _area.length,
+              businessObjective: _objectiveController.text,
+              question: _questionController.text,
+            )
+          : await _aiService.analyzeProperty(
+              analysisId: analysisId,
+              geometryDigest: geometryDigest,
+              businessObjective: _objectiveController.text,
+              question: _questionController.text,
+            );
+      if (!mounted) return;
+      setState(() => _aiInterpretation = result);
+    } on FirebaseFunctionsException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.message ?? 'AI analysis is temporarily unavailable.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _askingAi = false);
+    }
+  }
+
+  Widget _buildAiAnalysis() {
+    final result = _aiInterpretation;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'AI OPPORTUNITY ANALYSIS',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Known property and weather facts remain authoritative. AI interpretation is advisory.',
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _objectiveController,
+              decoration: const InputDecoration(
+                labelText: 'Business objective (optional)',
+                hintText: 'Example: I run an HVAC company.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _questionController,
+              maxLength: 1200,
+              decoration: const InputDecoration(
+                labelText: 'Ask about this area',
+                hintText: 'What would you market here?',
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: _askingAi ? null : () => _askAi(),
+                  icon: _askingAi
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('Ask AI About This Area'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _askingAi
+                      ? null
+                      : () => _askAi(combineWithWeather: true),
+                  icon: const Icon(Icons.cloud_outlined),
+                  label: const Text('Combine With Weather'),
+                ),
+              ],
+            ),
+            if (result != null) ...[
+              const Divider(height: 24),
+              const Text(
+                'PROPERTY SIGNAL',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Property Age Signal ${_analysis?.signal?.toString() ?? 'unavailable'} — authoritative Property Intelligence above.',
+              ),
+              if (result.knownData['weather'] case final Map weather) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'WEATHER SIGNAL',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  (weather['alerts'] as List? ?? const []).isEmpty
+                      ? 'No active authoritative weather alert was supplied.'
+                      : (weather['alerts'] as List)
+                            .whereType<Map>()
+                            .map(
+                              (alert) =>
+                                  '${alert['event'] ?? 'Weather alert'} (${alert['severity'] ?? 'unknown severity'})',
+                            )
+                            .join(' • '),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Text(result.summary),
+              for (final opportunity in result.opportunities) ...[
+                const SizedBox(height: 8),
+                Text(
+                  opportunity['title'] ?? '',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(opportunity['rationale'] ?? ''),
+                Text(
+                  opportunity['qualification'] ?? '',
+                  style: const TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ],
+              if (result.limitations.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Limitations: ${result.limitations.join(' ')}'),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _compareAreas() async {
+    if (_analyses.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Analyze at least two areas before comparing them.'),
+        ),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Compare Property Intelligence'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: _analyses
+                  .map(
+                    (entry) => ListTile(
+                      leading: CircleAvatar(
+                        child: Text(entry.analysis.signal?.toString() ?? '—'),
+                      ),
+                      title: Text(entry.label),
+                      subtitle: Text(
+                        '${entry.analysis.source} • ${entry.analysis.inputGranularity} • '
+                        '${entry.analysis.predominantEra} • Pre-1980 '
+                        '${entry.analysis.pre1980.toStringAsFixed(0)}% • Pre-2000 '
+                        '${entry.analysis.pre2000.toStringAsFixed(0)}% • '
+                        '${entry.analysis.confidence} confidence • '
+                        '${entry.analysis.coverage.toStringAsFixed(0)}% coverage',
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createCampaign() async {
+    final analysis = _analysis;
+    if (analysis == null || _area.length < 3) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateCampaignScreen(
+          initialServiceArea: List<Map<String, double>>.from(_geometry),
+          initialServiceAreaType: CampaignAreaGeometry.value(_shape),
+          propertyIntelligenceAnalysisId: analysis.data['analysisId']
+              ?.toString(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createPostcardCampaign() async {
+    final analysis = _analysis;
+    if (analysis == null || _area.length < 3) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ManagedGrowthScreen(
+          postcardHandoff: {
+            'geometry': List<Map<String, double>>.from(_geometry),
+            'analysisId': analysis.data['analysisId'],
+            'geometryDigest': analysis.data['geometryDigest'],
+            'propertyCount': analysis.propertyCount,
+            'businessObjective': _objectiveController.text.trim(),
+            'aiMessagingContext': _aiInterpretation?.summary,
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhysicalChannelRecommendation() {
+    final suitability = _analysis?.physicalChannelSuitability ?? const {};
+    final recommendation = suitability['recommendation']?.toString();
+    if (recommendation == null) return const SizedBox.shrink();
+    final directMail = recommendation == 'direct_mail_preferred';
+    final field = recommendation == 'scaler_distribution_preferred';
+    final label = directMail
+        ? 'Direct Mail / Postcards'
+        : field
+        ? 'Scaler Distribution'
+        : 'Manual channel review';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'RECOMMENDED PHYSICAL CHANNEL',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(label, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 6),
+            Text(suitability['explanation']?.toString() ?? ''),
+            if ((suitability['unavailableSignals'] as List? ?? const [])
+                .isNotEmpty)
+              Text(
+                'Unavailable: ${(suitability['unavailableSignals'] as List).join(', ')}. No unavailable access characteristic was inferred.',
+                style: const TextStyle(fontStyle: FontStyle.italic),
+              ),
+            if (suitability['lawfulAuthorizedAccessRequired'] == true)
+              const Text(
+                'Scaler activity requires lawful, authorized physical access.',
+              ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (directMail)
+                  FilledButton(
+                    onPressed: _createPostcardCampaign,
+                    child: const Text('Create Postcard Campaign'),
+                  ),
+                OutlinedButton(
+                  onPressed: _createCampaign,
+                  child: Text(
+                    directMail
+                        ? 'Choose Scaler Distribution Instead'
+                        : 'Create Field Campaign',
+                  ),
+                ),
+              ],
+            ),
+            if (directMail)
+              const Text(
+                'This recommendation is advisory. Choosing Scaler distribution preserves distribution-only work and does not create a door-to-door outreach job.',
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumGate() {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Property Intelligence')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Card(
+            margin: const EdgeInsets.all(24),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.workspace_premium_outlined, size: 40),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Know your market before you spend.',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('Included with Scale — \$499/month'),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Analyze housing-stock age, compare target areas, understand construction eras, and turn selected areas into ScaledCircle campaigns.',
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    key: const Key('property-intelligence-upgrade'),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SubscriptionScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.upgrade),
+                    label: const Text('Upgrade to Scale'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOperationalCenter() {
+    final polygon = _area.length < 3
+        ? const <Polygon>[]
+        : <Polygon>[
+            Polygon(
+              points: _area,
+              borderStrokeWidth: 3,
+              borderColor: const Color(0xFF19C7A2),
+              color: const Color(0x3319C7A2),
+            ),
+          ];
+    return Scaffold(
+      appBar: AppBar(title: const Text('Property Intelligence')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Explore property age and housing-stock patterns before choosing where to market.',
+                ),
+                const SizedBox(height: 12),
+                MappedAddressField(
+                  controller: _searchController,
+                  labelText: 'Search location',
+                  hintText: 'City, ZIP, neighborhood, or address',
+                  onSelected: _selectLocation,
+                ),
+                const SizedBox(height: 10),
+                const Text('Choose area shape'),
+                const SizedBox(height: 6),
+                SegmentedButton<CampaignAreaShape>(
+                  segments: CampaignAreaShape.values
+                      .map(
+                        (shape) => ButtonSegment(
+                          value: shape,
+                          label: Text(CampaignAreaGeometry.label(shape)),
+                        ),
+                      )
+                      .toList(growable: false),
+                  selected: {_shape},
+                  onSelectionChanged: (selection) =>
+                      _selectShape(selection.first),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _defaultCenter,
+                initialZoom: 12,
+                onTap: _addPoint,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.scaledcircle.app',
+                ),
+                PolygonLayer(polygons: polygon),
+                MarkerLayer(
+                  markers: _area
+                      .asMap()
+                      .entries
+                      .map(
+                        (entry) => Marker(
+                          point: entry.value,
+                          width: 34,
+                          height: 34,
+                          child: CircleAvatar(child: Text('${entry.key + 1}')),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 500),
+            padding: const EdgeInsets.all(14),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    !CampaignAreaGeometry.isComplete(_shape, _area)
+                        ? 'Draw a ${CampaignAreaGeometry.label(_shape).toLowerCase()} using the same controls as campaign maps.'
+                        : '${CampaignAreaGeometry.label(_shape)} ready with ${_area.length} normalized polygon points. Analysis does not create a campaign.',
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed:
+                            CampaignAreaGeometry.isComplete(_shape, _area) &&
+                                !_analyzing
+                            ? _analyzeArea
+                            : null,
+                        icon: _analyzing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.analytics_outlined),
+                        label: const Text('Analyze Area'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _area.isEmpty ? null : _clearArea,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Clear / Change Area'),
+                      ),
+                    ],
+                  ),
+                  if (_analysis != null) ...[
+                    const SizedBox(height: 12),
+                    PropertyIntelligencePanel(
+                      analysis: _analysis!,
+                      onCreateCampaign: _createCampaign,
+                      onCompare: _compareAreas,
+                      onAskAi: () => _askAi(),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPhysicalChannelRecommendation(),
+                    const SizedBox(height: 12),
+                    _buildAiAnalysis(),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return _buildPremiumGate();
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('wallets')
+          .doc(user.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final entitled = _planService.hasActiveScalePropertyIntelligence(
+          snapshot.data?.data(),
+        );
+        return entitled ? _buildOperationalCenter() : _buildPremiumGate();
+      },
+    );
+  }
+}
+
+class _ExploratoryAnalysis {
+  const _ExploratoryAnalysis({
+    required this.label,
+    required this.geometry,
+    required this.analysis,
+  });
+
+  final String label;
+  final List<Map<String, double>> geometry;
+  final PropertyIntelligenceAnalysis analysis;
+
+  String? get analysisId => analysis.data['analysisId']?.toString();
+}

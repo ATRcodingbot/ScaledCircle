@@ -14,12 +14,14 @@ class PlatformBillingService {
     'starter': 99.0,
     'growth': 299.0,
     'scale': 499.0,
+    'managed_growth': 999.0,
   };
 
   static const Map<String, int> _subscriptionRanks = {
     'starter': 1,
     'growth': 2,
     'scale': 3,
+    'managed_growth': 4,
   };
 
   Future<Map<String, dynamic>> _callSecureFunction({

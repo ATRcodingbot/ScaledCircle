@@ -406,28 +406,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      batch.set(firestore.collection('notifications').doc(), {
-        'userId': businessId,
-
-        'type': 'zone_completion_submitted',
-
-        'title': 'Zone Completion Submitted',
-
-        'message': '${user.email ?? 'Scaler'} submitted $zoneName',
-
-        'campaignId': widget.campaign.id,
-
-        'zoneId': zone.id,
-
-        'payoutId': payoutId,
-
-        'payoutAmount': payoutAmount,
-
-        'read': false,
-
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
       await batch.commit();
 
       if (!mounted) return;

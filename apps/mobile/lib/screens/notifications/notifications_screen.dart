@@ -6,6 +6,7 @@ import '../campaigns/campaign_applicants_screen.dart';
 import '../campaigns/campaign_details_screen.dart';
 import '../jobs/job_details_screen.dart';
 import '../jobs/scaler_wallet_screen.dart';
+import '../jobs/job_room_screen.dart';
 import '../business/weather_alerts_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -52,6 +53,10 @@ class NotificationsScreen extends StatelessWidget {
     final type = data['type']?.toString() ?? '';
 
     final campaignId = data['campaignId']?.toString();
+    final zoneId = data['zoneId']?.toString();
+    final deepLink = data['deepLink'] is Map
+        ? Map<String, dynamic>.from(data['deepLink'] as Map)
+        : const <String, dynamic>{};
 
     try {
       if (data['read'] != true) {
@@ -59,6 +64,20 @@ class NotificationsScreen extends StatelessWidget {
       }
 
       if (!context.mounted) {
+        return;
+      }
+
+      final destination = deepLink['destination']?.toString();
+      final linkedZoneId = deepLink['zoneId']?.toString() ?? zoneId;
+      if ({'job_room', 'material_change_review'}.contains(destination) &&
+          linkedZoneId != null &&
+          linkedZoneId.isNotEmpty) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => JobRoomScreen(zoneId: linkedZoneId),
+          ),
+        );
         return;
       }
 
@@ -108,6 +127,25 @@ class NotificationsScreen extends StatelessWidget {
               builder: (_) => CampaignApplicantsScreen(campaign: campaign),
             ),
           );
+          break;
+
+        case 'job_assignment':
+        case 'job_room_message':
+        case 'material_logistics_locked':
+        case 'material_change_proposed':
+        case 'material_change_accept':
+        case 'material_change_decline':
+        case 'material_change_confirmed':
+        case 'job_readiness_acknowledged':
+        case 'material_received':
+        case 'material_issue_reported':
+        case 'group_assignment_progress':
+          if (zoneId != null && zoneId.isNotEmpty) {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => JobRoomScreen(zoneId: zoneId)),
+            );
+          }
           break;
 
         case 'zone_completion_submitted':
@@ -245,6 +283,17 @@ class NotificationsScreen extends StatelessWidget {
       'zone_completion_submitted' => 'Review Zone',
       'payout_approved' => 'View Earnings',
       'weather_opportunity' => 'View Weather',
+      'job_room_message' => 'Open Job Room',
+      'job_assignment' => 'View Job',
+      'material_change_proposed' => 'Review Change',
+      'material_logistics_locked' ||
+      'material_change_accept' ||
+      'material_change_decline' ||
+      'material_change_confirmed' ||
+      'job_readiness_acknowledged' ||
+      'material_received' ||
+      'material_issue_reported' ||
+      'group_assignment_progress' => 'Open Job Room',
       _ => 'View',
     };
 
@@ -355,7 +404,29 @@ class NotificationsScreen extends StatelessWidget {
         return Icons.person_add;
 
       case 'application_accepted':
+      case 'job_assignment':
         return Icons.verified;
+
+      case 'job_room_message':
+        return Icons.chat_bubble_outline;
+
+      case 'material_logistics_locked':
+        return Icons.lock_outline;
+
+      case 'material_change_proposed':
+      case 'material_change_accept':
+      case 'material_change_decline':
+      case 'material_change_confirmed':
+        return Icons.rule_folder_outlined;
+
+      case 'job_readiness_acknowledged':
+        return Icons.check_circle_outline;
+
+      case 'material_received':
+        return Icons.inventory_2_outlined;
+
+      case 'material_issue_reported':
+        return Icons.report_problem_outlined;
 
       case 'application_rejected':
         return Icons.cancel;

@@ -76,7 +76,7 @@ abstract final class AppEnvironmentConfig {
   }
 
   static const FirebaseOptions _localFirebaseOptions = FirebaseOptions(
-    apiKey: 'demo-api-key',
+    apiKey: 'fake-api-key',
     appId: '1:000000000000:web:local-scaledcircle',
     messagingSenderId: '000000000000',
     projectId: 'demo-scaledcircle',

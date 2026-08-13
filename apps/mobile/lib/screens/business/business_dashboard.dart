@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/user/user_profile.dart';
+import '../../models/campaign_card_compensation.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../services/wallet_service.dart';
 import '../../services/maryland_weather_service.dart';
@@ -14,10 +15,13 @@ import 'campaign/sc_campaign_applicants_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'create/create_campaign_screen.dart';
 import 'subscription_screen.dart';
+import 'managed_growth_screen.dart';
 import 'business_wallet_screen.dart';
 import 'weather_alerts_screen.dart';
 import '../../widgets/reputation_card.dart';
 import 'profile/business_profile_screen.dart';
+import 'property_intelligence_center_screen.dart';
+import 'scaled_circle_services_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -58,12 +62,17 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
     final entitlement = await _weatherService.loadEntitlement(user.uid);
     if (mounted) {
-      setState(() => _weatherEntitlement = entitlement);
+      setState(() {
+        _weatherEntitlement = entitlement;
+      });
     }
 
     if (!entitlement.entitled) {
       if (mounted) {
-        setState(() => _weather = Future.value(const []));
+        final emptyWeather = Future.value(const <MarylandCountyWeather>[]);
+        setState(() {
+          _weather = emptyWeather;
+        });
       }
       return;
     }
@@ -75,7 +84,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
     final future = _weatherService.load(countyIds: countyIds);
 
     if (mounted) {
-      setState(() => _weather = future);
+      setState(() {
+        _weather = future;
+      });
     }
 
     await future;
@@ -323,7 +334,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Maryland Weather Intelligence',
+                        'AI Weather Intelligence',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -331,8 +342,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       ),
                       SizedBox(height: 6),
                       Text(
-                        'Premium weather opportunity alerts are included with '
-                        'the Scale subscription.',
+                        'Official weather facts with qualified AI opportunity '
+                        'analysis are included with Scale.',
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                       SizedBox(height: 10),
@@ -467,6 +478,16 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       appBar: AppBar(
         title: const ScaledCircleBrand(compact: true),
         actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ScaledCircleServicesScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.apps_outlined),
+            label: const Text('ScaledCircle Services'),
+          ),
           const AccountModeSwitchButton(targetView: UserRole.scaler),
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
@@ -621,6 +642,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 const SizedBox(height: 28),
 
                 _buildWalletSection(),
+                const SizedBox(height: 16),
+                _buildPropertyIntelligenceCard(user.uid),
+                _buildManagedGrowthCard(user.uid),
                 const SizedBox(height: 16),
                 _buildWeatherSection(),
                 const SizedBox(height: 16),
@@ -788,14 +812,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
                   final status = data['status']?.toString().toLowerCase() ?? '';
 
-                  final estimatedHomes =
-                      (data['estimatedHomes'] as num?)?.toInt() ??
-                      (data['homes'] as num?)?.toInt() ??
-                      0;
-
-                  final basePay = (data['basePay'] as num?)?.toDouble() ?? 0.0;
-
-                  final bonus = (data['bonus'] as num?)?.toDouble() ?? 0.0;
+                  final compensation = CampaignCardCompensation.fromCampaign(
+                    data,
+                  );
 
                   final platformFee = (data['platformFee'] as num?)?.toDouble();
 
@@ -835,13 +854,21 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                               ),
                               const SizedBox(height: 5),
                               Text(
-                                '$estimatedHomes homes • '
-                                '\$${basePay.toStringAsFixed(2)} base pay'
-                                '${bonus > 0 ? ' • \$${bonus.toStringAsFixed(2)} bonus' : ''}',
+                                compensation.primaryText,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
+                              if (compensation.secondaryText != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  compensation.secondaryText!,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                               if (platformFee != null) ...[
                                 const SizedBox(height: 4),
                                 Text(
@@ -1082,6 +1109,74 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
     );
   }
 
+  Widget _buildPropertyIntelligenceCard(String userId) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('wallets')
+          .doc(userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final entitled = _planService.hasActiveScalePropertyIntelligence(
+          snapshot.data?.data(),
+        );
+        return Card(
+          child: ListTile(
+            leading: Icon(
+              entitled ? Icons.home_work_outlined : Icons.lock_outline,
+            ),
+            title: const Text('AI Property Intelligence'),
+            subtitle: Text(
+              entitled
+                  ? 'Explore authoritative housing-stock patterns with qualified AI interpretation.'
+                  : 'AI intelligence included with Scale.',
+            ),
+            trailing: Text(entitled ? 'Open' : 'Upgrade to Scale'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => entitled
+                    ? const PropertyIntelligenceCenterScreen()
+                    : const SubscriptionScreen(),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildManagedGrowthCard(String userId) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('wallets')
+          .doc(userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final entitled = _planService.hasActiveManagedGrowth(
+          snapshot.data?.data(),
+        );
+        return Card(
+          child: ListTile(
+            leading: Icon(entitled ? Icons.auto_awesome : Icons.lock_outline),
+            title: const Text('Managed Growth — Beta'),
+            subtitle: const Text(
+              'AI growth plans, social, advertising strategy, SEO, email, postcards, and coordinated field campaigns.',
+            ),
+            trailing: Text(entitled ? 'Open' : 'Upgrade • \$999/mo'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => entitled
+                    ? const ManagedGrowthScreen()
+                    : const SubscriptionScreen(),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildSubscriptionSection(String userId) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
@@ -1286,6 +1381,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       case 'scale':
         return 'Scale';
 
+      case 'managed_growth':
+        return 'Managed Growth';
+
       default:
         return 'No Plan';
     }
@@ -1305,6 +1403,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         return 'High-volume access with unlimited operations, teams, '
             'priority matching, integrations, Weather Intelligence, and '
             'advanced reporting.';
+
+      case 'managed_growth':
+        return 'Everything in Scale plus coordinated AI marketing planning, content packages, and direct-mail management.';
 
       default:
         return 'Choose a Scaled Circle subscription plan.';

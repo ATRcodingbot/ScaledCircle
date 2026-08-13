@@ -757,24 +757,6 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
         scalerNotes: _notesController.text.trim(),
       );
 
-      if (_businessId.isNotEmpty) {
-        await _firestore.collection('notifications').add({
-          'userId': _businessId,
-          'type': 'campaign_completion_submitted',
-          'title': 'Campaign Work Submitted',
-          'message':
-              '${FirebaseAuth.instance.currentUser?.email ?? 'A Scaler'} '
-              'submitted work for $_campaignName.',
-          'campaignId': _campaignId,
-          'campaignName': _campaignName,
-          'completionId': completionId,
-          'scalerId': FirebaseAuth.instance.currentUser?.uid,
-          'scalerEmail': FirebaseAuth.instance.currentUser?.email,
-          'read': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
       if (!mounted) {
         return;
       }

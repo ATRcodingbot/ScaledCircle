@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class SubscriptionPlanService {
   static const Map<String, Map<String, dynamic>> plans = {
     'starter': {
@@ -68,8 +70,33 @@ class SubscriptionPlanService {
         'crm_integrations',
         'recurring_campaigns',
         'weather_intelligence',
+        'property_intelligence',
         'franchise_management',
         'priority_support',
+      ],
+    },
+    'managed_growth': {
+      'name': 'Managed Growth',
+      'price': 999.0,
+      'maxActiveCampaigns': null,
+      'maxScalersPerCampaign': null,
+      'unlimitedCampaigns': true,
+      'unlimitedScalers': true,
+      'features': [
+        'campaign_mapping',
+        'gps_verification',
+        'completion_verification',
+        'scaler_marketplace',
+        'payouts',
+        'advanced_analytics',
+        'property_intelligence',
+        'weather_intelligence',
+        'managed_growth_planning',
+        'social_content_package',
+        'advertising_strategy_package',
+        'seo_action_plan',
+        'email_sequence_package',
+        'postcard_campaign_management',
       ],
     },
   };
@@ -132,5 +159,34 @@ class SubscriptionPlanService {
     }
 
     return requestedScalers <= maxScalers;
+  }
+
+  bool hasActiveScalePropertyIntelligence(
+    Map<String, dynamic>? wallet, {
+    DateTime? now,
+  }) {
+    if (wallet == null) return false;
+    final plan = wallet['subscriptionPlan']?.toString().trim().toLowerCase();
+    final status = wallet['subscriptionStatus']
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    final expiresAt = wallet['subscriptionExpiresAt'];
+    final referenceTime = now ?? DateTime.now();
+    return (plan == 'scale' || plan == 'managed_growth') &&
+        status == 'active' &&
+        expiresAt is Timestamp &&
+        expiresAt.toDate().isAfter(referenceTime);
+  }
+
+  bool hasActiveManagedGrowth(Map<String, dynamic>? wallet, {DateTime? now}) {
+    if (wallet == null) return false;
+    final expiresAt = wallet['subscriptionExpiresAt'];
+    return wallet['subscriptionPlan']?.toString().trim().toLowerCase() ==
+            'managed_growth' &&
+        wallet['subscriptionStatus']?.toString().trim().toLowerCase() ==
+            'active' &&
+        expiresAt is Timestamp &&
+        expiresAt.toDate().isAfter(now ?? DateTime.now());
   }
 }

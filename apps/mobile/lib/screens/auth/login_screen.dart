@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../config/app_environment.dart';
 import '../business/business_dashboard.dart';
 import '../scaler/dashboard/scaler_dashboard_screen.dart';
 
@@ -10,6 +11,34 @@ import '../public/early_access_pending_screen.dart';
 import '../public/waitlist_screen.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
+
+int notificationCreatedAtEpochMillis(Object? value) {
+  if (value is Timestamp) {
+    return value.millisecondsSinceEpoch;
+  }
+  if (value is DateTime) {
+    return value.millisecondsSinceEpoch;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value is String) {
+    return DateTime.tryParse(value)?.millisecondsSinceEpoch ?? 0;
+  }
+  return 0;
+}
+
+int compareLoginNotificationsNewestFirst(
+  QueryDocumentSnapshot first,
+  QueryDocumentSnapshot second,
+) {
+  final firstData = first.data() as Map<String, dynamic>;
+  final secondData = second.data() as Map<String, dynamic>;
+  final timestampOrder = notificationCreatedAtEpochMillis(
+    secondData['createdAt'],
+  ).compareTo(notificationCreatedAtEpochMillis(firstData['createdAt']));
+  return timestampOrder != 0 ? timestampOrder : first.id.compareTo(second.id);
+}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -145,35 +174,10 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } on FirebaseAuthException catch (e) {
-      String message = 'Login failed.';
+      final message = _loginAuthErrorMessage(e);
 
-      switch (e.code) {
-        case 'user-not-found':
-          message = 'No account found.';
-          break;
-
-        case 'wrong-password':
-          message = 'Incorrect password.';
-          break;
-
-        case 'invalid-credential':
-          message = 'Invalid email or password.';
-          break;
-
-        case 'invalid-email':
-          message = 'Invalid email address.';
-          break;
-
-        case 'too-many-requests':
-          message = 'Too many login attempts. Please try again later.';
-          break;
-
-        case 'network-request-failed':
-          message = 'Network error. Check your internet connection.';
-          break;
-
-        default:
-          message = e.message ?? 'Login failed.';
+      if (AppEnvironmentConfig.isLocal) {
+        debugPrint('LOCAL Firebase Auth error code=${e.code}');
       }
 
       if (!mounted) return;
@@ -196,6 +200,35 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  String _loginAuthErrorMessage(FirebaseAuthException error) {
+    if (AppEnvironmentConfig.isLocal) {
+      return 'Firebase Auth error: ${error.code}';
+    }
+
+    switch (error.code) {
+      case 'user-not-found':
+        return 'No account found.';
+
+      case 'wrong-password':
+        return 'Incorrect password.';
+
+      case 'invalid-credential':
+        return 'Invalid email or password.';
+
+      case 'invalid-email':
+        return 'Invalid email address.';
+
+      case 'too-many-requests':
+        return 'Too many login attempts. Please try again later.';
+
+      case 'network-request-failed':
+        return 'Network error. Check your internet connection.';
+
+      default:
+        return error.message ?? 'Login failed.';
+    }
+  }
+
   Future<LoginNotificationData?> _buildLoginNotification({
     required String userId,
     required String? accountType,
@@ -213,29 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final notifications = List<QueryDocumentSnapshot>.from(snapshot.docs);
 
-      notifications.sort((a, b) {
-        final aData = a.data() as Map<String, dynamic>;
-
-        final bData = b.data() as Map<String, dynamic>;
-
-        final aTimestamp = aData['createdAt'] as Timestamp?;
-
-        final bTimestamp = bData['createdAt'] as Timestamp?;
-
-        if (aTimestamp == null && bTimestamp == null) {
-          return 0;
-        }
-
-        if (aTimestamp == null) {
-          return 1;
-        }
-
-        if (bTimestamp == null) {
-          return -1;
-        }
-
-        return bTimestamp.compareTo(aTimestamp);
-      });
+      notifications.sort(compareLoginNotificationsNewestFirst);
 
       if (accountType == 'business') {
         final applicationNotifications = notifications.where((notification) {

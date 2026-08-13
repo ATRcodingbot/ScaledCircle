@@ -792,10 +792,10 @@ class CampaignService {
   // Physical marketing materials cannot literally be digitally
   // delivered. Instead, the campaign records the handoff workflow:
   //
-  // business pickup
-  // business dropoff
-  // shipping
-  // Scaled Circle generated/printed materials
+  // Scaler pickup from a printing shop
+  // Scaler pickup from the Business
+  // Business delivery to the Scaler/group staging location
+  // no physical materials
   //
   // These fields let the UI manage that workflow without pretending
   // the physical item itself is digital.
@@ -811,11 +811,10 @@ class CampaignService {
     String? instructions,
   }) async {
     const supportedMethods = {
-      'business_pickup',
-      'business_dropoff',
-      'shipping',
-      'scaled_circle_generated',
-      'none',
+      'scaler_pickup_print_shop',
+      'scaler_pickup_business',
+      'business_delivery',
+      'no_materials_required',
     };
 
     if (!supportedMethods.contains(method)) {

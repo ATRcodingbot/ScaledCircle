@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../scaler/campaigns/exact_location_job_screen.dart';
 import '../reviews/create_review_screen.dart';
 import 'job_details_screen.dart';
+import 'job_room_screen.dart';
 
 class MyJobsScreen extends StatelessWidget {
   const MyJobsScreen({super.key});
@@ -53,7 +54,12 @@ class MyJobsScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _firestore
             .collection('campaignZones')
-            .where('assignedScalerId', isEqualTo: user.uid)
+            .where(
+              Filter.or(
+                Filter('assignedScalerId', isEqualTo: user.uid),
+                Filter('assignedScalerIds', arrayContains: user.uid),
+              ),
+            )
             .snapshots(),
         builder: (context, zoneSnapshot) {
           if (zoneSnapshot.hasError) {
@@ -372,7 +378,9 @@ class MyJobsScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => JobDetailsScreen(campaign: campaign),
+                  builder: (_) => zoneData['groupAssignmentId'] != null
+                      ? JobRoomScreen(zoneId: zone.id)
+                      : JobDetailsScreen(campaign: campaign),
                 ),
               );
             },

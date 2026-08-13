@@ -21,6 +21,7 @@ class CampaignModel {
   final double bonus;
   final int workerPoolCents;
   final int scheduledShareCents;
+  final Map<String, dynamic> materialLogistics;
 
   final bool beforePhotoRequired;
   final bool afterPhotoRequired;
@@ -65,6 +66,7 @@ class CampaignModel {
     required this.bonus,
     required this.workerPoolCents,
     required this.scheduledShareCents,
+    this.materialLogistics = const {},
 
     required this.beforePhotoRequired,
 
@@ -133,6 +135,9 @@ class CampaignModel {
                   100)
               .round(),
       scheduledShareCents: (data["scheduledShareCents"] as num?)?.round() ?? 0,
+      materialLogistics: Map<String, dynamic>.from(
+        (data['materialLogistics'] as Map?) ?? const {},
+      ),
 
       beforePhotoRequired:
           data["verification"]?["beforePhotoRequired"] ?? false,
@@ -178,13 +183,16 @@ class CampaignModel {
       address: data['zoneName']?.toString() ?? 'Mapped zone',
       latitude: 0,
       longitude: 0,
-      scalerCount: 1,
+      scalerCount: (data['requiredScalerCount'] as num?)?.round() ?? 1,
       estimatedMinutes: (data['estimatedWalkingMinutes'] as num?)?.round() ?? 0,
       basePay: workerCents / 100,
       bonus: bonusCents / 100,
       workerPoolCents: workerCents,
       scheduledShareCents:
           (data['scheduledShareCents'] as num?)?.round() ?? workerCents,
+      materialLogistics: Map<String, dynamic>.from(
+        (data['materialLogistics'] as Map?) ?? const {},
+      ),
       beforePhotoRequired: false,
       afterPhotoRequired: false,
       businessApprovalRequired: true,

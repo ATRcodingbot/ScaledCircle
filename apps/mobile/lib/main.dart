@@ -3,9 +3,11 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'config/app_environment.dart';
+import 'config/firebase_auth_emulator_session.dart';
 import 'navigation/app_routes.dart';
 import 'screens/business/business_dashboard.dart';
 import 'screens/auth/login_screen.dart';
@@ -31,7 +33,15 @@ Future<void> main() async {
 // ignore: unused_element
 Future<void> _connectToFirebaseEmulators() async {
   final host = AppEnvironmentConfig.emulatorHost;
-  await FirebaseAuth.instance.useAuthEmulator(host, 9099);
+  clearRetainedAuthEmulatorOrigin(Firebase.app().name);
+  final auth = FirebaseAuth.instance;
+  await auth.useAuthEmulator(host, 9099);
+  if (kIsWeb) {
+    // Keep emulator-only browser sessions in memory. This runs after Auth is
+    // attached to 127.0.0.1 so persistence setup cannot initialize a
+    // production-routed Auth transport.
+    await auth.setPersistence(Persistence.NONE);
+  }
   FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: false,

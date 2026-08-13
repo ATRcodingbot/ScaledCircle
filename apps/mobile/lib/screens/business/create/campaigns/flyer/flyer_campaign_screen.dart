@@ -9,7 +9,8 @@ import '../../../campaign_zones_screen.dart';
 
 import '../../../campaign/campaign_locations_screen.dart';
 import '../../../../campaigns/campaign_details_screen.dart';
-import '../../../../../widgets/mapped_address_field.dart';
+import '../../../../../models/material_logistics.dart';
+import '../../../../../widgets/material_fulfillment_form.dart';
 
 class FlyerCampaignScreen extends StatefulWidget {
   final String campaignType;
@@ -32,8 +33,6 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   final bonusController = TextEditingController();
   final scalerCountController = TextEditingController(text: '1');
 
-  final materialAddressController = TextEditingController();
-  final materialInstructionsController = TextEditingController();
   final materialQuantityController = TextEditingController();
 
   final PlatformBillingService _billingService = PlatformBillingService();
@@ -47,9 +46,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
   String _materialSource = 'business_provided';
 
-  String _materialHandoffMethod = 'business_pickup';
-  double? _materialHandoffLatitude;
-  double? _materialHandoffLongitude;
+  MaterialLogisticsDraft _materialLogistics = const MaterialLogisticsDraft(
+    fulfillmentType: MaterialLogisticsDraft.scalerPickupBusiness,
+  );
 
   bool _trackingEnabled = false;
 
@@ -82,10 +81,6 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     return _marketingMaterialCampaignTypes.contains(_campaignType);
   }
 
-  bool get _usesBusinessProvidedMaterials {
-    return _usesMarketingMaterials && _materialSource == 'business_provided';
-  }
-
   bool get _requiresExactLocations {
     return _campaignType == 'yard_sign_installation' ||
         _campaignType == 'dump_run' ||
@@ -103,8 +98,6 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     payController.dispose();
     bonusController.dispose();
     scalerCountController.dispose();
-    materialAddressController.dispose();
-    materialInstructionsController.dispose();
     materialQuantityController.dispose();
 
     super.dispose();
@@ -251,25 +244,21 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     }
   }
 
-  String _handoffLabel(String value) {
-    switch (value) {
-      case 'business_pickup':
-        return 'Scaler Picks Up from Business';
-
-      case 'business_dropoff':
-        return 'Business Drops Off Materials';
-
-      default:
-        return value;
-    }
-  }
-
   Future<void> publishCampaign() async {
     if (publishing) {
       return;
     }
 
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    final logisticsError = _usesMarketingMaterials
+        ? _materialLogistics.validate()
+        : null;
+    if (logisticsError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(logisticsError)),
+      );
       return;
     }
 
@@ -430,19 +419,25 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         initialData.addAll({
           'materialSource': _materialSource,
           'materialQuantity': materialQuantity,
-        });
-      }
-
-      if (_usesBusinessProvidedMaterials) {
-        initialData.addAll({
-          'materialHandoffMethod': _materialHandoffMethod,
-
-          'materialHandoffAddress': materialAddressController.text.trim(),
-          'materialHandoffLatitude': _materialHandoffLatitude,
-          'materialHandoffLongitude': _materialHandoffLongitude,
-
-          'materialHandoffInstructions': materialInstructionsController.text
-              .trim(),
+          'materialsRequired': _materialLogistics.materialsRequired,
+          'materialFulfillmentType': _materialLogistics.fulfillmentType,
+          'materialHandoffMethod': _materialLogistics.fulfillmentType,
+          'materialHandoffAddress': _materialLogistics.location.trim(),
+          'materialHandoffLatitude': _materialLogistics.latitude,
+          'materialHandoffLongitude': _materialLogistics.longitude,
+          'materialHandoffScheduledAt': _materialLogistics.scheduledAt == null
+              ? null
+              : Timestamp.fromDate(_materialLogistics.scheduledAt!),
+          'materialHandoffWindowEndAt':
+              _materialLogistics.windowEndAt == null
+              ? null
+              : Timestamp.fromDate(_materialLogistics.windowEndAt!),
+          'materialHandoffPrintingShopName':
+              _materialLogistics.printingShopName.trim(),
+          'materialHandoffOrderReference':
+              _materialLogistics.orderReference.trim(),
+          'materialHandoffInstructions':
+              _materialLogistics.instructions.trim(),
         });
       }
 
@@ -920,79 +915,14 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                   },
                 ),
 
-                if (_usesBusinessProvidedMaterials) ...[
+                if (_usesMarketingMaterials) ...[
                   const SizedBox(height: 20),
-
-                  DropdownButtonFormField<String>(
-                    initialValue: _materialHandoffMethod,
-                    decoration: const InputDecoration(
-                      labelText: 'Material Handoff',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'business_pickup',
-                        child: Text('Scaler Picks Up from Business'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'business_dropoff',
-                        child: Text('Business Drops Off Materials'),
-                      ),
-                    ],
-                    onChanged: publishing
-                        ? null
-                        : (value) {
-                            if (value == null) {
-                              return;
-                            }
-
-                            setState(() {
-                              _materialHandoffMethod = value;
-                            });
-                          },
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Text(_handoffLabel(_materialHandoffMethod)),
-
-                  const SizedBox(height: 18),
-
-                  MappedAddressField(
-                    controller: materialAddressController,
-                    labelText: 'Pickup / Drop-off Address',
-                    hintText: 'Enter the full street address',
-                    onChanged: (_) {
-                      _materialHandoffLatitude = null;
-                      _materialHandoffLongitude = null;
+                  MaterialFulfillmentForm(
+                    value: _materialLogistics,
+                    enabled: !publishing,
+                    onChanged: (value) {
+                      setState(() => _materialLogistics = value);
                     },
-                    onSelected: (suggestion) {
-                      _materialHandoffLatitude = suggestion.latitude;
-                      _materialHandoffLongitude = suggestion.longitude;
-                    },
-                    validator: (value) {
-                      if (!_usesBusinessProvidedMaterials) {
-                        return null;
-                      }
-
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Enter the material handoff address';
-                      }
-
-                      return null;
-                    },
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  TextFormField(
-                    controller: materialInstructionsController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Material Handoff Instructions',
-                      hintText: 'Example: Ask for Mike at the front desk.',
-                      border: OutlineInputBorder(),
-                    ),
                   ),
                 ],
 

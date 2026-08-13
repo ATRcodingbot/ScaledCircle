@@ -1,0 +1,1 @@
+void clearRetainedAuthEmulatorOrigin(String appName) {}

@@ -321,11 +321,6 @@ class CampaignService {
     );
   }
 
-  final notificationRef =
-      _firestore
-          .collection("notifications")
-          .doc();
-
   final batch = _firestore.batch();
 
   batch.set(
@@ -337,20 +332,6 @@ class CampaignService {
       "status": "pending",
       "createdAt": FieldValue.serverTimestamp(),
       "updatedAt": FieldValue.serverTimestamp(),
-    },
-  );
-
-  batch.set(
-    notificationRef,
-    {
-      "userId": businessId,
-      "campaignId": campaignId,
-      "scalerId": scalerId,
-      "type": "application_received",
-      "title": "New Scaler Application",
-      "message": "A scaler applied for your campaign.",
-      "read": false,
-      "createdAt": FieldValue.serverTimestamp(),
     },
   );
 

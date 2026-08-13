@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../jobs/job_room_screen.dart';
 
 import '../../services/completion_payout_service.dart';
 import '../../widgets/zone_intelligence_card.dart';
@@ -18,6 +19,14 @@ class CampaignZonesScreen extends StatelessWidget {
     final data = campaign.data() as Map<String, dynamic>?;
     final status = data?['status']?.toString() ?? 'draft';
     return status != 'draft';
+  }
+
+  bool get _hasTransferredAnalysisArea {
+    final data = campaign.data() as Map<String, dynamic>?;
+    final points = data?['serviceArea'];
+    return data?['propertyIntelligenceAnalysisId'] != null &&
+        points is List &&
+        points.length >= 3;
   }
 
   Future<String?> _askForZoneName(
@@ -124,6 +133,8 @@ class CampaignZonesScreen extends StatelessWidget {
         'serviceAreaPointCount': campaignData['serviceAreaPointCount'] ?? 0,
         'serviceAreaCenter': campaignData['serviceAreaCenter'],
         'serviceAreaRadiusMeters': campaignData['serviceAreaRadiusMeters'],
+        'propertyIntelligenceAnalysisId':
+            campaignData['propertyIntelligenceAnalysisId'],
         'estimatedHomes': 0,
         'homeCountStatus': 'pending',
         'homeCountMethod': null,
@@ -229,6 +240,48 @@ class CampaignZonesScreen extends StatelessWidget {
         context,
       ).showSnackBar(SnackBar(content: Text('Unable to create zone: $e')));
     }
+  }
+
+  Future<void> _createTransferredAnalysisZone(BuildContext context) async {
+    final campaignData = campaign.data() as Map<String, dynamic>;
+    final businessId = campaignData['businessId']?.toString();
+    final points = campaignData['serviceArea'];
+    if (businessId == null || points is! List || points.length < 3) return;
+    final existing = await _zonesCollection
+        .where('campaignId', isEqualTo: campaign.id)
+        .limit(1)
+        .get();
+    if (existing.docs.isNotEmpty || !context.mounted) return;
+    final zoneReference = _zonesCollection.doc();
+    await zoneReference.set({
+      'campaignId': campaign.id,
+      'businessId': businessId,
+      'zoneName': 'Property Intelligence Area',
+      'shapeType': 'polygon',
+      'serviceAreaType': 'polygon',
+      'serviceArea': points,
+      'serviceAreaPointCount': points.length,
+      'propertyIntelligenceAnalysisId':
+          campaignData['propertyIntelligenceAnalysisId'],
+      'estimatedHomes': 0,
+      'homeCountStatus': 'pending',
+      'assignedScalerId': null,
+      'requiredScalerCount':
+          (campaignData['requiredScalerCount'] as num?)?.round() ?? 1,
+      'workerPoolCents':
+          (campaignData['workerPoolCents'] as num?)?.round() ?? 0,
+      'status': 'unassigned',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    if (!context.mounted) return;
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CampaignAreaScreen(campaignReference: zoneReference),
+      ),
+    );
+    if (saved == true) await _refreshCampaignTotals();
   }
 
   Future<String> _nextSuggestedZoneName() async {
@@ -1357,10 +1410,18 @@ class CampaignZonesScreen extends StatelessWidget {
                           onPressed: _campaignLocked
                               ? null
                               : () {
-                                  _createZone(context);
+                                  if (_hasTransferredAnalysisArea) {
+                                    _createTransferredAnalysisZone(context);
+                                  } else {
+                                    _createZone(context);
+                                  }
                                 },
                           icon: const Icon(Icons.add_location_alt),
-                          label: const Text('Create First Zone'),
+                          label: Text(
+                            _hasTransferredAnalysisArea
+                                ? 'Use Analyzed Area'
+                                : 'Create First Zone',
+                          ),
                         ),
                       ],
                     ),
@@ -1397,6 +1458,74 @@ class CampaignZonesScreen extends StatelessWidget {
                               _editZoneArea(context, zone);
                             },
                     ),
+
+                    if (zoneStatus == 'assigned')
+                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('zoneGroupAssignments')
+                            .doc(zone.id)
+                            .snapshots(),
+                        builder: (context, groupSnapshot) {
+                          final group = groupSnapshot.data?.data();
+                          final required =
+                              (group?['requiredScalerCount'] as num?)
+                                  ?.round() ??
+                              (data['requiredScalerCount'] as num?)?.round() ??
+                              1;
+                          final assigned =
+                              (group?['acceptedScalerCount'] as num?)
+                                  ?.round() ??
+                              (data['assignedScalerId'] == null ? 0 : 1);
+                          final pool =
+                              (group?['workerPoolCents'] as num?)?.round() ??
+                              (data['workerPoolCents'] as num?)?.round() ??
+                              0;
+                          return Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    required > 1
+                                        ? 'GROUP COORDINATION'
+                                        : 'JOB COORDINATION',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    '$assigned / $required Scalers assigned',
+                                  ),
+                                  if (pool > 0)
+                                    Text(
+                                      'Worker pool: \$${(pool / 100).toStringAsFixed(2)}',
+                                    ),
+                                  if (pool > 0 && required > 0)
+                                    Text(
+                                      'Scheduled share: \$${(pool / required / 100).toStringAsFixed(2)} each',
+                                    ),
+                                  const Text('Status: Coordination required'),
+                                  const SizedBox(height: 8),
+                                  FilledButton.icon(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            JobRoomScreen(zoneId: zone.id),
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.meeting_room_outlined,
+                                    ),
+                                    label: const Text('Open Job Room'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
 
                     if (zoneStatus == 'submitted')
                       _submittedZoneReviewCard(context, zone),
