@@ -163,7 +163,9 @@ test("rate windows and limits are centralized and versioned", () => {
 
 test("entitlement is checked before property cache, Weather provider, secret, and OpenAI transport", () => {
   const start = indexSource.indexOf("exports.analyzeScaleIntelligence");
-  const callable = indexSource.slice(start, indexSource.indexOf("/**\n * Query OpenStreetMap", start));
+  const callableEnd = indexSource.indexOf("Query OpenStreetMap", start);
+  assert.ok(callableEnd > start, "analyzeScaleIntelligence source boundary");
+  const callable = indexSource.slice(start, callableEnd);
   const entitlement = callable.indexOf("requireScaleIntelligenceBusiness(request, trace)");
   assert.ok(entitlement >= 0);
   assert.ok(entitlement < callable.indexOf("loadAuthoritativePropertyIntelligence"));
