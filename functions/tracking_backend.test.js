@@ -312,6 +312,126 @@ test("paused tracking rejects early, expired, other-scaler, and cancelled resume
   await assert.rejects(start(), (error) => error.code === "failed-precondition");
 });
 
+test("group Business delivery receipt changes only the participant handoff", async () => {
+  const groupAssignment = require("./group_assignment");
+  const participantId = groupAssignment.participantId("group-zone", "scaler");
+  const otherParticipantId = groupAssignment.participantId("group-zone", "other");
+  const handoffId = `group-zone__${participantId}`;
+  const otherHandoffId = `group-zone__${otherParticipantId}`;
+  await Promise.all([
+    db.doc("campaignZones/group-zone").set({
+      campaignId: "campaign", businessId: "business",
+      assignedScalerIds: ["scaler", "other"], status: "assigned",
+    }),
+    db.doc("jobRooms/group-zone").set({
+      campaignId: "campaign", zoneId: "group-zone", businessId: "business",
+      scalerIds: ["scaler", "other"], status: "open",
+    }),
+    db.doc(`zoneScalerParticipations/${participantId}`).set({
+      participantId, zoneId: "group-zone", campaignId: "campaign",
+      businessId: "business", scalerUid: "scaler", materialHandoffId: handoffId,
+      status: "accepted",
+    }),
+    db.doc(`zoneScalerParticipations/${otherParticipantId}`).set({
+      participantId: otherParticipantId, zoneId: "group-zone", campaignId: "campaign",
+      businessId: "business", scalerUid: "other", materialHandoffId: otherHandoffId,
+      status: "accepted",
+    }),
+    db.doc(`materialHandoffs/${handoffId}`).set({
+      zoneId: "group-zone", campaignId: "campaign", businessId: "business",
+      scalerId: "scaler", fulfillmentType: "business_delivery", required: true,
+      status: "scheduled",
+    }),
+    db.doc(`materialHandoffs/${otherHandoffId}`).set({
+      zoneId: "group-zone", campaignId: "campaign", businessId: "business",
+      scalerId: "other", fulfillmentType: "business_delivery", required: true,
+      status: "scheduled",
+    }),
+  ]);
+  const businessResult = await call(functions.transitionMaterialHandoff, "business", {
+    zoneId: "group-zone", handoffId, nextStatus: "received",
+  });
+  assert.equal(businessResult.status, "handoff_in_progress");
+  let participantHandoff = (await db.doc(`materialHandoffs/${handoffId}`).get()).data();
+  assert.ok(participantHandoff.businessConfirmedAt);
+  assert.equal(participantHandoff.businessConfirmedBy, "business");
+  assert.equal(participantHandoff.scalerConfirmedAt, undefined);
+  assert.equal(participantHandoff.arrivalProof, undefined);
+  const result = await call(functions.transitionMaterialHandoff, "scaler", {
+    zoneId: "group-zone", handoffId, nextStatus: "received",
+  });
+  assert.equal(result.status, "received");
+  participantHandoff = (await db.doc(`materialHandoffs/${handoffId}`).get()).data();
+  assert.equal(participantHandoff.status, "received");
+  assert.ok(participantHandoff.scalerConfirmedAt);
+  assert.equal(participantHandoff.scalerConfirmedBy, "scaler");
+  assert.ok(participantHandoff.receivedAt);
+  assert.equal((await db.doc(`materialHandoffs/${otherHandoffId}`).get()).data().status, "scheduled");
+  assert.equal((await db.doc(`notifications/material-received_${handoffId}`).get()).exists, true);
+  await call(functions.transitionMaterialHandoff, "scaler", {
+    zoneId: "group-zone", handoffId, nextStatus: "received",
+  });
+  assert.equal((await db.collection("notifications")
+    .where("type", "==", "material_received").get()).size, 1);
+  await assert.rejects(call(functions.transitionMaterialHandoff, "other", {
+    zoneId: "group-zone", handoffId, nextStatus: "received",
+  }), (error) => error.code === "permission-denied");
+  assert.equal((await db.collection("trackingSessions").get()).size, 0);
+  assert.equal((await db.collection("campaignCompletions").get()).size, 0);
+  assert.equal((await db.collection("scalerTransfers").get()).size, 0);
+});
+
+test("Business delivery confirmation cannot forge participant receipt", async () => {
+  const handoffId = "zone-business-delivery";
+  await Promise.all([
+    db.doc("jobRooms/zone-business-delivery").set({
+      campaignId: "campaign", zoneId: "zone-business-delivery",
+      businessId: "business", scalerId: "scaler", status: "open",
+    }),
+    db.doc(`materialHandoffs/${handoffId}`).set({
+      zoneId: "zone-business-delivery", campaignId: "campaign",
+      businessId: "business", scalerId: "scaler", required: true,
+      fulfillmentType: "business_delivery", status: "scheduled",
+    }),
+  ]);
+  const result = await call(functions.transitionMaterialHandoff, "business", {
+    zoneId: "zone-business-delivery", handoffId,
+    nextStatus: "received",
+  });
+  assert.equal(result.status, "handoff_in_progress");
+  assert.notEqual((await db.doc(`materialHandoffs/${handoffId}`).get()).data().status, "received");
+});
+
+test("all physical fulfillment methods use location-free dual confirmation", async () => {
+  for (const fulfillmentType of [
+    "business_delivery", "scaler_pickup_business", "scaler_pickup_print_shop",
+  ]) {
+    const suffix = fulfillmentType.replaceAll("_", "-");
+    const zoneId = `zone-${suffix}`;
+    const handoffId = `handoff-${suffix}`;
+    await Promise.all([
+      db.doc(`jobRooms/${zoneId}`).set({
+        campaignId: "campaign", zoneId, businessId: "business",
+        scalerId: "scaler", status: "open",
+      }),
+      db.doc(`materialHandoffs/${handoffId}`).set({
+        zoneId, campaignId: "campaign", businessId: "business", scalerId: "scaler",
+        required: true, fulfillmentType, status: "scheduled",
+      }),
+    ]);
+    assert.equal((await call(functions.transitionMaterialHandoff, "scaler", {
+      zoneId, handoffId, nextStatus: "received",
+    })).status, "handoff_in_progress");
+    const oneSided = (await db.doc(`materialHandoffs/${handoffId}`).get()).data();
+    assert.equal(oneSided.status, "handoff_in_progress");
+    assert.equal(oneSided.proof, undefined);
+    assert.equal(oneSided.arrivalProof, undefined);
+    assert.equal((await call(functions.transitionMaterialHandoff, "business", {
+      zoneId, handoffId, nextStatus: "received",
+    })).status, "received");
+  }
+});
+
 test("business handoff fault reserves one $50/$50 split and blocks later settlement", async () => {
   const old = Timestamp.fromMillis(Date.now() - 20 * 60 * 1000);
   await Promise.all([

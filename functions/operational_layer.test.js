@@ -15,6 +15,10 @@ const {
   assertSupportAction,
   safeDiscoveryProjection,
   zoneGeometryDigest,
+  normalizeMaterialLogistics,
+  readinessStatus,
+  isJobRoomMember,
+  canRewriteMaterialHandoff,
 } = require("./operational_layer");
 
 test("one-Scaler duration accepts 359/360 and rejects 361 minutes", () => {
@@ -108,4 +112,63 @@ test("discovery projection excludes addresses, contacts, chat, and access detail
   assert.equal("privateHandoffLocation" in safe, false);
   assert.equal("privateEmail" in safe, false);
   assert.equal("privateContactName" in safe, false);
+});
+
+test("discovery includes assignment material contract without contact fields", () => {
+  const safe = safeDiscoveryProjection({
+    id: "campaign-materials", name: "Group job", workerAmountCents: 40000,
+    requiredScalerCount: 4, materialFulfillmentType: "business_delivery",
+    materialHandoffAddress: "100 Staging Plaza",
+    materialHandoffScheduledAt: "2030-09-03T12:30:00.000Z",
+    materialHandoffInstructions: "Meet at the entrance",
+    businessPhone: "private", businessEmail: "private@example.test",
+  });
+  assert.equal(safe.materialLogistics.location, "100 Staging Plaza");
+  assert.equal(safe.materialLogistics.fulfillmentType, "business_delivery");
+  assert.equal(typeof safe.materialLogistics.digest, "string");
+  assert.equal("businessPhone" in safe.materialLogistics, false);
+  assert.equal("businessEmail" in safe.materialLogistics, false);
+});
+
+test("material logistics support the three Business choices and no materials", () => {
+  const base = {scheduledAt: "2026-09-03T12:30:00Z", location: "Staging location"};
+  assert.equal(normalizeMaterialLogistics({...base, fulfillmentType: "scaler_pickup_print_shop",
+    printingShopName: "Print Shop"}).fulfillmentType, "scaler_pickup_print_shop");
+  assert.equal(normalizeMaterialLogistics({...base,
+    fulfillmentType: "scaler_pickup_business"}).materialsRequired, true);
+  assert.equal(normalizeMaterialLogistics({...base,
+    fulfillmentType: "business_delivery"}).location, "Staging location");
+  assert.deepEqual(normalizeMaterialLogistics({fulfillmentType: "no_materials_required"}), {
+    fulfillmentType: "no_materials_required", materialsRequired: false,
+    scheduledAt: null, windowEndAt: null, location: null, printingShopName: null,
+    orderReference: null, instructions: null,
+  });
+  assert.equal(normalizeMaterialLogistics({...base, fulfillmentType: "business_pickup"})
+    .fulfillmentType, "scaler_pickup_business");
+  assert.throws(() => normalizeMaterialLogistics({...base,
+    fulfillmentType: "scaler_pickup_print_shop"}), /Printing shop/);
+});
+
+test("only pre-receipt handoffs accept logistics rewrites", () => {
+  assert.equal(canRewriteMaterialHandoff("scheduled"), true);
+  assert.equal(canRewriteMaterialHandoff("scaler_en_route"), true);
+  assert.equal(canRewriteMaterialHandoff("received"), false);
+  assert.equal(canRewriteMaterialHandoff("handoff_in_progress"), false);
+});
+
+test("readiness acknowledgment remains separate from receipt", () => {
+  assert.equal(readinessStatus({assignedCount: 4, requiredCount: 4,
+    acknowledgedCount: 4, coordinationConfigured: true,
+    materialsRequired: false, receivedCount: 0}).ready, true);
+  assert.equal(readinessStatus({assignedCount: 4, requiredCount: 4,
+    acknowledgedCount: 4, coordinationConfigured: true,
+    materialsRequired: true, receivedCount: 3}).ready, false);
+});
+
+test("private Job Room membership excludes unassigned applicants", () => {
+  const room = {businessId: "business", scalerIds: ["scaler-a", "scaler-b"]};
+  assert.equal(isJobRoomMember({room, uid: "business"}), true);
+  assert.equal(isJobRoomMember({room, uid: "scaler-a"}), true);
+  assert.equal(isJobRoomMember({room, uid: "applicant"}), false);
+  assert.equal(isJobRoomMember({room, uid: "support", isAdmin: true}), true);
 });

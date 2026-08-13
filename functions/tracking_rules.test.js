@@ -57,6 +57,10 @@ beforeEach(async () => {
       scalerId: "scaler-one", points: [{latitude: 39, longitude: -76}],
     });
     await db.doc("wallets/business-one").set({ownerId: "business-one", availableCredits: 100});
+    await db.doc("businessSubscriptions/business-one").set({
+      businessId: "business-one", planId: "scale", status: "active",
+      expiresAt: new Date(Date.now() + 86400000),
+    });
     await db.doc("campaignPayments/payment-one").set({
       businessId: "business-one", campaignId: "campaign-one", status: "funded",
     });
@@ -71,6 +75,14 @@ beforeEach(async () => {
     });
     await db.doc("financialOperations/op-one").set({ownerId: "business-one", status: "succeeded"});
     await db.doc("stripeEvents/evt_test").set({status: "processed"});
+    await db.doc("materialLogisticsChangeProposals/zone-one_v2").set({
+      campaignId: "campaign-one", zoneId: "zone-one", businessId: "business-one",
+      affectedScalerIds: ["scaler-one"], status: "pending_acknowledgment",
+    });
+    await db.doc("notifications/assignment_zone-one_scaler-one").set({
+      userId: "scaler-one", type: "job_assignment", title: "Assigned",
+      message: "Review the Job Room", read: false, createdAt: new Date(),
+    });
   });
 });
 
@@ -106,6 +118,60 @@ test("outbound email jobs cannot be read or authored by clients", async () => {
   }
   await assertFails(environment.unauthenticatedContext().firestore()
     .doc("outboundEmailJobs/arbitrary").set({to: "attacker@example.test"}));
+});
+
+test("subscription entitlement records remain backend-only", async () => {
+  await assertFails(store("business-one").doc("businessSubscriptions/business-one").get());
+  await assertFails(store("business-one").doc("businessSubscriptions/business-one").update({planId: "scale"}));
+  await assertFails(store("business-two").doc("businessSubscriptions/business-two").set({
+    businessId: "business-two", planId: "scale", status: "active",
+  }));
+  await assertFails(store("admin-one").doc("businessSubscriptions/business-one").get());
+});
+
+test("AI interpretation cache and rate limits remain backend-only", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("intelligenceAnalysisCache/analysis-one").set({
+      businessId: "business-one", status: "complete",
+    });
+    await context.firestore().doc("intelligenceRateLimits/window-one").set({
+      count: 1, policyVersion: "ScaleIntelligenceRateLimitV1",
+    });
+  });
+  for (const uid of ["scaler-one", "business-one", "admin-one"]) {
+    const db = store(uid);
+    await assertFails(db.doc("intelligenceAnalysisCache/analysis-one").get());
+    await assertFails(db.doc("intelligenceAnalysisCache/forged").set({status: "complete"}));
+    await assertFails(db.doc("intelligenceRateLimits/window-one").get());
+    await assertFails(db.doc("intelligenceRateLimits/forged").set({count: 0}));
+  }
+});
+
+test("material logistics proposals are callable-only records", async () => {
+  for (const uid of ["scaler-one", "business-one", "admin-one"]) {
+    const db = store(uid);
+    await assertFails(db.doc("materialLogisticsChangeProposals/zone-one_v2").get());
+    await assertFails(db.doc("materialLogisticsChangeProposals/zone-one_v2")
+      .update({status: "accepted"}));
+    await assertFails(db.doc("materialLogisticsChangeProposals/forged").set({
+      affectedScalerIds: [uid], status: "accepted",
+    }));
+  }
+});
+
+test("notifications are recipient-private server events with read-only acknowledgment", async () => {
+  const id = "notifications/assignment_zone-one_scaler-one";
+  await assertSucceeds(store("scaler-one").doc(id).get());
+  await assertFails(store("scaler-two").doc(id).get());
+  await assertFails(store("business-one").doc(id).get());
+  await assertSucceeds(store("scaler-one").doc(id).update({
+    read: true, readAt: new Date(),
+  }));
+  await assertFails(store("scaler-two").doc(id).update({read: true}));
+  await assertFails(store("scaler-one").doc(id).update({title: "Forged"}));
+  await assertFails(store("scaler-one").doc("notifications/forged").set({
+    userId: "scaler-one", type: "job_assignment", read: false,
+  }));
 });
 
 test("no client can mutate native or client-claimed legacy route evidence", async () => {

@@ -16,6 +16,8 @@ const MARYLAND_PAGE_SIZE = 1000;
 const MAX_CENSUS_GEOGRAPHIES = 100;
 const TIGERWEB_BLOCK_GROUP_LAYER = 8;
 const ACS_REFERENCE_YEAR = 2024;
+const ASSISTANT_CONTEXT_VERSION = "ScaledCircleIntelligenceContextV1";
+const ASSISTANT_PROMPT_VERSION = "ScaledCircleIntelligencePromptV1";
 
 const MARYLAND_FIELDS = Object.freeze({
   propertyId: "account_id_mdp_field_acctid",
@@ -329,8 +331,12 @@ function analysisShape(value) {
 }
 
 function aiGrounding(analysis, objective = "") {
-  return {knownData: {propertyAgeSignal: analysis.propertyAgeSignal, propertyAgeSignalVersion: analysis.propertyAgeSignalVersion,
+  return {knownData: {analysisId: analysis.analysisId || null, geometryDigest: analysis.geometryDigest || null,
+    analysisVersion: analysis.analysisVersion || ANALYSIS_VERSION,
+    propertyAgeSignal: analysis.propertyAgeSignal, propertyAgeSignalCategory: analysis.propertyAgeSignalCategory,
+    propertyAgeSignalVersion: analysis.propertyAgeSignalVersion,
     propertyCount: analysis.propertyCount, residentialStructureCount: analysis.residentialStructureCount,
+    predominantConstructionEra: analysis.predominantConstructionEra,
     yearBuiltBuckets: analysis.yearBuiltBuckets, percentPre1980: analysis.percentPre1980, percentPre2000: analysis.percentPre2000,
     percent20PlusYearsOld: analysis.percent20PlusYearsOld, percent30PlusYearsOld: analysis.percent30PlusYearsOld,
     percent40PlusYearsOld: analysis.percent40PlusYearsOld, propertyTypeDistribution: analysis.propertyTypeDistribution,
@@ -339,21 +345,117 @@ function aiGrounding(analysis, objective = "") {
     estimatedPercent40PlusYearsOld: analysis.estimatedPercent40PlusYearsOld,
     inputGranularity: analysis.inputGranularity, signalPrecision: analysis.signalPrecision,
     source: analysis.source, sourceVersion: analysis.sourceVersion, dataUpdatedAt: analysis.dataUpdatedAt,
-    confidence: analysis.confidence, coverage: analysis.dataCoverage, limitations: analysis.limitations},
+    freshness: {generatedAt: analysis.generatedAt || null,
+      dataUpdatedAt: analysis.dataUpdatedAt || null},
+    confidence: analysis.confidence, coverage: analysis.dataCoverage, limitations: analysis.limitations,
+    physicalLogisticsVersion: analysis.physicalLogisticsVersion || null,
+    physicalLogistics: analysis.physicalLogistics || null,
+    physicalChannelSuitability: analysis.physicalChannelSuitability || null},
   inference: objective ? `These property-age characteristics may be relevant when evaluating ${String(objective).slice(0, 240)}, but they do not establish the condition or service needs of any property or component.` :
     "No trade-specific inference was requested.", distinctionRequired: true};
 }
 
+function limitedText(value, maximumLength) {
+  return value === null || value === undefined ? "" :
+    String(value).trim().slice(0, maximumLength);
+}
+
+function sanitizeWeatherIntelligence(weatherIntelligence) {
+  if (!weatherIntelligence || typeof weatherIntelligence !== "object") return null;
+  const rawAlerts = Array.isArray(weatherIntelligence.alerts) ?
+    weatherIntelligence.alerts.slice(0, 12) : [];
+  return {
+    source: limitedText(weatherIntelligence.source, 120) || "National Weather Service",
+    weatherAnalysisVersion: limitedText(
+      weatherIntelligence.weatherAnalysisVersion || weatherIntelligence.modelVersion,
+      120,
+    ) || "weather-opportunity-v1",
+    cached: weatherIntelligence.cached === true,
+    stale: weatherIntelligence.stale === true,
+    alerts: rawAlerts.map((alert) => {
+      const opportunity = alert?.opportunity && typeof alert.opportunity === "object" ?
+        alert.opportunity : alert || {};
+      return {
+        event: limitedText(alert?.event, 120),
+        headline: limitedText(alert?.headline, 240),
+        severity: limitedText(alert?.severity, 40),
+        areaDescription: limitedText(alert?.areaDescription, 500),
+        onset: limitedText(alert?.onset, 80),
+        expires: limitedText(alert?.expires, 80),
+        services: Array.isArray(opportunity.services) ?
+          opportunity.services.slice(0, 12).map((value) => limitedText(value, 80)) : [],
+        estimatedLeadLiftLowPercent: finite(
+          opportunity.estimatedLeadLiftLowPercent ?? opportunity.leadLiftLowPercent,
+        ),
+        estimatedLeadLiftHighPercent: finite(
+          opportunity.estimatedLeadLiftHighPercent ?? opportunity.leadLiftHighPercent,
+        ),
+        confidence: limitedText(opportunity.confidence, 80),
+        rationale: limitedText(opportunity.rationale, 500),
+        experimental: true,
+      };
+    }),
+    limitations: [
+      "Weather facts come from National Weather Service alerts.",
+      "Opportunity ranges are deterministic experimental estimates, not model-generated facts or guaranteed demand.",
+    ],
+  };
+}
+
 function buildPropertyIntelligenceAssistantContext({objective = "", propertyIntelligence,
   weatherIntelligence = null, campaignContext = null}) {
-  return {interface: "PropertyIntelligenceAssistantContextV1", objective: String(objective).trim().slice(0, 500),
-    propertyIntelligence: aiGrounding(propertyIntelligence, objective), weatherIntelligence, campaignContext};
+  const propertyContext = aiGrounding(propertyIntelligence, objective);
+  const weatherContext = sanitizeWeatherIntelligence(weatherIntelligence);
+  return {interface: "PropertyIntelligenceAssistantContextV1",
+    sharedInterface: ASSISTANT_CONTEXT_VERSION,
+    promptVersion: ASSISTANT_PROMPT_VERSION,
+    objective: String(objective).trim().slice(0, 500),
+    propertyIntelligence: propertyContext,
+    weatherIntelligence: weatherContext,
+    campaignContext: campaignContext === null ? null : {status: "not_loaded_by_authoritative_server"},
+    componentSignals: {property: propertyContext.knownData, weather: weatherContext, campaign: null},
+    responseContract: {knownPropertyDataMustRemainVerbatim: true,
+      inferenceMustBeQualified: true, unavailableDataMustRemainUnavailable: true}};
+}
+
+function intelligenceCacheIdentity(context, {modelVersion = "unconfigured"} = {}) {
+  const property = context?.propertyIntelligence?.knownData || {};
+  const weather = context?.weatherIntelligence || {};
+  const key = {
+    analysisId: property.analysisId || null,
+    geometryDigest: property.geometryDigest || null,
+    propertyAnalysisVersion: property.analysisVersion || ANALYSIS_VERSION,
+    weatherAnalysisVersion: weather.weatherAnalysisVersion || null,
+    objective: context?.objective || "",
+    promptVersion: context?.promptVersion || ASSISTANT_PROMPT_VERSION,
+    modelVersion,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(key)).digest("hex");
+}
+
+function sanitizeAssistantResponse(response, context) {
+  const raw = response && typeof response === "object" ? response : {};
+  const interpretation = typeof response === "string" ? response :
+    (raw.interpretation || raw.narrative || raw.text || "");
+  const limitations = Array.isArray(raw.limitations) ?
+    raw.limitations.slice(0, 20).map((value) => limitedText(value, 500)) : [];
+  return {
+    knownPropertyData: context.propertyIntelligence.knownData,
+    aiInterpretation: limitedText(interpretation, 4000),
+    limitations,
+    qualification: "AI interpretation cannot establish property or component condition, service need, or customer intent.",
+  };
 }
 
 async function analyzeBusinessOpportunity(input, {transport = null} = {}) {
   const context = buildPropertyIntelligenceAssistantContext(input);
-  if (typeof transport !== "function") return {status: "transport_unavailable", productionReady: false, context, response: null};
-  return {status: "complete", productionReady: true, context, response: await transport(context)};
+  const cacheIdentity = intelligenceCacheIdentity(context);
+  if (typeof transport !== "function") return {status: "transport_unavailable", productionReady: false,
+    provider: null, model: null, cacheIdentity, context, response: null};
+  const rawResponse = await transport(context);
+  return {status: "complete", productionReady: true, cacheIdentity, context,
+    authoritativeKnownData: context.propertyIntelligence.knownData,
+    response: sanitizeAssistantResponse(rawResponse, context)};
 }
 
 class MarylandPropertyProvider {
@@ -451,6 +553,8 @@ module.exports = {ANALYSIS_VERSION, SIGNAL_VERSION, ACS_SOURCE_VERSION, MARYLAND
   MARYLAND_FIELDS, ACS_FIELDS, validateGeometry, geometryDigest, boundingBox, pointInPolygon, arcGisPolygon,
   parseTigerwebBlockGroups, normalizeMarylandRecord, deduplicateParcels, parseCensusB25034,
   analyzeParcelObservations, analyzeCensusAggregates, estimatedOlderCount, propertyAgeSignal, aiGrounding,
-  buildPropertyIntelligenceAssistantContext, analyzeBusinessOpportunity,
+  ASSISTANT_CONTEXT_VERSION, ASSISTANT_PROMPT_VERSION, sanitizeWeatherIntelligence,
+  buildPropertyIntelligenceAssistantContext, intelligenceCacheIdentity, sanitizeAssistantResponse,
+  analyzeBusinessOpportunity,
   MarylandPropertyProvider, CensusPropertyProvider, analyzeWithFallback, cacheIsReusable,
   assertBusinessAccess};

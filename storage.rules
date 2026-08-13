@@ -46,38 +46,53 @@ service firebase.storage {
 
     // Material handoff evidence is uploaded by an assigned participant and
     // promoted into authoritative state only after trusted Function checks.
-    match /material_handoffs/{uid}/{zoneId}/{objectId} {
+    match /material_handoffs/{uid}/{handoffId}/{objectId} {
       allow create: if resource == null
         && signedIn()
         && request.auth.uid == uid
         && validImage()
-        && firestore.exists(/databases/(default)/documents/materialHandoffs/$(zoneId))
-        && firestore.exists(/databases/(default)/documents/jobRooms/$(zoneId))
-        && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.zoneId == zoneId
-        && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.scalerId ==
-          firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.scalerId
-        && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.businessId ==
-          firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.businessId
+        && firestore.exists(/databases/(default)/documents/materialHandoffs/$(handoffId))
+        && firestore.exists(/databases/(default)/documents/jobRooms/$(
+          firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.zoneId
+        ))
+        && firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.scalerId == uid
+        && firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.businessId ==
+          firestore.get(/databases/(default)/documents/jobRooms/$(
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.zoneId
+          )).data.businessId
+        && (
+          firestore.get(/databases/(default)/documents/jobRooms/$(
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.zoneId
+          )).data.get('scalerId', '') == uid
+          || firestore.get(/databases/(default)/documents/jobRooms/$(
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.zoneId
+          )).data.get('scalerIds', []).hasAny([uid])
+        )
         && (
           (
-            firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.fulfillmentType ==
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.fulfillmentType ==
               'third_party_pickup'
-            && firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.scalerId == uid
+            && firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.scalerId == uid
           )
           || (
-            firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.fulfillmentType !=
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.fulfillmentType !=
               'third_party_pickup'
             && (
-              firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.scalerId == uid
-              || firestore.get(/databases/(default)/documents/materialHandoffs/$(zoneId)).data.businessId == uid
+              firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.scalerId == uid
+              || firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.businessId == uid
             )
           )
         );
       allow read: if signedIn()
-        && firestore.exists(/databases/(default)/documents/jobRooms/$(zoneId))
+        && firestore.exists(/databases/(default)/documents/materialHandoffs/$(handoffId))
+        && firestore.exists(/databases/(default)/documents/jobRooms/$(
+          firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.zoneId
+        ))
         && (
-          firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.scalerId == request.auth.uid
-          || firestore.get(/databases/(default)/documents/jobRooms/$(zoneId)).data.businessId == request.auth.uid
+          firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.scalerId == request.auth.uid
+          || firestore.get(/databases/(default)/documents/jobRooms/$(
+            firestore.get(/databases/(default)/documents/materialHandoffs/$(handoffId)).data.zoneId
+          )).data.businessId == request.auth.uid
           || isAdmin()
         );
       allow update, delete: if false;

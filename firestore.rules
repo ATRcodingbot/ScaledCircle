@@ -370,6 +370,17 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // AI interpretations, provider usage metadata, and rate-limit counters are
+    // backend-only. Entitled clients receive a sanitized response via the
+    // analyzeScaleIntelligence callable and cannot forge or enumerate results.
+    match /intelligenceAnalysisCache/{analysisId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /intelligenceRateLimits/{windowId} {
+      allow read, create, update, delete: if false;
+    }
+
 
 
     // ============================================================
@@ -749,9 +760,8 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
 
-      // An owner may check whether a deterministic notification id exists
-      // before creating it. A missing document contains no private data;
-      // existing documents remain readable only by their owner.
+      // A missing deterministic id contains no private data; existing
+      // notifications remain readable only by their recipient.
       allow get:
         if isApprovedAccount()
         && (
@@ -765,14 +775,19 @@ service cloud.firestore {
         && resource.data.userId == request.auth.uid;
 
 
+      // Authoritative event notifications are written only by Admin SDK
+      // callables/triggers. Clients cannot impersonate a system event.
       allow create:
-        if isApprovedAccount();
+        if false;
 
 
       allow update:
         if isApprovedAccount()
         &&
-        resource.data.userId == request.auth.uid;
+        resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['read', 'readAt'])
+        && request.resource.data.read == true;
 
 
       allow delete:

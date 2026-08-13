@@ -1,6 +1,6 @@
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const {initializeApp} = require("firebase-admin/app");
@@ -36,7 +36,10 @@ const {runFinancialOperation} = require("./marketplace_operations");
 const operations = require("./operational_layer");
 const signupNotifications = require("./signup_notifications");
 const propertyIntelligence = require("./property_intelligence");
+const scaledCircleIntelligence = require("./scaled_circle_intelligence");
 const groupAssignment = require("./group_assignment");
+const subscriptionEntitlements = require("./subscription_entitlements");
+const managedGrowth = require("./managed_growth");
 
 initializeApp();
 
@@ -67,6 +70,7 @@ const SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD = defineSecret(
 );
 const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
 const CENSUS_API_KEY = defineSecret("CENSUS_API_KEY");
+const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const STRIPE_THIN_WEBHOOK_SECRET = defineSecret("STRIPE_THIN_WEBHOOK_SECRET");
@@ -3266,45 +3270,386 @@ exports.analyzePropertyIntelligence = onCall(
     try { propertyIntelligence.assertBusinessAccess({uid: context.uid, role: context.role,
       isAdmin: context.isAdmin, businessId: context.uid}); }
     catch (_) { throw new HttpsError("permission-denied", "Property Intelligence is available to Business accounts."); }
+    // businessSubscriptions is the trusted billing entitlement. The wallet is
+    // only a client-readable projection and request payload fields are never
+    // consulted. This check intentionally precedes zone/cache/provider work.
+    const entitlementSnapshot = await db.collection("businessSubscriptions")
+      .doc(context.uid).get();
+    if (!subscriptionEntitlements.hasActiveScaleEntitlement(
+      entitlementSnapshot.data(),
+    )) {
+      throw new HttpsError(
+        "permission-denied",
+        "Property Intelligence requires an active Scale subscription.",
+      );
+    }
     const zoneId = readText(request.data?.zoneId, 160);
-    if (!zoneId) throw new HttpsError("invalid-argument", "A valid zone is required.");
-    const zoneReference = db.collection("campaignZones").doc(zoneId);
-    const zoneSnapshot = await zoneReference.get();
-    if (!zoneSnapshot.exists) throw new HttpsError("not-found", "The campaign zone does not exist.");
-    const zone = zoneSnapshot.data() || {};
-    try { propertyIntelligence.assertBusinessAccess({uid: context.uid, role: context.role,
-      isAdmin: context.isAdmin, businessId: zone.businessId}); }
-    catch (_) { throw new HttpsError("permission-denied", "You do not own this campaign zone."); }
+    const exploratoryGeometry = request.data?.geometry;
+    if (!zoneId && !Array.isArray(exploratoryGeometry)) {
+      throw new HttpsError("invalid-argument", "A valid zone or exploratory analysis area is required.");
+    }
+    let zoneReference = null;
     let geometry;
-    try { geometry = propertyIntelligence.validateGeometry(zone.serviceArea); }
-    catch (_) { throw new HttpsError("failed-precondition", "Save a valid campaign area before requesting Property Intelligence."); }
+    if (zoneId) {
+      zoneReference = db.collection("campaignZones").doc(zoneId);
+      const zoneSnapshot = await zoneReference.get();
+      if (!zoneSnapshot.exists) throw new HttpsError("not-found", "The campaign zone does not exist.");
+      const zone = zoneSnapshot.data() || {};
+      try { propertyIntelligence.assertBusinessAccess({uid: context.uid, role: context.role,
+        isAdmin: context.isAdmin, businessId: zone.businessId}); }
+      catch (_) { throw new HttpsError("permission-denied", "You do not own this campaign zone."); }
+      try { geometry = propertyIntelligence.validateGeometry(zone.serviceArea); }
+      catch (_) { throw new HttpsError("failed-precondition", "Save a valid campaign area before requesting Property Intelligence."); }
+    } else {
+      try { geometry = propertyIntelligence.validateGeometry(exploratoryGeometry); }
+      catch (_) { throw new HttpsError("invalid-argument", "Draw a valid analysis area before requesting Property Intelligence."); }
+    }
     const digest = propertyIntelligence.geometryDigest(geometry);
+    const addPhysicalChannelSuitability = (value) => {
+      const walking = operations.calculateGeometryWalkingEstimate(geometry);
+      const homes = Number(value?.residentialStructureCount || value?.propertyCount || 0);
+      const areaSquareKm = walking.areaSquareMeters / 1000000;
+      const logisticsSignals = {
+        homesPerSquareKm: homes > 0 && areaSquareKm > 0 ? homes / areaSquareKm : null,
+        averagePropertySpacingMeters: homes > 0 ? Math.sqrt(walking.areaSquareMeters / homes) : null,
+        walkingMinutesPerReachableAddress: homes > 0 ? walking.estimatedWalkingMinutes / homes : null,
+        // Lot size and access are deliberately unavailable until an authoritative source supplies them.
+        accessStatus: "unknown",
+      };
+      return {...value, physicalLogisticsVersion: "PropertyPhysicalLogisticsV1",
+        physicalLogistics: logisticsSignals,
+        physicalChannelSuitability: managedGrowth.evaluatePhysicalChannelSuitability(logisticsSignals)};
+    };
     const cacheId = crypto.createHash("sha256").update(`${propertyIntelligence.ANALYSIS_VERSION}:${propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION}:${digest}`).digest("hex");
     const cacheReference = db.collection(PROPERTY_INTELLIGENCE_CACHE_COLLECTION).doc(cacheId);
     const cacheSnapshot = await cacheReference.get();
     const cached = cacheSnapshot.data() || {};
     if (propertyIntelligence.cacheIsReusable(cached, {digest})) {
-      await zoneReference.update({propertyIntelligenceCacheId: cacheId,
-        propertyIntelligenceGeometryDigest: digest, propertyIntelligenceStatus: "complete",
-        propertyIntelligenceSummary: cached.analysis,
-        propertyIntelligenceUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
-      return {success: true, zoneId, cached: true, analysis: cached.analysis,
-        aiContext: propertyIntelligence.aiGrounding(cached.analysis, request.data?.objective)};
+      if (zoneReference) {
+        await zoneReference.update({propertyIntelligenceCacheId: cacheId,
+          propertyIntelligenceGeometryDigest: digest, propertyIntelligenceStatus: "complete",
+          propertyIntelligenceSummary: cached.analysis,
+          propertyIntelligenceUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      }
+      const cachedAnalysis = addPhysicalChannelSuitability(cached.analysis);
+      return {success: true, zoneId: zoneId || null, analysisScope: zoneId ? "campaign_zone" : "exploratory",
+        cached: true, analysis: cachedAnalysis,
+        aiContext: propertyIntelligence.aiGrounding(cachedAnalysis, request.data?.objective)};
     }
     const providers = [new propertyIntelligence.MarylandPropertyProvider(),
       new propertyIntelligence.CensusPropertyProvider({apiKey: CENSUS_API_KEY.value() || ""})];
     const analysis = await propertyIntelligence.analyzeWithFallback({geometry, providers});
-    const sanitized = {...analysis, analysisId: cacheId, geometryDigest: digest, generatedAt: new Date().toISOString()};
+    const sanitized = addPhysicalChannelSuitability({...analysis, analysisId: cacheId,
+      geometryDigest: digest, generatedAt: new Date().toISOString()});
     delete sanitized.providerFailures;
     await cacheReference.set({analysisVersion: propertyIntelligence.ANALYSIS_VERSION,
       dataSourceBundleVersion: propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION,
       geometryDigest: digest, source: sanitized.source, sourceVersion: sanitized.sourceVersion,
       generatedAt: FieldValue.serverTimestamp(), analysis: sanitized});
-    await zoneReference.update({propertyIntelligenceCacheId: cacheId,
-      propertyIntelligenceGeometryDigest: digest, propertyIntelligenceStatus: sanitized.confidence === "INSUFFICIENT" ? "unavailable" : "complete",
-      propertyIntelligenceSummary: sanitized, propertyIntelligenceUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
-    return {success: true, zoneId, cached: false, analysis: sanitized,
+    if (zoneReference) {
+      await zoneReference.update({propertyIntelligenceCacheId: cacheId,
+        propertyIntelligenceGeometryDigest: digest, propertyIntelligenceStatus: sanitized.confidence === "INSUFFICIENT" ? "unavailable" : "complete",
+        propertyIntelligenceSummary: sanitized, propertyIntelligenceUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    }
+    return {success: true, zoneId: zoneId || null, analysisScope: zoneId ? "campaign_zone" : "exploratory",
+      cached: false, analysis: sanitized,
       aiContext: propertyIntelligence.aiGrounding(sanitized, request.data?.objective)};
+  },
+);
+
+function isLocalScaleIntelligenceEmulator() {
+  const projectId = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+  return process.env.FUNCTIONS_EMULATOR === "true" &&
+    process.env.APP_ENV === "local" && projectId === "demo-scaledcircle" &&
+    process.env.FIREBASE_AUTH_EMULATOR_HOST === "127.0.0.1:9099" &&
+    process.env.FIRESTORE_EMULATOR_HOST === "127.0.0.1:8080" &&
+    process.env.FUNCTIONS_EMULATOR_HOST === "127.0.0.1:5001" &&
+    process.env.FIREBASE_STORAGE_EMULATOR_HOST === "127.0.0.1:9199";
+}
+
+function localIntelligenceTrace() {
+  const enabled = isLocalScaleIntelligenceEmulator();
+  const correlationId = crypto.randomUUID();
+  const startedAt = Date.now();
+  const milestones = [];
+  return {
+    mark(milestone) {
+      if (!enabled) return;
+      const entry = {correlationId, milestone, elapsedMs: Date.now() - startedAt};
+      milestones.push(entry);
+      logger.info("Scale Intelligence local milestone.", entry);
+    },
+    diagnostics() {
+      return enabled ? {correlationId, milestones: [...milestones]} : undefined;
+    },
+  };
+}
+
+async function requireScaleIntelligenceBusiness(request, trace) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "You must be logged in to use Scale Intelligence.");
+  }
+  trace.mark("AUTH_VERIFIED");
+  const context = await authenticatedUserContext(
+    request,
+    "You must be logged in to use Scale Intelligence.",
+  );
+  trace.mark("BUSINESS_ID_RESOLVED");
+  if (context.role !== "business" && !context.isAdmin) {
+    throw new HttpsError(
+      "permission-denied",
+      "Scale Intelligence is available to Business accounts.",
+    );
+  }
+  trace.mark("SCALE_ENTITLEMENT_READ_START");
+  const entitlementSnapshot = await db.collection("businessSubscriptions")
+    .doc(context.uid).get();
+  trace.mark("SCALE_ENTITLEMENT_READ_END");
+  const entitlement = entitlementSnapshot.data();
+  if (entitlement?.source === "local_staging_synthetic" &&
+      !isLocalScaleIntelligenceEmulator()) {
+    throw new HttpsError(
+      "permission-denied",
+      "Synthetic staging entitlements are local-only.",
+    );
+  }
+  if (!subscriptionEntitlements.hasActiveScaleEntitlement(
+    entitlement,
+  )) {
+    throw new HttpsError(
+      "permission-denied",
+      "AI Intelligence requires an active Scale subscription.",
+    );
+  }
+  trace.mark("SCALE_ENTITLEMENT_VERIFIED");
+  return context;
+}
+
+function assertScaleIntelligenceRuntimeIsolation() {
+  if (process.env.FUNCTIONS_EMULATOR !== "true") return;
+  if (!isLocalScaleIntelligenceEmulator()) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Local Scale Intelligence requires the isolated demo Firebase emulators.",
+    );
+  }
+}
+
+function intelligenceRateLimitReferences(uid, nowMillis = Date.now()) {
+  const windows = scaledCircleIntelligence.rateLimitWindows(nowMillis);
+  const uidHash = crypto.createHash("sha256").update(uid).digest("hex").slice(0, 32);
+  return {
+    windows,
+    uidHash,
+    tenMinuteReference: db.collection("intelligenceRateLimits")
+      .doc(`${uidHash}_ten_${windows.tenMinute}`),
+    dayReference: db.collection("intelligenceRateLimits")
+      .doc(`${uidHash}_day_${windows.day}`),
+  };
+}
+
+function assertIntelligenceRateLimitCounts(tenMinuteCount, dayCount) {
+  if (tenMinuteCount >= scaledCircleIntelligence.MAX_REQUESTS_PER_TEN_MINUTES ||
+      dayCount >= scaledCircleIntelligence.MAX_REQUESTS_PER_DAY) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "The Scale Intelligence request limit was reached. Try again later.",
+    );
+  }
+}
+
+async function validateIntelligenceRateLimit(uid, nowMillis = Date.now()) {
+  const {tenMinuteReference, dayReference} = intelligenceRateLimitReferences(uid, nowMillis);
+  const [tenMinuteSnapshot, daySnapshot] = await Promise.all([
+    tenMinuteReference.get(), dayReference.get(),
+  ]);
+  assertIntelligenceRateLimitCounts(
+    Number(tenMinuteSnapshot.data()?.count || 0),
+    Number(daySnapshot.data()?.count || 0),
+  );
+}
+
+async function consumeIntelligenceRateLimit(uid, nowMillis = Date.now()) {
+  const {windows, uidHash, tenMinuteReference, dayReference} =
+    intelligenceRateLimitReferences(uid, nowMillis);
+  await db.runTransaction(async (transaction) => {
+    const [tenMinuteSnapshot, daySnapshot] = await Promise.all([
+      transaction.get(tenMinuteReference), transaction.get(dayReference),
+    ]);
+    const tenMinuteCount = Number(tenMinuteSnapshot.data()?.count || 0);
+    const dayCount = Number(daySnapshot.data()?.count || 0);
+    assertIntelligenceRateLimitCounts(tenMinuteCount, dayCount);
+    const metadata = {
+      policyVersion: scaledCircleIntelligence.RATE_LIMIT_POLICY_VERSION,
+      uidHash,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    transaction.set(tenMinuteReference, {...metadata, count: tenMinuteCount + 1,
+      expiresAt: Timestamp.fromMillis((windows.tenMinute + 2) * 10 * 60 * 1000)}, {merge: true});
+    transaction.set(dayReference, {...metadata, count: dayCount + 1,
+      expiresAt: Timestamp.fromMillis((windows.day + 2) * 24 * 60 * 60 * 1000)}, {merge: true});
+  });
+}
+
+async function loadAuthoritativePropertyIntelligence(analysisId, geometryDigest) {
+  if (!/^[a-f0-9]{64}$/i.test(analysisId)) {
+    throw new HttpsError("invalid-argument", "A valid Property Intelligence analysis is required.");
+  }
+  const snapshot = await db.collection(PROPERTY_INTELLIGENCE_CACHE_COLLECTION)
+    .doc(analysisId).get();
+  const cached = snapshot.data() || {};
+  if (!snapshot.exists || !cached.analysis) {
+    throw new HttpsError("not-found", "The Property Intelligence analysis was not found.");
+  }
+  if (geometryDigest && cached.geometryDigest !== geometryDigest) {
+    throw new HttpsError("failed-precondition", "The Property Intelligence geometry has changed.");
+  }
+  return propertyIntelligence.aiGrounding(cached.analysis).knownData;
+}
+
+/**
+ * Shared Scale-plan AI interpretation for authoritative Property and Weather
+ * Intelligence. The model is advisory and cannot mutate campaigns or finance.
+ */
+exports.analyzeScaleIntelligence = onCall(
+  {enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 30, memory: "512MiB",
+    secrets: [OPENAI_API_KEY]},
+  async (request) => {
+    const trace = localIntelligenceTrace();
+    trace.mark("CALLABLE_ENTRY");
+    assertScaleIntelligenceRuntimeIsolation();
+    trace.mark("LOCAL_ENV_GUARD_PASSED");
+    const business = await requireScaleIntelligenceBusiness(request, trace);
+    const mode = readText(request.data?.mode, 40).toLowerCase();
+    if (!["property", "weather", "combined"].includes(mode)) {
+      throw new HttpsError("invalid-argument", "Choose Property, Weather, or Combined intelligence.");
+    }
+    trace.mark("REQUEST_MODE_VALIDATED");
+
+    let propertyFacts = null;
+    let weatherFacts = null;
+    if (mode === "property" || mode === "combined") {
+      trace.mark("PROPERTY_ANALYSIS_LOOKUP_START");
+      propertyFacts = await loadAuthoritativePropertyIntelligence(
+        readText(request.data?.analysisId, 80),
+        readText(request.data?.geometryDigest, 80),
+      );
+      trace.mark("PROPERTY_ANALYSIS_LOOKUP_END");
+    }
+    if (mode === "weather" || mode === "combined") {
+      trace.mark("WEATHER_CONTEXT_BUILD_START");
+      const latitude = Number(request.data?.latitude);
+      const longitude = Number(request.data?.longitude);
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+          !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+        throw new HttpsError("invalid-argument", "A valid Weather Intelligence location is required.");
+      }
+      weatherFacts = propertyIntelligence.sanitizeWeatherIntelligence(
+        await loadWeatherOpportunityFeed({latitude, longitude}),
+      );
+      trace.mark("WEATHER_CONTEXT_BUILD_END");
+    }
+
+    let intelligenceContext;
+    try {
+      trace.mark("PROPERTY_CONTEXT_BUILD_START");
+      intelligenceContext = scaledCircleIntelligence.buildContext({
+        mode,
+        objective: request.data?.businessObjective,
+        question: request.data?.question,
+        propertyIntelligence: propertyFacts,
+        weatherIntelligence: weatherFacts,
+      });
+      trace.mark("PROPERTY_CONTEXT_BUILD_END");
+    } catch (error) {
+      throw new HttpsError("invalid-argument", "The Scale Intelligence request is malformed.");
+    }
+    const cacheId = scaledCircleIntelligence.cacheIdentity(intelligenceContext);
+    const cacheReference = db.collection("intelligenceAnalysisCache").doc(cacheId);
+    trace.mark("CACHE_LOOKUP_START");
+    const cacheSnapshot = await cacheReference.get();
+    trace.mark("CACHE_LOOKUP_END");
+    const cache = cacheSnapshot.data() || {};
+    const generatedAtMillis = cache.generatedAt instanceof Timestamp ?
+      cache.generatedAt.toMillis() : 0;
+    if (cache.result && Date.now() - generatedAtMillis >= 0 &&
+        Date.now() - generatedAtMillis < 7 * 24 * 60 * 60 * 1000) {
+      trace.mark("CALLABLE_RETURN");
+      return {...cache.result, cached: true,
+        localDiagnostics: trace.diagnostics()};
+    }
+
+    if (request.data?.localPreflight === true) {
+      if (!isLocalScaleIntelligenceEmulator()) {
+        throw new HttpsError("permission-denied", "Local preflight is unavailable.");
+      }
+      trace.mark("RATE_LIMIT_START");
+      await validateIntelligenceRateLimit(business.uid);
+      trace.mark("RATE_LIMIT_END");
+      trace.mark("CALLABLE_RETURN");
+      return {
+        readyForProvider: true,
+        mode,
+        propertyContextReady: propertyFacts !== null,
+        entitlementVerified: true,
+        environmentVerified: true,
+        localDiagnostics: trace.diagnostics(),
+      };
+    }
+
+    trace.mark("RATE_LIMIT_START");
+    await consumeIntelligenceRateLimit(business.uid);
+    trace.mark("RATE_LIMIT_END");
+    const apiKey = OPENAI_API_KEY.value();
+    trace.mark("SECRET_BINDING_READY");
+    if (!apiKey) {
+      return {status: "temporarily_unavailable", cached: false,
+        message: "AI analysis is temporarily unavailable.",
+        knownData: intelligenceContext.componentSignals};
+    }
+
+    try {
+      trace.mark("OPENAI_CLIENT_CREATE_START");
+      const transport = scaledCircleIntelligence.createOpenAITransport({apiKey});
+      trace.mark("OPENAI_CLIENT_CREATE_END");
+      trace.mark("OPENAI_REQUEST_START");
+      const result = await scaledCircleIntelligence.analyzeSafely(
+        intelligenceContext,
+        {transport: async (context) => transport(context, {
+          onMilestone: (milestone) => trace.mark(milestone),
+        })},
+      );
+      if (result.status !== "complete") return {...result, cached: false};
+      const storedResult = {...result, cacheId};
+      trace.mark("CACHE_WRITE_START");
+      await cacheReference.set({
+        businessId: business.uid,
+        mode,
+        model: result.model,
+        modelSnapshot: result.modelSnapshot,
+        modelConfigVersion: result.modelConfigVersion,
+        promptVersion: result.promptVersion,
+        contextVersion: result.contextVersion,
+        responseSchemaVersion: result.responseSchemaVersion,
+        usage: result.usage,
+        generatedAt: FieldValue.serverTimestamp(),
+        result: storedResult,
+      });
+      trace.mark("CACHE_WRITE_END");
+      trace.mark("CALLABLE_RETURN");
+      return {...storedResult, cached: false,
+        localDiagnostics: trace.diagnostics()};
+    } catch (error) {
+      logger.warn("Scale Intelligence provider unavailable.", {
+        uid: business.uid,
+        mode,
+        cacheId,
+        errorCode: error instanceof Error ? error.message.slice(0, 120) : "provider_error",
+      });
+      return {status: "temporarily_unavailable", cached: false,
+        message: "AI analysis is temporarily unavailable.",
+        knownData: intelligenceContext.componentSignals};
+    }
   },
 );
 
@@ -3907,12 +4252,20 @@ async function loadWeatherOpportunityFeed({
   try {
     const endpoint = new URL("https://api.weather.gov/alerts/active");
     endpoint.searchParams.set("point", `${roundedLatitude},${roundedLongitude}`);
-    const nwsResponse = await fetch(endpoint, {
-      headers: {
-        "Accept": "application/geo+json",
-        "User-Agent": "ScaledCircle/1.0 (https://scaledcircle.com)",
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    let nwsResponse;
+    try {
+      nwsResponse = await fetch(endpoint, {
+        headers: {
+          "Accept": "application/geo+json",
+          "User-Agent": "ScaledCircle/1.0 (https://scaledcircle.com)",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!nwsResponse.ok) {
       throw new Error(`NWS returned ${nwsResponse.status}.`);
@@ -4359,10 +4712,134 @@ function campaignWorkPolicy(campaign = {}) {
 }
 
 function materialRequiredForCampaign(campaign = {}) {
-  return campaign.materialsRequired === true ||
-    ["business_pickup", "third_party_pickup", "business_dropoff"]
-      .includes(String(campaign.materialFulfillmentType || campaign.materialHandoffMethod || ""));
+  const rawType = String(campaign.materialFulfillmentType ||
+    campaign.materialHandoffMethod || "");
+  if (rawType === "no_materials_required") return false;
+  try {
+    return operations.normalizeFulfillmentType(rawType) !== "no_materials_required";
+  } catch (_) {
+    return campaign.materialsRequired === true;
+  }
 }
+
+function operationalCallable(name, handler) {
+  return onCall(TRACKING_CALLABLE_OPTIONS, async (request) => {
+    try {
+      return await handler(request);
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error(`Unexpected ${name} failure`, {
+        error: error instanceof Error ? error.message : String(error),
+        uid: request.auth?.uid || null,
+      });
+      throw new HttpsError("internal", "The operational request could not be completed.");
+    }
+  });
+}
+
+function assertOperationalPayload(data, allowed, maximumBytes) {
+  try {
+    assertAllowedKeys(data || {}, allowed, "Operational request");
+  } catch (_) {
+    throw new HttpsError("invalid-argument", "The operational request is malformed.");
+  }
+  if (serializedBytes(data) > maximumBytes) {
+    throw new HttpsError("invalid-argument", "The operational request is too large.");
+  }
+}
+
+function inAppNotification({id, userId, type, title, message, campaignId = null,
+  zoneId = null, entityId = null, deepLink = null, priority = "normal",
+  metadata = {}}) {
+  return {
+    id, userId, type, title, message, campaignId, zoneId, entityId,
+    deepLink: deepLink || (zoneId ? {destination: "job_room", zoneId} : null),
+    priority, metadata, read: false, channel: "in_app",
+    emailRequested: false, pushRequested: false,
+    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    schemaVersion: 2,
+  };
+}
+
+function setInAppNotification(transaction, notification) {
+  const ref = db.collection("notifications").doc(notification.id);
+  transaction.set(ref, notification, {merge: true});
+}
+
+async function writeInAppNotification(notification) {
+  await db.collection("notifications").doc(notification.id)
+    .set(notification, {merge: true});
+}
+
+exports.notifyOnCampaignApplicationCreated = onDocumentCreated({
+  document: "campaigns/{campaignId}/applications/{applicationId}",
+  region: "us-east1", retry: true,
+}, async (event) => {
+  const application = event.data?.data() || {};
+  const campaignId = event.params.campaignId;
+  const scalerId = String(application.scalerId || event.params.applicationId || "");
+  const businessId = String(application.businessId || "");
+  if (!scalerId || !businessId) return;
+  await writeInAppNotification(inAppNotification({
+    id: `application-received_${campaignId}_${scalerId}`, userId: businessId,
+    type: "application_received", title: "New Scaler application",
+    message: "A Scaler applied for your campaign.", campaignId,
+    entityId: event.params.applicationId,
+    deepLink: {destination: "campaign_applicants", campaignId},
+  }));
+});
+
+exports.notifyOnCampaignApplicationUpdated = onDocumentUpdated({
+  document: "campaigns/{campaignId}/applications/{applicationId}",
+  region: "us-east1", retry: true,
+}, async (event) => {
+  const before = event.data?.before.data() || {};
+  const after = event.data?.after.data() || {};
+  if (before.status === after.status) return;
+  const scalerId = String(after.scalerId || event.params.applicationId || "");
+  if (!scalerId || !["accepted", "rejected"].includes(String(after.status))) return;
+  const campaignId = event.params.campaignId;
+  const zoneId = String(after.assignedZoneId || "");
+  const accepted = after.status === "accepted";
+  await writeInAppNotification(inAppNotification({
+    id: accepted && zoneId ? `assignment_${zoneId}_${scalerId}` :
+      `application-${after.status}_${campaignId}_${scalerId}`,
+    userId: scalerId, type: accepted ? "job_assignment" : "application_rejected",
+    title: accepted ? "You're assigned to a job" : "Application update",
+    message: accepted ? "Review your scheduled pay, material plan, and Job Room." :
+      "Your application was not selected.",
+    campaignId, zoneId: zoneId || null, entityId: event.params.applicationId,
+    deepLink: accepted && zoneId ? {destination: "job_room", zoneId} :
+      {destination: "campaign", campaignId},
+    priority: accepted ? "high" : "normal",
+  }));
+});
+
+exports.notifyOnCampaignZoneUpdated = onDocumentUpdated({
+  document: "campaignZones/{zoneId}", region: "us-east1", retry: true,
+}, async (event) => {
+  const before = event.data?.before.data() || {};
+  const after = event.data?.after.data() || {};
+  const becameSubmitted = before.status !== after.status &&
+    ["submitted", "verification_pending"].includes(String(after.status));
+  const becamePaused = before.status !== "paused_work_window" &&
+    after.status === "paused_work_window";
+  if (!becameSubmitted && !becamePaused) return;
+  const recipient = becameSubmitted ? after.businessId : after.assignedScalerId;
+  if (!recipient) return;
+  const zoneId = event.params.zoneId;
+  await writeInAppNotification(inAppNotification({
+    id: `${becameSubmitted ? "completion-submitted" : "work-cutoff"}_${zoneId}`,
+    userId: recipient,
+    type: becameSubmitted ? "zone_completion_submitted" : "work_cutoff_paused",
+    title: becameSubmitted ? "Zone completion submitted" : "Work paused at cutoff",
+    message: becameSubmitted ? "Verified work is ready for Business review." :
+      "Route evidence was preserved. Resume during the next allowed work window.",
+    campaignId: after.campaignId, zoneId, entityId: after.submittedCompletionId || zoneId,
+    deepLink: {destination: becameSubmitted ? "campaign_review" : "job_room", zoneId,
+      campaignId: after.campaignId}, priority: "high",
+  }));
+});
 
 function appendJobEvent(transaction, {campaignId, zoneId, businessId, scalerId, type, actorId, metadata = {}}) {
   const ref = db.collection("jobEvents").doc();
@@ -4636,6 +5113,14 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
     const campaign = campaignSnapshot.data();
     const zone = zoneSnapshot.data();
     const application = applicationSnapshot.data();
+    const materialLogistics = operations.materialLogisticsFromCampaign(campaign);
+    const materialLogisticsDigest = operations.materialLogisticsDigest(materialLogistics);
+    const materialLogisticsVersion = Number(campaign.materialLogisticsVersion || 1);
+    if (campaign.materialLogisticsLockedAt && campaign.materialLogisticsDigest &&
+        campaign.materialLogisticsDigest !== materialLogisticsDigest) {
+      throw new HttpsError("failed-precondition",
+        "The locked material plan requires trusted support reconciliation.");
+    }
     if (!context.isAdmin && campaign.businessId !== context.uid) {
       throw new HttpsError("permission-denied", "This campaign does not belong to you.");
     }
@@ -4715,12 +5200,19 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
       bonusAmountCents,
       acceptedCounterofferAmountCents: counterofferAmountCents,
       compensationVersion: 1,
+      acceptedMaterialLogisticsVersion: materialLogisticsVersion,
+      acceptedMaterialLogisticsDigest: materialLogisticsDigest,
+      acceptedMaterialLogistics: materialLogistics,
       immutable: true,
       createdAt: FieldValue.serverTimestamp(),
     });
     if (!roomSnapshot.exists) {
       transaction.create(jobRoomRef, {
         campaignId, zoneId, businessId: campaign.businessId, scalerId,
+        materialLogistics: {...materialLogistics, version: materialLogisticsVersion},
+        materialLogisticsVersion, materialLogisticsDigest,
+        materialLogisticsLockedAt: FieldValue.serverTimestamp(),
+        materialLogisticsLockedReason: "scaler_assignment",
         status: "open", createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(), schemaVersion: 1,
       });
@@ -4738,9 +5230,11 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
         platformFeeCents: Number.isSafeInteger(campaign.platformFeeCents) ?
           campaign.platformFeeCents : Math.round(baseAmountCents * 0.2),
         scheduledAt: campaign.materialHandoffScheduledAt || null,
-        privateLocation: campaign.materialPickupAddress ||
+        privateLocation: campaign.materialHandoffAddress || campaign.materialPickupAddress ||
           campaign.materialDropoffAddress || null,
         instructions: campaign.materialHandoffInstructions || null,
+        logisticsVersion: materialLogisticsVersion,
+        logisticsDigest: materialLogisticsDigest,
         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
         schemaVersion: 1,
       });
@@ -4748,6 +5242,8 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
     transaction.update(applicationRef, {
       status: "accepted", assignmentMode: "zone", assignedZoneId: zoneId,
       assignedZoneName: zoneName, assignedHomes,
+      acceptedMaterialLogisticsVersion: materialLogisticsVersion,
+      acceptedMaterialLogisticsDigest: materialLogisticsDigest,
       acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     });
     transaction.update(zoneRef, {
@@ -4756,15 +5252,36 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
       assignedHomeCountSource: "estimatedHomes",
       assignedHomeCountLockedAt: FieldValue.serverTimestamp(), status: "assigned",
       compensationContractId: compensationRef.id,
+      materialLogisticsVersion, materialLogisticsDigest,
+      materialLogisticsLockedAt: FieldValue.serverTimestamp(),
+      materialLogisticsLockedReason: "scaler_assignment",
       assignedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     });
-    transaction.set(db.collection("notifications").doc(), {
-      userId: scalerId, type: "application_accepted", title: "Zone Assignment Accepted",
-      message: `You were assigned to ${zoneName} for ${campaign.name || "this campaign"}. ` +
-        `${assignedHomes} homes are assigned.`,
-      campaignId, campaignName: campaign.name || "Campaign", assignmentMode: "zone",
-      zoneId, zoneName, assignedHomes, read: false, createdAt: FieldValue.serverTimestamp(),
-    });
+    if (!campaign.materialLogisticsLockedAt) {
+      transaction.update(campaignRef, {
+        materialLogisticsVersion, materialLogisticsDigest,
+        materialLogisticsLockedAt: FieldValue.serverTimestamp(),
+        materialLogisticsLockedReason: "scaler_assignment",
+        materialLogisticsLockedZoneId: zoneId,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    setInAppNotification(transaction, inAppNotification({
+      id: `assignment_${zoneId}_${scalerId}`, userId: scalerId,
+      type: "job_assignment", title: `You're assigned to ${zoneName}`,
+      message: `Review your scheduled pay, material plan, and Job Room.`,
+      campaignId, zoneId, entityId: applicationId,
+      deepLink: {destination: "job_room", zoneId}, priority: "high",
+      metadata: {assignedHomes, materialLogisticsVersion},
+    }));
+    setInAppNotification(transaction, inAppNotification({
+      id: `material-lock_${zoneId}_${scalerId}`, userId: scalerId,
+      type: "material_logistics_locked", title: "Material plan locked",
+      message: `${materialLogistics.fulfillmentType.replaceAll("_", " ")} • Review the confirmed plan in the Job Room.`,
+      campaignId, zoneId, entityId: materialLogisticsDigest,
+      deepLink: {destination: "job_room", zoneId}, priority: "high",
+      metadata: {materialLogisticsVersion},
+    }));
     appendJobEvent(transaction, {
       campaignId, zoneId, businessId: campaign.businessId, scalerId,
       actorId: context.uid, type: "assignment.accepted",
@@ -4888,36 +5405,105 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
     const participant = groupAssignment.initialParticipant({zoneId, campaignId, businessId: group.businessId,
       scalerUid, slotNumber: slot, shareCents: share});
     const campaign = campaignSnapshot.data() || {}; const materialRequired = materialRequiredForCampaign(campaign);
+    const materialLogistics = operations.materialLogisticsFromCampaign(campaign);
+    const materialLogisticsDigest = operations.materialLogisticsDigest(materialLogistics);
+    const materialLogisticsVersion = Number(campaign.materialLogisticsVersion || 1);
+    if (campaign.materialLogisticsLockedAt && campaign.materialLogisticsDigest &&
+        campaign.materialLogisticsDigest !== materialLogisticsDigest) {
+      throw new HttpsError("failed-precondition",
+        "The locked material plan requires trusted support reconciliation.");
+    }
     const materialHandoffId = materialRequired ? `${zoneId}__${participant.participantId}` : null;
     transaction.create(participantRef, {...participant, applicationId, materialHandoffId,
+      acceptedMaterialLogisticsVersion: materialLogisticsVersion,
+      acceptedMaterialLogisticsDigest: materialLogisticsDigest,
+      acceptedMaterialLogistics: materialLogistics,
       acceptedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     if (materialRequired) transaction.create(db.collection("materialHandoffs").doc(materialHandoffId), {
       campaignId, zoneId, groupAssignmentId: zoneId, participantId: participant.participantId,
       businessId: group.businessId, scalerId: scalerUid, required: true,
       fulfillmentType: operations.normalizeFulfillmentType(String(campaign.materialFulfillmentType || campaign.materialHandoffMethod || "")),
-      status: "scheduled", workerAmountCents: share, scheduledAt: campaign.materialHandoffScheduledAt || null,
-      privateLocation: campaign.materialPickupAddress || campaign.materialDropoffAddress || null,
+      status: "scheduled", workerAmountCents: share,
+      scheduledAt: campaign.materialHandoffScheduledAt || null,
+      windowEndAt: campaign.materialHandoffWindowEndAt || null,
+      privateLocation: campaign.materialHandoffAddress ||
+        campaign.materialPickupAddress || campaign.materialDropoffAddress || null,
+      printingShopName: campaign.materialHandoffPrintingShopName || null,
+      orderReference: campaign.materialHandoffOrderReference || null,
       instructions: campaign.materialHandoffInstructions || null,
+      logisticsVersion: materialLogisticsVersion,
+      logisticsDigest: materialLogisticsDigest,
       createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), schemaVersion: 2});
     if (roomSnapshot.exists) {
       transaction.update(roomRef, {
         scalerIds: FieldValue.arrayUnion(scalerUid), groupAssignmentId: zoneId,
+        materialLogistics: {...materialLogistics, version: materialLogisticsVersion},
+        materialLogisticsVersion, materialLogisticsDigest,
+        materialLogisticsLockedAt: roomSnapshot.data()?.materialLogisticsLockedAt || FieldValue.serverTimestamp(),
+        materialLogisticsLockedReason: "scaler_assignment",
         updatedAt: FieldValue.serverTimestamp(), schemaVersion: 2,
       });
     } else {
       transaction.create(roomRef, {
         campaignId, zoneId, businessId: group.businessId, scalerIds: [scalerUid],
+        materialLogistics: {...materialLogistics, version: materialLogisticsVersion},
+        materialLogisticsVersion, materialLogisticsDigest,
+        materialLogisticsLockedAt: FieldValue.serverTimestamp(),
+        materialLogisticsLockedReason: "scaler_assignment",
         groupAssignmentId: zoneId, status: "open", createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(), schemaVersion: 2,
       });
     }
     transaction.update(applicationRef, {status: "accepted", assignmentMode: "group_slot", assignedZoneId: zoneId,
-      participantId: participant.participantId, scheduledShareCents: share, acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      participantId: participant.participantId, scheduledShareCents: share,
+      acceptedMaterialLogisticsVersion: materialLogisticsVersion,
+      acceptedMaterialLogisticsDigest: materialLogisticsDigest,
+      acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     transaction.update(groupRef, {acceptedScalerCount: participants.filter((item) => !["declined", "cancelled_before_window", "replaced"].includes(item.status)).length + 1,
       acceptedScalerIds: FieldValue.arrayUnion(scalerUid),
       status: participants.length + 1 >= group.requiredScalerCount ? "filled" : "open", updatedAt: FieldValue.serverTimestamp()});
     transaction.update(zoneRef, {groupAssignmentStatus: participants.length + 1 >= group.requiredScalerCount ? "filled" : "open",
+      assignedScalerIds: FieldValue.arrayUnion(scalerUid),
+      materialLogisticsVersion, materialLogisticsDigest,
+      materialLogisticsLockedAt: zone.materialLogisticsLockedAt || FieldValue.serverTimestamp(),
+      materialLogisticsLockedReason: "scaler_assignment",
       status: "assigned", updatedAt: FieldValue.serverTimestamp()});
+    const assignedCount = participants.filter((item) =>
+      !["declined", "cancelled_before_window", "replaced"].includes(item.status)).length + 1;
+    const zoneName = String(zone.zoneName || "this group zone");
+    setInAppNotification(transaction, inAppNotification({
+      id: `assignment_${zoneId}_${scalerUid}`, userId: scalerUid,
+      type: "job_assignment", title: `You're assigned to ${zoneName}`,
+      message: `Your scheduled share is $${(share / 100).toFixed(2)}. Review the material plan and Job Room.`,
+      campaignId, zoneId, entityId: participant.participantId,
+      deepLink: {destination: "job_room", zoneId}, priority: "high",
+      metadata: {scheduledShareCents: share, groupSize: group.requiredScalerCount},
+    }));
+    setInAppNotification(transaction, inAppNotification({
+      id: `group-assignment_${zoneId}_${scalerUid}`, userId: group.businessId,
+      type: "group_assignment_progress", title: `${assignedCount} of ${group.requiredScalerCount} Scalers assigned`,
+      message: `${application.scalerName || application.scalerEmail || "A Scaler"} joined ${zoneName}.`,
+      campaignId, zoneId, entityId: participant.participantId,
+      deepLink: {destination: "job_room", zoneId},
+      metadata: {assignedCount, requiredCount: group.requiredScalerCount},
+    }));
+    setInAppNotification(transaction, inAppNotification({
+      id: `material-lock_${zoneId}_${scalerUid}`, userId: scalerUid,
+      type: "material_logistics_locked", title: "Material plan locked",
+      message: "Review the confirmed pickup or delivery plan in the Job Room.",
+      campaignId, zoneId, entityId: materialLogisticsDigest,
+      deepLink: {destination: "job_room", zoneId}, priority: "high",
+      metadata: {materialLogisticsVersion},
+    }));
+    if (!campaign.materialLogisticsLockedAt) {
+      transaction.update(campaignSnapshot.ref, {
+        materialLogisticsVersion, materialLogisticsDigest,
+        materialLogisticsLockedAt: FieldValue.serverTimestamp(),
+        materialLogisticsLockedReason: "scaler_assignment",
+        materialLogisticsLockedZoneId: zoneId,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
     result = participant;
   });
   return result;
@@ -5276,7 +5862,6 @@ exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) =>
   const campaignId = String(request.data?.campaignId || "").trim();
   const campaignRef = db.collection("campaigns").doc(campaignId);
   const applicationRef = campaignRef.collection("applications").doc(context.uid);
-  const notificationRef = db.collection("notifications").doc();
   await db.runTransaction(async (transaction) => {
     const [campaignSnapshot, applicationSnapshot] = await Promise.all([
       transaction.get(campaignRef), transaction.get(applicationRef),
@@ -5299,16 +5884,14 @@ exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) =>
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
-    transaction.create(notificationRef, {
-      userId: campaign.businessId,
-      campaignId,
-      scalerId: context.uid,
-      type: "application_received",
-      title: "New Scaler Application",
-      message: "A Scaler applied for your campaign.",
-      read: false,
-      createdAt: FieldValue.serverTimestamp(),
-    });
+    setInAppNotification(transaction, inAppNotification({
+      id: `application-received_${campaignId}_${context.uid}`,
+      userId: campaign.businessId, type: "application_received",
+      title: "New Scaler application", message: "A Scaler applied for your campaign.",
+      campaignId, entityId: context.uid,
+      deepLink: {destination: "campaign_applicants", campaignId},
+      metadata: {scalerId: context.uid},
+    }));
   });
   return {status: "pending"};
 });
@@ -5321,8 +5904,9 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   const roomSnapshot = await roomRef.get();
   const room = roomSnapshot.data() || {};
   const roomScalerIds = Array.isArray(room.scalerIds) ? room.scalerIds : [];
-  if (!roomSnapshot.exists ||
-      (!context.isAdmin && ![room.businessId, room.scalerId, ...roomScalerIds].includes(context.uid))) {
+  if (!roomSnapshot.exists || !operations.isJobRoomMember({
+    room, uid: context.uid, isAdmin: context.isAdmin,
+  })) {
     throw new HttpsError("permission-denied", "This private Job Room is unavailable.");
   }
   const participantId = roomScalerIds.includes(context.uid) ?
@@ -5332,17 +5916,31 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   const participant = participantSnapshot?.data() || null;
   const handoffId = participant?.materialHandoffId || zoneId;
   const [campaignSnapshot, zoneSnapshot, handoffSnapshot, compensationSnapshot,
-    messagesSnapshot, eventsSnapshot] = await Promise.all([
+    messagesSnapshot, eventsSnapshot, groupSnapshot, readinessSnapshot,
+    proposalSnapshot] = await Promise.all([
     db.collection("campaigns").doc(room.campaignId).get(),
     db.collection("campaignZones").doc(zoneId).get(),
     db.collection("materialHandoffs").doc(handoffId).get(),
     db.collection("assignmentCompensations").doc(zoneId).get(),
     db.collection("jobMessages").where("roomId", "==", zoneId).limit(100).get(),
     db.collection("jobEvents").where("zoneId", "==", zoneId).limit(100).get(),
+    db.collection("zoneGroupAssignments").doc(zoneId).get(),
+    roomRef.collection("readiness").get(),
+    db.collection("materialLogisticsChangeProposals")
+      .where("zoneId", "==", zoneId).limit(20).get(),
   ]);
   const campaign = campaignSnapshot.data() || {};
   const zone = zoneSnapshot.data() || {};
-  const handoff = handoffSnapshot.data() || {status: "not_required", required: false};
+  const campaignLogistics = operations.materialLogisticsFromCampaign(campaign);
+  const authoritativeLogistics = room.materialLogistics || campaignLogistics;
+  const materialsRequired = authoritativeLogistics.materialsRequired === true ||
+    authoritativeLogistics.fulfillmentType !== "no_materials_required";
+  const handoff = handoffSnapshot.exists ?
+    {id: handoffSnapshot.id, ...handoffSnapshot.data()} :
+    {id: handoffId, status: materialsRequired ? "scheduled" : "not_required",
+      required: materialsRequired,
+      fulfillmentType: authoritativeLogistics.fulfillmentType,
+      projectionMissingAuthoritativeRecord: true};
   const workWindow = operations.evaluateWorkWindow({...campaignWorkPolicy(campaign), date: new Date()});
   const gate = operations.evaluateJobStart({
     materialRequired: handoff.required === true,
@@ -5353,6 +5951,49 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   const messages = messagesSnapshot.docs.map((doc) => ({id: doc.id, ...doc.data()})).sort(byCreatedAt);
   const events = eventsSnapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}))
     .sort((a, b) => -byCreatedAt(a, b));
+  const group = groupSnapshot.data() || null;
+  const proposals = proposalSnapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
+  proposals.sort((a, b) => Number(b.proposedVersion || 0) - Number(a.proposedVersion || 0));
+  const materialLogisticsChange = proposals.find((item) =>
+    item.status === "pending_acknowledgment") || proposals[0] || null;
+  const assignedCount = roomScalerIds.length || (room.scalerId ? 1 : 0);
+  const requiredCount = Number(group?.requestedScalerCount || assignedCount || 1);
+  const acknowledgedCount = readinessSnapshot.docs.filter(
+    (doc) => doc.data()?.readinessAcknowledged === true,
+  ).length;
+  const viewerReadinessDocument = readinessSnapshot.docs.find(
+    (doc) => doc.id === context.uid,
+  );
+  const viewerReadinessAcknowledged =
+    viewerReadinessDocument?.data()?.readinessAcknowledged === true ||
+    participant?.readinessAcknowledged === true;
+  const participantHandoffs = group ? await Promise.all(roomScalerIds.map(async (uid) => {
+    const id = groupAssignment.participantId(zoneId, uid);
+    const participantDoc = await db.collection("zoneScalerParticipations").doc(id).get();
+    const participantData = participantDoc.data() || {};
+    if (!participantData.materialHandoffId) return null;
+    return db.collection("materialHandoffs").doc(participantData.materialHandoffId).get();
+  })) : [];
+  const receivedCount = participantHandoffs.filter(
+    (snapshot) => snapshot?.data()?.status === "received",
+  ).length;
+  const groupMaterialStatuses = context.uid === room.businessId || context.isAdmin ?
+    participantHandoffs.map((snapshot, index) => ({
+      scalerId: roomScalerIds[index],
+      handoffId: snapshot?.id || null,
+      status: snapshot?.data()?.status || (materialsRequired ? "scheduled" : "not_required"),
+      required: snapshot?.data()?.required === true || materialsRequired,
+      fulfillmentType: snapshot?.data()?.fulfillmentType ||
+        authoritativeLogistics.fulfillmentType,
+      businessConfirmed: snapshot?.data()?.businessConfirmedAt != null,
+      scalerConfirmed: snapshot?.data()?.scalerConfirmedAt != null,
+    })) : [];
+  const groupReadiness = operations.readinessStatus({
+    assignedCount, requiredCount, acknowledgedCount,
+    coordinationConfigured: room.coordination?.configured === true,
+    materialsRequired: room.coordination?.materialsRequired === true,
+    receivedCount,
+  });
   return {
     viewerRole: context.isAdmin ? "admin" :
       (context.uid === room.businessId ? "business" : "scaler"),
@@ -5366,14 +6007,25 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
       immutable: participant.immutableCompensation === true,
       groupAssignmentId: zoneId,
     } : compensationSnapshot.data() || null,
-    participant,
+    participant, groupAssignment: group,
+    groupReadiness: {...groupReadiness, assignedCount, requiredCount,
+      acknowledgedCount, receivedCount},
+    viewerReadiness: {
+      acknowledged: viewerReadinessAcknowledged,
+      acknowledgedAt: viewerReadinessDocument?.data()?.acknowledgedAt ||
+        participant?.readinessAcknowledgedAt || null,
+      attendanceConfirmed: false,
+      materialReceiptConfirmed: false,
+    },
+    groupMaterialStatuses,
+    materialLogisticsChange,
     messages, events,
     startEligibility: {...gate, workWindow},
   };
 });
 
-exports.sendJobMessage = trackingCallable("sendJobMessage", async (request) => {
-  assertTrackingPayload(request.data, new Set(["zoneId", "text"]), 8192);
+exports.sendJobMessage = operationalCallable("sendJobMessage", async (request) => {
+  assertOperationalPayload(request.data, new Set(["zoneId", "text"]), 8192);
   const context = await requireVerifiedUser(request, "Verify your email before messaging.");
   const zoneId = String(request.data?.zoneId || "").trim();
   const text = String(request.data?.text || "").trim();
@@ -5386,8 +6038,9 @@ exports.sendJobMessage = trackingCallable("sendJobMessage", async (request) => {
     const roomSnapshot = await transaction.get(roomRef);
     const room = roomSnapshot.data() || {};
     const roomScalerIds = Array.isArray(room.scalerIds) ? room.scalerIds : [];
-    if (!roomSnapshot.exists ||
-        (!context.isAdmin && ![room.businessId, room.scalerId, ...roomScalerIds].includes(context.uid))) {
+    if (!roomSnapshot.exists || !operations.isJobRoomMember({
+      room, uid: context.uid, isAdmin: context.isAdmin,
+    })) {
       throw new HttpsError("permission-denied", "This private Job Room is unavailable.");
     }
     if (room.status !== "open") throw new HttpsError("failed-precondition", "This Job Room is closed.");
@@ -5399,23 +6052,564 @@ exports.sendJobMessage = trackingCallable("sendJobMessage", async (request) => {
       senderId: context.uid, senderRole: context.role, text,
       createdAt: FieldValue.serverTimestamp(), schemaVersion: 1,
     });
+    const recipients = [...new Set([
+      room.businessId, room.scalerId,
+      ...(Array.isArray(room.scalerIds) ? room.scalerIds : []),
+    ].filter((uid) => uid && uid !== context.uid))];
+    const preview = text.length > 140 ? `${text.slice(0, 137)}...` : text;
+    for (const recipientId of recipients) {
+      setInAppNotification(transaction, inAppNotification({
+        id: `job-message_${messageRef.id}_${recipientId}`, userId: recipientId,
+        type: "job_room_message", title: "New Job Room message",
+        message: `${context.role === "business" ? "Business" : "Scaler"}: ${preview}`,
+        campaignId: room.campaignId, zoneId, entityId: messageRef.id,
+        deepLink: {destination: "job_room", zoneId},
+      }));
+    }
     transaction.update(roomRef, {updatedAt: FieldValue.serverTimestamp()});
   });
   return {messageId: messageRef.id};
 });
 
-exports.transitionMaterialHandoff = trackingCallable("transitionMaterialHandoff", async (request) => {
-  assertTrackingPayload(request.data, new Set([
-    "zoneId", "nextStatus", "latitude", "longitude", "accuracy", "proofStoragePath",
+exports.updateCampaignMaterialLogistics = operationalCallable(
+  "updateCampaignMaterialLogistics", async (request) => {
+    assertOperationalPayload(request.data, new Set([
+      "campaignId", "fulfillmentType", "scheduledAt", "windowEndAt",
+      "location", "printingShopName", "orderReference", "instructions",
+      "latitude", "longitude",
+    ]), 16384);
+    const context = await requireVerifiedUser(
+      request, "Verify your email before updating campaign logistics.",
+    );
+    const campaignId = String(request.data?.campaignId || "").trim();
+    if (!campaignId) {
+      throw new HttpsError("invalid-argument", "Campaign ID is required.");
+    }
+    let details;
+    try {
+      details = operations.normalizeMaterialLogistics(request.data || {});
+    } catch (error) {
+      throw new HttpsError("invalid-argument", error.message);
+    }
+    const latitude = request.data?.latitude == null ? null :
+      Number(request.data.latitude);
+    const longitude = request.data?.longitude == null ? null :
+      Number(request.data.longitude);
+    if ((latitude != null && (!Number.isFinite(latitude) ||
+        latitude < -90 || latitude > 90)) ||
+        (longitude != null && (!Number.isFinite(longitude) ||
+        longitude < -180 || longitude > 180))) {
+      throw new HttpsError("invalid-argument", "Material location coordinates are invalid.");
+    }
+
+    const campaignRef = db.collection("campaigns").doc(campaignId);
+    let result;
+    await db.runTransaction(async (transaction) => {
+      const campaignSnapshot = await transaction.get(campaignRef);
+      const campaign = campaignSnapshot.data() || {};
+      if (!campaignSnapshot.exists ||
+          (!context.isAdmin && campaign.businessId !== context.uid)) {
+        throw new HttpsError(
+          "permission-denied", "Only the owning Business may update campaign logistics.",
+        );
+      }
+      if (campaign.materialLogisticsLockedAt) {
+        throw new HttpsError("failed-precondition",
+          "Material logistics are locked because a Scaler accepted this job. Propose a change instead.");
+      }
+
+      const zonesSnapshot = await transaction.get(
+        db.collection("campaignZones").where("campaignId", "==", campaignId),
+      );
+      const assignmentStarted = zonesSnapshot.docs.some((doc) => {
+        const zone = doc.data() || {};
+        return Boolean(zone.assignedScalerId) ||
+          (Array.isArray(zone.assignedScalerIds) && zone.assignedScalerIds.length > 0);
+      });
+      if (assignmentStarted) {
+        throw new HttpsError("failed-precondition",
+          "Material logistics are locked because a Scaler accepted this job. Propose a change instead.");
+      }
+      const zoneIds = zonesSnapshot.docs.map((doc) => doc.id);
+      const roomSnapshots = await Promise.all(zoneIds.map((zoneId) =>
+        transaction.get(db.collection("jobRooms").doc(zoneId))));
+      const participantSnapshotsByZone = await Promise.all(zoneIds.map((zoneId) =>
+        transaction.get(db.collection("zoneScalerParticipations")
+          .where("zoneId", "==", zoneId))));
+      const handoffIds = participantSnapshotsByZone.flatMap((snapshot) =>
+        snapshot.docs.map((doc) => doc.data().materialHandoffId).filter(Boolean));
+      const handoffSnapshots = await Promise.all(handoffIds.map((handoffId) =>
+        transaction.get(db.collection("materialHandoffs").doc(handoffId))));
+
+      const timestamp = FieldValue.serverTimestamp();
+      const version = Number(campaign.materialLogisticsVersion || 0) + 1;
+      transaction.update(campaignRef, {
+        materialsRequired: details.materialsRequired,
+        materialFulfillmentType: details.fulfillmentType,
+        materialHandoffMethod: details.fulfillmentType,
+        materialHandoffScheduledAt: details.scheduledAt,
+        materialHandoffWindowEndAt: details.windowEndAt,
+        materialHandoffAddress: details.location,
+        materialHandoffLatitude: details.materialsRequired ? latitude : null,
+        materialHandoffLongitude: details.materialsRequired ? longitude : null,
+        materialHandoffPrintingShopName: details.printingShopName,
+        materialHandoffOrderReference: details.orderReference,
+        materialHandoffInstructions: details.instructions,
+        materialLogisticsVersion: version,
+        materialHandoffUpdatedAt: timestamp,
+        updatedAt: timestamp,
+      });
+
+      let updatedHandoffCount = 0;
+      let lockedHandoffCount = 0;
+      for (const snapshot of handoffSnapshots) {
+        if (!snapshot.exists ||
+            !operations.canRewriteMaterialHandoff(snapshot.data()?.status)) {
+          lockedHandoffCount++;
+          continue;
+        }
+        transaction.update(snapshot.ref, {
+          required: details.materialsRequired,
+          fulfillmentType: details.fulfillmentType,
+          status: details.materialsRequired ?
+            String(snapshot.data()?.status || "scheduled") : "not_required",
+          scheduledAt: details.scheduledAt,
+          windowEndAt: details.windowEndAt,
+          privateLocation: details.location,
+          printingShopName: details.printingShopName,
+          orderReference: details.orderReference,
+          instructions: details.instructions,
+          logisticsVersion: version,
+          logisticsUpdatedAt: timestamp,
+          updatedAt: timestamp,
+        });
+        updatedHandoffCount++;
+      }
+
+      for (const roomSnapshot of roomSnapshots) {
+        if (!roomSnapshot.exists) continue;
+        const room = roomSnapshot.data() || {};
+        const update = {
+          materialLogistics: {
+            ...details,
+            configured: true,
+            configuredBy: context.uid,
+            configuredAt: timestamp,
+            version,
+          },
+          coordination: {
+            configured: true,
+            materialsRequired: details.materialsRequired,
+          },
+          updatedAt: timestamp,
+        };
+        if (room.materialLogistics) {
+          update.materialLogisticsHistory =
+            FieldValue.arrayUnion(room.materialLogistics);
+        }
+        transaction.update(roomSnapshot.ref, update);
+        const scalerIds = Array.isArray(room.scalerIds) ?
+          room.scalerIds : (room.scalerId ? [room.scalerId] : []);
+        for (const scalerId of scalerIds) {
+          setInAppNotification(transaction, inAppNotification({
+            id: `job-coordination_${roomSnapshot.id}_${scalerId}`,
+            userId: scalerId, campaignId, zoneId: roomSnapshot.id,
+            type: "job_coordination_updated",
+            title: "Material logistics updated",
+            message: "Review the current pickup or delivery plan in the Job Room.",
+            deepLink: {destination: "job_room", zoneId: roomSnapshot.id},
+          }));
+        }
+      }
+      result = {
+        ...details,
+        version,
+        updatedHandoffCount,
+        lockedHandoffCount,
+      };
+    });
+    return result;
+  },
+);
+
+exports.proposeMaterialLogisticsChange = operationalCallable(
+  "proposeMaterialLogisticsChange", async (request) => {
+    assertOperationalPayload(request.data, new Set([
+      "zoneId", "reason", "fulfillmentType", "scheduledAt", "windowEndAt",
+      "location", "printingShopName", "orderReference", "instructions",
+      "latitude", "longitude",
+    ]), 16384);
+    const context = await requireVerifiedUser(request,
+      "Verify your email before proposing a logistics change.");
+    const zoneId = String(request.data?.zoneId || "").trim();
+    const reason = String(request.data?.reason || "").trim();
+    if (!zoneId || reason.length < 3 || reason.length > 1000) {
+      throw new HttpsError("invalid-argument", "A short reason for the change is required.");
+    }
+    let proposed;
+    try { proposed = operations.normalizeMaterialLogistics(request.data || {}); }
+    catch (error) { throw new HttpsError("invalid-argument", error.message); }
+    const roomRef = db.collection("jobRooms").doc(zoneId);
+    let result;
+    await db.runTransaction(async (transaction) => {
+      const roomSnapshot = await transaction.get(roomRef);
+      const room = roomSnapshot.data() || {};
+      if (!roomSnapshot.exists || (!context.isAdmin && room.businessId !== context.uid)) {
+        throw new HttpsError("permission-denied", "Only the owning Business may propose this change.");
+      }
+      if (!room.materialLogisticsLockedAt) {
+        throw new HttpsError("failed-precondition", "Edit the material plan directly before assignment.");
+      }
+      const participantSnapshot = await transaction.get(
+        db.collection("zoneScalerParticipations").where("zoneId", "==", zoneId));
+      const activeParticipants = participantSnapshot.docs.filter((doc) =>
+        !["cancelled_before_window", "declined", "replaced", "no_show"].includes(String(doc.data()?.status)));
+      const affected = activeParticipants.length ? activeParticipants.map((doc) => ({
+        participantId: doc.id, scalerId: String(doc.data()?.scalerUid || ""),
+        handoffId: doc.data()?.materialHandoffId || null,
+      })) : (room.scalerId ? [{participantId: null, scalerId: room.scalerId, handoffId: zoneId}] : []);
+      const handoffSnapshots = await Promise.all(affected.map((item) =>
+        transaction.get(db.collection("materialHandoffs").doc(item.handoffId || zoneId))));
+      const eligible = affected.filter((_, index) =>
+        !handoffSnapshots[index].exists ||
+        operations.canRewriteMaterialHandoff(handoffSnapshots[index].data()?.status));
+      if (!eligible.length) {
+        throw new HttpsError("failed-precondition",
+          "Completed material handoffs cannot be rewritten. Contact support for remaining logistics.");
+      }
+      const currentVersion = Number(room.materialLogisticsVersion || room.materialLogistics?.version || 1);
+      const proposedVersion = currentVersion + 1;
+      const proposedDigest = operations.materialLogisticsDigest(proposed);
+      const proposalIdentity = crypto.createHash("sha256")
+        .update(`${room.materialLogisticsDigest || "initial"}:${proposedDigest}:${reason}`)
+        .digest("hex").slice(0, 16);
+      const proposalRef = db.collection("materialLogisticsChangeProposals")
+        .doc(`${zoneId}_v${proposedVersion}_${proposalIdentity}`);
+      const existing = await transaction.get(proposalRef);
+      if (existing.exists && existing.data()?.status === "pending_acknowledgment") {
+        result = {proposalId: proposalRef.id, ...existing.data()}; return;
+      }
+      const affectedScalerIds = eligible.map((item) => item.scalerId).filter(Boolean).sort();
+      const proposal = {
+        campaignId: room.campaignId, zoneId, businessId: room.businessId,
+        currentVersion, currentDigest: room.materialLogisticsDigest,
+        currentLogistics: room.materialLogistics,
+        proposedVersion, proposedDigest, proposedLogistics: proposed, reason,
+        affectedParticipantIds: eligible.map((item) => item.participantId).filter(Boolean),
+        affectedScalerIds, acceptedScalerIds: [], declinedScalerIds: [],
+        pendingScalerIds: affectedScalerIds, status: "pending_acknowledgment",
+        createdBy: context.uid, createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(), schemaVersion: 1,
+      };
+      transaction.create(proposalRef, proposal);
+      for (const scalerId of affectedScalerIds) {
+        setInAppNotification(transaction, inAppNotification({
+          id: `material-change_${proposalRef.id}_${scalerId}`, userId: scalerId,
+          type: "material_change_proposed",
+          title: "Material plan change requires your response",
+          message: "The Business proposed a change to your material pickup or delivery plan.",
+          campaignId: room.campaignId, zoneId, entityId: proposalRef.id,
+          deepLink: {destination: "material_change_review", zoneId,
+            proposalId: proposalRef.id}, priority: "high",
+          metadata: {currentVersion, proposedVersion},
+        }));
+      }
+      result = {proposalId: proposalRef.id, ...proposal};
+    });
+    return result;
+  });
+
+exports.respondToMaterialLogisticsChange = operationalCallable(
+  "respondToMaterialLogisticsChange", async (request) => {
+    assertOperationalPayload(request.data, new Set(["proposalId", "decision"]), 4096);
+    const context = await requireVerifiedUser(request,
+      "Verify your email before responding to a logistics change.");
+    const proposalId = String(request.data?.proposalId || "").trim();
+    const decision = String(request.data?.decision || "").trim();
+    if (!proposalId || !["accept", "decline"].includes(decision)) {
+      throw new HttpsError("invalid-argument", "Accept or decline the proposed logistics.");
+    }
+    const proposalRef = db.collection("materialLogisticsChangeProposals").doc(proposalId);
+    let result;
+    await db.runTransaction(async (transaction) => {
+      const proposalSnapshot = await transaction.get(proposalRef);
+      const proposal = proposalSnapshot.data() || {};
+      if (!proposalSnapshot.exists || proposal.status !== "pending_acknowledgment") {
+        throw new HttpsError("failed-precondition", "This logistics proposal is no longer pending.");
+      }
+      const affected = Array.isArray(proposal.affectedScalerIds) ? proposal.affectedScalerIds : [];
+      if (!context.isAdmin && !affected.includes(context.uid)) {
+        throw new HttpsError("permission-denied", "This proposal does not affect your assignment.");
+      }
+      const responder = context.isAdmin && !affected.includes(context.uid) ? null : context.uid;
+      if (!responder) throw new HttpsError("failed-precondition", "Support cannot consent for an assigned Scaler.");
+      const accepted = new Set(Array.isArray(proposal.acceptedScalerIds) ? proposal.acceptedScalerIds : []);
+      const declined = new Set(Array.isArray(proposal.declinedScalerIds) ? proposal.declinedScalerIds : []);
+      accepted.delete(responder); declined.delete(responder);
+      (decision === "accept" ? accepted : declined).add(responder);
+      const consent = operations.materialChangeConsentStatus({
+        affectedScalerIds: affected,
+        acceptedScalerIds: [...accepted], declinedScalerIds: [...declined],
+      });
+      const pending = consent.pendingScalerIds;
+      const status = consent.status;
+      const roomRef = db.collection("jobRooms").doc(proposal.zoneId);
+      const campaignRef = db.collection("campaigns").doc(proposal.campaignId);
+      const zoneRef = db.collection("campaignZones").doc(proposal.zoneId);
+      const [roomSnapshot, campaignSnapshot, zoneSnapshot, participantsSnapshot] = await Promise.all([
+        transaction.get(roomRef), transaction.get(campaignRef), transaction.get(zoneRef),
+        transaction.get(db.collection("zoneScalerParticipations").where("zoneId", "==", proposal.zoneId)),
+      ]);
+      const participants = participantsSnapshot.docs.filter((doc) => affected.includes(doc.data()?.scalerUid));
+      const handoffIds = participants.map((doc) => doc.data()?.materialHandoffId).filter(Boolean);
+      if (!handoffIds.length && roomSnapshot.data()?.scalerId) handoffIds.push(proposal.zoneId);
+      const handoffs = await Promise.all(handoffIds.map((id) =>
+        transaction.get(db.collection("materialHandoffs").doc(id))));
+      const timestamp = FieldValue.serverTimestamp();
+      transaction.update(proposalRef, {
+        acceptedScalerIds: [...accepted].sort(), declinedScalerIds: [...declined].sort(),
+        pendingScalerIds: pending, status, updatedAt: timestamp,
+        [`acknowledgments.${responder}`]: {decision, acknowledgedAt: timestamp},
+      });
+      setInAppNotification(transaction, inAppNotification({
+        id: `material-change-response_${proposalId}_${responder}`,
+        userId: proposal.businessId, type: `material_change_${decision}`,
+        title: `A Scaler ${decision === "accept" ? "accepted" : "declined"} the material-plan change`,
+        message: `${accepted.size} accepted • ${pending.length} pending • ${declined.size} declined.`,
+        campaignId: proposal.campaignId, zoneId: proposal.zoneId,
+        entityId: proposalId, deepLink: {destination: "job_room", zoneId: proposal.zoneId},
+        priority: decision === "decline" ? "high" : "normal",
+        metadata: {responder, decision, acceptedCount: accepted.size,
+          pendingCount: pending.length, declinedCount: declined.size},
+      }));
+      if (status === "accepted") {
+        const details = proposal.proposedLogistics;
+        const update = {
+          materialsRequired: details.materialsRequired,
+          materialFulfillmentType: details.fulfillmentType,
+          materialHandoffMethod: details.fulfillmentType,
+          materialHandoffScheduledAt: details.scheduledAt,
+          materialHandoffWindowEndAt: details.windowEndAt,
+          materialHandoffAddress: details.location,
+          materialHandoffPrintingShopName: details.printingShopName,
+          materialHandoffOrderReference: details.orderReference,
+          materialHandoffInstructions: details.instructions,
+          materialLogisticsVersion: proposal.proposedVersion,
+          materialLogisticsDigest: proposal.proposedDigest,
+          updatedAt: timestamp,
+        };
+        transaction.update(campaignRef, update);
+        transaction.update(zoneRef, {
+          materialLogisticsVersion: proposal.proposedVersion,
+          materialLogisticsDigest: proposal.proposedDigest, updatedAt: timestamp,
+        });
+        transaction.update(roomRef, {
+          materialLogisticsHistory: FieldValue.arrayUnion(roomSnapshot.data()?.materialLogistics || {}),
+          materialLogistics: {...details, version: proposal.proposedVersion},
+          materialLogisticsVersion: proposal.proposedVersion,
+          materialLogisticsDigest: proposal.proposedDigest, updatedAt: timestamp,
+        });
+        for (const participant of participants) transaction.update(participant.ref, {
+          adoptedMaterialLogisticsVersion: proposal.proposedVersion,
+          adoptedMaterialLogisticsDigest: proposal.proposedDigest, updatedAt: timestamp,
+        });
+        for (const handoff of handoffs) {
+          if (!handoff.exists || !operations.canRewriteMaterialHandoff(handoff.data()?.status)) continue;
+          transaction.update(handoff.ref, {
+            required: details.materialsRequired, fulfillmentType: details.fulfillmentType,
+            status: details.materialsRequired ? String(handoff.data()?.status || "scheduled") : "not_required",
+            scheduledAt: details.scheduledAt, windowEndAt: details.windowEndAt,
+            privateLocation: details.location, printingShopName: details.printingShopName,
+            orderReference: details.orderReference, instructions: details.instructions,
+            logisticsVersion: proposal.proposedVersion, logisticsUpdatedAt: timestamp,
+            updatedAt: timestamp,
+          });
+        }
+        for (const recipientId of [...new Set([proposal.businessId, ...affected])]) {
+          setInAppNotification(transaction, inAppNotification({
+            id: `material-change-confirmed_${proposalId}_${recipientId}`,
+            userId: recipientId, type: "material_change_confirmed",
+            title: "Updated material plan confirmed",
+            message: "All required participants accepted the updated material plan.",
+            campaignId: proposal.campaignId, zoneId: proposal.zoneId,
+            entityId: proposalId,
+            deepLink: {destination: "job_room", zoneId: proposal.zoneId},
+            priority: "high", metadata: {materialLogisticsVersion: proposal.proposedVersion},
+          }));
+        }
+      }
+      result = {proposalId, status, acceptedScalerIds: [...accepted].sort(),
+        declinedScalerIds: [...declined].sort(), pendingScalerIds: pending};
+    });
+    return result;
+  });
+
+exports.configureJobCoordination = operationalCallable(
+  "configureJobCoordination", async (request) => {
+    assertOperationalPayload(request.data, new Set([
+      "zoneId", "fulfillmentType", "scheduledAt", "windowEndAt", "location",
+      "printingShopName", "orderReference", "instructions",
+    ]), 16384);
+    const context = await requireVerifiedUser(request,
+      "Verify your email before coordinating this job.");
+    const zoneId = String(request.data?.zoneId || "").trim();
+    const roomRef = db.collection("jobRooms").doc(zoneId);
+    const timestamp = FieldValue.serverTimestamp();
+    let result;
+    await db.runTransaction(async (transaction) => {
+      const roomSnapshot = await transaction.get(roomRef);
+      const room = roomSnapshot.data() || {};
+      if (!roomSnapshot.exists ||
+          (!context.isAdmin && context.uid !== room.businessId)) {
+        throw new HttpsError("permission-denied",
+          "Only the owning Business may configure this Job Room.");
+      }
+      const campaignSnapshot = await transaction.get(db.collection("campaigns").doc(room.campaignId));
+      const scalerIds = Array.isArray(room.scalerIds) ? room.scalerIds :
+        (room.scalerId ? [room.scalerId] : []);
+      const participantQuery = await transaction.get(
+        db.collection("zoneScalerParticipations").where("zoneId", "==", zoneId),
+      );
+      const handoffIds = participantQuery.docs.map((doc) => doc.data().materialHandoffId)
+        .filter(Boolean);
+      if (!handoffIds.length && room.scalerId) handoffIds.push(zoneId);
+      const handoffSnapshots = await Promise.all(handoffIds.map((id) =>
+        transaction.get(db.collection("materialHandoffs").doc(id))));
+      let details;
+      try {
+        details = operations.normalizeMaterialLogistics(request.data || {});
+      } catch (error) {
+        throw new HttpsError("invalid-argument", error.message);
+      }
+      const campaign = campaignSnapshot.data() || {};
+      if (!campaignSnapshot.exists || campaign.businessId !== room.businessId) {
+        throw new HttpsError("failed-precondition", "Campaign logistics are unavailable.");
+      }
+      if (room.materialLogisticsLockedAt || campaign.materialLogisticsLockedAt) {
+        throw new HttpsError("failed-precondition",
+          "Material logistics are locked because a Scaler accepted this job. Propose a change instead.");
+      }
+      if (room.scalerId || (Array.isArray(room.scalerIds) && room.scalerIds.length)) {
+        throw new HttpsError("failed-precondition",
+          "Material logistics are locked because a Scaler accepted this job. Propose a change instead.");
+      }
+      const version = Number(room.materialLogistics?.version || 0) + 1;
+      const roomUpdate = {
+        materialLogistics: {...details, configured: true, configuredBy: context.uid,
+          configuredAt: timestamp, version},
+        coordination: {configured: true, materialsRequired: details.materialsRequired},
+        updatedAt: timestamp,
+      };
+      if (room.materialLogistics) {
+        roomUpdate.materialLogisticsHistory = FieldValue.arrayUnion(room.materialLogistics);
+      }
+      transaction.update(roomRef, roomUpdate);
+      transaction.update(campaignSnapshot.ref, {
+        materialsRequired: details.materialsRequired,
+        materialFulfillmentType: details.fulfillmentType,
+        materialHandoffScheduledAt: details.scheduledAt,
+        materialHandoffWindowEndAt: details.windowEndAt,
+        materialHandoffAddress: details.location,
+        materialHandoffInstructions: details.instructions,
+        materialLogisticsVersion: version,
+        updatedAt: timestamp,
+      });
+      for (const snapshot of handoffSnapshots) {
+        if (!snapshot.exists || !operations.canRewriteMaterialHandoff(snapshot.data()?.status)) continue;
+        transaction.update(snapshot.ref, {
+          required: details.materialsRequired,
+          fulfillmentType: details.fulfillmentType,
+          status: details.materialsRequired ? String(snapshot.data()?.status || "scheduled") : "not_required",
+          scheduledAt: details.scheduledAt,
+          windowEndAt: details.windowEndAt,
+          privateLocation: details.location,
+          printingShopName: details.printingShopName,
+          orderReference: details.orderReference,
+          instructions: details.instructions,
+          logisticsVersion: version,
+          logisticsUpdatedAt: timestamp,
+          updatedAt: timestamp,
+        });
+      }
+      for (const scalerId of scalerIds) {
+        setInAppNotification(transaction, inAppNotification({
+          id: `job-coordination_${zoneId}_${scalerId}`,
+          userId: scalerId, campaignId: room.campaignId, zoneId,
+          type: "job_coordination_updated", title: "Material logistics available",
+          message: "Review the pickup or delivery plan and work details for your assigned job.",
+          deepLink: {destination: "job_room", zoneId},
+        }));
+      }
+      result = details;
+    });
+    return result;
+  });
+
+exports.acknowledgeJobReadiness = operationalCallable(
+  "acknowledgeJobReadiness", async (request) => {
+    assertOperationalPayload(request.data, new Set(["zoneId"]), 4096);
+    const context = await requireVerifiedUser(request,
+      "Verify your email before acknowledging readiness.");
+    const zoneId = String(request.data?.zoneId || "").trim();
+    const roomRef = db.collection("jobRooms").doc(zoneId);
+    const participantRef = db.collection("zoneScalerParticipations")
+      .doc(groupAssignment.participantId(zoneId, context.uid));
+    const readinessRef = roomRef.collection("readiness").doc(context.uid);
+    const alreadyAcknowledged = await db.runTransaction(async (transaction) => {
+      const [roomSnapshot, participantSnapshot, readinessSnapshot] = await Promise.all([
+        transaction.get(roomRef), transaction.get(participantRef),
+        transaction.get(readinessRef),
+      ]);
+      const room = roomSnapshot.data() || {};
+      const groupMember = Array.isArray(room.scalerIds) && room.scalerIds.includes(context.uid);
+      const singleMember = room.scalerId === context.uid;
+      if (!roomSnapshot.exists || !groupMember && !singleMember) {
+        throw new HttpsError("permission-denied",
+          "This private Job Room is unavailable.");
+      }
+      if (readinessSnapshot.data()?.readinessAcknowledged === true ||
+          participantSnapshot.data()?.readinessAcknowledged === true) {
+        return true;
+      }
+      const timestamp = FieldValue.serverTimestamp();
+      if (participantSnapshot.exists) {
+        transaction.update(participantRef, {
+          readinessAcknowledged: true, readinessAcknowledgedAt: timestamp,
+          updatedAt: timestamp,
+        });
+      }
+      transaction.set(readinessRef, {
+        scalerId: context.uid, reviewedJobDetails: true,
+        readinessAcknowledged: true, acknowledgedAt: timestamp,
+      }, {merge: true});
+      transaction.update(roomRef, {updatedAt: timestamp});
+      setInAppNotification(transaction, inAppNotification({
+        id: `ready_${zoneId}_${context.uid}`, userId: room.businessId,
+        type: "job_readiness_acknowledged", title: "Scaler confirmed job details",
+        message: "An assigned Scaler reviewed the Job Room and confirmed readiness. This is not attendance.",
+        campaignId: room.campaignId, zoneId, entityId: context.uid,
+        deepLink: {destination: "job_room", zoneId}, priority: "low",
+        metadata: {scalerId: context.uid, attendanceConfirmed: false,
+          materialReceiptConfirmed: false},
+      }));
+      return false;
+    });
+    return {readinessAcknowledged: true, alreadyAcknowledged};
+  });
+
+exports.transitionMaterialHandoff = operationalCallable("transitionMaterialHandoff", async (request) => {
+  assertOperationalPayload(request.data, new Set([
+    "zoneId", "handoffId", "nextStatus", "latitude", "longitude", "accuracy", "proofStoragePath",
   ]), 16384);
   const context = await requireVerifiedUser(request, "Verify your email to update material handoff.");
   const zoneId = String(request.data?.zoneId || "").trim();
   const nextStatus = String(request.data?.nextStatus || "").trim();
-  const handoffRef = db.collection("materialHandoffs").doc(zoneId);
+  const requestedHandoffId = String(request.data?.handoffId || zoneId).trim();
+  let handoffRef = db.collection("materialHandoffs").doc(requestedHandoffId);
   let verifiedProof = null;
   if (nextStatus === "received" && request.data?.proofStoragePath) {
     const path = String(request.data.proofStoragePath);
-    if (!path.startsWith(`material_handoffs/${context.uid}/${zoneId}/`)) {
+    if (!path.startsWith(`material_handoffs/${context.uid}/${requestedHandoffId}/`)) {
       throw new HttpsError("invalid-argument", "The handoff proof path is not owned by this user and job.");
     }
     try {
@@ -5432,18 +6626,34 @@ exports.transitionMaterialHandoff = trackingCallable("transitionMaterialHandoff"
   }
   let resolvedStatus = nextStatus;
   await db.runTransaction(async (transaction) => {
-    const snapshot = await transaction.get(handoffRef);
+    let snapshot = await transaction.get(handoffRef);
+    if (!snapshot.exists) {
+      const participantRef = db.collection("zoneScalerParticipations")
+        .doc(groupAssignment.participantId(zoneId, context.uid));
+      const participantSnapshot = await transaction.get(participantRef);
+      const participantHandoffId = participantSnapshot.data()?.materialHandoffId;
+      if (participantHandoffId) {
+        handoffRef = db.collection("materialHandoffs").doc(participantHandoffId);
+        snapshot = await transaction.get(handoffRef);
+      }
+    }
     const handoff = snapshot.data() || {};
     if (!snapshot.exists ||
+        handoff.zoneId !== zoneId ||
         (!context.isAdmin && ![handoff.businessId, handoff.scalerId].includes(context.uid))) {
       throw new HttpsError("permission-denied", "This material handoff is unavailable.");
     }
     const currentStatus = String(handoff.status);
+    if (nextStatus === "received" && currentStatus === "received") {
+      resolvedStatus = "received";
+      return;
+    }
     const scalerOnly = ["scaler_en_route", "scaler_arrived"];
     if (scalerOnly.includes(nextStatus) && !context.isAdmin && context.uid !== handoff.scalerId) {
       throw new HttpsError("permission-denied", "Only the assigned Scaler may record arrival.");
     }
     const update = {updatedAt: FieldValue.serverTimestamp()};
+    let confirmationRecorded = false;
     if (nextStatus === "business_arrived") {
       if (!context.isAdmin && context.uid !== handoff.businessId) {
         throw new HttpsError("permission-denied", "Only the Business may record its arrival.");
@@ -5461,6 +6671,7 @@ exports.transitionMaterialHandoff = trackingCallable("transitionMaterialHandoff"
       }
       update.businessArrivalProof = {latitude, longitude, accuracy};
       update.businessArrivedAt = FieldValue.serverTimestamp();
+      update.businessConfirmedAt = FieldValue.serverTimestamp();
       resolvedStatus = currentStatus === "scheduled" ? "waiting_for_counterparty" : currentStatus;
     }
     if (nextStatus === "scaler_arrived") {
@@ -5474,36 +6685,37 @@ exports.transitionMaterialHandoff = trackingCallable("transitionMaterialHandoff"
       }
       update.arrivalProof = {latitude, longitude, accuracy};
       update.arrivedAt = FieldValue.serverTimestamp();
+      if (currentStatus === "waiting_for_counterparty") {
+        resolvedStatus = "handoff_in_progress";
+      }
     }
     if (nextStatus === "received") {
-      if (!handoff.arrivalProof && handoff.status !== "scaler_arrived" &&
-          handoff.status !== "handoff_in_progress") {
-        throw new HttpsError("failed-precondition", "Arrival proof is required before receipt.");
+      const confirmingBusiness = context.uid === handoff.businessId;
+      const confirmingScaler = context.uid === handoff.scalerId;
+      if (!confirmingBusiness && !confirmingScaler) {
+        throw new HttpsError("permission-denied",
+          "Only the assigned Business or Scaler may confirm this material handoff.");
       }
-      if (handoff.fulfillmentType === "third_party_pickup") {
-        if (!context.isAdmin && context.uid !== handoff.scalerId) {
-          throw new HttpsError("permission-denied", "Only the assigned Scaler may confirm third-party receipt.");
-        }
-        if (!verifiedProof) {
-          throw new HttpsError("failed-precondition", "A verified third-party handoff photo is required.");
-        }
-        update.proof = verifiedProof;
-        resolvedStatus = "received";
-      } else {
-        if (context.uid === handoff.scalerId || context.isAdmin) {
-          update.scalerConfirmedAt = FieldValue.serverTimestamp();
-        }
-        if (context.uid === handoff.businessId || context.isAdmin) {
-          update.businessConfirmedAt = FieldValue.serverTimestamp();
-        }
-        const scalerConfirmed = context.isAdmin || context.uid === handoff.scalerId ||
-          handoff.scalerConfirmedAt != null;
-        const businessConfirmed = context.isAdmin || context.uid === handoff.businessId ||
-          handoff.businessConfirmedAt != null;
-        resolvedStatus = scalerConfirmed && businessConfirmed ? "received" : "handoff_in_progress";
+      const businessWasConfirmed = handoff.businessConfirmedAt != null;
+      const scalerWasConfirmed = handoff.scalerConfirmedAt != null;
+      if (confirmingBusiness && !businessWasConfirmed) {
+        update.businessConfirmedAt = FieldValue.serverTimestamp();
+        update.businessConfirmedBy = context.uid;
+        confirmationRecorded = true;
       }
+      if (confirmingScaler && !scalerWasConfirmed) {
+        update.scalerConfirmedAt = FieldValue.serverTimestamp();
+        update.scalerConfirmedBy = context.uid;
+        confirmationRecorded = true;
+      }
+      if (verifiedProof) update.supportingProof = verifiedProof;
+      const scalerConfirmed = scalerWasConfirmed || confirmingScaler;
+      const businessConfirmed = businessWasConfirmed || confirmingBusiness;
+      resolvedStatus = scalerConfirmed && businessConfirmed ? "received" : "handoff_in_progress";
+      if (!confirmationRecorded && !verifiedProof) return;
       if (resolvedStatus === "received") update.receivedAt = FieldValue.serverTimestamp();
-    } else if (nextStatus !== "business_arrived") {
+    } else if (nextStatus !== "business_arrived" &&
+        !(nextStatus === "scaler_arrived" && currentStatus === "waiting_for_counterparty")) {
       try {
         operations.assertHandoffTransition(currentStatus, nextStatus);
       } catch (_) {
@@ -5512,6 +6724,32 @@ exports.transitionMaterialHandoff = trackingCallable("transitionMaterialHandoff"
     }
     update.status = resolvedStatus;
     transaction.update(handoffRef, update);
+    if (confirmationRecorded && resolvedStatus !== "received") {
+      const recipientId = context.uid === handoff.businessId ? handoff.scalerId : handoff.businessId;
+      const businessConfirmed = context.uid === handoff.businessId;
+      setInAppNotification(transaction, inAppNotification({
+        id: `material-${businessConfirmed ? "business" : "scaler"}-confirmed_${handoffRef.id}`,
+        userId: recipientId, type: "material_confirmation_recorded",
+        title: businessConfirmed ? "Business confirmed material handoff" :
+          "Scaler confirmed material receipt",
+        message: businessConfirmed ?
+          "The Business confirmed materials were delivered or released. Your confirmation is still required." :
+          "The Scaler confirmed receipt. Your Business confirmation is still required.",
+        campaignId: handoff.campaignId, zoneId, entityId: handoffRef.id,
+        deepLink: {destination: "job_room", zoneId}, priority: "low",
+        metadata: {scalerId: handoff.scalerId, handoffId: handoffRef.id},
+      }));
+    }
+    if (resolvedStatus === "received") {
+      setInAppNotification(transaction, inAppNotification({
+        id: `material-received_${handoffRef.id}`, userId: handoff.businessId,
+        type: "material_received", title: "Scaler received materials",
+        message: "One assigned Scaler's material receipt is confirmed.",
+        campaignId: handoff.campaignId, zoneId, entityId: handoffRef.id,
+        deepLink: {destination: "job_room", zoneId},
+        metadata: {scalerId: handoff.scalerId, handoffId: handoffRef.id},
+      }));
+    }
     appendJobEvent(transaction, {
       campaignId: handoff.campaignId, zoneId, businessId: handoff.businessId,
       scalerId: handoff.scalerId, actorId: context.uid,
@@ -5541,8 +6779,9 @@ exports.createSupportCase = trackingCallable("createSupportCase", async (request
   await db.runTransaction(async (transaction) => {
     const roomSnapshot = await transaction.get(db.collection("jobRooms").doc(zoneId));
     const room = roomSnapshot.data() || {};
-    if (!roomSnapshot.exists ||
-        (!context.isAdmin && ![room.businessId, room.scalerId].includes(context.uid))) {
+    if (!roomSnapshot.exists || !operations.isJobRoomMember({
+      room, uid: context.uid, isAdmin: context.isAdmin,
+    })) {
       throw new HttpsError("permission-denied", "This job is unavailable.");
     }
     transaction.create(ref, {
@@ -5550,7 +6789,7 @@ exports.createSupportCase = trackingCallable("createSupportCase", async (request
       scalerId: room.scalerId, openedBy: context.uid, category, summary,
       status: "open", priority: "normal", supportEmail: SUPPORT_EMAIL,
       references: {
-        jobRoomId: zoneId, materialHandoffId: zoneId, compensationId: zoneId,
+        jobRoomId: zoneId, materialHandoffId: null, compensationId: zoneId,
         trackingZoneId: zoneId, chatRoomId: zoneId, campaignPaymentId: null,
         transferOperationId: null, completionId: null,
       },
@@ -5562,6 +6801,17 @@ exports.createSupportCase = trackingCallable("createSupportCase", async (request
       scalerId: room.scalerId, actorId: context.uid, type: "support.case_opened",
       metadata: {caseId: ref.id, category},
     });
+    if (category === "material_handoff" && context.uid !== room.businessId) {
+      setInAppNotification(transaction, inAppNotification({
+        id: `material-issue_${ref.id}_${room.businessId}`,
+        userId: room.businessId, type: "material_issue",
+        title: "Material issue reported",
+        message: "An assigned Scaler reported a material handoff issue.",
+        campaignId: room.campaignId, zoneId, entityId: ref.id,
+        deepLink: {destination: "job_room", zoneId},
+        metadata: {caseId: ref.id, scalerId: context.uid},
+      }));
+    }
   });
   return {caseId: ref.id, status: "open"};
 });
@@ -5728,6 +6978,16 @@ exports.reportMaterialHandoffFailure = trackingCallable(
           scalerId: handoff.scalerId, actorId: context.uid, type: "material.support_review",
         });
       }
+      setInAppNotification(transaction, inAppNotification({
+        id: `material-issue_${handoffRef.id}_${failureType}`,
+        userId: handoff.businessId, type: "material_issue_reported",
+        title: "Material issue reported",
+        message: "A participant material handoff requires attention.",
+        campaignId: handoff.campaignId, zoneId, entityId: handoffRef.id,
+        deepLink: {destination: "job_room", zoneId}, priority: "high",
+        metadata: {scalerId: handoff.scalerId, failureType,
+          supportCaseId: failureType === "failed_third_party" ? supportRef.id : null},
+      }));
       appendJobEvent(transaction, {
         campaignId: handoff.campaignId, zoneId, businessId: handoff.businessId,
         scalerId: handoff.scalerId, actorId: context.uid, type: `material.${failureType}`,

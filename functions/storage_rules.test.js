@@ -7,12 +7,14 @@ const {assertFails, assertSucceeds, initializeTestEnvironment} =
   require("@firebase/rules-unit-testing");
 
 let environment;
+const testProjectId = process.env.GCLOUD_PROJECT ||
+  process.env.GOOGLE_CLOUD_PROJECT || "demo-scaledcircle";
 
 before(async () => {
   environment = await initializeTestEnvironment({
     // Cross-service Storage rules read the Firestore emulator in the same
     // Firebase project namespace, so this must match emulators:exec.
-    projectId: "demo-scaledcircle",
+    projectId: testProjectId,
     firestore: {rules: fs.readFileSync(path.join(__dirname, "..", "firestore.rules"), "utf8")},
     storage: {rules: fs.readFileSync(path.join(__dirname, "..", "storage.rules"), "utf8")},
   });
@@ -40,6 +42,20 @@ beforeEach(async () => {
       zoneId: "zone-one", campaignId: "campaign-one",
       scalerId: "scaler-one", businessId: "business-one",
       fulfillmentType: "third_party_pickup", status: "scheduled",
+    });
+    await db.doc("jobRooms/group-zone").set({
+      scalerIds: ["scaler-one", "scaler-two"],
+      businessId: "business-one", status: "open",
+    });
+    await db.doc("materialHandoffs/group-zone__participant-one").set({
+      zoneId: "group-zone", campaignId: "campaign-one",
+      scalerId: "scaler-one", businessId: "business-one",
+      fulfillmentType: "scaler_pickup_print_shop", status: "scheduled",
+    });
+    await db.doc("materialHandoffs/group-zone__participant-two").set({
+      zoneId: "group-zone", campaignId: "campaign-one",
+      scalerId: "scaler-two", businessId: "business-one",
+      fulfillmentType: "business_delivery", status: "scheduled",
     });
   });
 });
@@ -101,4 +117,25 @@ test("material handoff proof is bounded, immutable, and participant-private", as
     .put(new Uint8Array([1]), {contentType: "text/plain"}));
   await assertFails(proof.put(new Uint8Array([4]), {contentType: "image/jpeg"}));
   await assertFails(proof.delete());
+});
+
+test("group material proof is scoped to the participant handoff identity", async () => {
+  const participantProof = ref(
+    "scaler-one",
+    "material_handoffs/scaler-one/group-zone__participant-one/receipt.jpg",
+  );
+  await assertSucceeds(participantProof.put(
+    new Uint8Array([1, 2, 3]), {contentType: "image/jpeg"},
+  ));
+  await assertSucceeds(participantProof.getDownloadURL());
+  await assertSucceeds(ref("business-one", participantProof.fullPath).getDownloadURL());
+  await assertFails(ref("scaler-two", participantProof.fullPath).getDownloadURL());
+  await assertFails(ref(
+    "scaler-one",
+    "material_handoffs/scaler-one/group-zone__participant-two/stolen.jpg",
+  ).put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await assertFails(ref(
+    "scaler-two",
+    "material_handoffs/scaler-two/group-zone__participant-one/stolen.jpg",
+  ).put(new Uint8Array([1]), {contentType: "image/jpeg"}));
 });

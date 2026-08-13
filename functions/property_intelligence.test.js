@@ -268,3 +268,26 @@ test("property analysis contains no campaign publishing or funding authority", (
   const result = property.analyzeParcelObservations([property.normalizeMarylandRecord(md("A", 1970))], {geometry: polygon});
   for (const key of ["funded", "published", "paymentStatus", "stripeCheckoutSessionId"]) assert.equal(key in result, false);
 });
+
+test("AI grounding carries only derived non-demographic physical logistics", () => {
+  const grounded = property.aiGrounding({analysisId: "a", geometryDigest: "b",
+    propertyAgeSignal: 50, physicalLogisticsVersion: "PropertyPhysicalLogisticsV1",
+    physicalLogistics: {homesPerSquareKm: 100, averagePropertySpacingMeters: 90,
+      walkingMinutesPerReachableAddress: 3, accessStatus: "unknown"},
+    physicalChannelSuitability: {policyVersion: "PhysicalChannelSuitabilityPolicyV1",
+      recommendation: "direct_mail_preferred", advisoryOnly: true}});
+  assert.equal(grounded.knownData.physicalChannelSuitability.recommendation,
+    "direct_mail_preferred");
+  assert.doesNotMatch(JSON.stringify(grounded), /wealth|income|race|ethnicity|ownerName/i);
+});
+
+test("exploratory callable path accepts geometry without requiring campaign authority fields", () => {
+  const indexSource = require("node:fs").readFileSync(require("node:path").join(__dirname, "index.js"), "utf8");
+  const callableStart = indexSource.indexOf("exports.analyzePropertyIntelligence = onCall");
+  const callableEnd = indexSource.indexOf("async function analyzeResidentialGeography", callableStart);
+  const callable = indexSource.slice(callableStart, callableEnd);
+  assert.match(callable, /request\.data\?\.geometry/);
+  assert.match(callable, /analysisScope: zoneId \? "campaign_zone" : "exploratory"/);
+  assert.match(callable, /propertyIntelligence\.validateGeometry\(exploratoryGeometry\)/);
+  assert.doesNotMatch(callable, /fundCampaign|publishCampaign|assignScaler/);
+});

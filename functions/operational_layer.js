@@ -3,10 +3,17 @@
 const crypto = require("node:crypto");
 
 const MATERIAL_FULFILLMENT_TYPES = Object.freeze([
-  "business_pickup",
-  "third_party_pickup",
-  "business_dropoff",
+  "scaler_pickup_print_shop",
+  "scaler_pickup_business",
+  "business_delivery",
+  "no_materials_required",
 ]);
+
+const LEGACY_MATERIAL_FULFILLMENT_TYPES = Object.freeze({
+  third_party_pickup: "scaler_pickup_print_shop",
+  business_pickup: "scaler_pickup_business",
+  business_dropoff: "business_delivery",
+});
 
 const HANDOFF_STATES = Object.freeze([
   "not_required",
@@ -57,12 +64,126 @@ const DEFAULT_WORK_WINDOWS = Object.freeze({
   commercial: {start: "06:00", end: "20:00"},
 });
 
+function normalizeMaterialLogistics(value = {}) {
+  const fulfillmentType = normalizeFulfillmentType(value.fulfillmentType);
+  const materialsRequired = fulfillmentType !== "no_materials_required";
+  const scheduledAt = value.scheduledAt || null;
+  const windowEndAt = value.windowEndAt || null;
+  const location = String(value.location || "").trim();
+  const printingShopName = String(value.printingShopName || "").trim();
+  const orderReference = String(value.orderReference || "").trim();
+  const instructions = String(value.instructions || "").trim();
+  if (materialsRequired && (!scheduledAt || !location)) {
+    throw new Error("Material date/time and location are required.");
+  }
+  if (materialsRequired && Number.isNaN(new Date(scheduledAt).getTime())) {
+    throw new Error("Material date and time must be valid.");
+  }
+  if (windowEndAt && (Number.isNaN(new Date(windowEndAt).getTime()) ||
+      new Date(windowEndAt) < new Date(scheduledAt))) {
+    throw new Error("Material window end must follow its start.");
+  }
+  if (fulfillmentType === "scaler_pickup_print_shop" && !printingShopName) {
+    throw new Error("Printing shop name is required.");
+  }
+  if ([location, printingShopName, orderReference].some((item) => item.length > 500) ||
+      instructions.length > 2000) throw new Error("Material logistics details are too long.");
+  return {fulfillmentType, materialsRequired,
+    scheduledAt: materialsRequired ? scheduledAt : null,
+    windowEndAt: materialsRequired ? windowEndAt : null,
+    location: materialsRequired ? location : null,
+    printingShopName: fulfillmentType === "scaler_pickup_print_shop" ? printingShopName : null,
+    orderReference: orderReference || null, instructions: instructions || null};
+}
+
+function materialLogisticsFromCampaign(campaign = {}) {
+  const fulfillmentType = normalizeFulfillmentType(String(
+    campaign.materialFulfillmentType || campaign.materialHandoffMethod ||
+    "no_materials_required",
+  ));
+  const materialsRequired = fulfillmentType !== "no_materials_required";
+  return {
+    fulfillmentType,
+    materialsRequired,
+    scheduledAt: materialsRequired ? campaign.materialHandoffScheduledAt || null : null,
+    windowEndAt: materialsRequired ? campaign.materialHandoffWindowEndAt || null : null,
+    location: materialsRequired ? String(campaign.materialHandoffAddress ||
+      campaign.materialPickupAddress || campaign.materialDropoffAddress || "").trim() : null,
+    printingShopName: fulfillmentType === "scaler_pickup_print_shop" ?
+      String(campaign.materialHandoffPrintingShopName || "").trim() || null : null,
+    orderReference: materialsRequired ?
+      String(campaign.materialHandoffOrderReference || "").trim() || null : null,
+    instructions: materialsRequired ?
+      String(campaign.materialHandoffInstructions || "").trim() || null : null,
+  };
+}
+
+function logisticsDateIdentity(value) {
+  if (value == null) return null;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : String(value);
+}
+
+function materialLogisticsDigest(logistics = {}) {
+  const canonical = {
+    fulfillmentType: logistics.fulfillmentType || null,
+    materialsRequired: logistics.materialsRequired === true,
+    scheduledAt: logisticsDateIdentity(logistics.scheduledAt),
+    windowEndAt: logisticsDateIdentity(logistics.windowEndAt),
+    location: logistics.location || null,
+    printingShopName: logistics.printingShopName || null,
+    orderReference: logistics.orderReference || null,
+    instructions: logistics.instructions || null,
+  };
+  return crypto.createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+function materialChangeConsentStatus({affectedScalerIds = [], acceptedScalerIds = [],
+  declinedScalerIds = []} = {}) {
+  const affected = [...new Set(affectedScalerIds.map(String))].sort();
+  const accepted = [...new Set(acceptedScalerIds.map(String))]
+    .filter((uid) => affected.includes(uid)).sort();
+  const declined = [...new Set(declinedScalerIds.map(String))]
+    .filter((uid) => affected.includes(uid)).sort();
+  const pending = affected.filter((uid) => !accepted.includes(uid) && !declined.includes(uid));
+  return {
+    acceptedScalerIds: accepted,
+    declinedScalerIds: declined,
+    pendingScalerIds: pending,
+    status: declined.length ? "declined" : pending.length ?
+      "pending_acknowledgment" : "accepted",
+  };
+}
+
+function readinessStatus({assignedCount, requiredCount, acknowledgedCount,
+  coordinationConfigured, materialsRequired, receivedCount}) {
+  const assigned = Number(assignedCount || 0);
+  const required = Number(requiredCount || 1);
+  const acknowledged = Number(acknowledgedCount || 0);
+  const received = Number(receivedCount || 0);
+  const ready = assigned >= required && coordinationConfigured === true &&
+    acknowledged >= assigned && (!materialsRequired || received >= assigned);
+  return {ready, status: ready ? "ready_for_work" : "coordination_required"};
+}
+
+function isJobRoomMember({room = {}, uid, isAdmin = false}) {
+  const scalerIds = Array.isArray(room.scalerIds) ? room.scalerIds : [];
+  return isAdmin || [room.businessId, room.scalerId, ...scalerIds].includes(uid);
+}
+
 function normalizeFulfillmentType(value) {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const normalized = LEGACY_MATERIAL_FULFILLMENT_TYPES[raw] || raw;
   if (!MATERIAL_FULFILLMENT_TYPES.includes(normalized)) {
     throw new Error("Unsupported material fulfillment type.");
   }
   return normalized;
+}
+
+function canRewriteMaterialHandoff(status) {
+  return ["scheduled", "scaler_en_route"].includes(String(status || "scheduled"));
 }
 
 function assertHandoffTransition(from, to) {
@@ -268,6 +389,7 @@ function safeDiscoveryProjection(campaign) {
     campaign.requiredScalerCount : Number.isSafeInteger(campaign.requestedScalerCount) ? campaign.requestedScalerCount : 1;
   const workerPoolCents = Number.isSafeInteger(campaign.workerPoolCents) ? campaign.workerPoolCents :
     Number.isSafeInteger(campaign.workerAmountCents) ? campaign.workerAmountCents : null;
+  const materialLogistics = materialLogisticsFromCampaign(campaign);
   return {
     campaignId: campaign.id || null,
     title: campaign.name || campaign.title || "Campaign",
@@ -285,8 +407,13 @@ function safeDiscoveryProjection(campaign) {
         campaign.assignedScalerCount : 0,
     scheduledShareCents: workerPoolCents ? Math.floor(workerPoolCents / requestedScalerCount) : null,
     bonusAmountCents: campaign.bonusAmountCents || null,
-    materialsRequired: campaign.materialsRequired === true,
+    materialsRequired: materialLogistics.materialsRequired,
     materialFulfillmentType: campaign.materialFulfillmentType || null,
+    materialLogistics: {
+      ...materialLogistics,
+      version: Number(campaign.materialLogisticsVersion || 1),
+      digest: materialLogisticsDigest(materialLogistics),
+    },
     handoffWindow: campaign.publicHandoffWindow || null,
     recommendedStartTime: campaign.recommendedStartTime || null,
     workWindowSummary: campaign.workWindowSummary || null,
@@ -315,7 +442,14 @@ module.exports = {
   evaluateWorkWindow,
   graceExpired,
   normalizeFulfillmentType,
+  normalizeMaterialLogistics,
+  readinessStatus,
+  isJobRoomMember,
+  canRewriteMaterialHandoff,
   normalizeSupportCategory,
   assertSupportAction,
+  materialLogisticsFromCampaign,
+  materialLogisticsDigest,
+  materialChangeConsentStatus,
   safeDiscoveryProjection,
 };
