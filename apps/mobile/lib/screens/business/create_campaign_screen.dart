@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../config/app_environment.dart';
 import '../../models/material_logistics.dart';
 import '../../services/platform_billing_service.dart';
 import '../../widgets/material_fulfillment_form.dart';
@@ -298,7 +299,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       return;
     }
 
-    final scalerCount = int.tryParse(scalerCountController.text.trim());
+    final scalerCount = AppEnvironmentConfig.isLocal
+        ? int.tryParse(scalerCountController.text.trim())
+        : 1;
 
     if (scalerCount == null || scalerCount < 1) {
       ScaffoldMessenger.of(
@@ -785,7 +788,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
     final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0;
 
-    final previewScalers = int.tryParse(scalerCountController.text.trim()) ?? 1;
+    final previewScalers = AppEnvironmentConfig.isLocal
+        ? int.tryParse(scalerCountController.text.trim()) ?? 1
+        : 1;
 
     final previewWorkerBudget = previewBasePay + previewBonus;
     final previewIndividualShare = previewScalers > 0
@@ -1108,17 +1113,19 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
               TextFormField(
                 controller: scalerCountController,
+                enabled: AppEnvironmentConfig.isLocal,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.next,
                 onChanged: (_) {
                   setState(() {});
                 },
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Scalers for this area',
-                  helperText:
-                      'Defaults to 1. More Scalers share the same worker-pay pool.',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.groups_outlined),
+                  helperText: AppEnvironmentConfig.isLocal
+                      ? 'Defaults to 1. More Scalers share the same worker-pay pool.'
+                      : 'Multi-Scaler crews — Private Beta. Production campaigns currently use 1 Scaler.',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.groups_outlined),
                 ),
                 validator: (value) {
                   final count = int.tryParse(value?.trim() ?? '');

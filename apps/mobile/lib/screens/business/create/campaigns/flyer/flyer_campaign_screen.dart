@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../../../config/app_environment.dart';
 import '../../../../../services/platform_billing_service.dart';
 
 import '../../../campaign_zones_screen.dart';
@@ -304,7 +305,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       return;
     }
 
-    final scalerCount = int.tryParse(scalerCountController.text.trim());
+    final scalerCount = AppEnvironmentConfig.isLocal
+        ? int.tryParse(scalerCountController.text.trim())
+        : 1;
 
     if (scalerCount == null || scalerCount < 1) {
       ScaffoldMessenger.of(
@@ -742,7 +745,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
     final previewBonus = double.tryParse(bonusController.text.trim()) ?? 0;
 
-    final previewScalers = int.tryParse(scalerCountController.text.trim()) ?? 1;
+    final previewScalers = AppEnvironmentConfig.isLocal
+        ? int.tryParse(scalerCountController.text.trim()) ?? 1
+        : 1;
 
     final previewWorkerBudget =
         (previewBasePay + previewBonus) * previewScalers;
@@ -1059,15 +1064,19 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
               TextFormField(
                 controller: scalerCountController,
+                enabled: AppEnvironmentConfig.isLocal,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.next,
                 onChanged: (_) {
                   setState(() {});
                 },
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Scalers Needed',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.groups_outlined),
+                  helperText: AppEnvironmentConfig.isLocal
+                      ? 'Local staging supports multi-Scaler testing.'
+                      : 'Multi-Scaler crews — Private Beta. Production campaigns currently use 1 Scaler.',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.groups_outlined),
                 ),
                 validator: (value) {
                   final count = int.tryParse(value?.trim() ?? '');
@@ -1076,8 +1085,8 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                     return 'Enter at least 1 Scaler';
                   }
 
-                  if (count > 100) {
-                    return 'Enter 100 or fewer for now';
+                  if (count > 12) {
+                    return 'Enter 12 or fewer for now';
                   }
 
                   return null;

@@ -38,10 +38,22 @@ const signupNotifications = require("./signup_notifications");
 const propertyIntelligence = require("./property_intelligence");
 const scaledCircleIntelligence = require("./scaled_circle_intelligence");
 const groupAssignment = require("./group_assignment");
+const multiScalerRollout = require("./multi_scaler_rollout");
 const subscriptionEntitlements = require("./subscription_entitlements");
 const managedGrowth = require("./managed_growth");
 
 initializeApp();
+
+function assertProductionScalerCount(value) {
+  try {
+    return multiScalerRollout.assertAllowedScalerCount(value).count;
+  } catch (_) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Multi-Scaler crews are currently limited to the private beta.",
+    );
+  }
+}
 
 const db = getFirestore();
 
@@ -5304,7 +5316,9 @@ exports.configureZoneGroupAssignment = trackingCallable(
     if (context.role !== "business" && !context.isAdmin) throw new HttpsError("permission-denied", "Only the campaign Business can configure group work.");
     const campaignId = String(request.data?.campaignId || "").trim();
     const zoneId = String(request.data?.zoneId || "").trim();
-    const requested = Number(request.data?.requiredScalerCount ?? 1);
+    const requested = assertProductionScalerCount(
+      request.data?.requiredScalerCount ?? 1,
+    );
     const campaignRef = db.collection("campaigns").doc(campaignId);
     const zoneRef = db.collection("campaignZones").doc(zoneId);
     const groupRef = db.collection("zoneGroupAssignments").doc(zoneId);
@@ -8098,6 +8112,9 @@ exports.publishFundedCampaign = safeStripeCallable(
       if (!context.isAdmin && campaign.businessId !== context.uid) {
         throw new HttpsError("permission-denied", "You do not own this campaign.");
       }
+      assertProductionScalerCount(
+        multiScalerRollout.campaignScalerCount(campaign),
+      );
       if (campaign.status === "open") return;
       if (campaign.status !== "draft" || campaign.fundingStatus !== "funded" ||
           !cleanId(campaign.fundingPaymentId)) {
@@ -8238,6 +8255,9 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
     if (campaign.businessId !== context.uid) {
       throw new HttpsError("permission-denied", "You do not own this campaign.");
     }
+    assertProductionScalerCount(
+      multiScalerRollout.campaignScalerCount(campaign),
+    );
     let fundingVersion;
     try {
       fundingVersion = nextFundingVersion(campaign);
