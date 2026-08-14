@@ -42,6 +42,11 @@ analysis_benchmark.json
 .pub-preload-cache/
 .pub/
 build/
+**/node_modules/
+functions-legacy/*
+!functions-legacy/README.md
+functions-platform/*
+!functions-platform/README.md
 flutter_*.png
 linked_*.ds
 unlinked.ds

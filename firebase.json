@@ -1,9 +1,22 @@
 {
   "functions": [
     {
-      "source": "functions",
+      "source": "functions-legacy",
       "codebase": "default",
+      "predeploy": ["npm --prefix functions run generate:function-codebases"],
       "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    },
+    {
+      "source": "functions-platform",
+      "codebase": "platform-core",
+      "predeploy": ["npm --prefix functions run generate:function-codebases"],
       "ignore": [
         "node_modules",
         ".git",

@@ -4785,7 +4785,7 @@ async function writeInAppNotification(notification) {
 
 exports.notifyOnCampaignApplicationCreated = onDocumentCreated({
   document: "campaigns/{campaignId}/applications/{applicationId}",
-  region: "us-east1", retry: true,
+  region: "us-east1", retry: false,
 }, async (event) => {
   const application = event.data?.data() || {};
   const campaignId = event.params.campaignId;
@@ -4803,7 +4803,7 @@ exports.notifyOnCampaignApplicationCreated = onDocumentCreated({
 
 exports.notifyOnCampaignApplicationUpdated = onDocumentUpdated({
   document: "campaigns/{campaignId}/applications/{applicationId}",
-  region: "us-east1", retry: true,
+  region: "us-east1", retry: false,
 }, async (event) => {
   const before = event.data?.before.data() || {};
   const after = event.data?.after.data() || {};
@@ -4828,7 +4828,7 @@ exports.notifyOnCampaignApplicationUpdated = onDocumentUpdated({
 });
 
 exports.notifyOnCampaignZoneUpdated = onDocumentUpdated({
-  document: "campaignZones/{zoneId}", region: "us-east1", retry: true,
+  document: "campaignZones/{zoneId}", region: "us-east1", retry: false,
 }, async (event) => {
   const before = event.data?.before.data() || {};
   const after = event.data?.after.data() || {};
