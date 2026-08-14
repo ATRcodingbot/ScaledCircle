@@ -19,6 +19,8 @@ const expectedExports = [
   "configureJobCoordination",
   "acknowledgeJobReadiness",
   "transitionMaterialHandoff",
+  "grantInternalBetaEntitlement",
+  "revokeInternalBetaEntitlement",
 ];
 
 function resolveFrom(packageName, packageRoot) {
@@ -34,4 +36,4 @@ for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer", 
 
 const platform = require(path.join(platformRoot, "index.js"));
 assert.deepEqual(Object.keys(platform).sort(), [...expectedExports].sort());
-console.log("Verified generated dependencies and 12 exact platform-core exports.");
+console.log("Verified generated dependencies and 14 exact platform-core exports.");

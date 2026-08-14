@@ -95,5 +95,39 @@ void main() {
         );
       },
     );
+
+    test('active Managed Growth beta inherits Scale while expired or revoked projections lock', () {
+      expect(
+        plans.hasActiveScalePropertyIntelligence(
+          wallet(plan: 'managed_growth'),
+          now: now,
+        ),
+        isTrue,
+      );
+      expect(
+        plans.hasActiveManagedGrowth(
+          wallet(plan: 'managed_growth'),
+          now: now,
+        ),
+        isTrue,
+      );
+      expect(
+        plans.hasActiveManagedGrowth(
+          wallet(
+            plan: 'managed_growth',
+            expiration: DateTime.utc(2026, 8, 13, 11),
+          ),
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        plans.hasActiveManagedGrowth(
+          wallet(plan: 'managed_growth', status: 'revoked'),
+          now: now,
+        ),
+        isFalse,
+      );
+    });
   });
 }

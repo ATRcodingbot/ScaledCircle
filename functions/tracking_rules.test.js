@@ -129,6 +129,24 @@ test("subscription entitlement records remain backend-only", async () => {
   await assertFails(store("admin-one").doc("businessSubscriptions/business-one").get());
 });
 
+test("internal beta entitlement audit events are backend-only and immutable to every client", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("entitlementAuditEvents/event-one").set({
+      eventType: "internal_beta_granted", businessUid: "business-one",
+      source: "internal_beta", occurredAt: new Date(),
+    });
+  });
+  for (const uid of ["business-one", "scaler-one", "admin-one"]) {
+    const db = store(uid);
+    await assertFails(db.doc("entitlementAuditEvents/event-one").get());
+    await assertFails(db.doc("entitlementAuditEvents/forged").set({
+      eventType: "internal_beta_granted", businessUid: uid,
+    }));
+    await assertFails(db.doc("entitlementAuditEvents/event-one").update({reason: "changed"}));
+    await assertFails(db.doc("entitlementAuditEvents/event-one").delete());
+  }
+});
+
 test("AI interpretation cache and rate limits remain backend-only", async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
     await context.firestore().doc("intelligenceAnalysisCache/analysis-one").set({

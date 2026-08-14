@@ -22,6 +22,7 @@ import '../../widgets/reputation_card.dart';
 import 'profile/business_profile_screen.dart';
 import 'property_intelligence_center_screen.dart';
 import 'scaled_circle_services_screen.dart';
+import 'internal_beta_entitlements_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -478,6 +479,28 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       appBar: AppBar(
         title: const ScaledCircleBrand(compact: true),
         actions: [
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final role = snapshot.data?.data()?['role']
+                  ?.toString()
+                  .toLowerCase();
+              if (role != 'admin') return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Beta Entitlements',
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const InternalBetaEntitlementsScreen(),
+                  ),
+                ),
+              );
+            },
+          ),
           TextButton.icon(
             onPressed: () => Navigator.push(
               context,

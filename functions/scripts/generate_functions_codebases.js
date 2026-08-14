@@ -24,6 +24,8 @@ const platformExports = new Set([
   "configureJobCoordination",
   "acknowledgeJobReadiness",
   "transitionMaterialHandoff",
+  "grantInternalBetaEntitlement",
+  "revokeInternalBetaEntitlement",
 ]);
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);

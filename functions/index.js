@@ -41,6 +41,7 @@ const groupAssignment = require("./group_assignment");
 const multiScalerRollout = require("./multi_scaler_rollout");
 const subscriptionEntitlements = require("./subscription_entitlements");
 const managedGrowth = require("./managed_growth");
+const internalBetaEntitlements = require("./internal_beta_entitlements");
 
 initializeApp();
 
@@ -56,6 +57,13 @@ function assertProductionScalerCount(value) {
 }
 
 const db = getFirestore();
+const internalBetaEntitlementService = internalBetaEntitlements
+  .createInternalBetaEntitlementService({
+    db,
+    auth: getAuth(),
+    FieldValue,
+    Timestamp,
+  });
 
 setGlobalOptions({
   maxInstances: 10,
@@ -3366,6 +3374,65 @@ exports.analyzePropertyIntelligence = onCall(
     return {success: true, zoneId: zoneId || null, analysisScope: zoneId ? "campaign_zone" : "exploratory",
       cached: false, analysis: sanitized,
       aiContext: propertyIntelligence.aiGrounding(sanitized, request.data?.objective)};
+  },
+);
+
+async function requireTrustedBetaAdmin(request) {
+  const context = await authenticatedUserContext(
+    request,
+    "You must be logged in to manage beta entitlements.",
+  );
+  try {
+    internalBetaEntitlements.assertTrustedAdminActor(context);
+  } catch (_) {
+    throw new HttpsError(
+      "permission-denied",
+      "Trusted administrator access is required.",
+    );
+  }
+  return context;
+}
+
+function internalBetaHttpsError(error) {
+  const code = String(error?.message || "");
+  if (["exactly_one_beta_target_required", "unsupported_internal_beta_plan",
+    "internal_beta_reason_required", "finite_internal_beta_expiry_required"].includes(code)) {
+    return new HttpsError("invalid-argument", code.replaceAll("_", " "));
+  }
+  if (code === "internal_beta_business_not_found") {
+    return new HttpsError("not-found", "The requested Business account was not found.");
+  }
+  if (code === "internal_beta_target_not_business" ||
+      code === "internal_beta_target_email_unverified" ||
+      code === "internal_beta_entitlement_not_found") {
+    return new HttpsError("failed-precondition", code.replaceAll("_", " "));
+  }
+  return new HttpsError("internal", "Unable to update the beta entitlement.");
+}
+
+/** Grants a finite, auditable, non-paid beta entitlement to a real Business. */
+exports.grantInternalBetaEntitlement = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const adminContext = await requireTrustedBetaAdmin(request);
+    try {
+      return await internalBetaEntitlementService.grant(request.data, adminContext);
+    } catch (error) {
+      throw internalBetaHttpsError(error);
+    }
+  },
+);
+
+/** Revokes internal-beta authority without touching Stripe-paid authority. */
+exports.revokeInternalBetaEntitlement = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const adminContext = await requireTrustedBetaAdmin(request);
+    try {
+      return await internalBetaEntitlementService.revoke(request.data, adminContext);
+    } catch (error) {
+      throw internalBetaHttpsError(error);
+    }
   },
 );
 

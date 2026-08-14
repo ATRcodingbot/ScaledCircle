@@ -79,4 +79,19 @@ void main() {
       expect(source, contains('does not create a door-to-door outreach job'));
     },
   );
+
+  test('trusted beta entitlement UI uses authenticated callables and keeps checkout separate', () {
+    final source = File(
+      'lib/screens/business/internal_beta_entitlements_screen.dart',
+    ).readAsStringSync();
+    final dashboard = File(
+      'lib/screens/business/business_dashboard.dart',
+    ).readAsStringSync();
+    expect(dashboard, contains("role != 'admin'"));
+    expect(source, contains('grantInternalBetaEntitlement'));
+    expect(source, contains('revokeInternalBetaEntitlement'));
+    expect(source, contains("'plan': 'managed_growth'"));
+    expect(source, contains('does not create a payment or Stripe subscription'));
+    expect(source, isNot(contains('createSubscriptionCheckoutSession')));
+  });
 }

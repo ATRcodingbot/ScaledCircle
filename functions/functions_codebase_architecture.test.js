@@ -14,6 +14,7 @@ const expected = [
   "notifyOnCampaignZoneUpdated", "sendJobMessage", "updateCampaignMaterialLogistics",
   "proposeMaterialLogisticsChange", "respondToMaterialLogisticsChange",
   "configureJobCoordination", "acknowledgeJobReadiness", "transitionMaterialHandoff",
+  "grantInternalBetaEntitlement", "revokeInternalBetaEntitlement",
 ];
 
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
@@ -44,6 +45,15 @@ test("provider secrets bind only to their intelligence functions", () => {
   assert.match(platform, /exports\.analyzeScaleIntelligence[\s\S]*?secrets:\s*\[OPENAI_API_KEY\]/);
   const operational = platform.slice(platform.indexOf("exports.notifyOnCampaignApplicationCreated"));
   assert.doesNotMatch(operational, /secrets:\s*\[(?:CENSUS_API_KEY|OPENAI_API_KEY)\]/);
+});
+
+test("internal beta callables add no provider or payment secret boundary", () => {
+  for (const name of ["grantInternalBetaEntitlement", "revokeInternalBetaEntitlement"]) {
+    const start = platform.indexOf(`exports.${name}`);
+    assert.notEqual(start, -1);
+    const declaration = platform.slice(start, start + 900);
+    assert.doesNotMatch(declaration, /secrets\s*:/);
+  }
 });
 
 test("new notification triggers do not silently enable production retries", () => {
