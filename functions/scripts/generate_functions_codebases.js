@@ -125,9 +125,39 @@ function copyPackage(destination) {
   }
 }
 
+function writePackageManifest(mode, destination) {
+  const sourcePackage = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package.json"), "utf8"));
+  const sourceLock = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package-lock.json"), "utf8"));
+  const dependencyNames = mode === "platform"
+    ? ["firebase-admin", "firebase-functions", "openai"]
+    : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
+  const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
+  const generatedPackage = {
+    name: `scaledcircle-functions-${mode}`,
+    version: sourcePackage.version || "1.0.0",
+    private: true,
+    main: "index.js",
+    engines: sourcePackage.engines,
+    dependencies,
+  };
+  const generatedLock = {...sourceLock};
+  generatedLock.name = generatedPackage.name;
+  generatedLock.version = generatedPackage.version;
+  generatedLock.packages = {...sourceLock.packages};
+  generatedLock.packages[""] = {
+    name: generatedPackage.name,
+    version: generatedPackage.version,
+    dependencies,
+    engines: generatedPackage.engines,
+  };
+  fs.writeFileSync(path.join(destination, "package.json"), `${JSON.stringify(generatedPackage, null, 2)}\n`);
+  fs.writeFileSync(path.join(destination, "package-lock.json"), `${JSON.stringify(generatedLock, null, 2)}\n`);
+}
+
 for (const [mode, destination] of [["legacy", legacyRoot], ["platform", platformRoot]]) {
   resetDirectory(destination);
   copyPackage(destination);
+  writePackageManifest(mode, destination);
   fs.writeFileSync(path.join(destination, "index.js"), transformIndex(mode));
   fs.writeFileSync(path.join(destination, "README.md"),
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");

@@ -16,6 +16,10 @@ const expected = [
   "configureJobCoordination", "acknowledgeJobReadiness", "transitionMaterialHandoff",
 ];
 
+const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
+const platformPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-platform", "package.json"), "utf8"));
+const legacyPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-legacy", "package.json"), "utf8"));
+
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
 }
@@ -54,4 +58,16 @@ test("new notification triggers do not silently enable production retries", () =
     assert.match(declaration, /retry:\s*false/);
     assert.doesNotMatch(declaration, /retry:\s*true/);
   }
+});
+
+test("generated codebase preparation installs dependencies after regeneration", () => {
+  for (const codebase of firebaseConfig.functions.filter((item) => ["default", "platform-core"].includes(item.codebase))) {
+    assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
+  }
+  assert.deepEqual(Object.keys(platformPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions", "openai",
+  ]);
+  assert.deepEqual(Object.keys(legacyPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions", "nodemailer", "stripe",
+  ]);
 });
