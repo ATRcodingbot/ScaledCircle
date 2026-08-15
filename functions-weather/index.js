@@ -3,7 +3,11 @@ const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 const crypto = require("node:crypto");
-const {hasWeatherSubscription, weatherPreferenceDecision} = require("./weather_preference_policy");
+const {
+  hasWeatherSubscription,
+  shouldMonitorWeatherUser,
+  weatherPreferenceDecision,
+} = require("./weather_preference_policy");
 
 initializeApp();
 const db = getFirestore();
@@ -76,15 +80,16 @@ exports.monitorMarylandWeatherAlerts = onSchedule(
       const preferences = preferenceSnapshots[index].data() || null;
       const countyIds = Array.isArray(user.weatherCoverageCountyIds) ?
         user.weatherCoverageCountyIds.filter((value) => typeof value === "string") : [];
-      if (countyIds.length === 0) continue;
-      users.push({
+      const candidate = {
         id: userSnapshot.id,
         email: text(user.email, 320).toLowerCase(),
         displayName: text(user.displayName, 120) || "there",
         countyIds: new Set(countyIds),
         preferences,
         emailEnabled: user.weatherEmailAlertsEnabled === true,
-      });
+      };
+      if (!shouldMonitorWeatherUser(candidate)) continue;
+      users.push(candidate);
     }
 
     let alertsSeen = 0;

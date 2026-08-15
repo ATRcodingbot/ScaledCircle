@@ -43,6 +43,12 @@ test("actual weather producer policy allows inside areas and suppresses outside 
   assert.equal(policy.weatherPreferenceDecision({preferences: preferences(), countyIds: new Set()}, outside).matched, false);
 });
 
+test("producer monitors saved preferences without requiring legacy county fields", () => {
+  assert.equal(policy.shouldMonitorWeatherUser({preferences: preferences(), countyIds: new Set()}), true);
+  assert.equal(policy.shouldMonitorWeatherUser({preferences: null, countyIds: new Set(["anne_arundel"])}), true);
+  assert.equal(policy.shouldMonitorWeatherUser({preferences: null, countyIds: new Set()}), false);
+});
+
 test("broader Maryland opt-in records a human reason", () => {
   const broad = preferences({
     outsideOpportunityScope: "maryland",

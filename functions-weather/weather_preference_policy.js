@@ -9,6 +9,9 @@ function hasWeatherSubscription(user, subscription) {
   if (text(user.role, 40).toLowerCase() === "admin") return true;
   return subscription.revokedAt == null && entitlement.hasActiveScaleEntitlement(subscription);
 }
+function shouldMonitorWeatherUser(user) {
+  return user.preferences != null || user.countyIds.size > 0;
+}
 function distanceMiles(lat1, lon1, lat2, lon2) {
   if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
   const radians = (degrees) => degrees * Math.PI / 180;
@@ -47,4 +50,4 @@ function weatherPreferenceDecision(user, county) {
     reason: "Outside your usual service area — you enabled nearby opportunities"};
   return {matched: false, reason: "Outside your notification preferences"};
 }
-module.exports = {hasWeatherSubscription, weatherPreferenceDecision};
+module.exports = {hasWeatherSubscription, shouldMonitorWeatherUser, weatherPreferenceDecision};

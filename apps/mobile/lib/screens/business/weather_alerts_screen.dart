@@ -222,7 +222,7 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
                               color: AppColors.primary,
                             ),
                             title: const Text(
-                              'Activate background alerts',
+                              'Set your service area to get relevant Weather opportunities',
                               style: TextStyle(fontWeight: FontWeight.w800),
                             ),
                             subtitle: const Text(

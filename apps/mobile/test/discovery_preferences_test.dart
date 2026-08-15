@@ -102,4 +102,14 @@ void main() {
     expect(screen, contains('Weather opportunities in my areas'));
     expect(screen, contains('New jobs in my areas'));
   });
+
+  test('Weather shows a soft service-area setup prompt', () {
+    final weather = File(
+      'lib/screens/business/weather_alerts_screen.dart',
+    ).readAsStringSync();
+    expect(
+      weather,
+      contains('Set your service area to get relevant Weather opportunities'),
+    );
+  });
 }
