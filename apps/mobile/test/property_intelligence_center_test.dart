@@ -104,6 +104,17 @@ void main() {
     );
     expect(center, contains('Combine With Weather'));
     expect(panel, contains('Ask AI About This Area'));
+    expect(center, contains('Scrollable.ensureVisible'));
+    expect(center, contains('_aiQuestionFocus.requestFocus()'));
+    expect(
+      center,
+      contains('What marketing opportunities does this area suggest'),
+    );
+    expect(center, contains("label: const Text('Copy All')"));
+    expect(
+      center,
+      contains("const SnackBar(content: Text('Copied to clipboard'))"),
+    );
   });
 
   test('standalone analyses do not become My Campaigns entries', () {

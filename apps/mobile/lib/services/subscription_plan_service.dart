@@ -189,4 +189,10 @@ class SubscriptionPlanService {
         expiresAt is Timestamp &&
         expiresAt.toDate().isAfter(now ?? DateTime.now());
   }
+
+  /// Central Scale-level entitlement used by Property, Weather, and services.
+  bool hasActiveScaleEntitlement(
+    Map<String, dynamic>? wallet, {
+    DateTime? now,
+  }) => hasActiveScalePropertyIntelligence(wallet, now: now);
 }

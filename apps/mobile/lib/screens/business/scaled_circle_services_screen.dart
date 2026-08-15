@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/scaled_circle_service_catalog.dart';
+import '../preferences/areas_preferences_screen.dart';
 import 'managed_growth_screen.dart';
 import 'property_intelligence_center_screen.dart';
 import 'subscription_screen.dart';
@@ -34,6 +35,24 @@ class ScaledCircleServicesScreen extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             children: [
               _subscription(plan, status),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: const Text('My Service Areas'),
+                  subtitle: const Text(
+                    'Tell ScaledCircle where you work and what jobs matter to you.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const AreasPreferencesScreen(role: 'business'),
+                    ),
+                  ),
+                ),
+              ),
               const SizedBox(height: 16),
               ..._catalog(context, plan),
               const SizedBox(height: 16),

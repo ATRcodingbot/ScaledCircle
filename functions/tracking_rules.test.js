@@ -86,7 +86,45 @@ beforeEach(async () => {
     await db.doc("adminIssues/issue-one").set({status: "open", severity: "high"});
     await db.doc("adminAuditEvents/audit-one").set({eventType: "admin_promoted"});
     await db.doc("entitlementAuditEvents/beta-one").set({eventType: "internal_beta_granted"});
+    await db.doc("businessGrowthProfiles/business-one").set({
+      businessUid: "business-one", profileVersion: 1, businessName: "Business One",
+    });
+    await db.doc("businessGrowthProfiles/business-two").set({
+      businessUid: "business-two", profileVersion: 1, businessName: "Business Two",
+    });
+    await db.doc("managedGrowthArtifacts/artifact-one").set({
+      businessUid: "business-one", status: "draft", artifact: {title: "Plan"},
+    });
+    await db.doc("managedGrowthRateLimits/business-one_day").set({
+      businessUid: "business-one", count: 1,
+    });
   });
+});
+
+test("Managed Growth profiles and artifacts are owner-readable and backend-write-only", async () => {
+  const owner = store("business-one");
+  const other = store("business-two");
+  await assertSucceeds(owner.doc("businessGrowthProfiles/business-one").get());
+  await assertFails(other.doc("businessGrowthProfiles/business-one").get());
+  await assertFails(owner.doc("businessGrowthProfiles/business-one").set({businessName: "Forged"}));
+  await assertSucceeds(owner.doc("managedGrowthArtifacts/artifact-one").get());
+  await assertFails(other.doc("managedGrowthArtifacts/artifact-one").get());
+  await assertFails(owner.doc("managedGrowthArtifacts/forged").set({businessUid: "business-one"}));
+  await assertFails(owner.doc("managedGrowthRateLimits/business-one_day").get());
+  await assertFails(owner.doc("managedGrowthRateLimits/business-one_day").set({count: 0}));
+});
+
+test("discovery preferences are owner-readable and backend-write-only", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("discoveryPreferences/business-one").set({
+      userUid: "business-one", role: "business", schemaVersion: "ServiceAreaPreferencesV1",
+      areas: [], preferenceVersion: 1,
+    });
+  });
+  await assertSucceeds(store("business-one").doc("discoveryPreferences/business-one").get());
+  await assertFails(store("scaler-one").doc("discoveryPreferences/business-one").get());
+  await assertFails(store("business-one").doc("discoveryPreferences/business-one").update({areas: []}));
+  await assertFails(store("business-one").doc("discoveryPreferences/business-one").delete());
 });
 
 after(async () => environment?.cleanup());

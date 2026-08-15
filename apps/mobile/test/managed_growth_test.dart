@@ -47,15 +47,59 @@ void main() {
       'lib/screens/business/managed_growth_screen.dart',
     ).readAsStringSync();
     expect(screen, contains('LIMITED BETA'));
-    expect(screen, contains('No automatic ad spend'));
+    expect(screen, contains('No ad launch'));
     expect(screen, contains('No scraped lists or automatic sending'));
-    expect(screen, contains('printing, postage, and third-party'));
+    expect(screen, contains('printing, postage, fulfillment, vendor costs'));
     expect(screen, contains('Postcards / Direct Mail'));
-    expect(screen, contains('Field Campaigns'));
-    expect(screen, contains('do not require homeowner conversations'));
-    expect(screen, contains('Door-to-Door Outreach'));
-    expect(screen, contains('Scaler consent'));
-    expect(screen, contains('right channel, area, and time'));
+    expect(screen, contains('Set Up Your Growth Profile'));
+    expect(screen, contains("artifact == null ? 'Generate' : 'Regenerate'"));
+    expect(screen, contains("const Text('View')"));
+    expect(screen, contains("label: const Text('Copy')"));
+    expect(screen, contains("label: const Text('Export Text')"));
+    expect(screen, contains('Generate Image — Coming Soon / Beta'));
+  });
+
+  test('Managed Growth uses backend profile and generation callables', () {
+    final service = File(
+      'lib/services/managed_growth_service.dart',
+    ).readAsStringSync();
+    expect(service, contains('saveBusinessGrowthProfile'));
+    expect(service, contains('generateManagedGrowthArtifact'));
+    expect(service, contains('suggestBusinessGrowthProfileFromWebsite'));
+    expect(service, isNot(contains('OPENAI_API_KEY')));
+  });
+
+  test('Growth Profile wizard uses plain contractor language', () {
+    final wizard = File(
+      'lib/screens/business/business_growth_profile_wizard.dart',
+    ).readAsStringSync();
+    for (final question in [
+      'What does your business do?',
+      'Where do you want more customers?',
+      'Which jobs do you want more of right now?',
+      'What makes customers choose you?',
+      'How should your business sound online?',
+      'What should people do after seeing your marketing?',
+      'Is there anything you NEVER want us to say?',
+      'What do customers ask you all the time?',
+    ]) {
+      expect(wizard, contains(question));
+    }
+    expect(wizard, contains('Skip for Now'));
+    expect(wizard, contains('Advanced Settings'));
+    expect(wizard, contains('Yes, use this'));
+    expect(wizard, contains('Let me change it'));
+    expect(wizard, contains("Here's what ScaledCircle understands"));
+    for (final jargon in [
+      'service taxonomy',
+      'geographic targeting parameters',
+      'campaign conversion objective',
+      'audience segmentation',
+      'campaign funnel',
+      'retargeting',
+    ]) {
+      expect(wizard.toLowerCase(), isNot(contains(jargon)));
+    }
   });
 
   test('public and subscription copy disclose separate spend', () {

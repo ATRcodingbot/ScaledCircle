@@ -391,6 +391,32 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // Business-supplied grounding profiles are owner-readable. Validation,
+    // versioning, and every write flow through saveBusinessGrowthProfile.
+    match /businessGrowthProfiles/{businessId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
+    // Generated drafts are owner-readable; model, prompt, usage, and source
+    // metadata are backend-authored and cannot be forged by a client.
+    match /managedGrowthArtifacts/{artifactId} {
+      allow read: if isApprovedAccount() && resource.data.businessUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /managedGrowthRateLimits/{windowId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Areas and discovery preferences are separate from identity and billing.
+    // Owners can read their sanitized projection; versioned writes and matching
+    // flow through platform-core so clients cannot spoof role or match reasons.
+    match /discoveryPreferences/{userId} {
+      allow read: if isApprovedAccount() && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+
 
 
     // ============================================================

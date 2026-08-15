@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../services/profile_service.dart';
 import '../../../widgets/reputation_card.dart';
+import '../../preferences/areas_preferences_screen.dart';
 
 class ScalerProfileScreen extends StatelessWidget {
   final String? scalerId;
@@ -117,6 +118,18 @@ class ScalerProfileScreen extends StatelessWidget {
                   title: const Text("Service Area"),
 
                   subtitle: Text(location),
+                  trailing: scalerId == null
+                      ? const Icon(Icons.chevron_right)
+                      : null,
+                  onTap: scalerId == null
+                      ? () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const AreasPreferencesScreen(role: 'scaler'),
+                          ),
+                        )
+                      : null,
                 ),
               ),
             ],

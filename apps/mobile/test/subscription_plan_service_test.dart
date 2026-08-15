@@ -23,6 +23,34 @@ void main() {
         isTrue,
       );
     });
+
+    test(
+      'is inherited by active paid, internal beta, and internal QA Managed Growth projections',
+      () {
+        final future = Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 1)),
+        );
+        for (final source in ['stripe', 'internal_beta', 'internal_qa']) {
+          expect(
+            plans.hasActiveScaleEntitlement({
+              'subscriptionPlan': 'managed_growth',
+              'subscriptionStatus': 'active',
+              'subscriptionExpiresAt': future,
+              'subscriptionSource': source,
+            }),
+            isTrue,
+          );
+        }
+        expect(
+          plans.hasActiveScaleEntitlement({
+            'subscriptionPlan': 'growth',
+            'subscriptionStatus': 'active',
+            'subscriptionExpiresAt': future,
+          }),
+          isFalse,
+        );
+      },
+    );
   });
 
   group('Property Intelligence Scale entitlement', () {
@@ -96,38 +124,41 @@ void main() {
       },
     );
 
-    test('active Managed Growth beta inherits Scale while expired or revoked projections lock', () {
-      expect(
-        plans.hasActiveScalePropertyIntelligence(
-          wallet(plan: 'managed_growth'),
-          now: now,
-        ),
-        isTrue,
-      );
-      expect(
-        plans.hasActiveManagedGrowth(
-          wallet(plan: 'managed_growth'),
-          now: now,
-        ),
-        isTrue,
-      );
-      expect(
-        plans.hasActiveManagedGrowth(
-          wallet(
-            plan: 'managed_growth',
-            expiration: DateTime.utc(2026, 8, 13, 11),
+    test(
+      'active Managed Growth beta inherits Scale while expired or revoked projections lock',
+      () {
+        expect(
+          plans.hasActiveScalePropertyIntelligence(
+            wallet(plan: 'managed_growth'),
+            now: now,
           ),
-          now: now,
-        ),
-        isFalse,
-      );
-      expect(
-        plans.hasActiveManagedGrowth(
-          wallet(plan: 'managed_growth', status: 'revoked'),
-          now: now,
-        ),
-        isFalse,
-      );
-    });
+          isTrue,
+        );
+        expect(
+          plans.hasActiveManagedGrowth(
+            wallet(plan: 'managed_growth'),
+            now: now,
+          ),
+          isTrue,
+        );
+        expect(
+          plans.hasActiveManagedGrowth(
+            wallet(
+              plan: 'managed_growth',
+              expiration: DateTime.utc(2026, 8, 13, 11),
+            ),
+            now: now,
+          ),
+          isFalse,
+        );
+        expect(
+          plans.hasActiveManagedGrowth(
+            wallet(plan: 'managed_growth', status: 'revoked'),
+            now: now,
+          ),
+          isFalse,
+        );
+      },
+    );
   });
 }

@@ -12,6 +12,7 @@ const expectedExports = [
   "notifyOnCampaignApplicationCreated",
   "notifyOnCampaignApplicationUpdated",
   "notifyOnCampaignZoneUpdated",
+  "notifyScalersOnCampaignOpened",
   "sendJobMessage",
   "updateCampaignMaterialLogistics",
   "proposeMaterialLogisticsChange",
@@ -24,6 +25,11 @@ const expectedExports = [
   "setApplicationAdminRole",
   "confirmAdminLoginReadiness",
   "createAdminIssue",
+  "saveBusinessGrowthProfile",
+  "generateManagedGrowthArtifact",
+  "suggestBusinessGrowthProfileFromWebsite",
+  "saveDiscoveryPreferences",
+  "evaluateOpportunityMatch",
 ];
 
 function resolveFrom(packageName, packageRoot) {
@@ -39,4 +45,4 @@ for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer", 
 
 const platform = require(path.join(platformRoot, "index.js"));
 assert.deepEqual(Object.keys(platform).sort(), [...expectedExports].sort());
-console.log("Verified generated dependencies and 17 exact platform-core exports.");
+console.log("Verified generated dependencies and 23 exact platform-core exports.");

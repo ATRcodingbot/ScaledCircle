@@ -13,6 +13,7 @@ const {
 } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 const crypto = require("node:crypto");
+const dns = require("node:dns").promises;
 const nodemailer = require("nodemailer");
 const Stripe = require("stripe");
 const {
@@ -26,6 +27,8 @@ const {
   serializedBytes,
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
+const discoveryPreferences = require("./discovery_preferences");
+const {scalerOpportunityDecision} = require("./opportunity_notification_policy");
 const {evaluateFundingCheckout, nextFundingVersion} = require("./marketplace_checkout");
 const {
   parseSnapshotEvent,
@@ -41,6 +44,7 @@ const groupAssignment = require("./group_assignment");
 const multiScalerRollout = require("./multi_scaler_rollout");
 const subscriptionEntitlements = require("./subscription_entitlements");
 const managedGrowth = require("./managed_growth");
+const managedGrowthProfile = require("./managed_growth_profile");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
 
@@ -3809,6 +3813,224 @@ exports.analyzeScaleIntelligence = onCall(
   },
 );
 
+async function requireManagedGrowthBusiness(request) {
+  const context = await requireVerifiedUser(
+    request,
+    "You must be logged in to use Managed Growth.",
+  );
+  if (!context.isAdmin && context.role !== "business") {
+    throw new HttpsError("permission-denied", "Managed Growth is available to Business accounts.");
+  }
+  const entitlement = (await db.collection("businessSubscriptions").doc(context.uid).get()).data();
+  if (!subscriptionEntitlements.hasActiveManagedGrowthEntitlement(entitlement)) {
+    throw new HttpsError("permission-denied", "An active Managed Growth entitlement is required.");
+  }
+  return {...context, entitlement};
+}
+
+/** Saves a versioned, reusable Business-supplied grounding profile. */
+exports.saveBusinessGrowthProfile = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    let profile;
+    try { profile = managedGrowthProfile.sanitizeProfile(request.data?.profile); }
+    catch (_) { throw new HttpsError("invalid-argument", "The Business Growth Profile contains an unsupported value."); }
+    const reference = db.collection("businessGrowthProfiles").doc(business.uid);
+    let profileVersion;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(reference);
+      profileVersion = Number(existing.data()?.profileVersion || 0) + 1;
+      transaction.set(reference, {...profile,
+        businessUid: business.uid,
+        schemaVersion: managedGrowthProfile.PROFILE_SCHEMA_VERSION,
+        profileVersion,
+        updatedBy: business.uid,
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp(),
+      });
+    });
+    return {profile: {...profile, businessUid: business.uid,
+      schemaVersion: managedGrowthProfile.PROFILE_SCHEMA_VERSION, profileVersion}, profileVersion};
+  },
+);
+
+/** Reads a public website and returns suggestions that the Business must confirm. */
+exports.suggestBusinessGrowthProfileFromWebsite = onCall(
+  {enforceAppCheck: false, maxInstances: 2, timeoutSeconds: 10, memory: "256MiB"},
+  async (request) => {
+    await requireManagedGrowthBusiness(request);
+    let website;
+    try { website = managedGrowthProfile.validatePublicWebsite(request.data?.website); }
+    catch (_) { throw new HttpsError("invalid-argument", "Enter a public HTTPS business website."); }
+    try {
+      const addresses = await dns.lookup(website.hostname, {all: true, verbatim: true});
+      if (!addresses.length || addresses.some(({address}) => managedGrowthProfile.isPrivateAddress(address))) {
+        throw new Error("private_website_address");
+      }
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Enter a reachable public business website.");
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(website, {redirect: "error", signal: controller.signal,
+        headers: {"user-agent": "ScaledCircle-Business-Profile/1.0"}});
+      if (!response.ok || !(response.headers.get("content-type") || "").toLowerCase().includes("text/html")) {
+        throw new Error("website_not_readable");
+      }
+      const declaredLength = Number(response.headers.get("content-length") || 0);
+      if (declaredLength > 512000) throw new Error("website_too_large");
+      const html = (await response.text()).slice(0, 300000);
+      return managedGrowthProfile.extractWebsiteSuggestions(html, website.toString());
+    } catch (error) {
+      logger.info("Business website suggestions unavailable.", {
+        businessUid: request.auth.uid, errorCode: String(error?.message || error).slice(0, 80),
+      });
+      throw new HttpsError("unavailable", "We could not read that website. You can continue without it.");
+    } finally { clearTimeout(timeout); }
+  },
+);
+
+/** Saves owner preferences without changing identity, entitlement, or search authority. */
+exports.saveDiscoveryPreferences = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const context = await requireVerifiedUser(request, "Sign in to save Areas & Preferences.");
+    if (!["business", "scaler"].includes(context.role)) {
+      throw new HttpsError("permission-denied", "A Business or Scaler account is required.");
+    }
+    let value;
+    try { value = discoveryPreferences.sanitizePreferences(request.data?.preferences, context.role); }
+    catch (_) { throw new HttpsError("invalid-argument", "Check the saved areas and preferences."); }
+    const reference = db.collection("discoveryPreferences").doc(context.uid);
+    let preferenceVersion;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(reference);
+      preferenceVersion = Number(existing.data()?.preferenceVersion || 0) + 1;
+      transaction.set(reference, {...value, userUid: context.uid, preferenceVersion,
+        updatedBy: context.uid, updatedAt: FieldValue.serverTimestamp(),
+        createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp()});
+    });
+    return {preferences: {...value, userUid: context.uid, preferenceVersion}};
+  },
+);
+
+/** Returns deterministic, explainable relevance; manual search always remains open. */
+exports.evaluateOpportunityMatch = onCall(
+  {enforceAppCheck: false, maxInstances: 8},
+  async (request) => {
+    const context = await requireVerifiedUser(request, "Sign in to personalize discovery.");
+    const snapshot = await db.collection("discoveryPreferences").doc(context.uid).get();
+    if (!snapshot.exists) return {version: discoveryPreferences.MATCH_VERSION,
+      matched: request.data?.scope === "manual", matchScore: null, distance: null,
+      serviceAreaMatch: null, serviceMatch: null, travelMatch: null,
+      reasons: [request.data?.scope === "manual" ? "Manual search shows all available results." :
+        "Set Areas & Preferences to personalize notifications."]};
+    let value;
+    try {
+      const preferences = discoveryPreferences.sanitizePreferences(snapshot.data(), context.role);
+      value = discoveryPreferences.matchOpportunity(preferences, request.data?.opportunity || {},
+        request.data?.scope === "manual" ? "manual" : "push");
+    } catch (_) { throw new HttpsError("invalid-argument", "The opportunity could not be matched."); }
+    return value;
+  },
+);
+
+async function consumeManagedGrowthRateLimit(business, artifactType, now = Date.now()) {
+  const windows = managedGrowthProfile.rateLimitWindows(now);
+  const caps = managedGrowthProfile.rateCaps(business.entitlement?.source);
+  const day = db.collection("managedGrowthRateLimits")
+    .doc(`${business.uid}_${windows.day}`);
+  const month = db.collection("managedGrowthRateLimits")
+    .doc(`${business.uid}_${windows.month}`);
+  await db.runTransaction(async (transaction) => {
+    const [daySnapshot, monthSnapshot] = await Promise.all([transaction.get(day), transaction.get(month)]);
+    const dayCount = Number(daySnapshot.data()?.count || 0);
+    const monthCount = Number(monthSnapshot.data()?.count || 0);
+    if (dayCount >= caps.daily || monthCount >= caps.monthly) {
+      throw new HttpsError("resource-exhausted", "The Managed Growth generation limit was reached.");
+    }
+    const metadata = {businessUid: business.uid, policyVersion: managedGrowthProfile.RATE_POLICY_VERSION,
+      entitlementSource: business.entitlement?.source || "unknown", updatedAt: FieldValue.serverTimestamp()};
+    transaction.set(day, {...metadata, windowType: "day", artifactType, count: dayCount + 1}, {merge: true});
+    transaction.set(month, {...metadata, windowType: "month", artifactType, count: monthCount + 1}, {merge: true});
+  });
+}
+
+/** Generates and persists a draft-only Managed Growth artifact. */
+exports.generateManagedGrowthArtifact = onCall(
+  {enforceAppCheck: false, maxInstances: 3, timeoutSeconds: 60, memory: "512MiB",
+    secrets: [OPENAI_API_KEY]},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    let generationRequest;
+    try { generationRequest = managedGrowthProfile.sanitizeGenerationRequest(request.data); }
+    catch (_) { throw new HttpsError("invalid-argument", "Choose a supported Managed Growth artifact."); }
+    const profileSnapshot = await db.collection("businessGrowthProfiles").doc(business.uid).get();
+    const profileRecord = profileSnapshot.data() || {};
+    const profile = managedGrowthProfile.sanitizeProfile(profileRecord);
+    if (!managedGrowthProfile.isProfileReady(profile)) {
+      throw new HttpsError("failed-precondition", "Set up the Business Growth Profile before generating content.");
+    }
+    let property = null;
+    if (generationRequest.propertyContext?.analysisId) {
+      property = await loadAuthoritativePropertyIntelligence(
+        generationRequest.propertyContext.analysisId,
+        generationRequest.propertyContext.geometryDigest,
+      );
+    }
+    const discoverySnapshot = await db.collection("discoveryPreferences").doc(business.uid).get();
+    const discovery = discoverySnapshot.exists ?
+      discoveryPreferences.sanitizePreferences(discoverySnapshot.data(), "business") : null;
+    const context = managedGrowthProfile.buildGenerationContext({profile,
+      profileVersion: Number(profileRecord.profileVersion || 1), request: generationRequest,
+      authoritative: {property}, discovery});
+    const artifactId = managedGrowthProfile.cacheIdentity(context);
+    const reference = db.collection("managedGrowthArtifacts").doc(artifactId);
+    const cached = await reference.get();
+    if (cached.exists) return {artifactId, artifact: cached.data().artifact, cached: true,
+      usage: cached.data().usage || null};
+    await consumeManagedGrowthRateLimit(business, generationRequest.artifactType);
+    const apiKey = OPENAI_API_KEY.value();
+    if (!apiKey) throw new HttpsError("unavailable", "Managed Growth generation is temporarily unavailable.");
+    try {
+      const OpenAI = require("openai");
+      const client = new OpenAI({apiKey, timeout: 45000, maxRetries: 0});
+      const response = await client.responses.create({
+        model: managedGrowthProfile.MODEL, store: false, reasoning: {effort: "low"},
+        instructions: [
+          "Create only the requested Managed Growth draft from the supplied structured context.",
+          "Business profile values are claims supplied by the Business; never invent missing licenses, years, awards, ratings, projects, testimonials, guarantees, certifications, locations, or customer intent.",
+          "Property and weather data are authoritative only when supplied in the authoritative object.",
+          "Distinguish traditional website/local SEO from social discovery; make no ranking, demand, or performance guarantees.",
+          "Do not claim to publish, send, order, fund, spend, launch, or execute anything.",
+          "For advertising, label budget as planned and actual provider spend as Not connected.",
+          "For direct mail, separate printing, postage, vendor cost, and the 20 percent management fee; do not recommend redundant physical channels without evidence.",
+          "Include useful creative briefs but do not generate images.",
+        ].join(" "),
+        input: JSON.stringify(context), max_output_tokens: 5000,
+        text: {format: {type: "json_schema", name: "managed_growth_artifact", strict: true,
+          schema: managedGrowthProfile.RESPONSE_SCHEMA}},
+      }, {idempotencyKey: artifactId, timeout: 45000, maxRetries: 0});
+      const artifact = managedGrowthProfile.validateArtifact(JSON.parse(response.output_text));
+      const usage = scaledCircleIntelligence.sanitizeUsage(response.usage);
+      await reference.set({businessUid: business.uid, artifactType: generationRequest.artifactType,
+        title: artifact.title, status: "draft", schemaVersion: managedGrowthProfile.ARTIFACT_SCHEMA_VERSION,
+        promptVersion: managedGrowthProfile.PROMPT_VERSION, profileVersion: context.profileVersion,
+        model: response.model || managedGrowthProfile.MODEL, usage, sourceContextIds: {
+          propertyAnalysisId: generationRequest.propertyContext?.analysisId || null},
+        executionAuthority: "none", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+        artifact});
+      return {artifactId, artifact, cached: false, usage};
+    } catch (error) {
+      logger.warn("Managed Growth provider unavailable.", {businessUid: business.uid,
+        artifactType: generationRequest.artifactType, error: String(error?.message || error).slice(0, 120)});
+      throw new HttpsError("unavailable", "Managed Growth generation is temporarily unavailable.");
+    }
+  },
+);
+
 /**
  * Query OpenStreetMap via Overpass.
  */
@@ -4996,6 +5218,40 @@ exports.notifyOnCampaignZoneUpdated = onDocumentUpdated({
       campaignId: after.campaignId}, priority: "high",
   }));
 });
+
+exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
+  document: "campaigns/{campaignId}", region: "us-east1", retry: false,
+}, async (event) => {
+  const before = event.data?.before.data() || {};
+  const campaign = event.data?.after.data() || {};
+  if (before.status === "open" || campaign.status !== "open") return;
+  // A bounded candidate query prevents one Firestore query per Scaler. Detailed
+  // geometry and travel policy are evaluated deterministically in memory.
+  const candidates = await db.collection("discoveryPreferences")
+    .where("role", "==", "scaler").limit(400).get();
+  if (candidates.empty) return;
+  const batch = db.batch();
+  let writes = 0;
+  for (const candidate of candidates.docs) {
+    let decision;
+    try { decision = scalerOpportunityDecision(candidate.data(), campaign); } catch (_) { continue; }
+    if (!decision.matched) continue;
+    const travel = decision.travelMatch && !decision.serviceAreaMatch;
+    const id = `job-opportunity_${event.params.campaignId}_${candidate.id}`;
+    batch.set(db.collection("notifications").doc(id), {
+      id, userId: candidate.id, type: travel ? "travel_job_opportunity" : "job_opportunity",
+      title: travel ? "Travel Opportunity" : "New job in your area",
+      message: travel ? "You're seeing this because you enabled higher-paying travel opportunities." :
+        "A new job matches your saved work preferences.",
+      campaignId: event.params.campaignId, relevanceReasons: decision.reasons,
+      distanceMiles: decision.distance, read: false, createdAt: FieldValue.serverTimestamp(),
+      schemaVersion: "OpportunityNotificationV1",
+    }, {merge: false});
+    writes += 1;
+  }
+  if (writes) await batch.commit();
+});
+
 
 function appendJobEvent(transaction, {campaignId, zoneId, businessId, scalerId, type, actorId, metadata = {}}) {
   const ref = db.collection("jobEvents").doc();

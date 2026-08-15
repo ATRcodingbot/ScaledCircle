@@ -17,6 +17,7 @@ const platformExports = new Set([
   "notifyOnCampaignApplicationCreated",
   "notifyOnCampaignApplicationUpdated",
   "notifyOnCampaignZoneUpdated",
+  "notifyScalersOnCampaignOpened",
   "sendJobMessage",
   "updateCampaignMaterialLogistics",
   "proposeMaterialLogisticsChange",
@@ -29,6 +30,11 @@ const platformExports = new Set([
   "setApplicationAdminRole",
   "confirmAdminLoginReadiness",
   "createAdminIssue",
+  "saveBusinessGrowthProfile",
+  "generateManagedGrowthArtifact",
+  "suggestBusinessGrowthProfileFromWebsite",
+  "saveDiscoveryPreferences",
+  "evaluateOpportunityMatch",
 ]);
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);

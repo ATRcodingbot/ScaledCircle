@@ -1,12 +1,16 @@
+import 'dart:math' as math;
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/campaign_area_geometry.dart';
 import '../../services/address_search_service.dart';
+import '../../services/discovery_preferences_service.dart';
 import '../../services/property_intelligence_service.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
 import '../../services/subscription_plan_service.dart';
@@ -32,6 +36,9 @@ class _PropertyIntelligenceCenterScreenState
   final _searchController = TextEditingController();
   final _objectiveController = TextEditingController();
   final _questionController = TextEditingController();
+  final _resultsScrollController = ScrollController();
+  final _aiSectionKey = GlobalKey();
+  final _aiQuestionFocus = FocusNode();
   final _service = PropertyIntelligenceService();
   final _aiService = ScaledCircleIntelligenceService();
   final _planService = SubscriptionPlanService();
@@ -43,6 +50,7 @@ class _PropertyIntelligenceCenterScreenState
   PropertyIntelligenceAnalysis? _analysis;
   bool _analyzing = false;
   bool _askingAi = false;
+  bool _fromSavedArea = false;
   ScaledCircleAiInterpretation? _aiInterpretation;
 
   @override
@@ -50,7 +58,73 @@ class _PropertyIntelligenceCenterScreenState
     _searchController.dispose();
     _objectiveController.dispose();
     _questionController.dispose();
+    _resultsScrollController.dispose();
+    _aiQuestionFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _focusAiQuestion() async {
+    if (_questionController.text.trim().isEmpty) {
+      _questionController.text =
+          'What marketing opportunities does this area suggest for my business?';
+    }
+    final target = _aiSectionKey.currentContext;
+    if (target != null) {
+      await Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        alignment: 0.08,
+      );
+    }
+    if (mounted) _aiQuestionFocus.requestFocus();
+  }
+
+  String _copyableAiAnalysis() {
+    final result = _aiInterpretation;
+    if (result == null) return '';
+    final buffer = StringBuffer()
+      ..writeln('PROPERTY SIGNAL')
+      ..writeln(
+        'Property Age Signal ${_analysis?.signal?.toString() ?? 'unavailable'}',
+      )
+      ..writeln();
+    if (result.knownData['weather'] case final Map weather) {
+      buffer
+        ..writeln('WEATHER SIGNAL')
+        ..writeln(
+          (weather['alerts'] as List? ?? const []).isEmpty
+              ? 'No active authoritative weather alert was supplied.'
+              : (weather['alerts'] as List)
+                    .map((item) => item.toString())
+                    .join('\n'),
+        )
+        ..writeln();
+    }
+    buffer
+      ..writeln('AI OPPORTUNITY ANALYSIS')
+      ..writeln(result.summary);
+    for (final opportunity in result.opportunities) {
+      buffer
+        ..writeln()
+        ..writeln(opportunity['title'] ?? '')
+        ..writeln(opportunity['rationale'] ?? '')
+        ..writeln(opportunity['qualification'] ?? '');
+    }
+    buffer
+      ..writeln()
+      ..writeln('LIMITATIONS')
+      ..writeln(result.limitations.join('\n'));
+    return buffer.toString().trim();
+  }
+
+  Future<void> _copyAiAnalysis() async {
+    await Clipboard.setData(ClipboardData(text: _copyableAiAnalysis()));
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+    }
   }
 
   List<Map<String, double>> get _geometry => _area
@@ -68,6 +142,7 @@ class _PropertyIntelligenceCenterScreenState
 
   void _addPoint(TapPosition _, LatLng point) {
     setState(() {
+      _fromSavedArea = false;
       if (_inputPoints.length >=
           CampaignAreaGeometry.maximumInputPoints(_shape)) {
         _inputPoints.clear();
@@ -77,6 +152,66 @@ class _PropertyIntelligenceCenterScreenState
       _analysis = null;
       _aiInterpretation = null;
     });
+  }
+
+  Future<void> _chooseSavedArea() async {
+    final saved = await DiscoveryPreferencesService().load();
+    final areas = List<Map<String, dynamic>>.from((saved?['areas'] as List? ?? const [])
+        .whereType<Map>().map((value) => Map<String, dynamic>.from(value)))
+        .where((area) => area['enabled'] != false).toList();
+    if (!mounted) return;
+    if (areas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Set up My Service Areas first, or use Explore Anywhere.'),
+      ));
+      return;
+    }
+    final selected = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('My Service Areas'),
+        children: areas.map((area) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, area),
+          child: Text(area['name']?.toString() ?? 'Service area'),
+        )).toList(),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    final geometry = (selected['geometry'] as List? ?? const []).whereType<Map>().map((point) =>
+      LatLng((point['latitude'] as num).toDouble(), (point['longitude'] as num).toDouble())).toList();
+    final center = selected['center'];
+    if (geometry.length >= 3) {
+      _loadSavedPolygon(selected, geometry);
+    } else if (center is Map && selected['radiusMiles'] is num) {
+      final latitude = (center['latitude'] as num).toDouble();
+      final longitude = (center['longitude'] as num).toDouble();
+      final radius = (selected['radiusMiles'] as num).toDouble();
+      final polygon = List.generate(32, (index) {
+        final angle = 2 * math.pi * index / 32;
+        return LatLng(latitude + radius / 69 * math.sin(angle),
+          longitude + radius / (69 * math.cos(latitude * math.pi / 180)) * math.cos(angle));
+      });
+      _loadSavedPolygon(selected, polygon);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Search this saved city or ZIP below to choose the exact analysis area.'),
+      ));
+    }
+  }
+
+  void _loadSavedPolygon(Map<String, dynamic> area, List<LatLng> polygon) {
+    setState(() {
+      _shape = CampaignAreaShape.polygon;
+      _inputPoints
+        ..clear()
+        ..addAll(polygon);
+      _area = polygon;
+      _fromSavedArea = true;
+      _analysis = null;
+      _aiInterpretation = null;
+      _searchController.text = area['name']?.toString() ?? 'Saved service area';
+    });
+    _mapController.move(polygon.first, 11);
   }
 
   void _selectShape(CampaignAreaShape shape) {
@@ -188,6 +323,7 @@ class _PropertyIntelligenceCenterScreenState
   Widget _buildAiAnalysis() {
     final result = _aiInterpretation;
     return Card(
+      key: _aiSectionKey,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -212,6 +348,7 @@ class _PropertyIntelligenceCenterScreenState
             const SizedBox(height: 8),
             TextField(
               controller: _questionController,
+              focusNode: _aiQuestionFocus,
               maxLength: 1200,
               decoration: const InputDecoration(
                 labelText: 'Ask about this area',
@@ -243,6 +380,15 @@ class _PropertyIntelligenceCenterScreenState
               ],
             ),
             if (result != null) ...[
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  key: const Key('copy-property-ai-analysis'),
+                  onPressed: _copyAiAnalysis,
+                  icon: const Icon(Icons.copy_all_outlined),
+                  label: const Text('Copy All'),
+                ),
+              ),
               const Divider(height: 24),
               const Text(
                 'PROPERTY SIGNAL',
@@ -515,6 +661,17 @@ class _PropertyIntelligenceCenterScreenState
                   'Explore property age and housing-stock patterns before choosing where to market.',
                 ),
                 const SizedBox(height: 12),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  FilledButton.tonalIcon(onPressed: _chooseSavedArea,
+                    icon: const Icon(Icons.home_work_outlined), label: const Text('My Service Areas')),
+                  OutlinedButton.icon(onPressed: () => setState(() => _fromSavedArea = false),
+                    icon: const Icon(Icons.public), label: const Text('Explore Anywhere')),
+                ]),
+                if (_area.isNotEmpty) Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_fromSavedArea ? 'Inside your service area' : 'Outside your usual service area — manual exploration is always available.'),
+                ),
+                const SizedBox(height: 12),
                 MappedAddressField(
                   controller: _searchController,
                   labelText: 'Search location',
@@ -575,6 +732,7 @@ class _PropertyIntelligenceCenterScreenState
             constraints: const BoxConstraints(maxHeight: 500),
             padding: const EdgeInsets.all(14),
             child: SingleChildScrollView(
+              controller: _resultsScrollController,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -618,7 +776,7 @@ class _PropertyIntelligenceCenterScreenState
                       analysis: _analysis!,
                       onCreateCampaign: _createCampaign,
                       onCompare: _compareAreas,
-                      onAskAi: () => _askAi(),
+                      onAskAi: _focusAiQuestion,
                     ),
                     const SizedBox(height: 12),
                     _buildPhysicalChannelRecommendation(),

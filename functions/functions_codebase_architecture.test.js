@@ -12,10 +12,14 @@ const expected = [
   "analyzePropertyIntelligence", "analyzeScaleIntelligence",
   "notifyOnCampaignApplicationCreated", "notifyOnCampaignApplicationUpdated",
   "notifyOnCampaignZoneUpdated", "sendJobMessage", "updateCampaignMaterialLogistics",
+  "notifyScalersOnCampaignOpened",
   "proposeMaterialLogisticsChange", "respondToMaterialLogisticsChange",
   "configureJobCoordination", "acknowledgeJobReadiness", "transitionMaterialHandoff",
   "grantInternalBetaEntitlement", "revokeInternalBetaEntitlement",
   "setApplicationAdminRole", "confirmAdminLoginReadiness", "createAdminIssue",
+  "saveBusinessGrowthProfile", "generateManagedGrowthArtifact",
+  "suggestBusinessGrowthProfileFromWebsite",
+  "saveDiscoveryPreferences", "evaluateOpportunityMatch",
 ];
 
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
@@ -41,11 +45,22 @@ test("platform-core is isolated from legacy and unrelated provider secrets", () 
   assert.match(platform, /const OPENAI_API_KEY = defineSecret\("OPENAI_API_KEY"\)/);
 });
 
-test("provider secrets bind only to their intelligence functions", () => {
+test("provider secrets bind only to their reviewed intelligence functions", () => {
   assert.match(platform, /exports\.analyzePropertyIntelligence[\s\S]*?secrets:\s*\[CENSUS_API_KEY\]/);
   assert.match(platform, /exports\.analyzeScaleIntelligence[\s\S]*?secrets:\s*\[OPENAI_API_KEY\]/);
-  const operational = platform.slice(platform.indexOf("exports.notifyOnCampaignApplicationCreated"));
-  assert.doesNotMatch(operational, /secrets:\s*\[(?:CENSUS_API_KEY|OPENAI_API_KEY)\]/);
+  const growthStart = platform.indexOf("exports.generateManagedGrowthArtifact");
+  assert.match(platform.slice(growthStart, growthStart + 900), /secrets:\s*\[OPENAI_API_KEY\]/);
+  for (const name of ["saveBusinessGrowthProfile", "suggestBusinessGrowthProfileFromWebsite",
+    "saveDiscoveryPreferences", "evaluateOpportunityMatch"]) {
+    const start = platform.indexOf(`exports.${name}`);
+    assert.doesNotMatch(platform.slice(start, start + 1200), /secrets\s*:/);
+  }
+  for (const name of ["notifyOnCampaignApplicationCreated", "notifyScalersOnCampaignOpened", "sendJobMessage",
+    "setApplicationAdminRole", "createAdminIssue"]) {
+    const start = platform.indexOf(`exports.${name}`);
+    assert.doesNotMatch(platform.slice(start, start + 900),
+      /secrets:\s*\[(?:CENSUS_API_KEY|OPENAI_API_KEY)\]/);
+  }
 });
 
 test("internal beta callables add no provider or payment secret boundary", () => {

@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../services/discovery_preferences_service.dart';
+import '../preferences/areas_preferences_screen.dart';
 
 import '../notifications/notifications_screen.dart';
 import 'job_details_screen.dart';
@@ -24,11 +28,16 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
 
   String search = '';
   late int currentIndex;
+  bool forYou = true;
+  Map<String, dynamic>? preferences;
 
   @override
   void initState() {
     super.initState();
     currentIndex = widget.initialIndex.clamp(0, 2);
+    DiscoveryPreferencesService().load().then((value) {
+      if (mounted) setState(() => preferences = value);
+    });
   }
 
   @override
@@ -153,6 +162,19 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: true, label: Text('For You'), icon: Icon(Icons.auto_awesome)),
+              ButtonSegment(value: false, label: Text('Search All Jobs'), icon: Icon(Icons.public)),
+            ],
+            selected: {forYou},
+            onSelectionChanged: (value) => setState(() => forYou = value.first),
+          ),
+          const SizedBox(height: 8),
+          Text(forYou
+              ? 'Based on your saved work areas and job preferences.'
+              : 'Manual search is not limited by your saved preferences.'),
+          const SizedBox(height: 12),
           TextField(
             controller: searchController,
             decoration: const InputDecoration(
@@ -198,6 +220,8 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
                 final campaigns = docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
 
+                  if (forYou && !_matchesSavedPreferences(data)) return false;
+
                   final campaignName = (data['campaignName'] ?? '')
                       .toString()
                       .toLowerCase();
@@ -220,6 +244,23 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
                 }).toList();
 
                 if (campaigns.isEmpty) {
+                  if (forYou && preferences == null) {
+                    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.tune, size: 64),
+                      const SizedBox(height: 12),
+                      const Text('Personalize the jobs you see', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text('Tell us what jobs you want, where you work, and how far you travel.'),
+                      const SizedBox(height: 16),
+                      FilledButton(onPressed: () async {
+                        await Navigator.push(context, MaterialPageRoute(builder: (_) =>
+                          const AreasPreferencesScreen(role: 'scaler')));
+                        final value = await DiscoveryPreferencesService().load();
+                        if (mounted) setState(() => preferences = value);
+                      }, child: const Text('Set My Preferences')),
+                      TextButton(onPressed: () => setState(() => forYou = false), child: const Text('Skip — Search All Jobs')),
+                    ]));
+                  }
                   return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -394,5 +435,57 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
         ],
       ),
     );
+  }
+
+  bool _matchesSavedPreferences(Map<String, dynamic> campaign) {
+    final saved = preferences;
+    if (saved == null) return false; // Safe default: prompt instead of distant-job spam.
+    final jobType = (campaign['jobType'] ?? campaign['workType'] ?? 'flyer_distribution').toString();
+    final jobTypes = List<String>.from(saved['jobTypes'] as List? ?? const []);
+    if (jobTypes.isNotEmpty && !jobTypes.contains(jobType)) return false;
+    if (jobType == 'door_to_door' && saved['outreachOptIn'] != true) return false;
+    if (jobType == 'crew_jobs' && saved['crewOptIn'] != true) return false;
+    final place = (campaign['city'] ?? campaign['county'] ?? campaign['locationName'] ?? '')
+        .toString().toLowerCase();
+    final postal = (campaign['postalCode'] ?? campaign['zipCode'] ?? '').toString().toLowerCase();
+    final areas = List<Map<String, dynamic>>.from((saved['areas'] as List? ?? const [])
+        .whereType<Map>().map((value) => Map<String, dynamic>.from(value)));
+    double? latitude(dynamic value) => value is GeoPoint ? value.latitude :
+        value is Map ? (value['latitude'] as num?)?.toDouble() : null;
+    double? longitude(dynamic value) => value is GeoPoint ? value.longitude :
+        value is Map ? (value['longitude'] as num?)?.toDouble() : null;
+    final target = campaign['location'] ?? campaign['center'] ?? campaign['serviceAreaCenter'];
+    double? nearest;
+    final local = areas.where((area) => area['enabled'] != false).any((area) {
+      final places = List<String>.from(area['places'] as List? ?? const [])
+          .map((value) => value.toLowerCase());
+      final postals = List<String>.from(area['postalCodes'] as List? ?? const [])
+          .map((value) => value.toLowerCase());
+      if ((place.isNotEmpty && places.contains(place)) ||
+          (postal.isNotEmpty && postals.contains(postal))) {
+        return true;
+      }
+      final center = area['center'];
+      final values = [latitude(center), longitude(center), latitude(target), longitude(target)];
+      if (values.any((value) => value == null)) return false;
+      final dLat = (values[2]! - values[0]!) * math.pi / 180;
+      final dLon = (values[3]! - values[1]!) * math.pi / 180;
+      final a = math.pow(math.sin(dLat / 2), 2) +
+          math.cos(values[0]! * math.pi / 180) * math.cos(values[2]! * math.pi / 180) *
+          math.pow(math.sin(dLon / 2), 2);
+      final miles = 3958.8 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+      nearest = nearest == null ? miles : math.min(nearest!, miles);
+      return miles <= ((area['radiusMiles'] as num?)?.toDouble() ?? 20);
+    });
+    if (local) return true;
+    final mode = (saved['travelMode'] ?? 'nearby').toString();
+    if (mode == 'anywhere') return true;
+    if (nearest == null) return false;
+    if ((mode == 'nearby' || mode == 'up_to_miles') &&
+        nearest! <= ((saved['maxTravelMiles'] as num?)?.toDouble() ?? 20)) {
+      return true;
+    }
+    final pay = (campaign['basePay'] as num?)?.toDouble() ?? 0;
+    return mode == 'worth_drive' && pay >= math.max(100, nearest! * 3);
   }
 }

@@ -1,8 +1,9 @@
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {initializeApp} = require("firebase-admin/app");
-const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
+const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 const crypto = require("node:crypto");
+const {hasWeatherSubscription, weatherPreferenceDecision} = require("./weather_preference_policy");
 
 initializeApp();
 const db = getFirestore();
@@ -43,21 +44,36 @@ exports.monitorMarylandWeatherAlerts = onSchedule(
     maxInstances: 1,
   },
   async () => {
-    const configuredUsers = await db.collection("users")
+    const legacyUsers = await db.collection("users")
       .where("weatherCoverageEnabled", "==", true)
       .get();
-    if (configuredUsers.empty) {
+    const preferenceUsers = await db.collection("discoveryPreferences")
+      .where("role", "==", "business")
+      .limit(500)
+      .get();
+    const userIds = new Set([
+      ...legacyUsers.docs.map((snapshot) => snapshot.id),
+      ...preferenceUsers.docs.map((snapshot) => snapshot.id),
+    ]);
+    if (userIds.size === 0) {
       logger.info("Weather monitor finished: no configured businesses.");
       return;
     }
-
+    const ids = [...userIds];
+    const userSnapshots = await db.getAll(...ids.map((id) => db.collection("users").doc(id)));
+    const preferenceSnapshots = await db.getAll(...ids.map((id) =>
+      db.collection("discoveryPreferences").doc(id)));
+    const subscriptionSnapshots = await db.getAll(...ids.map((id) =>
+      db.collection("businessSubscriptions").doc(id)));
     const users = [];
-    for (const userSnapshot of configuredUsers.docs) {
+    for (let index = 0; index < userSnapshots.length; index += 1) {
+      const userSnapshot = userSnapshots[index];
+      if (!userSnapshot.exists) continue;
       const user = userSnapshot.data() || {};
       const role = text(user.role, 40).toLowerCase();
       if (role !== "business" && role !== "admin") continue;
-      const walletSnapshot = await db.collection("wallets").doc(userSnapshot.id).get();
-      if (!hasWeatherSubscription(user, walletSnapshot.data() || {})) continue;
+      if (!hasWeatherSubscription(user, subscriptionSnapshots[index].data() || {})) continue;
+      const preferences = preferenceSnapshots[index].data() || null;
       const countyIds = Array.isArray(user.weatherCoverageCountyIds) ?
         user.weatherCoverageCountyIds.filter((value) => typeof value === "string") : [];
       if (countyIds.length === 0) continue;
@@ -66,6 +82,7 @@ exports.monitorMarylandWeatherAlerts = onSchedule(
         email: text(user.email, 320).toLowerCase(),
         displayName: text(user.displayName, 120) || "there",
         countyIds: new Set(countyIds),
+        preferences,
         emailEnabled: user.weatherEmailAlertsEnabled === true,
       });
     }
@@ -74,7 +91,10 @@ exports.monitorMarylandWeatherAlerts = onSchedule(
     let notificationsCreated = 0;
     let emailsQueued = 0;
     for (const county of COUNTIES) {
-      const interestedUsers = users.filter((user) => user.countyIds.has(county.id));
+      const interestedUsers = users.map((user) => ({
+        ...user,
+        relevance: weatherPreferenceDecision(user, county),
+      })).filter((user) => user.relevance.matched);
       if (interestedUsers.length === 0) continue;
       let alerts;
       try {
@@ -179,13 +199,6 @@ function mapFeature(feature) {
   };
 }
 
-function hasWeatherSubscription(user, wallet) {
-  if (text(user.role, 40).toLowerCase() === "admin") return true;
-  return text(wallet.subscriptionPlan, 40).toLowerCase() === "scale" &&
-    text(wallet.subscriptionStatus, 40).toLowerCase() === "active" &&
-    wallet.subscriptionExpiresAt instanceof Timestamp &&
-    wallet.subscriptionExpiresAt.toMillis() > Date.now();
-}
 
 function alertKey(alert) {
   const identity = text(alert.id, 1000) ||
@@ -217,6 +230,7 @@ async function deliverAlert({user, county, alert}) {
         source: "National Weather Service",
         sourceUrl: alert.sourceUrl,
         experimentalOpportunityModel: true,
+        relevanceReason: user.relevance.reason,
         read: false,
         createdAt: FieldValue.serverTimestamp(),
       }),
@@ -263,6 +277,7 @@ async function deliverAlert({user, county, alert}) {
   emailQueued = true;
   return {notificationCreated, emailQueued};
 }
+
 
 function text(value, maximumLength = 500) {
   if (value === null || value === undefined) return "";

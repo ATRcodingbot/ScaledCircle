@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'public_site_service.dart';
+import 'subscription_plan_service.dart';
 
 class MarylandCountySpec {
   final String id;
@@ -58,6 +59,7 @@ class MarylandWeatherService {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  final SubscriptionPlanService _plans = SubscriptionPlanService();
 
   static const counties = <MarylandCountySpec>[
     MarylandCountySpec(
@@ -219,15 +221,10 @@ class MarylandWeatherService {
     final isAdmin = userData['role']?.toString().toLowerCase() == 'admin';
     final plan =
         walletData['subscriptionPlan']?.toString().trim().toLowerCase() ?? '';
-    final status =
-        walletData['subscriptionStatus']?.toString().trim().toLowerCase() ?? '';
-    final expiresAt = walletData['subscriptionExpiresAt'];
-    final notExpired =
-        expiresAt is Timestamp && expiresAt.toDate().isAfter(DateTime.now());
-    final subscriptionActive = status == 'active' && notExpired;
+    final subscriptionActive = _plans.hasActiveScaleEntitlement(walletData);
 
     return WeatherEntitlement(
-      entitled: isAdmin || (subscriptionActive && plan == 'scale'),
+      entitled: isAdmin || subscriptionActive,
       isAdmin: isAdmin,
       subscriptionActive: subscriptionActive,
       plan: isAdmin ? 'scale' : plan,
