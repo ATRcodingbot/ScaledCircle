@@ -107,6 +107,31 @@ test("trusted service grants by UID with authoritative comped record, wallet, an
   assert.equal(audits[0][1].occurredAt, SERVER_TIMESTAMP);
 });
 
+test("internal QA Managed Growth is comped, finite, and has no fabricated payment state", async () => {
+  const env = fakeEnvironment();
+  await env.service.grant({...grantInput(), source: "internal_qa"}, {uid: "admin-one"});
+  const record = env.documents.get("businessSubscriptions/business-one");
+  assert.equal(record.source, "internal_qa");
+  assert.equal(record.plan, "managed_growth");
+  assert.equal(record.billingStatus, "comped");
+  assert.equal(record.comped, true);
+  assert.equal(record.expiresAt.toMillis(), EXPIRY);
+  for (const field of ["stripeCustomerId", "stripeSubscriptionId", "checkoutSessionId",
+    "invoiceId", "paymentIntentId"]) assert.equal(Object.hasOwn(record, field), false);
+});
+
+test("internal QA uses existing bounded AI authority and does not waive variable costs", () => {
+  const intelligence = fs.readFileSync(require.resolve("./scaled_circle_intelligence"), "utf8");
+  assert.match(intelligence, /RATE_LIMIT_POLICY_VERSION/);
+  assert.match(intelligence, /MAX_REQUESTS_PER_DAY\s*=\s*60/);
+  const entitlement = {plan: "managed_growth", status: "active", source: "internal_qa",
+    expiresAt: Timestamp.fromMillis(EXPIRY)};
+  assert.equal(entitlements.hasActiveScaleEntitlement(entitlement, {nowMillis: NOW}), true);
+  assert.equal(entitlements.hasActiveManagedGrowthEntitlement(entitlement, {nowMillis: NOW}), true);
+  for (const field of ["campaignFunding", "workerPay", "adSpend", "printing", "postage",
+    "directMailFulfillment"]) assert.equal(Object.hasOwn(entitlement, field), false);
+});
+
 test("target by normalized email works and invalid/non-Business targets fail", async () => {
   const env = fakeEnvironment();
   const result = await env.service.grant(grantInput({businessEmail: "OWNER@example.test"}),

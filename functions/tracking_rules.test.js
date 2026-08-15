@@ -83,6 +83,9 @@ beforeEach(async () => {
       userId: "scaler-one", type: "job_assignment", title: "Assigned",
       message: "Review the Job Room", read: false, createdAt: new Date(),
     });
+    await db.doc("adminIssues/issue-one").set({status: "open", severity: "high"});
+    await db.doc("adminAuditEvents/audit-one").set({eventType: "admin_promoted"});
+    await db.doc("entitlementAuditEvents/beta-one").set({eventType: "internal_beta_granted"});
   });
 });
 
@@ -118,6 +121,22 @@ test("outbound email jobs cannot be read or authored by clients", async () => {
   }
   await assertFails(environment.unauthenticatedContext().firestore()
     .doc("outboundEmailJobs/arbitrary").set({to: "attacker@example.test"}));
+});
+
+test("admin issues and admin audit events are admin-readable and server-written", async () => {
+  for (const path of ["adminIssues/issue-one", "adminAuditEvents/audit-one"]) {
+    await assertSucceeds(store("admin-one").doc(path).get());
+    await assertFails(store("business-one").doc(path).get());
+    await assertFails(store("scaler-one").doc(path).get());
+    await assertFails(store("admin-one").doc(path).update({forged: true}));
+    await assertFails(store("business-one").doc(path.replace(/one$/, "forged")).set({forged: true}));
+  }
+});
+
+test("clients cannot promote themselves or other profiles", async () => {
+  await assertFails(store("business-one").doc("users/business-one").update({role: "admin"}));
+  await assertFails(store("admin-one").doc("users/business-one").update({role: "admin"}));
+  await assertFails(store("scaler-one").doc("users/scaler-one").update({role: "admin"}));
 });
 
 test("subscription entitlement records remain backend-only", async () => {

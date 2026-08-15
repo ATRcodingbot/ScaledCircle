@@ -16,6 +16,7 @@ class _InternalBetaEntitlementsScreenState
   final _reasonController = TextEditingController();
   final _functions = const SecureFunctionService();
   int _durationDays = 90;
+  String _source = 'internal_beta';
   bool _working = false;
   String? _result;
 
@@ -54,18 +55,16 @@ class _InternalBetaEntitlementsScreenState
     final email = _emailController.text.trim();
     final reason = _reasonController.text.trim();
     if (email.isEmpty || reason.isEmpty || !await _confirm('Grant')) return;
-    await _call(
-      'grantInternalBetaEntitlement',
-      {
-        'businessEmail': email,
-        'plan': 'managed_growth',
-        'reason': reason,
-        'expiresAt': DateTime.now()
-            .toUtc()
-            .add(Duration(days: _durationDays))
-            .toIso8601String(),
-      },
-    );
+    await _call('grantInternalBetaEntitlement', {
+      'businessEmail': email,
+      'plan': 'managed_growth',
+      'reason': reason,
+      'source': _source,
+      'expiresAt': DateTime.now()
+          .toUtc()
+          .add(Duration(days: _durationDays))
+          .toIso8601String(),
+    });
   }
 
   Future<void> _revoke() async {
@@ -89,7 +88,9 @@ class _InternalBetaEntitlementsScreenState
         data: data,
       );
       if (!mounted) return;
-      final replay = response['idempotentReplay'] == true ? ' (already applied)' : '';
+      final replay = response['idempotentReplay'] == true
+          ? ' (already applied)'
+          : '';
       final preserved = response['preservedPaidEntitlement'] == true;
       setState(() {
         _result = preserved
@@ -97,7 +98,9 @@ class _InternalBetaEntitlementsScreenState
             : '${response['plan'] ?? 'Managed Growth'} for Business ${response['businessUid']}$replay.';
       });
     } catch (error) {
-      if (mounted) setState(() => _result = 'Unable to update beta access: $error');
+      if (mounted) {
+        setState(() => _result = 'Unable to update beta access: $error');
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -128,9 +131,29 @@ class _InternalBetaEntitlementsScreenState
           initialValue: _durationDays,
           decoration: const InputDecoration(labelText: 'Beta duration'),
           items: const [30, 60, 90]
-              .map((days) => DropdownMenuItem(value: days, child: Text('$days days')))
+              .map(
+                (days) =>
+                    DropdownMenuItem(value: days, child: Text('$days days')),
+              )
               .toList(),
-          onChanged: _working ? null : (value) => setState(() => _durationDays = value ?? 90),
+          onChanged: _working
+              ? null
+              : (value) => setState(() => _durationDays = value ?? 90),
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          initialValue: _source,
+          decoration: const InputDecoration(labelText: 'Access source'),
+          items: const [
+            DropdownMenuItem(
+              value: 'internal_beta',
+              child: Text('Internal Beta'),
+            ),
+            DropdownMenuItem(value: 'internal_qa', child: Text('Internal QA')),
+          ],
+          onChanged: _working
+              ? null
+              : (value) => setState(() => _source = value ?? 'internal_beta'),
         ),
         const SizedBox(height: 16),
         TextField(
@@ -145,8 +168,11 @@ class _InternalBetaEntitlementsScreenState
         const ListTile(
           contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.workspace_premium_outlined),
-          title: Text('Managed Growth — Internal Beta'),
-          subtitle: Text('Comped access; no payment or Stripe subscription.'),
+          title: Text('Managed Growth — Internal Beta / QA'),
+          subtitle: Text(
+            '\$999/month list price; comped software access with no payment or Stripe subscription. '
+            'Worker pay, ads, printing, postage, fulfillment, and other variable costs remain separate.',
+          ),
         ),
         Wrap(
           spacing: 12,
@@ -163,14 +189,16 @@ class _InternalBetaEntitlementsScreenState
             ),
           ],
         ),
-        if (_working) const Padding(
-          padding: EdgeInsets.only(top: 20),
-          child: LinearProgressIndicator(),
-        ),
-        if (_result != null) Padding(
-          padding: const EdgeInsets.only(top: 20),
-          child: SelectableText(_result!),
-        ),
+        if (_working)
+          const Padding(
+            padding: EdgeInsets.only(top: 20),
+            child: LinearProgressIndicator(),
+          ),
+        if (_result != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 20),
+            child: SelectableText(_result!),
+          ),
       ],
     ),
   );

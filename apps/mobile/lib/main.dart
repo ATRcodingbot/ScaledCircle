@@ -14,6 +14,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/public/public_landing_screen.dart';
 import 'screens/scaler/dashboard/scaler_dashboard_screen.dart';
+import 'screens/admin/admin_dashboard_screen.dart';
+import 'screens/admin/admin_login_screen.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -71,6 +73,8 @@ class ScaledCircleApp extends StatelessWidget {
         AppRoutes.publicExperience: (_) => const PublicLandingScreen(),
         AppRoutes.businessDashboard: (_) => const BusinessDashboard(),
         AppRoutes.scalerDashboard: (_) => const ScalerDashboardScreen(),
+        AppRoutes.adminLogin: (_) => const AdminLoginScreen(),
+        AppRoutes.adminDashboard: (_) => const AdminDashboardScreen(),
       },
       builder: (context, child) {
         if (!AppEnvironmentConfig.isLocal) return child ?? const SizedBox();

@@ -42,6 +42,7 @@ const multiScalerRollout = require("./multi_scaler_rollout");
 const subscriptionEntitlements = require("./subscription_entitlements");
 const managedGrowth = require("./managed_growth");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
+const adminOperations = require("./admin_operations");
 
 initializeApp();
 
@@ -64,6 +65,11 @@ const internalBetaEntitlementService = internalBetaEntitlements
     FieldValue,
     Timestamp,
   });
+const adminOperationsService = adminOperations.createAdminOperationsService({
+  db,
+  auth: getAuth(),
+  FieldValue,
+});
 
 setGlobalOptions({
   maxInstances: 10,
@@ -3396,7 +3402,8 @@ async function requireTrustedBetaAdmin(request) {
 function internalBetaHttpsError(error) {
   const code = String(error?.message || "");
   if (["exactly_one_beta_target_required", "unsupported_internal_beta_plan",
-    "internal_beta_reason_required", "finite_internal_beta_expiry_required"].includes(code)) {
+    "unsupported_internal_entitlement_source", "internal_beta_reason_required",
+    "finite_internal_beta_expiry_required"].includes(code)) {
     return new HttpsError("invalid-argument", code.replaceAll("_", " "));
   }
   if (code === "internal_beta_business_not_found") {
@@ -3432,6 +3439,76 @@ exports.revokeInternalBetaEntitlement = onCall(
       return await internalBetaEntitlementService.revoke(request.data, adminContext);
     } catch (error) {
       throw internalBetaHttpsError(error);
+    }
+  },
+);
+
+function adminOperationsHttpsError(error) {
+  const code = String(error?.message || "");
+  if (code === "trusted_admin_required") {
+    return new HttpsError("permission-denied", "Verified administrator authority is required.");
+  }
+  if (["exactly_one_admin_target_required", "invalid_admin_role_action",
+    "admin_role_reason_required", "invalid_admin_issue"].includes(code)) {
+    return new HttpsError("invalid-argument", code.replaceAll("_", " "));
+  }
+  if (["target_email_unverified", "last_admin_demotion_forbidden",
+    "verified_replacement_admin_required"].includes(code)) {
+    return new HttpsError("failed-precondition", code.replaceAll("_", " "));
+  }
+  if (["target_auth_user_not_found", "target_profile_not_found"].includes(code)) {
+    return new HttpsError("not-found", "The requested application account was not found.");
+  }
+  return new HttpsError("internal", "Unable to complete the administrator operation.");
+}
+
+async function requireTrustedAdmin(request) {
+  const context = await authenticatedUserContext(
+    request,
+    "You must be logged in to use administrator operations.",
+  );
+  try {
+    return adminOperations.assertTrustedAdmin(context);
+  } catch (error) {
+    throw adminOperationsHttpsError(error);
+  }
+}
+
+/** Promotes or demotes an application administrator with last-admin protection. */
+exports.setApplicationAdminRole = onCall(
+  {enforceAppCheck: false, maxInstances: 2},
+  async (request) => {
+    const actor = await requireTrustedAdmin(request);
+    try {
+      return await adminOperationsService.setAdminRole(request.data, actor);
+    } catch (error) {
+      throw adminOperationsHttpsError(error);
+    }
+  },
+);
+
+/** Records evidence that a replacement administrator reached the Admin Dashboard. */
+exports.confirmAdminLoginReadiness = onCall(
+  {enforceAppCheck: false, maxInstances: 2},
+  async (request) => {
+    const actor = await requireTrustedAdmin(request);
+    try {
+      return await adminOperationsService.confirmAdminLogin(actor);
+    } catch (error) {
+      throw adminOperationsHttpsError(error);
+    }
+  },
+);
+
+/** Creates a deduplicated administrator issue and, when actionable, a queued alert. */
+exports.createAdminIssue = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const actor = await requireTrustedAdmin(request);
+    try {
+      return await adminOperationsService.createIssue(request.data, actor);
+    } catch (error) {
+      throw adminOperationsHttpsError(error);
     }
   },
 );

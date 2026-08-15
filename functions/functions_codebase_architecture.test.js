@@ -15,6 +15,7 @@ const expected = [
   "proposeMaterialLogisticsChange", "respondToMaterialLogisticsChange",
   "configureJobCoordination", "acknowledgeJobReadiness", "transitionMaterialHandoff",
   "grantInternalBetaEntitlement", "revokeInternalBetaEntitlement",
+  "setApplicationAdminRole", "confirmAdminLoginReadiness", "createAdminIssue",
 ];
 
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
@@ -54,6 +55,17 @@ test("internal beta callables add no provider or payment secret boundary", () =>
     const declaration = platform.slice(start, start + 900);
     assert.doesNotMatch(declaration, /secrets\s*:/);
   }
+});
+
+test("admin operations are platform-only and add no provider, payment, or email secret binding", () => {
+  for (const name of ["setApplicationAdminRole", "confirmAdminLoginReadiness", "createAdminIssue"]) {
+    const start = platform.indexOf(`exports.${name}`);
+    assert.notEqual(start, -1);
+    const declaration = platform.slice(start, start + 1000);
+    assert.doesNotMatch(declaration, /secrets\s*:/);
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.doesNotMatch(platform, /registerSalesRepresentative|salesCommission|claimSalesReferral/);
 });
 
 test("new notification triggers do not silently enable production retries", () => {

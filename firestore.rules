@@ -135,10 +135,6 @@ service cloud.firestore {
           || request.resource.data.weatherEmailAlertsEnabled is bool
         );
 
-
-      allow write:
-        if isAdmin();
-
     }
 
 
@@ -281,6 +277,20 @@ service cloud.firestore {
       allow read, create, update, delete:
         if false;
 
+    }
+
+    match /adminIssues/{issueId} {
+      // Actionable issue details are visible only inside the authoritative
+      // Admin experience. Creation and resolution remain server-only.
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /adminAuditEvents/{eventId} {
+      // Role-transfer and login-readiness evidence is immutable and authored
+      // only by trusted backend/operator code.
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
 

@@ -26,6 +26,9 @@ const platformExports = new Set([
   "transitionMaterialHandoff",
   "grantInternalBetaEntitlement",
   "revokeInternalBetaEntitlement",
+  "setApplicationAdminRole",
+  "confirmAdminLoginReadiness",
+  "createAdminIssue",
 ]);
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);

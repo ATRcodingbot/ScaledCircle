@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 
 const SCHEMA_VERSION = "InternalBetaEntitlementV1";
 const SOURCE = "internal_beta";
+const QA_SOURCE = "internal_qa";
 const BILLING_STATUS = "comped";
 const ALLOWED_PLANS = new Set(["managed_growth"]);
 const MAXIMUM_GRANT_DAYS = 365;
@@ -68,7 +69,11 @@ function validateGrantInput(input, nowMillis) {
   if (!Number.isFinite(expiresAtMillis) || expiresAtMillis <= nowMillis || expiresAtMillis > maximum) {
     throw new Error("finite_internal_beta_expiry_required");
   }
-  return {businessUid, businessEmail, plan, reason, expiresAtMillis};
+  const source = cleanText(input?.source, 60).toLowerCase() || SOURCE;
+  if (![SOURCE, QA_SOURCE].includes(source)) {
+    throw new Error("unsupported_internal_entitlement_source");
+  }
+  return {businessUid, businessEmail, plan, reason, expiresAtMillis, source};
 }
 
 function validateRevokeInput(input) {
@@ -130,7 +135,7 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
       const serverTimestamp = FieldValue.serverTimestamp();
       const authoritative = {
         businessId: business.uid, plan: valid.plan, planId: valid.plan, status: "active",
-        source: SOURCE, billingStatus: BILLING_STATUS, comped: true, reason: valid.reason,
+        source: valid.source, billingStatus: BILLING_STATUS, comped: true, reason: valid.reason,
         grantedBy: actor.uid, grantedAt: serverTimestamp, expiresAt,
         revokedAt: null, revokedBy: null, revocationReason: null, updatedAt: serverTimestamp,
       };
@@ -139,14 +144,14 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
         ownerId: business.uid, ownerType: "business", subscriptionPlan: valid.plan,
         subscriptionPrice: MANAGED_GROWTH_LIST_PRICE,
         subscriptionStatus: "active", subscriptionComped: true,
-        subscriptionSource: SOURCE, subscriptionBillingStatus: BILLING_STATUS,
+        subscriptionSource: valid.source, subscriptionBillingStatus: BILLING_STATUS,
         subscriptionExpiresAt: expiresAt, subscriptionUpdatedAt: serverTimestamp,
         updatedAt: serverTimestamp,
       }, {merge: true});
       transaction.create(auditRef, {
         schemaVersion: SCHEMA_VERSION, eventType: "internal_beta_granted",
         businessUid: business.uid, businessEmail: business.email || null, plan: valid.plan,
-        source: SOURCE, billingStatus: BILLING_STATUS, reason: valid.reason,
+        source: valid.source, billingStatus: BILLING_STATUS, reason: valid.reason,
         expiresAt, grantedBy: actor.uid, occurredAt: serverTimestamp,
         previousEntitlement: entitlementSummary(previous),
         newEntitlement: entitlementSummary({...authoritative, expiresAt}),
@@ -164,7 +169,9 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
     return db.runTransaction(async (transaction) => {
       const subscriptionSnapshot = await transaction.get(subscriptionRef);
       const previous = subscriptionSnapshot.data() || {};
-      if (previous.source !== SOURCE) throw new Error("internal_beta_entitlement_not_found");
+      if (![SOURCE, QA_SOURCE].includes(previous.source)) {
+        throw new Error("internal_beta_entitlement_not_found");
+      }
       if (previous.status === "revoked") {
         return {revoked: true, idempotentReplay: true, businessUid: business.uid};
       }
@@ -179,13 +186,13 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
       transaction.update(subscriptionRef, {status: "revoked", revokedAt: serverTimestamp,
         revokedBy: actor.uid, revocationReason: valid.reason, updatedAt: serverTimestamp});
       transaction.set(walletRef, {subscriptionStatus: "revoked", subscriptionComped: true,
-        subscriptionSource: SOURCE, subscriptionBillingStatus: BILLING_STATUS,
+        subscriptionSource: previous.source, subscriptionBillingStatus: BILLING_STATUS,
         subscriptionRevokedAt: serverTimestamp, subscriptionUpdatedAt: serverTimestamp,
         updatedAt: serverTimestamp}, {merge: true});
       transaction.create(auditRef, {
         schemaVersion: SCHEMA_VERSION, eventType: "internal_beta_revoked",
         businessUid: business.uid, plan: previous.planId || previous.plan,
-        source: SOURCE, reason: valid.reason, revokedBy: actor.uid,
+        source: previous.source, reason: valid.reason, revokedBy: actor.uid,
         occurredAt: serverTimestamp, previousEntitlement: entitlementSummary(previous),
         newEntitlement: entitlementSummary({...previous, status: "revoked"}),
       });
@@ -196,7 +203,7 @@ function createInternalBetaEntitlementService({db, auth, FieldValue, Timestamp, 
   return {grant, revoke, resolveBusiness};
 }
 
-module.exports = {SCHEMA_VERSION, SOURCE, BILLING_STATUS, ALLOWED_PLANS,
+module.exports = {SCHEMA_VERSION, SOURCE, QA_SOURCE, BILLING_STATUS, ALLOWED_PLANS,
   MAXIMUM_GRANT_DAYS, MANAGED_GROWTH_LIST_PRICE, normalizeEmail, millis, entitlementSummary,
   isActiveStripeEntitlement, validateGrantInput, validateRevokeInput,
   assertTrustedAdminActor, createInternalBetaEntitlementService};
