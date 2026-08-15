@@ -62,22 +62,44 @@ void main() {
   });
 
   test('Scaler discovery separates personalized and unrestricted modes', () {
-    final jobs = File('lib/screens/jobs/jobs_marketplace_screen.dart').readAsStringSync();
+    final jobs = File(
+      'lib/screens/jobs/jobs_marketplace_screen.dart',
+    ).readAsStringSync();
     expect(jobs, contains("Text('For You')"));
     expect(jobs, contains("Text('Search All Jobs')"));
-    expect(jobs, contains('Manual search is not limited by your saved preferences.'));
+    expect(
+      jobs,
+      contains('Manual search is not limited by your saved preferences.'),
+    );
     expect(jobs, contains('Personalize the jobs you see'));
     expect(jobs, contains("jobType == 'door_to_door'"));
   });
 
-  test('Property discovery exposes saved areas and unrestricted exploration', () {
-    final property = File(
-      'lib/screens/business/property_intelligence_center_screen.dart',
-    ).readAsStringSync();
-    expect(property, contains("Text('My Service Areas')"));
-    expect(property, contains("Text('Explore Anywhere')"));
-    expect(property, contains('Inside your service area'));
-    expect(property, contains('manual exploration is always available'));
-    expect(property, contains('Analysis does not create a campaign'));
+  test(
+    'Property discovery exposes saved areas and unrestricted exploration',
+    () {
+      final property = File(
+        'lib/screens/business/property_intelligence_center_screen.dart',
+      ).readAsStringSync();
+      expect(property, contains("Text('My Service Areas')"));
+      expect(property, contains("Text('Explore Anywhere')"));
+      expect(property, contains('Inside your service area'));
+      expect(property, contains('manual exploration is always available'));
+      expect(property, contains("Text('Add to Service Areas')"));
+      expect(property, contains('Analysis does not create a campaign'));
+    },
+  );
+
+  test('notification settings do not advertise missing producers', () {
+    expect(
+      screen,
+      isNot(contains("'propertyOpportunities': 'Property opportunities'")),
+    );
+    expect(
+      screen,
+      isNot(contains("'managedGrowthReminders': 'Managed Growth reminders'")),
+    );
+    expect(screen, contains('Weather opportunities in my areas'));
+    expect(screen, contains('New jobs in my areas'));
   });
 }

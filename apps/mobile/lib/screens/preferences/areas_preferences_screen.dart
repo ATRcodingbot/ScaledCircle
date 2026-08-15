@@ -549,9 +549,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       ? <String, String>{
                           'weatherInMyAreas':
                               'Weather opportunities in my areas',
-                          'propertyOpportunities': 'Property opportunities',
                           'campaignActivity': 'Campaign activity',
-                          'managedGrowthReminders': 'Managed Growth reminders',
                           'outsideMyAreas':
                               'Opportunities outside my service area',
                         }

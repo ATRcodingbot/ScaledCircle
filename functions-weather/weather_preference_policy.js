@@ -1,5 +1,5 @@
 "use strict";
-const {Timestamp} = require("firebase-admin/firestore");
+const entitlement = require("./subscription_entitlements");
 
 function text(value, maximumLength = 500) {
   if (value === null || value === undefined) return "";
@@ -7,10 +7,7 @@ function text(value, maximumLength = 500) {
 }
 function hasWeatherSubscription(user, subscription) {
   if (text(user.role, 40).toLowerCase() === "admin") return true;
-  const plan = text(subscription.planId || subscription.plan, 40).toLowerCase();
-  return (plan === "scale" || plan === "managed_growth") &&
-    text(subscription.status, 40).toLowerCase() === "active" && subscription.revokedAt == null &&
-    subscription.expiresAt instanceof Timestamp && subscription.expiresAt.toMillis() > Date.now();
+  return subscription.revokedAt == null && entitlement.hasActiveScaleEntitlement(subscription);
 }
 function distanceMiles(lat1, lon1, lat2, lon2) {
   if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;

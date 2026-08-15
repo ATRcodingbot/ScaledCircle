@@ -19,6 +19,7 @@ import '../../widgets/property_intelligence_panel.dart';
 import 'create_campaign_screen.dart';
 import 'subscription_screen.dart';
 import 'managed_growth_screen.dart';
+import '../preferences/areas_preferences_screen.dart';
 
 class PropertyIntelligenceCenterScreen extends StatefulWidget {
   const PropertyIntelligenceCenterScreen({super.key});
@@ -156,29 +157,46 @@ class _PropertyIntelligenceCenterScreenState
 
   Future<void> _chooseSavedArea() async {
     final saved = await DiscoveryPreferencesService().load();
-    final areas = List<Map<String, dynamic>>.from((saved?['areas'] as List? ?? const [])
-        .whereType<Map>().map((value) => Map<String, dynamic>.from(value)))
-        .where((area) => area['enabled'] != false).toList();
+    final areas = List<Map<String, dynamic>>.from(
+      (saved?['areas'] as List? ?? const []).whereType<Map>().map(
+        (value) => Map<String, dynamic>.from(value),
+      ),
+    ).where((area) => area['enabled'] != false).toList();
     if (!mounted) return;
     if (areas.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Set up My Service Areas first, or use Explore Anywhere.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Set up My Service Areas first, or use Explore Anywhere.',
+          ),
+        ),
+      );
       return;
     }
     final selected = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => SimpleDialog(
         title: const Text('My Service Areas'),
-        children: areas.map((area) => SimpleDialogOption(
-          onPressed: () => Navigator.pop(context, area),
-          child: Text(area['name']?.toString() ?? 'Service area'),
-        )).toList(),
+        children: areas
+            .map(
+              (area) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, area),
+                child: Text(area['name']?.toString() ?? 'Service area'),
+              ),
+            )
+            .toList(),
       ),
     );
     if (selected == null || !mounted) return;
-    final geometry = (selected['geometry'] as List? ?? const []).whereType<Map>().map((point) =>
-      LatLng((point['latitude'] as num).toDouble(), (point['longitude'] as num).toDouble())).toList();
+    final geometry = (selected['geometry'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (point) => LatLng(
+            (point['latitude'] as num).toDouble(),
+            (point['longitude'] as num).toDouble(),
+          ),
+        )
+        .toList();
     final center = selected['center'];
     if (geometry.length >= 3) {
       _loadSavedPolygon(selected, geometry);
@@ -188,14 +206,23 @@ class _PropertyIntelligenceCenterScreenState
       final radius = (selected['radiusMiles'] as num).toDouble();
       final polygon = List.generate(32, (index) {
         final angle = 2 * math.pi * index / 32;
-        return LatLng(latitude + radius / 69 * math.sin(angle),
-          longitude + radius / (69 * math.cos(latitude * math.pi / 180)) * math.cos(angle));
+        return LatLng(
+          latitude + radius / 69 * math.sin(angle),
+          longitude +
+              radius /
+                  (69 * math.cos(latitude * math.pi / 180)) *
+                  math.cos(angle),
+        );
       });
       _loadSavedPolygon(selected, polygon);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Search this saved city or ZIP below to choose the exact analysis area.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Search this saved city or ZIP below to choose the exact analysis area.',
+          ),
+        ),
+      );
     }
   }
 
@@ -661,16 +688,49 @@ class _PropertyIntelligenceCenterScreenState
                   'Explore property age and housing-stock patterns before choosing where to market.',
                 ),
                 const SizedBox(height: 12),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  FilledButton.tonalIcon(onPressed: _chooseSavedArea,
-                    icon: const Icon(Icons.home_work_outlined), label: const Text('My Service Areas')),
-                  OutlinedButton.icon(onPressed: () => setState(() => _fromSavedArea = false),
-                    icon: const Icon(Icons.public), label: const Text('Explore Anywhere')),
-                ]),
-                if (_area.isNotEmpty) Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_fromSavedArea ? 'Inside your service area' : 'Outside your usual service area — manual exploration is always available.'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: _chooseSavedArea,
+                      icon: const Icon(Icons.home_work_outlined),
+                      label: const Text('My Service Areas'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => setState(() => _fromSavedArea = false),
+                      icon: const Icon(Icons.public),
+                      label: const Text('Explore Anywhere'),
+                    ),
+                  ],
                 ),
+                if (_area.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _fromSavedArea
+                                ? 'Inside your service area'
+                                : 'Outside your usual service area — manual exploration is always available.',
+                          ),
+                        ),
+                        if (!_fromSavedArea)
+                          TextButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AreasPreferencesScreen(
+                                  role: 'business',
+                                ),
+                              ),
+                            ),
+                            child: const Text('Add to Service Areas'),
+                          ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 MappedAddressField(
                   controller: _searchController,

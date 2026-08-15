@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {Timestamp} = require("firebase-admin/firestore");
+const fs = require("node:fs");
 
 // Loading the module defines the scheduled function but does not invoke providers.
 const policy = require("./weather_preference_policy");
@@ -28,6 +29,12 @@ test("managed growth subscriptions, including comped QA, inherit weather access"
   assert.equal(policy.hasWeatherSubscription({role: "business"}, {
     plan: "managed_growth", status: "revoked", expiresAt: future,
   }), false);
+});
+
+test("weather uses an LF-normalized mirror of the canonical entitlement resolver", () => {
+  const normalized = (value) => value.replace(/\r\n/g, "\n");
+  assert.equal(normalized(fs.readFileSync("subscription_entitlements.js", "utf8")),
+    normalized(fs.readFileSync("../functions/subscription_entitlements.js", "utf8")));
 });
 
 test("actual weather producer policy allows inside areas and suppresses outside by default", () => {

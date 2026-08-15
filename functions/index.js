@@ -29,6 +29,7 @@ const {
 const marketplace = require("./marketplace_finance");
 const discoveryPreferences = require("./discovery_preferences");
 const {scalerOpportunityDecision} = require("./opportunity_notification_policy");
+const scalerCapacity = require("./scaler_notification_capacity");
 const {evaluateFundingCheckout, nextFundingVersion} = require("./marketplace_checkout");
 const {
   parseSnapshotEvent,
@@ -5227,8 +5228,34 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
   if (before.status === "open" || campaign.status !== "open") return;
   // A bounded candidate query prevents one Firestore query per Scaler. Detailed
   // geometry and travel policy are evaluated deterministically in memory.
-  const candidates = await db.collection("discoveryPreferences")
-    .where("role", "==", "scaler").limit(400).get();
+  const candidateQuery = db.collection("discoveryPreferences").where("role", "==", "scaler");
+  const populationSnapshot = await candidateQuery.count().get();
+  const population = populationSnapshot.data().count;
+  const capacity = scalerCapacity.capacityAssessment(population);
+  if (capacity) {
+    const issueId = scalerCapacity.issueIdentity(capacity.level);
+    const issueRef = db.collection("adminIssues").doc(issueId);
+    await db.runTransaction(async (transaction) => {
+      if ((await transaction.get(issueRef)).exists) return;
+      transaction.create(issueRef, {
+        schemaVersion: scalerCapacity.POLICY_VERSION,
+        issueId,
+        type: "scaler_notification_matching_capacity",
+        severity: capacity.severity,
+        status: "open",
+        entityType: "discoveryPreferences",
+        entityId: null,
+        summary: capacity.summary,
+        dashboardDeepLink: "/#/admin",
+        dedupeKey: `scaler-notification-capacity:${capacity.level}`,
+        metadata: {savedScalerPreferenceCount: population,
+          supportedPopulation: scalerCapacity.SUPPORTED_POPULATION},
+        createdAt: FieldValue.serverTimestamp(),
+        resolvedAt: null,
+      });
+    });
+  }
+  const candidates = await candidateQuery.limit(scalerCapacity.SUPPORTED_POPULATION).get();
   if (candidates.empty) return;
   const batch = db.batch();
   let writes = 0;
