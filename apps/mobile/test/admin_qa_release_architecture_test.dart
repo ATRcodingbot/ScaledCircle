@@ -32,9 +32,57 @@ void main() {
     expect(dashboard, contains('Administrator Accounts'));
     expect(dashboard, contains('Beta Entitlements'));
     expect(dashboard, contains('Platform Issues / Action Required'));
-    expect(dashboard, contains('Sales Program — Private Development'));
+    expect(dashboard, contains("title: 'Sales Program'"));
+    expect(dashboard, contains("badge: 'PRIVATE DEVELOPMENT'"));
+    expect(dashboard, contains('disabled: true'));
     expect(dashboard, isNot(contains('AdminSalesScreen')));
     expect(dashboard, isNot(contains('Commission / payout ledger')));
+  });
+
+  test('Admin Dashboard cards have explicit actions or disabled semantics', () {
+    final dashboard = source('lib/screens/admin/admin_dashboard_screen.dart');
+    final cards = source('lib/screens/admin/admin_dashboard_card.dart');
+    expect(dashboard, contains('Scrollable.ensureVisible'));
+    expect(dashboard, contains('AdminRoleManagementScreen'));
+    expect(dashboard, contains('InternalBetaEntitlementsScreen'));
+    expect(dashboard, contains('AdminSubscriptionOverviewScreen'));
+    expect(dashboard, contains('AdminPlatformHealthScreen'));
+    expect(cards, contains('SystemMouseCursors.click'));
+    expect(cards, contains('canRequestFocus: true'));
+    expect(cards, contains('enabled: _interactive'));
+    expect(cards, contains('Icons.lock_outline'));
+  });
+
+  test('Admin destinations independently enforce authoritative role', () {
+    final gate = source('lib/screens/admin/admin_role_gate.dart');
+    final subscriptions = source(
+      'lib/screens/admin/admin_subscription_overview_screen.dart',
+    );
+    final health = source(
+      'lib/screens/admin/admin_platform_health_screen.dart',
+    );
+    expect(gate, contains("collection('users')"));
+    expect(gate, contains("['role'] != 'admin'"));
+    expect(subscriptions, contains('AdminRoleGate'));
+    expect(health, contains('AdminRoleGate'));
+  });
+
+  test('Admin summaries are truthful and require no provider request', () {
+    final subscriptions = source(
+      'lib/screens/admin/admin_subscription_overview_screen.dart',
+    );
+    final health = source(
+      'lib/screens/admin/admin_platform_health_screen.dart',
+    );
+    expect(subscriptions, contains('Not available'));
+    expect(subscriptions, contains('Revenue / MRR'));
+    expect(subscriptions, contains('No Stripe or provider request'));
+    expect(health, contains('Stripe health telemetry'));
+    expect(health, contains('Advertising integrations'));
+    expect(health, contains('Direct Mail provider'));
+    expect(health, contains('exposes no secret metadata or values'));
+    expect(health, isNot(contains('OPENAI_API_KEY')));
+    expect(health, isNot(contains('CENSUS_API_KEY')));
   });
 
   test(

@@ -3,78 +3,108 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../business/internal_beta_entitlements_screen.dart';
+import 'admin_dashboard_card.dart';
+import 'admin_platform_health_screen.dart';
+import 'admin_role_gate.dart';
 import 'admin_role_management_screen.dart';
+import 'admin_subscription_overview_screen.dart';
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text('Administrator authentication required.')),
-      );
-    }
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.data?.data()?['role'] != 'admin') {
-          return const Scaffold(
-            body: Center(child: Text('Administrator authority is required.')),
-          );
-        }
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('ScaledCircle Admin Dashboard'),
-            actions: [
-              IconButton(
-                tooltip: 'Sign out',
-                icon: const Icon(Icons.logout),
-                onPressed: () async {
-                  await FirebaseAuth.instance.signOut();
-                  if (context.mounted) {
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/admin/login',
-                      (_) => false,
-                    );
-                  }
-                },
-              ),
-            ],
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  final _issuesKey = GlobalKey();
+
+  void _showActionableIssues() {
+    final target = _issuesKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      alignment: 0.05,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AdminRoleGate(
+    builder: (context) => Scaffold(
+      appBar: AppBar(
+        title: const Text('ScaledCircle Admin Dashboard'),
+        actions: [
+          IconButton(
+            tooltip: 'Sign out',
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/admin/login',
+                  (_) => false,
+                );
+              }
+            },
           ),
-          body: ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              const Text(
-                'Platform operations',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-              ),
-              const Text(
-                'Administrator authority, product entitlements, subscription revenue, worker funds, '
-                'planned budgets, actual spend, and provider costs remain separate.',
-              ),
-              const SizedBox(height: 20),
-              Wrap(
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          const Text(
+            'Platform operations',
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+          ),
+          const Text(
+            'Administrator authority, product entitlements, subscription revenue, worker funds, '
+            'planned budgets, actual spend, and provider costs remain separate.',
+          ),
+          const SizedBox(height: 20),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = constraints.maxWidth < 656
+                  ? constraints.maxWidth
+                  : 310.0;
+              return Wrap(
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  const _AdminCard(
-                    'Platform Issues / Action Required',
-                    'High and critical issues can queue one deduplicated minimal support alert.',
+                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: _openIssuesQuery.snapshots(),
+                    builder: (context, issues) {
+                      final docs = issues.data?.docs;
+                      final highPriority = docs?.where((doc) {
+                        final severity = doc
+                            .data()['severity']
+                            ?.toString()
+                            .toLowerCase();
+                        return severity == 'high' || severity == 'critical';
+                      }).length;
+                      final status = issues.hasError
+                          ? 'Issue status unavailable'
+                          : docs == null
+                          ? 'Loading issue status'
+                          : highPriority! > 0
+                          ? '${docs.length} open • $highPriority high priority'
+                          : '${docs.length} open issues';
+                      return AdminDashboardCard(
+                        title: 'Platform Issues / Action Required',
+                        subtitle: status,
+                        badge: docs == null ? null : 'OPEN ISSUES',
+                        width: cardWidth,
+                        onTap: _showActionableIssues,
+                      );
+                    },
                   ),
-                  _AdminCard(
-                    'Administrator Accounts',
-                    'Audited promotion and safe replacement-admin demotion.',
+                  AdminDashboardCard(
+                    title: 'Administrator Accounts',
+                    subtitle:
+                        'Audited promotion and safe replacement-admin demotion.',
+                    width: cardWidth,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -82,9 +112,11 @@ class AdminDashboardScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _AdminCard(
-                    'Beta Entitlements',
-                    'Finite Internal Beta or Internal QA Managed Growth access.',
+                  AdminDashboardCard(
+                    title: 'Beta Entitlements',
+                    subtitle:
+                        'Finite Internal Beta or Internal QA Managed Growth access.',
+                    width: cardWidth,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -92,90 +124,83 @@ class AdminDashboardScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const _AdminCard(
-                    'Subscription overview',
-                    'Paid and internal comped authority remain distinctly represented.',
+                  AdminDashboardCard(
+                    title: 'Subscription overview',
+                    subtitle:
+                        'Paid and internal comped authority remain distinctly represented.',
+                    width: cardWidth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminSubscriptionOverviewScreen(),
+                      ),
+                    ),
                   ),
-                  const _AdminCard(
-                    'Provider / platform health',
-                    'Operational status without exposing secret values.',
+                  AdminDashboardCard(
+                    title: 'Provider / platform health',
+                    subtitle:
+                        'Safe configuration status without exposing secret values.',
+                    width: cardWidth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminPlatformHealthScreen(),
+                      ),
+                    ),
                   ),
-                  const _AdminCard(
-                    'Sales Program — Private Development',
-                    'Referral commissions and payouts are disabled pending financial validation.',
+                  AdminDashboardCard(
+                    title: 'Sales Program',
+                    subtitle:
+                        'Referral commissions and payouts are being validated before release.',
+                    badge: 'PRIVATE DEVELOPMENT',
+                    disabled: true,
+                    width: cardWidth,
                   ),
                 ],
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Actionable issues',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('adminIssues')
-                    .where('status', isEqualTo: 'open')
-                    .limit(25)
-                    .snapshots(),
-                builder: (context, issues) {
-                  if (issues.hasError) {
-                    return const Text('Issue data is not available.');
-                  }
-                  final docs = issues.data?.docs ?? const [];
-                  if (docs.isEmpty) {
-                    return const ListTile(title: Text('No open issues'));
-                  }
-                  return Column(
-                    children: docs
-                        .map(
-                          (doc) => ListTile(
-                            title: Text(
-                              doc.data()['summary']?.toString() ??
-                                  'Action required',
-                            ),
-                            subtitle: Text(
-                              '${doc.data()['severity'] ?? 'normal'} • '
-                              '${doc.data()['type'] ?? 'platform'}',
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  );
-                },
-              ),
-            ],
+              );
+            },
           ),
-        );
-      },
-    );
-  }
-}
-
-class _AdminCard extends StatelessWidget {
-  const _AdminCard(this.title, this.subtitle, {this.onTap});
-
-  final String title;
-  final String subtitle;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 310,
-    child: Card(
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              Text(subtitle),
-            ],
+          const SizedBox(height: 24),
+          Text(
+            'Actionable issues',
+            key: _issuesKey,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
-        ),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _openIssuesQuery.snapshots(),
+            builder: (context, issues) {
+              if (issues.hasError) {
+                return const Text('Issue data is not available.');
+              }
+              final docs = issues.data?.docs ?? const [];
+              if (docs.isEmpty) {
+                return const ListTile(title: Text('No open issues'));
+              }
+              return Column(
+                children: docs
+                    .map(
+                      (doc) => ListTile(
+                        title: Text(
+                          doc.data()['summary']?.toString() ??
+                              'Action required',
+                        ),
+                        subtitle: Text(
+                          '${doc.data()['severity'] ?? 'normal'} • '
+                          '${doc.data()['type'] ?? 'platform'}',
+                        ),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+          ),
+        ],
       ),
     ),
   );
+
+  Query<Map<String, dynamic>> get _openIssuesQuery => FirebaseFirestore.instance
+      .collection('adminIssues')
+      .where('status', isEqualTo: 'open')
+      .limit(25);
 }
