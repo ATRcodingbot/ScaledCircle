@@ -20,7 +20,9 @@ void main() {
       'Preview',
       'Everything look good?',
       'Approve & Schedule',
+      'Approve Posts',
       'Post Now',
+      'Ready to Schedule',
       'Save for Later',
       'Try Another Version',
     ]) {
@@ -41,6 +43,7 @@ void main() {
     expect(screen, contains('Export instead'));
     expect(screen, contains('Download / Email / Copy All'));
     expect(screen, contains("const Chip(label: Text('More'))"));
+    expect(screen, contains('!publishingAvailable'));
   });
 
   test(

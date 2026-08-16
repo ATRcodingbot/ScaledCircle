@@ -442,7 +442,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
               const Text(
-                'This sends only this generated file. It does not send a marketing campaign.',
+                "We'll send the generated content to this email. This is not a marketing campaign and no attachment is included.",
               ),
             ],
           ),
@@ -476,8 +476,8 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                             SnackBar(
                               content: Text(
                                 result['status'] == 'already_queued'
-                                    ? 'This file is already queued for delivery.'
-                                    : 'File queued for delivery.',
+                                    ? 'This content is already queued for email delivery.'
+                                    : 'Generated content queued for email delivery.',
                               ),
                             ),
                           );
@@ -490,7 +490,8 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                           ScaffoldMessenger.of(this.context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                error.message ?? 'Unable to send this file.',
+                                error.message ??
+                                    'Unable to email this content.',
                               ),
                             ),
                           );
@@ -503,7 +504,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Send File'),
+                  : const Text('Email This'),
             ),
           ],
         ),

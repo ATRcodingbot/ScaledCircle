@@ -58,7 +58,8 @@ void main() {
     expect(screen, contains("label: const Text('Download')"));
     expect(screen, contains("label: const Text('Download CSV')"));
     expect(screen, contains("label: const Text('Email')"));
-    expect(screen, contains("const Text('Send File')"));
+    expect(screen, contains("const Text('Email This')"));
+    expect(screen, contains('no attachment is included'));
     expect(screen, contains('Generate Image — Coming Soon / Beta'));
   });
 

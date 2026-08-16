@@ -461,7 +461,7 @@ class _MiniCalendar extends StatelessWidget {
           _CalendarRow(
             day: 'THU',
             title: 'Google Business • Fence Post',
-            status: 'SCHEDULED',
+            status: 'READY TO SCHEDULE',
             color: _blue,
           ),
           _CalendarRow(

@@ -205,6 +205,25 @@ class _SocialApprovalScreenState extends State<SocialApprovalScreen> {
     }
   }
 
+  Future<void> _approveOnly() async {
+    if (_draftId == null || _working) return;
+    setState(() => _working = true);
+    try {
+      await _service.approve(
+        draftId: _draftId!,
+        contentVersion: _contentVersion,
+      );
+      if (mounted) setState(() => _status = 'approved');
+      _message(
+        'Posts approved and ready to schedule when your social connection is available.',
+      );
+    } on FirebaseFunctionsException catch (error) {
+      _message(error.message ?? 'Unable to approve these posts.');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   Future<void> _uploadPhoto() async {
     final selected = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -382,133 +401,151 @@ class _SocialApprovalScreenState extends State<SocialApprovalScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Your Posts Are Ready')),
-    body: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          'Your Social Accounts',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 8),
-        ..._providers.map(
-          (provider) => Card(
+  Widget build(BuildContext context) {
+    final publishingAvailable = _providers.any(
+      (provider) => provider.canPublish,
+    );
+    return Scaffold(
+      appBar: AppBar(title: const Text('Your Posts Are Ready')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Your Social Accounts',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 8),
+          ..._providers.map(
+            (provider) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.public),
+                title: Text(provider.label),
+                subtitle: Text(
+                  provider.status == 'requires_approval'
+                      ? 'Connection requires approval'
+                      : 'Coming Soon',
+                ),
+                trailing: provider.status == 'requires_approval'
+                    ? TextButton(
+                        onPressed: _connectionRequired,
+                        child: const Text('Review Status'),
+                      )
+                    : const Text('Coming Soon'),
+              ),
+            ),
+          ),
+          Card(
             child: ListTile(
-              leading: const Icon(Icons.public),
-              title: Text(provider.label),
-              subtitle: Text(
-                provider.status == 'requires_approval'
-                    ? 'Connection requires approval'
-                    : 'Coming Soon',
+              onTap: _showPhotos,
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('My Photos'),
+              subtitle: const Text(
+                'Use your own project photos. ScaledCircle uses only details you provide.',
               ),
-              trailing: TextButton(
-                onPressed: _connectionRequired,
-                child: Text(provider.canPublish ? 'Connected' : 'Connect'),
+              trailing: Wrap(
+                spacing: 4,
+                children: [
+                  TextButton(
+                    onPressed: _uploadPhoto,
+                    child: const Text('Upload Photo'),
+                  ),
+                  const Tooltip(
+                    message: 'Coming Soon / Beta',
+                    child: Chip(label: Text('Create Image — Coming Soon')),
+                  ),
+                ],
               ),
             ),
           ),
-        ),
-        Card(
-          child: ListTile(
-            onTap: _showPhotos,
-            leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('My Photos'),
-            subtitle: const Text(
-              'Use your own project photos. ScaledCircle uses only details you provide.',
-            ),
-            trailing: Wrap(
-              spacing: 4,
-              children: [
-                TextButton(
-                  onPressed: _uploadPhoto,
-                  child: const Text('Upload Photo'),
-                ),
-                const Tooltip(
-                  message: 'Coming Soon / Beta',
-                  child: Chip(label: Text('Create Image — Coming Soon')),
-                ),
-              ],
+          const SizedBox(height: 18),
+          Text('Preview', style: Theme.of(context).textTheme.headlineSmall),
+          const Text(
+            'A close preview of what customers will see. Social apps may change their exact layout.',
+          ),
+          const SizedBox(height: 8),
+          ..._posts.asMap().entries.map(
+            (entry) => _SocialPreviewCard(
+              businessName: widget.businessName,
+              provider: _label(entry.value['provider'].toString()),
+              format: entry.value['format']?.toString() ?? 'feed',
+              body: entry.value['body']?.toString() ?? '',
+              onEdit: () => _edit(entry.key),
+              onChangePhoto: _uploadPhoto,
+              onTryAnother: () => _message(
+                'Use Regenerate to create another grounded version.',
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 18),
-        Text('Preview', style: Theme.of(context).textTheme.headlineSmall),
-        const Text(
-          'A close preview of what customers will see. Social apps may change their exact layout.',
-        ),
-        const SizedBox(height: 8),
-        ..._posts.asMap().entries.map(
-          (entry) => _SocialPreviewCard(
-            businessName: widget.businessName,
-            provider: _label(entry.value['provider'].toString()),
-            format: entry.value['format']?.toString() ?? 'feed',
-            body: entry.value['body']?.toString() ?? '',
-            onEdit: () => _edit(entry.key),
-            onChangePhoto: _uploadPhoto,
-            onTryAnother: () =>
-                _message('Use Regenerate to create another grounded version.'),
+          const SizedBox(height: 12),
+          Text(
+            'Everything look good?',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Everything look good?',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton.icon(
-              onPressed: _working ? null : _approveAndSchedule,
-              icon: const Icon(Icons.schedule),
-              label: const Text('Approve & Schedule'),
-            ),
-            OutlinedButton.icon(
-              onPressed: _working
-                  ? null
-                  : () => _approveAndSchedule(postNow: true),
-              icon: const Icon(Icons.send),
-              label: const Text('Post Now'),
-            ),
-            TextButton(onPressed: () => _edit(0), child: const Text('Edit')),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Save for Later'),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'More',
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'export',
-                  child: Text('Download / Email / Copy All'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: _working
+                    ? null
+                    : publishingAvailable
+                    ? _approveAndSchedule
+                    : _approveOnly,
+                icon: Icon(
+                  publishingAvailable
+                      ? Icons.schedule
+                      : Icons.check_circle_outline,
                 ),
-              ],
-              onSelected: (_) => widget.onMore(),
-              child: const Chip(label: Text('More')),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Social Calendar',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.calendar_today),
-            title: Text(widget.artifact.title),
-            subtitle: Text(switch (_status) {
-              'scheduled' => 'Scheduled',
-              'approved' => 'Approved',
-              _ => 'Needs Approval',
-            }),
-            onTap: () {},
+                label: Text(
+                  publishingAvailable ? 'Approve & Schedule' : 'Approve Posts',
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _working || !publishingAvailable
+                    ? null
+                    : () => _approveAndSchedule(postNow: true),
+                icon: const Icon(Icons.send),
+                label: const Text('Post Now'),
+              ),
+              TextButton(onPressed: () => _edit(0), child: const Text('Edit')),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Save for Later'),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'More',
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'export',
+                    child: Text('Download / Email / Copy All'),
+                  ),
+                ],
+                onSelected: (_) => widget.onMore(),
+                child: const Chip(label: Text('More')),
+              ),
+            ],
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 24),
+          Text(
+            'Social Calendar',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.calendar_today),
+              title: Text(widget.artifact.title),
+              subtitle: Text(switch (_status) {
+                'scheduled' => 'Scheduled',
+                'approved' => 'Ready to Schedule',
+                _ => 'Needs Approval',
+              }),
+              onTap: () {},
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SocialPreviewCard extends StatelessWidget {
