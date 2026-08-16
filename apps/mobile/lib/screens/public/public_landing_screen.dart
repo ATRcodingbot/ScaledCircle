@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../navigation/app_routes.dart';
+import '../../services/subscription_plan_service.dart';
 import 'waitlist_screen.dart';
 
 const _bg = Color(0xFF020914);
@@ -63,7 +64,11 @@ class PublicLandingScreen extends StatelessWidget {
                           onStart: () => _start(context, 'scaler'),
                         ),
                         const _Gap(),
-                        const _Pricing(),
+                        _Pricing(
+                          onGetStarted: () => _start(context, 'business'),
+                          onCompare: () =>
+                              Navigator.pushNamed(context, AppRoutes.login),
+                        ),
                         const _Gap(),
                         _FinalCta(
                           onBusiness: () => _start(context, 'business'),
@@ -667,50 +672,133 @@ class _ScalerExperience extends StatelessWidget {
 }
 
 class _Pricing extends StatelessWidget {
-  const _Pricing();
+  const _Pricing({required this.onGetStarted, required this.onCompare});
+
+  final VoidCallback onGetStarted;
+  final VoidCallback onCompare;
+
+  static const _order = ['starter', 'growth', 'scale', 'managed_growth'];
+
+  static const _descriptions = <String, String>{
+    'starter': 'For local businesses starting with verified field campaigns.',
+    'growth':
+        'For growing teams that want stronger planning, content, and response tracking.',
+    'scale':
+        'For businesses operating advanced local intelligence and recurring growth.',
+    'managed_growth':
+        'For businesses that want ScaledCircle helping prepare and coordinate ongoing marketing.',
+  };
+
+  static const _featureLabels = <String, String>{
+    'campaign_mapping': 'Campaign mapping',
+    'gps_verification': 'GPS-verified field work',
+    'basic_ai_planning': 'Simple AI campaign planning',
+    'advanced_analytics': 'Advanced campaign analytics',
+    'ai_content_creation': 'AI-assisted content creation',
+    'lead_tracking': 'Lead and response tracking',
+    'property_intelligence': 'Property Intelligence',
+    'weather_intelligence': 'Weather Intelligence',
+    'priority_scaler_matching': 'Priority Scaler matching',
+    'managed_growth_planning': '30-day Managed Growth planning',
+    'social_content_package': 'Social content ready for approval',
+    'seo_action_plan': 'SEO action planning',
+  };
+
+  List<String> _highlights(String planId, Map<String, dynamic> plan) {
+    final preferred = switch (planId) {
+      'starter' => const [
+        'campaign_mapping',
+        'gps_verification',
+        'basic_ai_planning',
+      ],
+      'growth' => const [
+        'advanced_analytics',
+        'ai_content_creation',
+        'lead_tracking',
+      ],
+      'scale' => const [
+        'property_intelligence',
+        'weather_intelligence',
+        'priority_scaler_matching',
+      ],
+      _ => const [
+        'managed_growth_planning',
+        'social_content_package',
+        'seo_action_plan',
+      ],
+    };
+    final available = (plan['features'] as List? ?? const []).toSet();
+    return preferred
+        .where(available.contains)
+        .map((feature) => _featureLabels[feature] ?? feature)
+        .toList(growable: false);
+  }
+
   @override
-  Widget build(BuildContext context) => const Column(
-    children: [
-      _Heading(
-        eyebrow: 'SIMPLE PRICING',
-        title: 'Choose how much help you want.',
-        subtitle:
-            'Software access is clear. Variable campaign costs are approved separately.',
-      ),
-      SizedBox(height: 22),
-      _Cards(
-        children: [
-          _Price(
-            name: 'SCALE',
-            price: '\$499/month',
-            body: 'For businesses running local growth themselves.',
-            features: [
-              'Property and Weather Intelligence',
-              'Campaign planning and tracking',
-              'Business growth tools',
-            ],
-          ),
-          _Price(
-            name: 'MANAGED GROWTH',
-            price: '\$999/month',
-            badge: 'LIMITED BETA',
-            body:
-                'For businesses that want ScaledCircle helping prepare and coordinate ongoing marketing.',
-            features: [
-              'Everything in Scale',
-              'Marketing drafts ready for approval',
-              '30-day planning and coordination',
-            ],
-          ),
-        ],
-      ),
-      SizedBox(height: 16),
-      Text(
-        'Scaler pay, advertising spend, printing, postage, and third-party vendors are separately approved and funded.',
-        style: TextStyle(color: _muted),
-        textAlign: TextAlign.center,
-      ),
-    ],
+  Widget build(BuildContext context) {
+    final cards = _order
+        .map((planId) {
+          final plan = SubscriptionPlanService.plans[planId]!;
+          final name = plan['name']!.toString();
+          final price = (plan['price'] as num).toDouble();
+          return _Price(
+            key: Key('public-plan-$planId'),
+            name: name.toUpperCase(),
+            price: '\$${price.toStringAsFixed(0)}/month',
+            badge: planId == 'managed_growth' ? 'LIMITED BETA' : null,
+            body: _descriptions[planId]!,
+            features: _highlights(planId, plan),
+            onGetStarted: onGetStarted,
+          );
+        })
+        .toList(growable: false);
+    return Column(
+      children: [
+        const _Heading(
+          eyebrow: 'SIMPLE PRICING',
+          title: 'Choose how much help you want.',
+          subtitle:
+              'Software access is clear. Variable campaign costs are approved separately.',
+        ),
+        const SizedBox(height: 22),
+        _PricingGrid(children: cards),
+        const SizedBox(height: 18),
+        OutlinedButton(
+          onPressed: onCompare,
+          child: const Text('Compare Plans'),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Scaler pay, advertising spend, printing, postage, and third-party vendors are separately approved and funded.',
+          style: TextStyle(color: _muted),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+class _PricingGrid extends StatelessWidget {
+  const _PricingGrid({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 1080
+          ? 4
+          : constraints.maxWidth >= 680
+          ? 2
+          : 1;
+      final width = (constraints.maxWidth - (16 * (columns - 1))) / columns;
+      return Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: children
+            .map((child) => SizedBox(width: width, child: child))
+            .toList(growable: false),
+      );
+    },
   );
 }
 
@@ -933,12 +1021,15 @@ class _Price extends StatelessWidget {
     required this.price,
     required this.body,
     required this.features,
+    required this.onGetStarted,
     this.badge,
+    super.key,
   });
   final String name;
   final String price;
   final String body;
   final List<String> features;
+  final VoidCallback onGetStarted;
   final String? badge;
   @override
   Widget build(BuildContext context) => _Panel(
@@ -987,6 +1078,18 @@ class _Price extends StatelessWidget {
                 style: const TextStyle(color: Colors.white),
               ),
             ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: onGetStarted,
+              style: FilledButton.styleFrom(
+                backgroundColor: _green,
+                foregroundColor: _bg,
+              ),
+              child: const Text('Get Started'),
+            ),
+          ),
         ],
       ),
     ),

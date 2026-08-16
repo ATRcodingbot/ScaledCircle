@@ -113,10 +113,11 @@ void main() {
   test(
     'Property modes explain saved territory versus unrestricted exploration',
     () {
-      expect(property, contains("Key('property-mode-my-service-areas')"));
-      expect(property, contains('Choose one of your saved, named territories'));
-      expect(property, contains("Key('property-mode-explore-anywhere')"));
-      expect(property, contains('Start with an unrestricted map'));
+      expect(property, contains('SegmentedButton<_PropertyDiscoveryMode>'));
+      expect(property, contains("label: Text('My Service Areas')"));
+      expect(property, contains("label: Text('Explore Anywhere')"));
+      expect(property, contains('Analyzing:'));
+      expect(property, contains("Key('property-map-workspace')"));
       expect(property, contains('manual exploration is always available'));
     },
   );
@@ -126,7 +127,9 @@ void main() {
     expect(homepage, contains('Semantics'));
     expect(dashboard, contains('Semantics('));
     expect(dashboard, contains('BoxConstraints(minHeight: 170)'));
-    expect(property, contains('constraints.maxWidth >= 620'));
+    expect(property, contains('viewport.maxWidth >= 760'));
+    expect(property, contains('clamp(520.0, 760.0)'));
+    expect(property, contains('clamp(360.0, 560.0)'));
   });
 
   for (final viewport in <({String name, Size size})>[

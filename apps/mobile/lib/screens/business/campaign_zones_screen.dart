@@ -8,8 +8,13 @@ import 'campaign_area_screen.dart';
 
 class CampaignZonesScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
+  final bool startWithAreaBuilder;
 
-  const CampaignZonesScreen({super.key, required this.campaign});
+  const CampaignZonesScreen({
+    super.key,
+    required this.campaign,
+    this.startWithAreaBuilder = false,
+  });
 
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
@@ -88,7 +93,10 @@ class CampaignZonesScreen extends StatelessWidget {
     return zoneName;
   }
 
-  Future<void> _createZone(BuildContext context) async {
+  Future<void> _createZone(
+    BuildContext context, {
+    bool skipNamePrompt = false,
+  }) async {
     final campaignData = campaign.data() as Map<String, dynamic>;
 
     final businessId = campaignData['businessId']?.toString();
@@ -109,10 +117,9 @@ class CampaignZonesScreen extends StatelessWidget {
       return;
     }
 
-    final zoneName = await _askForZoneName(
-      context,
-      initialValue: suggestedName,
-    );
+    final zoneName = skipNamePrompt
+        ? suggestedName
+        : await _askForZoneName(context, initialValue: suggestedName);
 
     if (zoneName == null || zoneName.isEmpty) {
       return;
@@ -1209,332 +1216,340 @@ class CampaignZonesScreen extends StatelessWidget {
               icon: const Icon(Icons.add_location_alt),
               label: const Text('Add Zone'),
             ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _zonesCollection
-            .where('campaignId', isEqualTo: campaign.id)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  snapshot.error.toString(),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final zones = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
-            snapshot.data?.docs ?? [],
-          );
-
-          zones.sort((a, b) {
-            final aData = a.data();
-
-            final bData = b.data();
-
-            final aCreated = aData['createdAt'];
-
-            final bCreated = bData['createdAt'];
-
-            if (aCreated is Timestamp && bCreated is Timestamp) {
-              return aCreated.compareTo(bCreated);
-            }
-
-            return (aData['zoneName']?.toString() ?? '').compareTo(
-              bData['zoneName']?.toString() ?? '',
-            );
-          });
-
-          int totalEstimatedHomes = 0;
-          int assignedZones = 0;
-          int mappedZones = 0;
-          double totalWalkingMiles = 0;
-          int totalMinutes = 0;
-
-          for (final zone in zones) {
-            final data = zone.data();
-
-            totalEstimatedHomes +=
-                (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-
-            totalWalkingMiles +=
-                (data['estimatedWalkingMiles'] as num?)?.toDouble() ?? 0;
-
-            totalMinutes += (data['estimatedMinutes'] as num?)?.toInt() ?? 0;
-
-            final assignedScalerId = data['assignedScalerId']?.toString();
-
-            if (assignedScalerId != null && assignedScalerId.isNotEmpty) {
-              assignedZones++;
-            }
-
-            final pointCount =
-                (data['serviceAreaPointCount'] as num?)?.toInt() ?? 0;
-
-            if (pointCount >= 3) {
-              mappedZones++;
-            }
-          }
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-            children: [
-              const Text(
-                'Campaign Zone Manager',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                'Divide the campaign into individual work areas. Each zone receives its own workload estimate, Scaler assignment, GPS route, and completion status.',
-              ),
-
-              const SizedBox(height: 22),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: _summaryCard(
-                      icon: Icons.map_outlined,
-                      value: '${zones.length}',
-                      label: 'Zones',
-                    ),
-                  ),
-
-                  const SizedBox(width: 10),
-
-                  Expanded(
-                    child: _summaryCard(
-                      icon: Icons.location_on_outlined,
-                      value: '$mappedZones',
-                      label: 'Mapped',
-                    ),
-                  ),
-
-                  const SizedBox(width: 10),
-
-                  Expanded(
-                    child: _summaryCard(
-                      icon: Icons.person_outline,
-                      value: '$assignedZones',
-                      label: 'Assigned',
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              Card(
+      body: _OpenAreaBuilderOnce(
+        enabled: startWithAreaBuilder && !_campaignLocked,
+        onOpen: () => _createZone(context, skipNamePrompt: true),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _zonesCollection
+              .where('campaignId', isEqualTo: campaign.id)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _campaignMetricRow(
-                        icon: Icons.home_work_outlined,
-                        label: 'Estimated Homes',
-                        value: totalEstimatedHomes > 0
-                            ? '$totalEstimatedHomes'
-                            : 'Pending',
-                      ),
-                      const Divider(),
-                      _campaignMetricRow(
-                        icon: Icons.directions_walk,
-                        label: 'Estimated Walking Distance',
-                        value: totalWalkingMiles > 0
-                            ? '${totalWalkingMiles.toStringAsFixed(1)} miles'
-                            : 'Pending',
-                      ),
-                      const Divider(),
-                      _campaignMetricRow(
-                        icon: Icons.schedule,
-                        label: 'Estimated Campaign Time',
-                        value: totalMinutes > 0
-                            ? _formatDuration(totalMinutes)
-                            : 'Pending',
-                      ),
-                    ],
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    snapshot.error.toString(),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
+              );
+            }
 
-              const SizedBox(height: 22),
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Zone Intelligence',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+            final zones =
+                List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
+                  snapshot.data?.docs ?? [],
+                );
+
+            zones.sort((a, b) {
+              final aData = a.data();
+
+              final bData = b.data();
+
+              final aCreated = aData['createdAt'];
+
+              final bCreated = bData['createdAt'];
+
+              if (aCreated is Timestamp && bCreated is Timestamp) {
+                return aCreated.compareTo(bCreated);
+              }
+
+              return (aData['zoneName']?.toString() ?? '').compareTo(
+                bData['zoneName']?.toString() ?? '',
+              );
+            });
+
+            int totalEstimatedHomes = 0;
+            int assignedZones = 0;
+            int mappedZones = 0;
+            double totalWalkingMiles = 0;
+            int totalMinutes = 0;
+
+            for (final zone in zones) {
+              final data = zone.data();
+
+              totalEstimatedHomes +=
+                  (data['estimatedHomes'] as num?)?.toInt() ?? 0;
+
+              totalWalkingMiles +=
+                  (data['estimatedWalkingMiles'] as num?)?.toDouble() ?? 0;
+
+              totalMinutes += (data['estimatedMinutes'] as num?)?.toInt() ?? 0;
+
+              final assignedScalerId = data['assignedScalerId']?.toString();
+
+              if (assignedScalerId != null && assignedScalerId.isNotEmpty) {
+                assignedZones++;
+              }
+
+              final pointCount =
+                  (data['serviceAreaPointCount'] as num?)?.toInt() ?? 0;
+
+              if (pointCount >= 3) {
+                mappedZones++;
+              }
+            }
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+              children: [
+                const Text(
+                  'Campaign Zone Manager',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 8),
+
+                const Text(
+                  'Divide the campaign into individual work areas. Each zone receives its own workload estimate, Scaler assignment, GPS route, and completion status.',
+                ),
+
+                const SizedBox(height: 22),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _summaryCard(
+                        icon: Icons.map_outlined,
+                        value: '${zones.length}',
+                        label: 'Zones',
                       ),
                     ),
-                  ),
-                  Text('${zones.length} total'),
-                ],
-              ),
 
-              const SizedBox(height: 12),
+                    const SizedBox(width: 10),
 
-              if (zones.isEmpty)
+                    Expanded(
+                      child: _summaryCard(
+                        icon: Icons.location_on_outlined,
+                        value: '$mappedZones',
+                        label: 'Mapped',
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    Expanded(
+                      child: _summaryCard(
+                        icon: Icons.person_outline,
+                        value: '$assignedZones',
+                        label: 'Assigned',
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        const Icon(Icons.add_location_alt_outlined, size: 54),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No zones yet',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        _campaignMetricRow(
+                          icon: Icons.home_work_outlined,
+                          label: 'Estimated Homes',
+                          value: totalEstimatedHomes > 0
+                              ? '$totalEstimatedHomes'
+                              : 'Pending',
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Add the first canvassing zone for this campaign.',
-                          textAlign: TextAlign.center,
+                        const Divider(),
+                        _campaignMetricRow(
+                          icon: Icons.directions_walk,
+                          label: 'Estimated Walking Distance',
+                          value: totalWalkingMiles > 0
+                              ? '${totalWalkingMiles.toStringAsFixed(1)} miles'
+                              : 'Pending',
                         ),
-                        const SizedBox(height: 18),
-                        ElevatedButton.icon(
-                          onPressed: _campaignLocked
-                              ? null
-                              : () {
-                                  if (_hasTransferredAnalysisArea) {
-                                    _createTransferredAnalysisZone(context);
-                                  } else {
-                                    _createZone(context);
-                                  }
-                                },
-                          icon: const Icon(Icons.add_location_alt),
-                          label: Text(
-                            _hasTransferredAnalysisArea
-                                ? 'Use Analyzed Area'
-                                : 'Create First Zone',
-                          ),
+                        const Divider(),
+                        _campaignMetricRow(
+                          icon: Icons.schedule,
+                          label: 'Estimated Campaign Time',
+                          value: totalMinutes > 0
+                              ? _formatDuration(totalMinutes)
+                              : 'Pending',
                         ),
                       ],
                     ),
                   ),
                 ),
 
-              ...zones.map((zone) {
-                final data = zone.data();
+                const SizedBox(height: 22),
 
-                final zoneName = data['zoneName']?.toString() ?? 'Unnamed Zone';
-
-                final zoneStatus = data['status']?.toString() ?? 'unassigned';
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                Row(
                   children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        tooltip: 'Zone options',
-                        onPressed: () {
-                          _showZoneActions(context, zone);
-                        },
-                        icon: const Icon(Icons.more_horiz),
+                    const Expanded(
+                      child: Text(
+                        'Zone Intelligence',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
+                    Text('${zones.length} total'),
+                  ],
+                ),
 
-                    ZoneIntelligenceCard(
-                      zoneName: zoneName,
-                      data: data,
-                      onTap: _campaignLocked || data['mapLocked'] == true
-                          ? null
-                          : () {
-                              _editZoneArea(context, zone);
-                            },
+                const SizedBox(height: 12),
+
+                if (zones.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.add_location_alt_outlined, size: 54),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'No zones yet',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Add the first canvassing zone for this campaign.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 18),
+                          ElevatedButton.icon(
+                            onPressed: _campaignLocked
+                                ? null
+                                : () {
+                                    if (_hasTransferredAnalysisArea) {
+                                      _createTransferredAnalysisZone(context);
+                                    } else {
+                                      _createZone(context);
+                                    }
+                                  },
+                            icon: const Icon(Icons.add_location_alt),
+                            label: Text(
+                              _hasTransferredAnalysisArea
+                                  ? 'Use Analyzed Area'
+                                  : 'Create First Zone',
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ),
 
-                    if (zoneStatus == 'assigned')
-                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance
-                            .collection('zoneGroupAssignments')
-                            .doc(zone.id)
-                            .snapshots(),
-                        builder: (context, groupSnapshot) {
-                          final group = groupSnapshot.data?.data();
-                          final required =
-                              (group?['requiredScalerCount'] as num?)
-                                  ?.round() ??
-                              (data['requiredScalerCount'] as num?)?.round() ??
-                              1;
-                          final assigned =
-                              (group?['acceptedScalerCount'] as num?)
-                                  ?.round() ??
-                              (data['assignedScalerId'] == null ? 0 : 1);
-                          final pool =
-                              (group?['workerPoolCents'] as num?)?.round() ??
-                              (data['workerPoolCents'] as num?)?.round() ??
-                              0;
-                          return Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Text(
-                                    required > 1
-                                        ? 'GROUP COORDINATION'
-                                        : 'JOB COORDINATION',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    '$assigned / $required Scalers assigned',
-                                  ),
-                                  if (pool > 0)
+                ...zones.map((zone) {
+                  final data = zone.data();
+
+                  final zoneName =
+                      data['zoneName']?.toString() ?? 'Unnamed Zone';
+
+                  final zoneStatus = data['status']?.toString() ?? 'unassigned';
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          tooltip: 'Zone options',
+                          onPressed: () {
+                            _showZoneActions(context, zone);
+                          },
+                          icon: const Icon(Icons.more_horiz),
+                        ),
+                      ),
+
+                      ZoneIntelligenceCard(
+                        zoneName: zoneName,
+                        data: data,
+                        onTap: _campaignLocked || data['mapLocked'] == true
+                            ? null
+                            : () {
+                                _editZoneArea(context, zone);
+                              },
+                      ),
+
+                      if (zoneStatus == 'assigned')
+                        StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('zoneGroupAssignments')
+                              .doc(zone.id)
+                              .snapshots(),
+                          builder: (context, groupSnapshot) {
+                            final group = groupSnapshot.data?.data();
+                            final required =
+                                (group?['requiredScalerCount'] as num?)
+                                    ?.round() ??
+                                (data['requiredScalerCount'] as num?)
+                                    ?.round() ??
+                                1;
+                            final assigned =
+                                (group?['acceptedScalerCount'] as num?)
+                                    ?.round() ??
+                                (data['assignedScalerId'] == null ? 0 : 1);
+                            final pool =
+                                (group?['workerPoolCents'] as num?)?.round() ??
+                                (data['workerPoolCents'] as num?)?.round() ??
+                                0;
+                            return Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
                                     Text(
-                                      'Worker pool: \$${(pool / 100).toStringAsFixed(2)}',
-                                    ),
-                                  if (pool > 0 && required > 0)
-                                    Text(
-                                      'Scheduled share: \$${(pool / required / 100).toStringAsFixed(2)} each',
-                                    ),
-                                  const Text('Status: Coordination required'),
-                                  const SizedBox(height: 8),
-                                  FilledButton.icon(
-                                    onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            JobRoomScreen(zoneId: zone.id),
+                                      required > 1
+                                          ? 'GROUP COORDINATION'
+                                          : 'JOB COORDINATION',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    icon: const Icon(
-                                      Icons.meeting_room_outlined,
+                                    Text(
+                                      '$assigned / $required Scalers assigned',
                                     ),
-                                    label: const Text('Open Job Room'),
-                                  ),
-                                ],
+                                    if (pool > 0)
+                                      Text(
+                                        'Worker pool: \$${(pool / 100).toStringAsFixed(2)}',
+                                      ),
+                                    if (pool > 0 && required > 0)
+                                      Text(
+                                        'Scheduled share: \$${(pool / required / 100).toStringAsFixed(2)} each',
+                                      ),
+                                    const Text('Status: Coordination required'),
+                                    const SizedBox(height: 8),
+                                    FilledButton.icon(
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              JobRoomScreen(zoneId: zone.id),
+                                        ),
+                                      ),
+                                      icon: const Icon(
+                                        Icons.meeting_room_outlined,
+                                      ),
+                                      label: const Text('Open Job Room'),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
 
-                    if (zoneStatus == 'submitted')
-                      _submittedZoneReviewCard(context, zone),
-                  ],
-                );
-              }),
-            ],
-          );
-        },
+                      if (zoneStatus == 'submitted')
+                        _submittedZoneReviewCard(context, zone),
+                    ],
+                  );
+                }),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -1600,4 +1615,36 @@ class CampaignZonesScreen extends StatelessWidget {
 
     return '$hours hr $remainingMinutes min';
   }
+}
+
+class _OpenAreaBuilderOnce extends StatefulWidget {
+  const _OpenAreaBuilderOnce({
+    required this.enabled,
+    required this.onOpen,
+    required this.child,
+  });
+
+  final bool enabled;
+  final Future<void> Function() onOpen;
+  final Widget child;
+
+  @override
+  State<_OpenAreaBuilderOnce> createState() => _OpenAreaBuilderOnceState();
+}
+
+class _OpenAreaBuilderOnceState extends State<_OpenAreaBuilderOnce> {
+  bool _opened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.enabled || _opened) return;
+      _opened = true;
+      widget.onOpen();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

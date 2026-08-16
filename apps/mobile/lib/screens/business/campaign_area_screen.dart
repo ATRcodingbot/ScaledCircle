@@ -1094,297 +1094,330 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _mappingLocked ? 'Campaign Zone (Locked)' : 'Define Campaign Zone',
+          _mappingLocked
+              ? 'Campaign Area (Locked)'
+              : 'Step 3 of 4 — Choose the Area',
         ),
         centerTitle: true,
       ),
-      body: Column(
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-            child: SegmentedButton<CampaignAreaShape>(
-              segments: CampaignAreaShape.values
-                  .map(
-                    (shape) => ButtonSegment<CampaignAreaShape>(
-                      value: shape,
-                      icon: Icon(_shapeIcon(shape)),
-                      label: Text(_shapeLabel(shape)),
-                    ),
-                  )
-                  .toList(),
-              selected: {_selectedShape},
-              onSelectionChanged: _mappingLocked
-                  ? null
-                  : (selection) {
-                      _selectShape(selection.first);
-                    },
-              showSelectedIcon: false,
-            ),
-          ),
-
-          if (_mappingLocked)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
-              child: Card(
-                child: ListTile(
-                  leading: Icon(Icons.lock_outline),
-                  title: Text('Campaign zone map is locked'),
-                  subtitle: Text(
-                    'The boundary cannot change after campaign launch or '
-                    'Scaler assignment.',
-                  ),
-                ),
-              ),
-            ),
-
-          SwitchListTile(
-            value: _propertyLayerEnabled,
-            secondary: const Icon(Icons.home_work_outlined),
-            title: const Text('Property Intelligence'),
-            subtitle: const Text(
-              'Optional property-age and housing-stock information',
-            ),
-            onChanged: _generatedArea.length < 3
-                ? null
-                : (enabled) {
-                    setState(() => _propertyLayerEnabled = enabled);
-                    if (enabled && _propertyIntelligence == null) {
-                      _loadPropertyIntelligence();
-                    }
-                  },
-          ),
-
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      body: LayoutBuilder(
+        builder: (context, viewport) {
+          final desktop = viewport.maxWidth >= 760;
+          final mapHeight = desktop
+              ? (viewport.maxHeight * 0.64).clamp(520.0, 760.0)
+              : (viewport.maxHeight * 0.56).clamp(360.0, 560.0);
+          return SingleChildScrollView(
             child: Column(
               children: [
-                Text(_instructionText(), textAlign: TextAlign.center),
-
-                if (radius != null) ...[
-                  const SizedBox(height: 6),
-
-                  Text(
-                    'Radius: ${radius.toStringAsFixed(0)} meters',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                if (!_mappingLocked)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Choose where the work happens',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
                   ),
-                ],
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: FlutterMap(
-              mapController: _mapController,
-
-              options: MapOptions(
-                initialCenter: _generatedArea.isEmpty
-                    ? _defaultCenter
-                    : _calculateCenter(_generatedArea),
-                initialZoom: _generatedArea.isEmpty ? 13 : 15,
-
-                onTap: _mappingLocked ? null : _handleMapTap,
-              ),
-
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.scaledcircle.app',
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                  child: SegmentedButton<CampaignAreaShape>(
+                    segments: CampaignAreaShape.values
+                        .map(
+                          (shape) => ButtonSegment<CampaignAreaShape>(
+                            value: shape,
+                            icon: Icon(_shapeIcon(shape)),
+                            label: Text(_shapeLabel(shape)),
+                          ),
+                        )
+                        .toList(),
+                    selected: {_selectedShape},
+                    onSelectionChanged: _mappingLocked
+                        ? null
+                        : (selection) {
+                            _selectShape(selection.first);
+                          },
+                    showSelectedIcon: false,
+                  ),
                 ),
 
-                PolygonLayer(polygons: polygons),
-
-                MarkerLayer(markers: markers),
-              ],
-            ),
-          ),
-
-          Container(
-            constraints: BoxConstraints(
-              maxHeight: _propertyLayerEnabled ? 520 : 285,
-            ),
-            padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  if (_propertyLayerEnabled && _loadingPropertyIntelligence)
-                    const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: CircularProgressIndicator(),
+                if (_mappingLocked)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
+                    child: Card(
+                      child: ListTile(
+                        leading: Icon(Icons.lock_outline),
+                        title: Text('Campaign zone map is locked'),
+                        subtitle: Text(
+                          'The boundary cannot change after campaign launch or '
+                          'Scaler assignment.',
+                        ),
+                      ),
                     ),
-                  if (_propertyLayerEnabled &&
-                      _propertyIntelligence != null) ...[
-                    PropertyIntelligencePanel(
-                      analysis: _propertyIntelligence!,
-                      onCreateCampaign: () =>
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'This selected area is already attached to the current campaign draft. Confirm and save the campaign when ready.',
+                  ),
+
+                SwitchListTile(
+                  value: _propertyLayerEnabled,
+                  secondary: const Icon(Icons.home_work_outlined),
+                  title: const Text('Property Intelligence'),
+                  subtitle: const Text(
+                    'Optional property-age and housing-stock information',
+                  ),
+                  onChanged: _generatedArea.length < 3
+                      ? null
+                      : (enabled) {
+                          setState(() => _propertyLayerEnabled = enabled);
+                          if (enabled && _propertyIntelligence == null) {
+                            _loadPropertyIntelligence();
+                          }
+                        },
+                ),
+
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Column(
+                    children: [
+                      Text(_instructionText(), textAlign: TextAlign.center),
+
+                      if (radius != null) ...[
+                        const SizedBox(height: 6),
+
+                        Text(
+                          'Radius: ${radius.toStringAsFixed(0)} meters',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                SizedBox(
+                  key: const Key('campaign-zone-map-workspace'),
+                  height: mapHeight,
+                  child: FlutterMap(
+                    mapController: _mapController,
+
+                    options: MapOptions(
+                      initialCenter: _generatedArea.isEmpty
+                          ? _defaultCenter
+                          : _calculateCenter(_generatedArea),
+                      initialZoom: _generatedArea.isEmpty ? 13 : 15,
+
+                      onTap: _mappingLocked ? null : _handleMapTap,
+                    ),
+
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.scaledcircle.app',
+                      ),
+
+                      PolygonLayer(polygons: polygons),
+
+                      MarkerLayer(markers: markers),
+                    ],
+                  ),
+                ),
+
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      if (_propertyLayerEnabled && _loadingPropertyIntelligence)
+                        const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      if (_propertyLayerEnabled &&
+                          _propertyIntelligence != null) ...[
+                        PropertyIntelligencePanel(
+                          analysis: _propertyIntelligence!,
+                          onCreateCampaign: () =>
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'This selected area is already attached to the current campaign draft. Confirm and save the campaign when ready.',
+                                  ),
+                                ),
                               ),
+                          onCompare: _showPropertyComparison,
+                          onAskAi: _askPropertyAi,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (metrics != null)
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.analytics_outlined),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Preliminary Zone Intelligence',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 17,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    Chip(
+                                      avatar: const Icon(
+                                        Icons.square_foot,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        '${metrics.areaAcres.toStringAsFixed(1)} acres',
+                                      ),
+                                    ),
+
+                                    Chip(
+                                      avatar: const Icon(
+                                        Icons.directions_walk,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        '${metrics.estimatedWalkingMiles.toStringAsFixed(1)} mi estimated',
+                                      ),
+                                    ),
+
+                                    Chip(
+                                      avatar: const Icon(
+                                        Icons.schedule,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        _formatDuration(
+                                          metrics.estimatedMinutes,
+                                        ),
+                                      ),
+                                    ),
+
+                                    Chip(
+                                      avatar: const Icon(
+                                        Icons.groups_outlined,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        '${metrics.recommendedScalerCount} recommended',
+                                      ),
+                                    ),
+
+                                    Chip(
+                                      avatar: const Icon(
+                                        Icons.attach_money,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        '\$${metrics.suggestedBasePay.toStringAsFixed(0)} preliminary pay',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 8),
+
+                                const Text(
+                                  'These estimates use zone geometry only. '
+                                  'Home counts, actual streets, access conditions, '
+                                  'and route optimization will improve them later.',
+                                  style: TextStyle(fontSize: 12),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ),
                           ),
-                      onCompare: _showPropertyComparison,
-                      onAskAi: _askPropertyAi,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (metrics != null)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.analytics_outlined),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Preliminary Zone Intelligence',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 17,
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                Chip(
-                                  avatar: const Icon(
-                                    Icons.square_foot,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    '${metrics.areaAcres.toStringAsFixed(1)} acres',
-                                  ),
-                                ),
-
-                                Chip(
-                                  avatar: const Icon(
-                                    Icons.directions_walk,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    '${metrics.estimatedWalkingMiles.toStringAsFixed(1)} mi estimated',
-                                  ),
-                                ),
-
-                                Chip(
-                                  avatar: const Icon(Icons.schedule, size: 18),
-                                  label: Text(
-                                    _formatDuration(metrics.estimatedMinutes),
-                                  ),
-                                ),
-
-                                Chip(
-                                  avatar: const Icon(
-                                    Icons.groups_outlined,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    '${metrics.recommendedScalerCount} recommended',
-                                  ),
-                                ),
-
-                                Chip(
-                                  avatar: const Icon(
-                                    Icons.attach_money,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    '\$${metrics.suggestedBasePay.toStringAsFixed(0)} preliminary pay',
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 8),
-
-                            const Text(
-                              'These estimates use zone geometry only. '
-                              'Home counts, actual streets, access conditions, '
-                              'and route optimization will improve them later.',
-                              style: TextStyle(fontSize: 12),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
                         ),
-                      ),
-                    ),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _mappingLocked ||
-                                  (_inputPoints.isEmpty &&
-                                      _generatedArea.isEmpty)
-                              ? null
-                              : _undoLastPoint,
-                          icon: const Icon(Icons.undo),
-                          label: const Text('Undo'),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  _mappingLocked ||
+                                      (_inputPoints.isEmpty &&
+                                          _generatedArea.isEmpty)
+                                  ? null
+                                  : _undoLastPoint,
+                              icon: const Icon(Icons.undo),
+                              label: const Text('Undo'),
+                            ),
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  _mappingLocked ||
+                                      (_inputPoints.isEmpty &&
+                                          _generatedArea.isEmpty)
+                                  ? null
+                                  : _clearArea,
+                              icon: const Icon(Icons.clear),
+                              label: const Text('Clear'),
+                            ),
+                          ),
+                        ],
                       ),
 
-                      const SizedBox(width: 12),
+                      const SizedBox(height: 10),
 
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _mappingLocked ||
-                                  (_inputPoints.isEmpty &&
-                                      _generatedArea.isEmpty)
+                      Text(
+                        '${_shapeLabel(_selectedShape)} • '
+                        '${_generatedArea.length} verification '
+                        'point${_generatedArea.length == 1 ? '' : 's'}',
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          onPressed: _saving || _mappingLocked
                               ? null
-                              : _clearArea,
-                          icon: const Icon(Icons.clear),
-                          label: const Text('Clear'),
+                              : _saveArea,
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.save),
+                          label: Text(
+                            _saving
+                                ? 'Saving & Analyzing...'
+                                : 'Save Campaign Zone',
+                          ),
                         ),
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 10),
-
-                  Text(
-                    '${_shapeLabel(_selectedShape)} • '
-                    '${_generatedArea.length} verification '
-                    'point${_generatedArea.length == 1 ? '' : 's'}',
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton.icon(
-                      onPressed: _saving || _mappingLocked ? null : _saveArea,
-                      icon: _saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.save),
-                      label: Text(
-                        _saving
-                            ? 'Saving & Analyzing...'
-                            : 'Save Campaign Zone',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

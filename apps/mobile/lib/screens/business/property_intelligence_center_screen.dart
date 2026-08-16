@@ -28,6 +28,8 @@ class PropertyIntelligenceCenterScreen extends StatefulWidget {
       _PropertyIntelligenceCenterScreenState();
 }
 
+enum _PropertyDiscoveryMode { serviceAreas, exploreAnywhere }
+
 class _PropertyIntelligenceCenterScreenState
     extends State<PropertyIntelligenceCenterScreen> {
   static const _defaultCenter = LatLng(38.9784, -76.4922);
@@ -36,7 +38,6 @@ class _PropertyIntelligenceCenterScreenState
   final _searchController = TextEditingController();
   final _objectiveController = TextEditingController();
   final _questionController = TextEditingController();
-  final _resultsScrollController = ScrollController();
   final _aiSectionKey = GlobalKey();
   final _aiQuestionFocus = FocusNode();
   final _service = PropertyIntelligenceService();
@@ -62,7 +63,6 @@ class _PropertyIntelligenceCenterScreenState
     _searchController.dispose();
     _objectiveController.dispose();
     _questionController.dispose();
-    _resultsScrollController.dispose();
     _aiQuestionFocus.dispose();
     super.dispose();
   }
@@ -717,255 +717,232 @@ class _PropertyIntelligenceCenterScreenState
           ];
     return Scaffold(
       appBar: AppBar(title: const Text('Property Intelligence')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      body: LayoutBuilder(
+        builder: (context, viewport) {
+          final desktop = viewport.maxWidth >= 760;
+          final mapHeight = desktop
+              ? (viewport.maxHeight * 0.62).clamp(520.0, 760.0)
+              : (viewport.maxHeight * 0.55).clamp(360.0, 560.0);
+          return SingleChildScrollView(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Explore property age and housing-stock patterns before choosing where to market.',
-                ),
-                const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = constraints.maxWidth >= 620
-                        ? (constraints.maxWidth - 12) / 2
-                        : constraints.maxWidth;
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        SizedBox(
-                          width: width,
-                          child: Card(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primaryContainer,
-                            child: InkWell(
-                              key: const Key('property-mode-my-service-areas'),
-                              onTap: _chooseSavedArea,
-                              borderRadius: BorderRadius.circular(12),
-                              child: const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(Icons.home_work_outlined),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      'My Service Areas',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    SizedBox(height: 6),
-                                    Text(
-                                      'Choose one of your saved, named territories and load its mapped area.',
-                                    ),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      'Choose a saved area →',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          width: width,
-                          child: Card(
-                            child: InkWell(
-                              key: const Key('property-mode-explore-anywhere'),
-                              onTap: _exploreAnywhere,
-                              borderRadius: BorderRadius.circular(12),
-                              child: const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(Icons.public),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      'Explore Anywhere',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    SizedBox(height: 6),
-                                    Text(
-                                      'Start with an unrestricted map. Search or draw anywhere supported.',
-                                    ),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      'Open the map →',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                if (_fromSavedArea && _selectedSavedAreaName != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Analyzing: $_selectedSavedAreaName',
-                      key: const Key('selected-saved-property-area'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                if (_area.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _fromSavedArea
-                                ? 'Inside your service area'
-                                : _outsideUsualArea
-                                ? 'Outside your usual service area — manual exploration is always available.'
-                                : 'Explore Anywhere — saved preferences do not restrict manual analysis.',
-                          ),
-                        ),
-                        if (!_fromSavedArea && _outsideUsualArea)
-                          TextButton(
-                            onPressed: _confirmAddToServiceAreas,
-                            child: const Text('Add to Service Areas'),
-                          ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                MappedAddressField(
-                  controller: _searchController,
-                  labelText: 'Search location',
-                  hintText: 'City, ZIP, neighborhood, or address',
-                  onSelected: _selectLocation,
-                ),
-                const SizedBox(height: 10),
-                const Text('Choose area shape'),
-                const SizedBox(height: 6),
-                SegmentedButton<CampaignAreaShape>(
-                  segments: CampaignAreaShape.values
-                      .map(
-                        (shape) => ButtonSegment(
-                          value: shape,
-                          label: Text(CampaignAreaGeometry.label(shape)),
-                        ),
-                      )
-                      .toList(growable: false),
-                  selected: {_shape},
-                  onSelectionChanged: (selection) =>
-                      _selectShape(selection.first),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _defaultCenter,
-                initialZoom: 12,
-                onTap: _addPoint,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.scaledcircle.app',
-                ),
-                PolygonLayer(polygons: polygon),
-                MarkerLayer(
-                  markers: _area
-                      .asMap()
-                      .entries
-                      .map(
-                        (entry) => Marker(
-                          point: entry.value,
-                          width: 34,
-                          height: 34,
-                          child: CircleAvatar(child: Text('${entry.key + 1}')),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            constraints: const BoxConstraints(maxHeight: 500),
-            padding: const EdgeInsets.all(14),
-            child: SingleChildScrollView(
-              controller: _resultsScrollController,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    !CampaignAreaGeometry.isComplete(_shape, _area)
-                        ? 'Draw a ${CampaignAreaGeometry.label(_shape).toLowerCase()} using the same controls as campaign maps.'
-                        : '${CampaignAreaGeometry.label(_shape)} ready with ${_area.length} normalized polygon points. Analysis does not create a campaign.',
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      FilledButton.icon(
-                        onPressed:
-                            CampaignAreaGeometry.isComplete(_shape, _area) &&
-                                !_analyzing
-                            ? _analyzeArea
-                            : null,
-                        icon: _analyzing
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.analytics_outlined),
-                        label: const Text('Analyze Area'),
+                      const Text(
+                        'Explore property age and housing-stock patterns before choosing where to market.',
                       ),
-                      OutlinedButton.icon(
-                        onPressed: _area.isEmpty ? null : _clearArea,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Clear / Change Area'),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Analyze:',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      SegmentedButton<_PropertyDiscoveryMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _PropertyDiscoveryMode.serviceAreas,
+                            icon: Icon(Icons.home_work_outlined),
+                            label: Text('My Service Areas'),
+                          ),
+                          ButtonSegment(
+                            value: _PropertyDiscoveryMode.exploreAnywhere,
+                            icon: Icon(Icons.public),
+                            label: Text('Explore Anywhere'),
+                          ),
+                        ],
+                        selected: {
+                          _fromSavedArea
+                              ? _PropertyDiscoveryMode.serviceAreas
+                              : _PropertyDiscoveryMode.exploreAnywhere,
+                        },
+                        onSelectionChanged: (selection) {
+                          if (selection.first ==
+                              _PropertyDiscoveryMode.serviceAreas) {
+                            _chooseSavedArea();
+                          } else {
+                            _exploreAnywhere();
+                          }
+                        },
+                      ),
+                      if (_fromSavedArea && _selectedSavedAreaName != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Analyzing: $_selectedSavedAreaName',
+                                  key: const Key(
+                                    'selected-saved-property-area',
+                                  ),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              TextButton.icon(
+                                key: const Key('property-change-saved-area'),
+                                onPressed: _chooseSavedArea,
+                                icon: const Icon(Icons.swap_horiz),
+                                label: const Text('Change area'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_area.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _fromSavedArea
+                                      ? 'Inside your service area'
+                                      : _outsideUsualArea
+                                      ? 'Outside your usual service area — manual exploration is always available.'
+                                      : 'Explore Anywhere — saved preferences do not restrict manual analysis.',
+                                ),
+                              ),
+                              if (!_fromSavedArea && _outsideUsualArea)
+                                TextButton(
+                                  onPressed: _confirmAddToServiceAreas,
+                                  child: const Text('Add to Service Areas'),
+                                ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      if (!_fromSavedArea) ...[
+                        MappedAddressField(
+                          controller: _searchController,
+                          labelText: 'Search location',
+                          hintText: 'City, ZIP, neighborhood, or address',
+                          onSelected: _selectLocation,
+                        ),
+                        const SizedBox(height: 10),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SegmentedButton<CampaignAreaShape>(
+                            segments: CampaignAreaShape.values
+                                .map(
+                                  (shape) => ButtonSegment(
+                                    value: shape,
+                                    label: Text(
+                                      CampaignAreaGeometry.label(shape),
+                                    ),
+                                  ),
+                                )
+                                .toList(growable: false),
+                            selected: {_shape},
+                            onSelectionChanged: (selection) =>
+                                _selectShape(selection.first),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  key: const Key('property-map-workspace'),
+                  height: mapHeight,
+                  child: FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: _defaultCenter,
+                      initialZoom: 12,
+                      onTap: _addPoint,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.scaledcircle.app',
+                      ),
+                      PolygonLayer(polygons: polygon),
+                      MarkerLayer(
+                        markers: _area
+                            .asMap()
+                            .entries
+                            .map(
+                              (entry) => Marker(
+                                point: entry.value,
+                                width: 34,
+                                height: 34,
+                                child: CircleAvatar(
+                                  child: Text('${entry.key + 1}'),
+                                ),
+                              ),
+                            )
+                            .toList(growable: false),
                       ),
                     ],
                   ),
-                  if (_analysis != null) ...[
-                    const SizedBox(height: 12),
-                    PropertyIntelligencePanel(
-                      analysis: _analysis!,
-                      onCreateCampaign: _createCampaign,
-                      onCompare: _compareAreas,
-                      onAskAi: _focusAiQuestion,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildPhysicalChannelRecommendation(),
-                    const SizedBox(height: 12),
-                    _buildAiAnalysis(),
-                  ],
-                ],
-              ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        !CampaignAreaGeometry.isComplete(_shape, _area)
+                            ? 'Draw a ${CampaignAreaGeometry.label(_shape).toLowerCase()} using the same controls as campaign maps.'
+                            : '${CampaignAreaGeometry.label(_shape)} ready with ${_area.length} normalized polygon points. Analysis does not create a campaign.',
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            onPressed:
+                                CampaignAreaGeometry.isComplete(
+                                      _shape,
+                                      _area,
+                                    ) &&
+                                    !_analyzing
+                                ? _analyzeArea
+                                : null,
+                            icon: _analyzing
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.analytics_outlined),
+                            label: const Text('Analyze Area'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _area.isEmpty ? null : _clearArea,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Clear / Change Area'),
+                          ),
+                        ],
+                      ),
+                      if (_analysis != null) ...[
+                        const SizedBox(height: 12),
+                        PropertyIntelligencePanel(
+                          analysis: _analysis!,
+                          onCreateCampaign: _createCampaign,
+                          onCompare: _compareAreas,
+                          onAskAi: _focusAiQuestion,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildPhysicalChannelRecommendation(),
+                        const SizedBox(height: 12),
+                        _buildAiAnalysis(),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

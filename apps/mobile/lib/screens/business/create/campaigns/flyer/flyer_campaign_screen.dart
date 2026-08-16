@@ -27,6 +27,12 @@ class FlyerCampaignScreen extends StatefulWidget {
 
 class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _formScrollController = ScrollController();
+  final _materialQuantityKey = GlobalKey();
+  final _campaignNameKey = GlobalKey();
+  final _descriptionKey = GlobalKey();
+  final _scalerCountKey = GlobalKey();
+  final _payKey = GlobalKey();
 
   final campaignNameController = TextEditingController();
   final descriptionController = TextEditingController();
@@ -100,8 +106,51 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     bonusController.dispose();
     scalerCountController.dispose();
     materialQuantityController.dispose();
+    _formScrollController.dispose();
 
     super.dispose();
+  }
+
+  Future<bool> _validateAndRevealFirstError() async {
+    if (_formKey.currentState?.validate() ?? false) return true;
+
+    GlobalKey target = _campaignNameKey;
+    var message = 'Complete the highlighted campaign information.';
+    if (_usesMarketingMaterials &&
+        materialQuantityController.text.trim().isEmpty) {
+      target = _materialQuantityKey;
+      message = _campaignType == 'flyer_distribution'
+          ? 'Enter how many flyers you have.'
+          : 'Enter how many materials you have.';
+    } else if (campaignNameController.text.trim().isEmpty) {
+      target = _campaignNameKey;
+      message = 'Enter a campaign name.';
+    } else if (descriptionController.text.trim().isEmpty) {
+      target = _descriptionKey;
+      message = 'Tell Scalers what this campaign involves.';
+    } else if ((int.tryParse(scalerCountController.text.trim()) ?? 0) < 1) {
+      target = _scalerCountKey;
+      message = 'Enter how many Scalers you need.';
+    } else if ((double.tryParse(payController.text.trim()) ?? 0) <= 0) {
+      target = _payKey;
+      message = 'Enter the Scaler compensation.';
+    }
+
+    final fieldContext = target.currentContext;
+    if (fieldContext != null) {
+      await Scrollable.ensureVisible(
+        fieldContext,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        alignment: 0.18,
+      );
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+    return false;
   }
 
   Future<void> _pickMarketingDate() async {
@@ -250,16 +299,19 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       return;
     }
 
-    if (!_formKey.currentState!.validate()) {
+    if (!await _validateAndRevealFirstError()) {
+      return;
+    }
+    if (!mounted) {
       return;
     }
     final logisticsError = _usesMarketingMaterials
         ? _materialLogistics.validate()
         : null;
     if (logisticsError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(logisticsError)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(logisticsError)));
       return;
     }
 
@@ -333,12 +385,6 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       return;
     }
 
-    final marketplaceQuote = await _billingService.campaignQuoteEstimate(
-      maximumWorkerBudget,
-    );
-    final platformFee = marketplaceQuote['platformFee']!;
-    final totalCampaignCost = marketplaceQuote['totalCharge']!;
-
     setState(() {
       publishing = true;
     });
@@ -346,6 +392,12 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     DocumentReference<Map<String, dynamic>>? campaignReference;
 
     try {
+      final marketplaceQuote = await _billingService.campaignQuoteEstimate(
+        maximumWorkerBudget,
+      );
+      final platformFee = marketplaceQuote['platformFee']!;
+      final totalCampaignCost = marketplaceQuote['totalCharge']!;
+
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
@@ -431,16 +483,14 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
           'materialHandoffScheduledAt': _materialLogistics.scheduledAt == null
               ? null
               : Timestamp.fromDate(_materialLogistics.scheduledAt!),
-          'materialHandoffWindowEndAt':
-              _materialLogistics.windowEndAt == null
+          'materialHandoffWindowEndAt': _materialLogistics.windowEndAt == null
               ? null
               : Timestamp.fromDate(_materialLogistics.windowEndAt!),
-          'materialHandoffPrintingShopName':
-              _materialLogistics.printingShopName.trim(),
-          'materialHandoffOrderReference':
-              _materialLogistics.orderReference.trim(),
-          'materialHandoffInstructions':
-              _materialLogistics.instructions.trim(),
+          'materialHandoffPrintingShopName': _materialLogistics.printingShopName
+              .trim(),
+          'materialHandoffOrderReference': _materialLogistics.orderReference
+              .trim(),
+          'materialHandoffInstructions': _materialLogistics.instructions.trim(),
         });
       }
 
@@ -575,7 +625,10 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       final zonesConfigured = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
-          builder: (_) => CampaignZonesScreen(campaign: campaignSnapshot),
+          builder: (_) => CampaignZonesScreen(
+            campaign: campaignSnapshot,
+            startWithAreaBuilder: true,
+          ),
         ),
       );
 
@@ -758,504 +811,530 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const Text(
-                'Create Campaign',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1080),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                controller: _formScrollController,
+                padding: const EdgeInsets.all(20),
+                children: [
+                  const _CampaignCreationSteps(currentStep: 1),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Create Campaign',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  ),
 
-              const SizedBox(height: 8),
+                  const SizedBox(height: 8),
 
-              const Text(
-                'Choose the kind of field work, configure materials, '
-                'schedule the campaign, and secure Scaler compensation.',
-              ),
+                  const Text(
+                    'Choose the kind of field work, configure materials, '
+                    'schedule the campaign, and secure Scaler compensation.',
+                  ),
 
-              const SizedBox(height: 28),
+                  const SizedBox(height: 28),
 
-              RadioGroup<String>(
-                groupValue: _campaignType,
-                onChanged: (value) {
-                  if (publishing || value == null) {
-                    return;
-                  }
+                  RadioGroup<String>(
+                    groupValue: _campaignType,
+                    onChanged: (value) {
+                      if (publishing || value == null) {
+                        return;
+                      }
 
-                  setState(() {
-                    _campaignType = value;
-                  });
-                },
-                child: Column(
-                  children:
-                      [
-                        'flyer_distribution',
-                        'door_hanger_distribution',
-                        'business_card_distribution',
-                        'yard_sign_installation',
-                        'dump_run',
-                        'event_marketing',
-                      ].map((type) {
-                        return Card(
-                          child: RadioListTile<String>(
-                            value: type,
-                            title: Text(
-                              _campaignTypeLabel(type),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                      setState(() {
+                        _campaignType = value;
+                      });
+                    },
+                    child: Column(
+                      children:
+                          [
+                            'flyer_distribution',
+                            'door_hanger_distribution',
+                            'business_card_distribution',
+                            'yard_sign_installation',
+                            'dump_run',
+                            'event_marketing',
+                          ].map((type) {
+                            return Card(
+                              child: RadioListTile<String>(
+                                value: type,
+                                title: Text(
+                                  _campaignTypeLabel(type),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: Text(_campaignTypeDescription(type)),
+                              ),
+                            );
+                          }).toList(),
+                    ),
+                  ),
+
+                  if (_requiresExactLocations) ...[
+                    const SizedBox(height: 10),
+
+                    Card(
+                      color: Colors.blue.shade50,
+                      child: const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.location_on_outlined),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'This campaign uses exact locations rather than '
+                                'a canvassing zone. After this screen we will '
+                                'configure addresses and map pins.',
                               ),
                             ),
-                            subtitle: Text(_campaignTypeDescription(type)),
-                          ),
-                        );
-                      }).toList(),
-                ),
-              ),
-
-              if (_requiresExactLocations) ...[
-                const SizedBox(height: 10),
-
-                Card(
-                  color: Colors.blue.shade50,
-                  child: const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.location_on_outlined),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'This campaign uses exact locations rather than '
-                            'a canvassing zone. After this screen we will '
-                            'configure addresses and map pins.',
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-
-              if (_usesMarketingMaterials) ...[
-                const SizedBox(height: 28),
-
-                const Text(
-                  'Marketing Materials',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 12),
-
-                DropdownButtonFormField<String>(
-                  initialValue: _materialSource,
-                  decoration: const InputDecoration(
-                    labelText: 'Material Source',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'business_provided',
-                      child: Text('I Already Have My Materials'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'scaled_circle_generated',
-                      child: Text(
-                        'Create Tracked Materials with Scaled Circle',
                       ),
                     ),
-                    DropdownMenuItem(
-                      value: 'printed_by_scaled_circle',
-                      child: Text('Scaled Circle Printing'),
+                  ],
+
+                  if (_usesMarketingMaterials) ...[
+                    const SizedBox(height: 28),
+
+                    const Text(
+                      'Marketing Materials',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    DropdownButtonFormField<String>(
+                      initialValue: _materialSource,
+                      decoration: const InputDecoration(
+                        labelText: 'Material Source',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'business_provided',
+                          child: Text('I Already Have My Materials'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'scaled_circle_generated',
+                          child: Text(
+                            'Create Tracked Materials with Scaled Circle',
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'printed_by_scaled_circle',
+                          child: Text('Scaled Circle Printing'),
+                        ),
+                      ],
+                      onChanged: publishing
+                          ? null
+                          : (value) {
+                              if (value == null) {
+                                return;
+                              }
+
+                              setState(() {
+                                _materialSource = value;
+                              });
+                            },
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Text(
+                      _materialSourceLabel(_materialSource),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    TextFormField(
+                      key: _materialQuantityKey,
+                      controller: materialQuantityController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Material Quantity',
+                        hintText: 'Example: 500',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (!_usesMarketingMaterials) {
+                          return null;
+                        }
+
+                        if (value == null || value.trim().isEmpty) {
+                          return _campaignType == 'flyer_distribution'
+                              ? 'Enter how many flyers you have'
+                              : 'Enter the material quantity';
+                        }
+
+                        final quantity = int.tryParse(value.trim());
+
+                        if (quantity == null || quantity < 1) {
+                          return 'Enter a valid quantity';
+                        }
+
+                        return null;
+                      },
+                    ),
+
+                    if (_usesMarketingMaterials) ...[
+                      const SizedBox(height: 20),
+                      MaterialFulfillmentForm(
+                        value: _materialLogistics,
+                        enabled: !publishing,
+                        onChanged: (value) {
+                          setState(() => _materialLogistics = value);
+                        },
+                      ),
+                    ],
+
+                    if (_materialSource == 'scaled_circle_generated') ...[
+                      const SizedBox(height: 16),
+
+                      Card(
+                        color: Colors.green.shade50,
+                        child: const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.auto_awesome_outlined),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Scaled Circle-created materials can eventually '
+                                  'include campaign QR codes, tracking phone '
+                                  'numbers, landing pages, and forwarding email '
+                                  'addresses so leads can be attributed to this '
+                                  'campaign.',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Track responses from this campaign'),
+                      subtitle: const Text(
+                        'Use QR codes, landing pages, calls and campaign links to see what generates responses.',
+                      ),
+                      value: _trackingEnabled,
+                      onChanged: publishing
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _trackingEnabled = value;
+                              });
+                            },
                     ),
                   ],
-                  onChanged: publishing
-                      ? null
-                      : (value) {
-                          if (value == null) {
-                            return;
-                          }
 
-                          setState(() {
-                            _materialSource = value;
-                          });
-                        },
-                ),
+                  const SizedBox(height: 28),
 
-                const SizedBox(height: 10),
+                  TextFormField(
+                    key: _campaignNameKey,
+                    controller: campaignNameController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Campaign Name',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Enter a campaign name';
+                      }
 
-                Text(
-                  _materialSourceLabel(_materialSource),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-
-                const SizedBox(height: 18),
-
-                TextFormField(
-                  controller: materialQuantityController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Material Quantity',
-                    hintText: 'Example: 500',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (!_usesMarketingMaterials) {
                       return null;
-                    }
-
-                    if (value == null || value.trim().isEmpty) {
-                      return null;
-                    }
-
-                    final quantity = int.tryParse(value.trim());
-
-                    if (quantity == null || quantity < 1) {
-                      return 'Enter a valid quantity';
-                    }
-
-                    return null;
-                  },
-                ),
-
-                if (_usesMarketingMaterials) ...[
-                  const SizedBox(height: 20),
-                  MaterialFulfillmentForm(
-                    value: _materialLogistics,
-                    enabled: !publishing,
-                    onChanged: (value) {
-                      setState(() => _materialLogistics = value);
                     },
                   ),
-                ],
 
-                if (_materialSource == 'scaled_circle_generated') ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
+
+                  TextFormField(
+                    key: _descriptionKey,
+                    controller: descriptionController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Tell Scalers what this campaign involves';
+                      }
+
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  const Text(
+                    'Campaign Schedule',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+
+                  const SizedBox(height: 12),
 
                   Card(
-                    color: Colors.green.shade50,
-                    child: const Padding(
+                    child: ListTile(
+                      leading: const Icon(Icons.calendar_month),
+                      title: const Text('Campaign Date'),
+                      subtitle: Text(_formatDate(_marketingDate)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: publishing ? null : _pickMarketingDate,
+                    ),
+                  ),
+
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.play_circle_outline),
+                      title: const Text('Start Time'),
+                      subtitle: Text(_formatTime(_startTime)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: publishing ? null : _pickStartTime,
+                    ),
+                  ),
+
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.timer_outlined),
+                      title: const Text('Completion Deadline'),
+                      subtitle: Text(_formatTime(_deadlineTime)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: publishing ? null : _pickDeadlineTime,
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  const Text(
+                    'Staffing',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  TextFormField(
+                    key: _scalerCountKey,
+                    controller: scalerCountController,
+                    enabled: AppEnvironmentConfig.isLocal,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) {
+                      setState(() {});
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Scalers Needed',
+                      helperText: AppEnvironmentConfig.isLocal
+                          ? 'Local staging supports multi-Scaler testing.'
+                          : 'Multi-Scaler crews — Private Beta. Production campaigns currently use 1 Scaler.',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.groups_outlined),
+                    ),
+                    validator: (value) {
+                      final count = int.tryParse(value?.trim() ?? '');
+
+                      if (count == null || count < 1) {
+                        return 'Enter at least 1 Scaler';
+                      }
+
+                      if (count > 12) {
+                        return 'Enter 12 or fewer for now';
+                      }
+
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  const Text(
+                    'Compensation',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  TextFormField(
+                    key: _payKey,
+                    controller: payController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) {
+                      setState(() {});
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Base Pay per Scaler (\$)',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Enter the Scaler compensation';
+                      }
+
+                      final amount = double.tryParse(value.trim());
+
+                      if (amount == null || amount <= 0) {
+                        return 'Enter an amount greater than zero';
+                      }
+
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  TextFormField(
+                    controller: bonusController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onChanged: (_) {
+                      setState(() {});
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Completion Bonus per Scaler (\$)',
+                      helperText: 'Paid when completion requirements are met.',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return null;
+                      }
+
+                      final bonus = double.tryParse(value.trim());
+
+                      if (bonus == null || bonus < 0) {
+                        return 'Enter a valid amount';
+                      }
+
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 22),
+
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.receipt_long_outlined),
+                              SizedBox(width: 10),
+                              Text(
+                                'Campaign Cost',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          _costRow(
+                            'SCALER PAY',
+                            previewWorkerBudget,
+                            bold: true,
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          const Text(
+                            'PLATFORM FEE\nCalculated before checkout',
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          const Text(
+                            'ESTIMATED TOTAL\nShown when the authoritative amount is available',
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          const Text(
+                            '1 credit = \$1. An active monthly subscription '
+                            'is required to publish campaigns.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  const Card(
+                    child: Padding(
                       padding: EdgeInsets.all(16),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.auto_awesome_outlined),
+                          Icon(Icons.account_balance_wallet_outlined),
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Scaled Circle-created materials can eventually '
-                              'include campaign QR codes, tracking phone '
-                              'numbers, landing pages, and forwarding email '
-                              'addresses so leads can be attributed to this '
-                              'campaign.',
+                              'Worker compensation is secured before the '
+                              'campaign becomes visible to Scalers. '
+                              'The campaign platform fee is charged when '
+                              'the campaign launches.',
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ],
 
-                const SizedBox(height: 16),
+                  const SizedBox(height: 32),
 
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Enable Campaign Tracking'),
-                  subtitle: const Text(
-                    'Prepare this campaign for QR, phone, website, '
-                    'landing-page, and email attribution.',
-                  ),
-                  value: _trackingEnabled,
-                  onChanged: publishing
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _trackingEnabled = value;
-                          });
-                        },
-                ),
-              ],
-
-              const SizedBox(height: 28),
-
-              TextFormField(
-                controller: campaignNameController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Campaign Name',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Required';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 20),
-
-              TextFormField(
-                controller: descriptionController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Required';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 28),
-
-              const Text(
-                'Campaign Schedule',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.calendar_month),
-                  title: const Text('Campaign Date'),
-                  subtitle: Text(_formatDate(_marketingDate)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: publishing ? null : _pickMarketingDate,
-                ),
-              ),
-
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.play_circle_outline),
-                  title: const Text('Start Time'),
-                  subtitle: Text(_formatTime(_startTime)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: publishing ? null : _pickStartTime,
-                ),
-              ),
-
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.timer_outlined),
-                  title: const Text('Completion Deadline'),
-                  subtitle: Text(_formatTime(_deadlineTime)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: publishing ? null : _pickDeadlineTime,
-                ),
-              ),
-
-              const SizedBox(height: 28),
-
-              const Text(
-                'Staffing',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: scalerCountController,
-                enabled: AppEnvironmentConfig.isLocal,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) {
-                  setState(() {});
-                },
-                decoration: InputDecoration(
-                  labelText: 'Scalers Needed',
-                  helperText: AppEnvironmentConfig.isLocal
-                      ? 'Local staging supports multi-Scaler testing.'
-                      : 'Multi-Scaler crews — Private Beta. Production campaigns currently use 1 Scaler.',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.groups_outlined),
-                ),
-                validator: (value) {
-                  final count = int.tryParse(value?.trim() ?? '');
-
-                  if (count == null || count < 1) {
-                    return 'Enter at least 1 Scaler';
-                  }
-
-                  if (count > 12) {
-                    return 'Enter 12 or fewer for now';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 28),
-
-              const Text(
-                'Compensation',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: payController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textInputAction: TextInputAction.next,
-                onChanged: (_) {
-                  setState(() {});
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Base Pay per Scaler (\$)',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Required';
-                  }
-
-                  final amount = double.tryParse(value.trim());
-
-                  if (amount == null || amount <= 0) {
-                    return 'Enter an amount greater than zero';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 20),
-
-              TextFormField(
-                controller: bonusController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textInputAction: TextInputAction.done,
-                onChanged: (_) {
-                  setState(() {});
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Completion Bonus per Scaler (\$)',
-                  helperText: 'Paid when completion requirements are met.',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return null;
-                  }
-
-                  final bonus = double.tryParse(value.trim());
-
-                  if (bonus == null || bonus < 0) {
-                    return 'Enter a valid amount';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 22),
-
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.receipt_long_outlined),
-                          SizedBox(width: 10),
-                          Text(
-                            'Campaign Cost',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                  SizedBox(
+                    height: 55,
+                    child: ElevatedButton.icon(
+                      onPressed: publishing ? null : publishCampaign,
+                      icon: publishing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              _usesCampaignZones
+                                  ? Icons.map_outlined
+                                  : Icons.location_on_outlined,
                             ),
-                          ),
-                        ],
+                      label: Text(
+                        publishing
+                            ? 'Creating Campaign...'
+                            : _usesCampaignZones
+                            ? 'Create & Define Zones'
+                            : 'Create & Define Locations',
                       ),
-
-                      const SizedBox(height: 14),
-
-                      _costRow('Scaler compensation', previewWorkerBudget),
-
-                      const SizedBox(height: 8),
-
-                      const Text(
-                        'The secure backend calculates the Platform Fee and '
-                        'final charge before checkout.',
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      const Text(
-                        '1 credit = \$1. An active monthly subscription '
-                        'is required to publish campaigns.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-
-              const SizedBox(height: 12),
-
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.account_balance_wallet_outlined),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Worker compensation is secured before the '
-                          'campaign becomes visible to Scalers. '
-                          'The campaign platform fee is charged when '
-                          'the campaign launches.',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              SizedBox(
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: publishing ? null : publishCampaign,
-                  icon: publishing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          _usesCampaignZones
-                              ? Icons.map_outlined
-                              : Icons.location_on_outlined,
-                        ),
-                  label: Text(
-                    publishing
-                        ? 'Creating Campaign...'
-                        : _usesCampaignZones
-                        ? 'Create & Define Zones'
-                        : 'Create & Define Locations',
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1282,4 +1361,25 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       ],
     );
   }
+}
+
+class _CampaignCreationSteps extends StatelessWidget {
+  const _CampaignCreationSteps({required this.currentStep});
+
+  final int currentStep;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Campaign setup step $currentStep of 4',
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: const [
+        Chip(label: Text('1  Campaign')),
+        Chip(label: Text('2  Materials')),
+        Chip(label: Text('3  Area')),
+        Chip(label: Text('4  Review & Fund')),
+      ],
+    ),
+  );
 }
