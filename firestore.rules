@@ -416,6 +416,32 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Social account projections contain display/capability state only. Tokens,
+    // provider credentials, approval authority, and publishing results are backend-only.
+    match /socialConnections/{businessId}/providers/{providerId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
+    match /socialPostDrafts/{draftId} {
+      allow read: if isApprovedAccount() && resource.data.businessUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /socialPublishingJobs/{jobId} {
+      allow read: if isApprovedAccount() && resource.data.businessUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /socialMediaLibraries/{businessId}/items/{mediaId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
+    match /socialConnectionCredentials/{document=**} {
+      allow read, write: if false;
+    }
+
     // Areas and discovery preferences are separate from identity and billing.
     // Owners can read their sanitized projection; versioned writes and matching
     // flow through platform-core so clients cannot spoof role or match reasons.

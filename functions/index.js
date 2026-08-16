@@ -47,6 +47,7 @@ const subscriptionEntitlements = require("./subscription_entitlements");
 const managedGrowth = require("./managed_growth");
 const managedGrowthProfile = require("./managed_growth_profile");
 const managedGrowthDelivery = require("./managed_growth_delivery");
+const socialWorkflow = require("./social_workflow");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
 
@@ -4101,6 +4102,144 @@ exports.deliverManagedGrowthArtifact = onCall(
     }
     return {status: alreadyQueued ? "already_queued" : "queued",
       artifactDeliveryEmail: delivery.recipient, attachmentIncluded: false};
+  },
+);
+
+/** Returns capability-driven provider availability without credentials. */
+exports.getSocialProviderAvailability = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    await requireManagedGrowthBusiness(request);
+    return {schemaVersion: socialWorkflow.PROVIDER_POLICY_VERSION,
+      providers: socialWorkflow.providerAvailability()};
+  },
+);
+
+/** Creates reviewable platform-specific posts from an owned generated artifact. */
+exports.createSocialPostDraft = onCall(
+  {enforceAppCheck: false, maxInstances: 6},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    const artifactId = readText(request.data?.artifactId, 160);
+    const artifactSnapshot = await db.collection("managedGrowthArtifacts").doc(artifactId).get();
+    if (!artifactSnapshot.exists || artifactSnapshot.data()?.businessUid !== business.uid ||
+        artifactSnapshot.data()?.artifactType !== "social_package") {
+      throw new HttpsError("permission-denied", "That Social draft is not available.");
+    }
+    let draft;
+    try {
+      draft = socialWorkflow.createDraft({uid: business.uid, artifactId,
+        title: artifactSnapshot.data()?.title, posts: request.data?.posts, now: Date.now()});
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Review the Social post content and try again.");
+    }
+    await db.collection("socialPostDrafts").doc(draft.id).set({
+      ...draft.record, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: false});
+    return {draftId: draft.id, status: draft.record.status,
+      contentVersion: draft.record.contentVersion};
+  },
+);
+
+/** Saves edits and invalidates any earlier approval. */
+exports.updateSocialPostDraft = onCall(
+  {enforceAppCheck: false, maxInstances: 6},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    const draftId = readText(request.data?.draftId, 160);
+    const ref = db.collection("socialPostDrafts").doc(draftId);
+    let updated;
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      try { updated = socialWorkflow.editDraft({uid: business.uid, record: snapshot.data(),
+        posts: request.data?.posts, now: Date.now()}); } catch (error) {
+        const code = String(error?.message || error);
+        throw new HttpsError(code.includes("not_owned") ? "permission-denied" : "failed-precondition",
+          "This Social draft cannot be edited.");
+      }
+      transaction.set(ref, {...updated, createdAt: snapshot.data().createdAt,
+        updatedAt: FieldValue.serverTimestamp()});
+    });
+    return {draftId, status: updated.status, contentVersion: updated.contentVersion};
+  },
+);
+
+/** Records explicit Business approval of one exact content version. */
+exports.approveSocialPostDraft = onCall(
+  {enforceAppCheck: false, maxInstances: 6},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    const draftId = readText(request.data?.draftId, 160);
+    const ref = db.collection("socialPostDrafts").doc(draftId);
+    let approved;
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      try { approved = socialWorkflow.approveDraft({uid: business.uid, record: snapshot.data(),
+        contentVersion: request.data?.contentVersion, now: Date.now()}); } catch (error) {
+        const code = String(error?.message || error);
+        throw new HttpsError(code.includes("not_owned") ? "permission-denied" : "failed-precondition",
+          "Review the latest version before approving.");
+      }
+      transaction.set(ref, {...approved, createdAt: snapshot.data().createdAt,
+        approvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    });
+    return {draftId, status: approved.status,
+      approvedContentVersion: approved.approvedContentVersion};
+  },
+);
+
+/** Schedules an approved version; unavailable provider connections fail closed. */
+exports.scheduleSocialPostDraft = onCall(
+  {enforceAppCheck: false, maxInstances: 6},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    const draftId = readText(request.data?.draftId, 160);
+    const draftSnapshot = await db.collection("socialPostDrafts").doc(draftId).get();
+    if (!draftSnapshot.exists || draftSnapshot.data()?.businessUid !== business.uid) {
+      throw new HttpsError("permission-denied", "That Social draft is not available.");
+    }
+    const draft = {...draftSnapshot.data(), id: draftId};
+    const jobs = [];
+    for (let index = 0; index < (draft.posts || []).length; index += 1) {
+      const provider = draft.posts[index]?.provider;
+      const connectionSnapshot = await db.collection("socialConnections").doc(business.uid)
+        .collection("providers").doc(provider).get();
+      try { jobs.push(socialWorkflow.publishingJob({uid: business.uid, draft, postIndex: index,
+        connection: connectionSnapshot.data(), scheduledFor: request.data?.scheduledFor,
+        now: Date.now()})); } catch (error) {
+        if (String(error?.message || error).includes("connection")) {
+          throw new HttpsError("failed-precondition", "This social account needs to be connected before scheduling.");
+        }
+        throw new HttpsError("failed-precondition", "Approve the latest version before scheduling.");
+      }
+    }
+    const batch = db.batch();
+    for (const job of jobs) batch.set(db.collection("socialPublishingJobs").doc(job.id), {
+      ...job.record, scheduledFor: Timestamp.fromDate(new Date(job.record.scheduledFor)),
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: false});
+    batch.update(draftSnapshot.ref, {status: "scheduled", updatedAt: FieldValue.serverTimestamp()});
+    await batch.commit();
+    return {draftId, status: "scheduled", jobCount: jobs.length};
+  },
+);
+
+/** Registers one owner-scoped image after direct Storage upload. */
+exports.registerSocialMediaItem = onCall(
+  {enforceAppCheck: false, maxInstances: 6},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    let media;
+    try { media = socialWorkflow.mediaRecord({uid: business.uid,
+      mediaId: request.data?.mediaId, storagePath: request.data?.storagePath,
+      filename: request.data?.filename, category: request.data?.category,
+      description: request.data?.description, now: Date.now()}); } catch (_) {
+      throw new HttpsError("invalid-argument", "Choose a valid Business photo.");
+    }
+    await db.collection("socialMediaLibraries").doc(business.uid).collection("items")
+      .doc(media.mediaId).set({...media, createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()});
+    return {mediaId: media.mediaId, status: media.status};
   },
 );
 

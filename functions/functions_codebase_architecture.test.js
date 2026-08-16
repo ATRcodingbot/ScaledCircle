@@ -20,6 +20,8 @@ const expected = [
   "setApplicationAdminRole", "confirmAdminLoginReadiness", "createAdminIssue",
   "saveBusinessGrowthProfile", "generateManagedGrowthArtifact",
   "saveArtifactDeliveryPreference", "deliverManagedGrowthArtifact",
+  "getSocialProviderAvailability", "createSocialPostDraft", "updateSocialPostDraft",
+  "approveSocialPostDraft", "scheduleSocialPostDraft", "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences", "evaluateOpportunityMatch",
 ];

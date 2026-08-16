@@ -6,6 +6,7 @@ import '../../services/artifact_download.dart';
 import '../../services/artifact_export_service.dart';
 import '../../services/managed_growth_service.dart';
 import 'business_growth_profile_wizard.dart';
+import 'social_approval_screen.dart';
 
 class ManagedGrowthScreen extends StatefulWidget {
   const ManagedGrowthScreen({super.key, this.postcardHandoff});
@@ -97,12 +98,6 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
     }
   }
 
-  List<String> _lines(String value) => value
-      .split(RegExp(r'[,\n]'))
-      .map((v) => v.trim())
-      .where((v) => v.isNotEmpty)
-      .toList(growable: false);
-
   Future<void> _editProfile() async {
     final payload = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
@@ -137,7 +132,8 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
     final budget = TextEditingController(
       text: _profile?.data['plannedAdBudget']?.toString() ?? '',
     );
-    final platforms = TextEditingController(text: 'Facebook, Instagram');
+    final selectedPlatforms = <String>{'Facebook', 'Instagram'};
+    var socialAction = 'Call us';
     final audience = TextEditingController();
     var mode = 'organic_only';
     if (!mounted) return;
@@ -193,15 +189,64 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                       helperText: 'Actual Spend: Not connected',
                     ),
                   ),
-                if (type == 'social_package')
-                  TextField(
-                    controller: platforms,
+                if (type == 'social_package') ...[
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Where should we prepare these posts?'),
+                  ),
+                  Wrap(
+                    spacing: 6,
+                    children:
+                        ['Facebook', 'Instagram', 'Google Business', 'LinkedIn']
+                            .map(
+                              (platform) => FilterChip(
+                                label: Text(platform),
+                                selected: selectedPlatforms.contains(platform),
+                                onSelected: (selected) => setModalState(
+                                  () => selected
+                                      ? selectedPlatforms.add(platform)
+                                      : selectedPlatforms.remove(platform),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: socialAction,
                     decoration: const InputDecoration(
-                      labelText: 'Platforms',
-                      helperText:
-                          'Facebook, Instagram, Google Business Profile, LinkedIn, etc.',
+                      labelText: 'What should people do?',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Call us',
+                        child: Text('Call us'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Request an estimate',
+                        child: Text('Request an estimate'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Visit our website',
+                        child: Text('Visit our website'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Send us a message',
+                        child: Text('Send us a message'),
+                      ),
+                    ],
+                    onChanged: (value) => setModalState(
+                      () => socialAction = value ?? socialAction,
                     ),
                   ),
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.photo_outlined),
+                    title: Text('Want to use a photo?'),
+                    subtitle: Text(
+                      'Choose or upload your photo after the posts are ready. Create Image is Coming Soon / Beta.',
+                    ),
+                  ),
+                ],
                 if (type == 'email_sequence')
                   TextField(
                     controller: audience,
@@ -235,16 +280,23 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
       try {
         final value = await _service.generate(
           artifactType: type,
-          instruction: instruction.text,
+          instruction: type == 'social_package'
+              ? '${instruction.text.trim()}\nPeople should: $socialAction'
+                    .trim()
+              : instruction.text,
           mode: mode,
-          platforms: _lines(platforms.text),
+          platforms: selectedPlatforms.toList(),
           audience: audience.text,
           plannedBudget: num.tryParse(budget.text),
           propertyContext: widget.postcardHandoff,
         );
         if (mounted) {
           setState(() => _artifacts[type] = value);
-          await _view(value, onRegenerate: () => _generate(type, title));
+          if (type == 'social_package') {
+            await _openSocial(value, title);
+          } else {
+            await _view(value, onRegenerate: () => _generate(type, title));
+          }
         }
       } on FirebaseFunctionsException catch (error) {
         if (mounted) {
@@ -260,9 +312,22 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
     }
     instruction.dispose();
     budget.dispose();
-    platforms.dispose();
     audience.dispose();
   }
+
+  Future<void> _openSocial(ManagedGrowthArtifact artifact, String title) =>
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SocialApprovalScreen(
+            artifact: artifact,
+            businessName: _businessName,
+            onMore: () => _view(
+              artifact,
+              onRegenerate: () => _generate('social_package', title),
+            ),
+          ),
+        ),
+      );
 
   String get _businessName =>
       _profile?.data['businessName']?.toString() ?? 'Your business';
@@ -660,31 +725,57 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                             alignment: WrapAlignment.end,
                             spacing: 6,
                             runSpacing: 6,
-                            children: [
-                              TextButton(
-                                onPressed: () => _view(
-                                  artifact,
-                                  onRegenerate: () =>
-                                      _generate(item.type, friendlyTitle),
-                                ),
-                                child: const Text('View'),
-                              ),
-                              TextButton.icon(
-                                onPressed: () => _download(artifact),
-                                icon: const Icon(Icons.download_outlined),
-                                label: const Text('Download'),
-                              ),
-                              TextButton.icon(
-                                onPressed: () => _email(artifact),
-                                icon: const Icon(Icons.email_outlined),
-                                label: const Text('Email'),
-                              ),
-                              TextButton.icon(
-                                onPressed: () => _copy(artifact),
-                                icon: const Icon(Icons.copy_all_outlined),
-                                label: const Text('Copy All'),
-                              ),
-                            ],
+                            children: item.type == 'social_package'
+                                ? [
+                                    FilledButton.tonalIcon(
+                                      onPressed: () =>
+                                          _openSocial(artifact, friendlyTitle),
+                                      icon: const Icon(Icons.preview_outlined),
+                                      label: const Text('Preview & Approve'),
+                                    ),
+                                    PopupMenuButton<String>(
+                                      tooltip: 'More',
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(
+                                          value: 'view',
+                                          child: Text(
+                                            'Download / Email / Copy All',
+                                          ),
+                                        ),
+                                      ],
+                                      onSelected: (_) => _view(
+                                        artifact,
+                                        onRegenerate: () =>
+                                            _generate(item.type, friendlyTitle),
+                                      ),
+                                      child: const Chip(label: Text('More')),
+                                    ),
+                                  ]
+                                : [
+                                    TextButton(
+                                      onPressed: () => _view(
+                                        artifact,
+                                        onRegenerate: () =>
+                                            _generate(item.type, friendlyTitle),
+                                      ),
+                                      child: const Text('View'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => _download(artifact),
+                                      icon: const Icon(Icons.download_outlined),
+                                      label: const Text('Download'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => _email(artifact),
+                                      icon: const Icon(Icons.email_outlined),
+                                      label: const Text('Email'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => _copy(artifact),
+                                      icon: const Icon(Icons.copy_all_outlined),
+                                      label: const Text('Copy All'),
+                                    ),
+                                  ],
                           ),
                         ),
                     ],

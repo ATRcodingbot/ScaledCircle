@@ -102,6 +102,19 @@ beforeEach(async () => {
       businessUid: "business-one", artifactDeliveryEmail: "files@example.test",
       schemaVersion: "ArtifactDeliveryPreferencesV1",
     });
+    await db.doc("socialConnections/business-one/providers/facebook").set({
+      businessUid: "business-one", provider: "facebook", connectionStatus: "connected",
+    });
+    await db.doc("socialPostDrafts/social-one").set({
+      businessUid: "business-one", status: "ready_for_review", contentVersion: 1,
+    });
+    await db.doc("socialPublishingJobs/job-one").set({
+      businessUid: "business-one", status: "scheduled",
+    });
+    await db.doc("socialMediaLibraries/business-one/items/media-one").set({
+      businessUid: "business-one", status: "ready",
+    });
+    await db.doc("socialConnectionCredentials/private-one").set({token: "server-only"});
   });
 });
 
@@ -121,6 +134,23 @@ test("Managed Growth profiles and artifacts are owner-readable and backend-write
   await assertFails(owner.doc("artifactDeliveryPreferences/business-one").update({
     artifactDeliveryEmail: "forged@example.test",
   }));
+});
+
+test("Social records are owner-readable and all authority remains backend-only", async () => {
+  const owner = store("business-one");
+  const other = store("business-two");
+  for (const path of [
+    "socialConnections/business-one/providers/facebook",
+    "socialPostDrafts/social-one",
+    "socialPublishingJobs/job-one",
+    "socialMediaLibraries/business-one/items/media-one",
+  ]) {
+    await assertSucceeds(owner.doc(path).get());
+    await assertFails(other.doc(path).get());
+    await assertFails(owner.doc(path).update({status: "published"}));
+  }
+  await assertFails(owner.doc("socialConnectionCredentials/private-one").get());
+  await assertFails(owner.doc("socialConnectionCredentials/private-one").set({token: "forged"}));
 });
 
 test("discovery preferences are owner-readable and backend-write-only", async () => {

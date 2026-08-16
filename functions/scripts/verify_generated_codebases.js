@@ -30,6 +30,12 @@ const expectedExports = [
   "generateManagedGrowthArtifact",
   "saveArtifactDeliveryPreference",
   "deliverManagedGrowthArtifact",
+  "getSocialProviderAvailability",
+  "createSocialPostDraft",
+  "updateSocialPostDraft",
+  "approveSocialPostDraft",
+  "scheduleSocialPostDraft",
+  "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences",
   "evaluateOpportunityMatch",
@@ -71,4 +77,4 @@ for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer"
   assert.doesNotMatch(walletLock, new RegExp(forbiddenPackage));
 }
 
-console.log("Verified generated dependencies, 25 platform-core exports, and one isolated wallet-core export.");
+console.log("Verified generated dependencies, 31 platform-core exports, and one isolated wallet-core export.");

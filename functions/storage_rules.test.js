@@ -139,3 +139,15 @@ test("group material proof is scoped to the participant handoff identity", async
     "material_handoffs/scaler-two/group-zone__participant-one/stolen.jpg",
   ).put(new Uint8Array([1]), {contentType: "image/jpeg"}));
 });
+
+test("Business social media is private, bounded, and owner controlled", async () => {
+  const photo = ref("business-one", "social_media/business-one/media-one/deck.jpg");
+  await assertSucceeds(photo.put(new Uint8Array([1, 2, 3]), {contentType: "image/jpeg"}));
+  await assertSucceeds(photo.getDownloadURL());
+  await assertFails(ref("scaler-one", photo.fullPath).getDownloadURL());
+  await assertFails(ref("scaler-one", "social_media/business-one/media-two/stolen.jpg")
+    .put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await assertFails(ref("business-one", "social_media/business-one/media-three/file.txt")
+    .put(new Uint8Array([1]), {contentType: "text/plain"}));
+  await assertSucceeds(photo.delete());
+});
