@@ -416,6 +416,10 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /artifactDeliveryEmailJobs/{jobId} {
+      allow read, create, update, delete: if false;
+    }
+
     // Social account projections contain display/capability state only. Tokens,
     // provider credentials, approval authority, and publishing results are backend-only.
     match /socialConnections/{businessId}/providers/{providerId} {

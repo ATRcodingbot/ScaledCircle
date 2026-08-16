@@ -54,3 +54,58 @@ test("saved delivery preference is dedicated and contains no identity or billing
     assert.equal(Object.hasOwn(value, field), false);
   }
 });
+
+test("artifact worker sends one validated backend job through the supplied SMTP adapter", async () => {
+  const prepared = delivery.prepareDelivery({uid: "business-one",
+    recipient: "owner@example.test", artifactId: "artifact-one", artifactDocument,
+    businessName: "Business One", now: Date.UTC(2026, 7, 16)});
+  let sentMessage;
+  let markedSent;
+  const result = await delivery.processArtifactEmailJob({jobId: prepared.jobId,
+    job: prepared.job, senderEmail: "support@scaledcircle.com",
+    senderName: "Scaled Circle Support", reject: async () => assert.fail("valid job rejected"),
+    claim: async () => true, sendMail: async (message) => {
+      sentMessage = message; return {messageId: "mock-message"};
+    }, markSent: async (id) => { markedSent = id; },
+    markFailed: async () => assert.fail("valid send failed"), logFailure: () => {}});
+  assert.equal(result.status, "sent");
+  assert.equal(sentMessage.to, "owner@example.test");
+  assert.match(sentMessage.text, /Here is|ORGANIC SOCIAL DRAFT|ScaledCircle created/);
+  assert.doesNotMatch(sentMessage.text, /internal-model|inputTokens|promptVersion/);
+  assert.equal(markedSent, "mock-message");
+});
+
+test("artifact worker rejects malformed and bulk-recipient jobs without SMTP", async () => {
+  const prepared = delivery.prepareDelivery({uid: "business-one",
+    recipient: "owner@example.test", artifactId: "artifact-one", artifactDocument,
+    businessName: "Business One", now: Date.UTC(2026, 7, 16)});
+  for (const job of [
+    {...prepared.job, schemaVersion: "wrong"},
+    {...prepared.job, to: "one@example.test,two@example.test"},
+    {...prepared.job, businessUid: ""},
+  ]) {
+    let rejected = false;
+    const result = await delivery.processArtifactEmailJob({jobId: prepared.jobId, job,
+      senderEmail: "support@scaledcircle.com", senderName: "Scaled Circle Support",
+      reject: async () => { rejected = true; }, claim: async () => assert.fail("invalid job claimed"),
+      sendMail: async () => assert.fail("invalid job sent"),
+      markSent: async () => assert.fail("invalid job marked sent"),
+      markFailed: async () => assert.fail("invalid job marked failed"), logFailure: () => {}});
+    assert.equal(result.status, "rejected");
+    assert.equal(rejected, true);
+  }
+});
+
+test("artifact worker claim prevents duplicate SMTP delivery", async () => {
+  const prepared = delivery.prepareDelivery({uid: "business-one",
+    recipient: "owner@example.test", artifactId: "artifact-one", artifactDocument,
+    businessName: "Business One", now: Date.UTC(2026, 7, 16)});
+  let sends = 0;
+  const result = await delivery.processArtifactEmailJob({jobId: prepared.jobId,
+    job: prepared.job, senderEmail: "support@scaledcircle.com",
+    senderName: "Scaled Circle Support", reject: async () => {}, claim: async () => false,
+    sendMail: async () => { sends += 1; }, markSent: async () => {},
+    markFailed: async () => {}, logFailure: () => {}});
+  assert.equal(result.status, "already_claimed");
+  assert.equal(sends, 0);
+});

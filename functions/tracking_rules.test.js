@@ -179,25 +179,40 @@ test("private tracking evidence is readable only by owner, campaign business, an
   await assertFails(environment.unauthenticatedContext().firestore().doc("trackingSessions/session-one").get());
 });
 
-test("outbound email jobs cannot be read or authored by clients", async () => {
+test("email jobs cannot be read or authored by clients", async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
     await context.firestore().doc("outboundEmailJobs/welcome-user_test").set({
       to: "user@example.test",
       fromAddress: "support@scaledcircle.com",
       status: "queued",
     });
+    await context.firestore().doc("artifactDeliveryEmailJobs/artifact_test").set({
+      to: "user@example.test",
+      businessUid: "business-one",
+      artifactId: "artifact-one",
+      status: "queued",
+    });
   });
   for (const uid of ["scaler-one", "business-one", "admin-one"]) {
     const db = store(uid);
     await assertFails(db.doc("outboundEmailJobs/welcome-user_test").get());
+    await assertFails(db.doc("artifactDeliveryEmailJobs/artifact_test").get());
     await assertFails(db.doc("outboundEmailJobs/arbitrary").set({
       to: "attacker@example.test",
       fromAddress: "spoof@example.test",
       status: "queued",
     }));
+    await assertFails(db.doc("artifactDeliveryEmailJobs/arbitrary").set({
+      to: "attacker@example.test",
+      businessUid: uid,
+      artifactId: "forged",
+      status: "queued",
+    }));
   }
   await assertFails(environment.unauthenticatedContext().firestore()
     .doc("outboundEmailJobs/arbitrary").set({to: "attacker@example.test"}));
+  await assertFails(environment.unauthenticatedContext().firestore()
+    .doc("artifactDeliveryEmailJobs/arbitrary").set({to: "attacker@example.test"}));
 });
 
 test("admin issues and admin audit events are admin-readable and server-written", async () => {

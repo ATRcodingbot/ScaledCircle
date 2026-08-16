@@ -11,6 +11,7 @@ const sourceRoot = path.join(root, "functions");
 const platformRoot = path.join(root, "functions-platform");
 const legacyRoot = path.join(root, "functions-legacy");
 const walletRoot = path.join(root, "functions-wallet");
+const artifactEmailRoot = path.join(root, "functions-artifact-email");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -48,6 +49,8 @@ const platformExports = new Set([
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);
 const walletExports = new Set(["ensureLegacyWalletProjection"]);
+const artifactEmailExports = new Set(["sendArtifactDeliveryEmailJob"]);
+const artifactEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
 const allSecretNames = new Set([
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD",
   "SUPPORT_EMAIL_SMTP_PASSWORD",
@@ -115,12 +118,16 @@ function transformIndex(mode) {
   const ast = parser.parse(source, {sourceType: "script", plugins: ["optionalChaining"]});
   if (mode === "platform") selectedProgram(ast, platformExports);
   if (mode === "wallet") selectedProgram(ast, walletExports);
+  if (mode === "artifact-email") selectedProgram(ast, artifactEmailExports);
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
-    const excludedFromLegacy = new Set([...platformExports, ...walletExports]);
+    const excludedFromLegacy = new Set([
+      ...platformExports, ...walletExports, ...artifactEmailExports,
+    ]);
     if (name && (
       (mode === "platform" && !platformExports.has(name)) ||
       (mode === "wallet" && !walletExports.has(name)) ||
+      (mode === "artifact-email" && !artifactEmailExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -131,6 +138,7 @@ function transformIndex(mode) {
       if (!identifier || !allSecretNames.has(identifier)) return true;
       if (mode === "platform") return platformSecrets.has(identifier);
       if (mode === "wallet") return false;
+      if (mode === "artifact-email") return artifactEmailSecrets.has(identifier);
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -151,6 +159,8 @@ function copyPackage(destination, mode) {
     if (name === "index.js" || (!name.endsWith(".js") &&
         !["package.json", "package-lock.json"].includes(name))) continue;
     if (mode === "wallet" && name.endsWith(".js")) continue;
+    if (mode === "artifact-email" && name.endsWith(".js") &&
+        name !== "managed_growth_delivery.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -162,6 +172,8 @@ function writePackageManifest(mode, destination) {
     ? ["firebase-admin", "firebase-functions", "openai"]
     : mode === "wallet"
       ? ["firebase-admin", "firebase-functions"]
+      : mode === "artifact-email"
+        ? ["firebase-admin", "firebase-functions", "nodemailer"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
@@ -188,6 +200,7 @@ function writePackageManifest(mode, destination) {
 
 for (const [mode, destination] of [
   ["legacy", legacyRoot], ["platform", platformRoot], ["wallet", walletRoot],
+  ["artifact-email", artifactEmailRoot],
 ]) {
   resetDirectory(destination);
   copyPackage(destination, mode);
@@ -197,4 +210,4 @@ for (const [mode, destination] of [
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
 
-console.log("Generated isolated legacy, platform-core, and wallet-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, wallet-core, and artifact-email Functions packages.");

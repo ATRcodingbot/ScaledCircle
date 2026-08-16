@@ -9,6 +9,9 @@ const root = path.resolve(__dirname, "..");
 const platform = fs.readFileSync(path.join(root, "functions-platform", "index.js"), "utf8");
 const legacy = fs.readFileSync(path.join(root, "functions-legacy", "index.js"), "utf8");
 const wallet = fs.readFileSync(path.join(root, "functions-wallet", "index.js"), "utf8");
+const artifactEmail = fs.readFileSync(path.join(root, "functions-artifact-email", "index.js"), "utf8");
+const artifactEmailDelivery = fs.readFileSync(
+  path.join(root, "functions-artifact-email", "managed_growth_delivery.js"), "utf8");
 const expected = [
   "analyzePropertyIntelligence", "analyzeScaleIntelligence",
   "notifyOnCampaignApplicationCreated", "notifyOnCampaignApplicationUpdated",
@@ -31,6 +34,10 @@ const platformPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-pl
 const legacyPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-legacy", "package.json"), "utf8"));
 const walletPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-wallet", "package.json"), "utf8"));
 const walletLock = fs.readFileSync(path.join(root, "functions-wallet", "package-lock.json"), "utf8");
+const artifactEmailPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-artifact-email", "package.json"), "utf8"));
+const artifactEmailLock = fs.readFileSync(
+  path.join(root, "functions-artifact-email", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -52,10 +59,30 @@ test("wallet-core owns exactly one secret-free callable with no duplicate assign
   for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
     assert.doesNotMatch(walletLock, new RegExp(forbiddenPackage));
   }
-  const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet)]
+  const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet),
+    exportsIn(artifactEmail)]
     .map((exports) => [...new Set(exports)]);
   const all = inventories.flat();
   assert.equal(new Set(all).size, all.length);
+});
+
+test("artifact-email owns one isolated support-SMTP worker on a distinct queue", () => {
+  assert.deepEqual(exportsIn(artifactEmail), ["sendArtifactDeliveryEmailJob"]);
+  assert.doesNotMatch(legacy, /exports\.sendArtifactDeliveryEmailJob\s*=/);
+  assert.match(artifactEmail,
+    /const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret\("SUPPORT_EMAIL_SMTP_PASSWORD"\)/);
+  assert.match(`${artifactEmail}\n${artifactEmailDelivery}`, /artifactDeliveryEmailJobs/);
+  for (const forbidden of [
+    "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
+    "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "OPENAI_API_KEY", "CENSUS_API_KEY",
+    "stripeClient", "stripeWebhook",
+  ]) assert.doesNotMatch(artifactEmail, new RegExp(forbidden));
+  for (const forbiddenPackage of ["node_modules/stripe", "openai"]) {
+    assert.doesNotMatch(artifactEmailLock, new RegExp(forbiddenPackage));
+  }
+  const legacyWorker = legacy.slice(legacy.indexOf("exports.sendOutboundEmailJob"),
+    legacy.indexOf("exports.localOpportunityAlerts"));
+  assert.doesNotMatch(legacyWorker, /artifact_delivery_v1|artifactDeliveryEmailJobs/);
 });
 
 test("platform-core is isolated from legacy and unrelated provider secrets", () => {
@@ -122,7 +149,7 @@ test("new notification triggers do not silently enable production retries", () =
 
 test("generated codebase preparation installs dependencies after regeneration", () => {
   for (const codebase of firebaseConfig.functions.filter((item) =>
-    ["default", "platform-core", "wallet-core"].includes(item.codebase))) {
+    ["default", "platform-core", "wallet-core", "artifact-email"].includes(item.codebase))) {
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }
   assert.deepEqual(Object.keys(platformPackage.dependencies).sort(), [
@@ -133,5 +160,8 @@ test("generated codebase preparation installs dependencies after regeneration", 
   ]);
   assert.deepEqual(Object.keys(walletPackage.dependencies).sort(), [
     "firebase-admin", "firebase-functions",
+  ]);
+  assert.deepEqual(Object.keys(artifactEmailPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions", "nodemailer",
   ]);
 });
