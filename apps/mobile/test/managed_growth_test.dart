@@ -114,8 +114,9 @@ void main() {
     final subscription = File(
       'lib/screens/business/subscription_screen.dart',
     ).readAsStringSync();
-    expect(public, contains('MANAGED GROWTH — LIMITED BETA'));
-    expect(public, contains('vendor costs are separate'));
+    expect(public, contains("name: 'MANAGED GROWTH'"));
+    expect(public, contains("badge: 'LIMITED BETA'"));
+    expect(public, contains('third-party vendors are separately approved'));
     expect(subscription, contains("plan: 'managed_growth'"));
     expect(subscription, contains('Advertising spend, printing, postage'));
   });

@@ -80,12 +80,11 @@ void main() {
       final source = File(
         'lib/screens/public/public_landing_screen.dart',
       ).readAsStringSync();
-      expect(source, contains("'AI PROPERTY INTELLIGENCE'"));
-      expect(source, contains(r'Included with Scale — \$499/month'));
-      expect(source, contains(r"'Unlock with Scale — \$499/month'"));
+      expect(source, contains('PROPERTY OPPORTUNITY • EXAMPLE'));
+      expect(source, contains('Included with Scale'));
       expect(source, isNot(contains('analyzePropertyIntelligence')));
-      expect(source, contains('DATA-INFORMED LOCAL CAMPAIGNS'));
-      expect(source, contains('qualified AI analysis'));
+      expect(source, contains('See the opportunity before you spend.'));
+      expect(source, contains('trustworthy local facts'));
     },
   );
 

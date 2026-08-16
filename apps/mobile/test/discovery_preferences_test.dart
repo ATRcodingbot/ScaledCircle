@@ -81,8 +81,8 @@ void main() {
       final property = File(
         'lib/screens/business/property_intelligence_center_screen.dart',
       ).readAsStringSync();
-      expect(property, contains("Text('My Service Areas')"));
-      expect(property, contains("Text('Explore Anywhere')"));
+      expect(property, contains("'My Service Areas'"));
+      expect(property, contains("'Explore Anywhere'"));
       expect(property, contains('Inside your service area'));
       expect(property, contains('manual exploration is always available'));
       expect(property, contains("Text('Add to Service Areas')"));

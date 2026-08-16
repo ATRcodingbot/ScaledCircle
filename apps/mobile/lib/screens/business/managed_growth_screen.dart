@@ -680,8 +680,108 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 12, bottom: 6),
                 child: Text(
-                  'What do you want to work on today?',
+                  'WHAT DO YOU WANT TO WORK ON?',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                ),
+              ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth >= 720
+                      ? (constraints.maxWidth - 24) / 3
+                      : constraints.maxWidth;
+                  final priority =
+                      (_profile?.data['priorityServices'] as List? ?? const [])
+                          .map((value) => value.toString())
+                          .where((value) => value.isNotEmpty)
+                          .firstOrNull;
+                  final choices = <(IconData, String, String)>[
+                    (
+                      Icons.calendar_month_outlined,
+                      'Create this week’s marketing',
+                      'social_package',
+                    ),
+                    (
+                      Icons.trending_up,
+                      priority == null
+                          ? 'Help me get more jobs'
+                          : 'Help me get more $priority jobs',
+                      'business_analysis',
+                    ),
+                    (
+                      Icons.rate_review_outlined,
+                      'Review my social posts',
+                      'social_package',
+                    ),
+                    (
+                      Icons.event_note_outlined,
+                      'Build a 30-day plan',
+                      'growth_plan_30_day',
+                    ),
+                    (
+                      Icons.campaign_outlined,
+                      'Promote a service',
+                      'advertising_plan',
+                    ),
+                    (
+                      Icons.travel_explore_outlined,
+                      'Analyze an area',
+                      'business_analysis',
+                    ),
+                  ];
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: choices
+                        .map(
+                          (choice) => SizedBox(
+                            width: width,
+                            child: Card(
+                              child: InkWell(
+                                onTap: () {
+                                  final existing = _artifacts[choice.$3];
+                                  if (choice.$2 == 'Review my social posts' &&
+                                      existing != null) {
+                                    _openSocial(existing, choice.$2);
+                                  } else {
+                                    _generate(choice.$3, choice.$2);
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: 112,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(choice.$1),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          choice.$2,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 24, bottom: 6),
+                child: Text(
+                  'More Marketing Tools',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
               ),
               ..._packages.map((item) {

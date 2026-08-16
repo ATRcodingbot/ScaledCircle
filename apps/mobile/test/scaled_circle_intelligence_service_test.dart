@@ -75,8 +75,11 @@ void main() {
     final source = File(
       'lib/screens/public/public_landing_screen.dart',
     ).readAsStringSync();
-    expect(source, contains('AI PROPERTY INTELLIGENCE'));
-    expect(source, contains('AI Weather Intelligence'));
-    expect(source, contains('official property and Census information'));
+    expect(source, contains('PROPERTY OPPORTUNITY • EXAMPLE'));
+    expect(source, contains('WEATHER OPPORTUNITY • ILLUSTRATION'));
+    expect(
+      source,
+      contains('Official weather facts remain separate from AI interpretation.'),
+    );
   });
 }

@@ -188,9 +188,7 @@ class _PropertyIntelligenceCenterScreenState
                   .map(
                     (area) => SimpleDialogOption(
                       onPressed: () => Navigator.pop(context, area),
-                      child: Text(
-                        area['name']?.toString() ?? 'Service area',
-                      ),
+                      child: Text(area['name']?.toString() ?? 'Service area'),
                     ),
                   )
                   .toList(),
@@ -274,11 +272,9 @@ class _PropertyIntelligenceCenterScreenState
       final analysis = await _service.analyzeArea(_geometry);
       if (!mounted) return;
       setState(() {
-        _outsideUsualArea = !_fromSavedArea &&
-            !_areaContextService.overlapsSavedArea(
-              _area,
-              _savedAreaContexts,
-            );
+        _outsideUsualArea =
+            !_fromSavedArea &&
+            !_areaContextService.overlapsSavedArea(_area, _savedAreaContexts);
         _analysis = analysis;
         _aiInterpretation = null;
         final analysisId = analysis.data['analysisId']?.toString();
@@ -287,10 +283,11 @@ class _PropertyIntelligenceCenterScreenState
         );
         _analyses.add(
           _ExploratoryAnalysis(
-            label: _selectedSavedAreaName ??
+            label:
+                _selectedSavedAreaName ??
                 (_searchController.text.trim().isEmpty
-                ? 'Analysis ${_analyses.length + 1}'
-                : _searchController.text.trim()),
+                    ? 'Analysis ${_analyses.length + 1}'
+                    : _searchController.text.trim()),
             geometry: List<Map<String, double>>.from(_geometry),
             analysis: analysis,
           ),
@@ -731,21 +728,95 @@ class _PropertyIntelligenceCenterScreenState
                   'Explore property age and housing-stock patterns before choosing where to market.',
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: _chooseSavedArea,
-                      icon: const Icon(Icons.home_work_outlined),
-                      label: const Text('My Service Areas'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _exploreAnywhere,
-                      icon: const Icon(Icons.public),
-                      label: const Text('Explore Anywhere'),
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth >= 620
+                        ? (constraints.maxWidth - 12) / 2
+                        : constraints.maxWidth;
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: width,
+                          child: Card(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer,
+                            child: InkWell(
+                              key: const Key('property-mode-my-service-areas'),
+                              onTap: _chooseSavedArea,
+                              borderRadius: BorderRadius.circular(12),
+                              child: const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(Icons.home_work_outlined),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      'My Service Areas',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      'Choose one of your saved, named territories and load its mapped area.',
+                                    ),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      'Choose a saved area →',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: width,
+                          child: Card(
+                            child: InkWell(
+                              key: const Key('property-mode-explore-anywhere'),
+                              onTap: _exploreAnywhere,
+                              borderRadius: BorderRadius.circular(12),
+                              child: const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(Icons.public),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      'Explore Anywhere',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      'Start with an unrestricted map. Search or draw anywhere supported.',
+                                    ),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      'Open the map →',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 if (_fromSavedArea && _selectedSavedAreaName != null)
                   Padding(

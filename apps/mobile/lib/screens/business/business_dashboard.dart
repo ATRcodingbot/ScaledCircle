@@ -31,6 +31,178 @@ class BusinessDashboard extends StatefulWidget {
   State<BusinessDashboard> createState() => _BusinessDashboardState();
 }
 
+class _BusinessGoalGrid extends StatelessWidget {
+  const _BusinessGoalGrid({
+    required this.onFindOpportunity,
+    required this.onCreateMarketing,
+    required this.onLaunchCampaign,
+    required this.onReviewResults,
+    required this.hasResults,
+  });
+
+  final VoidCallback onFindOpportunity;
+  final VoidCallback onCreateMarketing;
+  final VoidCallback onLaunchCampaign;
+  final VoidCallback onReviewResults;
+  final bool hasResults;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = [
+      _GoalCard(
+        key: const Key('business-goal-find-opportunity'),
+        icon: Icons.travel_explore,
+        title: 'FIND AN OPPORTUNITY',
+        description: 'Explore Property, Weather, and local intelligence.',
+        onTap: onFindOpportunity,
+      ),
+      _GoalCard(
+        key: const Key('business-goal-create-marketing'),
+        icon: Icons.auto_awesome_outlined,
+        title: 'CREATE MARKETING',
+        description: 'Prepare social, SEO, email, ads, and direct mail.',
+        onTap: onCreateMarketing,
+      ),
+      _GoalCard(
+        key: const Key('business-goal-launch-campaign'),
+        icon: Icons.rocket_launch_outlined,
+        title: 'LAUNCH A CAMPAIGN',
+        description: 'Choose the map, Scalers, materials, and tracking.',
+        onTap: onLaunchCampaign,
+      ),
+      _GoalCard(
+        key: const Key('business-goal-review-results'),
+        icon: Icons.insights_outlined,
+        title: 'REVIEW RESULTS',
+        description: hasResults
+            ? 'Review campaign response, proof, and activity.'
+            : 'Results will appear after your first campaign starts.',
+        onTap: hasResults ? onReviewResults : null,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 820
+            ? 4
+            : constraints.maxWidth >= 520
+            ? 2
+            : 1;
+        final width = (constraints.maxWidth - ((columns - 1) * 12)) / columns;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: cards
+              .map((card) => SizedBox(width: width, child: card))
+              .toList(),
+        );
+      },
+    );
+  }
+}
+
+class _GoalCard extends StatelessWidget {
+  const _GoalCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String title;
+  final String description;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: onTap != null,
+    enabled: onTap != null,
+    label: '$title. $description',
+    child: Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 170),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: AppColors.primary, size: 30),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  description,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const Spacer(),
+                if (onTap != null)
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Icon(Icons.arrow_forward, semanticLabel: 'Open'),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _BusinessToday extends StatelessWidget {
+  const _BusinessToday({
+    required this.activeCampaigns,
+    required this.needsReview,
+  });
+  final int activeCampaigns;
+  final int needsReview;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'THIS WEEK',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          if (needsReview > 0)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
+                Icons.rate_review_outlined,
+                color: AppColors.warning,
+              ),
+              title: Text(
+                '$needsReview campaign${needsReview == 1 ? '' : 's'} need your review',
+              ),
+            ),
+          if (activeCampaigns > 0)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
+                Icons.campaign_outlined,
+                color: AppColors.primary,
+              ),
+              title: Text(
+                '$activeCampaigns active campaign${activeCampaigns == 1 ? '' : 's'}',
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _BusinessDashboardState extends State<BusinessDashboard> {
   final WalletService _walletService = WalletService();
 
@@ -485,7 +657,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 .doc(user.uid)
                 .snapshots(),
             builder: (context, snapshot) {
-              final role = snapshot.data?.data()?['role']
+              final role = snapshot.data
+                  ?.data()?['role']
                   ?.toString()
                   .toLowerCase();
               if (role != 'admin') return const SizedBox.shrink();
@@ -509,7 +682,37 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               ),
             ),
             icon: const Icon(Icons.apps_outlined),
-            label: const Text('ScaledCircle Services'),
+            label: const Text('Grow'),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Business navigation',
+            icon: const Icon(Icons.menu),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'home', child: Text('Home')),
+              PopupMenuItem(value: 'grow', child: Text('Grow')),
+              PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
+              PopupMenuItem(value: 'results', child: Text('Results')),
+              PopupMenuItem(value: 'account', child: Text('Account')),
+            ],
+            onSelected: (value) {
+              if (value == 'grow') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ScaledCircleServicesScreen(),
+                  ),
+                );
+              } else if (value == 'campaigns') {
+                _openCreateCampaign(context, user.uid);
+              } else if (value == 'account') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BusinessProfileScreen(),
+                  ),
+                );
+              }
+            },
           ),
           const AccountModeSwitchButton(targetView: UserRole.scaler),
           StreamBuilder<QuerySnapshot>(
@@ -632,15 +835,20 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               ),
               children: [
                 DashboardHero(
-                  eyebrow: 'Business command center',
-                  title: 'Turn local opportunity into verified results.',
+                  eyebrow: 'BUSINESS HOME',
+                  title: 'Good morning. What do you want to accomplish?',
                   description:
-                      'Launch mapped campaigns, fund Scaler work, and monitor '
-                      'proof from one live workspace.',
-                  primaryActionLabel: 'Launch a Campaign',
-                  primaryActionIcon: Icons.rocket_launch_outlined,
+                      'Choose a goal. ScaledCircle will take you to the right tools without making you sort through every feature.',
+                  primaryActionLabel: 'Find an Opportunity',
+                  primaryActionIcon: Icons.travel_explore_outlined,
                   onPrimaryAction: () {
-                    _openCreateCampaign(context, user.uid);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const PropertyIntelligenceCenterScreen(),
+                      ),
+                    );
                   },
                   metrics: [
                     DashboardPill(
@@ -662,7 +870,44 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 22),
+
+                _BusinessGoalGrid(
+                  onFindOpportunity: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PropertyIntelligenceCenterScreen(),
+                    ),
+                  ),
+                  onCreateMarketing: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ManagedGrowthScreen(),
+                    ),
+                  ),
+                  onLaunchCampaign: () =>
+                      _openCreateCampaign(context, user.uid),
+                  onReviewResults: () {
+                    if (campaigns.isEmpty) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            CampaignDetailsScreen(campaign: campaigns.first),
+                      ),
+                    );
+                  },
+                  hasResults: campaigns.isNotEmpty,
+                ),
+                const SizedBox(height: 24),
+
+                if (activeCampaigns.isNotEmpty || submittedCampaigns.isNotEmpty)
+                  _BusinessToday(
+                    activeCampaigns: activeCampaigns.length,
+                    needsReview: submittedCampaigns.length,
+                  ),
+                if (activeCampaigns.isNotEmpty || submittedCampaigns.isNotEmpty)
+                  const SizedBox(height: 24),
 
                 _buildWalletSection(),
                 const SizedBox(height: 16),
