@@ -23,9 +23,19 @@ function runNpmCi(cwd) {
   run(npmCommand, ["ci", "--ignore-scripts"], cwd);
 }
 
+function prunePackageLock(cwd) {
+  if (process.platform === "win32") {
+    run(process.env.ComSpec || "cmd.exe",
+      ["/d", "/s", "/c", "npm.cmd install --package-lock-only --ignore-scripts"], cwd);
+    return;
+  }
+  run(npmCommand, ["install", "--package-lock-only", "--ignore-scripts"], cwd);
+}
+
 run(process.execPath, [path.join(__dirname, "generate_functions_codebases.js")], root);
 
-for (const directory of ["functions-platform", "functions-legacy"]) {
+for (const directory of ["functions-platform", "functions-legacy", "functions-wallet"]) {
+  if (directory === "functions-wallet") prunePackageLock(path.join(root, directory));
   runNpmCi(path.join(root, directory));
 }
 

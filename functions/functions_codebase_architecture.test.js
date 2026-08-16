@@ -8,6 +8,7 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const platform = fs.readFileSync(path.join(root, "functions-platform", "index.js"), "utf8");
 const legacy = fs.readFileSync(path.join(root, "functions-legacy", "index.js"), "utf8");
+const wallet = fs.readFileSync(path.join(root, "functions-wallet", "index.js"), "utf8");
 const expected = [
   "analyzePropertyIntelligence", "analyzeScaleIntelligence",
   "notifyOnCampaignApplicationCreated", "notifyOnCampaignApplicationUpdated",
@@ -25,6 +26,8 @@ const expected = [
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 const platformPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-platform", "package.json"), "utf8"));
 const legacyPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-legacy", "package.json"), "utf8"));
+const walletPackage = JSON.parse(fs.readFileSync(path.join(root, "functions-wallet", "package.json"), "utf8"));
+const walletLock = fs.readFileSync(path.join(root, "functions-wallet", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -33,6 +36,23 @@ function exportsIn(source) {
 test("platform-core has the exact reviewed public exports", () => {
   assert.deepEqual([...new Set(exportsIn(platform))].sort(), [...expected].sort());
   for (const name of expected) assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+});
+
+test("wallet-core owns exactly one secret-free callable with no duplicate assignment", () => {
+  assert.deepEqual(exportsIn(wallet), ["ensureLegacyWalletProjection"]);
+  assert.doesNotMatch(legacy, /exports\.ensureLegacyWalletProjection\s*=/);
+  for (const forbidden of [
+    "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
+    "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
+    "OPENAI_API_KEY", "CENSUS_API_KEY", "stripeClient", "stripeWebhook",
+  ]) assert.doesNotMatch(wallet, new RegExp(forbidden));
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(walletLock, new RegExp(forbiddenPackage));
+  }
+  const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet)]
+    .map((exports) => [...new Set(exports)]);
+  const all = inventories.flat();
+  assert.equal(new Set(all).size, all.length);
 });
 
 test("platform-core is isolated from legacy and unrelated provider secrets", () => {
@@ -98,7 +118,8 @@ test("new notification triggers do not silently enable production retries", () =
 });
 
 test("generated codebase preparation installs dependencies after regeneration", () => {
-  for (const codebase of firebaseConfig.functions.filter((item) => ["default", "platform-core"].includes(item.codebase))) {
+  for (const codebase of firebaseConfig.functions.filter((item) =>
+    ["default", "platform-core", "wallet-core"].includes(item.codebase))) {
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }
   assert.deepEqual(Object.keys(platformPackage.dependencies).sort(), [
@@ -106,5 +127,8 @@ test("generated codebase preparation installs dependencies after regeneration", 
   ]);
   assert.deepEqual(Object.keys(legacyPackage.dependencies).sort(), [
     "firebase-admin", "firebase-functions", "nodemailer", "stripe",
+  ]);
+  assert.deepEqual(Object.keys(walletPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
   ]);
 });

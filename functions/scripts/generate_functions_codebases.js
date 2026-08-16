@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..", "..");
 const sourceRoot = path.join(root, "functions");
 const platformRoot = path.join(root, "functions-platform");
 const legacyRoot = path.join(root, "functions-legacy");
+const walletRoot = path.join(root, "functions-wallet");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -38,6 +39,7 @@ const platformExports = new Set([
 ]);
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);
+const walletExports = new Set(["ensureLegacyWalletProjection"]);
 const allSecretNames = new Set([
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD",
   "SUPPORT_EMAIL_SMTP_PASSWORD",
@@ -60,7 +62,7 @@ function exportedName(statement) {
   return left.property.name;
 }
 
-function platformProgram(ast) {
+function selectedProgram(ast, selectedExports) {
   const retained = new Set();
   const queued = [];
   let programPath;
@@ -74,7 +76,7 @@ function platformProgram(ast) {
 
   for (const statementPath of programPath.get("body")) {
     const name = exportedName(statementPath.node);
-    if (name && platformExports.has(name)) retain(statementPath);
+    if (name && selectedExports.has(name)) retain(statementPath);
     if (statementPath.isExpressionStatement()) {
       const callee = statementPath.node.expression?.callee;
       if (callee?.type === "Identifier" && ["initializeApp", "setGlobalOptions"].includes(callee.name)) {
@@ -103,17 +105,25 @@ function platformProgram(ast) {
 function transformIndex(mode) {
   const source = fs.readFileSync(path.join(sourceRoot, "index.js"), "utf8");
   const ast = parser.parse(source, {sourceType: "script", plugins: ["optionalChaining"]});
-  if (mode === "platform") platformProgram(ast);
+  if (mode === "platform") selectedProgram(ast, platformExports);
+  if (mode === "wallet") selectedProgram(ast, walletExports);
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
-    if (name && (mode === "platform" ? !platformExports.has(name) : platformExports.has(name))) {
+    const excludedFromLegacy = new Set([...platformExports, ...walletExports]);
+    if (name && (
+      (mode === "platform" && !platformExports.has(name)) ||
+      (mode === "wallet" && !walletExports.has(name)) ||
+      (mode === "legacy" && excludedFromLegacy.has(name))
+    )) {
       return [];
     }
     if (statement.type !== "VariableDeclaration") return [statement];
     const declarations = statement.declarations.filter((declaration) => {
       const identifier = declaration.id?.type === "Identifier" ? declaration.id.name : null;
       if (!identifier || !allSecretNames.has(identifier)) return true;
-      return mode === "platform" ? platformSecrets.has(identifier) : !platformSecrets.has(identifier);
+      if (mode === "platform") return platformSecrets.has(identifier);
+      if (mode === "wallet") return false;
+      return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
   });
@@ -125,13 +135,14 @@ function resetDirectory(destination) {
   fs.mkdirSync(destination, {recursive: true});
 }
 
-function copyPackage(destination) {
+function copyPackage(destination, mode) {
   for (const name of fs.readdirSync(sourceRoot)) {
     const source = path.join(sourceRoot, name);
     if (!fs.statSync(source).isFile()) continue;
     if (name.endsWith(".test.js")) continue;
     if (name === "index.js" || (!name.endsWith(".js") &&
         !["package.json", "package-lock.json"].includes(name))) continue;
+    if (mode === "wallet" && name.endsWith(".js")) continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -141,7 +152,9 @@ function writePackageManifest(mode, destination) {
   const sourceLock = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package-lock.json"), "utf8"));
   const dependencyNames = mode === "platform"
     ? ["firebase-admin", "firebase-functions", "openai"]
-    : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
+    : mode === "wallet"
+      ? ["firebase-admin", "firebase-functions"]
+      : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
     name: `scaledcircle-functions-${mode}`,
@@ -165,13 +178,15 @@ function writePackageManifest(mode, destination) {
   fs.writeFileSync(path.join(destination, "package-lock.json"), `${JSON.stringify(generatedLock, null, 2)}\n`);
 }
 
-for (const [mode, destination] of [["legacy", legacyRoot], ["platform", platformRoot]]) {
+for (const [mode, destination] of [
+  ["legacy", legacyRoot], ["platform", platformRoot], ["wallet", walletRoot],
+]) {
   resetDirectory(destination);
-  copyPackage(destination);
+  copyPackage(destination, mode);
   writePackageManifest(mode, destination);
   fs.writeFileSync(path.join(destination, "index.js"), transformIndex(mode));
   fs.writeFileSync(path.join(destination, "README.md"),
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
 
-console.log("Generated isolated legacy and platform-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, and wallet-core Functions packages.");
