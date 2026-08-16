@@ -6,6 +6,7 @@ const SCALER_SCHEMA_VERSION = "ScalerDiscoveryPreferencesV1";
 const MATCH_VERSION = "OpportunityMatchV1";
 const MAX_AREAS = 8;
 const MAX_POINTS = 100;
+const MAX_GOALS = 20;
 const BUSINESS_OUTSIDE = new Set(["none", "nearby", "maryland", "followed"]);
 const SCALER_TRAVEL = new Set(["never", "nearby", "worth_drive", "up_to_miles", "anywhere"]);
 const AREA_TYPES = new Set(["around_business", "place", "postal_codes", "drawn"]);
@@ -26,6 +27,12 @@ function point(value) {
       latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
   return {latitude, longitude};
 }
+function bounds(value) {
+  if (!value || typeof value !== "object") return null;
+  const output = {south: Number(value.south), north: Number(value.north),
+    west: Number(value.west), east: Number(value.east)};
+  return Object.values(output).every(Number.isFinite) ? output : null;
+}
 function sanitizeArea(value, index) {
   if (!value || typeof value !== "object") throw new Error("invalid_service_area");
   const type = text(value.type, 30);
@@ -42,7 +49,17 @@ function sanitizeArea(value, index) {
   centerLabel: text(value.centerLabel, 100), places: list(value.places, 20, 100),
   postalCodes: list(value.postalCodes, 30, 12),
   center, radiusMiles: center && Number.isFinite(radiusMiles) ? Math.round(radiusMiles * 10) / 10 : null,
-  geometry};
+  geometry, areaType: text(value.areaType, 30) || type, displayName: text(value.displayName, 160),
+  city: text(value.city, 100), county: text(value.county, 100), state: text(value.state, 100),
+  postalCode: text(value.postalCode, 20), bounds: bounds(value.bounds),
+  resolutionSource: text(value.resolutionSource, 80),
+  resolutionVersion: text(value.resolutionVersion, 80)};
+}
+function sanitizeGoal(value, index) {
+  if (!value || typeof value !== "object") throw new Error("invalid_business_goal");
+  return {id: text(value.id, 80) || `goal_${index + 1}`, label: text(value.label, 160),
+    service: text(value.service, 100), enabled: value.enabled !== false,
+    custom: value.custom === true, schemaVersion: "BusinessOpportunityGoalV1"};
 }
 function notificationDefaults(role) {
   return role === "business" ? {weatherInMyAreas: true, propertyOpportunities: true,
@@ -69,7 +86,11 @@ function sanitizePreferences(input, authoritativeRole) {
     roleSchemaVersion: BUSINESS_SCHEMA_VERSION,
     priorityServices: list(input.priorityServices), otherServices: list(input.otherServices),
     excludedServices: list(input.excludedServices), outsideOpportunityScope:
-      BUSINESS_OUTSIDE.has(input.outsideOpportunityScope) ? input.outsideOpportunityScope : "none"};
+      BUSINESS_OUTSIDE.has(input.outsideOpportunityScope) ? input.outsideOpportunityScope : "none",
+    savedGoals: Array.isArray(input.savedGoals) ? input.savedGoals.slice(0, MAX_GOALS)
+      .map(sanitizeGoal).filter((goal) => goal.label) : [],
+    preferredCampaignTypes: list(input.preferredCampaignTypes, 10, 60),
+    defaultResponseGoal: text(input.defaultResponseGoal, 160)};
   const travelMode = SCALER_TRAVEL.has(input.travelMode) ? input.travelMode : "nearby";
   const maxTravelMiles = Number(input.maxTravelMiles);
   const jobTypes = list(input.jobTypes).filter((item) => JOB_TYPES.has(item));

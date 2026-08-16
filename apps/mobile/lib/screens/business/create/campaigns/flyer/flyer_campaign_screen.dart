@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../../config/app_environment.dart';
 import '../../../../../services/platform_billing_service.dart';
+import '../../../../../services/discovery_preferences_service.dart';
+import '../../../../../services/property_area_context_service.dart';
 
 import '../../../campaign_zones_screen.dart';
 
@@ -15,10 +17,24 @@ import '../../../../../widgets/material_fulfillment_form.dart';
 
 class FlyerCampaignScreen extends StatefulWidget {
   final String campaignType;
+  final List<Map<String, double>> initialServiceArea;
+  final String? initialServiceAreaName;
+  final String? initialGoal;
+  final String? initialService;
+  final String? propertyIntelligenceAnalysisId;
+  final PlatformBillingService? billingService;
+  final Future<Map<String, dynamic>?> Function()? loadPreferences;
 
   const FlyerCampaignScreen({
     super.key,
     this.campaignType = 'flyer_distribution',
+    this.initialServiceArea = const [],
+    this.initialServiceAreaName,
+    this.initialGoal,
+    this.initialService,
+    this.propertyIntelligenceAnalysisId,
+    this.billingService,
+    this.loadPreferences,
   });
 
   @override
@@ -42,7 +58,8 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
   final materialQuantityController = TextEditingController();
 
-  final PlatformBillingService _billingService = PlatformBillingService();
+  PlatformBillingService get _billingService =>
+      widget.billingService ?? PlatformBillingService();
 
   DateTime? _marketingDate;
 
@@ -60,11 +77,81 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   bool _trackingEnabled = false;
 
   bool publishing = false;
+  List<Map<String, double>> _campaignArea = const [];
+  String? _campaignAreaName;
+  List<SavedPropertyAreaContext> _savedAreas = const [];
   @override
   void initState() {
     super.initState();
 
     _campaignType = widget.campaignType;
+    _campaignArea = List<Map<String, double>>.from(widget.initialServiceArea);
+    _campaignAreaName = widget.initialServiceAreaName;
+    if (widget.initialGoal?.trim().isNotEmpty == true) {
+      campaignNameController.text = widget.initialGoal!.trim();
+      descriptionController.text = [
+        widget.initialGoal!.trim(),
+        if (widget.initialService?.trim().isNotEmpty == true)
+          'Service: ${widget.initialService!.trim()}',
+      ].join('\n');
+    }
+    _loadSavedAreas();
+  }
+
+  Future<void> _loadSavedAreas() async {
+    try {
+      final preferences = widget.loadPreferences != null
+          ? await widget.loadPreferences!()
+          : await DiscoveryPreferencesService().load();
+      final areas = const PropertyAreaContextService().resolveEnabledAreas(
+        preferences,
+      );
+      if (mounted) setState(() => _savedAreas = areas);
+    } catch (_) {
+      // Campaign creation remains available with a custom area.
+    }
+  }
+
+  Future<void> _chooseServiceArea() async {
+    if (_savedAreas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No mapped Service Areas are available. Choose another area in the map step.',
+          ),
+        ),
+      );
+      return;
+    }
+    final area = await showDialog<SavedPropertyAreaContext>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Use a Service Area'),
+        children: [
+          for (final area in _savedAreas)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, area),
+              child: ListTile(
+                leading: const Icon(Icons.map_outlined),
+                title: Text(area.name),
+                subtitle: const Text('Use as a starting template'),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (area == null || !mounted) return;
+    setState(() {
+      _campaignAreaName = area.name;
+      _campaignArea = area.polygon
+          .map(
+            (point) => {
+              'latitude': point.latitude,
+              'longitude': point.longitude,
+            },
+          )
+          .toList(growable: false);
+    });
   }
 
   static const Set<String> _distributionCampaignTypes = {
@@ -392,27 +479,10 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     DocumentReference<Map<String, dynamic>>? campaignReference;
 
     try {
-      final marketplaceQuote = await _billingService.campaignQuoteEstimate(
-        maximumWorkerBudget,
-      );
-      final platformFee = marketplaceQuote['platformFee']!;
-      final totalCampaignCost = marketplaceQuote['totalCharge']!;
-
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         throw Exception('You must be logged in to create a campaign.');
-      }
-
-      final hasActiveSubscription = await _billingService.hasActiveSubscription(
-        businessId: user.uid,
-      );
-
-      if (!hasActiveSubscription) {
-        throw Exception(
-          'An active Scaled Circle subscription is required '
-          'before creating a campaign.',
-        );
       }
 
       final campaignName = campaignNameController.text.trim();
@@ -462,6 +532,21 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         'estimatedMinutes': 0,
         'suggestedBasePayTotal': 0.0,
         'recommendedScalerCount': 0,
+
+        if (_campaignArea.length >= 3) ...{
+          'serviceArea': _campaignArea,
+          'serviceAreaPointCount': _campaignArea.length,
+          'serviceAreaType': 'polygon',
+          'shapeType': 'polygon',
+          'serviceAreaTemplateName': _campaignAreaName,
+        },
+        if (widget.initialGoal?.trim().isNotEmpty == true)
+          'opportunityGoal': widget.initialGoal!.trim(),
+        if (widget.initialService?.trim().isNotEmpty == true)
+          'promotedService': widget.initialService!.trim(),
+        if (widget.propertyIntelligenceAnalysisId != null)
+          'propertyIntelligenceAnalysisId':
+              widget.propertyIntelligenceAnalysisId,
 
         'trackingEnabled': _trackingEnabled,
 
@@ -612,12 +697,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Campaign draft created. '
-            '\$${maximumWorkerBudget.toStringAsFixed(2)} worker budget '
-            '+ \$${platformFee.toStringAsFixed(2)} platform fee '
-            '= \$${totalCampaignCost.toStringAsFixed(2)} total.',
+            'Campaign draft created. No funding was charged. Define the area, then review authoritative costs before checkout.',
           ),
         ),
       );
@@ -780,9 +862,15 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to publish campaign: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            campaignReference == null
+                ? "We couldn't create the campaign draft. Try again."
+                : "We saved the draft, but couldn't open the area step. Try again. ($e)",
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -832,6 +920,57 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                   const Text(
                     'Choose the kind of field work, configure materials, '
                     'schedule the campaign, and secure Scaler compensation.',
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  Card(
+                    key: const Key('campaign-service-area-template'),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Where should this campaign run?',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _campaignAreaName == null
+                                ? 'Use a saved Service Area, or choose another area in the map step.'
+                                : 'Starting with: $_campaignAreaName',
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: publishing
+                                    ? null
+                                    : _chooseServiceArea,
+                                icon: const Icon(Icons.bookmark_outline),
+                                label: const Text('Use a Service Area'),
+                              ),
+                              TextButton(
+                                onPressed: publishing
+                                    ? null
+                                    : () => setState(() {
+                                        _campaignArea = const [];
+                                        _campaignAreaName = null;
+                                      }),
+                                child: const Text('Choose Another Area'),
+                              ),
+                            ],
+                          ),
+                          if (_campaignArea.length >= 3)
+                            const Text(
+                              'You can use the entire area, adjust it, or divide it into zones next. Your saved Service Area will not change.',
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
 
                   const SizedBox(height: 28),

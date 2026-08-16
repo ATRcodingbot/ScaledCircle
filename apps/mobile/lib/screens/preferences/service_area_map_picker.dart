@@ -9,8 +9,17 @@ class ServiceAreaMapSelection {
 }
 
 class ServiceAreaMapPicker extends StatefulWidget {
-  const ServiceAreaMapPicker({super.key, required this.drawArea});
+  const ServiceAreaMapPicker({
+    super.key,
+    required this.drawArea,
+    this.initialCenter,
+    this.initialGeometry = const [],
+    this.confirmationOnly = false,
+  });
   final bool drawArea;
+  final LatLng? initialCenter;
+  final List<LatLng> initialGeometry;
+  final bool confirmationOnly;
 
   @override
   State<ServiceAreaMapPicker> createState() => _ServiceAreaMapPickerState();
@@ -19,25 +28,52 @@ class ServiceAreaMapPicker extends StatefulWidget {
 class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
   static const _maryland = LatLng(39.0458, -76.6413);
   final List<LatLng> _points = [];
+  bool _adjusting = false;
 
-  void _tap(TapPosition _, LatLng point) => setState(() {
-    if (!widget.drawArea) _points.clear();
-    if (_points.length < 100) _points.add(point);
-  });
+  @override
+  void initState() {
+    super.initState();
+    _points.addAll(widget.initialGeometry);
+    if (_points.isEmpty && widget.initialCenter != null && !widget.drawArea) {
+      _points.add(widget.initialCenter!);
+    }
+  }
+
+  void _tap(TapPosition _, LatLng point) {
+    if (widget.confirmationOnly && !_adjusting) return;
+    setState(() {
+      if (!widget.drawArea) _points.clear();
+      if (_points.length < 100) _points.add(point);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final ready = widget.drawArea ? _points.length >= 3 : _points.length == 1;
+    final usingResolvedBoundary =
+        widget.confirmationOnly && !_adjusting && _points.length >= 3;
+    final ready = usingResolvedBoundary
+        ? true
+        : widget.drawArea
+        ? _points.length >= 3
+        : _points.length == 1;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.drawArea ? 'Draw my area' : 'Choose the center'),
+        title: Text(
+          widget.confirmationOnly
+              ? 'Confirm service area'
+              : widget.drawArea
+              ? 'Draw my area'
+              : 'Choose the center',
+        ),
       ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
             child: Text(
-              widget.drawArea
+              widget.confirmationOnly && !_adjusting
+                  ? 'Is this the area you serve? The saved boundary will be reused across ScaledCircle.'
+                  : widget.drawArea
                   ? 'Tap around the area where you want to work. Use at least three points.'
                   : 'Tap the map near your business or preferred work area. This does not turn on GPS.',
             ),
@@ -45,8 +81,10 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
           Expanded(
             child: FlutterMap(
               options: MapOptions(
-                initialCenter: _maryland,
-                initialZoom: 8,
+                initialCenter:
+                    widget.initialCenter ??
+                    (_points.isEmpty ? _maryland : _points.first),
+                initialZoom: widget.initialCenter == null ? 8 : 10,
                 onTap: _tap,
               ),
               children: [
@@ -87,12 +125,21 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  TextButton(
-                    onPressed: _points.isEmpty
-                        ? null
-                        : () => setState(_points.clear),
-                    child: const Text('Start Over'),
-                  ),
+                  if (widget.confirmationOnly && !_adjusting)
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _adjusting = true;
+                        _points.clear();
+                      }),
+                      child: const Text('Adjust Boundary'),
+                    )
+                  else
+                    TextButton(
+                      onPressed: _points.isEmpty
+                          ? null
+                          : () => setState(_points.clear),
+                      child: const Text('Start Over'),
+                    ),
                   const Spacer(),
                   FilledButton(
                     onPressed: ready
@@ -111,7 +158,8 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
                               context,
                               ServiceAreaMapSelection(
                                 center: LatLng(latitude, longitude),
-                                geometry: widget.drawArea
+                                geometry:
+                                    widget.drawArea || usingResolvedBoundary
                                     ? List.unmodifiable(_points)
                                     : const [],
                               ),

@@ -55,3 +55,22 @@ test("Business and Scaler role payloads cannot cross roles", () => {
   assert.equal(result.role, "business");
   assert.equal(result.jobTypes, undefined);
 });
+
+test("Business saved goals and resolved area metadata remain backend validated", () => {
+  const result = preferences.sanitizePreferences({areas: [{id: "main", name: "Main Area",
+    type: "place", geometry: [{latitude: 39, longitude: -76.7},
+      {latitude: 39.1, longitude: -76.6}, {latitude: 39, longitude: -76.5}],
+    areaType: "county", displayName: "Anne Arundel County, Maryland",
+    county: "Anne Arundel County", state: "Maryland",
+    resolutionSource: "openstreetmap_nominatim",
+    resolutionVersion: "ServiceAreaResolutionV1"}], savedGoals: [
+    {id: "deck", label: "Get more deck jobs", service: "Decks", enabled: true},
+    {id: "custom", label: "Get more screened porch jobs", custom: true}],
+  preferredCampaignTypes: ["flyer_distribution"],
+  defaultResponseGoal: "Request a free estimate"}, "business");
+  assert.equal(result.areas[0].county, "Anne Arundel County");
+  assert.equal(result.areas[0].geometry.length, 3);
+  assert.equal(result.savedGoals.length, 2);
+  assert.equal(result.savedGoals[1].schemaVersion, "BusinessOpportunityGoalV1");
+  assert.deepEqual(result.preferredCampaignTypes, ["flyer_distribution"]);
+});

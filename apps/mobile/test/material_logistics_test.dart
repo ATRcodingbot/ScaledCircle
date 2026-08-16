@@ -84,7 +84,7 @@ void main() {
       'material_distribution_campaign_screen.dart',
     ).readAsStringSync();
     expect(flyerSource, contains('MaterialFulfillmentForm('));
-    expect(distributionSource, contains('MaterialFulfillmentForm('));
+    expect(distributionSource, contains('FlyerCampaignScreen('));
     expect(flyerSource, isNot(contains("labelText: 'Material Handoff'")));
     expect(distributionSource, isNot(contains("labelText: 'Material Handoff'")));
     for (final method in MaterialLogisticsDraft.supportedTypes) {

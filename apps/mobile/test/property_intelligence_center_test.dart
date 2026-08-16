@@ -152,9 +152,10 @@ void main() {
       'lib/screens/business/campaign_zones_screen.dart',
     ).readAsStringSync();
 
-    expect(center, contains('CreateCampaignScreen('));
+    expect(center, contains('MaterialDistributionCampaignScreen('));
     expect(center, contains('initialServiceArea:'));
-    expect(center, contains('initialServiceAreaType:'));
+    expect(center, contains('initialServiceAreaName:'));
+    expect(center, contains('initialGoal:'));
     expect(center, contains('propertyIntelligenceAnalysisId:'));
     expect(creator, contains('widget.initialServiceArea'));
     expect(creator, contains("'serviceAreaPointCount'"));

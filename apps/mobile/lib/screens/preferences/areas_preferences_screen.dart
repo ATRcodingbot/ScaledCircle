@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../services/discovery_preferences_service.dart';
+import '../../services/service_area_resolution_service.dart';
+import '../../widgets/mapped_address_field.dart';
 import 'service_area_map_picker.dart';
 
 class AreasPreferencesScreen extends StatefulWidget {
@@ -20,6 +23,7 @@ class AreasPreferencesScreen extends StatefulWidget {
 
 class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   final _service = DiscoveryPreferencesService();
+  final _areaResolver = const ServiceAreaResolutionService();
   final List<Map<String, dynamic>> _areas = [];
   final Set<String> _priorities = {};
   final Set<String> _otherServices = {};
@@ -111,6 +115,10 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
     );
     var type = existing?['type']?.toString() ?? 'place';
     var radius = (existing?['radiusMiles'] as num?)?.toDouble() ?? 20;
+    String? resolutionError;
+    Map<String, dynamic> normalized = existing == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(existing);
     Map<String, dynamic>? center = existing?['center'] is Map
         ? Map<String, dynamic>.from(existing!['center'] as Map)
         : null;
@@ -168,20 +176,56 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                         setDialogState(() => type = value ?? type),
                   ),
                   if (type == 'place')
-                    TextField(
+                    MappedAddressField(
                       controller: places,
-                      decoration: const InputDecoration(
-                        labelText: 'Cities or counties',
-                        hintText: 'Baltimore County, Annapolis',
-                      ),
+                      labelText: 'City or county',
+                      hintText: 'Anne Arundel County, Maryland',
+                      onSelected: (suggestion) {
+                        final resolution = _areaResolver.fromKnownPlace(
+                          suggestion: suggestion,
+                          areaType: 'place',
+                        );
+                        setDialogState(() {
+                          normalized = resolution.data;
+                          center = Map<String, dynamic>.from(
+                            resolution.data['center'] as Map,
+                          );
+                          geometry = List<Map<String, dynamic>>.from(
+                            resolution.data['geometry'] as List,
+                          );
+                          places.text = suggestion.fullAddress;
+                          resolutionError = resolution.resolved
+                              ? null
+                              : "We found the place, but couldn't map its boundary automatically.";
+                        });
+                      },
                     ),
                   if (type == 'postal_codes')
-                    TextField(
+                    MappedAddressField(
                       controller: postals,
-                      decoration: const InputDecoration(
-                        labelText: 'ZIP codes',
-                        hintText: '21401, 21201',
-                      ),
+                      labelText: 'ZIP code',
+                      hintText: '21401',
+                      onSelected: (suggestion) {
+                        final resolution = _areaResolver.fromKnownPlace(
+                          suggestion: suggestion,
+                          areaType: 'postal_codes',
+                        );
+                        setDialogState(() {
+                          normalized = resolution.data;
+                          center = Map<String, dynamic>.from(
+                            resolution.data['center'] as Map,
+                          );
+                          geometry = List<Map<String, dynamic>>.from(
+                            resolution.data['geometry'] as List,
+                          );
+                          postals.text = suggestion.postalCode.isEmpty
+                              ? suggestion.fullAddress
+                              : suggestion.postalCode;
+                          resolutionError = resolution.resolved
+                              ? null
+                              : "We found the place, but couldn't map its boundary automatically.";
+                        });
+                      },
                     ),
                   if (type == 'around_business') ...[
                     const SizedBox(height: 12),
@@ -196,16 +240,56 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                             ),
                           )
                           .toList(),
-                      onChanged: (value) =>
-                          setDialogState(() => radius = value ?? radius),
+                      onChanged: (value) {
+                        final selectedRadius = value ?? radius;
+                        setDialogState(() {
+                          radius = selectedRadius;
+                          final latitude = center?['latitude'];
+                          final longitude = center?['longitude'];
+                          if (latitude is num && longitude is num) {
+                            final updated = _areaResolver.radiusFromCoordinates(
+                              latitude: latitude.toDouble(),
+                              longitude: longitude.toDouble(),
+                              radiusMiles: radius,
+                              displayName: centerLabel.text.trim(),
+                            );
+                            normalized = updated.data;
+                            geometry = List<Map<String, dynamic>>.from(
+                              updated.data['geometry'] as List,
+                            );
+                          }
+                        });
+                      },
                     ),
-                    TextField(
+                    MappedAddressField(
                       controller: centerLabel,
-                      decoration: const InputDecoration(
-                        labelText: 'What place is this area centered around?',
-                        hintText: 'Example: Annapolis',
-                        helperText:
-                            'We use only the place name you confirm in generated wording.',
+                      labelText: 'Business location, city, or ZIP',
+                      hintText: 'Example: Annapolis, Maryland',
+                      onSelected: (suggestion) {
+                        final resolution = _areaResolver.radius(
+                          center: suggestion,
+                          radiusMiles: radius,
+                        );
+                        setDialogState(() {
+                          normalized = resolution.data;
+                          center = Map<String, dynamic>.from(
+                            resolution.data['center'] as Map,
+                          );
+                          geometry = List<Map<String, dynamic>>.from(
+                            resolution.data['geometry'] as List,
+                          );
+                          centerLabel.text = suggestion.fullAddress;
+                          resolutionError = null;
+                        });
+                      },
+                    ),
+                  ],
+                  if (resolutionError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      resolutionError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
                       ),
                     ),
                   ],
@@ -219,10 +303,32 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                             .push<ServiceAreaMapSelection>(
                               MaterialPageRoute(
                                 builder: (_) => ServiceAreaMapPicker(
-                                  drawArea:
-                                      type == 'drawn' ||
-                                      type == 'place' ||
-                                      type == 'postal_codes',
+                                  drawArea: type != 'around_business',
+                                  initialCenter:
+                                      center?['latitude'] is num &&
+                                          center?['longitude'] is num
+                                      ? LatLng(
+                                          (center!['latitude'] as num)
+                                              .toDouble(),
+                                          (center!['longitude'] as num)
+                                              .toDouble(),
+                                        )
+                                      : null,
+                                  initialGeometry: geometry
+                                      .where(
+                                        (point) =>
+                                            point['latitude'] is num &&
+                                            point['longitude'] is num,
+                                      )
+                                      .map(
+                                        (point) => LatLng(
+                                          (point['latitude'] as num).toDouble(),
+                                          (point['longitude'] as num)
+                                              .toDouble(),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                  confirmationOnly: geometry.length >= 3,
                                 ),
                               ),
                             );
@@ -247,9 +353,13 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       label: Text(
                         center == null
                             ? (type == 'around_business'
-                                  ? 'Choose the center on a map'
-                                  : 'Draw this saved area on the map')
-                            : 'Map area selected',
+                                  ? 'Choose a Nearby Map Area'
+                                  : type == 'drawn'
+                                  ? 'Draw a Custom Area'
+                                  : 'Choose a Nearby Map Area')
+                            : geometry.length >= 3
+                            ? 'Review Resolved Boundary'
+                            : 'Choose a Nearby Map Area',
                       ),
                     ),
                 ],
@@ -266,11 +376,18 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                 final valid =
                     name.text.trim().isNotEmpty &&
                     (type == 'place'
-                        ? places.text.trim().isNotEmpty
+                        ? places.text.trim().isNotEmpty && geometry.length >= 3
                         : type == 'postal_codes'
-                        ? postals.text.trim().isNotEmpty
+                        ? postals.text.trim().isNotEmpty && geometry.length >= 3
                         : center != null);
-                if (!valid) return;
+                if (!valid) {
+                  setDialogState(() {
+                    resolutionError = type == 'place' || type == 'postal_codes'
+                        ? "We found the place, but couldn't map its boundary automatically. Choose a nearby map area or draw a custom area."
+                        : 'Choose the center of this service area.';
+                  });
+                  return;
+                }
                 Navigator.pop(dialogContext, {
                   'id':
                       existing?['id'] ??
@@ -285,6 +402,15 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                   'center': center,
                   'radiusMiles': type == 'around_business' ? radius : null,
                   'geometry': geometry,
+                  'areaType': normalized['areaType'] ?? type,
+                  'displayName': normalized['displayName'],
+                  'city': normalized['city'],
+                  'county': normalized['county'],
+                  'state': normalized['state'],
+                  'postalCode': normalized['postalCode'],
+                  'bounds': normalized['bounds'],
+                  'resolutionSource': normalized['resolutionSource'],
+                  'resolutionVersion': normalized['resolutionVersion'],
                 });
               },
               child: const Text('Save Area'),

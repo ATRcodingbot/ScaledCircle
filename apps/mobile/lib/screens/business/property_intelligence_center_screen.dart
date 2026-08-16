@@ -13,11 +13,13 @@ import '../../services/property_intelligence_service.dart';
 import '../../services/property_area_context_service.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
 import '../../services/subscription_plan_service.dart';
+import '../../services/opportunity_goal_service.dart';
+import '../../models/campaign/campaign.dart';
 import '../../widgets/mapped_address_field.dart';
 import '../../widgets/property_intelligence_panel.dart';
-import 'create_campaign_screen.dart';
 import 'subscription_screen.dart';
 import 'managed_growth_screen.dart';
+import 'create/campaigns/distribution/material_distribution_campaign_screen.dart';
 import '../preferences/areas_preferences_screen.dart';
 
 class PropertyIntelligenceCenterScreen extends StatefulWidget {
@@ -57,6 +59,77 @@ class _PropertyIntelligenceCenterScreenState
   String? _selectedSavedAreaName;
   List<SavedPropertyAreaContext> _savedAreaContexts = const [];
   ScaledCircleAiInterpretation? _aiInterpretation;
+  List<BusinessOpportunityGoal> _goals = const [];
+  BusinessOpportunityGoal? _selectedGoal;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGoals();
+  }
+
+  Future<void> _loadGoals() async {
+    try {
+      final goals = await OpportunityGoalService().loadSuggestedAndSaved();
+      if (!mounted) return;
+      setState(() {
+        _goals = goals;
+        _selectedGoal ??= goals.isEmpty ? null : goals.first;
+        if (_objectiveController.text.trim().isEmpty && _selectedGoal != null) {
+          _objectiveController.text = _selectedGoal!.label;
+        }
+      });
+    } catch (_) {
+      // Manual goal entry remains available.
+    }
+  }
+
+  Future<void> _saveCustomGoal() async {
+    final controller = TextEditingController();
+    final label = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Save a goal'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'What are you trying to get more of?',
+            hintText: 'Get more screened porch jobs',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Save this goal'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (label == null || label.trim().isEmpty) return;
+    try {
+      final goal = await OpportunityGoalService().saveCustom(label);
+      if (!mounted) return;
+      setState(() {
+        _goals = [..._goals, goal];
+        _selectedGoal = goal;
+        _objectiveController.text = goal.label;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("We couldn't save that goal. Try again."),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -404,6 +477,14 @@ class _PropertyIntelligenceCenterScreenState
             const Text(
               'Known property and weather facts remain authoritative. AI interpretation is advisory.',
             ),
+            if ((_selectedGoal?.service.toLowerCase() ?? '').contains('hvac'))
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Property age does not establish HVAC system age, condition, ownership, or replacement need. Any recommendation is broad area marketing only.',
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ),
             const SizedBox(height: 10),
             TextField(
               controller: _objectiveController,
@@ -458,7 +539,7 @@ class _PropertyIntelligenceCenterScreenState
               ),
               const Divider(height: 24),
               const Text(
-                'PROPERTY SIGNAL',
+                'WHAT WE KNOW',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(
@@ -483,6 +564,10 @@ class _PropertyIntelligenceCenterScreenState
                 ),
               ],
               const SizedBox(height: 10),
+              const Text(
+                'WHAT IT MAY MEAN FOR YOUR GOAL',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               Text(result.summary),
               for (final opportunity in result.opportunities) ...[
                 const SizedBox(height: 8),
@@ -500,6 +585,25 @@ class _PropertyIntelligenceCenterScreenState
                 const SizedBox(height: 8),
                 Text('Limitations: ${result.limitations.join(' ')}'),
               ],
+              const SizedBox(height: 12),
+              const Text(
+                'WHAT YOU COULD DO NEXT',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton(
+                    onPressed: _createCampaign,
+                    child: const Text('Create Flyer Campaign'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _createPostcardCampaign,
+                    child: const Text('Plan a Postcard'),
+                  ),
+                ],
+              ),
             ],
           ],
         ),
@@ -562,9 +666,12 @@ class _PropertyIntelligenceCenterScreenState
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (_) => CreateCampaignScreen(
+        builder: (_) => MaterialDistributionCampaignScreen(
+          campaignType: CampaignType.flyerDistribution,
           initialServiceArea: List<Map<String, double>>.from(_geometry),
-          initialServiceAreaType: CampaignAreaGeometry.value(_shape),
+          initialServiceAreaName: _selectedSavedAreaName,
+          initialGoal: _selectedGoal?.label ?? _objectiveController.text.trim(),
+          initialService: _selectedGoal?.service,
           propertyIntelligenceAnalysisId: analysis.data['analysisId']
               ?.toString(),
         ),
@@ -732,11 +839,52 @@ class _PropertyIntelligenceCenterScreenState
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Text(
+                        'STEP 1 — WHAT DO YOU WANT MORE OF?',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_goals.isNotEmpty)
+                        DropdownButtonFormField<BusinessOpportunityGoal>(
+                          key: const Key('property-opportunity-goal'),
+                          initialValue: _selectedGoal,
+                          decoration: const InputDecoration(
+                            labelText: 'What are you trying to accomplish?',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _goals
+                              .map(
+                                (goal) => DropdownMenuItem(
+                                  value: goal,
+                                  child: Text(goal.label),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (goal) => setState(() {
+                            _selectedGoal = goal;
+                            _objectiveController.text = goal?.label ?? '';
+                            _aiInterpretation = null;
+                          }),
+                        ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _saveCustomGoal,
+                          icon: const Icon(Icons.add_task_outlined),
+                          label: const Text('Save a different goal'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'STEP 2 — WHERE DO YOU WANT TO LOOK?',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
                         'Explore property age and housing-stock patterns before choosing where to market.',
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'Analyze:',
+                        'Choose an area:',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 6),
@@ -886,6 +1034,11 @@ class _PropertyIntelligenceCenterScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const Text(
+                        'STEP 3 — ANALYZE',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
                       Text(
                         !CampaignAreaGeometry.isComplete(_shape, _area)
                             ? 'Draw a ${CampaignAreaGeometry.label(_shape).toLowerCase()} using the same controls as campaign maps.'

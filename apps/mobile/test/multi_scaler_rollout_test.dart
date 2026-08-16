@@ -12,6 +12,10 @@ void main() {
 
     for (final path in paths) {
       final source = File(path).readAsStringSync();
+      if (path.contains('material_distribution_campaign_screen.dart')) {
+        expect(source, contains('FlyerCampaignScreen('));
+        continue;
+      }
       expect(source, contains('enabled: AppEnvironmentConfig.isLocal'));
       expect(source, contains('? int.tryParse(scalerCountController.text.trim())'));
       expect(source, contains("'Multi-Scaler crews — Private Beta."));
