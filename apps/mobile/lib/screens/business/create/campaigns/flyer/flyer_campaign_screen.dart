@@ -24,6 +24,7 @@ class FlyerCampaignScreen extends StatefulWidget {
   final String? propertyIntelligenceAnalysisId;
   final PlatformBillingService? billingService;
   final Future<Map<String, dynamic>?> Function()? loadPreferences;
+  final Future<void> Function(BuildContext context)? draftAndAreaFlowOverride;
 
   const FlyerCampaignScreen({
     super.key,
@@ -35,6 +36,7 @@ class FlyerCampaignScreen extends StatefulWidget {
     this.propertyIntelligenceAnalysisId,
     this.billingService,
     this.loadPreferences,
+    this.draftAndAreaFlowOverride,
   });
 
   @override
@@ -479,6 +481,10 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     DocumentReference<Map<String, dynamic>>? campaignReference;
 
     try {
+      if (widget.draftAndAreaFlowOverride != null) {
+        await widget.draftAndAreaFlowOverride!(context);
+        return;
+      }
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
@@ -961,6 +967,16 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                                         _campaignAreaName = null;
                                       }),
                                 child: const Text('Choose Another Area'),
+                              ),
+                              TextButton.icon(
+                                onPressed: publishing
+                                    ? null
+                                    : () => setState(() {
+                                        _campaignArea = const [];
+                                        _campaignAreaName = 'Custom Area';
+                                      }),
+                                icon: const Icon(Icons.gesture),
+                                label: const Text('Draw Custom Area'),
                               ),
                             ],
                           ),

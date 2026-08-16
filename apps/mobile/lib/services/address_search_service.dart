@@ -1,6 +1,4 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AddressSuggestion {
   const AddressSuggestion({
@@ -41,10 +39,13 @@ class AddressSuggestion {
 }
 
 class AddressSearchService {
-  const AddressSearchService();
+  AddressSearchService({FirebaseFunctions? functions})
+    : _functions =
+          functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
+
+  final FirebaseFunctions _functions;
 
   static final Map<String, List<AddressSuggestion>> _cache = {};
-  static DateTime? _lastRequestAt;
 
   Future<List<AddressSuggestion>> search(String query) async {
     final normalizedQuery = query.trim();
@@ -58,41 +59,15 @@ class AddressSearchService {
       return cached;
     }
 
-    final lastRequestAt = _lastRequestAt;
-    if (lastRequestAt != null) {
-      final elapsed = DateTime.now().difference(lastRequestAt);
-      const minimumInterval = Duration(seconds: 1);
-      if (elapsed < minimumInterval) {
-        await Future<void>.delayed(minimumInterval - elapsed);
-      }
-    }
-    _lastRequestAt = DateTime.now();
-
-    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-      'q': normalizedQuery,
-      'format': 'jsonv2',
-      'limit': '6',
-      'countrycodes': 'us',
-      'addressdetails': '1',
-      'polygon_geojson': '1',
-    });
-    final response = await http.get(
-      uri,
-      headers: const {
-        'User-Agent': 'ScaledCircle/1.0',
-        'Accept': 'application/json',
-      },
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Map search returned status ${response.statusCode}.');
-    }
-
-    final payload = jsonDecode(response.body);
-    if (payload is! List) {
+    final response = await _functions
+        .httpsCallable('resolveServiceAreaPlace')
+        .call(<String, dynamic>{'query': normalizedQuery});
+    final payload = response.data;
+    if (payload is! Map || payload['results'] is! List) {
       return const [];
     }
 
-    final suggestions = payload
+    final suggestions = (payload['results'] as List)
         .map(parseSuggestion)
         .whereType<AddressSuggestion>()
         .toList(growable: false);
@@ -104,9 +79,17 @@ class AddressSearchService {
     if (rawResult is! Map) {
       return null;
     }
-    final latitude = double.tryParse(rawResult['lat']?.toString() ?? '');
-    final longitude = double.tryParse(rawResult['lon']?.toString() ?? '');
-    final fullAddress = rawResult['display_name']?.toString().trim() ?? '';
+    final latitude = double.tryParse(
+      (rawResult['latitude'] ?? rawResult['lat'])?.toString() ?? '',
+    );
+    final longitude = double.tryParse(
+      (rawResult['longitude'] ?? rawResult['lon'])?.toString() ?? '',
+    );
+    final fullAddress =
+        (rawResult['fullAddress'] ?? rawResult['display_name'])
+            ?.toString()
+            .trim() ??
+        '';
     if (latitude == null || longitude == null || fullAddress.isEmpty) {
       return null;
     }
@@ -129,10 +112,26 @@ class AddressSearchService {
         ? fullAddress.substring(resolvedPrimary.length + 2)
         : fullAddress;
 
-    final geometry = _geometry(rawResult['geojson']);
+    final geometry = rawResult['geometry'] is List
+        ? (rawResult['geometry'] as List)
+              .whereType<Map>()
+              .map(
+                (point) => <String, double>{
+                  'latitude': (point['latitude'] as num).toDouble(),
+                  'longitude': (point['longitude'] as num).toDouble(),
+                },
+              )
+              .toList(growable: false)
+        : _geometry(rawResult['geojson']);
     final boundingBox = rawResult['boundingbox'];
     Map<String, double>? bounds;
-    if (boundingBox is List && boundingBox.length >= 4) {
+    if (rawResult['bounds'] is Map) {
+      final rawBounds = rawResult['bounds'] as Map;
+      bounds = <String, double>{
+        for (final key in const ['south', 'north', 'west', 'east'])
+          key: (rawBounds[key] as num).toDouble(),
+      };
+    } else if (boundingBox is List && boundingBox.length >= 4) {
       final south = double.tryParse(boundingBox[0].toString());
       final north = double.tryParse(boundingBox[1].toString());
       final west = double.tryParse(boundingBox[2].toString());
@@ -143,23 +142,42 @@ class AddressSearchService {
     }
 
     return AddressSuggestion(
-      id: '${rawResult['osm_type']}-${rawResult['osm_id']}',
-      primaryText: resolvedPrimary,
-      secondaryText: secondaryText,
+      id:
+          rawResult['id']?.toString() ??
+          '${rawResult['osm_type']}-${rawResult['osm_id']}',
+      primaryText: rawResult['primaryText']?.toString() ?? resolvedPrimary,
+      secondaryText: rawResult['secondaryText']?.toString() ?? secondaryText,
       fullAddress: fullAddress,
       latitude: latitude,
       longitude: longitude,
       geometry: geometry,
       bounds: bounds,
-      placeType: rawResult['type']?.toString() ?? '',
+      placeType:
+          (rawResult['placeType'] ?? rawResult['type'])?.toString() ?? '',
       city:
+          rawResult['city']?.toString() ??
           addressMap['city']?.toString() ??
           addressMap['town']?.toString() ??
           addressMap['village']?.toString() ??
           '',
-      county: addressMap['county']?.toString() ?? '',
-      state: addressMap['state']?.toString() ?? '',
-      postalCode: addressMap['postcode']?.toString() ?? '',
+      county:
+          rawResult['county']?.toString() ??
+          addressMap['county']?.toString() ??
+          '',
+      state:
+          rawResult['state']?.toString() ??
+          addressMap['state']?.toString() ??
+          '',
+      postalCode:
+          rawResult['postalCode']?.toString() ??
+          addressMap['postcode']?.toString() ??
+          '',
+      resolutionSource:
+          rawResult['resolutionSource']?.toString() ??
+          'openstreetmap_nominatim',
+      resolutionVersion:
+          rawResult['resolutionVersion']?.toString() ??
+          'ServiceAreaResolutionV1',
     );
   }
 

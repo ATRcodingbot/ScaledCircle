@@ -39,6 +39,7 @@ const expectedExports = [
   "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences",
+  "resolveServiceAreaPlace",
   "evaluateOpportunityMatch",
 ];
 
@@ -99,4 +100,4 @@ for (const forbiddenPackage of ["node_modules/stripe", "openai"]) {
   assert.doesNotMatch(artifactLock, new RegExp(forbiddenPackage));
 }
 
-console.log("Verified 31 platform-core exports plus isolated wallet-core and artifact-email exports.");
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated wallet-core and artifact-email exports.`);

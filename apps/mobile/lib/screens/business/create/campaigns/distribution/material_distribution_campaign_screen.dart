@@ -14,6 +14,7 @@ class MaterialDistributionCampaignScreen extends StatelessWidget {
     this.initialGoal,
     this.initialService,
     this.propertyIntelligenceAnalysisId,
+    this.draftAndAreaFlowOverride,
   });
 
   final CampaignType campaignType;
@@ -22,6 +23,7 @@ class MaterialDistributionCampaignScreen extends StatelessWidget {
   final String? initialGoal;
   final String? initialService;
   final String? propertyIntelligenceAnalysisId;
+  final Future<void> Function(BuildContext context)? draftAndAreaFlowOverride;
 
   String get _legacyType => switch (campaignType) {
     CampaignType.flyerDistribution => 'flyer_distribution',
@@ -38,5 +40,6 @@ class MaterialDistributionCampaignScreen extends StatelessWidget {
     initialGoal: initialGoal,
     initialService: initialService,
     propertyIntelligenceAnalysisId: propertyIntelligenceAnalysisId,
+    draftAndAreaFlowOverride: draftAndAreaFlowOverride,
   );
 }

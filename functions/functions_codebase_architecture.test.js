@@ -27,6 +27,7 @@ const expected = [
   "approveSocialPostDraft", "scheduleSocialPostDraft", "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences", "evaluateOpportunityMatch",
+  "resolveServiceAreaPlace",
 ];
 
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));

@@ -10,7 +10,10 @@ import 'campaigns/dump_run/dump_run_campaign_screen.dart';
 import 'campaigns/canvassing/canvassing_campaign_screen.dart';
 
 class CreateCampaignScreen extends StatelessWidget {
-  const CreateCampaignScreen({super.key});
+  const CreateCampaignScreen({super.key, this.flyerDraftAndAreaFlowOverride});
+
+  final Future<void> Function(BuildContext context)?
+  flyerDraftAndAreaFlowOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -52,8 +55,9 @@ class CreateCampaignScreen extends StatelessWidget {
             Icons.mail_outline,
             "Flyer Distribution",
             "Distribute flyers with GPS verification and mapped zones.",
-            const MaterialDistributionCampaignScreen(
+            MaterialDistributionCampaignScreen(
               campaignType: CampaignType.flyerDistribution,
+              draftAndAreaFlowOverride: flyerDraftAndAreaFlowOverride,
             ),
           ),
 

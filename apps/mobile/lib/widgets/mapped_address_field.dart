@@ -27,7 +27,7 @@ class MappedAddressField extends StatefulWidget {
 }
 
 class _MappedAddressFieldState extends State<MappedAddressField> {
-  static const _searchService = AddressSearchService();
+  static final _searchService = AddressSearchService();
 
   List<AddressSuggestion> _suggestions = const [];
   bool _searching = false;
@@ -61,7 +61,7 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
         return;
       }
       setState(() {
-        _error = 'Map search is temporarily unavailable. You can keep typing.';
+        _error = "We couldn't map that area automatically.";
       });
     } finally {
       if (mounted) {
@@ -148,7 +148,29 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
             child: _error != null
                 ? Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Text(_error!),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_error!),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            OutlinedButton(
+                              onPressed: _searching ? null : _search,
+                              child: const Text('Try Again'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                widget.controller.clear();
+                                setState(() => _error = null);
+                              },
+                              child: const Text('Choose Another Area'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   )
                 : Column(
                     mainAxisSize: MainAxisSize.min,
@@ -185,7 +207,7 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
                             ),
                             const SizedBox(width: 5),
                             Text(
-                              'Search powered by OpenStreetMap',
+                              'Search © OpenStreetMap contributors • Nominatim',
                               style: Theme.of(context).textTheme.labelSmall
                                   ?.copyWith(
                                     color: colorScheme.onSurfaceVariant,

@@ -28,6 +28,7 @@ const {
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
 const discoveryPreferences = require("./discovery_preferences");
+const serviceAreaResolution = require("./service_area_resolution");
 const {scalerOpportunityDecision} = require("./opportunity_notification_policy");
 const scalerCapacity = require("./scaler_notification_capacity");
 const {evaluateFundingCheckout, nextFundingVersion} = require("./marketplace_checkout");
@@ -3978,6 +3979,32 @@ exports.saveDiscoveryPreferences = onCall(
         createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp()});
     });
     return {preferences: {...value, userUid: context.uid, preferenceVersion}};
+  },
+);
+
+/** Resolves user-submitted places through a cached, globally throttled provider boundary. */
+exports.resolveServiceAreaPlace = onCall(
+  {enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 15},
+  async (request) => {
+    await requireVerifiedUser(request, "Sign in to find a service area.");
+    try {
+      return await serviceAreaResolution.resolvePlace({
+        query: request.data?.query,
+        db,
+        baseUrl: process.env.NOMINATIM_BASE_URL,
+      });
+    } catch (error) {
+      if (error?.message === "invalid_query") {
+        throw new HttpsError("invalid-argument", "Enter a city, county, or ZIP.");
+      }
+      if (error?.message === "rate_limited") {
+        throw new HttpsError("resource-exhausted", "Map search is busy. Try again in a moment.");
+      }
+      logger.info("Service area resolution unavailable.", {
+        errorCode: String(error?.message || error).slice(0, 80),
+      });
+      throw new HttpsError("unavailable", "We couldn't map that area automatically.");
+    }
   },
 );
 

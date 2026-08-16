@@ -92,6 +92,12 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.scaledcircle.app',
                 ),
+                const RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution('© OpenStreetMap contributors'),
+                    TextSourceAttribution('Search boundaries: Nominatim'),
+                  ],
+                ),
                 if (_points.length >= 3)
                   PolygonLayer(
                     polygons: [

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/models/campaign/campaign.dart';
@@ -99,6 +101,24 @@ void main() {
     expect(resolution.data['geometry'], hasLength(48));
   });
 
+  test(
+    'place resolution uses an explicit backend search with no client autocomplete',
+    () {
+      final service = File(
+        'lib/services/address_search_service.dart',
+      ).readAsStringSync();
+      final field = File(
+        'lib/widgets/mapped_address_field.dart',
+      ).readAsStringSync();
+      expect(service, contains("httpsCallable('resolveServiceAreaPlace')"));
+      expect(service, isNot(contains('nominatim.openstreetmap.org')));
+      expect(field, contains('onFieldSubmitted: (_) => _search()'));
+      expect(field, contains('onPressed: widget.enabled ? _search : null'));
+      expect(field, isNot(contains('Timer(')));
+      expect(field, contains('© OpenStreetMap contributors • Nominatim'));
+    },
+  );
+
   test('Growth Profile services create relevant plain-language goals', () {
     final goals = OpportunityGoalService.suggestForServices([
       'Decks',
@@ -132,6 +152,97 @@ void main() {
     await tester.tap(find.text('Create & Define Zones'));
     await tester.pumpAndSettle();
     expect(find.text('Enter how many flyers you have.'), findsOneWidget);
+  });
+
+  testWidgets('actual catalog CTA opens the zone map exactly once', (
+    tester,
+  ) async {
+    var draftCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CreateCampaignScreen(
+          flyerDraftAndAreaFlowOverride: (context) async {
+            draftCalls += 1;
+            await Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const Scaffold(
+                  body: SizedBox.expand(
+                    key: Key('campaign-zone-map-workspace'),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.tap(find.text('Flyer Distribution'));
+    await tester.pumpAndSettle();
+
+    Future<void> enter(String label, String value) async {
+      await tester.scrollUntilVisible(
+        find.text(label),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      final field = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(TextFormField),
+      );
+      await tester.ensureVisible(field);
+      await tester.enterText(field, value);
+    }
+
+    final fulfillment = find.text('Scaler picks up from my Business');
+    await tester.scrollUntilVisible(
+      fulfillment,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(fulfillment);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('No physical materials required').last);
+    await tester.pumpAndSettle();
+
+    await enter('Campaign Name', 'Deck estimate flyers');
+    await enter(
+      'Description',
+      'Distribute estimate flyers in the selected area.',
+    );
+
+    for (final label in [
+      'Campaign Date',
+      'Start Time',
+      'Completion Deadline',
+    ]) {
+      final control = find.text(label);
+      await tester.ensureVisible(control);
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+    }
+
+    await enter('Base Pay per Scaler (\$)', '125');
+
+    final cta = find.text('Create & Define Zones');
+    await tester.scrollUntilVisible(
+      cta,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.ancestor(of: cta, matching: find.byType(ElevatedButton)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('campaign-zone-map-workspace')),
+      findsOneWidget,
+    );
+    expect(draftCalls, 1);
   });
 
   testWidgets('campaign handoff visibly reuses selected area and goal', (
