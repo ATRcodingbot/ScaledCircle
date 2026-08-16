@@ -33,6 +33,8 @@ const platformExports = new Set([
   "createAdminIssue",
   "saveBusinessGrowthProfile",
   "generateManagedGrowthArtifact",
+  "saveArtifactDeliveryPreference",
+  "deliverManagedGrowthArtifact",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences",
   "evaluateOpportunityMatch",

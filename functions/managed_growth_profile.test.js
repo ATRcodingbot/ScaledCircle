@@ -42,6 +42,28 @@ test("generation context uses confirmed service areas and never invents territor
   assert.doesNotMatch(JSON.stringify(context), /Anne Arundel/i);
 });
 
+test("radius and county areas remain separate authoritative territories", () => {
+  const context = profile.buildGenerationContext({profile: profile.sanitizeProfile(valid),
+    profileVersion: 5, request: {artifactType: "social_package"}, discovery: {
+      schemaVersion: "ServiceAreaPreferencesV1", priorityServices: ["Decks"],
+      excludedServices: [], areas: [
+        {name: "Main Area", type: "around_business", centerLabel: "Annapolis",
+          radiusMiles: 30, enabled: true},
+        {name: "Howard County", type: "place", places: ["Howard County"], enabled: true},
+        {name: "Disabled Expansion", type: "place", places: ["Kent County"], enabled: false},
+      ],
+    }});
+  assert.equal(context.discoveryPreferences.areasAreIndependent, true);
+  assert.equal(context.discoveryPreferences.areas.length, 2);
+  assert.deepEqual(context.discoveryPreferences.areas[0], {
+    name: "Main Area", type: "around_business", centerLabel: "Annapolis", places: [],
+    postalCodes: [], radiusMiles: 30, relationship: "independent",
+  });
+  assert.deepEqual(context.discoveryPreferences.areas[1].places, ["Howard County"]);
+  assert.equal(context.boundaries.savedServiceAreasAreIndependentRulesAndMustNotBeMergedIntoOneGeometry, true);
+  assert.doesNotMatch(JSON.stringify(context), /Kent County/);
+});
+
 test("every supported workflow validates and unknown workflow fails", () => {
   for (const artifactType of profile.ALLOWED_ARTIFACT_TYPES) {
     assert.equal(profile.sanitizeGenerationRequest({artifactType}).artifactType, artifactType);

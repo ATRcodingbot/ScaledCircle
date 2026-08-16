@@ -17,9 +17,16 @@ class BusinessGrowthProfile {
 }
 
 class ManagedGrowthArtifact {
-  const ManagedGrowthArtifact({required this.id, required this.data});
+  const ManagedGrowthArtifact({
+    required this.id,
+    required this.data,
+    required this.artifactType,
+    required this.generatedAt,
+  });
   final String id;
   final Map<String, dynamic> data;
+  final String artifactType;
+  final DateTime generatedAt;
   String get title => data['title']?.toString() ?? 'Managed Growth draft';
   String get summary => data['summary']?.toString() ?? '';
   List<Map<String, dynamic>> get sections =>
@@ -124,6 +131,42 @@ class ManagedGrowthService {
     return ManagedGrowthArtifact(
       id: data['artifactId'].toString(),
       data: Map<String, dynamic>.from(data['artifact'] as Map),
+      artifactType: artifactType,
+      generatedAt: DateTime.now().toUtc(),
     );
+  }
+
+  String? get authenticatedEmail => _auth.currentUser?.email;
+
+  Future<String?> loadArtifactDeliveryEmail() async {
+    final snapshot = await _firestore
+        .collection('artifactDeliveryPreferences')
+        .doc(_uid)
+        .get();
+    return snapshot.data()?['artifactDeliveryEmail']?.toString();
+  }
+
+  Future<String> saveArtifactDeliveryEmail(String email) async {
+    final response = await _functions
+        .httpsCallable('saveArtifactDeliveryPreference')
+        .call({'artifactDeliveryEmail': email.trim()});
+    return Map<String, dynamic>.from(
+      response.data as Map,
+    )['artifactDeliveryEmail'].toString();
+  }
+
+  Future<Map<String, dynamic>> emailArtifact({
+    required ManagedGrowthArtifact artifact,
+    required String recipient,
+    required bool remember,
+  }) async {
+    final response = await _functions
+        .httpsCallable('deliverManagedGrowthArtifact')
+        .call({
+          'artifactId': artifact.id,
+          'recipient': recipient.trim(),
+          'remember': remember,
+        });
+    return Map<String, dynamic>.from(response.data as Map);
   }
 }

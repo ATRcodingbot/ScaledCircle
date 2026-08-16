@@ -19,6 +19,7 @@ const expected = [
   "grantInternalBetaEntitlement", "revokeInternalBetaEntitlement",
   "setApplicationAdminRole", "confirmAdminLoginReadiness", "createAdminIssue",
   "saveBusinessGrowthProfile", "generateManagedGrowthArtifact",
+  "saveArtifactDeliveryPreference", "deliverManagedGrowthArtifact",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences", "evaluateOpportunityMatch",
 ];

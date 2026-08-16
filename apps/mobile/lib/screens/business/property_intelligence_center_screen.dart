@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +10,7 @@ import '../../models/campaign_area_geometry.dart';
 import '../../services/address_search_service.dart';
 import '../../services/discovery_preferences_service.dart';
 import '../../services/property_intelligence_service.dart';
+import '../../services/property_area_context_service.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../widgets/mapped_address_field.dart';
@@ -43,6 +42,7 @@ class _PropertyIntelligenceCenterScreenState
   final _service = PropertyIntelligenceService();
   final _aiService = ScaledCircleIntelligenceService();
   final _planService = SubscriptionPlanService();
+  final _areaContextService = const PropertyAreaContextService();
   final List<LatLng> _inputPoints = [];
   List<LatLng> _area = [];
   CampaignAreaShape _shape = CampaignAreaShape.polygon;
@@ -52,6 +52,9 @@ class _PropertyIntelligenceCenterScreenState
   bool _analyzing = false;
   bool _askingAi = false;
   bool _fromSavedArea = false;
+  bool _outsideUsualArea = false;
+  String? _selectedSavedAreaName;
+  List<SavedPropertyAreaContext> _savedAreaContexts = const [];
   ScaledCircleAiInterpretation? _aiInterpretation;
 
   @override
@@ -144,6 +147,7 @@ class _PropertyIntelligenceCenterScreenState
   void _addPoint(TapPosition _, LatLng point) {
     setState(() {
       _fromSavedArea = false;
+      _selectedSavedAreaName = null;
       if (_inputPoints.length >=
           CampaignAreaGeometry.maximumInputPoints(_shape)) {
         _inputPoints.clear();
@@ -162,6 +166,7 @@ class _PropertyIntelligenceCenterScreenState
         (value) => Map<String, dynamic>.from(value),
       ),
     ).where((area) => area['enabled'] != false).toList();
+    _savedAreaContexts = _areaContextService.resolveEnabledAreas(saved);
     if (!mounted) return;
     if (areas.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -173,72 +178,70 @@ class _PropertyIntelligenceCenterScreenState
       );
       return;
     }
-    final selected = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('My Service Areas'),
-        children: areas
-            .map(
-              (area) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, area),
-                child: Text(area['name']?.toString() ?? 'Service area'),
-              ),
-            )
-            .toList(),
-      ),
-    );
+    final selected = areas.length == 1
+        ? areas.single
+        : await showDialog<Map<String, dynamic>>(
+            context: context,
+            builder: (context) => SimpleDialog(
+              title: const Text('Which service area should we analyze?'),
+              children: areas
+                  .map(
+                    (area) => SimpleDialogOption(
+                      onPressed: () => Navigator.pop(context, area),
+                      child: Text(
+                        area['name']?.toString() ?? 'Service area',
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          );
     if (selected == null || !mounted) return;
-    final geometry = (selected['geometry'] as List? ?? const [])
-        .whereType<Map>()
-        .map(
-          (point) => LatLng(
-            (point['latitude'] as num).toDouble(),
-            (point['longitude'] as num).toDouble(),
-          ),
-        )
-        .toList();
-    final center = selected['center'];
-    if (geometry.length >= 3) {
-      _loadSavedPolygon(selected, geometry);
-    } else if (center is Map && selected['radiusMiles'] is num) {
-      final latitude = (center['latitude'] as num).toDouble();
-      final longitude = (center['longitude'] as num).toDouble();
-      final radius = (selected['radiusMiles'] as num).toDouble();
-      final polygon = List.generate(32, (index) {
-        final angle = 2 * math.pi * index / 32;
-        return LatLng(
-          latitude + radius / 69 * math.sin(angle),
-          longitude +
-              radius /
-                  (69 * math.cos(latitude * math.pi / 180)) *
-                  math.cos(angle),
-        );
-      });
-      _loadSavedPolygon(selected, polygon);
-    } else {
+    final contextArea = _areaContextService.resolve(selected);
+    if (contextArea == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Search this saved city or ZIP below to choose the exact analysis area.',
+            'This saved place needs a mapped boundary before Property Intelligence can analyze it. Edit the service area to add one.',
           ),
         ),
       );
+      return;
     }
+    _loadSavedArea(contextArea);
   }
 
-  void _loadSavedPolygon(Map<String, dynamic> area, List<LatLng> polygon) {
+  void _loadSavedArea(SavedPropertyAreaContext area) {
     setState(() {
       _shape = CampaignAreaShape.polygon;
       _inputPoints
         ..clear()
-        ..addAll(polygon);
-      _area = polygon;
+        ..addAll(area.polygon);
+      _area = area.polygon;
       _fromSavedArea = true;
+      _outsideUsualArea = false;
+      _selectedSavedAreaName = area.name;
       _analysis = null;
       _aiInterpretation = null;
-      _searchController.text = area['name']?.toString() ?? 'Saved service area';
+      _searchController.text = area.name;
     });
-    _mapController.move(polygon.first, 11);
+    _mapController.move(area.polygon.first, 11);
+  }
+
+  Future<void> _exploreAnywhere() async {
+    final saved = await DiscoveryPreferencesService().load();
+    if (!mounted) return;
+    setState(() {
+      _savedAreaContexts = _areaContextService.resolveEnabledAreas(saved);
+      _fromSavedArea = false;
+      _outsideUsualArea = false;
+      _selectedSavedAreaName = null;
+      _inputPoints.clear();
+      _area = [];
+      _analysis = null;
+      _aiInterpretation = null;
+      _searchController.clear();
+    });
   }
 
   void _selectShape(CampaignAreaShape shape) {
@@ -246,6 +249,8 @@ class _PropertyIntelligenceCenterScreenState
       _shape = shape;
       _inputPoints.clear();
       _area = [];
+      _fromSavedArea = false;
+      _selectedSavedAreaName = null;
       _analysis = null;
       _aiInterpretation = null;
     });
@@ -255,6 +260,8 @@ class _PropertyIntelligenceCenterScreenState
     setState(() {
       _area.clear();
       _inputPoints.clear();
+      _fromSavedArea = false;
+      _selectedSavedAreaName = null;
       _analysis = null;
       _aiInterpretation = null;
     });
@@ -267,6 +274,11 @@ class _PropertyIntelligenceCenterScreenState
       final analysis = await _service.analyzeArea(_geometry);
       if (!mounted) return;
       setState(() {
+        _outsideUsualArea = !_fromSavedArea &&
+            !_areaContextService.overlapsSavedArea(
+              _area,
+              _savedAreaContexts,
+            );
         _analysis = analysis;
         _aiInterpretation = null;
         final analysisId = analysis.data['analysisId']?.toString();
@@ -275,9 +287,10 @@ class _PropertyIntelligenceCenterScreenState
         );
         _analyses.add(
           _ExploratoryAnalysis(
-            label: _searchController.text.trim().isEmpty
+            label: _selectedSavedAreaName ??
+                (_searchController.text.trim().isEmpty
                 ? 'Analysis ${_analyses.length + 1}'
-                : _searchController.text.trim(),
+                : _searchController.text.trim()),
             geometry: List<Map<String, double>>.from(_geometry),
             analysis: analysis,
           ),
@@ -295,6 +308,36 @@ class _PropertyIntelligenceCenterScreenState
       );
     } finally {
       if (mounted) setState(() => _analyzing = false);
+    }
+  }
+
+  Future<void> _confirmAddToServiceAreas() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add this area?'),
+        content: const Text(
+          'Your saved service areas will change only after you review and save the area.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Review Service Areas'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const AreasPreferencesScreen(role: 'business'),
+        ),
+      );
     }
   }
 
@@ -698,12 +741,21 @@ class _PropertyIntelligenceCenterScreenState
                       label: const Text('My Service Areas'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: () => setState(() => _fromSavedArea = false),
+                      onPressed: _exploreAnywhere,
                       icon: const Icon(Icons.public),
                       label: const Text('Explore Anywhere'),
                     ),
                   ],
                 ),
+                if (_fromSavedArea && _selectedSavedAreaName != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Analyzing: $_selectedSavedAreaName',
+                      key: const Key('selected-saved-property-area'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 if (_area.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -713,19 +765,14 @@ class _PropertyIntelligenceCenterScreenState
                           child: Text(
                             _fromSavedArea
                                 ? 'Inside your service area'
-                                : 'Outside your usual service area — manual exploration is always available.',
+                                : _outsideUsualArea
+                                ? 'Outside your usual service area — manual exploration is always available.'
+                                : 'Explore Anywhere — saved preferences do not restrict manual analysis.',
                           ),
                         ),
-                        if (!_fromSavedArea)
+                        if (!_fromSavedArea && _outsideUsualArea)
                           TextButton(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const AreasPreferencesScreen(
-                                  role: 'business',
-                                ),
-                              ),
-                            ),
+                            onPressed: _confirmAddToServiceAreas,
                             child: const Text('Add to Service Areas'),
                           ),
                       ],

@@ -2,6 +2,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/artifact_download.dart';
+import '../../services/artifact_export_service.dart';
 import '../../services/managed_growth_service.dart';
 import 'business_growth_profile_wizard.dart';
 
@@ -14,8 +16,10 @@ class ManagedGrowthScreen extends StatefulWidget {
 
 class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
   final _service = ManagedGrowthService();
+  final _exports = const ArtifactExportService();
   BusinessGrowthProfile? _profile;
   final Map<String, ManagedGrowthArtifact> _artifacts = {};
+  String? _deliveryEmail;
   bool _loading = true;
 
   static const _packages = <({IconData icon, String type, String title, String description})>[
@@ -78,8 +82,16 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
 
   Future<void> _load() async {
     try {
-      final value = await _service.loadProfile();
-      if (mounted) setState(() => _profile = value);
+      final values = await Future.wait([
+        _service.loadProfile(),
+        _service.loadArtifactDeliveryEmail(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _profile = values[0] as BusinessGrowthProfile?;
+          _deliveryEmail = values[1] as String?;
+        });
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -232,7 +244,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
         );
         if (mounted) {
           setState(() => _artifacts[type] = value);
-          await _view(value);
+          await _view(value, onRegenerate: () => _generate(type, title));
         }
       } on FirebaseFunctionsException catch (error) {
         if (mounted) {
@@ -252,22 +264,210 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
     audience.dispose();
   }
 
-  Future<void> _copy(ManagedGrowthArtifact value, {bool export = false}) async {
-    await Clipboard.setData(ClipboardData(text: value.toPlainText()));
+  String get _businessName =>
+      _profile?.data['businessName']?.toString() ?? 'Your business';
+
+  String? get _focus =>
+      (_profile?.data['priorityServices'] as List? ?? const [])
+          .map((value) => value.toString().trim())
+          .where((value) => value.isNotEmpty)
+          .firstOrNull;
+
+  Future<void> _download(
+    ManagedGrowthArtifact value, {
+    bool csv = false,
+  }) async {
+    final content = csv
+        ? _exports.socialCsv(value)
+        : _exports.text(
+            artifact: value,
+            businessName: _businessName,
+            focus: _focus,
+          );
+    final filename = _exports.filename(
+      artifact: value,
+      businessName: _businessName,
+      focus: _focus,
+      extension: csv ? 'csv' : 'txt',
+    );
+    await downloadArtifact(
+      filename: filename,
+      content: content,
+      mimeType: csv ? 'text/csv' : 'text/plain',
+    );
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            export
-                ? 'Plain-text export copied to clipboard'
-                : 'Copied to clipboard',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Downloaded $filename')));
     }
   }
 
-  Future<void> _view(ManagedGrowthArtifact value) => showDialog<void>(
+  Future<void> _editDeliveryEmail() async {
+    final controller = TextEditingController(
+      text: _deliveryEmail ?? _service.authenticatedEmail ?? '',
+    );
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Generated file email'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Where should ScaledCircle send generated files?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (save == true) {
+      try {
+        final email = await _service.saveArtifactDeliveryEmail(controller.text);
+        if (mounted) setState(() => _deliveryEmail = email);
+      } on FirebaseFunctionsException catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error.message ?? 'Unable to save the email.'),
+            ),
+          );
+        }
+      }
+    }
+    controller.dispose();
+  }
+
+  Future<void> _email(ManagedGrowthArtifact value) async {
+    final controller = TextEditingController(
+      text: _deliveryEmail ?? _service.authenticatedEmail ?? '',
+    );
+    var remember = _deliveryEmail != null;
+    var sending = false;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !sending,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Text('Where should we send this?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                enabled: !sending,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email address'),
+              ),
+              CheckboxListTile(
+                value: remember,
+                onChanged: sending
+                    ? null
+                    : (value) => setModalState(() => remember = value == true),
+                title: const Text('Remember this email for generated files'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const Text(
+                'This sends only this generated file. It does not send a marketing campaign.',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: sending ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: sending
+                  ? null
+                  : () async {
+                      setModalState(() => sending = true);
+                      try {
+                        final result = await _service.emailArtifact(
+                          artifact: value,
+                          recipient: controller.text,
+                          remember: remember,
+                        );
+                        if (remember && mounted) {
+                          setState(
+                            () => _deliveryEmail =
+                                result['artifactDeliveryEmail']?.toString(),
+                          );
+                        }
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        if (mounted) {
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                result['status'] == 'already_queued'
+                                    ? 'This file is already queued for delivery.'
+                                    : 'File queued for delivery.',
+                              ),
+                            ),
+                          );
+                        }
+                      } on FirebaseFunctionsException catch (error) {
+                        if (dialogContext.mounted) {
+                          setModalState(() => sending = false);
+                        }
+                        if (mounted) {
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                error.message ?? 'Unable to send this file.',
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Send File'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+  }
+
+  Future<void> _copy(ManagedGrowthArtifact value) async {
+    await Clipboard.setData(
+      ClipboardData(
+        text: _exports.text(
+          artifact: value,
+          businessName: _businessName,
+          focus: _focus,
+        ),
+      ),
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Copied to clipboard')));
+    }
+  }
+
+  Future<void> _view(
+    ManagedGrowthArtifact value, {
+    VoidCallback? onRegenerate,
+  }) => showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(value.title),
@@ -306,13 +506,33 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
         TextButton.icon(
           onPressed: () => _copy(value),
           icon: const Icon(Icons.copy),
-          label: const Text('Copy'),
+          label: const Text('Copy All'),
         ),
         TextButton.icon(
-          onPressed: () => _copy(value, export: true),
+          onPressed: () => _download(value),
           icon: const Icon(Icons.download_outlined),
-          label: const Text('Export Text'),
+          label: const Text('Download'),
         ),
+        if (value.artifactType == 'social_package')
+          TextButton.icon(
+            onPressed: () => _download(value, csv: true),
+            icon: const Icon(Icons.table_view_outlined),
+            label: const Text('Download CSV'),
+          ),
+        TextButton.icon(
+          onPressed: () => _email(value),
+          icon: const Icon(Icons.email_outlined),
+          label: const Text('Email'),
+        ),
+        if (onRegenerate != null)
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              onRegenerate();
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Regenerate'),
+          ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
@@ -361,6 +581,20 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                   ),
                 ),
               ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.attach_email_outlined),
+                  title: const Text('Generated file delivery'),
+                  subtitle: Text(
+                    _deliveryEmail ??
+                        'Uses your account email unless you choose another address.',
+                  ),
+                  trailing: TextButton(
+                    onPressed: _editDeliveryEmail,
+                    child: const Text('Edit'),
+                  ),
+                ),
+              ),
               const Card(
                 child: Padding(
                   padding: EdgeInsets.all(16),
@@ -406,32 +640,54 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                   _ => item.title,
                 };
                 return Card(
-                  child: ListTile(
-                    leading: Icon(item.icon),
-                    title: Text(friendlyTitle),
-                    subtitle: Text(item.description),
-                    trailing: Wrap(
-                      spacing: 6,
-                      children: [
-                        if (artifact != null)
-                          TextButton(
-                            onPressed: () => _view(artifact),
-                            child: const Text('View'),
-                          ),
-                        if (artifact != null)
-                          IconButton(
-                            tooltip: 'Copy',
-                            onPressed: () => _copy(artifact),
-                            icon: const Icon(Icons.copy_outlined),
-                          ),
-                        FilledButton(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Icon(item.icon),
+                        title: Text(friendlyTitle),
+                        subtitle: Text(item.description),
+                        trailing: FilledButton(
                           onPressed: () => _generate(item.type, friendlyTitle),
                           child: Text(
                             artifact == null ? 'Generate' : 'Regenerate',
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      if (artifact != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                          child: Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              TextButton(
+                                onPressed: () => _view(
+                                  artifact,
+                                  onRegenerate: () =>
+                                      _generate(item.type, friendlyTitle),
+                                ),
+                                child: const Text('View'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => _download(artifact),
+                                icon: const Icon(Icons.download_outlined),
+                                label: const Text('Download'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => _email(artifact),
+                                icon: const Icon(Icons.email_outlined),
+                                label: const Text('Email'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => _copy(artifact),
+                                icon: const Icon(Icons.copy_all_outlined),
+                                label: const Text('Copy All'),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                 );
               }),

@@ -46,6 +46,7 @@ const multiScalerRollout = require("./multi_scaler_rollout");
 const subscriptionEntitlements = require("./subscription_entitlements");
 const managedGrowth = require("./managed_growth");
 const managedGrowthProfile = require("./managed_growth_profile");
+const managedGrowthDelivery = require("./managed_growth_delivery");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
 
@@ -666,10 +667,15 @@ exports.sendOutboundEmailJob = onDocumentCreated(
     const destination = readText(queued.to, 254).toLowerCase();
     const fromAddress = readText(queued.fromAddress, 254).toLowerCase();
     const template = readText(queued.template, 80);
+    const artifactDelivery = template === managedGrowthDelivery.DELIVERY_TEMPLATE;
     const allowedTemplate = template.startsWith("welcome_") ||
-      template.startsWith("support_");
+      template.startsWith("support_") || artifactDelivery;
     const recipientAllowed = destination === SUPPORT_EMAIL ||
-      template.startsWith("welcome_");
+      template.startsWith("welcome_") || artifactDelivery &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination) &&
+      queued.schemaVersion === managedGrowthDelivery.DELIVERY_SCHEMA_VERSION &&
+      readText(queued.businessUid, 128) && readText(queued.artifactId, 128) &&
+      readText(queued.bodyHash, 128);
     if (fromAddress !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed) {
       await snapshot.ref.set({
         status: "rejected",
@@ -706,7 +712,7 @@ exports.sendOutboundEmailJob = onDocumentCreated(
         to: destination,
         replyTo: SUPPORT_EMAIL,
         subject: readText(queued.subject, 180),
-        text: String(queued.text || "").slice(0, 12000),
+        text: String(queued.text || "").slice(0, artifactDelivery ? 50000 : 12000),
         headers: {"X-Scaled-Circle-Notification": jobId},
       });
       await snapshot.ref.set({
@@ -4029,6 +4035,72 @@ exports.generateManagedGrowthArtifact = onCall(
         artifactType: generationRequest.artifactType, error: String(error?.message || error).slice(0, 120)});
       throw new HttpsError("unavailable", "Managed Growth generation is temporarily unavailable.");
     }
+  },
+);
+
+/** Saves a dedicated generated-file recipient without changing Auth or billing email. */
+exports.saveArtifactDeliveryPreference = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    let preference;
+    try {
+      preference = managedGrowthDelivery.deliveryPreference(
+        business.uid, request.data?.artifactDeliveryEmail,
+      );
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Enter a valid file-delivery email address.");
+    }
+    await db.collection("artifactDeliveryPreferences").doc(business.uid).set({
+      ...preference,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: business.uid,
+    }, {merge: true});
+    return {artifactDeliveryEmail: preference.artifactDeliveryEmail,
+      schemaVersion: managedGrowthDelivery.DELIVERY_PREFERENCE_VERSION};
+  },
+);
+
+/** Queues one owner-authorized artifact email; it never sends a marketing campaign. */
+exports.deliverManagedGrowthArtifact = onCall(
+  {enforceAppCheck: false, maxInstances: 6},
+  async (request) => {
+    const business = await requireManagedGrowthBusiness(request);
+    const artifactId = readText(request.data?.artifactId, 128);
+    if (!artifactId) throw new HttpsError("invalid-argument", "Choose a generated file to send.");
+    const [artifactSnapshot, profileSnapshot] = await Promise.all([
+      db.collection("managedGrowthArtifacts").doc(artifactId).get(),
+      db.collection("businessGrowthProfiles").doc(business.uid).get(),
+    ]);
+    let delivery;
+    try {
+      delivery = managedGrowthDelivery.prepareDelivery({uid: business.uid,
+        recipient: request.data?.recipient || request.auth.token.email,
+        artifactId, artifactDocument: artifactSnapshot.exists ? artifactSnapshot.data() : null,
+        businessName: profileSnapshot.data()?.businessName, now: Date.now()});
+    } catch (error) {
+      const code = String(error?.message || error);
+      if (code === "artifact_not_owned_or_missing") {
+        throw new HttpsError("permission-denied", "That generated file is not available to this Business.");
+      }
+      throw new HttpsError("invalid-argument", "Enter a valid file-delivery email address.");
+    }
+    const jobRef = db.collection(signupNotifications.EMAIL_JOB_COLLECTION).doc(delivery.jobId);
+    let alreadyQueued = false;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(jobRef);
+      if (existing.exists) { alreadyQueued = true; return; }
+      transaction.create(jobRef, {...delivery.job,
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    });
+    if (request.data?.remember === true) {
+      const preference = managedGrowthDelivery.deliveryPreference(business.uid, delivery.recipient);
+      await db.collection("artifactDeliveryPreferences").doc(business.uid).set({
+        ...preference, updatedAt: FieldValue.serverTimestamp(), updatedBy: business.uid,
+      }, {merge: true});
+    }
+    return {status: alreadyQueued ? "already_queued" : "queued",
+      artifactDeliveryEmail: delivery.recipient, attachmentIncluded: false};
   },
 );
 

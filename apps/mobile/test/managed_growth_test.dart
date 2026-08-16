@@ -54,8 +54,11 @@ void main() {
     expect(screen, contains('Set Up Your Growth Profile'));
     expect(screen, contains("artifact == null ? 'Generate' : 'Regenerate'"));
     expect(screen, contains("const Text('View')"));
-    expect(screen, contains("label: const Text('Copy')"));
-    expect(screen, contains("label: const Text('Export Text')"));
+    expect(screen, contains("label: const Text('Copy All')"));
+    expect(screen, contains("label: const Text('Download')"));
+    expect(screen, contains("label: const Text('Download CSV')"));
+    expect(screen, contains("label: const Text('Email')"));
+    expect(screen, contains("const Text('Send File')"));
     expect(screen, contains('Generate Image — Coming Soon / Beta'));
   });
 
@@ -66,6 +69,8 @@ void main() {
     expect(service, contains('saveBusinessGrowthProfile'));
     expect(service, contains('generateManagedGrowthArtifact'));
     expect(service, contains('suggestBusinessGrowthProfileFromWebsite'));
+    expect(service, contains('deliverManagedGrowthArtifact'));
+    expect(service, contains('saveArtifactDeliveryPreference'));
     expect(service, isNot(contains('OPENAI_API_KEY')));
   });
 

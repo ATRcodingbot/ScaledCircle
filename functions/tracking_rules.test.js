@@ -98,6 +98,10 @@ beforeEach(async () => {
     await db.doc("managedGrowthRateLimits/business-one_day").set({
       businessUid: "business-one", count: 1,
     });
+    await db.doc("artifactDeliveryPreferences/business-one").set({
+      businessUid: "business-one", artifactDeliveryEmail: "files@example.test",
+      schemaVersion: "ArtifactDeliveryPreferencesV1",
+    });
   });
 });
 
@@ -112,6 +116,11 @@ test("Managed Growth profiles and artifacts are owner-readable and backend-write
   await assertFails(owner.doc("managedGrowthArtifacts/forged").set({businessUid: "business-one"}));
   await assertFails(owner.doc("managedGrowthRateLimits/business-one_day").get());
   await assertFails(owner.doc("managedGrowthRateLimits/business-one_day").set({count: 0}));
+  await assertSucceeds(owner.doc("artifactDeliveryPreferences/business-one").get());
+  await assertFails(other.doc("artifactDeliveryPreferences/business-one").get());
+  await assertFails(owner.doc("artifactDeliveryPreferences/business-one").update({
+    artifactDeliveryEmail: "forged@example.test",
+  }));
 });
 
 test("discovery preferences are owner-readable and backend-write-only", async () => {

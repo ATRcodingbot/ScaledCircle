@@ -409,6 +409,13 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // The generated-file recipient is distinct from Auth, billing, and support
+    // email. Owners may read it; validated writes use platform-core only.
+    match /artifactDeliveryPreferences/{businessId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
     // Areas and discovery preferences are separate from identity and billing.
     // Owners can read their sanitized projection; versioned writes and matching
     // flow through platform-core so clients cannot spoof role or match reasons.

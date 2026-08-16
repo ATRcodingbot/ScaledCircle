@@ -39,7 +39,8 @@ function sanitizeArea(value, index) {
       radiusMiles < 1 || radiusMiles > 250)) throw new Error("radius_area_requires_center");
   return {id: text(value.id, 80) || `area_${index + 1}`, name: text(value.name, 100) ||
     `Service Area ${index + 1}`, type, primary: value.primary === true, enabled: value.enabled !== false,
-  places: list(value.places, 20, 100), postalCodes: list(value.postalCodes, 30, 12),
+  centerLabel: text(value.centerLabel, 100), places: list(value.places, 20, 100),
+  postalCodes: list(value.postalCodes, 30, 12),
   center, radiusMiles: center && Number.isFinite(radiusMiles) ? Math.round(radiusMiles * 10) / 10 : null,
   geometry};
 }

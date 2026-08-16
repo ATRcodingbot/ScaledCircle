@@ -102,10 +102,12 @@ function buildGenerationContext({profile, profileVersion, request, authoritative
     businessProfile: effectiveProfile,
     discoveryPreferences: discovery ? {
       schemaVersion: text(discovery.schemaVersion, 80),
+      areasAreIndependent: true,
       areas: Array.isArray(discovery.areas) ? discovery.areas.filter((area) => area?.enabled !== false)
         .slice(0, 8).map((area) => ({name: text(area.name, 100), type: text(area.type, 40),
-          places: list(area.places, 20, 100), postalCodes: list(area.postalCodes, 30, 12),
-          radiusMiles: Number(area.radiusMiles) || null})) : [],
+          centerLabel: text(area.centerLabel, 100), places: list(area.places, 20, 100),
+          postalCodes: list(area.postalCodes, 30, 12),
+          radiusMiles: Number(area.radiusMiles) || null, relationship: "independent"})) : [],
       priorityServices: list(discovery.priorityServices),
       excludedServices: list(discovery.excludedServices),
     } : null,
@@ -118,6 +120,8 @@ function buildGenerationContext({profile, profileVersion, request, authoritative
     boundaries: {
       unknownValuesRemainUnknown: true,
       noLicensesAwardsRatingsProjectsTestimonialsGuaranteesOrServiceAreasMayBeInvented: true,
+      savedServiceAreasAreIndependentRulesAndMustNotBeMergedIntoOneGeometry: true,
+      radiusWordingRequiresTheSavedRadiusAndAConfirmedCenterLabel: true,
       outputIsDraftOnly: true,
       noPublishingSendingOrderingFundingSpendingOrAssignment: true,
       plannedBudgetIsNotActualSpend: true,

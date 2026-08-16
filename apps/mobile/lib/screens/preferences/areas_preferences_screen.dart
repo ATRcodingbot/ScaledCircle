@@ -106,6 +106,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
     final postals = TextEditingController(
       text: _strings(existing?['postalCodes']).join(', '),
     );
+    final centerLabel = TextEditingController(
+      text: existing?['centerLabel']?.toString() ?? '',
+    );
     var type = existing?['type']?.toString() ?? 'place';
     var radius = (existing?['radiusMiles'] as num?)?.toDouble() ?? 20;
     Map<String, dynamic>? center = existing?['center'] is Map
@@ -196,15 +199,30 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       onChanged: (value) =>
                           setDialogState(() => radius = value ?? radius),
                     ),
+                    TextField(
+                      controller: centerLabel,
+                      decoration: const InputDecoration(
+                        labelText: 'What place is this area centered around?',
+                        hintText: 'Example: Annapolis',
+                        helperText:
+                            'We use only the place name you confirm in generated wording.',
+                      ),
+                    ),
                   ],
-                  if (type == 'around_business' || type == 'drawn')
+                  if (type == 'around_business' ||
+                      type == 'drawn' ||
+                      type == 'place' ||
+                      type == 'postal_codes')
                     FilledButton.tonalIcon(
                       onPressed: () async {
                         final selection = await Navigator.of(dialogContext)
                             .push<ServiceAreaMapSelection>(
                               MaterialPageRoute(
                                 builder: (_) => ServiceAreaMapPicker(
-                                  drawArea: type == 'drawn',
+                                  drawArea:
+                                      type == 'drawn' ||
+                                      type == 'place' ||
+                                      type == 'postal_codes',
                                 ),
                               ),
                             );
@@ -228,9 +246,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       icon: const Icon(Icons.map_outlined),
                       label: Text(
                         center == null
-                            ? (type == 'drawn'
-                                  ? 'Draw my area'
-                                  : 'Choose the center on a map')
+                            ? (type == 'around_business'
+                                  ? 'Choose the center on a map'
+                                  : 'Draw this saved area on the map')
                             : 'Map area selected',
                       ),
                     ),
@@ -263,6 +281,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                   'enabled': existing?['enabled'] != false,
                   'places': _split(places.text),
                   'postalCodes': _split(postals.text),
+                  'centerLabel': centerLabel.text.trim(),
                   'center': center,
                   'radiusMiles': type == 'around_business' ? radius : null,
                   'geometry': geometry,
@@ -277,6 +296,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
     name.dispose();
     places.dispose();
     postals.dispose();
+    centerLabel.dispose();
     if (result != null) {
       setState(() {
         if (editIndex == null) {
