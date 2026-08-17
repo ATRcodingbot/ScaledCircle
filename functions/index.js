@@ -4035,6 +4035,10 @@ exports.resolveServiceAreaPlace = onCall(
         db,
         baseUrl: process.env.NOMINATIM_BASE_URL,
         tigerBase: process.env.TIGERWEB_BASE_URL,
+        onCacheWriteError: (error) => logger.info("Service area cache write skipped.", {
+          errorCode: String(error?.message || error).slice(0, 80),
+          cacheVersion: serviceAreaResolution.CACHE_VERSION,
+        }),
       });
     } catch (error) {
       if (error?.message === "invalid_query") {

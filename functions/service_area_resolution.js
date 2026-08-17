@@ -1,7 +1,8 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const CACHE_VERSION = "USBoundaryCacheV2";
+const CACHE_VERSION = "USBoundaryCacheV3";
+const LEGACY_CACHE_VERSION = "NominatimBoundaryCacheV1";
 const RESOLUTION_VERSION = "ServiceAreaResolutionV2";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MIN_REQUEST_INTERVAL_MS = 1100;
@@ -10,6 +11,7 @@ const TIGER_BASE = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERwe
 
 function normalizeQuery(value) { return String(value || "").trim().replace(/\s+/g, " ").slice(0, 180); }
 function cacheId(query) { return crypto.createHash("sha256").update(`${CACHE_VERSION}:${query.toLowerCase()}`).digest("hex"); }
+function legacyCacheId(query) { return crypto.createHash("sha256").update(query.toLowerCase()).digest("hex"); }
 function simplifyRing(ring, maximum = 100) {
   if (!Array.isArray(ring)) return [];
   const points = ring.map((coordinate) => {
@@ -36,6 +38,62 @@ function normalizeGeoJson(rawGeoJson) {
   const geometryParts = rings.map((ring) => simplifyRing(ring)).filter((ring) => ring.length >= 3);
   const geometry = geometryParts.reduce((largest, ring) => Math.abs(ringArea(ring)) > Math.abs(ringArea(largest)) ? ring : largest, []);
   return {geometry, geometryParts, geometryType: geometryParts.length ? type : ""};
+}
+function validPoint(point) {
+  return point && Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude));
+}
+function normalizePoints(value) {
+  return Array.isArray(value) ? value.filter(validPoint).map((point) => ({
+    latitude: Number(point.latitude), longitude: Number(point.longitude),
+  })) : [];
+}
+function encodeCacheResult(result) {
+  const geometry = normalizePoints(result.geometry);
+  const geometryParts = Array.isArray(result.geometryParts) ? result.geometryParts
+    .map((points) => ({points: normalizePoints(points)})).filter((part) => part.points.length >= 3) : [];
+  return {id: String(result.id || ""), primaryText: String(result.primaryText || ""),
+    secondaryText: String(result.secondaryText || ""), fullAddress: String(result.fullAddress || ""),
+    canonicalName: String(result.fullAddress || result.primaryText || ""),
+    latitude: Number(result.latitude), longitude: Number(result.longitude),
+    center: {latitude: Number(result.latitude), longitude: Number(result.longitude)},
+    bounds: result.bounds || null, placeType: String(result.placeType || ""),
+    areaType: String(result.geographyType || result.placeType || ""),
+    geographyType: String(result.geographyType || ""), geometryType: String(result.geometryType || ""),
+    city: String(result.city || ""), county: String(result.county || ""), state: String(result.state || ""),
+    country: String(result.country || "United States"), postalCode: String(result.postalCode || ""),
+    geographicId: String(result.geographicId || ""), sourceVintage: String(result.sourceVintage || ""),
+    provider: String(result.resolutionSource || ""), resolutionSource: String(result.resolutionSource || ""),
+    resolutionVersion: String(result.resolutionVersion || RESOLUTION_VERSION),
+    geometry: {points: geometry}, geometryParts};
+}
+function decodeCacheResult(stored) {
+  if (!stored || typeof stored !== "object") return null;
+  const geometry = normalizePoints(stored.geometry?.points || stored.geometry);
+  const geometryParts = Array.isArray(stored.geometryParts) ? stored.geometryParts
+    .map((part) => normalizePoints(part?.points)).filter((points) => points.length >= 3) : [];
+  return {...stored, geometry, geometryParts: geometryParts.length ? geometryParts :
+    (geometry.length >= 3 ? [geometry] : [])};
+}
+function encodeCacheDocument(results, now) {
+  return {cacheVersion: CACHE_VERSION, resolutionVersion: RESOLUTION_VERSION,
+    status: "success", results: results.map(encodeCacheResult), createdAtMs: now,
+    resolvedAtMs: now, expiresAtMs: now + CACHE_TTL_MS};
+}
+function decodeCacheDocument(value) {
+  if (!value || value.cacheVersion !== CACHE_VERSION || value.status !== "success") return [];
+  return Array.isArray(value.results) ? value.results.map(decodeCacheResult).filter(Boolean) : [];
+}
+function decodeLegacyCacheDocument(value) {
+  if (!value || value.cacheVersion !== LEGACY_CACHE_VERSION) return [];
+  return Array.isArray(value.results) ? value.results.map((result) => {
+    const decoded = decodeCacheResult(result); if (!decoded || decoded.geometry.length < 3) return null;
+    const label = `${decoded.primaryText || ""} ${decoded.fullAddress || ""}`.toLowerCase();
+    const legacyGeographyType = label.includes(" county") ? "county" :
+      (/\b\d{5}(?:-\d{4})?\b/.test(label) ? "zcta" : "city");
+    return {...decoded, geometryType: decoded.geometryType || "Polygon",
+      geographyType: decoded.geographyType || legacyGeographyType,
+      resolutionVersion: RESOLUTION_VERSION};
+  }).filter(Boolean) : [];
 }
 function geographyType(raw, address) {
   const kind = String(raw.addresstype || "").toLowerCase();
@@ -92,11 +150,28 @@ async function censusBoundary(result, {fetchImpl, tigerBase = TIGER_BASE}) {
   }
   return null;
 }
-async function resolvePlace({query: rawQuery, db, fetchImpl = fetch, now = Date.now(), baseUrl, tigerBase}) {
+async function writeCacheFailSoft(reference, results, now, onCacheWriteError) {
+  try { await reference.set(encodeCacheDocument(results, now)); }
+  catch (error) { if (onCacheWriteError) onCacheWriteError(error); }
+}
+async function resolvePlace({query: rawQuery, db, fetchImpl = fetch, now = Date.now(), baseUrl, tigerBase,
+  onCacheWriteError}) {
   const query = normalizeQuery(rawQuery); if (query.length < 2) throw new Error("invalid_query");
   const cacheReference = db.collection("serviceAreaResolutionCache").doc(cacheId(query));
   const cached = await cacheReference.get();
-  if (cached.exists && cached.data()?.cacheVersion === CACHE_VERSION && Number(cached.data()?.expiresAtMs || 0) > now) return {results: cached.data().results || [], cached: true};
+  if (cached.exists && Number(cached.data()?.expiresAtMs || 0) > now) {
+    const results = decodeCacheDocument(cached.data());
+    if (results.some((result) => result.geometry.length >= 3)) return {results, cached: true};
+  }
+  const legacyReference = db.collection("serviceAreaResolutionCache").doc(legacyCacheId(query));
+  const legacy = await legacyReference.get();
+  if (legacy.exists && Number(legacy.data()?.expiresAtMs || 0) > now) {
+    const results = decodeLegacyCacheDocument(legacy.data());
+    if (results.length) {
+      await writeCacheFailSoft(cacheReference, results, now, onCacheWriteError);
+      return {results, cached: true};
+    }
+  }
   const throttleReference = db.collection("serviceAreaResolutionSystem").doc("publicNominatim");
   await db.runTransaction(async (transaction) => {
     const throttle = await transaction.get(throttleReference);
@@ -110,9 +185,14 @@ async function resolvePlace({query: rawQuery, db, fetchImpl = fetch, now = Date.
   const parsed = Array.isArray(payload) ? payload.map(parseResult).filter(Boolean) : [];
   const results = [];
   for (const result of parsed) results.push(result.geometry.length >= 3 ? result : await censusBoundary(result, {fetchImpl, tigerBase}) || result);
-  await cacheReference.set({cacheVersion: CACHE_VERSION, resolutionVersion: RESOLUTION_VERSION,
-    results, createdAtMs: now, resolvedAtMs: now, expiresAtMs: now + CACHE_TTL_MS});
+  // Only usable boundaries receive the 30-day cache. Provider/network failures throw
+  // before this point, and unresolved identities are deliberately not cached.
+  if (results.some((result) => result.geometry.length >= 3)) {
+    await writeCacheFailSoft(cacheReference, results, now, onCacheWriteError);
+  }
   return {results, cached: false};
 }
 module.exports = {CACHE_VERSION, RESOLUTION_VERSION, CACHE_TTL_MS, MIN_REQUEST_INTERVAL_MS,
-  PROVIDER_TIMEOUT_MS, normalizeQuery, normalizeGeoJson, parseResult, censusBoundary, resolvePlace};
+  PROVIDER_TIMEOUT_MS, normalizeQuery, normalizeGeoJson, parseResult, censusBoundary,
+  encodeCacheResult, decodeCacheResult, encodeCacheDocument, decodeCacheDocument,
+  decodeLegacyCacheDocument, resolvePlace};

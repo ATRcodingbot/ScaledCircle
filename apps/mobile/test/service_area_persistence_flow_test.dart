@@ -13,27 +13,28 @@ void main() {
         {'latitude': 39.3, 'longitude': -76.9},
         {'latitude': 39.3, 'longitude': -76.3},
       ];
+      final callableSuggestion = AddressSearchService.parseSuggestion({
+        'id': 'county-24003',
+        'primaryText': 'Anne Arundel County',
+        'secondaryText': 'Maryland, United States',
+        'fullAddress': 'Anne Arundel County, Maryland',
+        'latitude': 39,
+        'longitude': -76.6,
+        'geometry': boundary,
+        'geometryParts': [boundary],
+        'geometryType': 'Polygon',
+        'geographyType': 'county',
+        'geographicId': '24003',
+        'sourceVintage': 'January 1, 2025',
+        'resolutionSource': 'openstreetmap_nominatim',
+        'resolutionVersion': 'ServiceAreaResolutionV2',
+      })!;
       await tester.pumpWidget(
         MaterialApp(
           home: AreasPreferencesScreen(
             role: 'business',
             loadPreferences: () async => null,
-            searchAddresses: (query) async => const [
-              AddressSuggestion(
-                id: 'county-24003',
-                primaryText: 'Anne Arundel County',
-                secondaryText: 'Maryland, United States',
-                fullAddress: 'Anne Arundel County, Maryland',
-                latitude: 39,
-                longitude: -76.6,
-                geometry: boundary,
-                geometryParts: [boundary],
-                geometryType: 'Polygon',
-                geographyType: 'county',
-                geographicId: '24003',
-                sourceVintage: 'January 1, 2025',
-              ),
-            ],
+            searchAddresses: (query) async => [callableSuggestion],
             savePreferences: (payload) async {
               persisted = payload;
               return {...payload, 'preferenceVersion': 1};
