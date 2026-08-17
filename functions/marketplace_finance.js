@@ -1,10 +1,14 @@
 "use strict";
 
 const crypto = require("node:crypto");
-
-const PLATFORM_FEE_BASIS_POINTS = 2000;
-const BASIS_POINTS_DENOMINATOR = 10000;
-const CURRENCY = "usd";
+const {
+  BASIS_POINTS_DENOMINATOR,
+  CURRENCY,
+  PLATFORM_FEE_BASIS_POINTS,
+  assertSafeCents,
+  feeForWorkerAmount,
+  quoteCampaignFunding,
+} = require("./campaign_funding_quote");
 const REVIEW_WINDOW_HOURS = 48;
 const DEFAULT_REDO_LIMIT = 1;
 
@@ -24,39 +28,6 @@ const TRANSFER_STATES = Object.freeze({
   failed: "transfer_failed",
   reversed: "transfer_reversed",
 });
-
-function assertSafeCents(value, field = "amount") {
-  if (!Number.isSafeInteger(value) || value < 0 || value > 100000000) {
-    throw new Error(`${field} must be integer cents within policy limits.`);
-  }
-  return value;
-}
-
-function feeForWorkerAmount(workerAmountCents, basisPoints = PLATFORM_FEE_BASIS_POINTS) {
-  assertSafeCents(workerAmountCents, "workerAmountCents");
-  if (!Number.isSafeInteger(basisPoints) || basisPoints < 0 || basisPoints > 10000) {
-    throw new Error("platformFeeRateBasisPoints is invalid.");
-  }
-  // Round half-up to the nearest cent. Multiplication remains a safe integer
-  // because worker amounts are bounded above.
-  return Math.floor(
-    (workerAmountCents * basisPoints + BASIS_POINTS_DENOMINATOR / 2) /
-      BASIS_POINTS_DENOMINATOR,
-  );
-}
-
-function quoteCampaignFunding(workerAmountCents) {
-  const worker = assertSafeCents(workerAmountCents, "workerAmountCents");
-  if (worker === 0) throw new Error("workerAmountCents must be greater than zero.");
-  const platformFeeCents = feeForWorkerAmount(worker);
-  return Object.freeze({
-    currency: CURRENCY,
-    workerAmountCents: worker,
-    platformFeeRateBasisPoints: PLATFORM_FEE_BASIS_POINTS,
-    platformFeeCents,
-    businessChargeCents: worker + platformFeeCents,
-  });
-}
 
 function payoutForCompletion(contract, completionBasisPoints, releaseOptionalBonus = false) {
   const base = assertSafeCents(contract.baseAmountCents, "baseAmountCents");

@@ -39,6 +39,12 @@ const artifactEmailPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-artifact-email", "package.json"), "utf8"));
 const artifactEmailLock = fs.readFileSync(
   path.join(root, "functions-artifact-email", "package-lock.json"), "utf8");
+const campaignFunding = fs.readFileSync(
+  path.join(root, "functions-campaign-funding", "index.js"), "utf8");
+const campaignFundingPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-campaign-funding", "package.json"), "utf8"));
+const campaignFundingLock = fs.readFileSync(
+  path.join(root, "functions-campaign-funding", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -47,6 +53,30 @@ function exportsIn(source) {
 test("platform-core has the exact reviewed public exports", () => {
   assert.deepEqual([...new Set(exportsIn(platform))].sort(), [...expected].sort());
   for (const name of expected) assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+});
+
+test("campaign-funding owns exactly one secret-free quote callable", () => {
+  assert.deepEqual(exportsIn(campaignFunding), ["quoteCampaignFunding"]);
+  assert.doesNotMatch(legacy, /exports\.quoteCampaignFunding\s*=/);
+  assert.match(campaignFunding, /safeCampaignQuoteCallable\("quoteCampaignFunding"/);
+  assert.match(campaignFunding, /requireFinancialRole[\s\S]*?"business"/);
+  assert.match(campaignFunding, /campaignFundingQuote\.quoteCampaignFunding\(workerAmountCents\)/);
+  for (const forbidden of [
+    "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
+    "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
+    "OPENAI_API_KEY", "CENSUS_API_KEY", "createCampaignFundingCheckoutSession",
+    "publishFundedCampaign", "stripeWebhook", "stripeThinWebhook", "fundCampaign",
+  ]) assert.doesNotMatch(campaignFunding, new RegExp(forbidden));
+  for (const writeOrProvider of [
+    /\.set\(/, /\.update\(/, /runTransaction\(/, /wallets/, /campaignPayments/,
+    /checkout\.sessions/, /paymentIntents/, /require\(["']stripe["']\)/,
+  ]) assert.doesNotMatch(campaignFunding, writeOrProvider);
+  assert.deepEqual(Object.keys(campaignFundingPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(campaignFundingLock, new RegExp(forbiddenPackage));
+  }
 });
 
 test("wallet-core owns exactly one secret-free callable with no duplicate assignment", () => {
@@ -150,7 +180,8 @@ test("new notification triggers do not silently enable production retries", () =
 
 test("generated codebase preparation installs dependencies after regeneration", () => {
   for (const codebase of firebaseConfig.functions.filter((item) =>
-    ["default", "platform-core", "wallet-core", "artifact-email"].includes(item.codebase))) {
+    ["default", "platform-core", "wallet-core", "artifact-email", "campaign-funding"]
+      .includes(item.codebase))) {
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }
   assert.deepEqual(Object.keys(platformPackage.dependencies).sort(), [
@@ -164,5 +195,8 @@ test("generated codebase preparation installs dependencies after regeneration", 
   ]);
   assert.deepEqual(Object.keys(artifactEmailPackage.dependencies).sort(), [
     "firebase-admin", "firebase-functions", "nodemailer",
+  ]);
+  assert.deepEqual(Object.keys(campaignFundingPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
   ]);
 });

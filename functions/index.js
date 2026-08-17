@@ -28,6 +28,7 @@ const {
   serializedBytes,
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
+const campaignFundingQuote = require("./campaign_funding_quote");
 const discoveryPreferences = require("./discovery_preferences");
 const serviceAreaGeometryCodec = require("./service_area_geometry_codec");
 const serviceAreaResolution = require("./service_area_resolution");
@@ -8677,6 +8678,28 @@ const MARKETPLACE_FUNCTION_OPTIONS = {
   secrets: [STRIPE_SECRET_KEY],
 };
 
+const CAMPAIGN_QUOTE_FUNCTION_OPTIONS = {
+  enforceAppCheck: false,
+  maxInstances: 20,
+  concurrency: 40,
+  timeoutSeconds: 30,
+  memory: "256MiB",
+};
+
+function safeCampaignQuoteCallable(name, handler) {
+  return onCall(CAMPAIGN_QUOTE_FUNCTION_OPTIONS, async (request) => {
+    try {
+      return await handler(request);
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error(`${name} failed.`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new HttpsError("internal", "The campaign quote could not be prepared.");
+    }
+  });
+}
+
 function safeStripeCallable(name, handler) {
   return onCall(MARKETPLACE_FUNCTION_OPTIONS, async (request) => {
     try {
@@ -8876,13 +8899,13 @@ exports.getMarketplacePolicy = safeStripeCallable("getMarketplacePolicy", async 
   };
 });
 
-exports.quoteCampaignFunding = safeStripeCallable("quoteCampaignFunding", async (request) => {
+exports.quoteCampaignFunding = safeCampaignQuoteCallable("quoteCampaignFunding", async (request) => {
   await requireFinancialRole(
     request, "business", "Sign in as a Business to request campaign pricing.",
   );
   const workerAmountCents = Number(request.data?.workerAmountCents);
   try {
-    return {...marketplace.quoteCampaignFunding(workerAmountCents), quoteVersion: 1};
+    return {...campaignFundingQuote.quoteCampaignFunding(workerAmountCents), quoteVersion: 1};
   } catch (_) {
     throw new HttpsError("invalid-argument", "The worker amount is invalid.");
   }

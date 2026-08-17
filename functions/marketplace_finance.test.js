@@ -112,3 +112,23 @@ test("campaign quote accepts only the server worker amount and policy", () => {
   assert.throws(() => quoteCampaignFunding(0));
   assert.throws(() => quoteCampaignFunding(12.34));
 });
+
+test("completion bonus is quoted once as part of the worker pool", () => {
+  const baseAmountCents = 5000;
+  const completionBonusCents = 2500;
+  assert.deepEqual(quoteCampaignFunding(baseAmountCents + completionBonusCents), {
+    currency: "usd",
+    workerAmountCents: 7500,
+    platformFeeRateBasisPoints: 2000,
+    platformFeeCents: 1500,
+    businessChargeCents: 9000,
+  });
+});
+
+test("Crew participant count does not multiply the authoritative worker pool", () => {
+  const authoritativeCrewPoolCents = 15000;
+  const quote = quoteCampaignFunding(authoritativeCrewPoolCents);
+  assert.equal(quote.workerAmountCents, authoritativeCrewPoolCents);
+  assert.equal(quote.platformFeeCents, 3000);
+  assert.equal(quote.businessChargeCents, 18000);
+});

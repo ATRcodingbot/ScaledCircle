@@ -13,6 +13,7 @@ const legacyRoot = path.join(root, "functions-legacy");
 const walletRoot = path.join(root, "functions-wallet");
 const artifactEmailRoot = path.join(root, "functions-artifact-email");
 const jobAlertEmailRoot = path.join(root, "functions-job-alert-email");
+const campaignFundingRoot = path.join(root, "functions-campaign-funding");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -55,6 +56,7 @@ const artifactEmailExports = new Set(["sendArtifactDeliveryEmailJob"]);
 const artifactEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
 const jobAlertEmailExports = new Set(["sendScalerJobAlertEmailJob"]);
 const jobAlertEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
+const campaignFundingExports = new Set(["quoteCampaignFunding"]);
 const allSecretNames = new Set([
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD",
   "SUPPORT_EMAIL_SMTP_PASSWORD",
@@ -124,16 +126,19 @@ function transformIndex(mode) {
   if (mode === "wallet") selectedProgram(ast, walletExports);
   if (mode === "artifact-email") selectedProgram(ast, artifactEmailExports);
   if (mode === "job-alert-email") selectedProgram(ast, jobAlertEmailExports);
+  if (mode === "campaign-funding") selectedProgram(ast, campaignFundingExports);
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
     const excludedFromLegacy = new Set([
       ...platformExports, ...walletExports, ...artifactEmailExports, ...jobAlertEmailExports,
+      ...campaignFundingExports,
     ]);
     if (name && (
       (mode === "platform" && !platformExports.has(name)) ||
       (mode === "wallet" && !walletExports.has(name)) ||
       (mode === "artifact-email" && !artifactEmailExports.has(name)) ||
       (mode === "job-alert-email" && !jobAlertEmailExports.has(name)) ||
+      (mode === "campaign-funding" && !campaignFundingExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -146,11 +151,15 @@ function transformIndex(mode) {
       if (mode === "wallet") return false;
       if (mode === "artifact-email") return artifactEmailSecrets.has(identifier);
       if (mode === "job-alert-email") return jobAlertEmailSecrets.has(identifier);
+      if (mode === "campaign-funding") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
   });
-  return `${generator(ast, {comments: true, retainLines: true}, source).code}\n`;
+  return `${generator(ast, {
+    comments: true,
+    retainLines: mode !== "campaign-funding",
+  }, source).code}\n`;
 }
 
 function resetDirectory(destination) {
@@ -170,6 +179,8 @@ function copyPackage(destination, mode) {
         name !== "managed_growth_delivery.js") continue;
     if (mode === "job-alert-email" && name.endsWith(".js") &&
         name !== "scaler_job_alert_email.js") continue;
+    if (mode === "campaign-funding" && name.endsWith(".js") &&
+        name !== "campaign_funding_quote.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -185,6 +196,8 @@ function writePackageManifest(mode, destination) {
         ? ["firebase-admin", "firebase-functions", "nodemailer"]
       : mode === "job-alert-email"
         ? ["firebase-admin", "firebase-functions", "nodemailer"]
+      : mode === "campaign-funding"
+        ? ["firebase-admin", "firebase-functions"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
@@ -213,6 +226,7 @@ for (const [mode, destination] of [
   ["legacy", legacyRoot], ["platform", platformRoot], ["wallet", walletRoot],
   ["artifact-email", artifactEmailRoot],
   ["job-alert-email", jobAlertEmailRoot],
+  ["campaign-funding", campaignFundingRoot],
 ]) {
   resetDirectory(destination);
   copyPackage(destination, mode);
@@ -222,4 +236,4 @@ for (const [mode, destination] of [
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
 
-console.log("Generated isolated legacy, platform-core, wallet-core, artifact-email, and job-alert-email Functions packages.");
+console.log("Generated isolated legacy, platform-core, wallet-core, artifact-email, job-alert-email, and campaign-funding Functions packages.");
