@@ -423,6 +423,7 @@ class FunnelFinalCta extends StatelessWidget {
     required this.onPrimary,
     required this.supportingCopy,
     required this.onWaitlist,
+    required this.waitlistLabel,
   });
   final String title;
   final String primary;
@@ -430,6 +431,7 @@ class FunnelFinalCta extends StatelessWidget {
   final VoidCallback onPrimary;
   final String supportingCopy;
   final VoidCallback onWaitlist;
+  final String waitlistLabel;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 48),
@@ -475,7 +477,7 @@ class FunnelFinalCta extends StatelessWidget {
                 foregroundColor: Colors.white,
                 minimumSize: const Size(180, 52),
               ),
-              child: const Text('Join the Waitlist'),
+              child: Text(waitlistLabel),
             ),
             TextButton(
               key: const Key('funnel-login'),

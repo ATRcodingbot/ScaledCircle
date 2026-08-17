@@ -117,7 +117,7 @@ void main() {
       600,
     );
     expect(find.text('Create My Business Account'), findsOneWidget);
-    expect(find.text('Join the Waitlist'), findsOneWidget);
+    expect(find.text('Join Business Waitlist'), findsOneWidget);
     expect(find.text('Log In'), findsWidgets);
     expect(
       find.textContaining('Marketplace access is being rolled out in stages'),
@@ -134,7 +134,7 @@ void main() {
       600,
     );
     expect(find.text('Create Scaler Account'), findsOneWidget);
-    expect(find.text('Join the Waitlist'), findsOneWidget);
+    expect(find.text('Join Scaler Waitlist'), findsOneWidget);
     expect(find.text('Log In'), findsWidgets);
     expect(
       find.textContaining("we'll let you know as access becomes available"),

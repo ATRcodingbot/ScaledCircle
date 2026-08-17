@@ -93,6 +93,7 @@ class BusinessFunnelScreen extends StatelessWidget {
         accent: businessGreen,
         supportingCopy:
             'Create your ScaledCircle account now. Marketplace access is being rolled out in stages.',
+        waitlistLabel: 'Join Business Waitlist',
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
         onWaitlist: () => openPublicWaitlist(context, 'business'),
       ),

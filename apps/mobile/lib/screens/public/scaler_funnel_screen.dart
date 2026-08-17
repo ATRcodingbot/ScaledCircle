@@ -89,6 +89,7 @@ class ScalerFunnelScreen extends StatelessWidget {
         accent: scalerBlue,
         supportingCopy:
             "Set up your ScaledCircle account now and we'll let you know as access becomes available.",
+        waitlistLabel: 'Join Scaler Waitlist',
         onPrimary: () => openPublicAccountRegistration(context, 'scaler'),
         onWaitlist: () => openPublicWaitlist(context, 'scaler'),
       ),
