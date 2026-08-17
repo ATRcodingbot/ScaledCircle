@@ -815,12 +815,14 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   Future<void> _saveArea() async {
-    final latestSnapshot = await widget.campaignReference.get();
+    final latestSnapshot = widget.pendingZoneData == null
+        ? await widget.campaignReference.get()
+        : null;
     if (!mounted) {
       return;
     }
 
-    final latestData = latestSnapshot.data() as Map<String, dynamic>?;
+    final latestData = latestSnapshot?.data() as Map<String, dynamic>?;
     final latestAssignedScalerId = latestData?['assignedScalerId']?.toString();
 
     if (_mappingLocked ||
@@ -910,20 +912,22 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         updateData['serviceAreaRadiusMeters'] = FieldValue.delete();
       }
 
-      if (latestSnapshot.exists) {
+      if (latestSnapshot?.exists == true) {
         updateData.remove('estimatedHomes');
         updateData.remove('homeCountStatus');
         updateData.remove('analysisStatus');
         await widget.campaignReference.update(updateData);
-      } else if (latestSnapshot.exists) {
+      } else {
         final pendingZoneData = widget.pendingZoneData;
         if (pendingZoneData == null) {
           throw StateError('Campaign zone draft information is unavailable.');
         }
-        await widget.campaignReference.set({
-          ...pendingZoneData,
-          ...updateData,
-        });
+        final createData = <String, dynamic>{...pendingZoneData, ...updateData};
+        if (_selectedShape != CampaignAreaShape.circle) {
+          createData.remove('serviceAreaCenter');
+          createData.remove('serviceAreaRadiusMeters');
+        }
+        await widget.campaignReference.set(createData);
       }
 
       final analysisCompleted = await _analyzeSavedZone();
@@ -956,6 +960,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         return;
       }
 
+      debugPrint('Unable to save campaign zone: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to save campaign zone: $e')),
       );
@@ -1120,6 +1125,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
               ? (viewport.maxHeight * 0.64).clamp(520.0, 760.0)
               : (viewport.maxHeight * 0.56).clamp(360.0, 560.0);
           return SingleChildScrollView(
+            key: const Key('campaign-area-scroll'),
             child: Column(
               children: [
                 if (!_mappingLocked)

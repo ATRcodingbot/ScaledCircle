@@ -715,7 +715,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         MaterialPageRoute(
           builder: (_) => CampaignZonesScreen(
             campaign: campaignSnapshot,
-            startWithAreaBuilder: true,
+            startWithAreaBuilder: false,
           ),
         ),
       );
@@ -911,6 +911,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
             child: Form(
               key: _formKey,
               child: ListView(
+                key: const Key('flyer-campaign-form-scroll'),
                 controller: _formScrollController,
                 padding: const EdgeInsets.all(20),
                 children: [

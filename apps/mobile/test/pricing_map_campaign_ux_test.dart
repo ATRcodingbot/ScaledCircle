@@ -37,7 +37,9 @@ void main() {
     expect(zonesSource, contains('Draw Custom Target'));
     expect(zonesSource, contains('pendingZoneData: pendingZoneData'));
     expect(zonesSource, isNot(contains("'workerPoolCents':")));
-    expect(areaSource, contains("if (latestSnapshot.exists)"));
+    expect(areaSource, contains("if (latestSnapshot?.exists == true)"));
+    expect(areaSource, contains("widget.pendingZoneData == null"));
+    expect(areaSource, contains("await widget.campaignReference.set(createData)"));
     expect(areaSource, contains('widget.campaignReference.set'));
     expect(areaSource, contains('Route not yet verified'));
   });
@@ -111,7 +113,7 @@ void main() {
   test('campaign CTA validates visibly and enters the area workspace once', () {
     expect(flyerSource, contains('_validateAndRevealFirstError'));
     expect(flyerSource, contains('Scrollable.ensureVisible'));
-    expect(flyerSource, contains('startWithAreaBuilder: true'));
+    expect(flyerSource, contains('startWithAreaBuilder: false'));
     expect(flyerSource, contains('publishing = true'));
     expect(flyerSource, contains('maxWidth: 1080'));
     expect(flyerSource, contains('_CampaignCreationSteps(currentStep: 1)'));

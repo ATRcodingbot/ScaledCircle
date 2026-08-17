@@ -1365,21 +1365,30 @@ class CampaignZonesScreen extends StatelessWidget {
                             OutlinedButton.icon(
                               onPressed: _campaignLocked
                                   ? null
-                                  : () => _createZone(context),
+                                  : () => _createZone(
+                                      context,
+                                      skipNamePrompt: true,
+                                    ),
                               icon: const Icon(Icons.insights_outlined),
                               label: const Text('Use Analyzed Area'),
                             ),
                           ElevatedButton.icon(
                             onPressed: _campaignLocked
                                 ? null
-                                : () => _createZone(context),
+                                : () => _createZone(
+                                    context,
+                                    skipNamePrompt: true,
+                                  ),
                             icon: const Icon(Icons.add_location_alt),
                             label: const Text('Choose Target Area'),
                           ),
                           TextButton.icon(
                             onPressed: _campaignLocked
                                 ? null
-                                : () => _createZone(context),
+                                : () => _createZone(
+                                    context,
+                                    skipNamePrompt: true,
+                                  ),
                             icon: const Icon(Icons.gesture),
                             label: const Text('Draw Custom Target'),
                           ),
