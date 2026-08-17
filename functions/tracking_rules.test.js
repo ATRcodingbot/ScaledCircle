@@ -192,11 +192,16 @@ test("email jobs cannot be read or authored by clients", async () => {
       artifactId: "artifact-one",
       status: "queued",
     });
+    await context.firestore().doc("scalerJobAlertEmailJobs/job_test").set({
+      to: "scaler@example.test", scalerUid: "scaler-one", campaignId: "campaign-one",
+      status: "queued",
+    });
   });
   for (const uid of ["scaler-one", "business-one", "admin-one"]) {
     const db = store(uid);
     await assertFails(db.doc("outboundEmailJobs/welcome-user_test").get());
     await assertFails(db.doc("artifactDeliveryEmailJobs/artifact_test").get());
+    await assertFails(db.doc("scalerJobAlertEmailJobs/job_test").get());
     await assertFails(db.doc("outboundEmailJobs/arbitrary").set({
       to: "attacker@example.test",
       fromAddress: "spoof@example.test",
@@ -208,11 +213,16 @@ test("email jobs cannot be read or authored by clients", async () => {
       artifactId: "forged",
       status: "queued",
     }));
+    await assertFails(db.doc("scalerJobAlertEmailJobs/arbitrary").set({
+      to: "attacker@example.test", scalerUid: uid, campaignId: "forged", status: "queued",
+    }));
   }
   await assertFails(environment.unauthenticatedContext().firestore()
     .doc("outboundEmailJobs/arbitrary").set({to: "attacker@example.test"}));
   await assertFails(environment.unauthenticatedContext().firestore()
     .doc("artifactDeliveryEmailJobs/arbitrary").set({to: "attacker@example.test"}));
+  await assertFails(environment.unauthenticatedContext().firestore()
+    .doc("scalerJobAlertEmailJobs/arbitrary").set({to: "attacker@example.test"}));
 });
 
 test("admin issues and admin audit events are admin-readable and server-written", async () => {

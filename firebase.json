@@ -62,6 +62,19 @@
         "firebase-debug.*.log",
         "*.local"
       ]
+    },
+    {
+      "source": "functions-job-alert-email",
+      "codebase": "job-alert-email",
+      "predeploy": ["npm --prefix functions run prepare:function-codebases"],
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     }
   ],
   "emulators": {

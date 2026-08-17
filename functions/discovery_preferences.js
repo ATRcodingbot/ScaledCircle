@@ -73,6 +73,15 @@ function sanitizeNotifications(role, value) {
   return Object.fromEntries(Object.keys(defaults).map((key) => [key,
     typeof input[key] === "boolean" ? input[key] : defaults[key]]));
 }
+function sanitizeAlertDelivery(role, value) {
+  const input = value && typeof value === "object" ? value : {};
+  return {
+    inApp: input.inApp !== false,
+    email: role === "scaler" && input.email === true,
+    push: false,
+    emailFrequency: "immediate",
+  };
+}
 function sanitizePreferences(input, authoritativeRole) {
   if (!input || typeof input !== "object" || !["business", "scaler"].includes(authoritativeRole)) {
     throw new Error("invalid_discovery_preferences");
@@ -81,7 +90,8 @@ function sanitizePreferences(input, authoritativeRole) {
     .map(sanitizeArea) : [];
   if (areas.filter((area) => area.primary).length > 1) throw new Error("multiple_primary_areas");
   const base = {schemaVersion: SCHEMA_VERSION, role: authoritativeRole, areas,
-    notifications: sanitizeNotifications(authoritativeRole, input.notifications)};
+    notifications: sanitizeNotifications(authoritativeRole, input.notifications),
+    alertDelivery: sanitizeAlertDelivery(authoritativeRole, input.alertDelivery)};
   if (authoritativeRole === "business") return {...base,
     roleSchemaVersion: BUSINESS_SCHEMA_VERSION,
     priorityServices: list(input.priorityServices), otherServices: list(input.otherServices),

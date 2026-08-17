@@ -15,6 +15,7 @@ const logger = require("firebase-functions/logger");
 const crypto = require("node:crypto");
 const dns = require("node:dns").promises;
 const nodemailer = require("nodemailer");
+const scalerJobAlertEmail = require("./scaler_job_alert_email");
 const Stripe = require("stripe");
 const {
   LIMITS: TRACKING_LIMITS,
@@ -792,6 +793,47 @@ exports.sendArtifactDeliveryEmailJob = onDocumentCreated(
         error: error instanceof Error ? error.message : String(error),
       }),
     });
+  },
+);
+
+/** Sends one deterministic, server-authored matching-job alert to one Scaler. */
+exports.sendScalerJobAlertEmailJob = onDocumentCreated(
+  {
+    document: `${scalerJobAlertEmail.EMAIL_JOB_COLLECTION}/{jobId}`,
+    secrets: [SUPPORT_EMAIL_SMTP_PASSWORD], retry: false, maxInstances: 3,
+  },
+  async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) return;
+    const queued = {...(snapshot.data() || {}), id: event.params.jobId};
+    if (!scalerJobAlertEmail.validateJob(queued)) {
+      await snapshot.ref.set({status: "rejected", errorCode: "invalid_job_alert_email",
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      return;
+    }
+    const claimed = await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(snapshot.ref);
+      if (current.data()?.status !== "queued") return false;
+      transaction.update(snapshot.ref, {status: "sending", attempts: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp()});
+      return true;
+    });
+    if (!claimed) return;
+    try {
+      const result = await nodemailer.createTransport({service: "gmail", auth: {
+        user: scalerJobAlertEmail.SUPPORT_EMAIL, pass: SUPPORT_EMAIL_SMTP_PASSWORD.value(),
+      }}).sendMail({from: `${scalerJobAlertEmail.SUPPORT_FROM_NAME} <${scalerJobAlertEmail.SUPPORT_EMAIL}>`,
+        to: queued.to, replyTo: scalerJobAlertEmail.SUPPORT_EMAIL,
+        subject: queued.subject, text: queued.text,
+        headers: {"X-Scaled-Circle-Notification": event.params.jobId}});
+      await snapshot.ref.set({status: "sent", messageId: readText(result.messageId, 500),
+        sentAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    } catch (error) {
+      logger.error("Scaler job-alert email delivery failed.", {jobId: event.params.jobId,
+        error: error instanceof Error ? error.message : String(error)});
+      await snapshot.ref.set({status: "failed", errorCode: "job_alert_email_failed",
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    }
   },
 );
 
@@ -5553,14 +5595,16 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
   const candidates = await candidateQuery.limit(scalerCapacity.SUPPORTED_POPULATION).get();
   if (candidates.empty) return;
   const batch = db.batch();
+  const emailBatch = db.batch();
   let writes = 0;
+  let emailWrites = 0;
   for (const candidate of candidates.docs) {
     let decision;
     try { decision = scalerOpportunityDecision(candidate.data(), campaign); } catch (_) { continue; }
     if (!decision.matched) continue;
     const travel = decision.travelMatch && !decision.serviceAreaMatch;
     const id = `job-opportunity_${event.params.campaignId}_${candidate.id}`;
-    batch.set(db.collection("notifications").doc(id), {
+    if (candidate.data().alertDelivery?.inApp !== false) batch.set(db.collection("notifications").doc(id), {
       id, userId: candidate.id, type: travel ? "travel_job_opportunity" : "job_opportunity",
       title: travel ? "Travel Opportunity" : "New job in your area",
       message: travel ? "You're seeing this because you enabled higher-paying travel opportunities." :
@@ -5569,9 +5613,22 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
       distanceMiles: decision.distance, read: false, createdAt: FieldValue.serverTimestamp(),
       schemaVersion: "OpportunityNotificationV1",
     }, {merge: false});
-    writes += 1;
+    if (candidate.data().alertDelivery?.inApp !== false) writes += 1;
+    if (candidate.data().alertDelivery?.email === true) {
+      const user = await db.collection("users").doc(candidate.id).get();
+      const recipient = user.data()?.email;
+      try {
+        const emailJob = scalerJobAlertEmail.createJob({campaignId: event.params.campaignId,
+          scalerUid: candidate.id, recipient, campaignName: campaign.name});
+        emailBatch.set(db.collection(scalerJobAlertEmail.EMAIL_JOB_COLLECTION).doc(emailJob.id), {
+          ...emailJob, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: false});
+        emailWrites += 1;
+      } catch (_) { /* Missing/invalid authoritative account email fails closed. */ }
+    }
   }
   if (writes) await batch.commit();
+  if (emailWrites) await emailBatch.commit();
 });
 
 

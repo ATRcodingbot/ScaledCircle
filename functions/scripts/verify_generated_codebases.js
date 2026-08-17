@@ -8,6 +8,7 @@ const platformRoot = path.join(root, "functions-platform");
 const legacyRoot = path.join(root, "functions-legacy");
 const walletRoot = path.join(root, "functions-wallet");
 const artifactEmailRoot = path.join(root, "functions-artifact-email");
+const jobAlertEmailRoot = path.join(root, "functions-job-alert-email");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -58,6 +59,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, artifactEmailRoot);
+  resolveFrom(dependency, jobAlertEmailRoot);
 }
 
 const platform = require(path.join(platformRoot, "index.js"));
@@ -65,13 +67,16 @@ assert.deepEqual(Object.keys(platform).sort(), [...expectedExports].sort());
 const legacy = require(path.join(legacyRoot, "index.js"));
 const wallet = require(path.join(walletRoot, "index.js"));
 const artifactEmail = require(path.join(artifactEmailRoot, "index.js"));
+const jobAlertEmail = require(path.join(jobAlertEmailRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
+assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);
 assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);
+assert.equal(Object.hasOwn(legacy, "sendScalerJobAlertEmailJob"), false);
 
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
-  Object.keys(artifactEmail)];
+  Object.keys(artifactEmail), Object.keys(jobAlertEmail)];
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 
@@ -100,4 +105,10 @@ for (const forbiddenPackage of ["node_modules/stripe", "openai"]) {
   assert.doesNotMatch(artifactLock, new RegExp(forbiddenPackage));
 }
 
-console.log(`Verified ${expectedExports.length} platform-core exports plus isolated wallet-core and artifact-email exports.`);
+const jobAlertSource = require("node:fs").readFileSync(path.join(jobAlertEmailRoot, "index.js"), "utf8");
+assert.match(jobAlertSource,
+  /const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret\("SUPPORT_EMAIL_SMTP_PASSWORD"\)/);
+for (const forbidden of ["STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "OPENAI_API_KEY",
+  "CENSUS_API_KEY", "sendArtifactDeliveryEmailJob"]) assert.doesNotMatch(jobAlertSource, new RegExp(forbidden));
+
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated wallet-core, artifact-email, and job-alert-email exports.`);

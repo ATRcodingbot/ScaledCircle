@@ -449,7 +449,7 @@ service cloud.firestore {
     // Areas and discovery preferences are separate from identity and billing.
     // Owners can read their sanitized projection; versioned writes and matching
     // flow through platform-core so clients cannot spoof role or match reasons.
-    match /discoveryPreferences/{userId} {
+      match /discoveryPreferences/{userId} {
       allow read: if isApprovedAccount() && request.auth.uid == userId;
       allow create, update, delete: if false;
     }
@@ -506,6 +506,11 @@ service cloud.firestore {
           );
 
         allow create, update, delete: if false;
+      }
+
+      // Matching-job email jobs are created and processed only by trusted backend code.
+      match /scalerJobAlertEmailJobs/{jobId} {
+        allow read, create, update, delete: if false;
       }
 
       match /checkpoints/{checkpointId} {

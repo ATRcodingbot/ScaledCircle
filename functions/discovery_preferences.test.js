@@ -50,6 +50,24 @@ test("explicit travel and outreach preferences work without GPS authority", () =
 test("manual Scaler search sees distant jobs regardless of preferences", () => {
   assert.equal(preferences.matchOpportunity(scaler, {location: {latitude: 30, longitude: -80}}, "manual").matched, true);
 });
+test("three sequential saved areas remain distinct with one primary", () => {
+  const result = preferences.sanitizePreferences({...business, areas: [
+    business.areas[0],
+    {id: "howard", name: "Howard County", type: "place", places: ["Howard County"]},
+    {id: "baltimore", name: "Baltimore County", type: "place", places: ["Baltimore County"]},
+  ]}, "business");
+  assert.deepEqual(result.areas.map((area) => area.id), ["main", "howard", "baltimore"]);
+  assert.equal(result.areas.filter((area) => area.primary).length, 1);
+});
+test("Scaler alert delivery is explicit and push fails closed", () => {
+  const optedIn = preferences.sanitizePreferences({...scaler,
+    alertDelivery: {inApp: true, email: true, push: true}}, "scaler");
+  assert.deepEqual(optedIn.alertDelivery, {inApp: true, email: true, push: false,
+    emailFrequency: "immediate"});
+  const business = preferences.sanitizePreferences({areas: [],
+    alertDelivery: {email: true}}, "business");
+  assert.equal(business.alertDelivery.email, false);
+});
 test("Business and Scaler role payloads cannot cross roles", () => {
   const result = preferences.sanitizePreferences({jobTypes: ["flyer_distribution"]}, "business");
   assert.equal(result.role, "business");

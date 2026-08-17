@@ -12,17 +12,22 @@ class AreasPreferencesScreen extends StatefulWidget {
     required this.role,
     this.initialServices = const [],
     this.onSaved,
+    this.loadPreferences,
+    this.savePreferences,
   });
   final String role;
   final List<String> initialServices;
   final ValueChanged<Map<String, dynamic>>? onSaved;
+  final Future<Map<String, dynamic>?> Function()? loadPreferences;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic>)?
+  savePreferences;
 
   @override
   State<AreasPreferencesScreen> createState() => _AreasPreferencesScreenState();
 }
 
 class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
-  final _service = DiscoveryPreferencesService();
+  DiscoveryPreferencesService get _service => DiscoveryPreferencesService();
   final _areaResolver = const ServiceAreaResolutionService();
   final List<Map<String, dynamic>> _areas = [];
   final Set<String> _priorities = {};
@@ -37,6 +42,12 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   bool _crew = false;
   bool _loading = true;
   bool _saving = false;
+  Map<String, dynamic> _authoritative = {};
+  Map<String, bool> _alertDelivery = {
+    'inApp': true,
+    'email': false,
+    'push': false,
+  };
 
   bool get _business => widget.role == 'business';
 
@@ -63,8 +74,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   }
 
   Future<void> _load() async {
-    final data = await _service.load();
+    final data = await (widget.loadPreferences?.call() ?? _service.load());
     if (data != null) {
+      _authoritative = Map<String, dynamic>.from(data);
       _areas.addAll(
         (data['areas'] as List? ?? const []).whereType<Map>().map(
           (value) => Map<String, dynamic>.from(value),
@@ -86,6 +98,14 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
           (key, value) => MapEntry(key.toString(), value == true),
         ),
       );
+      _alertDelivery = Map<String, bool>.from(
+        (data['alertDelivery'] as Map? ?? const {}).map(
+          (key, value) => MapEntry(key.toString(), value == true),
+        ),
+      );
+      _alertDelivery.putIfAbsent('inApp', () => true);
+      _alertDelivery.putIfAbsent('email', () => false);
+      _alertDelivery['push'] = false;
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -127,6 +147,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
             .whereType<Map>()
             .map((value) => Map<String, dynamic>.from(value))
             .toList();
+    var dialogSaving = false;
     if (!mounted) return;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -372,66 +393,169 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () {
-                final valid =
-                    name.text.trim().isNotEmpty &&
-                    (type == 'place'
-                        ? places.text.trim().isNotEmpty && geometry.length >= 3
-                        : type == 'postal_codes'
-                        ? postals.text.trim().isNotEmpty && geometry.length >= 3
-                        : center != null);
-                if (!valid) {
-                  setDialogState(() {
-                    resolutionError = type == 'place' || type == 'postal_codes'
-                        ? "We found the place, but couldn't map its boundary automatically. Choose a nearby map area or draw a custom area."
-                        : 'Choose the center of this service area.';
-                  });
-                  return;
-                }
-                Navigator.pop(dialogContext, {
-                  'id':
-                      existing?['id'] ??
-                      'area_${DateTime.now().microsecondsSinceEpoch}',
-                  'name': name.text.trim(),
-                  'type': type,
-                  'primary': existing?['primary'] == true || _areas.isEmpty,
-                  'enabled': existing?['enabled'] != false,
-                  'places': _split(places.text),
-                  'postalCodes': _split(postals.text),
-                  'centerLabel': centerLabel.text.trim(),
-                  'center': center,
-                  'radiusMiles': type == 'around_business' ? radius : null,
-                  'geometry': geometry,
-                  'areaType': normalized['areaType'] ?? type,
-                  'displayName': normalized['displayName'],
-                  'city': normalized['city'],
-                  'county': normalized['county'],
-                  'state': normalized['state'],
-                  'postalCode': normalized['postalCode'],
-                  'bounds': normalized['bounds'],
-                  'resolutionSource': normalized['resolutionSource'],
-                  'resolutionVersion': normalized['resolutionVersion'],
-                });
-              },
-              child: const Text('Save Area'),
+              onPressed: dialogSaving
+                  ? null
+                  : () async {
+                      final valid =
+                          name.text.trim().isNotEmpty &&
+                          (type == 'place'
+                              ? places.text.trim().isNotEmpty &&
+                                    geometry.length >= 3
+                              : type == 'postal_codes'
+                              ? postals.text.trim().isNotEmpty &&
+                                    geometry.length >= 3
+                              : center != null);
+                      if (!valid) {
+                        setDialogState(() {
+                          resolutionError =
+                              type == 'place' || type == 'postal_codes'
+                              ? "We found the place, but couldn't map its boundary automatically. Choose a nearby map area or draw a custom area."
+                              : 'Choose the center of this service area.';
+                        });
+                        return;
+                      }
+                      final area = <String, dynamic>{
+                        'id':
+                            existing?['id'] ??
+                            'area_${DateTime.now().microsecondsSinceEpoch}',
+                        'name': name.text.trim(),
+                        'type': type,
+                        'primary':
+                            existing?['primary'] == true || _areas.isEmpty,
+                        'enabled': existing?['enabled'] != false,
+                        'places': _split(places.text),
+                        'postalCodes': _split(postals.text),
+                        'centerLabel': centerLabel.text.trim(),
+                        'center': center,
+                        'radiusMiles': type == 'around_business'
+                            ? radius
+                            : null,
+                        'geometry': geometry,
+                        'areaType': normalized['areaType'] ?? type,
+                        'displayName': normalized['displayName'],
+                        'city': normalized['city'],
+                        'county': normalized['county'],
+                        'state': normalized['state'],
+                        'postalCode': normalized['postalCode'],
+                        'bounds': normalized['bounds'],
+                        'resolutionSource': normalized['resolutionSource'],
+                        'resolutionVersion': normalized['resolutionVersion'],
+                      };
+                      final candidate = _areas
+                          .map((item) => Map<String, dynamic>.from(item))
+                          .toList();
+                      if (editIndex == null) {
+                        candidate.add(area);
+                      } else {
+                        candidate[editIndex] = area;
+                      }
+                      setDialogState(() {
+                        dialogSaving = true;
+                        resolutionError = null;
+                      });
+                      try {
+                        final saved = await _persistAreas(candidate);
+                        if (!dialogContext.mounted) return;
+                        Navigator.pop(dialogContext, saved);
+                      } catch (_) {
+                        if (!dialogContext.mounted) return;
+                        setDialogState(() {
+                          dialogSaving = false;
+                          resolutionError =
+                              "We couldn't save this service area.";
+                        });
+                      }
+                    },
+              child: Text(dialogSaving ? 'Saving…' : 'Save Area'),
             ),
           ],
         ),
       ),
     );
-    name.dispose();
-    places.dispose();
-    postals.dispose();
-    centerLabel.dispose();
-    if (result != null) {
-      setState(() {
-        if (editIndex == null) {
-          _areas.add(result);
-        } else {
-          _areas[editIndex] = result;
-        }
+    // Route dismissal can still animate one final dialog frame. These short-lived
+    // controllers are released with the route instead of being disposed while a
+    // TextField may still be detaching.
+    if (result != null && mounted) {
+      final savedArea = (result['areas'] as List? ?? const [])
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .firstWhere(
+            (area) =>
+                area['id'] ==
+                (editIndex == null
+                    ? result['lastSavedAreaId']
+                    : existing?['id']),
+            orElse: () => const <String, dynamic>{},
+          );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✓ ${savedArea['displayName'] ?? savedArea['name'] ?? 'Service area'} saved',
+          ),
+          action: SnackBarAction(
+            label: 'Add Another',
+            onPressed: () => _addArea(),
+          ),
+        ),
+      );
+    }
+  }
+
+  Map<String, dynamic> _payload({List<Map<String, dynamic>>? areas}) {
+    final payload = Map<String, dynamic>.from(_authoritative)
+      ..remove('updatedAt')
+      ..remove('createdAt')
+      ..remove('updatedBy')
+      ..remove('userUid')
+      ..remove('preferenceVersion')
+      ..['areas'] = areas ?? _areas
+      ..['notifications'] = _notifications
+      ..['alertDelivery'] = _alertDelivery;
+    if (_business) {
+      payload.addAll({
+        'priorityServices': _priorities.toList(),
+        'otherServices': _otherServices.toList(),
+        'excludedServices': _excluded.toList(),
+        'outsideOpportunityScope': _outsideScope,
+      });
+    } else {
+      payload.addAll({
+        'jobTypes': _jobTypes.toList(),
+        'travelMode': _travelMode,
+        'maxTravelMiles': _travelMiles,
+        'outreachOptIn': _outreach,
+        'crewOptIn': _crew,
       });
     }
+    return payload;
+  }
+
+  Future<Map<String, dynamic>> _persistAreas(
+    List<Map<String, dynamic>> candidate,
+  ) async {
+    final saved =
+        await (widget.savePreferences?.call(_payload(areas: candidate)) ??
+            _service.save(_payload(areas: candidate)));
+    final persisted = (saved['areas'] as List? ?? const [])
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
+        .toList();
+    if (persisted.length != candidate.length) {
+      throw StateError('Area was not persisted.');
+    }
+    if (mounted) {
+      setState(() {
+        _authoritative = Map<String, dynamic>.from(saved);
+        _areas
+          ..clear()
+          ..addAll(persisted);
+      });
+    }
+    widget.onSaved?.call(saved);
+    return {
+      ...saved,
+      'lastSavedAreaId': candidate.isEmpty ? null : candidate.last['id'],
+    };
   }
 
   List<String> _split(String value) => value
@@ -440,36 +564,62 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
       .where((item) => item.isNotEmpty)
       .toList();
 
-  void _setPrimary(int index) => setState(() {
-    for (var i = 0; i < _areas.length; i++) {
-      _areas[i]['primary'] = i == index;
+  Future<void> _setPrimary(int index) async {
+    final candidate = _areas
+        .map((area) => Map<String, dynamic>.from(area))
+        .toList();
+    for (var i = 0; i < candidate.length; i++) {
+      candidate[i]['primary'] = i == index;
     }
-  });
+    await _persistAreas(candidate);
+  }
+
+  Future<void> _toggleArea(int index) async {
+    final candidate = _areas
+        .map((area) => Map<String, dynamic>.from(area))
+        .toList();
+    candidate[index]['enabled'] = candidate[index]['enabled'] == false;
+    await _persistAreas(candidate);
+  }
+
+  Future<void> _deleteArea(int index) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this saved area?'),
+        content: const Text(
+          'Existing campaign zones keep their copied geometry.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final candidate =
+        _areas.map((area) => Map<String, dynamic>.from(area)).toList()
+          ..removeAt(index);
+    if (candidate.isNotEmpty &&
+        !candidate.any((area) => area['primary'] == true)) {
+      candidate.first['primary'] = true;
+    }
+    await _persistAreas(candidate);
+  }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final payload = <String, dynamic>{
-        'areas': _areas,
-        'notifications': _notifications,
-      };
-      if (_business) {
-        payload.addAll({
-          'priorityServices': _priorities.toList(),
-          'otherServices': _otherServices.toList(),
-          'excludedServices': _excluded.toList(),
-          'outsideOpportunityScope': _outsideScope,
-        });
-      } else {
-        payload.addAll({
-          'jobTypes': _jobTypes.toList(),
-          'travelMode': _travelMode,
-          'maxTravelMiles': _travelMiles,
-          'outreachOptIn': _outreach,
-          'crewOptIn': _crew,
-        });
-      }
-      final saved = await _service.save(payload);
+      final saved =
+          await (widget.savePreferences?.call(_payload()) ??
+              _service.save(_payload()));
+      _authoritative = Map<String, dynamic>.from(saved);
       widget.onSaved?.call(saved);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -498,13 +648,23 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
         ].join(' • '),
       ),
       trailing: PopupMenuButton<String>(
-        onSelected: (value) {
-          if (value == 'edit') _addArea(index);
-          if (value == 'primary') _setPrimary(index);
-          if (value == 'toggle') {
-            setState(() => area['enabled'] = area['enabled'] == false);
+        onSelected: (value) async {
+          try {
+            if (value == 'edit') await _addArea(index);
+            if (value == 'primary') await _setPrimary(index);
+            if (value == 'toggle') await _toggleArea(index);
+            if (value == 'delete') await _deleteArea(index);
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    "We couldn't update this ${_business ? 'service' : 'work'} area.",
+                  ),
+                ),
+              );
+            }
           }
-          if (value == 'delete') setState(() => _areas.removeAt(index));
         },
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'edit', child: Text('Edit')),
@@ -559,7 +719,11 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               OutlinedButton.icon(
                 onPressed: _areas.length >= 8 ? null : _addArea,
                 icon: const Icon(Icons.add_location_alt_outlined),
-                label: const Text('Add Another Service Area'),
+                label: Text(
+                  _business
+                      ? 'Add Another Service Area'
+                      : 'Add Another Work Area',
+                ),
               ),
               const Divider(height: 32),
               Text(
@@ -572,16 +736,28 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                 ),
               ),
               if (_business) ...[
-                _chips([
-                  'Decks',
-                  'Fences',
-                  'Roofing',
-                  'HVAC',
-                  'Remodeling',
-                  'Landscaping',
-                  'Cleaning',
-                  'Other',
-                ], _priorities),
+                if (widget.initialServices.isNotEmpty) ...[
+                  const Text(
+                    'YOUR SERVICES',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(widget.initialServices.join(' • ')),
+                  const SizedBox(height: 10),
+                ],
+                _chips(
+                  <String>{
+                    ...widget.initialServices,
+                    'Decks',
+                    'Fences',
+                    'Roofing',
+                    'HVAC',
+                    'Remodeling',
+                    'Landscaping',
+                    'Cleaning',
+                    'Other',
+                  }.toList(),
+                  _priorities,
+                ),
                 TextField(
                   onSubmitted: (value) =>
                       setState(() => _otherServices.addAll(_split(value))),
@@ -687,8 +863,10 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                 ),
               ],
               const Divider(height: 32),
-              const Text(
-                'What should we notify you about?',
+              Text(
+                _business
+                    ? 'HOW SHOULD WE NOTIFY YOU?'
+                    : 'HOW SHOULD WE TELL YOU ABOUT MATCHING JOBS?',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               ...(_business
@@ -721,6 +899,30 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       title: Text(entry.value),
                     ),
                   ),
+              SwitchListTile(
+                value: _alertDelivery['inApp'] ?? true,
+                onChanged: (value) =>
+                    setState(() => _alertDelivery['inApp'] = value),
+                title: const Text('In ScaledCircle'),
+              ),
+              if (!_business)
+                SwitchListTile(
+                  value: _alertDelivery['email'] ?? false,
+                  onChanged: (value) =>
+                      setState(() => _alertDelivery['email'] = value),
+                  title: const Text('Email me about matching jobs'),
+                  subtitle: const Text(
+                    'One email per matching job. Duplicate alerts are prevented.',
+                  ),
+                ),
+              const SwitchListTile(
+                value: false,
+                onChanged: null,
+                title: Text('Push notifications — Coming Soon'),
+                subtitle: Text(
+                  'We will only ask for permission when this becomes available and you turn it on.',
+                ),
+              ),
               const Card(
                 child: ListTile(
                   leading: Icon(Icons.search),
@@ -730,6 +932,54 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                   ),
                 ),
               ),
+              if (_areas.isNotEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _business ? 'YOU WORK IN' : 'YOU WANT TO WORK IN',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        ..._areas
+                            .where((area) => area['enabled'] != false)
+                            .map(
+                              (area) => Text(
+                                '✓ ${area['displayName'] ?? area['name']}',
+                              ),
+                            ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _business ? 'YOU WANT MORE' : "YOU'RE INTERESTED IN",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          (_business ? _priorities : _jobTypes).isEmpty
+                              ? 'You can choose this later.'
+                              : (_business ? _priorities : _jobTypes).join(
+                                  ' • ',
+                                ),
+                        ),
+                        if (!_business) ...[
+                          const SizedBox(height: 12),
+                          const Text(
+                            'ALERTS',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'In ScaledCircle ${_alertDelivery['inApp'] == false ? '— Off' : '✓'}',
+                          ),
+                          Text(
+                            'Email ${_alertDelivery['email'] == true ? '✓' : '— Off'}',
+                          ),
+                          const Text('Push — Off'),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: const Icon(Icons.save_outlined),
