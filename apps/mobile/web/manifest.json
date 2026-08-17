@@ -7,7 +7,7 @@
     "display": "standalone",
     "background_color": "#020914",
     "theme_color": "#020914",
-    "description": "Map local campaigns, estimate homes and field pay, connect with local Scalers, and verify results with GPS coverage.",
+    "description": "Local growth intelligence and verified field campaigns connecting businesses with Scalers.",
     "categories": ["business", "productivity", "navigation"],
     "prefer_related_applications": false,
     "icons": [

@@ -22,7 +22,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('FOR LOCAL BUSINESSES'), findsOneWidget);
     expect(find.text('SEE WHERE GROWTH CAN HAPPEN.'), findsOneWidget);
-    expect(find.text('Local Growth Workspace'), findsOneWidget);
+    expect(find.text('Business Dashboard'), findsOneWidget);
+    expect(find.text('Analyze Main Service Area'), findsOneWidget);
   });
 
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {
@@ -31,7 +32,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('FOR SCALERS'), findsWidgets);
     expect(find.text('LOCAL WORK. CLEAR FROM THE START.'), findsOneWidget);
-    expect(find.text('Opportunity Match'), findsOneWidget);
+    expect(find.text('Flyer Distribution'), findsWidgets);
+    expect(find.text('View Job'), findsOneWidget);
   });
 
   testWidgets('Business funnel preserves its sequential journey and plans', (
@@ -58,9 +60,11 @@ void main() {
     expect(find.text('\$499/month'), findsOneWidget);
     expect(find.text('\$999/month'), findsOneWidget);
     expect(find.text('LIMITED BETA'), findsOneWidget);
-    expect(find.textContaining('Provider connection required'), findsOneWidget);
-    expect(find.text('Campaign Response'), findsOneWidget);
-    expect(find.text('SAMPLE REPORT'), findsOneWidget);
+    expect(find.textContaining('connection requires approval'), findsOneWidget);
+    expect(find.text('Flyer Distribution Results'), findsOneWidget);
+    expect(find.text('SAMPLE RESULTS'), findsOneWidget);
+    expect(find.text('Weather Intelligence'), findsOneWidget);
+    expect(find.text('SAMPLE SCENARIO'), findsOneWidget);
   });
 
   testWidgets('Scaler funnel is ordered and keeps capability claims truthful', (
@@ -83,11 +87,17 @@ void main() {
     expect(jobs, lessThan(area));
     expect(area, lessThan(proof));
     expect(find.text('Coming Soon'), findsOneWidget);
-    expect(find.text('Limited rollout'), findsOneWidget);
+    expect(find.textContaining('Limited rollout'), findsWidgets);
     expect(find.text('Not yet verified'), findsWidgets);
-    expect(find.text('SAMPLE • NOT A LIVE LISTING'), findsOneWidget);
-    expect(find.text('Private Job Room'), findsOneWidget);
+    expect(find.text('SAMPLE'), findsWidgets);
+    expect(find.text('Job Room'), findsOneWidget);
     expect(find.text('ACTIVE WORK ONLY'), findsOneWidget);
+    expect(find.text('SAMPLE ACTIVE-WORK GPS TRACE'), findsOneWidget);
+    expect(find.text('✓ Flyer Distribution'), findsOneWidget);
+    expect(find.text('✓ Door Hanger Distribution'), findsOneWidget);
+    expect(find.text('✓ Material Pickup'), findsOneWidget);
+    expect(find.text('Door-to-Door Outreach'), findsOneWidget);
+    expect(find.text('Off • explicit opt-in'), findsOneWidget);
   });
 
   testWidgets('both funnels remain single-column and overflow-free at 390px', (
@@ -98,7 +108,8 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(app(home: const BusinessFunnelScreen()));
-    expect(tester.takeException(), isNull);
+    final businessLayoutError = tester.takeException();
+    expect(businessLayoutError, isNull);
     expect(
       find.bySemanticsLabel(RegExp('ScaledCircle for Local Businesses')),
       findsOneWidget,
@@ -170,5 +181,46 @@ void main() {
     expect(loginSource, contains("role == 'admin'"));
     expect(loginSource, contains("userData?['active'] == true"));
     expect(loginSource, contains("userData?['betaAccess'] == 'approved'"));
+  });
+
+  test('public previews use approved branding and truthful field evidence', () {
+    final components = File(
+      'lib/screens/public/public_funnel_components.dart',
+    ).readAsStringSync();
+    final business = File(
+      'lib/screens/public/business_funnel_screen.dart',
+    ).readAsStringSync();
+    final scaler = File(
+      'lib/screens/public/scaler_funnel_screen.dart',
+    ).readAsStringSync();
+    final html = File('web/index.html').readAsStringSync();
+
+    expect(components, contains("'web/icons/Icon-192.png'"));
+    expect(components, contains('How do you want to use ScaledCircle?'));
+    expect(business, contains('Service Area'));
+    expect(business, contains('Campaign Target'));
+    expect(business, contains('Scaler Zone'));
+    expect(business, contains("ProductLine('Route', 'Not yet verified')"));
+    expect(scaler, contains('SAMPLE ACTIVE-WORK GPS TRACE'));
+    expect(scaler, contains('Recorded active-work evidence'));
+    expect(scaler, contains('it is not a planned walking route'));
+    expect(scaler, isNot(contains('Suggested Walking Route')));
+    expect(scaler, isNot(contains('Optimized Route')));
+    expect(html, contains('og:type'));
+    expect(html, contains('og:url'));
+    expect(html, contains('og:title'));
+    expect(html, contains('og:description'));
+    expect(html, contains('og:image'));
+    expect(html, contains('twitter:card'));
+    expect(html, contains('twitter:title'));
+    expect(html, contains('twitter:description'));
+    expect(html, contains('twitter:image'));
+    expect(html, contains('icons/scaled-circle-mark.svg'));
+    expect(
+      html,
+      contains(
+        'ScaledCircle — Local Growth Intelligence + Verified Field Campaigns',
+      ),
+    );
   });
 }

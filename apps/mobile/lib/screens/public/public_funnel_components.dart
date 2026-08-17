@@ -30,6 +30,93 @@ void openPublicWaitlist(BuildContext context, String role) {
   );
 }
 
+void openPublicRoleChooser(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: publicPanel,
+      title: const Text('How do you want to use ScaledCircle?'),
+      content: const Text(
+        'Choose the path that fits you. You can switch perspectives anytime.',
+        style: TextStyle(color: publicMuted),
+      ),
+      actions: [
+        OutlinedButton.icon(
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            Navigator.pushNamed(context, AppRoutes.scalers);
+          },
+          icon: const Icon(Icons.directions_walk),
+          label: const Text('Find Work as a Scaler'),
+        ),
+        FilledButton.icon(
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            Navigator.pushNamed(context, AppRoutes.businesses);
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: businessGreen,
+            foregroundColor: publicBackground,
+          ),
+          icon: const Icon(Icons.trending_up),
+          label: const Text('Grow My Business'),
+        ),
+      ],
+    ),
+  );
+}
+
+class ScaledCircleBrand extends StatelessWidget {
+  const ScaledCircleBrand({super.key, this.compact = false});
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final showWordmark = !compact || constraints.maxWidth >= 130;
+      return Semantics(
+        label: 'ScaledCircle home',
+        button: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () =>
+              Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'web/icons/Icon-192.png',
+                  width: compact ? 34 : 40,
+                  height: compact ? 34 : 40,
+                  semanticLabel: 'ScaledCircle logo',
+                  filterQuality: FilterQuality.high,
+                ),
+                if (showWordmark) ...[
+                  const SizedBox(width: 9),
+                  Flexible(
+                    child: Text(
+                      compact ? 'ScaledCircle' : 'SCALEDCIRCLE',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: compact ? 15 : 16,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: compact ? .1 : 1.1,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class PublicTopNavigation extends StatelessWidget {
   const PublicTopNavigation({super.key, required this.accent});
   final Color accent;
@@ -44,27 +131,14 @@ class PublicTopNavigation extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              const Expanded(
-                child: Text(
-                  'SCALEDCIRCLE',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
+              const Expanded(child: ScaledCircleBrand(compact: true)),
               IconButton(
                 tooltip: 'Log In',
                 onPressed: () => Navigator.pushNamed(context, AppRoutes.login),
                 icon: const Icon(Icons.login, color: publicMuted),
               ),
               FilledButton(
-                onPressed: () => openPublicAccountRegistration(
-                  context,
-                  accent == scalerBlue ? 'scaler' : 'business',
-                ),
+                onPressed: () => openPublicRoleChooser(context),
                 style: FilledButton.styleFrom(
                   backgroundColor: accent,
                   foregroundColor: accent == businessGreen
@@ -83,28 +157,7 @@ class PublicTopNavigation extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
           children: [
-            Semantics(
-              button: true,
-              label: 'ScaledCircle home',
-              child: InkWell(
-                onTap: () => Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/',
-                  (route) => false,
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'SCALEDCIRCLE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            const ScaledCircleBrand(),
             const Spacer(),
             PublicNavLink(label: 'For Businesses', route: AppRoutes.businesses),
             PublicNavLink(label: 'For Scalers', route: AppRoutes.scalers),
@@ -116,10 +169,7 @@ class PublicTopNavigation extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             FilledButton(
-              onPressed: () => openPublicAccountRegistration(
-                context,
-                accent == scalerBlue ? 'scaler' : 'business',
-              ),
+              onPressed: () => openPublicRoleChooser(context),
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
                 foregroundColor: accent == businessGreen
@@ -424,12 +474,24 @@ class ProductWindow extends StatelessWidget {
       children: [
         Row(
           children: [
-            const _WindowDot(color: Color(0xFFFF6B6B)),
-            const SizedBox(width: 6),
-            const _WindowDot(color: Color(0xFFFFCA56)),
-            const SizedBox(width: 6),
-            _WindowDot(color: accent),
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(Icons.circle_outlined, color: accent, size: 18),
+            ),
             const SizedBox(width: 10),
+            const Text(
+              'ScaledCircle',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const Spacer(),
             Expanded(
               child: Align(
                 alignment: Alignment.centerRight,
@@ -441,7 +503,9 @@ class ProductWindow extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
+        const Divider(color: publicBorder, height: 1),
+        const SizedBox(height: 16),
         Text(
           title,
           style: const TextStyle(
@@ -454,17 +518,6 @@ class ProductWindow extends StatelessWidget {
         child,
       ],
     ),
-  );
-}
-
-class _WindowDot extends StatelessWidget {
-  const _WindowDot({required this.color});
-  final Color color;
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 9,
-    height: 9,
-    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
   );
 }
 
@@ -499,6 +552,11 @@ class StatusPill extends StatelessWidget {
   final IconData? icon;
   @override
   Widget build(BuildContext context) => Container(
+    constraints: BoxConstraints(
+      maxWidth: MediaQuery.sizeOf(context).width < 480
+          ? MediaQuery.sizeOf(context).width - 64
+          : 340,
+    ),
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     decoration: BoxDecoration(
       color: color.withValues(alpha: .12),
@@ -511,9 +569,11 @@ class StatusPill extends StatelessWidget {
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 6),
         ],
-        Text(
-          label,
-          style: TextStyle(color: color, fontWeight: FontWeight.w800),
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+          ),
         ),
       ],
     ),

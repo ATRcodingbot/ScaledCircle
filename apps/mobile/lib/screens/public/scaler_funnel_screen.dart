@@ -99,7 +99,7 @@ class _ScalerHeroVisual extends StatelessWidget {
   const _ScalerHeroVisual();
   @override
   Widget build(BuildContext context) => ProductWindow(
-    title: 'Opportunity Match',
+    title: 'Flyer Distribution',
     accent: scalerBlue,
     label: 'SAMPLE JOB',
     child: Column(
@@ -123,24 +123,23 @@ class _ScalerHeroVisual extends StatelessWidget {
         ),
         SizedBox(height: 8),
         Text(
-          'Inside your Anne Arundel Work Area',
+          'Anne Arundel County • Inside your Work Area',
           style: TextStyle(color: publicMuted, fontSize: 12),
         ),
-        ProductLine('Sample job pay', '\$125', color: scalerBlue),
-        SizedBox(height: 18),
+        ProductLine('Job pay', '\$125', color: scalerBlue),
+        ProductLine('Flyers', '500'),
+        ProductLine('Materials', 'Pickup required'),
+        ProductLine('Deadline', 'Friday, 5 PM'),
+        ProductLine('Route', 'Not yet verified'),
+        SizedBox(height: 14),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             StatusPill(
-              'Materials provided',
+              'View Job',
               color: scalerBlue,
-              icon: Icons.inventory_2_outlined,
-            ),
-            StatusPill(
-              'Route not verified',
-              color: publicMuted,
-              icon: Icons.route_outlined,
+              icon: Icons.arrow_forward,
             ),
           ],
         ),
@@ -153,7 +152,7 @@ class _WorkAreaVisual extends StatelessWidget {
   const _WorkAreaVisual();
   @override
   Widget build(BuildContext context) => const ProductWindow(
-    title: 'My Work Preferences',
+    title: 'My Work Areas + Preferences',
     accent: scalerBlue,
     label: 'SAMPLE SETUP',
     child: Column(
@@ -183,7 +182,29 @@ class _WorkAreaVisual extends StatelessWidget {
         SizedBox(height: 14),
         ProductLine('Baltimore County', 'Enabled', color: scalerBlue),
         ProductLine('Anne Arundel County', 'Enabled', color: scalerBlue),
-        ProductLine('Door-to-door outreach', 'Off'),
+        SizedBox(height: 14),
+        Text(
+          'WHAT KIND OF WORK DO YOU WANT?',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+          ),
+        ),
+        SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            StatusPill('✓ Flyer Distribution', color: scalerBlue),
+            StatusPill('✓ Door Hanger Distribution', color: scalerBlue),
+            StatusPill('✓ Material Pickup', color: scalerBlue),
+            StatusPill('✓ Short Local Jobs', color: scalerBlue),
+            StatusPill('Scaler Crew • Limited rollout', color: publicMuted),
+          ],
+        ),
+        SizedBox(height: 12),
+        ProductLine('Door-to-Door Outreach', 'Off • explicit opt-in'),
       ],
     ),
   );
@@ -222,7 +243,7 @@ class _JobCardVisual extends StatelessWidget {
   Widget build(BuildContext context) => const ProductWindow(
     title: 'Flyer Distribution',
     accent: scalerBlue,
-    label: 'SAMPLE • NOT A LIVE LISTING',
+    label: 'SAMPLE',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -262,25 +283,39 @@ class _ZoneVisual extends StatelessWidget {
   const _ZoneVisual();
   @override
   Widget build(BuildContext context) => const ProductWindow(
-    title: 'Your Assigned Zone',
+    title: 'How Verified Coverage Looks',
     accent: scalerBlue,
-    label: 'SAMPLE MAP',
+    label: 'SAMPLE ACTIVE WORK',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _ScalerZoneMap(),
+        SizedBox(height: 8),
+        Text(
+          'SAMPLE ACTIVE-WORK GPS TRACE',
+          style: TextStyle(
+            color: businessGreen,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             StatusPill('Zone 1', color: scalerBlue, icon: Icons.crop_free),
-            StatusPill('Not assigned', color: publicMuted),
+            StatusPill('GPS recording', color: businessGreen),
           ],
         ),
-        ProductLine('Estimated homes', 'Shown when supported'),
-        ProductLine('Route', 'Not yet verified'),
-        ProductLine('Deadline', 'Friday, 5:00 PM'),
+        ProductLine('Trace', 'Recorded active-work evidence'),
+        ProductLine('Planned route', 'Not provided'),
+        ProductLine('Coverage', 'Recording'),
+        SizedBox(height: 8),
+        Text(
+          'When active work starts, ScaledCircle records GPS evidence used to review coverage inside the assigned Zone.',
+          style: TextStyle(color: publicMuted, fontSize: 12, height: 1.35),
+        ),
       ],
     ),
   );
@@ -291,10 +326,15 @@ class _ScalerZoneMap extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(14),
-    child: SizedBox(
-      height: 150,
-      width: double.infinity,
-      child: CustomPaint(painter: _ScalerZonePainter()),
+    child: Semantics(
+      image: true,
+      label:
+          'Example recorded active-work GPS trace inside an assigned campaign Zone; it is not a planned walking route',
+      child: SizedBox(
+        height: 180,
+        width: double.infinity,
+        child: CustomPaint(painter: _ScalerZonePainter()),
+      ),
     ),
   );
 }
@@ -305,17 +345,61 @@ class _ScalerZonePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(
       Offset.zero & size,
-      Paint()..color = const Color(0xFF0B2034),
+      Paint()..color = const Color(0xFF102536),
+    );
+    canvas.drawCircle(
+      Offset(size.width * .15, size.height * .18),
+      size.width * .13,
+      Paint()..color = const Color(0xFF173C35),
     );
     final streets = Paint()
-      ..color = const Color(0xFF24445B)
-      ..strokeWidth = 2;
-    for (var x = 24.0; x < size.width; x += 52) {
-      canvas.drawLine(Offset(x, 0), Offset(x - 20, size.height), streets);
+      ..color = const Color(0xFF557084)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    final mainStreet = Path()
+      ..moveTo(0, size.height * .78)
+      ..cubicTo(
+        size.width * .28,
+        size.height * .52,
+        size.width * .6,
+        size.height * .36,
+        size.width,
+        size.height * .12,
+      );
+    canvas.drawPath(mainStreet, streets..strokeWidth = 3.5);
+    for (final branch in <Path>[
+      Path()
+        ..moveTo(size.width * .2, size.height)
+        ..quadraticBezierTo(
+          size.width * .3,
+          size.height * .55,
+          size.width * .42,
+          0,
+        ),
+      Path()
+        ..moveTo(size.width * .36, size.height * .58)
+        ..quadraticBezierTo(
+          size.width * .62,
+          size.height * .74,
+          size.width * .82,
+          size.height,
+        ),
+    ]) {
+      canvas.drawPath(branch, streets..strokeWidth = 1.8);
     }
-    for (var y = 26.0; y < size.height; y += 40) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y + 12), streets);
-    }
+    final target = Path()
+      ..moveTo(size.width * .08, size.height * .12)
+      ..lineTo(size.width * .88, size.height * .08)
+      ..lineTo(size.width * .95, size.height * .84)
+      ..lineTo(size.width * .14, size.height * .92)
+      ..close();
+    canvas.drawPath(
+      target,
+      Paint()
+        ..color = publicMuted.withValues(alpha: .55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
     final zone = Path()
       ..moveTo(size.width * .18, size.height * .2)
       ..lineTo(size.width * .73, size.height * .13)
@@ -331,10 +415,45 @@ class _ScalerZonePainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
+    final trace = Path()
+      ..moveTo(size.width * .26, size.height * .66)
+      ..cubicTo(
+        size.width * .31,
+        size.height * .38,
+        size.width * .48,
+        size.height * .28,
+        size.width * .61,
+        size.height * .4,
+      )
+      ..quadraticBezierTo(
+        size.width * .72,
+        size.height * .54,
+        size.width * .58,
+        size.height * .72,
+      )
+      ..quadraticBezierTo(
+        size.width * .45,
+        size.height * .82,
+        size.width * .36,
+        size.height * .6,
+      );
+    canvas.drawPath(
+      trace,
+      Paint()
+        ..color = businessGreen
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke,
+    );
     canvas.drawCircle(
-      Offset(size.width * .52, size.height * .5),
-      7,
+      Offset(size.width * .26, size.height * .66),
+      5,
       Paint()..color = Colors.white,
+    );
+    canvas.drawCircle(
+      Offset(size.width * .36, size.height * .6),
+      6,
+      Paint()..color = businessGreen,
     );
   }
 
@@ -346,7 +465,7 @@ class _JobRoomVisual extends StatelessWidget {
   const _JobRoomVisual();
   @override
   Widget build(BuildContext context) => const ProductWindow(
-    title: 'Private Job Room',
+    title: 'Job Room',
     accent: scalerBlue,
     label: 'WORKSPACE PREVIEW',
     child: Column(
@@ -358,15 +477,12 @@ class _JobRoomVisual extends StatelessWidget {
             (
               Icons.chat_bubble_outline,
               'Business message',
-              'Job details ready',
+              '“Materials will be ready at 8 AM.”',
             ),
-            (
-              Icons.inventory_2_outlined,
-              'Materials plan',
-              'Pickup instructions available',
-            ),
-            (Icons.handshake_outlined, 'Handoff', 'Confirm when received'),
-            (Icons.support_agent, 'Support', 'Available inside the job'),
+            (Icons.inventory_2_outlined, 'Materials', 'Pickup at Business'),
+            (Icons.check_circle_outline, 'Readiness', 'Ready ✓'),
+            (Icons.handshake_outlined, 'Handoff', 'Received ✓'),
+            (Icons.support_agent, 'Support', 'Available'),
           ],
         ),
       ],
@@ -378,37 +494,18 @@ class _ProofVisual extends StatelessWidget {
   const _ProofVisual();
   @override
   Widget build(BuildContext context) => const ProductWindow(
-    title: 'Verified Completion',
+    title: 'Active Work • Zone 1',
     accent: scalerBlue,
     label: 'ACTIVE WORK ONLY',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        WorkflowRail(
-          accent: scalerBlue,
-          steps: [
-            (
-              Icons.play_circle_outline,
-              'Start active work',
-              'Location verification begins',
-            ),
-            (
-              Icons.route_outlined,
-              'Complete your Zone',
-              'Coverage captured for review',
-            ),
-            (
-              Icons.add_a_photo_outlined,
-              'Add proof',
-              'Checkpoints when required',
-            ),
-            (
-              Icons.verified_user_outlined,
-              'Submit completion',
-              'Build verified history',
-            ),
-          ],
-        ),
+        ProductLine('GPS verification', 'Active', color: businessGreen),
+        ProductLine('Checkpoint', '2 of 4'),
+        ProductLine('Materials', 'Confirmed ✓'),
+        ProductLine('Coverage', 'Recording'),
+        SizedBox(height: 10),
+        StatusPill('Complete Job', color: scalerBlue, icon: Icons.check),
         SizedBox(height: 12),
         Text(
           'Location is not tracked while browsing jobs.',
@@ -443,7 +540,7 @@ class _EarningsVisual extends StatelessWidget {
             Expanded(
               child: MetricTile(
                 label: 'Status',
-                value: 'Review',
+                value: 'Pending',
                 icon: Icons.fact_check_outlined,
                 accent: scalerBlue,
               ),
@@ -451,9 +548,15 @@ class _EarningsVisual extends StatelessWidget {
           ],
         ),
         SizedBox(height: 14),
-        ProductLine('Completion bonus', 'When offered'),
-        ProductLine('Verification', 'Pending review'),
-        ProductLine('Payment', 'Follows approved workflow'),
+        ProductLine('Completion', 'Submitted'),
+        ProductLine('Verification', 'Pending'),
+        ProductLine('Payment', 'Pending'),
+        ProductLine('Verified Jobs', 'Sample: 12'),
+        SizedBox(height: 8),
+        Text(
+          'Example status only. Payment timing follows the approved workflow.',
+          style: TextStyle(color: publicMuted, fontSize: 12),
+        ),
       ],
     ),
   );
@@ -466,22 +569,62 @@ class _CrewAndTrustBand extends StatelessWidget {
     key: Key('scaler-crew'),
     step: 'LARGER CAMPAIGNS',
     title: 'CLEAR ZONES. NO DUPLICATE COVERAGE.',
-    body:
-        'Some larger or time-sensitive campaigns may use a Scaler Crew where rollout access permits. One campaign can be divided into non-overlapping Zones. Crew availability remains gated rather than advertised as unrestricted.',
+    body: 'One campaign. Separate Zones. No duplicate coverage.',
     accent: scalerBlue,
     visual: ProductPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('TRUST & SAFETY', style: _title),
-          ProductLine('Job details', 'Clear before you apply'),
-          ProductLine('Work area', 'Mapped'),
-          ProductLine('Job Room', 'Private'),
-          ProductLine('Completion', 'Verified'),
-          ProductLine('Scaler Crew', 'Limited rollout'),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              Text('LARGE CAMPAIGN', style: _title),
+              DemoBadge(label: 'LIMITED ROLLOUT', color: scalerBlue),
+            ],
+          ),
+          SizedBox(height: 16),
+          _CrewZoneStrip(),
+          SizedBox(height: 14),
+          ProductLine('Zone 1', 'Scaler A'),
+          ProductLine('Zone 2', 'Scaler B'),
+          ProductLine('Zone 3', 'Scaler C'),
+          ProductLine('Coverage', 'Non-overlapping'),
         ],
       ),
     ),
+  );
+}
+
+class _CrewZoneStrip extends StatelessWidget {
+  const _CrewZoneStrip();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      for (final zone in const [
+        ('1', Color(0xFF287EFF)),
+        ('2', Color(0xFF14E39A)),
+        ('3', Color(0xFF9C7BFF)),
+      ]) ...[
+        Expanded(
+          child: Container(
+            height: 76,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: zone.$2.withValues(alpha: .16),
+              border: Border.all(color: zone.$2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'ZONE ${zone.$1}',
+              style: TextStyle(color: zone.$2, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ),
+        if (zone.$1 != '3') const SizedBox(width: 8),
+      ],
+    ],
   );
 }
 
