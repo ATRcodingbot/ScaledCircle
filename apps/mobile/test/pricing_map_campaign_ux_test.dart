@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/public/public_landing_screen.dart';
 import 'package:flutter_app/services/subscription_plan_service.dart';
+import 'package:flutter_app/screens/business/campaign_zones_screen.dart';
 
 void main() {
   final propertySource = File(
@@ -18,6 +19,28 @@ void main() {
   final areaSource = File(
     'lib/screens/business/campaign_area_screen.dart',
   ).readAsStringSync();
+
+  test('Campaign Zones continues only from persisted valid geometry', () {
+    expect(campaignZonesCanContinue(const []), isFalse);
+    expect(campaignZonesCanContinue(const [
+      {'serviceAreaPointCount': 0},
+      {'serviceAreaPointCount': 2},
+    ]), isFalse);
+    expect(campaignZonesCanContinue(const [
+      {'serviceAreaPointCount': 3},
+    ]), isTrue);
+  });
+
+  test('focused zone flow opens the maintained map before persistence', () {
+    expect(zonesSource, contains('Choose where this campaign will run'));
+    expect(zonesSource, contains('Choose Target Area'));
+    expect(zonesSource, contains('Draw Custom Target'));
+    expect(zonesSource, contains('pendingZoneData: pendingZoneData'));
+    expect(zonesSource, isNot(contains("'workerPoolCents':")));
+    expect(areaSource, contains("if (latestSnapshot.exists)"));
+    expect(areaSource, contains('widget.campaignReference.set'));
+    expect(areaSource, contains('Route not yet verified'));
+  });
 
   test('authoritative plan configuration contains all four real plans', () {
     final plans = SubscriptionPlanService.plans;

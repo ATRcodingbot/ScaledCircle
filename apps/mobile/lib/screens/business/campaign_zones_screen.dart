@@ -6,6 +6,12 @@ import '../../services/completion_payout_service.dart';
 import '../../widgets/zone_intelligence_card.dart';
 import 'campaign_area_screen.dart';
 
+bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
+  return zones.any(
+    (zone) => ((zone['serviceAreaPointCount'] as num?)?.toInt() ?? 0) >= 3,
+  );
+}
+
 class CampaignZonesScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
   final bool startWithAreaBuilder;
@@ -28,10 +34,24 @@ class CampaignZonesScreen extends StatelessWidget {
 
   bool get _hasTransferredAnalysisArea {
     final data = campaign.data() as Map<String, dynamic>?;
-    final points = data?['serviceArea'];
     return data?['propertyIntelligenceAnalysisId'] != null &&
-        points is List &&
-        points.length >= 3;
+        _serviceAreaBoundary.length >= 3;
+  }
+
+  List<Map<String, dynamic>> get _serviceAreaBoundary {
+    final data = campaign.data() as Map<String, dynamic>?;
+    final points = data?['serviceArea'];
+    if (points is! List) return const [];
+    return points
+        .whereType<Map>()
+        .map((point) => Map<String, dynamic>.from(point))
+        .toList();
+  }
+
+  String get _serviceAreaName {
+    final data = campaign.data() as Map<String, dynamic>?;
+    final name = data?['serviceAreaTemplateName']?.toString().trim();
+    return name == null || name.isEmpty ? 'your selected Service Area' : name;
   }
 
   Future<String?> _askForZoneName(
@@ -111,7 +131,9 @@ class CampaignZonesScreen extends StatelessWidget {
       return;
     }
 
-    final suggestedName = await _nextSuggestedZoneName();
+    final suggestedName = _hasTransferredAnalysisArea
+        ? 'Property Intelligence Area'
+        : await _nextSuggestedZoneName();
 
     if (!context.mounted) {
       return;
@@ -130,36 +152,15 @@ class CampaignZonesScreen extends StatelessWidget {
     try {
       zoneReference = _zonesCollection.doc();
 
-      await zoneReference.set({
+      final pendingZoneData = <String, dynamic>{
         'campaignId': campaign.id,
         'businessId': businessId,
         'zoneName': zoneName,
-        'shapeType': campaignData['shapeType'] ?? 'polygon',
-        'serviceAreaType': campaignData['serviceAreaType'] ?? 'polygon',
-        'serviceArea': campaignData['serviceArea'] ?? [],
-        'serviceAreaPointCount': campaignData['serviceAreaPointCount'] ?? 0,
-        'serviceAreaCenter': campaignData['serviceAreaCenter'],
-        'serviceAreaRadiusMeters': campaignData['serviceAreaRadiusMeters'],
-        'propertyIntelligenceAnalysisId':
-            campaignData['propertyIntelligenceAnalysisId'],
-        'estimatedHomes': 0,
-        'homeCountStatus': 'pending',
-        'homeCountMethod': null,
-        'homeCountConfidence': null,
-        'homeCountConfidenceScore': null,
         'assignedScalerId': null,
-        'assignedScalerEmail': null,
-        'requiredScalerCount':
-            (campaignData['requiredScalerCount'] as num?)?.round() ??
-            (campaignData['requestedScalerCount'] as num?)?.round() ??
-            1,
-        'workerPoolCents':
-            (campaignData['workerPoolCents'] as num?)?.round() ??
-            (((campaignData['maximumWorkerBudget'] ?? 0) as num) * 100).round(),
         'status': 'unassigned',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
 
       if (!context.mounted) {
         return;
@@ -168,7 +169,11 @@ class CampaignZonesScreen extends StatelessWidget {
       final areaSaved = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
-          builder: (_) => CampaignAreaScreen(campaignReference: zoneReference!),
+          builder: (_) => CampaignAreaScreen(
+            campaignReference: zoneReference!,
+            pendingZoneData: pendingZoneData,
+            searchBoundary: _serviceAreaBoundary,
+          ),
         ),
       );
 
@@ -188,38 +193,6 @@ class CampaignZonesScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$zoneName was added to the campaign.')),
         );
-      } else {
-        final keepDraft = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) {
-            return AlertDialog(
-              title: const Text('Keep Draft Zone?'),
-              content: Text(
-                '$zoneName does not have a mapped area. Keep it as a draft?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext, false);
-                  },
-                  child: const Text('Delete Draft'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext, true);
-                  },
-                  child: const Text('Keep Draft'),
-                ),
-              ],
-            );
-          },
-        );
-
-        if (keepDraft != true) {
-          await zoneReference.delete();
-        }
-
-        await _refreshCampaignTotals();
       }
     } catch (e) {
       if (zoneReference != null) {
@@ -243,52 +216,11 @@ class CampaignZonesScreen extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to create zone: $e')));
+      debugPrint('Campaign zone creation failed: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("We couldn't save this campaign area.")),
+      );
     }
-  }
-
-  Future<void> _createTransferredAnalysisZone(BuildContext context) async {
-    final campaignData = campaign.data() as Map<String, dynamic>;
-    final businessId = campaignData['businessId']?.toString();
-    final points = campaignData['serviceArea'];
-    if (businessId == null || points is! List || points.length < 3) return;
-    final existing = await _zonesCollection
-        .where('campaignId', isEqualTo: campaign.id)
-        .limit(1)
-        .get();
-    if (existing.docs.isNotEmpty || !context.mounted) return;
-    final zoneReference = _zonesCollection.doc();
-    await zoneReference.set({
-      'campaignId': campaign.id,
-      'businessId': businessId,
-      'zoneName': 'Property Intelligence Area',
-      'shapeType': 'polygon',
-      'serviceAreaType': 'polygon',
-      'serviceArea': points,
-      'serviceAreaPointCount': points.length,
-      'propertyIntelligenceAnalysisId':
-          campaignData['propertyIntelligenceAnalysisId'],
-      'estimatedHomes': 0,
-      'homeCountStatus': 'pending',
-      'assignedScalerId': null,
-      'requiredScalerCount':
-          (campaignData['requiredScalerCount'] as num?)?.round() ?? 1,
-      'workerPoolCents':
-          (campaignData['workerPoolCents'] as num?)?.round() ?? 0,
-      'status': 'unassigned',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    if (!context.mounted) return;
-    final saved = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CampaignAreaScreen(campaignReference: zoneReference),
-      ),
-    );
-    if (saved == true) await _refreshCampaignTotals();
   }
 
   Future<String> _nextSuggestedZoneName() async {
@@ -1191,21 +1123,42 @@ class CampaignZonesScreen extends StatelessWidget {
       ),
       bottomNavigationBar: _campaignLocked
           ? null
-          : SafeArea(
-              minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-              child: SizedBox(
-                height: 58,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    splashFactory: NoSplash.splashFactory,
+          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _zonesCollection
+                  .where('campaignId', isEqualTo: campaign.id)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final canContinue = campaignZonesCanContinue(
+                  (snapshot.data?.docs ?? const []).map((doc) => doc.data()),
+                );
+                return SafeArea(
+                  minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!canContinue)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'Add at least one campaign area before continuing.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 58,
+                        child: ElevatedButton.icon(
+                          onPressed: canContinue
+                              ? () => Navigator.pop(context, true)
+                              : null,
+                          icon: const Icon(Icons.arrow_forward),
+                          label: const Text('Continue to Review & Launch'),
+                        ),
+                      ),
+                    ],
                   ),
-                  onPressed: () {
-                    Navigator.pop(context, true);
-                  },
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text('Continue to Review & Launch'),
-                ),
-              ),
+                );
+              },
             ),
       floatingActionButton: _campaignLocked
           ? null
@@ -1266,19 +1219,12 @@ class CampaignZonesScreen extends StatelessWidget {
             int totalEstimatedHomes = 0;
             int assignedZones = 0;
             int mappedZones = 0;
-            double totalWalkingMiles = 0;
-            int totalMinutes = 0;
 
             for (final zone in zones) {
               final data = zone.data();
 
               totalEstimatedHomes +=
                   (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-
-              totalWalkingMiles +=
-                  (data['estimatedWalkingMiles'] as num?)?.toDouble() ?? 0;
-
-              totalMinutes += (data['estimatedMinutes'] as num?)?.toInt() ?? 0;
 
               final assignedScalerId = data['assignedScalerId']?.toString();
 
@@ -1297,102 +1243,99 @@ class CampaignZonesScreen extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
               children: [
-                const Text(
-                  'Campaign Zone Manager',
+                Text(
+                  zones.isEmpty
+                      ? 'Choose where this campaign will run'
+                      : 'Campaign Areas',
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 8),
 
-                const Text(
-                  'Divide the campaign into individual work areas. Each zone receives its own workload estimate, Scaler assignment, GPS route, and completion status.',
+                Text(
+                  zones.isEmpty
+                      ? 'Starting inside: $_serviceAreaName'
+                      : 'Each saved area can become a distinct Scaler work assignment.',
                 ),
 
                 const SizedBox(height: 22),
 
-                Row(
-                  children: [
-                    Expanded(
-                      child: _summaryCard(
-                        icon: Icons.map_outlined,
-                        value: '${zones.length}',
-                        label: 'Zones',
+                if (zones.isNotEmpty)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _summaryCard(
+                          icon: Icons.map_outlined,
+                          value: '${zones.length}',
+                          label: 'Zones',
+                        ),
                       ),
-                    ),
 
-                    const SizedBox(width: 10),
+                      const SizedBox(width: 10),
 
-                    Expanded(
-                      child: _summaryCard(
-                        icon: Icons.location_on_outlined,
-                        value: '$mappedZones',
-                        label: 'Mapped',
+                      Expanded(
+                        child: _summaryCard(
+                          icon: Icons.location_on_outlined,
+                          value: '$mappedZones',
+                          label: 'Mapped',
+                        ),
                       ),
-                    ),
 
-                    const SizedBox(width: 10),
+                      const SizedBox(width: 10),
 
-                    Expanded(
-                      child: _summaryCard(
-                        icon: Icons.person_outline,
-                        value: '$assignedZones',
-                        label: 'Assigned',
+                      Expanded(
+                        child: _summaryCard(
+                          icon: Icons.person_outline,
+                          value: '$assignedZones',
+                          label: 'Assigned',
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
 
                 const SizedBox(height: 10),
 
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        _campaignMetricRow(
-                          icon: Icons.home_work_outlined,
-                          label: 'Estimated Homes',
-                          value: totalEstimatedHomes > 0
-                              ? '$totalEstimatedHomes'
-                              : 'Pending',
-                        ),
-                        const Divider(),
-                        _campaignMetricRow(
-                          icon: Icons.directions_walk,
-                          label: 'Estimated Walking Distance',
-                          value: totalWalkingMiles > 0
-                              ? '${totalWalkingMiles.toStringAsFixed(1)} miles'
-                              : 'Pending',
-                        ),
-                        const Divider(),
-                        _campaignMetricRow(
-                          icon: Icons.schedule,
-                          label: 'Estimated Campaign Time',
-                          value: totalMinutes > 0
-                              ? _formatDuration(totalMinutes)
-                              : 'Pending',
-                        ),
-                      ],
+                if (zones.isNotEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _campaignMetricRow(
+                            icon: Icons.home_work_outlined,
+                            label: 'Estimated Homes',
+                            value: totalEstimatedHomes > 0
+                                ? '$totalEstimatedHomes'
+                                : 'Pending',
+                          ),
+                          const Divider(),
+                          _campaignMetricRow(
+                            icon: Icons.directions_walk,
+                            label: 'Walking Route',
+                            value: 'Not yet verified',
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
 
                 const SizedBox(height: 22),
 
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Zone Intelligence',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                if (zones.isNotEmpty)
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Zone Intelligence',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                    Text('${zones.length} total'),
-                  ],
-                ),
+                      Text('${zones.length} total'),
+                    ],
+                  ),
 
                 const SizedBox(height: 12),
 
@@ -1401,11 +1344,12 @@ class CampaignZonesScreen extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const Icon(Icons.add_location_alt_outlined, size: 54),
                           const SizedBox(height: 12),
                           const Text(
-                            'No zones yet',
+                            'Choose a target inside your Service Area',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -1413,26 +1357,31 @@ class CampaignZonesScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Add the first canvassing zone for this campaign.',
+                            'The saved Service Area is a visual boundary only. Draw a smaller area for this campaign.',
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 18),
+                          if (_hasTransferredAnalysisArea)
+                            OutlinedButton.icon(
+                              onPressed: _campaignLocked
+                                  ? null
+                                  : () => _createZone(context),
+                              icon: const Icon(Icons.insights_outlined),
+                              label: const Text('Use Analyzed Area'),
+                            ),
                           ElevatedButton.icon(
                             onPressed: _campaignLocked
                                 ? null
-                                : () {
-                                    if (_hasTransferredAnalysisArea) {
-                                      _createTransferredAnalysisZone(context);
-                                    } else {
-                                      _createZone(context);
-                                    }
-                                  },
+                                : () => _createZone(context),
                             icon: const Icon(Icons.add_location_alt),
-                            label: Text(
-                              _hasTransferredAnalysisArea
-                                  ? 'Use Analyzed Area'
-                                  : 'Create First Zone',
-                            ),
+                            label: const Text('Choose Target Area'),
+                          ),
+                          TextButton.icon(
+                            onPressed: _campaignLocked
+                                ? null
+                                : () => _createZone(context),
+                            icon: const Icon(Icons.gesture),
+                            label: const Text('Draw Custom Target'),
                           ),
                         ],
                       ),
@@ -1598,22 +1547,6 @@ class CampaignZonesScreen extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _formatDuration(int minutes) {
-    if (minutes < 60) {
-      return '$minutes min';
-    }
-
-    final hours = minutes ~/ 60;
-
-    final remainingMinutes = minutes % 60;
-
-    if (remainingMinutes == 0) {
-      return '$hours hr';
-    }
-
-    return '$hours hr $remainingMinutes min';
   }
 }
 

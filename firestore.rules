@@ -328,28 +328,43 @@ service cloud.firestore {
 
 
       allow create:
-        if isApprovedAccount()
+        if isApprovedBusiness()
         && request.resource.data.businessId == request.auth.uid
+        && request.resource.data.campaignId is string
+        && request.resource.data.campaignId.size() > 0
+        && request.resource.data.campaignId.size() <= 128
+        && exists(
+          /databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)
+        )
+        && get(
+          /databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)
+        ).data.businessId == request.auth.uid
+        && get(
+          /databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)
+        ).data.status == 'draft'
         && request.resource.data.assignedScalerId == null
         && request.resource.data.status == 'unassigned'
         && request.resource.data.keys().hasOnly([
           'campaignId', 'businessId', 'zoneName', 'shapeType',
           'serviceAreaType', 'serviceArea', 'serviceAreaPointCount',
           'serviceAreaCenter', 'serviceAreaRadiusMeters', 'estimatedHomes',
-          'homeCountStatus', 'homeCountMethod', 'homeCountConfidence',
-          'homeCountConfidenceScore', 'assignedScalerId',
-          'assignedScalerEmail', 'status', 'createdAt', 'updatedAt'
-        ]);
+          'homeCountStatus', 'analysisStatus', 'assignedScalerId', 'status',
+          'createdAt', 'updatedAt', 'serviceAreaUpdatedAt'
+        ])
+        && validDraftZoneTarget(request.resource.data);
 
 
       allow update:
-        if isApprovedAccount()
+        if isApprovedBusiness()
         && resource.data.businessId == request.auth.uid
         && resource.data.assignedScalerId == null
         && (!('mapLocked' in resource.data) || resource.data.mapLocked != true)
         && get(
           /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
         ).data.status == 'draft'
+        && get(
+          /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+        ).data.businessId == request.auth.uid
         && request.resource.data.businessId == resource.data.businessId
         && request.resource.data.campaignId == resource.data.campaignId
         && request.resource.data.assignedScalerId == resource.data.assignedScalerId
@@ -357,18 +372,30 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'zoneName', 'shapeType', 'serviceAreaType', 'serviceArea',
           'serviceAreaPointCount', 'serviceAreaCenter',
-          'serviceAreaRadiusMeters', 'zoneAreaSquareMeters', 'zoneAreaAcres',
-          'zoneAreaSquareMiles', 'zonePerimeterMeters',
-          'estimatedWalkingMeters', 'estimatedWalkingMiles',
-          'estimatedMinutes', 'suggestedBasePay', 'recommendedScalerCount',
-          'estimatedHomes', 'homeCountStatus', 'homeCountMethod',
-          'homeCountConfidence', 'homeCountConfidenceScore',
-          'analysisStatus', 'analysisUpdatedAt', 'updatedAt'
-        ]);
+          'serviceAreaRadiusMeters', 'updatedAt', 'serviceAreaUpdatedAt'
+        ])
+        && validDraftZoneUpdate(request.resource.data);
 
 
       allow delete:
-        if isAdmin();
+        if isAdmin()
+        || (
+          isApprovedBusiness()
+          && resource.data.businessId == request.auth.uid
+          && resource.data.assignedScalerId == null
+          && resource.data.status == 'unassigned'
+          && get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.businessId == request.auth.uid
+          && get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.status == 'draft'
+          && !resource.data.keys().hasAny([
+            'activeTrackingSessionId', 'routeId', 'completionStatus',
+            'verificationStatus', 'paymentStatus', 'payoutStatus',
+            'settlementStatus', 'materialHandoffStatus'
+          ])
+        );
 
     }
 
@@ -956,6 +983,59 @@ service cloud.firestore {
         'transferOperationId', 'stripeTransferId', 'earningsStatus',
         'settlementStatus', 'redoRequired', 'redoCount', 'disputeOpen'
       ];
+    }
+
+    function isApprovedBusiness() {
+      return isApprovedAccount()
+        && get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'business';
+    }
+
+    function validZonePoint(point) {
+      return point is map
+        && point.keys().hasOnly(['latitude', 'longitude'])
+        && point.latitude is number
+        && point.longitude is number
+        && point.latitude >= -90
+        && point.latitude <= 90
+        && point.longitude >= -180
+        && point.longitude <= 180;
+    }
+
+    // Firestore Rules cannot iterate arbitrary lists. The bounded list, exact
+    // point count, map-only first/last vertices, and client model validation
+    // provide a deterministic gate; server analysis remains authoritative.
+    function validZoneGeometry(data) {
+      return data.serviceArea is list
+        && data.serviceArea.size() >= 3
+        && data.serviceArea.size() <= 200
+        && data.serviceAreaPointCount == data.serviceArea.size()
+        && validZonePoint(data.serviceArea[0])
+        && validZonePoint(data.serviceArea[1])
+        && validZonePoint(data.serviceArea[2])
+        && validZonePoint(data.serviceArea[data.serviceArea.size() - 1]);
+    }
+
+    function validDraftZoneTarget(data) {
+      return data.zoneName is string
+        && data.zoneName.size() > 0
+        && data.zoneName.size() <= 100
+        && data.shapeType in ['polygon', 'triangle', 'rectangle', 'circle']
+        && data.serviceAreaType == data.shapeType
+        && validZoneGeometry(data)
+        && data.estimatedHomes == 0
+        && data.homeCountStatus == 'pending'
+        && data.analysisStatus == 'waiting';
+    }
+
+    function validDraftZoneUpdate(data) {
+      return data.zoneName is string
+        && data.zoneName.size() > 0
+        && data.zoneName.size() <= 100
+        && data.shapeType in ['polygon', 'triangle', 'rectangle', 'circle']
+        && data.serviceAreaType == data.shapeType
+        && validZoneGeometry(data);
     }
 
 

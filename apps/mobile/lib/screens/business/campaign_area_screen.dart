@@ -13,8 +13,15 @@ import '../../widgets/property_intelligence_panel.dart';
 
 class CampaignAreaScreen extends StatefulWidget {
   final DocumentReference campaignReference;
+  final Map<String, dynamic>? pendingZoneData;
+  final List<Map<String, dynamic>> searchBoundary;
 
-  const CampaignAreaScreen({super.key, required this.campaignReference});
+  const CampaignAreaScreen({
+    super.key,
+    required this.campaignReference,
+    this.pendingZoneData,
+    this.searchBoundary = const [],
+  });
 
   @override
   State<CampaignAreaScreen> createState() => _CampaignAreaScreenState();
@@ -26,6 +33,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   final List<LatLng> _inputPoints = [];
 
   List<LatLng> _generatedArea = [];
+  List<LatLng> _searchBoundary = [];
 
   CampaignAreaShape _selectedShape = CampaignAreaShape.polygon;
 
@@ -68,8 +76,17 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         }
 
         setState(() {
+          _searchBoundary = _parsePoints(widget.searchBoundary);
           _loadingExistingArea = false;
         });
+
+        if (_searchBoundary.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _mapController.move(_calculateCenter(_searchBoundary), 10);
+            }
+          });
+        }
 
         return;
       }
@@ -866,33 +883,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
         'serviceAreaPointCount': polygonPoints.length,
 
-        'zoneAreaSquareMeters': metrics.areaSquareMeters,
-
-        'zoneAreaAcres': metrics.areaAcres,
-
-        'zoneAreaSquareMiles': metrics.areaSquareMiles,
-
-        'zonePerimeterMeters': metrics.perimeterMeters,
-
-        'zonePerimeterMiles': metrics.perimeterMiles,
-
-        'estimatedWalkingMeters': metrics.estimatedWalkingMeters,
-
-        'estimatedWalkingMiles': metrics.estimatedWalkingMiles,
-
-        'estimatedMinutes': metrics.estimatedMinutes,
-
-        'recommendedScalerCount': metrics.recommendedScalerCount,
-
-        'suggestedBasePay': metrics.suggestedBasePay,
-
-        'zoneMetricsMethod': 'geometry_v1',
-
-        'zoneMetricsDescription':
-            'Preliminary estimate based on zone area, perimeter, '
-            '30-meter sweep spacing, 75 walking meters per minute, '
-            'and 240 productive minutes per Scaler.',
-
         'analysisStatus': 'waiting',
 
         'homeCountStatus': 'pending',
@@ -920,7 +910,21 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         updateData['serviceAreaRadiusMeters'] = FieldValue.delete();
       }
 
-      await widget.campaignReference.update(updateData);
+      if (latestSnapshot.exists) {
+        updateData.remove('estimatedHomes');
+        updateData.remove('homeCountStatus');
+        updateData.remove('analysisStatus');
+        await widget.campaignReference.update(updateData);
+      } else if (latestSnapshot.exists) {
+        final pendingZoneData = widget.pendingZoneData;
+        if (pendingZoneData == null) {
+          throw StateError('Campaign zone draft information is unavailable.');
+        }
+        await widget.campaignReference.set({
+          ...pendingZoneData,
+          ...updateData,
+        });
+      }
 
       final analysisCompleted = await _analyzeSavedZone();
 
@@ -932,9 +936,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${_shapeLabel(_selectedShape)} zone saved and analyzed. '
-              '${metrics.areaAcres.toStringAsFixed(1)} acres and '
-              '${metrics.estimatedWalkingMiles.toStringAsFixed(1)} estimated walking miles.',
+              '${_shapeLabel(_selectedShape)} campaign area saved. Route not yet verified.',
             ),
           ),
         );
@@ -1059,6 +1061,17 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
             ),
           ]
         : <Polygon>[];
+    if (_searchBoundary.length >= 3) {
+      polygons.insert(
+        0,
+        Polygon(
+          points: _searchBoundary,
+          borderStrokeWidth: 2,
+          color: Colors.blueGrey.withValues(alpha: 0.05),
+          borderColor: Colors.blueGrey.withValues(alpha: 0.65),
+        ),
+      );
+    }
 
     final markers = _inputPoints
         .asMap()
@@ -1205,9 +1218,13 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                     options: MapOptions(
                       initialCenter: _generatedArea.isEmpty
-                          ? _defaultCenter
+                          ? (_searchBoundary.isEmpty
+                                ? _defaultCenter
+                                : _calculateCenter(_searchBoundary))
                           : _calculateCenter(_generatedArea),
-                      initialZoom: _generatedArea.isEmpty ? 13 : 15,
+                      initialZoom: _generatedArea.isEmpty
+                          ? (_searchBoundary.isEmpty ? 13 : 10)
+                          : 15,
 
                       onTap: _mappingLocked ? null : _handleMapTap,
                     ),

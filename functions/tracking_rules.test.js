@@ -25,6 +25,8 @@ beforeEach(async () => {
       ["admin-one", "admin"],
     ]) await db.doc(`users/${id}`).set({role, active: true});
     await db.doc("campaigns/campaign-one").set({businessId: "business-one", status: "draft"});
+    await db.doc("campaigns/campaign-two").set({businessId: "business-two", status: "draft"});
+    await db.doc("campaigns/campaign-live").set({businessId: "business-one", status: "active"});
     await db.doc("campaignZones/zone-one").set({
       campaignId: "campaign-one", businessId: "business-one", zoneName: "Zone 1",
       shapeType: "polygon", serviceAreaType: "polygon", serviceArea: [],
@@ -38,10 +40,12 @@ beforeEach(async () => {
     });
     await db.doc("campaignZones/zone-draft").set({
       campaignId: "campaign-one", businessId: "business-one", zoneName: "Draft",
-      shapeType: "polygon", serviceAreaType: "polygon", serviceArea: [],
-      serviceAreaPointCount: 0, serviceAreaCenter: null, serviceAreaRadiusMeters: null,
-      estimatedHomes: 0, homeCountStatus: "unavailable", homeCountMethod: "area",
-      homeCountConfidence: "low", homeCountConfidenceScore: 0,
+      shapeType: "polygon", serviceAreaType: "polygon", serviceArea: [
+        {latitude: 39, longitude: -76.6}, {latitude: 39.1, longitude: -76.5},
+        {latitude: 39, longitude: -76.4},
+      ],
+      serviceAreaPointCount: 3, serviceAreaCenter: null, serviceAreaRadiusMeters: null,
+      estimatedHomes: 0, homeCountStatus: "pending", analysisStatus: "waiting",
       assignedScalerId: null, assignedScalerEmail: null, status: "unassigned",
       updatedAt: new Date(), createdAt: new Date(),
     });
@@ -359,10 +363,54 @@ test("assigned scaler and businesses cannot spoof protected campaign zone state"
 
 test("owning business may edit only mapped draft configuration fields", async () => {
   const ref = store("business-one").doc("campaignZones/zone-draft");
-  await assertSucceeds(ref.update({zoneName: "Safer draft", estimatedHomes: 75, updatedAt: new Date()}));
+  await assertSucceeds(ref.update({
+    zoneName: "Safer draft",
+    serviceArea: [
+      {latitude: 39, longitude: -76.61}, {latitude: 39.11, longitude: -76.5},
+      {latitude: 39, longitude: -76.39},
+    ],
+    serviceAreaPointCount: 3, updatedAt: new Date(),
+  }));
+  await assertFails(ref.update({estimatedHomes: 75}));
   await assertFails(ref.update({status: "assigned"}));
   await assertFails(ref.update({assignedScalerId: "scaler-one"}));
   await assertFails(store("business-two").doc("campaignZones/zone-draft").update({zoneName: "stolen"}));
+});
+
+test("campaign zone draft creation is owner-scoped, validated, and authority-safe", async () => {
+  const valid = {
+    campaignId: "campaign-one", businessId: "business-one", zoneName: "Zone 1",
+    shapeType: "polygon", serviceAreaType: "polygon", serviceArea: [
+      {latitude: 39, longitude: -76.6}, {latitude: 39.1, longitude: -76.5},
+      {latitude: 39, longitude: -76.4},
+    ], serviceAreaPointCount: 3, estimatedHomes: 0, homeCountStatus: "pending",
+    analysisStatus: "waiting", assignedScalerId: null, status: "unassigned",
+    createdAt: new Date(), updatedAt: new Date(), serviceAreaUpdatedAt: new Date(),
+  };
+  const owner = store("business-one");
+  await assertSucceeds(owner.doc("campaignZones/valid-target").set(valid));
+  await assertFails(owner.doc("campaignZones/other-business-campaign").set({...valid, campaignId: "campaign-two"}));
+  await assertFails(owner.doc("campaignZones/live-campaign").set({...valid, campaignId: "campaign-live"}));
+  await assertFails(store("scaler-one").doc("campaignZones/scaler-target").set({...valid, businessId: "scaler-one"}));
+  await assertFails(environment.unauthenticatedContext().firestore().doc("campaignZones/public-target").set(valid));
+
+  for (const patch of [
+    {assignedScalerId: "scaler-one"}, {assignedScalerEmail: "one@example.test"},
+    {workerPoolCents: 1}, {platformFeeCents: 1}, {paymentStatus: "funded"},
+    {settlementStatus: "paid"}, {payoutStatus: "paid"},
+  ]) {
+    await assertFails(owner.doc(`campaignZones/forged-${Object.keys(patch)[0]}`).set({...valid, ...patch}));
+  }
+  await assertFails(owner.doc("campaignZones/invalid-geometry").set({...valid, serviceArea: [
+    {latitude: 139, longitude: -76.6}, {latitude: 39.1, longitude: -76.5},
+    {latitude: 39, longitude: -76.4},
+  ]}));
+  await assertFails(owner.doc("campaignZones/too-many-points").set({...valid,
+    serviceArea: Array.from({length: 201}, (_, index) => ({latitude: 39, longitude: -76 + index / 10000})),
+    serviceAreaPointCount: 201,
+  }));
+  await assertFails(owner.doc("campaignZones/valid-target").update({assignedScalerId: "scaler-one"}));
+  await assertSucceeds(owner.doc("campaignZones/valid-target").delete());
 });
 
 test("clients cannot mutate wallets or authoritative financial records", async () => {
