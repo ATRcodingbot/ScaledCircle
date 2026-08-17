@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../services/discovery_preferences_service.dart';
+import '../../services/address_search_service.dart';
 import '../../services/service_area_resolution_service.dart';
 import '../../widgets/mapped_address_field.dart';
 import 'service_area_map_picker.dart';
@@ -14,6 +15,7 @@ class AreasPreferencesScreen extends StatefulWidget {
     this.onSaved,
     this.loadPreferences,
     this.savePreferences,
+    this.searchAddresses,
   });
   final String role;
   final List<String> initialServices;
@@ -21,6 +23,7 @@ class AreasPreferencesScreen extends StatefulWidget {
   final Future<Map<String, dynamic>?> Function()? loadPreferences;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic>)?
   savePreferences;
+  final Future<List<AddressSuggestion>> Function(String query)? searchAddresses;
 
   @override
   State<AreasPreferencesScreen> createState() => _AreasPreferencesScreenState();
@@ -147,6 +150,17 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
             .whereType<Map>()
             .map((value) => Map<String, dynamic>.from(value))
             .toList();
+    List<List<Map<String, dynamic>>> geometryParts =
+        (existing?['geometryParts'] as List? ?? const [])
+            .whereType<List>()
+            .map(
+              (part) => part
+                  .whereType<Map>()
+                  .map((point) => Map<String, dynamic>.from(point))
+                  .toList(),
+            )
+            .where((part) => part.length >= 3)
+            .toList();
     var dialogSaving = false;
     if (!mounted) return;
     final result = await showDialog<Map<String, dynamic>>(
@@ -201,6 +215,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       controller: places,
                       labelText: 'City or county',
                       hintText: 'Anne Arundel County, Maryland',
+                      searchAddresses: widget.searchAddresses,
                       onSelected: (suggestion) {
                         final resolution = _areaResolver.fromKnownPlace(
                           suggestion: suggestion,
@@ -214,10 +229,24 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                           geometry = List<Map<String, dynamic>>.from(
                             resolution.data['geometry'] as List,
                           );
+                          geometryParts =
+                              (resolution.data['geometryParts'] as List? ??
+                                      const [])
+                                  .whereType<List>()
+                                  .map(
+                                    (part) => part
+                                        .whereType<Map>()
+                                        .map(
+                                          (point) =>
+                                              Map<String, dynamic>.from(point),
+                                        )
+                                        .toList(),
+                                  )
+                                  .toList();
                           places.text = suggestion.fullAddress;
                           resolutionError = resolution.resolved
                               ? null
-                              : "We found the place, but couldn't map its boundary automatically.";
+                              : "We found ${suggestion.primaryText}, but couldn't load its boundary.";
                         });
                       },
                     ),
@@ -226,6 +255,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       controller: postals,
                       labelText: 'ZIP code',
                       hintText: '21401',
+                      searchAddresses: widget.searchAddresses,
                       onSelected: (suggestion) {
                         final resolution = _areaResolver.fromKnownPlace(
                           suggestion: suggestion,
@@ -239,12 +269,26 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                           geometry = List<Map<String, dynamic>>.from(
                             resolution.data['geometry'] as List,
                           );
+                          geometryParts =
+                              (resolution.data['geometryParts'] as List? ??
+                                      const [])
+                                  .whereType<List>()
+                                  .map(
+                                    (part) => part
+                                        .whereType<Map>()
+                                        .map(
+                                          (point) =>
+                                              Map<String, dynamic>.from(point),
+                                        )
+                                        .toList(),
+                                  )
+                                  .toList();
                           postals.text = suggestion.postalCode.isEmpty
                               ? suggestion.fullAddress
                               : suggestion.postalCode;
                           resolutionError = resolution.resolved
                               ? null
-                              : "We found the place, but couldn't map its boundary automatically.";
+                              : "We found ${suggestion.primaryText}, but couldn't load its boundary.";
                         });
                       },
                     ),
@@ -286,6 +330,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       controller: centerLabel,
                       labelText: 'Business location, city, or ZIP',
                       hintText: 'Example: Annapolis, Maryland',
+                      searchAddresses: widget.searchAddresses,
                       onSelected: (suggestion) {
                         final resolution = _areaResolver.radius(
                           center: suggestion,
@@ -312,6 +357,50 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => setDialogState(() {
+                            resolutionError = null;
+                            normalized = <String, dynamic>{};
+                            geometry = [];
+                            geometryParts = [];
+                          }),
+                          child: const Text('Try Again'),
+                        ),
+                        OutlinedButton(
+                          onPressed: () => setDialogState(() {
+                            type = 'around_business';
+                            resolutionError = null;
+                          }),
+                          child: const Text('Use a Radius Instead'),
+                        ),
+                        OutlinedButton(
+                          onPressed: () => setDialogState(() {
+                            type = 'drawn';
+                            resolutionError = null;
+                          }),
+                          child: const Text('Draw a Custom Area'),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (geometry.length >= 3 &&
+                      (type == 'place' || type == 'postal_codes')) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'We found your area',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      normalized['displayName']?.toString() ??
+                          (places.text.trim().isNotEmpty
+                              ? places.text.trim()
+                              : postals.text.trim()),
                     ),
                   ],
                   if (type == 'around_business' ||
@@ -349,6 +438,26 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                                         ),
                                       )
                                       .toList(growable: false),
+                                  initialGeometryParts: geometryParts
+                                      .map(
+                                        (part) => part
+                                            .where(
+                                              (point) =>
+                                                  point['latitude'] is num &&
+                                                  point['longitude'] is num,
+                                            )
+                                            .map(
+                                              (point) => LatLng(
+                                                (point['latitude'] as num)
+                                                    .toDouble(),
+                                                (point['longitude'] as num)
+                                                    .toDouble(),
+                                              ),
+                                            )
+                                            .toList(growable: false),
+                                      )
+                                      .where((part) => part.length >= 3)
+                                      .toList(growable: false),
                                   confirmationOnly: geometry.length >= 3,
                                 ),
                               ),
@@ -367,6 +476,18 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                                   },
                                 )
                                 .toList();
+                            geometryParts = selection.geometryParts
+                                .map(
+                                  (part) => part
+                                      .map(
+                                        (point) => {
+                                          'latitude': point.latitude,
+                                          'longitude': point.longitude,
+                                        },
+                                      )
+                                      .toList(),
+                                )
+                                .toList();
                           });
                         }
                       },
@@ -379,7 +500,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                                   ? 'Draw a Custom Area'
                                   : 'Choose a Nearby Map Area')
                             : geometry.length >= 3
-                            ? 'Review Resolved Boundary'
+                            ? (_business
+                                  ? 'Use This Area'
+                                  : 'Use This Work Area')
                             : 'Choose a Nearby Map Area',
                       ),
                     ),
@@ -393,7 +516,10 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: dialogSaving
+              onPressed:
+                  dialogSaving ||
+                      ((type == 'place' || type == 'postal_codes') &&
+                          geometry.length < 3)
                   ? null
                   : () async {
                       final valid =
@@ -431,6 +557,10 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                             ? radius
                             : null,
                         'geometry': geometry,
+                        'geometryParts':
+                            geometryParts.isEmpty && geometry.length >= 3
+                            ? [geometry]
+                            : geometryParts,
                         'areaType': normalized['areaType'] ?? type,
                         'displayName': normalized['displayName'],
                         'city': normalized['city'],
@@ -440,6 +570,10 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                         'bounds': normalized['bounds'],
                         'resolutionSource': normalized['resolutionSource'],
                         'resolutionVersion': normalized['resolutionVersion'],
+                        'geometryType': normalized['geometryType'],
+                        'geographyType': normalized['geographyType'],
+                        'geographicId': normalized['geographicId'],
+                        'sourceVintage': normalized['sourceVintage'],
                       };
                       final candidate = _areas
                           .map((item) => Map<String, dynamic>.from(item))
@@ -645,6 +779,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
           if (area['type'] == 'around_business') '${area['radiusMiles']} miles',
           ..._strings(area['places']),
           ..._strings(area['postalCodes']),
+          if ((area['type'] == 'place' || area['type'] == 'postal_codes') &&
+              (area['geometry'] as List? ?? const []).length < 3)
+            'Needs a map boundary before targeting',
         ].join(' • '),
       ),
       trailing: PopupMenuButton<String>(
@@ -666,11 +803,19 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
             }
           }
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'edit', child: Text('Edit')),
-          PopupMenuItem(value: 'primary', child: Text('Make Primary')),
-          PopupMenuItem(value: 'toggle', child: Text('Enable / Disable')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'edit',
+            child: Text(
+              (area['type'] == 'place' || area['type'] == 'postal_codes') &&
+                      (area['geometry'] as List? ?? const []).length < 3
+                  ? 'Map This Area'
+                  : 'Edit',
+            ),
+          ),
+          const PopupMenuItem(value: 'primary', child: Text('Make Primary')),
+          const PopupMenuItem(value: 'toggle', child: Text('Enable / Disable')),
+          const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),
     ),

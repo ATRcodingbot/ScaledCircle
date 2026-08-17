@@ -1,8 +1,82 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/preferences/areas_preferences_screen.dart';
+import 'package:flutter_app/services/address_search_service.dart';
 
 void main() {
+  testWidgets(
+    'explicit county search auto-selects one boundary and saves without drawing',
+    (tester) async {
+      Map<String, dynamic>? persisted;
+      const boundary = [
+        {'latitude': 38.7, 'longitude': -76.9},
+        {'latitude': 39.3, 'longitude': -76.9},
+        {'latitude': 39.3, 'longitude': -76.3},
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AreasPreferencesScreen(
+            role: 'business',
+            loadPreferences: () async => null,
+            searchAddresses: (query) async => const [
+              AddressSuggestion(
+                id: 'county-24003',
+                primaryText: 'Anne Arundel County',
+                secondaryText: 'Maryland, United States',
+                fullAddress: 'Anne Arundel County, Maryland',
+                latitude: 39,
+                longitude: -76.6,
+                geometry: boundary,
+                geometryParts: [boundary],
+                geometryType: 'Polygon',
+                geographyType: 'county',
+                geographicId: '24003',
+                sourceVintage: 'January 1, 2025',
+              ),
+            ],
+            savePreferences: (payload) async {
+              persisted = payload;
+              return {...payload, 'preferenceVersion': 1};
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add Another Service Area'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save Area'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'anne arundel county maryland',
+      );
+      await tester.tap(find.byTooltip('Search map'));
+      await tester.pumpAndSettle();
+      expect(find.text('We found your area'), findsOneWidget);
+      expect(find.text('Anne Arundel County, Maryland'), findsWidgets);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save Area'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Save Area'));
+      await tester.pumpAndSettle();
+      expect((persisted?['areas'] as List).single['geometry'], hasLength(3));
+      expect((persisted?['areas'] as List).single['geographicId'], '24003');
+      expect(find.text('Main Service Area'), findsOneWidget);
+      expect(find.textContaining('saved'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'Save Area waits for authoritative preferences and refreshes the card',
     (tester) async {

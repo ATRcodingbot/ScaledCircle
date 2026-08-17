@@ -78,6 +78,10 @@ test("Business saved goals and resolved area metadata remain backend validated",
   const result = preferences.sanitizePreferences({areas: [{id: "main", name: "Main Area",
     type: "place", geometry: [{latitude: 39, longitude: -76.7},
       {latitude: 39.1, longitude: -76.6}, {latitude: 39, longitude: -76.5}],
+    geometryParts: [[{latitude: 39, longitude: -76.7},
+      {latitude: 39.1, longitude: -76.6}, {latitude: 39, longitude: -76.5}]],
+    geometryType: "MultiPolygon", geographyType: "county", geographicId: "24003",
+    sourceVintage: "January 1, 2025",
     areaType: "county", displayName: "Anne Arundel County, Maryland",
     county: "Anne Arundel County", state: "Maryland",
     resolutionSource: "openstreetmap_nominatim",
@@ -88,6 +92,8 @@ test("Business saved goals and resolved area metadata remain backend validated",
   defaultResponseGoal: "Request a free estimate"}, "business");
   assert.equal(result.areas[0].county, "Anne Arundel County");
   assert.equal(result.areas[0].geometry.length, 3);
+  assert.equal(result.areas[0].geometryParts.length, 1);
+  assert.equal(result.areas[0].geographicId, "24003");
   assert.equal(result.savedGoals.length, 2);
   assert.equal(result.savedGoals[1].schemaVersion, "BusinessOpportunityGoalV1");
   assert.deepEqual(result.preferredCampaignTypes, ["flyer_distribution"]);

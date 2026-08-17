@@ -11,6 +11,7 @@ class MappedAddressField extends StatefulWidget {
     this.validator,
     this.onChanged,
     this.onSelected,
+    this.searchAddresses,
     this.enabled = true,
   });
 
@@ -20,6 +21,7 @@ class MappedAddressField extends StatefulWidget {
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onChanged;
   final ValueChanged<AddressSuggestion>? onSelected;
+  final Future<List<AddressSuggestion>> Function(String query)? searchAddresses;
   final bool enabled;
 
   @override
@@ -46,7 +48,9 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
     });
 
     try {
-      final suggestions = await _searchService.search(query);
+      final suggestions =
+          await (widget.searchAddresses?.call(query) ??
+              _searchService.search(query));
       if (!mounted) {
         return;
       }
@@ -56,6 +60,13 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
             ? 'No map matches found. Add city, state, or ZIP and try again.'
             : null;
       });
+      // The explicit Search action is sufficient confirmation when there is one
+      // unambiguous result with a real mapped boundary. This avoids requiring a
+      // second, easily missed tap on the result row.
+      if (suggestions.length == 1 &&
+          suggestions.single.hasAuthoritativeBoundary) {
+        _select(suggestions.single);
+      }
     } catch (_) {
       if (!mounted) {
         return;

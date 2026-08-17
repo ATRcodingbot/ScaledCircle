@@ -68,7 +68,7 @@ void main() {
       expect(resolution.resolved, isTrue);
       expect(resolution.data['geometry'], hasLength(4));
       expect(resolution.data['resolutionSource'], 'openstreetmap_nominatim');
-      expect(resolution.data['resolutionVersion'], 'ServiceAreaResolutionV1');
+      expect(resolution.data['resolutionVersion'], 'ServiceAreaResolutionV2');
     }
   });
 

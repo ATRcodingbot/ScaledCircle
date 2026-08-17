@@ -4034,6 +4034,7 @@ exports.resolveServiceAreaPlace = onCall(
         query: request.data?.query,
         db,
         baseUrl: process.env.NOMINATIM_BASE_URL,
+        tigerBase: process.env.TIGERWEB_BASE_URL,
       });
     } catch (error) {
       if (error?.message === "invalid_query") {

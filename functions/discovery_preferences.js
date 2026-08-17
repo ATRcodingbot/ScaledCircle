@@ -39,6 +39,9 @@ function sanitizeArea(value, index) {
   if (!AREA_TYPES.has(type)) throw new Error("invalid_service_area_type");
   const geometry = Array.isArray(value.geometry) ? value.geometry.slice(0, MAX_POINTS)
     .map(point).filter(Boolean) : [];
+  const geometryParts = Array.isArray(value.geometryParts) ? value.geometryParts.slice(0, 24)
+    .map((part) => Array.isArray(part) ? part.slice(0, MAX_POINTS).map(point).filter(Boolean) : [])
+    .filter((part) => part.length >= 3) : (geometry.length >= 3 ? [geometry] : []);
   if (type === "drawn" && geometry.length < 3) throw new Error("drawn_area_requires_geometry");
   const radiusMiles = Number(value.radiusMiles);
   const center = point(value.center);
@@ -49,11 +52,14 @@ function sanitizeArea(value, index) {
   centerLabel: text(value.centerLabel, 100), places: list(value.places, 20, 100),
   postalCodes: list(value.postalCodes, 30, 12),
   center, radiusMiles: center && Number.isFinite(radiusMiles) ? Math.round(radiusMiles * 10) / 10 : null,
-  geometry, areaType: text(value.areaType, 30) || type, displayName: text(value.displayName, 160),
+  geometry, geometryParts, geometryType: text(value.geometryType, 30),
+  geographyType: text(value.geographyType, 30), areaType: text(value.areaType, 30) || type,
+  displayName: text(value.displayName, 160),
   city: text(value.city, 100), county: text(value.county, 100), state: text(value.state, 100),
   postalCode: text(value.postalCode, 20), bounds: bounds(value.bounds),
   resolutionSource: text(value.resolutionSource, 80),
-  resolutionVersion: text(value.resolutionVersion, 80)};
+  resolutionVersion: text(value.resolutionVersion, 80), geographicId: text(value.geographicId, 40),
+  sourceVintage: text(value.sourceVintage, 80)};
 }
 function sanitizeGoal(value, index) {
   if (!value || typeof value !== "object") throw new Error("invalid_business_goal");
@@ -134,6 +140,7 @@ function insidePolygon(target, polygon) {
 function areaMatch(area, opportunity) {
   if (!area.enabled) return {matched: false, distance: null};
   const target = point(opportunity.location);
+  if (area.geometryParts.some((part) => insidePolygon(target, part))) return {matched: true, distance: 0};
   if (area.geometry.length >= 3 && insidePolygon(target, area.geometry)) return {matched: true, distance: 0};
   const distance = distanceMiles(area.center, target);
   if (distance != null && area.radiusMiles != null && distance <= area.radiusMiles) return {matched: true, distance};

@@ -3,9 +3,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 class ServiceAreaMapSelection {
-  const ServiceAreaMapSelection({required this.center, required this.geometry});
+  const ServiceAreaMapSelection({
+    required this.center,
+    required this.geometry,
+    this.geometryParts = const [],
+  });
   final LatLng center;
   final List<LatLng> geometry;
+  final List<List<LatLng>> geometryParts;
 }
 
 class ServiceAreaMapPicker extends StatefulWidget {
@@ -14,11 +19,13 @@ class ServiceAreaMapPicker extends StatefulWidget {
     required this.drawArea,
     this.initialCenter,
     this.initialGeometry = const [],
+    this.initialGeometryParts = const [],
     this.confirmationOnly = false,
   });
   final bool drawArea;
   final LatLng? initialCenter;
   final List<LatLng> initialGeometry;
+  final List<List<LatLng>> initialGeometryParts;
   final bool confirmationOnly;
 
   @override
@@ -95,19 +102,27 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
                 const RichAttributionWidget(
                   attributions: [
                     TextSourceAttribution('© OpenStreetMap contributors'),
-                    TextSourceAttribution('Search boundaries: Nominatim'),
+                    TextSourceAttribution(
+                      'Boundaries: Nominatim / U.S. Census',
+                    ),
                   ],
                 ),
                 if (_points.length >= 3)
                   PolygonLayer(
-                    polygons: [
-                      Polygon(
-                        points: _points,
-                        color: const Color(0x3319C7A2),
-                        borderColor: const Color(0xFF19C7A2),
-                        borderStrokeWidth: 3,
-                      ),
-                    ],
+                    polygons:
+                        (usingResolvedBoundary &&
+                                    widget.initialGeometryParts.isNotEmpty
+                                ? widget.initialGeometryParts
+                                : [_points])
+                            .map(
+                              (part) => Polygon(
+                                points: part,
+                                color: const Color(0x3319C7A2),
+                                borderColor: const Color(0xFF19C7A2),
+                                borderStrokeWidth: 3,
+                              ),
+                            )
+                            .toList(),
                   ),
                 MarkerLayer(
                   markers: _points
@@ -168,6 +183,13 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
                                     widget.drawArea || usingResolvedBoundary
                                     ? List.unmodifiable(_points)
                                     : const [],
+                                geometryParts: usingResolvedBoundary
+                                    ? List.unmodifiable(
+                                        widget.initialGeometryParts.isEmpty
+                                            ? [List.unmodifiable(_points)]
+                                            : widget.initialGeometryParts,
+                                      )
+                                    : [List.unmodifiable(_points)],
                               ),
                             );
                           }

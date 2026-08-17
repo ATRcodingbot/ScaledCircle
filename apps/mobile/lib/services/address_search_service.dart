@@ -9,6 +9,7 @@ class AddressSuggestion {
     required this.latitude,
     required this.longitude,
     this.geometry = const [],
+    this.geometryParts = const [],
     this.bounds,
     this.placeType = '',
     this.city = '',
@@ -16,7 +17,11 @@ class AddressSuggestion {
     this.state = '',
     this.postalCode = '',
     this.resolutionSource = 'openstreetmap_nominatim',
-    this.resolutionVersion = 'ServiceAreaResolutionV1',
+    this.resolutionVersion = 'ServiceAreaResolutionV2',
+    this.geometryType = '',
+    this.geographyType = '',
+    this.geographicId = '',
+    this.sourceVintage = '',
   });
 
   final String id;
@@ -26,6 +31,7 @@ class AddressSuggestion {
   final double latitude;
   final double longitude;
   final List<Map<String, double>> geometry;
+  final List<List<Map<String, double>>> geometryParts;
   final Map<String, double>? bounds;
   final String placeType;
   final String city;
@@ -34,6 +40,10 @@ class AddressSuggestion {
   final String postalCode;
   final String resolutionSource;
   final String resolutionVersion;
+  final String geometryType;
+  final String geographyType;
+  final String geographicId;
+  final String sourceVintage;
 
   bool get hasAuthoritativeBoundary => geometry.length >= 3;
 }
@@ -123,6 +133,23 @@ class AddressSearchService {
               )
               .toList(growable: false)
         : _geometry(rawResult['geojson']);
+    final geometryParts = rawResult['geometryParts'] is List
+        ? (rawResult['geometryParts'] as List)
+              .whereType<List>()
+              .map(
+                (part) => part
+                    .whereType<Map>()
+                    .map(
+                      (point) => <String, double>{
+                        'latitude': (point['latitude'] as num).toDouble(),
+                        'longitude': (point['longitude'] as num).toDouble(),
+                      },
+                    )
+                    .toList(growable: false),
+              )
+              .where((part) => part.length >= 3)
+              .toList(growable: false)
+        : <List<Map<String, double>>>[if (geometry.length >= 3) geometry];
     final boundingBox = rawResult['boundingbox'];
     Map<String, double>? bounds;
     if (rawResult['bounds'] is Map) {
@@ -151,6 +178,7 @@ class AddressSearchService {
       latitude: latitude,
       longitude: longitude,
       geometry: geometry,
+      geometryParts: geometryParts,
       bounds: bounds,
       placeType:
           (rawResult['placeType'] ?? rawResult['type'])?.toString() ?? '',
@@ -177,7 +205,11 @@ class AddressSearchService {
           'openstreetmap_nominatim',
       resolutionVersion:
           rawResult['resolutionVersion']?.toString() ??
-          'ServiceAreaResolutionV1',
+          'ServiceAreaResolutionV2',
+      geometryType: rawResult['geometryType']?.toString() ?? '',
+      geographyType: rawResult['geographyType']?.toString() ?? '',
+      geographicId: rawResult['geographicId']?.toString() ?? '',
+      sourceVintage: rawResult['sourceVintage']?.toString() ?? '',
     );
   }
 
