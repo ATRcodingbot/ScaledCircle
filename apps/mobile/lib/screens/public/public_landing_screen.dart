@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../navigation/app_routes.dart';
 import '../../services/subscription_plan_service.dart';
+import 'authentic_product_map.dart';
+import 'public_funnel_components.dart'
+    show ScaledCircleBrand, openPublicRoleChooser;
 
 const _bg = Color(0xFF020914);
 const _navy = Color(0xFF071525);
@@ -48,7 +49,7 @@ class PublicLandingScreen extends StatelessWidget {
               toolbarHeight: mobile ? 108 : 72,
               title: _Navigation(
                 onLogin: () => Navigator.pushNamed(context, AppRoutes.login),
-                onStart: () => _start(context, 'business'),
+                onStart: () => openPublicRoleChooser(context),
                 onBusiness: () =>
                     Navigator.pushNamed(context, AppRoutes.businesses),
                 onScaler: () => Navigator.pushNamed(context, AppRoutes.scalers),
@@ -137,15 +138,7 @@ class _Navigation extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           runSpacing: 8,
           children: [
-            const Text(
-              'SCALEDCIRCLE',
-              semanticsLabel: 'ScaledCircle home',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.4,
-              ),
-            ),
+            const SizedBox(width: 190, child: ScaledCircleBrand(compact: true)),
             if (showLinks)
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -201,7 +194,7 @@ class _Hero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'GROW YOUR BUSINESS LOCALLY.',
+            'PLAN LOCAL GROWTH. PUT IT INTO ACTION.',
             key: Key('homepage-hero-title'),
             style: TextStyle(
               color: Colors.white,
@@ -213,7 +206,7 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'ScaledCircle helps you decide where to market, what to say, and connects you with real people who can help execute campaigns in the field.',
+            'ScaledCircle helps plan the campaign. You choose the map. Real people deliver results.',
             style: TextStyle(color: _muted, fontSize: 19, height: 1.55),
           ),
           const SizedBox(height: 12),
@@ -270,72 +263,10 @@ class _MapPreview extends StatelessWidget {
   const _MapPreview();
   @override
   Widget build(BuildContext context) => _Panel(
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: SizedBox(
-        height: 410,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: FlutterMap(
-                  options: const MapOptions(
-                    initialCenter: LatLng(39.08, -76.63),
-                    initialZoom: 10.5,
-                    interactionOptions: InteractionOptions(
-                      flags: InteractiveFlag.none,
-                    ),
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.scaledcircle.app',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const Positioned.fill(child: ColoredBox(color: Color(0x66020914))),
-            const Positioned(
-              left: 20,
-              right: 20,
-              bottom: 24,
-              child: _Panel(
-                child: Padding(
-                  padding: EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'LOCAL OPPORTUNITY',
-                        style: TextStyle(
-                          color: _green,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Choose an area. Understand it. Put a campaign into action.',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Property signals • Weather context • Verified field work',
-                        style: TextStyle(color: _muted),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    child: const AuthenticProductMap(
+      mode: PublicProductMapMode.campaign,
+      height: 410,
+      showOpportunityCard: true,
     ),
   );
 }

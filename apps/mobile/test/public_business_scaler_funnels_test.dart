@@ -26,6 +26,17 @@ void main() {
     expect(find.text('Analyze Main Service Area'), findsOneWidget);
   });
 
+  testWidgets('homepage restores authentic campaign-map hero and role paths', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    expect(find.text('PLAN LOCAL GROWTH. PUT IT INTO ACTION.'), findsOneWidget);
+    expect(find.text('CAMPAIGN OPPORTUNITY • EXAMPLE'), findsOneWidget);
+    expect(find.textContaining('Zone 1 mapped'), findsOneWidget);
+    expect(find.text('Grow My Business'), findsWidgets);
+    expect(find.text('Earn as a Scaler'), findsWidgets);
+  });
+
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {
     await tester.pumpWidget(app());
     await tester.tap(find.byKey(const Key('scaler-primary-cta')));
@@ -65,6 +76,14 @@ void main() {
     expect(find.text('SAMPLE RESULTS'), findsOneWidget);
     expect(find.text('Weather Intelligence'), findsOneWidget);
     expect(find.text('SAMPLE SCENARIO'), findsOneWidget);
+    expect(find.text('CAMPAIGN ZONES'), findsOneWidget);
+    expect(find.text('1 Zone'), findsOneWidget);
+    expect(find.text('1 Mapped'), findsOneWidget);
+    expect(find.text('0 Assigned'), findsOneWidget);
+    expect(find.text('PRELIMINARY ZONE INTELLIGENCE'), findsOneWidget);
+    expect(find.text('Walking Route'), findsOneWidget);
+    expect(find.text('Pending target analysis'), findsOneWidget);
+    expect(find.text('Review Campaign'), findsOneWidget);
   });
 
   testWidgets('Scaler funnel is ordered and keeps capability claims truthful', (
@@ -92,7 +111,7 @@ void main() {
     expect(find.text('SAMPLE'), findsWidgets);
     expect(find.text('Job Room'), findsOneWidget);
     expect(find.text('ACTIVE WORK ONLY'), findsOneWidget);
-    expect(find.text('SAMPLE ACTIVE-WORK GPS TRACE'), findsOneWidget);
+    expect(find.text('EXAMPLE ACTIVE-WORK GPS EVIDENCE'), findsOneWidget);
     expect(find.text('✓ Flyer Distribution'), findsOneWidget);
     expect(find.text('✓ Door Hanger Distribution'), findsOneWidget);
     expect(find.text('✓ Material Pickup'), findsOneWidget);
@@ -193,6 +212,12 @@ void main() {
     final scaler = File(
       'lib/screens/public/scaler_funnel_screen.dart',
     ).readAsStringSync();
+    final maps = File(
+      'lib/screens/public/authentic_product_map.dart',
+    ).readAsStringSync();
+    final landing = File(
+      'lib/screens/public/public_landing_screen.dart',
+    ).readAsStringSync();
     final html = File('web/index.html').readAsStringSync();
 
     expect(components, contains("'web/icons/Icon-192.png'"));
@@ -201,11 +226,19 @@ void main() {
     expect(business, contains('Campaign Target'));
     expect(business, contains('Scaler Zone'));
     expect(business, contains("ProductLine('Route', 'Not yet verified')"));
-    expect(scaler, contains('SAMPLE ACTIVE-WORK GPS TRACE'));
-    expect(scaler, contains('Recorded active-work evidence'));
-    expect(scaler, contains('it is not a planned walking route'));
+    expect(scaler, contains('EXAMPLE ACTIVE-WORK GPS EVIDENCE'));
+    expect(scaler, contains('Recording during active work'));
     expect(scaler, isNot(contains('Suggested Walking Route')));
     expect(scaler, isNot(contains('Optimized Route')));
+    expect(business, isNot(contains('_CampaignMapPainter')));
+    expect(scaler, isNot(contains('_ScalerZonePainter')));
+    expect(maps, contains('FlutterMap('));
+    expect(maps, contains('PolygonLayer('));
+    expect(maps, contains('MarkerLayer('));
+    expect(maps, contains('© OpenStreetMap contributors'));
+    expect(maps, isNot(contains('PolylineLayer(')));
+    expect(landing, contains('ScaledCircleBrand'));
+    expect(landing, contains('openPublicRoleChooser(context)'));
     expect(html, contains('og:type'));
     expect(html, contains('og:url'));
     expect(html, contains('og:title'));

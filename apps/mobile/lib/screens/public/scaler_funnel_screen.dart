@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'authentic_product_map.dart';
 import 'public_funnel_components.dart';
 
 class ScalerFunnelScreen extends StatelessWidget {
@@ -292,7 +293,7 @@ class _ZoneVisual extends StatelessWidget {
         _ScalerZoneMap(),
         SizedBox(height: 8),
         Text(
-          'SAMPLE ACTIVE-WORK GPS TRACE',
+          'EXAMPLE ACTIVE-WORK GPS EVIDENCE',
           style: TextStyle(
             color: businessGreen,
             fontSize: 11,
@@ -308,8 +309,8 @@ class _ZoneVisual extends StatelessWidget {
             StatusPill('GPS recording', color: businessGreen),
           ],
         ),
-        ProductLine('Trace', 'Recorded active-work evidence'),
-        ProductLine('Planned route', 'Not provided'),
+        ProductLine('Position evidence', 'Recording during active work'),
+        ProductLine('Route', 'Not yet verified'),
         ProductLine('Coverage', 'Recording'),
         SizedBox(height: 8),
         Text(
@@ -324,141 +325,10 @@ class _ZoneVisual extends StatelessWidget {
 class _ScalerZoneMap extends StatelessWidget {
   const _ScalerZoneMap();
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(14),
-    child: Semantics(
-      image: true,
-      label:
-          'Example recorded active-work GPS trace inside an assigned campaign Zone; it is not a planned walking route',
-      child: SizedBox(
-        height: 180,
-        width: double.infinity,
-        child: CustomPaint(painter: _ScalerZonePainter()),
-      ),
-    ),
+  Widget build(BuildContext context) => const AuthenticProductMap(
+    mode: PublicProductMapMode.activeWork,
+    height: 210,
   );
-}
-
-class _ScalerZonePainter extends CustomPainter {
-  const _ScalerZonePainter();
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFF102536),
-    );
-    canvas.drawCircle(
-      Offset(size.width * .15, size.height * .18),
-      size.width * .13,
-      Paint()..color = const Color(0xFF173C35),
-    );
-    final streets = Paint()
-      ..color = const Color(0xFF557084)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    final mainStreet = Path()
-      ..moveTo(0, size.height * .78)
-      ..cubicTo(
-        size.width * .28,
-        size.height * .52,
-        size.width * .6,
-        size.height * .36,
-        size.width,
-        size.height * .12,
-      );
-    canvas.drawPath(mainStreet, streets..strokeWidth = 3.5);
-    for (final branch in <Path>[
-      Path()
-        ..moveTo(size.width * .2, size.height)
-        ..quadraticBezierTo(
-          size.width * .3,
-          size.height * .55,
-          size.width * .42,
-          0,
-        ),
-      Path()
-        ..moveTo(size.width * .36, size.height * .58)
-        ..quadraticBezierTo(
-          size.width * .62,
-          size.height * .74,
-          size.width * .82,
-          size.height,
-        ),
-    ]) {
-      canvas.drawPath(branch, streets..strokeWidth = 1.8);
-    }
-    final target = Path()
-      ..moveTo(size.width * .08, size.height * .12)
-      ..lineTo(size.width * .88, size.height * .08)
-      ..lineTo(size.width * .95, size.height * .84)
-      ..lineTo(size.width * .14, size.height * .92)
-      ..close();
-    canvas.drawPath(
-      target,
-      Paint()
-        ..color = publicMuted.withValues(alpha: .55)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-    final zone = Path()
-      ..moveTo(size.width * .18, size.height * .2)
-      ..lineTo(size.width * .73, size.height * .13)
-      ..lineTo(size.width * .87, size.height * .66)
-      ..lineTo(size.width * .58, size.height * .88)
-      ..lineTo(size.width * .2, size.height * .72)
-      ..close();
-    canvas.drawPath(zone, Paint()..color = scalerBlue.withValues(alpha: .2));
-    canvas.drawPath(
-      zone,
-      Paint()
-        ..color = scalerBlue
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3,
-    );
-    final trace = Path()
-      ..moveTo(size.width * .26, size.height * .66)
-      ..cubicTo(
-        size.width * .31,
-        size.height * .38,
-        size.width * .48,
-        size.height * .28,
-        size.width * .61,
-        size.height * .4,
-      )
-      ..quadraticBezierTo(
-        size.width * .72,
-        size.height * .54,
-        size.width * .58,
-        size.height * .72,
-      )
-      ..quadraticBezierTo(
-        size.width * .45,
-        size.height * .82,
-        size.width * .36,
-        size.height * .6,
-      );
-    canvas.drawPath(
-      trace,
-      Paint()
-        ..color = businessGreen
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke,
-    );
-    canvas.drawCircle(
-      Offset(size.width * .26, size.height * .66),
-      5,
-      Paint()..color = Colors.white,
-    );
-    canvas.drawCircle(
-      Offset(size.width * .36, size.height * .6),
-      6,
-      Paint()..color = businessGreen,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _JobRoomVisual extends StatelessWidget {

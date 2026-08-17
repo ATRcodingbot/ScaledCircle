@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
 import '../../services/subscription_plan_service.dart';
+import 'authentic_product_map.dart';
 import 'public_funnel_components.dart';
 
 class BusinessFunnelScreen extends StatelessWidget {
@@ -405,6 +406,45 @@ class _CampaignMapVisual extends StatelessWidget {
         ProductLine('Zone 1', 'Mapped', color: scalerBlue),
         ProductLine('Route', 'Not yet verified'),
         ProductLine('Scaler Pay', '\$50.00'),
+        SizedBox(height: 14),
+        Text(
+          'CAMPAIGN ZONES',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            StatusPill('1 Zone', color: scalerBlue),
+            StatusPill('1 Mapped', color: scalerBlue),
+            StatusPill('0 Assigned', color: publicMuted),
+          ],
+        ),
+        SizedBox(height: 14),
+        Text(
+          'PRELIMINARY ZONE INTELLIGENCE',
+          style: TextStyle(
+            color: businessGreen,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        SizedBox(height: 6),
+        ProductLine('Geographic Area', '312 acres • Example'),
+        ProductLine('Estimated Homes', '140 • Example'),
+        ProductLine('Walking Route', 'Not yet verified'),
+        ProductLine('Workload', 'Pending target analysis'),
+        SizedBox(height: 8),
+        StatusPill(
+          'Review Campaign',
+          color: businessGreen,
+          icon: Icons.fact_check_outlined,
+        ),
         SizedBox(height: 10),
         Wrap(
           spacing: 8,
@@ -423,18 +463,9 @@ class _CampaignMapVisual extends StatelessWidget {
 class _MapLayers extends StatelessWidget {
   const _MapLayers();
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(16),
-    child: Semantics(
-      label:
-          'Product map preview showing a broad Service Area, a smaller Campaign Target, and Zone 1 inside the target',
-      image: true,
-      child: SizedBox(
-        height: 240,
-        width: double.infinity,
-        child: CustomPaint(painter: _CampaignMapPainter()),
-      ),
-    ),
+  Widget build(BuildContext context) => const AuthenticProductMap(
+    mode: PublicProductMapMode.campaign,
+    height: 240,
   );
 }
 
@@ -477,189 +508,6 @@ class _WeatherVisual extends StatelessWidget {
       ],
     ),
   );
-}
-
-class _CampaignMapPainter extends CustomPainter {
-  const _CampaignMapPainter();
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFF102536),
-    );
-    final water = Path()
-      ..moveTo(size.width * .76, 0)
-      ..cubicTo(
-        size.width * .69,
-        size.height * .25,
-        size.width * .84,
-        size.height * .55,
-        size.width * .73,
-        size.height,
-      )
-      ..lineTo(size.width, size.height)
-      ..lineTo(size.width, 0)
-      ..close();
-    canvas.drawPath(water, Paint()..color = const Color(0xFF123A55));
-    canvas.drawCircle(
-      Offset(size.width * .18, size.height * .24),
-      size.width * .16,
-      Paint()..color = const Color(0xFF173C35),
-    );
-    canvas.drawCircle(
-      Offset(size.width * .5, size.height * .78),
-      size.width * .12,
-      Paint()..color = const Color(0xFF173C35),
-    );
-    final road = Paint()
-      ..color = const Color(0xFF557084)
-      ..strokeWidth = 2.2
-      ..style = PaintingStyle.stroke;
-    final arterial = Path()
-      ..moveTo(0, size.height * .72)
-      ..cubicTo(
-        size.width * .25,
-        size.height * .55,
-        size.width * .48,
-        size.height * .42,
-        size.width * .8,
-        size.height * .2,
-      );
-    canvas.drawPath(arterial, road..strokeWidth = 4);
-    for (final branch in <Path>[
-      Path()
-        ..moveTo(size.width * .12, size.height)
-        ..quadraticBezierTo(
-          size.width * .24,
-          size.height * .58,
-          size.width * .42,
-          0,
-        ),
-      Path()
-        ..moveTo(size.width * .3, size.height * .64)
-        ..quadraticBezierTo(
-          size.width * .58,
-          size.height * .8,
-          size.width * .7,
-          size.height,
-        ),
-      Path()
-        ..moveTo(size.width * .08, size.height * .28)
-        ..quadraticBezierTo(
-          size.width * .38,
-          size.height * .18,
-          size.width * .72,
-          size.height * .4,
-        ),
-    ]) {
-      canvas.drawPath(branch, road..strokeWidth = 2);
-    }
-    final service = Path()
-      ..moveTo(size.width * .08, size.height * .2)
-      ..lineTo(size.width * .38, size.height * .08)
-      ..lineTo(size.width * .86, size.height * .22)
-      ..lineTo(size.width * .92, size.height * .72)
-      ..lineTo(size.width * .58, size.height * .92)
-      ..lineTo(size.width * .16, size.height * .78)
-      ..close();
-    canvas.drawPath(
-      service,
-      Paint()..color = publicMuted.withValues(alpha: .04),
-    );
-    canvas.drawPath(
-      service,
-      Paint()
-        ..color = publicMuted.withValues(alpha: .7)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-    final target = Path()
-      ..moveTo(size.width * .28, size.height * .34)
-      ..lineTo(size.width * .7, size.height * .25)
-      ..lineTo(size.width * .8, size.height * .63)
-      ..lineTo(size.width * .5, size.height * .79)
-      ..lineTo(size.width * .22, size.height * .62)
-      ..close();
-    canvas.drawPath(
-      target,
-      Paint()..color = businessGreen.withValues(alpha: .18),
-    );
-    canvas.drawPath(
-      target,
-      Paint()
-        ..color = businessGreen
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5,
-    );
-    final zone = Path()
-      ..moveTo(size.width * .32, size.height * .4)
-      ..lineTo(size.width * .53, size.height * .35)
-      ..lineTo(size.width * .6, size.height * .66)
-      ..lineTo(size.width * .38, size.height * .7)
-      ..close();
-    canvas.drawPath(zone, Paint()..color = scalerBlue.withValues(alpha: .28));
-    canvas.drawPath(
-      zone,
-      Paint()
-        ..color = scalerBlue
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-    canvas.drawCircle(
-      Offset(size.width * .46, size.height * .53),
-      6,
-      Paint()..color = Colors.white,
-    );
-    _drawMapLabel(
-      canvas,
-      'SERVICE AREA',
-      Offset(size.width * .1, size.height * .1),
-      publicMuted,
-    );
-    _drawMapLabel(
-      canvas,
-      'TARGET AREA',
-      Offset(size.width * .54, size.height * .72),
-      businessGreen,
-    );
-    _drawMapLabel(
-      canvas,
-      'ZONE 1',
-      Offset(size.width * .34, size.height * .43),
-      scalerBlue,
-    );
-  }
-
-  void _drawMapLabel(Canvas canvas, String text, Offset offset, Color color) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final background = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        offset.dx - 5,
-        offset.dy - 4,
-        painter.width + 10,
-        painter.height + 8,
-      ),
-      const Radius.circular(6),
-    );
-    canvas.drawRRect(
-      background,
-      Paint()..color = publicBackground.withValues(alpha: .84),
-    );
-    painter.paint(canvas, offset);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _VerificationVisual extends StatelessWidget {

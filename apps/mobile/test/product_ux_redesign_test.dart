@@ -27,7 +27,7 @@ void main() {
 
   test('homepage follows the outcome-led product hierarchy', () {
     final headings = [
-      'GROW YOUR BUSINESS LOCALLY.',
+      'PLAN LOCAL GROWTH. PUT IT INTO ACTION.',
       'HOW SCALEDCIRCLE WORKS',
       'FOR BUSINESSES',
       'MANAGED GROWTH',
