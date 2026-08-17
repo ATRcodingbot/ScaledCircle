@@ -192,7 +192,12 @@ class FunnelPage extends StatelessWidget {
                     child: SizedBox(
                       width: double.infinity,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(22, 42, 22, 80),
+                        padding: EdgeInsets.fromLTRB(
+                          MediaQuery.sizeOf(context).width < 480 ? 14 : 22,
+                          42,
+                          MediaQuery.sizeOf(context).width < 480 ? 14 : 22,
+                          80,
+                        ),
                         child: Column(children: children),
                       ),
                     ),
@@ -374,13 +379,243 @@ class ProductPanel extends StatelessWidget {
   final Color? accent;
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(22),
+    padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 480 ? 16 : 22),
     decoration: BoxDecoration(
-      color: publicPanel,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.lerp(publicPanel, accent ?? publicBorder, .08)!,
+          publicPanel,
+        ],
+      ),
       borderRadius: BorderRadius.circular(20),
       border: Border.all(color: accent ?? publicBorder),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x66000000),
+          blurRadius: 30,
+          offset: Offset(0, 16),
+        ),
+      ],
     ),
     child: child,
+  );
+}
+
+class ProductWindow extends StatelessWidget {
+  const ProductWindow({
+    super.key,
+    required this.title,
+    required this.child,
+    required this.accent,
+    this.label = 'PRODUCT PREVIEW',
+  });
+  final String title;
+  final Widget child;
+  final Color accent;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => ProductPanel(
+    accent: accent,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const _WindowDot(color: Color(0xFFFF6B6B)),
+            const SizedBox(width: 6),
+            const _WindowDot(color: Color(0xFFFFCA56)),
+            const SizedBox(width: 6),
+            _WindowDot(color: accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: DemoBadge(label: label, color: accent),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 16),
+        child,
+      ],
+    ),
+  );
+}
+
+class _WindowDot extends StatelessWidget {
+  const _WindowDot({required this.color});
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 9,
+    height: 9,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
+}
+
+class DemoBadge extends StatelessWidget {
+  const DemoBadge({super.key, required this.label, required this.color});
+  final String label;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: color.withValues(alpha: .5)),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: color,
+        fontSize: 10,
+        fontWeight: FontWeight.w900,
+        letterSpacing: .7,
+      ),
+    ),
+  );
+}
+
+class StatusPill extends StatelessWidget {
+  const StatusPill(this.label, {super.key, required this.color, this.icon});
+  final String label;
+  final Color color;
+  final IconData? icon;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+        ],
+        Text(
+          label,
+          style: TextStyle(color: color, fontWeight: FontWeight.w800),
+        ),
+      ],
+    ),
+  );
+}
+
+class MetricTile extends StatelessWidget {
+  const MetricTile({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accent,
+  });
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accent;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 132,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFF091C2E),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: publicBorder),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 19, color: accent),
+        const SizedBox(height: 12),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(label, style: const TextStyle(color: publicMuted, fontSize: 12)),
+      ],
+    ),
+  );
+}
+
+class WorkflowRail extends StatelessWidget {
+  const WorkflowRail({super.key, required this.steps, required this.accent});
+  final List<(IconData, String, String)> steps;
+  final Color accent;
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      for (var index = 0; index < steps.length; index++) ...[
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: .14),
+                shape: BoxShape.circle,
+                border: Border.all(color: accent.withValues(alpha: .55)),
+              ),
+              child: Icon(steps[index].$1, size: 18, color: accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      steps[index].$2,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      steps[index].$3,
+                      style: const TextStyle(color: publicMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (index != steps.length - 1)
+          Container(
+            alignment: Alignment.centerLeft,
+            margin: const EdgeInsets.only(left: 18),
+            width: 1,
+            height: 16,
+            color: accent.withValues(alpha: .35),
+          ),
+      ],
+    ],
   );
 }
 

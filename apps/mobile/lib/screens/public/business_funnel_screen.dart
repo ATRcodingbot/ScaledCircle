@@ -16,31 +16,30 @@ class BusinessFunnelScreen extends StatelessWidget {
     children: [
       FunnelHero(
         eyebrow: 'FOR LOCAL BUSINESSES',
-        title: 'GROW YOUR BUSINESS LOCALLY.',
-        body:
-            'Know where to market. Know what to say. Put your marketing into action. ScaledCircle combines local intelligence, marketing tools, and verified field campaigns in one system.',
-        primaryLabel: 'Start Growing',
-        secondaryLabel: 'See How It Works',
+        title: 'SEE WHERE GROWTH CAN HAPPEN.',
+        body: 'Find the opportunity. Build the campaign. See the work happen.',
+        primaryLabel: 'Create Business Account',
+        secondaryLabel: 'Join Business Waitlist',
         accent: businessGreen,
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
-        onSecondary: () => _showSection(context, 'START WITH YOUR BUSINESS.'),
-        visual: const _BusinessProfileVisual(),
+        onSecondary: () => openPublicWaitlist(context, 'business'),
+        visual: const _BusinessHeroVisual(),
       ),
       const FunnelSection(
         key: Key('business-step-setup'),
         step: 'STEP 1',
-        title: 'START WITH YOUR BUSINESS.',
+        title: 'YOUR BUSINESS, READY TO REUSE.',
         body:
-            'Tell ScaledCircle what you do, what work you want more of, and where you work. Your Growth Profile, goals, and Service Areas are remembered so you do not have to start over each time.',
+            'Services, goals, and operating areas stay together for the next decision.',
         accent: businessGreen,
         visual: _BusinessProfileVisual(),
       ),
       const FunnelSection(
         key: Key('business-step-intelligence'),
         step: 'STEP 2',
-        title: 'KNOW WHERE TO MARKET.',
+        title: 'FIND THE LOCAL SIGNAL.',
         body:
-            'Property Intelligence, official Weather Intelligence, saved Service Areas, and qualified AI interpretation help you understand an area before spending marketing money. Facts stay separate from interpretation; broad housing patterns never prove that a particular home needs your service.',
+            'Compare broad property and official weather facts before choosing where to market.',
         accent: businessGreen,
         reverse: true,
         visual: _IntelligenceVisual(),
@@ -48,18 +47,18 @@ class BusinessFunnelScreen extends StatelessWidget {
       const FunnelSection(
         key: Key('business-step-marketing'),
         step: 'STEP 3',
-        title: 'CREATE THE MARKETING.',
+        title: 'TURN THE SIGNAL INTO MARKETING.',
         body:
-            'Prepare Social Content, SEO actions, advertising plans, email content, postcard planning, 30-day growth plans, and Business Growth Analysis. ScaledCircle reuses your approved business context. You preview, edit, and approve—nothing is falsely represented as published.',
+            'Create, preview, edit, and approve—always with your business context in view.',
         accent: businessGreen,
         visual: _SocialVisual(),
       ),
       const FunnelSection(
         key: Key('business-step-campaigns'),
         step: 'STEP 4',
-        title: 'TURN MARKETING INTO REAL ACTION.',
+        title: 'CHOOSE A PRACTICAL TARGET.',
         body:
-            'Launch supported field campaigns with Scalers. Reuse a broad Service Area, choose a practical campaign Target Area, then define the Zone a Scaler covers. Flyer Distribution, supported material distribution, pickup and handoff, and explicitly consented outreach remain distinct workflows.',
+            'Start with where you operate. Narrow it to this campaign. Give each Scaler a clear Zone.',
         accent: businessGreen,
         reverse: true,
         visual: _CampaignMapVisual(),
@@ -67,18 +66,18 @@ class BusinessFunnelScreen extends StatelessWidget {
       const FunnelSection(
         key: Key('business-step-verification'),
         step: 'STEP 5',
-        title: 'KNOW THE WORK ACTUALLY HAPPENED.',
+        title: 'WATCH THE WORK MOVE.',
         body:
-            'Use the Job Room, readiness and material handoff, active-work GPS verification, coverage and checkpoint proof where required, completion workflows, and Scaler verification—without learning the implementation underneath.',
+            'Materials, assignment, active-work verification, and completion stay visible.',
         accent: businessGreen,
         visual: _VerificationVisual(),
       ),
       const FunnelSection(
         key: Key('business-step-results'),
         step: 'STEP 6',
-        title: 'CONNECT THE RESPONSE BACK TO THE CAMPAIGN.',
+        title: 'SEE THE RESPONSE.',
         body:
-            'Track what generated the response with supported QR codes, campaign links, landing pages, phone and email attribution, response reporting, and campaign results.',
+            'Connect supported scans, calls, links, and requests back to the campaign.',
         accent: businessGreen,
         reverse: true,
         visual: _ResultsVisual(),
@@ -99,24 +98,96 @@ class BusinessFunnelScreen extends StatelessWidget {
       ),
     ],
   );
+}
 
-  void _showSection(BuildContext context, String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  }
+class _BusinessHeroVisual extends StatelessWidget {
+  const _BusinessHeroVisual();
+  @override
+  Widget build(BuildContext context) => ProductWindow(
+    title: 'Local Growth Workspace',
+    accent: businessGreen,
+    label: 'PRODUCT WALKTHROUGH',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: MetricTile(
+                label: 'Service areas',
+                value: '2',
+                icon: Icons.map_outlined,
+                accent: businessGreen,
+              ),
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: MetricTile(
+                label: 'Next action',
+                value: 'Target',
+                icon: Icons.ads_click,
+                accent: businessGreen,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 14),
+        _GrowthJourneyStrip(),
+      ],
+    ),
+  );
+}
+
+class _GrowthJourneyStrip extends StatelessWidget {
+  const _GrowthJourneyStrip();
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 7,
+    runSpacing: 7,
+    children: const [
+      StatusPill('Find', color: businessGreen, icon: Icons.search),
+      StatusPill(
+        'Target',
+        color: businessGreen,
+        icon: Icons.location_on_outlined,
+      ),
+      StatusPill(
+        'Launch',
+        color: businessGreen,
+        icon: Icons.rocket_launch_outlined,
+      ),
+      StatusPill('Verify', color: businessGreen, icon: Icons.verified_outlined),
+    ],
+  );
 }
 
 class _BusinessProfileVisual extends StatelessWidget {
   const _BusinessProfileVisual();
   @override
-  Widget build(BuildContext context) => const ProductPanel(
+  Widget build(BuildContext context) => const ProductWindow(
+    title: 'Business Growth Profile',
     accent: businessGreen,
+    label: 'SAMPLE SETUP',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('BUSINESS GROWTH PROFILE', style: _panelTitle),
-        ProductLine('Services', 'Decks • Fences • Remodeling'),
-        ProductLine('Service Areas', 'Anne Arundel • Howard County'),
-        ProductLine('Goal', 'Get more estimate requests', color: businessGreen),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            StatusPill('Decks', color: businessGreen),
+            StatusPill('Fences', color: businessGreen),
+            StatusPill('Remodeling', color: businessGreen),
+          ],
+        ),
+        SizedBox(height: 16),
+        ProductLine('Main Service Area', 'Anne Arundel County'),
+        ProductLine('Second Area', 'Howard County'),
+        ProductLine(
+          'Growth goal',
+          'More estimate requests',
+          color: businessGreen,
+        ),
       ],
     ),
   );
@@ -125,21 +196,54 @@ class _BusinessProfileVisual extends StatelessWidget {
 class _IntelligenceVisual extends StatelessWidget {
   const _IntelligenceVisual();
   @override
-  Widget build(BuildContext context) => const ProductPanel(
+  Widget build(BuildContext context) => const ProductWindow(
+    title: 'Area + Goal Intelligence',
+    accent: businessGreen,
+    label: 'EXAMPLE • BROAD AREA DATA',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('PROPERTY INTELLIGENCE • EXAMPLE', style: _panelTitle),
-        ProductLine('Goal', 'Get more deck jobs'),
-        ProductLine('Area', 'Main Service Area'),
-        Divider(color: publicBorder),
-        ProductLine('Properties analyzed', '422'),
-        ProductLine('Built before 1980', '86%'),
-        ProductLine('Coverage', '98%', color: businessGreen),
-        SizedBox(height: 8),
-        Text(
-          'What We Know → What It Could Mean → What You Can Do Next',
-          style: TextStyle(color: publicMuted),
+        Row(
+          children: [
+            Expanded(
+              child: MetricTile(
+                label: 'Properties reviewed',
+                value: '422',
+                icon: Icons.home_work_outlined,
+                accent: businessGreen,
+              ),
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: MetricTile(
+                label: 'Data coverage',
+                value: '98%',
+                icon: Icons.donut_large,
+                accent: businessGreen,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 14),
+        WorkflowRail(
+          accent: businessGreen,
+          steps: [
+            (
+              Icons.fact_check_outlined,
+              'What we know',
+              'Broad housing-stock patterns',
+            ),
+            (
+              Icons.lightbulb_outline,
+              'What it could mean',
+              'Qualified local opportunity',
+            ),
+            (
+              Icons.arrow_forward,
+              'What to do next',
+              'Choose a campaign target',
+            ),
+          ],
         ),
       ],
     ),
@@ -149,20 +253,73 @@ class _IntelligenceVisual extends StatelessWidget {
 class _SocialVisual extends StatelessWidget {
   const _SocialVisual();
   @override
-  Widget build(BuildContext context) => const ProductPanel(
+  Widget build(BuildContext context) => ProductWindow(
+    title: 'Campaign Creative',
+    accent: businessGreen,
+    label: 'EXAMPLE PREVIEW',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('SOCIAL PREVIEW • EXAMPLE', style: _panelTitle),
-        Text(
-          'Create  →  Preview  →  Edit  →  Approve',
-          style: TextStyle(color: businessGreen, fontWeight: FontWeight.w800),
+        Container(
+          constraints: const BoxConstraints(minHeight: 104),
+          padding: EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Color(0xFF0B2034),
+            borderRadius: BorderRadius.all(Radius.circular(14)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 74,
+                decoration: BoxDecoration(
+                  color: Color(0x3322E6A1),
+                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                ),
+                child: Icon(
+                  Icons.deck_outlined,
+                  color: businessGreen,
+                  size: 34,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Ready for the backyard?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 5),
+                    Text(
+                      'Local deck & fence estimate campaign',
+                      style: TextStyle(color: publicMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        ProductLine('Facebook / Instagram', 'Connection requires approval'),
-        ProductLine('Google Business / LinkedIn', 'Coming Soon'),
+        SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            StatusPill('Create', color: businessGreen),
+            StatusPill('Preview', color: businessGreen),
+            StatusPill('Edit', color: businessGreen),
+            StatusPill('Approve', color: businessGreen),
+          ],
+        ),
+        SizedBox(height: 12),
         Text(
-          'No post is published without real provider capability and your approval.',
-          style: TextStyle(color: publicMuted),
+          'Provider connection required before publishing.',
+          style: TextStyle(color: publicMuted, fontSize: 12),
         ),
       ],
     ),
@@ -172,20 +329,24 @@ class _SocialVisual extends StatelessWidget {
 class _CampaignMapVisual extends StatelessWidget {
   const _CampaignMapVisual();
   @override
-  Widget build(BuildContext context) => const ProductPanel(
+  Widget build(BuildContext context) => const ProductWindow(
+    title: 'Flyer Distribution Target',
+    accent: businessGreen,
+    label: 'MAP CONCEPT',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('CAMPAIGN MAP', style: _panelTitle),
-        ProductLine('SERVICE AREA', 'Where your business operates'),
-        ProductLine(
-          'TARGET AREA',
-          'Where this campaign runs',
-          color: businessGreen,
-        ),
-        ProductLine('ZONE', 'What one Scaler covers'),
-        SizedBox(height: 10),
         _MapLayers(),
+        SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            StatusPill('Service Area', color: publicMuted),
+            StatusPill('Campaign Target', color: businessGreen),
+            StatusPill('Scaler Zone', color: scalerBlue),
+          ],
+        ),
       ],
     ),
   );
@@ -194,73 +355,134 @@ class _CampaignMapVisual extends StatelessWidget {
 class _MapLayers extends StatelessWidget {
   const _MapLayers();
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 150,
-    child: Stack(
-      children: [
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Color(0xFF0B2034),
-              borderRadius: BorderRadius.all(Radius.circular(14)),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 26,
-          top: 18,
-          right: 20,
-          bottom: 18,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.fromBorderSide(BorderSide(color: publicMuted)),
-              borderRadius: BorderRadius.all(Radius.circular(40)),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 75,
-          top: 48,
-          width: 190,
-          height: 72,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Color(0x3314E39A),
-              border: Border.fromBorderSide(BorderSide(color: businessGreen)),
-              borderRadius: BorderRadius.all(Radius.circular(28)),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 118,
-          top: 64,
-          width: 74,
-          height: 42,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Color(0x55287EFF),
-              border: Border.fromBorderSide(BorderSide(color: scalerBlue)),
-              borderRadius: BorderRadius.all(Radius.circular(14)),
-            ),
-          ),
-        ),
-      ],
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(16),
+    child: SizedBox(
+      height: 220,
+      width: double.infinity,
+      child: CustomPaint(painter: _CampaignMapPainter()),
     ),
   );
+}
+
+class _CampaignMapPainter extends CustomPainter {
+  const _CampaignMapPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFF0B2034),
+    );
+    final road = Paint()
+      ..color = const Color(0xFF17344B)
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke;
+    for (final y in [42.0, 102.0, 170.0]) {
+      final p = Path()
+        ..moveTo(0, y)
+        ..cubicTo(
+          size.width * .3,
+          y - 24,
+          size.width * .65,
+          y + 28,
+          size.width,
+          y - 8,
+        );
+      canvas.drawPath(p, road);
+    }
+    final service = Path()
+      ..moveTo(size.width * .08, size.height * .2)
+      ..lineTo(size.width * .38, size.height * .08)
+      ..lineTo(size.width * .86, size.height * .22)
+      ..lineTo(size.width * .92, size.height * .72)
+      ..lineTo(size.width * .58, size.height * .92)
+      ..lineTo(size.width * .16, size.height * .78)
+      ..close();
+    canvas.drawPath(
+      service,
+      Paint()..color = publicMuted.withValues(alpha: .04),
+    );
+    canvas.drawPath(
+      service,
+      Paint()
+        ..color = publicMuted.withValues(alpha: .7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    final target = Path()
+      ..moveTo(size.width * .28, size.height * .34)
+      ..lineTo(size.width * .7, size.height * .25)
+      ..lineTo(size.width * .8, size.height * .63)
+      ..lineTo(size.width * .5, size.height * .79)
+      ..lineTo(size.width * .22, size.height * .62)
+      ..close();
+    canvas.drawPath(
+      target,
+      Paint()..color = businessGreen.withValues(alpha: .18),
+    );
+    canvas.drawPath(
+      target,
+      Paint()
+        ..color = businessGreen
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+    final zone = Path()
+      ..moveTo(size.width * .32, size.height * .4)
+      ..lineTo(size.width * .53, size.height * .35)
+      ..lineTo(size.width * .6, size.height * .66)
+      ..lineTo(size.width * .38, size.height * .7)
+      ..close();
+    canvas.drawPath(zone, Paint()..color = scalerBlue.withValues(alpha: .28));
+    canvas.drawPath(
+      zone,
+      Paint()
+        ..color = scalerBlue
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    canvas.drawCircle(
+      Offset(size.width * .46, size.height * .53),
+      6,
+      Paint()..color = Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _VerificationVisual extends StatelessWidget {
   const _VerificationVisual();
   @override
-  Widget build(BuildContext context) => const ProductPanel(
+  Widget build(BuildContext context) => const ProductWindow(
+    title: 'Campaign Execution',
+    accent: businessGreen,
+    label: 'WORKFLOW PREVIEW',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('JOB ROOM', style: _panelTitle),
-        ProductLine('Materials', 'Handoff confirmed'),
-        ProductLine('Active work', 'GPS verification on'),
-        ProductLine('Coverage proof', 'Ready for review'),
-        ProductLine('Completion', 'Verified', color: businessGreen),
+        WorkflowRail(
+          accent: businessGreen,
+          steps: [
+            (
+              Icons.inventory_2_outlined,
+              'Materials ready',
+              'Handoff confirmed',
+            ),
+            (
+              Icons.person_pin_circle_outlined,
+              'Zone assigned',
+              'Scaler has the Job Room',
+            ),
+            (Icons.gps_fixed, 'Active work', 'GPS / coverage verification'),
+            (
+              Icons.verified_outlined,
+              'Completion review',
+              'Proof ready to review',
+            ),
+          ],
+        ),
       ],
     ),
   );
@@ -269,17 +491,41 @@ class _VerificationVisual extends StatelessWidget {
 class _ResultsVisual extends StatelessWidget {
   const _ResultsVisual();
   @override
-  Widget build(BuildContext context) => const ProductPanel(
+  Widget build(BuildContext context) => const ProductWindow(
+    title: 'Campaign Response',
+    accent: businessGreen,
+    label: 'SAMPLE REPORT',
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('CAMPAIGN RESULTS • EXAMPLE', style: _panelTitle),
-        ProductLine('QR responses', '18'),
-        ProductLine('Landing-page requests', '7'),
-        ProductLine('Attributed calls', 'Supported campaigns'),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            MetricTile(
+              label: 'QR scans',
+              value: '18',
+              icon: Icons.qr_code_2,
+              accent: businessGreen,
+            ),
+            MetricTile(
+              label: 'Requests',
+              value: '7',
+              icon: Icons.mark_email_read_outlined,
+              accent: businessGreen,
+            ),
+            MetricTile(
+              label: 'Proof status',
+              value: 'Ready',
+              icon: Icons.verified_outlined,
+              accent: businessGreen,
+            ),
+          ],
+        ),
+        SizedBox(height: 12),
         Text(
-          'Track what generated the response.',
-          style: TextStyle(color: businessGreen, fontWeight: FontWeight.w800),
+          'Sample reporting view — not live campaign activity.',
+          style: TextStyle(color: publicMuted, fontSize: 12),
         ),
       ],
     ),

@@ -21,7 +21,8 @@ void main() {
     await tester.tap(find.byKey(const Key('business-primary-cta')));
     await tester.pumpAndSettle();
     expect(find.text('FOR LOCAL BUSINESSES'), findsOneWidget);
-    expect(find.text('GROW YOUR BUSINESS LOCALLY.'), findsWidgets);
+    expect(find.text('SEE WHERE GROWTH CAN HAPPEN.'), findsOneWidget);
+    expect(find.text('Local Growth Workspace'), findsOneWidget);
   });
 
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {
@@ -29,7 +30,8 @@ void main() {
     await tester.tap(find.byKey(const Key('scaler-primary-cta')));
     await tester.pumpAndSettle();
     expect(find.text('FOR SCALERS'), findsWidgets);
-    expect(find.text('FIND LOCAL WORK THAT FITS YOU.'), findsOneWidget);
+    expect(find.text('LOCAL WORK. CLEAR FROM THE START.'), findsOneWidget);
+    expect(find.text('Opportunity Match'), findsOneWidget);
   });
 
   testWidgets('Business funnel preserves its sequential journey and plans', (
@@ -56,8 +58,9 @@ void main() {
     expect(find.text('\$499/month'), findsOneWidget);
     expect(find.text('\$999/month'), findsOneWidget);
     expect(find.text('LIMITED BETA'), findsOneWidget);
-    expect(find.textContaining('Connection requires approval'), findsOneWidget);
-    expect(find.textContaining('Coming Soon'), findsOneWidget);
+    expect(find.textContaining('Provider connection required'), findsOneWidget);
+    expect(find.text('Campaign Response'), findsOneWidget);
+    expect(find.text('SAMPLE REPORT'), findsOneWidget);
   });
 
   testWidgets('Scaler funnel is ordered and keeps capability claims truthful', (
@@ -81,8 +84,10 @@ void main() {
     expect(area, lessThan(proof));
     expect(find.text('Coming Soon'), findsOneWidget);
     expect(find.text('Limited rollout'), findsOneWidget);
-    expect(find.text('Not yet verified'), findsOneWidget);
-    expect(find.text('SAMPLE JOB • NOT A LIVE LISTING'), findsOneWidget);
+    expect(find.text('Not yet verified'), findsWidgets);
+    expect(find.text('SAMPLE • NOT A LIVE LISTING'), findsOneWidget);
+    expect(find.text('Private Job Room'), findsOneWidget);
+    expect(find.text('ACTIVE WORK ONLY'), findsOneWidget);
   });
 
   testWidgets('both funnels remain single-column and overflow-free at 390px', (
@@ -116,8 +121,8 @@ void main() {
       find.byKey(const Key('funnel-create-account')),
       600,
     );
-    expect(find.text('Create My Business Account'), findsOneWidget);
-    expect(find.text('Join Business Waitlist'), findsOneWidget);
+    expect(find.text('Create My Business Account'), findsWidgets);
+    expect(find.text('Join Business Waitlist'), findsWidgets);
     expect(find.text('Log In'), findsWidgets);
     expect(
       find.textContaining('Marketplace access is being rolled out in stages'),
@@ -133,8 +138,8 @@ void main() {
       find.byKey(const Key('funnel-create-account')),
       600,
     );
-    expect(find.text('Create Scaler Account'), findsOneWidget);
-    expect(find.text('Join Scaler Waitlist'), findsOneWidget);
+    expect(find.text('Create Scaler Account'), findsWidgets);
+    expect(find.text('Join Scaler Waitlist'), findsWidgets);
     expect(find.text('Log In'), findsWidgets);
     expect(
       find.textContaining("we'll let you know as access becomes available"),
