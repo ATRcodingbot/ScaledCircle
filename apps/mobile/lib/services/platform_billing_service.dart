@@ -10,6 +10,11 @@ class PlatformBillingService {
 
   static const String adminWalletId = 'scaled_circle_admin';
 
+  /// Temporary production capability gate. The reviewed funding callables are
+  /// not live yet, so drafts must remain safely saved without presenting a
+  /// launch action that cannot succeed.
+  static const bool authoritativeCampaignFundingAvailable = false;
+
   static const Map<String, double> subscriptionPrices = {
     'starter': 99.0,
     'growth': 299.0,

@@ -358,11 +358,6 @@ class MyJobsScreen extends StatelessWidget {
         final estimatedHomes =
             (zoneData['estimatedHomes'] as num?)?.toInt() ?? 0;
 
-        final walkingMiles = (zoneData['estimatedWalkingMiles'] as num?)
-            ?.toDouble();
-
-        final suggestedPay = (zoneData['suggestedBasePay'] as num?)?.toDouble();
-
         final reviewFeedback = zoneData['reviewFeedback']?.toString();
 
         final hasChangesRequested =
@@ -495,17 +490,10 @@ class MyJobsScreen extends StatelessWidget {
                         ),
                       ),
 
-                      if (walkingMiles != null)
-                        Chip(
-                          avatar: const Icon(Icons.directions_walk, size: 18),
-                          label: Text('${walkingMiles.toStringAsFixed(1)} mi'),
-                        ),
-
-                      if (suggestedPay != null)
-                        Chip(
-                          avatar: const Icon(Icons.attach_money, size: 18),
-                          label: Text('\$${suggestedPay.toStringAsFixed(0)}'),
-                        ),
+                      const Chip(
+                        avatar: Icon(Icons.route_outlined, size: 18),
+                        label: Text('Route not yet verified'),
+                      ),
                     ],
                   ),
 

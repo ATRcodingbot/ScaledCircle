@@ -364,8 +364,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         assignedHomes: assignedHomes,
         completedHomes: completedHomes,
         basePay:
-            double.tryParse(zoneData['suggestedBasePay']?.toString() ?? '0') ??
-            0,
+            double.tryParse(campaignData['basePay']?.toString() ?? '0') ?? 0,
         completionBonus:
             double.tryParse(campaignData['bonus']?.toString() ?? '0') ?? 0,
       );
@@ -464,7 +463,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                 Text('Homes: ${data['estimatedHomes'] ?? 0}'),
 
-                Text('Distance: ${data['estimatedWalkingMiles'] ?? 0} miles'),
+                const Text('Route: Not yet verified'),
 
                 Text(
                   'Status: ${_statusLabel(data['status']?.toString() ?? 'assigned')}',
@@ -533,7 +532,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                 completedHomes: (data['completedHomes'] as num?)?.toInt() ?? 0,
 
-                basePay: (data['suggestedBasePay'] as num?)?.toDouble() ?? 0,
+                basePay:
+                    (campaignData['basePay'] as num?)?.toDouble() ?? 0,
               ),
 
               const SizedBox(height: 20),

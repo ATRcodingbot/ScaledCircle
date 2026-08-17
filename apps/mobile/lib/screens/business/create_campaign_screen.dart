@@ -404,10 +404,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         'mappedZoneCount': 0,
 
         'estimatedHomes': 0,
-        'estimatedWalkingMiles': 0.0,
-        'estimatedMinutes': 0,
-        'suggestedBasePayTotal': 0.0,
-        'recommendedScalerCount': 1,
 
         if (widget.initialServiceArea.length >= 3) ...{
           'serviceArea': widget.initialServiceArea,
@@ -655,30 +651,11 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
       int totalEstimatedHomes = 0;
 
-      double totalWalkingMiles = 0;
-
-      int totalEstimatedMinutes = 0;
-
-      double totalSuggestedBasePay = 0;
-
-      int totalRecommendedScalers = 0;
-
       for (final zone in mappedZones) {
         final data = zone.data();
 
         totalEstimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
 
-        totalWalkingMiles +=
-            (data['estimatedWalkingMiles'] as num?)?.toDouble() ?? 0;
-
-        totalEstimatedMinutes +=
-            (data['estimatedMinutes'] as num?)?.toInt() ?? 0;
-
-        totalSuggestedBasePay +=
-            (data['suggestedBasePay'] as num?)?.toDouble() ?? 0;
-
-        totalRecommendedScalers +=
-            (data['recommendedScalerCount'] as num?)?.toInt() ?? 0;
       }
 
       await campaignReference.update({
@@ -687,14 +664,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         'mappedZoneCount': mappedZones.length,
 
         'estimatedHomes': totalEstimatedHomes,
-
-        'estimatedWalkingMiles': totalWalkingMiles,
-
-        'estimatedMinutes': totalEstimatedMinutes,
-
-        'suggestedBasePayTotal': totalSuggestedBasePay,
-
-        'recommendedScalerCount': totalRecommendedScalers,
 
         'setupStatus': 'configured',
 

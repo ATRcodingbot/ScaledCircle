@@ -119,8 +119,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           campaignType == 'event_marketing';
 
       int estimatedHomes = 0;
-      double suggestedZonePayTotal = 0.0;
-
       int zoneCount = 0;
       int mappedZoneCount = 0;
 
@@ -211,8 +209,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
           estimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
 
-          suggestedZonePayTotal +=
-              (data['suggestedBasePay'] as num?)?.toDouble() ?? 0.0;
         }
       }
 
@@ -230,10 +226,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         workerBudget = (basePay + bonus) * requestedScalerCount;
       }
 
-      if (workerBudget <= 0.0 && suggestedZonePayTotal > 0.0) {
-        workerBudget = suggestedZonePayTotal;
-      }
-
       if (workerBudget <= 0.0) {
         throw Exception('Campaign worker budget must be greater than zero.');
       }
@@ -245,7 +237,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         'locationCount': locationCount,
         'totalLocationQuantity': totalLocationQuantity,
         'estimatedHomes': estimatedHomes,
-        'suggestedBasePayTotal': suggestedZonePayTotal,
         'setupStatus': 'configured',
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -499,6 +490,30 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     BuildContext context,
     DocumentSnapshot liveCampaign,
   ) {
+    if (!PlatformBillingService.authoritativeCampaignFundingAvailable) {
+      return Card(
+        color: Colors.amber.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Campaign funding is temporarily unavailable.',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+              const SizedBox(height: 8),
+              const Text('Your campaign draft and target are saved.'),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => Navigator.maybePop(context),
+                child: const Text('Back to Campaign'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return SizedBox(
       width: double.infinity,
       height: 55,

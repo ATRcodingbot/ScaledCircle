@@ -649,13 +649,6 @@ class _ScalerCampaignDetailsScreenState
                     ),
                   ],
 
-                  if (campaign.estimatedMinutes > 0 &&
-                      campaign.scalerCount == 1)
-                    _info(
-                      Icons.schedule_outlined,
-                      "\$${(campaign.basePay / (campaign.estimatedMinutes / 60)).toStringAsFixed(2)} Estimated Hourly Wage",
-                      bold: true,
-                    ),
                 ],
               ),
             ),

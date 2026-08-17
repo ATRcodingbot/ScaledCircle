@@ -54,6 +54,11 @@ class CampaignZonesScreen extends StatelessWidget {
     return name == null || name.isEmpty ? 'your selected Service Area' : name;
   }
 
+  int? get _materialQuantity {
+    final data = campaign.data() as Map<String, dynamic>?;
+    return (data?['materialQuantity'] as num?)?.toInt();
+  }
+
   Future<String?> _askForZoneName(
     BuildContext context, {
     String initialValue = '',
@@ -173,6 +178,7 @@ class CampaignZonesScreen extends StatelessWidget {
             campaignReference: zoneReference!,
             pendingZoneData: pendingZoneData,
             searchBoundary: _serviceAreaBoundary,
+            materialQuantity: _materialQuantity,
           ),
         ),
       );
@@ -191,7 +197,7 @@ class CampaignZonesScreen extends StatelessWidget {
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$zoneName was added to the campaign.')),
+          SnackBar(content: Text('✓ Target saved — $zoneName')),
         );
       }
     } catch (e) {
@@ -259,7 +265,10 @@ class CampaignZonesScreen extends StatelessWidget {
     final areaSaved = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => CampaignAreaScreen(campaignReference: zone.reference),
+        builder: (_) => CampaignAreaScreen(
+          campaignReference: zone.reference,
+          materialQuantity: _materialQuantity,
+        ),
       ),
     );
 
@@ -401,25 +410,10 @@ class CampaignZonesScreen extends StatelessWidget {
     int assignedZones = 0;
     int mappedZones = 0;
 
-    double totalWalkingMiles = 0;
-    int totalEstimatedMinutes = 0;
-    double totalSuggestedPay = 0;
-    int totalRecommendedScalers = 0;
-
     for (final zone in zonesSnapshot.docs) {
       final data = zone.data();
 
       estimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-
-      totalWalkingMiles +=
-          (data['estimatedWalkingMiles'] as num?)?.toDouble() ?? 0;
-
-      totalEstimatedMinutes += (data['estimatedMinutes'] as num?)?.toInt() ?? 0;
-
-      totalSuggestedPay += (data['suggestedBasePay'] as num?)?.toDouble() ?? 0;
-
-      totalRecommendedScalers +=
-          (data['recommendedScalerCount'] as num?)?.toInt() ?? 0;
 
       final assignedScalerId = data['assignedScalerId']?.toString();
 
@@ -439,10 +433,6 @@ class CampaignZonesScreen extends StatelessWidget {
       'mappedZoneCount': mappedZones,
       'estimatedHomes': estimatedHomes,
       'assignedScalerCount': assignedZones,
-      'estimatedWalkingMiles': totalWalkingMiles,
-      'estimatedMinutes': totalEstimatedMinutes,
-      'suggestedBasePayTotal': totalSuggestedPay,
-      'recommendedScalerCount': totalRecommendedScalers,
       'zonesUpdatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -1219,12 +1209,17 @@ class CampaignZonesScreen extends StatelessWidget {
             int totalEstimatedHomes = 0;
             int assignedZones = 0;
             int mappedZones = 0;
+            var anyHomeEstimatePending = false;
 
             for (final zone in zones) {
               final data = zone.data();
 
               totalEstimatedHomes +=
                   (data['estimatedHomes'] as num?)?.toInt() ?? 0;
+              final homeStatus = data['homeCountStatus']?.toString() ?? 'pending';
+              anyHomeEstimatePending = anyHomeEstimatePending ||
+                  homeStatus == 'pending' ||
+                  homeStatus == 'waiting';
 
               final assignedScalerId = data['assignedScalerId']?.toString();
 
@@ -1306,7 +1301,9 @@ class CampaignZonesScreen extends StatelessWidget {
                             label: 'Estimated Homes',
                             value: totalEstimatedHomes > 0
                                 ? '$totalEstimatedHomes'
-                                : 'Pending',
+                                : anyHomeEstimatePending
+                                ? 'Analyzing...'
+                                : 'Unavailable',
                           ),
                           const Divider(),
                           _campaignMetricRow(

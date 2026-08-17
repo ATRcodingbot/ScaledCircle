@@ -190,7 +190,8 @@ void main() {
       source,
       contains("scalerCountController = TextEditingController(text: '1')"),
     );
-    expect(source, contains("'recommendedScalerCount': 1"));
+    expect(source, contains("'requestedScalerCount': scalerCount"));
+    expect(source, isNot(contains("'recommendedScalerCount': 1")));
     expect(source, contains("'Scalers for this area'"));
     expect(source, contains('divides the worker pool among the group'));
   });

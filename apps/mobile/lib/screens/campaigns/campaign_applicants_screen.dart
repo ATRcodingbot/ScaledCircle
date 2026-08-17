@@ -104,14 +104,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
                   final estimatedHomes =
                       (data['estimatedHomes'] as num?)?.toInt() ?? 0;
 
-                  final walkingMiles = (data['estimatedWalkingMiles'] as num?)
-                      ?.toDouble();
-
                   final homesLabel = '$estimatedHomes estimated homes';
-
-                  final distanceLabel = walkingMiles == null
-                      ? null
-                      : '${walkingMiles.toStringAsFixed(1)} estimated miles';
 
                   return ListTile(
                     leading: const CircleAvatar(
@@ -121,12 +114,8 @@ class CampaignApplicantsScreen extends StatelessWidget {
                       zoneName,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    subtitle: Text(
-                      distanceLabel == null
-                          ? homesLabel
-                          : '$homesLabel\n$distanceLabel',
-                    ),
-                    isThreeLine: distanceLabel != null,
+                    subtitle: Text('$homesLabel\nRoute not yet verified'),
+                    isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
                       Navigator.pop(dialogContext, zone);

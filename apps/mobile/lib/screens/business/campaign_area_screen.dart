@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -15,12 +15,14 @@ class CampaignAreaScreen extends StatefulWidget {
   final DocumentReference campaignReference;
   final Map<String, dynamic>? pendingZoneData;
   final List<Map<String, dynamic>> searchBoundary;
+  final int? materialQuantity;
 
   const CampaignAreaScreen({
     super.key,
     required this.campaignReference,
     this.pendingZoneData,
     this.searchBoundary = const [],
+    this.materialQuantity,
   });
 
   @override
@@ -47,17 +49,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
   static const LatLng _defaultCenter = LatLng(39.2904, -76.6122);
 
-  static const double _metersPerMile = 1609.344;
-
   static const double _squareMetersPerAcre = 4046.8564224;
-
-  static const double _squareMetersPerSquareMile = 2589988.110336;
-
-  static const double _estimatedSweepSpacingMeters = 30;
-
-  static const double _walkingMetersPerMinute = 75;
-
-  static const double _preliminaryHourlyRate = 25;
 
   @override
   void initState() {
@@ -420,41 +412,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
     final areaSquareMeters = _calculatePolygonAreaSquareMeters(_generatedArea);
 
-    final perimeterMeters = _calculatePerimeterMeters(_generatedArea);
-
-    final interiorTraversalMeters =
-        areaSquareMeters / _estimatedSweepSpacingMeters;
-
-    final estimatedWalkingMeters = perimeterMeters + interiorTraversalMeters;
-
-    final estimatedMinutes = math.max(
-      1,
-      (estimatedWalkingMeters / _walkingMetersPerMinute).ceil(),
-    );
-
-    // Maps remain intentionally sized for one Scaler. Extra Scalers are an
-    // optional Business speed/coordination choice, not a default multiplier.
-    const recommendedScalerCount = 1;
-
-    final totalHours = estimatedMinutes / 60;
-
-    final rawSuggestedPay = totalHours * _preliminaryHourlyRate;
-
-    final suggestedBasePay = math
-        .max(25, _roundToNearestFive(rawSuggestedPay))
-        .toDouble();
-
     return ZoneMetrics(
       areaSquareMeters: areaSquareMeters,
       areaAcres: areaSquareMeters / _squareMetersPerAcre,
-      areaSquareMiles: areaSquareMeters / _squareMetersPerSquareMile,
-      perimeterMeters: perimeterMeters,
-      perimeterMiles: perimeterMeters / _metersPerMile,
-      estimatedWalkingMeters: estimatedWalkingMeters,
-      estimatedWalkingMiles: estimatedWalkingMeters / _metersPerMile,
-      estimatedMinutes: estimatedMinutes,
-      recommendedScalerCount: recommendedScalerCount,
-      suggestedBasePay: suggestedBasePay,
     );
   }
 
@@ -500,26 +460,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     return signedArea.abs() / 2;
   }
 
-  double _calculatePerimeterMeters(List<LatLng> points) {
-    if (points.length < 2) {
-      return 0;
-    }
-
-    const distance = Distance();
-
-    double perimeter = 0;
-
-    for (int index = 0; index < points.length; index++) {
-      perimeter += distance.as(
-        LengthUnit.Meter,
-        points[index],
-        points[(index + 1) % points.length],
-      );
-    }
-
-    return perimeter;
-  }
-
   LatLng _calculateCenter(List<LatLng> points) {
     if (points.isEmpty) {
       return _defaultCenter;
@@ -542,10 +482,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     return degrees * math.pi / 180;
   }
 
-  int _roundToNearestFive(double value) {
-    return (value / 5).round() * 5;
-  }
-
   Future<bool> _analyzeSavedZone() async {
     try {
       final callable = FirebaseFunctions.instanceFor(
@@ -561,11 +497,11 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         '${e.code} ${e.message}',
       );
 
-      return _runDevelopmentHomeEstimateFallback();
+      return _markHomeEstimateUnavailable();
     } catch (e) {
       debugPrint('Zone analysis failed: $e');
 
-      return _runDevelopmentHomeEstimateFallback();
+      return _markHomeEstimateUnavailable();
     }
   }
 
@@ -755,63 +691,56 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     }
   }
 
-  Future<bool> _runDevelopmentHomeEstimateFallback() async {
+  Future<bool> _markHomeEstimateUnavailable() async {
     try {
-      final snapshot = await widget.campaignReference.get();
-
-      if (!snapshot.exists) {
-        return false;
-      }
-
-      final data = snapshot.data();
-
-      if (data is! Map<String, dynamic>) {
-        return false;
-      }
-
-      final areaAcres = (data['zoneAreaAcres'] as num?)?.toDouble() ?? 0.0;
-
-      if (areaAcres <= 0.0) {
-        await widget.campaignReference.update({
-          'analysisStatus': 'geometry_complete',
-          'homeCountStatus': 'unavailable',
-          'homeCountMethod': 'development_area_density_fallback_v1',
-          'homeCountConfidence': 'low',
-          'homeCountConfidenceScore': 0.0,
-          'estimatedHomes': 0,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        return true;
-      }
-
-      const homesPerAcre = 2.5;
-
-      final estimatedHomes = math.max(1, (areaAcres * homesPerAcre).round());
-
       await widget.campaignReference.update({
-        'estimatedHomes': estimatedHomes,
-        'homeCountStatus': 'estimated',
-        'homeCountMethod': 'development_area_density_fallback_v1',
-        'homeCountConfidence': 'low',
-        'homeCountConfidenceScore': 0.35,
-        'analysisStatus': 'complete',
+        'analysisStatus': 'geometry_complete',
+        'homeCountStatus': 'unavailable',
+        'homeCountMethod': 'unavailable',
+        'homeCountConfidence': 'unavailable',
+        'homeCountConfidenceScore': 0.0,
+        'estimatedHomes': 0,
         'analysisUpdatedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      debugPrint(
-        'Development fallback estimated '
-        '$estimatedHomes homes from '
-        '${areaAcres.toStringAsFixed(2)} acres.',
-      );
-
       return true;
     } catch (e) {
-      debugPrint('Development home estimate fallback failed: $e');
+      debugPrint('Unable to record unavailable home estimate: $e');
 
       return false;
     }
+  }
+
+  bool get _targetExceedsKnownMaterialCapacity {
+    final quantity = widget.materialQuantity;
+    final analyzedHomes = _propertyIntelligence?.propertyCount ?? 0;
+    return quantity != null &&
+        quantity > 0 &&
+        analyzedHomes > quantity * 2;
+  }
+
+  Future<bool> _confirmKnownSizeMismatch() async {
+    if (!_targetExceedsKnownMaterialCapacity) return true;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('This target looks much larger than your flyer quantity.'),
+        content: const Text(
+          'Reduce the target before saving so the campaign area better matches the materials available.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Reduce Target'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Keep Editing'),
+          ),
+        ],
+      ),
+    );
+    return false;
   }
 
   Future<void> _saveArea() async {
@@ -851,6 +780,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       return;
     }
+
+    if (!await _confirmKnownSizeMismatch() || !mounted) return;
 
     final metrics = _calculateZoneMetrics();
 
@@ -930,30 +861,11 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         await widget.campaignReference.set(createData);
       }
 
-      final analysisCompleted = await _analyzeSavedZone();
+      if (!mounted) return;
 
-      if (!mounted) {
-        return;
-      }
-
-      if (analysisCompleted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${_shapeLabel(_selectedShape)} campaign area saved. Route not yet verified.',
-            ),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Zone saved, but backend analysis could not be completed.',
-            ),
-          ),
-        );
-      }
-
+      // Persistence is authoritative. Optional intelligence continues after
+      // the map workflow returns and can never invalidate the saved target.
+      unawaited(_analyzeSavedZone());
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) {
@@ -1029,22 +941,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       case CampaignAreaShape.triangle:
         return Icons.change_history;
     }
-  }
-
-  String _formatDuration(int minutes) {
-    if (minutes < 60) {
-      return '$minutes min';
-    }
-
-    final hours = minutes ~/ 60;
-
-    final remainingMinutes = minutes % 60;
-
-    if (remainingMinutes == 0) {
-      return '$hours hr';
-    }
-
-    return '$hours hr $remainingMinutes min';
   }
 
   @override
@@ -1311,46 +1207,13 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                                       ),
                                     ),
 
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.directions_walk,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        '${metrics.estimatedWalkingMiles.toStringAsFixed(1)} mi estimated',
-                                      ),
+                                    const Chip(
+                                      avatar: Icon(Icons.route_outlined, size: 18),
+                                      label: Text('Route not yet verified'),
                                     ),
-
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.schedule,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        _formatDuration(
-                                          metrics.estimatedMinutes,
-                                        ),
-                                      ),
-                                    ),
-
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.groups_outlined,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        '${metrics.recommendedScalerCount} recommended',
-                                      ),
-                                    ),
-
-                                    Chip(
-                                      avatar: const Icon(
-                                        Icons.attach_money,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        '\$${metrics.suggestedBasePay.toStringAsFixed(0)} preliminary pay',
-                                      ),
+                                    const Chip(
+                                      avatar: Icon(Icons.analytics_outlined, size: 18),
+                                      label: Text('Workload pending target analysis'),
                                     ),
                                   ],
                                 ),
@@ -1358,9 +1221,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                                 const SizedBox(height: 8),
 
                                 const Text(
-                                  'These estimates use zone geometry only. '
-                                  'Home counts, actual streets, access conditions, '
-                                  'and route optimization will improve them later.',
+                                  'Geographic area is calculated from your target. '
+                                  'Home and workload estimates are handled separately.',
                                   style: TextStyle(fontSize: 12),
                                   textAlign: TextAlign.center,
                                 ),
@@ -1429,7 +1291,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                               : const Icon(Icons.save),
                           label: Text(
                             _saving
-                                ? 'Saving & Analyzing...'
+                                ? 'Saving Target...'
                                 : 'Save Campaign Zone',
                           ),
                         ),
@@ -1449,26 +1311,10 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 class ZoneMetrics {
   final double areaSquareMeters;
   final double areaAcres;
-  final double areaSquareMiles;
-  final double perimeterMeters;
-  final double perimeterMiles;
-  final double estimatedWalkingMeters;
-  final double estimatedWalkingMiles;
-  final int estimatedMinutes;
-  final int recommendedScalerCount;
-  final double suggestedBasePay;
 
   const ZoneMetrics({
     required this.areaSquareMeters,
     required this.areaAcres,
-    required this.areaSquareMiles,
-    required this.perimeterMeters,
-    required this.perimeterMiles,
-    required this.estimatedWalkingMeters,
-    required this.estimatedWalkingMiles,
-    required this.estimatedMinutes,
-    required this.recommendedScalerCount,
-    required this.suggestedBasePay,
   });
 }
 
