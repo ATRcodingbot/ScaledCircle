@@ -13,6 +13,8 @@ import 'screens/business/business_dashboard.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/public/public_landing_screen.dart';
+import 'screens/public/business_funnel_screen.dart';
+import 'screens/public/scaler_funnel_screen.dart';
 import 'screens/scaler/dashboard/scaler_dashboard_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_login_screen.dart';
@@ -71,6 +73,8 @@ class ScaledCircleApp extends StatelessWidget {
         AppRoutes.login: (_) => const LoginScreen(),
         AppRoutes.createAccount: (_) => const RegisterScreen(),
         AppRoutes.publicExperience: (_) => const PublicLandingScreen(),
+        AppRoutes.businesses: (_) => const BusinessFunnelScreen(),
+        AppRoutes.scalers: (_) => const ScalerFunnelScreen(),
         AppRoutes.businessDashboard: (_) => const BusinessDashboard(),
         AppRoutes.scalerDashboard: (_) => const ScalerDashboardScreen(),
         AppRoutes.adminLogin: (_) => const AdminLoginScreen(),

@@ -24,6 +24,19 @@ class PublicLandingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 760;
+    final howItWorksKey = GlobalKey();
+    final pricingKey = GlobalKey();
+    void reveal(GlobalKey key) {
+      final target = key.currentContext;
+      if (target != null) {
+        Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+
     return Scaffold(
       backgroundColor: _bg,
       body: SelectionArea(
@@ -37,6 +50,11 @@ class PublicLandingScreen extends StatelessWidget {
               title: _Navigation(
                 onLogin: () => Navigator.pushNamed(context, AppRoutes.login),
                 onStart: () => _start(context, 'business'),
+                onBusiness: () =>
+                    Navigator.pushNamed(context, AppRoutes.businesses),
+                onScaler: () => Navigator.pushNamed(context, AppRoutes.scalers),
+                onHowItWorks: () => reveal(howItWorksKey),
+                onPricing: () => reveal(pricingKey),
               ),
             ),
             SliverToBoxAdapter(
@@ -48,11 +66,15 @@ class PublicLandingScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         _Hero(
-                          onBusiness: () => _start(context, 'business'),
-                          onScaler: () => _start(context, 'scaler'),
+                          onBusiness: () => Navigator.pushNamed(
+                            context,
+                            AppRoutes.businesses,
+                          ),
+                          onScaler: () =>
+                              Navigator.pushNamed(context, AppRoutes.scalers),
                         ),
                         const _Gap(),
-                        const _HowItWorks(),
+                        _HowItWorks(key: howItWorksKey),
                         const _Gap(),
                         const _BusinessExperience(),
                         const _Gap(),
@@ -65,6 +87,7 @@ class PublicLandingScreen extends StatelessWidget {
                         ),
                         const _Gap(),
                         _Pricing(
+                          key: pricingKey,
                           onGetStarted: () => _start(context, 'business'),
                           onCompare: () =>
                               Navigator.pushNamed(context, AppRoutes.login),
@@ -90,9 +113,20 @@ class PublicLandingScreen extends StatelessWidget {
 }
 
 class _Navigation extends StatelessWidget {
-  const _Navigation({required this.onLogin, required this.onStart});
+  const _Navigation({
+    required this.onLogin,
+    required this.onStart,
+    required this.onBusiness,
+    required this.onScaler,
+    required this.onHowItWorks,
+    required this.onPricing,
+  });
   final VoidCallback onLogin;
   final VoidCallback onStart;
+  final VoidCallback onBusiness;
+  final VoidCallback onScaler;
+  final VoidCallback onHowItWorks;
+  final VoidCallback onPricing;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -114,13 +148,13 @@ class _Navigation extends StatelessWidget {
               ),
             ),
             if (showLinks)
-              const Row(
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _NavText('For Businesses'),
-                  _NavText('For Scalers'),
-                  _NavText('How It Works'),
-                  _NavText('Pricing'),
+                  _NavText('For Businesses', onPressed: onBusiness),
+                  _NavText('For Scalers', onPressed: onScaler),
+                  _NavText('How It Works', onPressed: onHowItWorks),
+                  _NavText('Pricing', onPressed: onPricing),
                 ],
               ),
             Row(
@@ -147,11 +181,12 @@ class _Navigation extends StatelessWidget {
 }
 
 class _NavText extends StatelessWidget {
-  const _NavText(this.value);
+  const _NavText(this.value, {this.onPressed});
   final String value;
+  final VoidCallback? onPressed;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10),
+  Widget build(BuildContext context) => TextButton(
+    onPressed: onPressed ?? () {},
     child: Text(value, style: const TextStyle(color: _muted, fontSize: 14)),
   );
 }
@@ -307,7 +342,7 @@ class _MapPreview extends StatelessWidget {
 }
 
 class _HowItWorks extends StatelessWidget {
-  const _HowItWorks();
+  const _HowItWorks({super.key});
   @override
   Widget build(BuildContext context) => const Column(
     children: [
@@ -672,7 +707,11 @@ class _ScalerExperience extends StatelessWidget {
 }
 
 class _Pricing extends StatelessWidget {
-  const _Pricing({required this.onGetStarted, required this.onCompare});
+  const _Pricing({
+    super.key,
+    required this.onGetStarted,
+    required this.onCompare,
+  });
 
   final VoidCallback onGetStarted;
   final VoidCallback onCompare;
