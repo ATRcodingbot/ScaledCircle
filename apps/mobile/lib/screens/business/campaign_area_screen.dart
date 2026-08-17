@@ -46,6 +46,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   bool _propertyLayerEnabled = false;
   bool _loadingPropertyIntelligence = false;
   PropertyIntelligenceAnalysis? _propertyIntelligence;
+  late String _zoneName;
 
   static const LatLng _defaultCenter = LatLng(39.2904, -76.6122);
 
@@ -54,6 +55,8 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   @override
   void initState() {
     super.initState();
+
+    _zoneName = widget.pendingZoneData?['zoneName']?.toString() ?? 'Zone 1';
 
     _loadExistingArea();
   }
@@ -111,6 +114,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       }
 
       setState(() {
+        _zoneName = rawData['zoneName']?.toString() ?? _zoneName;
         _selectedShape = existingShape;
 
         _mappingLocked =
@@ -242,23 +246,53 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     });
   }
 
-  void _prepareForNewDrawing() {
-    if (!_hasLoadedExistingArea) {
-      return;
-    }
-
-    _inputPoints.clear();
-    _generatedArea.clear();
-
-    _hasLoadedExistingArea = false;
+  Future<bool> _confirmReplaceExistingArea() async {
+    if (!_hasLoadedExistingArea) return true;
+    final replace = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('$_zoneName already has an area'),
+        content: const Text(
+          'A Zone is one practical Scaler work area. Replace the current '
+          'boundary to redraw this Zone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('Replace $_zoneName'),
+          ),
+        ],
+      ),
+    );
+    if (replace != true || !mounted) return false;
+    _beginReplacement();
+    return true;
   }
 
-  void _handleMapTap(TapPosition tapPosition, LatLng point) {
+  void _beginReplacement() {
+    setState(() {
+      _inputPoints.clear();
+      _generatedArea.clear();
+      _hasLoadedExistingArea = false;
+    });
+  }
+
+  Future<void> _changeShape(CampaignAreaShape shape) async {
+    if (shape == _selectedShape) return;
+    if (!await _confirmReplaceExistingArea() || !mounted) return;
+    _selectShape(shape);
+  }
+
+  Future<void> _handleMapTap(TapPosition tapPosition, LatLng point) async {
     debugPrint('CAMPAIGN AREA TAP: ${point.latitude}, ${point.longitude}');
 
-    setState(() {
-      _prepareForNewDrawing();
+    if (!await _confirmReplaceExistingArea() || !mounted) return;
 
+    setState(() {
       switch (_selectedShape) {
         case CampaignAreaShape.polygon:
           _inputPoints.add(point);
@@ -714,9 +748,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   bool get _targetExceedsKnownMaterialCapacity {
     final quantity = widget.materialQuantity;
     final analyzedHomes = _propertyIntelligence?.propertyCount ?? 0;
-    return quantity != null &&
-        quantity > 0 &&
-        analyzedHomes > quantity * 2;
+    return quantity != null && quantity > 0 && analyzedHomes > quantity * 2;
   }
 
   Future<bool> _confirmKnownSizeMismatch() async {
@@ -724,7 +756,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('This target looks much larger than your flyer quantity.'),
+        title: const Text(
+          'This target looks much larger than your flyer quantity.',
+        ),
         content: const Text(
           'Reduce the target before saving so the campaign area better matches the materials available.',
         ),
@@ -980,21 +1014,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         .map(
           (entry) => Marker(
             point: entry.value,
-            width: 42,
-            height: 42,
+            width: 16,
+            height: 16,
             child: Container(
-              alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: Colors.blue,
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
-              ),
-              child: Text(
-                '${entry.key + 1}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black38, blurRadius: 3),
+                ],
               ),
             ),
           ),
@@ -1055,7 +1084,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                     onSelectionChanged: _mappingLocked
                         ? null
                         : (selection) {
-                            _selectShape(selection.first);
+                            unawaited(_changeShape(selection.first));
                           },
                     showSelectedIcon: false,
                   ),
@@ -1071,6 +1100,21 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                         subtitle: Text(
                           'The boundary cannot change after campaign launch or '
                           'Scaler assignment.',
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (_hasLoadedExistingArea && !_mappingLocked)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
+                    child: Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.check_circle_outline),
+                        title: Text('$_zoneName already has an area'),
+                        subtitle: const Text(
+                          'This boundary is one Scaler assignment area. Use '
+                          'Replace Area to redraw it.',
                         ),
                       ),
                     ),
@@ -1128,7 +1172,11 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                           ? (_searchBoundary.isEmpty ? 13 : 10)
                           : 15,
 
-                      onTap: _mappingLocked ? null : _handleMapTap,
+                      onTap: _mappingLocked
+                          ? null
+                          : (tapPosition, point) {
+                              unawaited(_handleMapTap(tapPosition, point));
+                            },
                     ),
 
                     children: [
@@ -1208,12 +1256,20 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                                     ),
 
                                     const Chip(
-                                      avatar: Icon(Icons.route_outlined, size: 18),
+                                      avatar: Icon(
+                                        Icons.route_outlined,
+                                        size: 18,
+                                      ),
                                       label: Text('Route not yet verified'),
                                     ),
                                     const Chip(
-                                      avatar: Icon(Icons.analytics_outlined, size: 18),
-                                      label: Text('Workload pending target analysis'),
+                                      avatar: Icon(
+                                        Icons.analytics_outlined,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        'Workload pending target analysis',
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1233,6 +1289,18 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       Row(
                         children: [
+                          if (_hasLoadedExistingArea) ...[
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _mappingLocked
+                                    ? null
+                                    : _beginReplacement,
+                                icon: const Icon(Icons.edit_location_alt),
+                                label: const Text('Replace Area'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed:
@@ -1265,6 +1333,16 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
                       const SizedBox(height: 10),
 
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+
                       Text(
                         '${_shapeLabel(_selectedShape)} • '
                         '${_generatedArea.length} verification '
@@ -1290,9 +1368,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                                 )
                               : const Icon(Icons.save),
                           label: Text(
-                            _saving
-                                ? 'Saving Target...'
-                                : 'Save Campaign Zone',
+                            _saving ? 'Saving Target...' : 'Save Zone',
                           ),
                         ),
                       ),
@@ -1312,10 +1388,7 @@ class ZoneMetrics {
   final double areaSquareMeters;
   final double areaAcres;
 
-  const ZoneMetrics({
-    required this.areaSquareMeters,
-    required this.areaAcres,
-  });
+  const ZoneMetrics({required this.areaSquareMeters, required this.areaAcres});
 }
 
 class _ProjectedPoint {

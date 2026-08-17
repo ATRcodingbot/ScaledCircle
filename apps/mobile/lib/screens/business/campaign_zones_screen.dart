@@ -12,6 +12,13 @@ bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
   );
 }
 
+const int productionMaximumZonesPerCampaign = 1;
+
+bool campaignCanAddZone(
+  int persistedZoneCount, {
+  int maximumZones = productionMaximumZonesPerCampaign,
+}) => persistedZoneCount < maximumZones;
+
 class CampaignZonesScreen extends StatelessWidget {
   final DocumentSnapshot campaign;
   final bool startWithAreaBuilder;
@@ -196,9 +203,9 @@ class CampaignZonesScreen extends StatelessWidget {
           return;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✓ Target saved — $zoneName')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('✓ Target saved — $zoneName')));
       }
     } catch (e) {
       if (zoneReference != null) {
@@ -1150,15 +1157,7 @@ class CampaignZonesScreen extends StatelessWidget {
                 );
               },
             ),
-      floatingActionButton: _campaignLocked
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () {
-                _createZone(context);
-              },
-              icon: const Icon(Icons.add_location_alt),
-              label: const Text('Add Zone'),
-            ),
+      floatingActionButton: null,
       body: _OpenAreaBuilderOnce(
         enabled: startWithAreaBuilder && !_campaignLocked,
         onOpen: () => _createZone(context, skipNamePrompt: true),
@@ -1216,8 +1215,10 @@ class CampaignZonesScreen extends StatelessWidget {
 
               totalEstimatedHomes +=
                   (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-              final homeStatus = data['homeCountStatus']?.toString() ?? 'pending';
-              anyHomeEstimatePending = anyHomeEstimatePending ||
+              final homeStatus =
+                  data['homeCountStatus']?.toString() ?? 'pending';
+              anyHomeEstimatePending =
+                  anyHomeEstimatePending ||
                   homeStatus == 'pending' ||
                   homeStatus == 'waiting';
 
@@ -1250,7 +1251,7 @@ class CampaignZonesScreen extends StatelessWidget {
                 Text(
                   zones.isEmpty
                       ? 'Starting inside: $_serviceAreaName'
-                      : 'Each saved area can become a distinct Scaler work assignment.',
+                      : 'One Zone is one practical Scaler assignment area.',
                 ),
 
                 const SizedBox(height: 22),
@@ -1335,6 +1336,18 @@ class CampaignZonesScreen extends StatelessWidget {
                   ),
 
                 const SizedBox(height: 12),
+
+                if (zones.isNotEmpty && !campaignCanAddZone(zones.length))
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.groups_outlined),
+                      title: Text('One Scaler • One Zone'),
+                      subtitle: Text(
+                        'Scaler Crew and additional worker Zones are currently '
+                        'in limited rollout.',
+                      ),
+                    ),
+                  ),
 
                 if (zones.isEmpty)
                   Card(
@@ -1425,6 +1438,33 @@ class CampaignZonesScreen extends StatelessWidget {
                                 _editZoneArea(context, zone);
                               },
                       ),
+
+                      if (!_campaignLocked) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: data['mapLocked'] == true
+                                    ? null
+                                    : () => _editZoneArea(context, zone),
+                                icon: const Icon(Icons.edit_location_alt),
+                                label: const Text('Edit Zone'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: zoneStatus == 'unassigned'
+                                    ? () => _deleteZone(context, zone)
+                                    : null,
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Remove'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
 
                       if (zoneStatus == 'assigned')
                         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
