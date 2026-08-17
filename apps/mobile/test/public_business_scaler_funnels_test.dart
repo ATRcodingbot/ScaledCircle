@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/navigation/app_routes.dart';
 import 'package:flutter_app/screens/public/business_funnel_screen.dart';
+import 'package:flutter_app/screens/public/authentic_product_map.dart';
 import 'package:flutter_app/screens/public/public_landing_screen.dart';
 import 'package:flutter_app/screens/public/scaler_funnel_screen.dart';
 
@@ -117,6 +118,37 @@ void main() {
     expect(find.text('✓ Material Pickup'), findsOneWidget);
     expect(find.text('Door-to-Door Outreach'), findsOneWidget);
     expect(find.text('Off • explicit opt-in'), findsOneWidget);
+    expect(find.text('Your Assigned Work Area'), findsOneWidget);
+    expect(find.text('ASSIGNED ZONE • Zone 1'), findsOneWidget);
+    expect(find.text('GPS verification'), findsWidgets);
+    expect(find.text('Active'), findsWidgets);
+  });
+
+  test('Scaler residential fixture keeps position inside a bounded Zone', () {
+    expect(scalerResidentialZoneFixture, hasLength(greaterThanOrEqualTo(3)));
+    expect(
+      publicPointInsidePolygon(
+        scalerResidentialPositionFixture,
+        scalerResidentialZoneFixture,
+      ),
+      isTrue,
+    );
+    final latitudes = scalerResidentialZoneFixture.map(
+      (point) => point.latitude,
+    );
+    final longitudes = scalerResidentialZoneFixture.map(
+      (point) => point.longitude,
+    );
+    expect(
+      latitudes.reduce((a, b) => a > b ? a : b) -
+          latitudes.reduce((a, b) => a < b ? a : b),
+      lessThan(.02),
+    );
+    expect(
+      longitudes.reduce((a, b) => a > b ? a : b) -
+          longitudes.reduce((a, b) => a < b ? a : b),
+      lessThan(.02),
+    );
   });
 
   testWidgets('both funnels remain single-column and overflow-free at 390px', (
@@ -237,6 +269,10 @@ void main() {
     expect(maps, contains('MarkerLayer('));
     expect(maps, contains('© OpenStreetMap contributors'));
     expect(maps, isNot(contains('PolylineLayer(')));
+    expect(maps, contains('InteractiveFlag.none'));
+    expect(maps, isNot(contains('Geolocator')));
+    expect(maps, isNot(contains('requestPermission')));
+    expect(maps, isNot(contains('startTracking')));
     expect(landing, contains('ScaledCircleBrand'));
     expect(landing, contains('openPublicRoleChooser(context)'));
     expect(html, contains('og:type'));

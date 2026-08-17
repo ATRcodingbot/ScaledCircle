@@ -284,7 +284,7 @@ class _ZoneVisual extends StatelessWidget {
   const _ZoneVisual();
   @override
   Widget build(BuildContext context) => const ProductWindow(
-    title: 'How Verified Coverage Looks',
+    title: 'Your Assigned Work Area',
     accent: scalerBlue,
     label: 'SAMPLE ACTIVE WORK',
     child: Column(
@@ -305,16 +305,20 @@ class _ZoneVisual extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            StatusPill('Zone 1', color: scalerBlue, icon: Icons.crop_free),
-            StatusPill('GPS recording', color: businessGreen),
+            StatusPill(
+              'ASSIGNED ZONE • Zone 1',
+              color: scalerBlue,
+              icon: Icons.crop_free,
+            ),
           ],
         ),
+        ProductLine('GPS verification', 'Active', color: businessGreen),
         ProductLine('Position evidence', 'Recording during active work'),
         ProductLine('Route', 'Not yet verified'),
         ProductLine('Coverage', 'Recording'),
         SizedBox(height: 8),
         Text(
-          'When active work starts, ScaledCircle records GPS evidence used to review coverage inside the assigned Zone.',
+          'Your assigned Zone stays visible while ScaledCircle records GPS evidence during active work.',
           style: TextStyle(color: publicMuted, fontSize: 12, height: 1.35),
         ),
       ],

@@ -6,6 +6,34 @@ import 'public_funnel_components.dart';
 
 enum PublicProductMapMode { campaign, activeWork }
 
+const scalerResidentialZoneFixture = <LatLng>[
+  LatLng(39.3810, -76.5460),
+  LatLng(39.3810, -76.5350),
+  LatLng(39.3740, -76.5320),
+  LatLng(39.3700, -76.5390),
+  LatLng(39.3740, -76.5480),
+];
+
+const scalerResidentialPositionFixture = LatLng(39.3760, -76.5400);
+
+bool publicPointInsidePolygon(LatLng point, List<LatLng> polygon) {
+  var inside = false;
+  for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    final a = polygon[i];
+    final b = polygon[j];
+    final crossesLatitude =
+        (a.latitude > point.latitude) != (b.latitude > point.latitude);
+    if (!crossesLatitude) continue;
+    final crossingLongitude =
+        (b.longitude - a.longitude) *
+            (point.latitude - a.latitude) /
+            (b.latitude - a.latitude) +
+        a.longitude;
+    if (point.longitude < crossingLongitude) inside = !inside;
+  }
+  return inside;
+}
+
 /// A read-only public preview built from the same FlutterMap layers used by
 /// campaign creation and active-job tracking. Coordinates are deterministic
 /// demo fixtures; no production customer data is rendered.
@@ -42,11 +70,17 @@ class AuthenticProductMap extends StatelessWidget {
     LatLng(39.046, -76.562),
     LatLng(39.059, -76.582),
   ];
-  static const _currentPosition = LatLng(39.0615, -76.5585);
-
   @override
   Widget build(BuildContext context) {
     final activeWork = mode == PublicProductMapMode.activeWork;
+    assert(
+      !activeWork ||
+          publicPointInsidePolygon(
+            scalerResidentialPositionFixture,
+            scalerResidentialZoneFixture,
+          ),
+      'The public Scaler position fixture must remain inside its assigned Zone.',
+    );
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Semantics(
@@ -64,9 +98,18 @@ class AuthenticProductMap extends StatelessWidget {
                   child: FlutterMap(
                     options: MapOptions(
                       initialCenter: activeWork
-                          ? const LatLng(39.062, -76.560)
+                          ? scalerResidentialPositionFixture
                           : const LatLng(39.055, -76.560),
-                      initialZoom: activeWork ? 14.5 : 12.3,
+                      initialZoom: activeWork ? 15.4 : 12.3,
+                      initialCameraFit: activeWork
+                          ? CameraFit.bounds(
+                              bounds: LatLngBounds.fromPoints(
+                                scalerResidentialZoneFixture,
+                              ),
+                              padding: const EdgeInsets.all(28),
+                              maxZoom: 16,
+                            )
+                          : null,
                       interactionOptions: const InteractionOptions(
                         flags: InteractiveFlag.none,
                       ),
@@ -104,10 +147,10 @@ class AuthenticProductMap extends StatelessWidget {
                         PolygonLayer(
                           polygons: [
                             Polygon(
-                              points: _zone,
-                              color: scalerBlue.withValues(alpha: .22),
+                              points: scalerResidentialZoneFixture,
+                              color: scalerBlue.withValues(alpha: .18),
                               borderColor: scalerBlue,
-                              borderStrokeWidth: 3,
+                              borderStrokeWidth: 4,
                             ),
                           ],
                         ),
@@ -115,7 +158,7 @@ class AuthenticProductMap extends StatelessWidget {
                         const MarkerLayer(
                           markers: [
                             Marker(
-                              point: _currentPosition,
+                              point: scalerResidentialPositionFixture,
                               width: 46,
                               height: 46,
                               child: _CurrentPositionMarker(),
