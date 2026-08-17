@@ -5595,9 +5595,7 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
   const candidates = await candidateQuery.limit(scalerCapacity.SUPPORTED_POPULATION).get();
   if (candidates.empty) return;
   const batch = db.batch();
-  const emailBatch = db.batch();
   let writes = 0;
-  let emailWrites = 0;
   for (const candidate of candidates.docs) {
     let decision;
     try { decision = scalerOpportunityDecision(candidate.data(), campaign); } catch (_) { continue; }
@@ -5619,16 +5617,35 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
       const recipient = user.data()?.email;
       try {
         const emailJob = scalerJobAlertEmail.createJob({campaignId: event.params.campaignId,
-          scalerUid: candidate.id, recipient, campaignName: campaign.name});
-        emailBatch.set(db.collection(scalerJobAlertEmail.EMAIL_JOB_COLLECTION).doc(emailJob.id), {
-          ...emailJob, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
-        }, {merge: false});
-        emailWrites += 1;
+          scalerUid: candidate.id, recipient, campaignName: campaign.name,
+          jobType: campaign.jobType || campaign.campaignType,
+          areaLabel: campaign.areaLabel || campaign.locationName,
+          reasons: decision.reasons});
+        const jobRef = db.collection(scalerJobAlertEmail.EMAIL_JOB_COLLECTION).doc(emailJob.id);
+        const policyNow = new Date();
+        const limitRef = db.collection("scalerJobAlertEmailRateLimits")
+          .doc(scalerJobAlertEmail.rateLimitId(candidate.id, policyNow));
+        await db.runTransaction(async (transaction) => {
+          const [existingJob, limit] = await Promise.all([
+            transaction.get(jobRef), transaction.get(limitRef),
+          ]);
+          // A preference change cannot replay old campaigns: this producer runs
+          // only when a campaign newly transitions to open, and an existing
+          // campaign+Scaler job is never recreated.
+          const sentOrQueued = Number(limit.data()?.count || 0);
+          if (!scalerJobAlertEmail.canQueue({jobExists: existingJob.exists,
+            dailyCount: sentOrQueued})) return;
+          transaction.create(jobRef, {...emailJob, createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()});
+          transaction.set(limitRef, {schemaVersion: scalerJobAlertEmail.POLICY_VERSION,
+            scalerUid: candidate.id, day: scalerJobAlertEmail.utcDay(policyNow),
+            count: sentOrQueued + 1, limit: scalerJobAlertEmail.DAILY_LIMIT,
+            updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+        });
       } catch (_) { /* Missing/invalid authoritative account email fails closed. */ }
     }
   }
   if (writes) await batch.commit();
-  if (emailWrites) await emailBatch.commit();
 });
 
 

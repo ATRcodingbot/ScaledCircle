@@ -513,6 +513,10 @@ service cloud.firestore {
         allow read, create, update, delete: if false;
       }
 
+      match /scalerJobAlertEmailRateLimits/{limitId} {
+        allow read, create, update, delete: if false;
+      }
+
       match /checkpoints/{checkpointId} {
         allow read:
           if isApprovedAccount()

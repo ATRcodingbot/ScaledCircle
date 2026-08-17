@@ -196,12 +196,15 @@ test("email jobs cannot be read or authored by clients", async () => {
       to: "scaler@example.test", scalerUid: "scaler-one", campaignId: "campaign-one",
       status: "queued",
     });
+    await context.firestore().doc("scalerJobAlertEmailRateLimits/scaler-one_2026-08-17")
+      .set({scalerUid: "scaler-one", count: 1, limit: 5});
   });
   for (const uid of ["scaler-one", "business-one", "admin-one"]) {
     const db = store(uid);
     await assertFails(db.doc("outboundEmailJobs/welcome-user_test").get());
     await assertFails(db.doc("artifactDeliveryEmailJobs/artifact_test").get());
     await assertFails(db.doc("scalerJobAlertEmailJobs/job_test").get());
+    await assertFails(db.doc("scalerJobAlertEmailRateLimits/scaler-one_2026-08-17").get());
     await assertFails(db.doc("outboundEmailJobs/arbitrary").set({
       to: "attacker@example.test",
       fromAddress: "spoof@example.test",
@@ -216,6 +219,7 @@ test("email jobs cannot be read or authored by clients", async () => {
     await assertFails(db.doc("scalerJobAlertEmailJobs/arbitrary").set({
       to: "attacker@example.test", scalerUid: uid, campaignId: "forged", status: "queued",
     }));
+    await assertFails(db.doc("scalerJobAlertEmailRateLimits/arbitrary").set({count: 0}));
   }
   await assertFails(environment.unauthenticatedContext().firestore()
     .doc("outboundEmailJobs/arbitrary").set({to: "attacker@example.test"}));
