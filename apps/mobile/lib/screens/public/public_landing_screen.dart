@@ -4,7 +4,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../../navigation/app_routes.dart';
 import '../../services/subscription_plan_service.dart';
-import 'waitlist_screen.dart';
 
 const _bg = Color(0xFF020914);
 const _navy = Color(0xFF071525);
@@ -16,9 +15,9 @@ const _muted = Color(0xFFB8C9D8);
 class PublicLandingScreen extends StatelessWidget {
   const PublicLandingScreen({super.key});
 
-  void _start(BuildContext context, String role) => Navigator.push(
+  void _start(BuildContext context, String role) => Navigator.pushNamed(
     context,
-    MaterialPageRoute(builder: (_) => WaitlistScreen(initialRole: role)),
+    role == 'scaler' ? AppRoutes.scalers : AppRoutes.businesses,
   );
 
   @override

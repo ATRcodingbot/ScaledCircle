@@ -18,7 +18,7 @@ class ScalerFunnelScreen extends StatelessWidget {
         primaryLabel: 'Become a Scaler',
         secondaryLabel: 'See How Jobs Work',
         accent: scalerBlue,
-        onPrimary: () => openPublicSignup(context, 'scaler'),
+        onPrimary: () => openPublicAccountRegistration(context, 'scaler'),
         onSecondary: () => ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('WORK WHERE YOU WANT.'))),
@@ -87,7 +87,10 @@ class ScalerFunnelScreen extends StatelessWidget {
         title: 'READY TO FIND LOCAL WORK?',
         primary: 'Create Scaler Account',
         accent: scalerBlue,
-        onPrimary: () => openPublicSignup(context, 'scaler'),
+        supportingCopy:
+            "Set up your ScaledCircle account now and we'll let you know as access becomes available.",
+        onPrimary: () => openPublicAccountRegistration(context, 'scaler'),
+        onWaitlist: () => openPublicWaitlist(context, 'scaler'),
       ),
     ],
   );

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../models/user/user_profile.dart';
 import '../../navigation/app_routes.dart';
+import '../auth/register_screen.dart';
 import 'waitlist_screen.dart';
 
 const publicBackground = Color(0xFF020914);
@@ -10,7 +12,18 @@ const businessGreen = Color(0xFF14E39A);
 const scalerBlue = Color(0xFF287EFF);
 const publicMuted = Color(0xFFB8C9D8);
 
-void openPublicSignup(BuildContext context, String role) {
+void openPublicAccountRegistration(BuildContext context, String role) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => RegisterScreen(
+        initialRole: role == 'scaler' ? UserRole.scaler : UserRole.business,
+      ),
+    ),
+  );
+}
+
+void openPublicWaitlist(BuildContext context, String role) {
   Navigator.push(
     context,
     MaterialPageRoute(builder: (_) => WaitlistScreen(initialRole: role)),
@@ -48,7 +61,7 @@ class PublicTopNavigation extends StatelessWidget {
                 icon: const Icon(Icons.login, color: publicMuted),
               ),
               FilledButton(
-                onPressed: () => openPublicSignup(
+                onPressed: () => openPublicAccountRegistration(
                   context,
                   accent == scalerBlue ? 'scaler' : 'business',
                 ),
@@ -103,7 +116,7 @@ class PublicTopNavigation extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             FilledButton(
-              onPressed: () => openPublicSignup(
+              onPressed: () => openPublicAccountRegistration(
                 context,
                 accent == scalerBlue ? 'scaler' : 'business',
               ),
@@ -408,11 +421,15 @@ class FunnelFinalCta extends StatelessWidget {
     required this.primary,
     required this.accent,
     required this.onPrimary,
+    required this.supportingCopy,
+    required this.onWaitlist,
   });
   final String title;
   final String primary;
   final Color accent;
   final VoidCallback onPrimary;
+  final String supportingCopy;
+  final VoidCallback onWaitlist;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 48),
@@ -427,6 +444,12 @@ class FunnelFinalCta extends StatelessWidget {
             fontWeight: FontWeight.w900,
           ),
         ),
+        const SizedBox(height: 10),
+        Text(
+          supportingCopy,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: publicMuted, height: 1.5),
+        ),
         const SizedBox(height: 20),
         Wrap(
           alignment: WrapAlignment.center,
@@ -434,6 +457,7 @@ class FunnelFinalCta extends StatelessWidget {
           runSpacing: 12,
           children: [
             FilledButton(
+              key: const Key('funnel-create-account'),
               onPressed: onPrimary,
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
@@ -444,7 +468,17 @@ class FunnelFinalCta extends StatelessWidget {
               ),
               child: Text(primary),
             ),
+            OutlinedButton(
+              key: const Key('funnel-join-waitlist'),
+              onPressed: onWaitlist,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                minimumSize: const Size(180, 52),
+              ),
+              child: const Text('Join the Waitlist'),
+            ),
             TextButton(
+              key: const Key('funnel-login'),
               onPressed: () => Navigator.pushNamed(context, AppRoutes.login),
               child: const Text('Log In'),
             ),

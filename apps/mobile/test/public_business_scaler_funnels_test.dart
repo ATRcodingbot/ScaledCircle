@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/navigation/app_routes.dart';
@@ -104,5 +106,64 @@ void main() {
       findsOneWidget,
     );
     semantics.dispose();
+  });
+
+  testWidgets('Business funnel prioritizes account creation over waitlist', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(home: const BusinessFunnelScreen()));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('funnel-create-account')),
+      600,
+    );
+    expect(find.text('Create My Business Account'), findsOneWidget);
+    expect(find.text('Join the Waitlist'), findsOneWidget);
+    expect(find.text('Log In'), findsWidgets);
+    expect(
+      find.textContaining('Marketplace access is being rolled out in stages'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Scaler funnel prioritizes account creation over waitlist', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(home: const ScalerFunnelScreen()));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('funnel-create-account')),
+      600,
+    );
+    expect(find.text('Create Scaler Account'), findsOneWidget);
+    expect(find.text('Join the Waitlist'), findsOneWidget);
+    expect(find.text('Log In'), findsWidgets);
+    expect(
+      find.textContaining("we'll let you know as access becomes available"),
+      findsOneWidget,
+    );
+  });
+
+  test('account CTAs reuse pending registration without granting access', () {
+    final funnelSource = File(
+      'lib/screens/public/public_funnel_components.dart',
+    ).readAsStringSync();
+    final profileSource = File(
+      'lib/services/user/user_service.dart',
+    ).readAsStringSync();
+    final registerSource = File(
+      'lib/screens/auth/register_screen.dart',
+    ).readAsStringSync();
+    final loginSource = File(
+      'lib/screens/auth/login_screen.dart',
+    ).readAsStringSync();
+
+    expect(funnelSource, contains('RegisterScreen('));
+    expect(funnelSource, contains('UserRole.scaler : UserRole.business'));
+    expect(funnelSource, contains('WaitlistScreen(initialRole: role)'));
+    expect(profileSource, contains("'active': false"));
+    expect(profileSource, contains("'betaAccess': 'pending'"));
+    expect(registerSource, contains('EarlyAccessPendingScreen(email: email)'));
+    expect(loginSource, contains("role == 'admin'"));
+    expect(loginSource, contains("userData?['active'] == true"));
+    expect(loginSource, contains("userData?['betaAccess'] == 'approved'"));
   });
 }

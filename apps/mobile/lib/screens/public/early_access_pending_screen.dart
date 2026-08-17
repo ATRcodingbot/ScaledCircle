@@ -44,7 +44,7 @@ class EarlyAccessPendingScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 22),
                     const Text(
-                      'Your access is not open yet',
+                      "YOU'RE SET UP",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -54,7 +54,8 @@ class EarlyAccessPendingScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '$email is on the pre-launch path. We will email you when this account is approved for the private beta.',
+                      'Your ScaledCircle account has been created for $email. '
+                      "We're rolling out marketplace access in stages. We'll let you know when your account is ready.",
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Color(0xFFB8C9D8),

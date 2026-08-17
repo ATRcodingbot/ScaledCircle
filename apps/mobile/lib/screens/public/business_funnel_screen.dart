@@ -22,7 +22,7 @@ class BusinessFunnelScreen extends StatelessWidget {
         primaryLabel: 'Start Growing',
         secondaryLabel: 'See How It Works',
         accent: businessGreen,
-        onPrimary: () => openPublicSignup(context, 'business'),
+        onPrimary: () => openPublicAccountRegistration(context, 'business'),
         onSecondary: () => _showSection(context, 'START WITH YOUR BUSINESS.'),
         visual: const _BusinessProfileVisual(),
       ),
@@ -84,12 +84,17 @@ class BusinessFunnelScreen extends StatelessWidget {
         visual: _ResultsVisual(),
       ),
       const _ManagedGrowthBand(),
-      _BusinessPricing(onStart: () => openPublicSignup(context, 'business')),
+      _BusinessPricing(
+        onStart: () => openPublicAccountRegistration(context, 'business'),
+      ),
       FunnelFinalCta(
         title: 'READY TO GROW LOCALLY?',
         primary: 'Create My Business Account',
         accent: businessGreen,
-        onPrimary: () => openPublicSignup(context, 'business'),
+        supportingCopy:
+            'Create your ScaledCircle account now. Marketplace access is being rolled out in stages.',
+        onPrimary: () => openPublicAccountRegistration(context, 'business'),
+        onWaitlist: () => openPublicWaitlist(context, 'business'),
       ),
     ],
   );
