@@ -106,7 +106,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (_) => EarlyAccessPendingScreen(email: email),
+          builder: (_) => EarlyAccessPendingScreen(
+            email: email,
+            role: UserProfile.roleValue(_role),
+          ),
         ),
         (_) => false,
       );

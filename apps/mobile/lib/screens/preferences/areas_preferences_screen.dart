@@ -16,6 +16,9 @@ class AreasPreferencesScreen extends StatefulWidget {
     this.loadPreferences,
     this.savePreferences,
     this.searchAddresses,
+    this.onboarding = false,
+    this.onSkip,
+    this.loadWorkTypes,
   });
   final String role;
   final List<String> initialServices;
@@ -24,6 +27,9 @@ class AreasPreferencesScreen extends StatefulWidget {
   final Future<Map<String, dynamic>> Function(Map<String, dynamic>)?
   savePreferences;
   final Future<List<AddressSuggestion>> Function(String query)? searchAddresses;
+  final bool onboarding;
+  final VoidCallback? onSkip;
+  final Future<List<MarketplaceWorkType>> Function()? loadWorkTypes;
 
   @override
   State<AreasPreferencesScreen> createState() => _AreasPreferencesScreenState();
@@ -43,6 +49,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   double _travelMiles = 20;
   bool _outreach = false;
   bool _crew = false;
+  String _vehicleType = '';
+  String _vehicleBed = '';
+  List<MarketplaceWorkType> _workTypes = const [];
   bool _loading = true;
   bool _saving = false;
   Map<String, dynamic> _authoritative = {};
@@ -77,7 +86,15 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   }
 
   Future<void> _load() async {
-    final data = await (widget.loadPreferences?.call() ?? _service.load());
+    final results = await Future.wait<dynamic>([
+      widget.loadPreferences?.call() ?? _service.load(),
+      if (!_business)
+        widget.loadWorkTypes?.call() ?? _service.loadMarketplaceWorkTypes(),
+    ]);
+    final data = results.first as Map<String, dynamic>?;
+    if (!_business) {
+      _workTypes = (results[1] as List).cast<MarketplaceWorkType>();
+    }
     if (data != null) {
       _authoritative = Map<String, dynamic>.from(data);
       _areas.addAll(
@@ -96,6 +113,8 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
       _travelMiles = (data['maxTravelMiles'] as num?)?.toDouble() ?? 20;
       _outreach = data['outreachOptIn'] == true;
       _crew = data['crewOptIn'] == true;
+      _vehicleType = data['vehicleType']?.toString() ?? '';
+      _vehicleBed = data['vehicleBed']?.toString() ?? '';
       _notifications = Map<String, bool>.from(
         (data['notifications'] as Map? ?? const {}).map(
           (key, value) => MapEntry(key.toString(), value == true),
@@ -668,6 +687,8 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
         'maxTravelMiles': _travelMiles,
         'outreachOptIn': _outreach,
         'crewOptIn': _crew,
+        'vehicleType': _vehicleType,
+        'vehicleBed': _vehicleBed,
       });
     }
     return payload;
@@ -848,7 +869,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Areas & Preferences')),
+    appBar: AppBar(title: Text(widget.onboarding ? 'Set Up Work Preferences' : 'Areas & Preferences')),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : ListView(
@@ -950,14 +971,20 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       setState(() => _outsideScope = value ?? _outsideScope),
                 ),
               ] else ...[
-                _chips(const [
-                  'flyer_distribution',
-                  'door_hangers',
-                  'material_pickup',
-                  'crew_jobs',
-                  'short_local',
-                  'long_high_paying',
-                ], _jobTypes),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _workTypes
+                      .where((type) => type.scalerSelectable && !type.requiresOutreachConsent)
+                      .map((type) => FilterChip(
+                            label: Text(type.customerLabel),
+                            selected: _jobTypes.contains(type.id),
+                            onSelected: (value) => setState(() => value
+                                ? _jobTypes.add(type.id)
+                                : _jobTypes.remove(type.id)),
+                          ))
+                      .toList(),
+                ),
                 DropdownButtonFormField<String>(
                   initialValue: _travelMode,
                   decoration: const InputDecoration(
@@ -1015,6 +1042,33 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                     'Off by default. Other field work does not turn this on.',
                   ),
                 ),
+                if (_workTypes.any((type) =>
+                    type.requiresVehicle && _jobTypes.contains(type.id))) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _vehicleType.isEmpty ? null : _vehicleType,
+                    decoration: const InputDecoration(
+                      labelText: 'Vehicle available for work (optional)',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'car', child: Text('Car')),
+                      DropdownMenuItem(value: 'pickup_truck', child: Text('Pickup Truck')),
+                      DropdownMenuItem(value: 'van', child: Text('Van')),
+                      DropdownMenuItem(value: 'box_truck', child: Text('Box Truck')),
+                      DropdownMenuItem(value: 'no_vehicle', child: Text('No Vehicle')),
+                    ],
+                    onChanged: (value) => setState(() => _vehicleType = value ?? ''),
+                  ),
+                  if (_vehicleType == 'pickup_truck' || _vehicleType == 'van' || _vehicleType == 'box_truck')
+                    DropdownButtonFormField<String>(
+                      initialValue: _vehicleBed.isEmpty ? null : _vehicleBed,
+                      decoration: const InputDecoration(labelText: 'Cargo area (optional)'),
+                      items: const [
+                        DropdownMenuItem(value: 'open', child: Text('Open bed')),
+                        DropdownMenuItem(value: 'covered', child: Text('Covered / enclosed')),
+                      ],
+                      onChanged: (value) => setState(() => _vehicleBed = value ?? ''),
+                    ),
+                ],
               ],
               const Divider(height: 32),
               Text(
@@ -1112,11 +1166,17 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                         Text(
                           (_business ? _priorities : _jobTypes).isEmpty
                               ? 'You can choose this later.'
-                              : (_business ? _priorities : _jobTypes).join(
-                                  ' • ',
-                                ),
+                              : _business
+                                  ? _priorities.join(' • ')
+                                  : _jobTypes.map((id) => _workTypes
+                                      .where((type) => type.id == id)
+                                      .map((type) => type.customerLabel)
+                                      .firstOrNull ?? id).join(' • '),
                         ),
                         if (!_business) ...[
+                          const SizedBox(height: 12),
+                          const Text('TRAVEL', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(_travelMode == 'anywhere' ? 'Anywhere' : 'Up to ${_travelMiles.round()} miles'),
                           const SizedBox(height: 12),
                           const Text(
                             'ALERTS',
@@ -1128,7 +1188,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                           Text(
                             'Email ${_alertDelivery['email'] == true ? '✓' : '— Off'}',
                           ),
-                          const Text('Push — Off'),
+                          const Text('Push — Coming Soon'),
                         ],
                       ],
                     ),
@@ -1137,8 +1197,10 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: const Icon(Icons.save_outlined),
-                label: Text(_saving ? 'Saving…' : 'Save Areas & Preferences'),
+                label: Text(_saving ? 'Saving…' : widget.onboarding ? 'Save & Continue' : 'Save Areas & Preferences'),
               ),
+              if (widget.onboarding)
+                TextButton(onPressed: widget.onSkip, child: const Text('Skip for Now')),
             ],
           ),
   );

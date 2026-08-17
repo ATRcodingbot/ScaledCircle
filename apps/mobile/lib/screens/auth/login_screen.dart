@@ -93,6 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (_) => EarlyAccessPendingScreen(
               email: user.email ?? emailController.text.trim(),
+              role: null,
             ),
           ),
         );
@@ -113,6 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (_) => EarlyAccessPendingScreen(
               email: user.email ?? emailController.text.trim(),
+              role: role,
             ),
           ),
         );
@@ -170,6 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(
           builder: (_) => EarlyAccessPendingScreen(
             email: user.email ?? emailController.text.trim(),
+            role: role,
           ),
         ),
       );

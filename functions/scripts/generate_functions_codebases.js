@@ -46,6 +46,9 @@ const platformExports = new Set([
   "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences",
+  "getMarketplaceWorkTypes",
+  "getPendingScalerPreferences",
+  "savePendingScalerPreferences",
   "resolveServiceAreaPlace",
   "evaluateOpportunityMatch",
 ]);

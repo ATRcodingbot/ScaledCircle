@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/preferences/areas_preferences_screen.dart';
 import 'package:flutter_app/services/address_search_service.dart';
 import 'package:flutter_app/services/service_area_geometry_codec.dart';
+import 'package:flutter_app/services/discovery_preferences_service.dart';
 
 void main() {
   testWidgets(
@@ -156,6 +157,16 @@ void main() {
         home: AreasPreferencesScreen(
           role: 'scaler',
           loadPreferences: () async => null,
+          loadWorkTypes: () async => const [
+            MarketplaceWorkType(
+              id: 'flyer_distribution',
+              customerLabel: 'Flyer Distribution',
+              description: 'Distribution',
+              scalerSelectable: true,
+              requiresVehicle: false,
+              requiresOutreachConsent: false,
+            ),
+          ],
           savePreferences: (payload) async => payload,
         ),
       ),

@@ -37,6 +37,40 @@ class DiscoveryPreferencesService {
     ));
   }
 
+  Future<Map<String, dynamic>?> loadPendingScaler() async {
+    final result = await _functions
+        .httpsCallable('getPendingScalerPreferences')
+        .call();
+    final raw = Map<String, dynamic>.from(result.data as Map)['preferences'];
+    return raw is Map
+        ? ServiceAreaGeometryCodec.decodePreferences(
+            Map<String, dynamic>.from(raw),
+          )
+        : null;
+  }
+
+  Future<Map<String, dynamic>> savePendingScaler(
+    Map<String, dynamic> preferences,
+  ) async {
+    final result = await _functions
+        .httpsCallable('savePendingScalerPreferences')
+        .call({'preferences': preferences});
+    return ServiceAreaGeometryCodec.decodePreferences(
+      Map<String, dynamic>.from(
+        Map<String, dynamic>.from(result.data as Map)['preferences'] as Map,
+      ),
+    );
+  }
+
+  Future<List<MarketplaceWorkType>> loadMarketplaceWorkTypes() async {
+    final result = await _functions.httpsCallable('getMarketplaceWorkTypes').call();
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return (data['workTypes'] as List? ?? const [])
+        .whereType<Map>()
+        .map((value) => MarketplaceWorkType.fromMap(Map<String, dynamic>.from(value)))
+        .toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> explainMatch(
     Map<String, dynamic> opportunity, {
     bool manualSearch = false,
@@ -49,4 +83,32 @@ class DiscoveryPreferencesService {
         });
     return Map<String, dynamic>.from(result.data as Map);
   }
+}
+
+class MarketplaceWorkType {
+  const MarketplaceWorkType({
+    required this.id,
+    required this.customerLabel,
+    required this.description,
+    required this.scalerSelectable,
+    required this.requiresVehicle,
+    required this.requiresOutreachConsent,
+  });
+
+  factory MarketplaceWorkType.fromMap(Map<String, dynamic> value) =>
+      MarketplaceWorkType(
+        id: value['id']?.toString() ?? '',
+        customerLabel: value['customerLabel']?.toString() ?? '',
+        description: value['description']?.toString() ?? '',
+        scalerSelectable: value['scalerSelectable'] == true,
+        requiresVehicle: value['requiresVehicle'] == true,
+        requiresOutreachConsent: value['requiresOutreachConsent'] == true,
+      );
+
+  final String id;
+  final String customerLabel;
+  final String description;
+  final bool scalerSelectable;
+  final bool requiresVehicle;
+  final bool requiresOutreachConsent;
 }

@@ -50,6 +50,31 @@ test("explicit travel and outreach preferences work without GPS authority", () =
 test("manual Scaler search sees distant jobs regardless of preferences", () => {
   assert.equal(preferences.matchOpportunity(scaler, {location: {latitude: 30, longitude: -80}}, "manual").matched, true);
 });
+test("canonical work taxonomy resolves Business and Scaler aliases", () => {
+  const dumpScaler = preferences.sanitizePreferences({...scaler, jobTypes: ["dump_runs"]}, "scaler");
+  assert.deepEqual(dumpScaler.jobTypes, ["dump_run"]);
+  assert.equal(preferences.matchOpportunity(dumpScaler, {
+    location: {latitude: 39.3, longitude: -76.62}, jobType: "dump_run"}).matched, true);
+  const hangerScaler = preferences.sanitizePreferences({...scaler,
+    jobTypes: ["door_hangers"]}, "scaler");
+  assert.deepEqual(hangerScaler.jobTypes, ["door_hanger_distribution"]);
+  assert.equal(preferences.matchOpportunity(hangerScaler, {
+    location: {latitude: 39.3, longitude: -76.62}, jobType: "door_hanger_distribution"}).matched, true);
+});
+test("unknown work values fail safely and disabled Junk Removal is not advertised", () => {
+  const unknown = preferences.sanitizePreferences({...scaler, jobTypes: ["mystery_job"]}, "scaler");
+  assert.deepEqual(unknown.jobTypes, []);
+  assert.equal(preferences.matchOpportunity(unknown, {
+    location: {latitude: 39.3, longitude: -76.62}, jobType: "mystery_job"}).matched, false);
+  const junk = preferences.sanitizePreferences({...scaler, jobTypes: ["junkRemoval"]}, "scaler");
+  assert.deepEqual(junk.jobTypes, []);
+});
+test("vehicle capability is optional but explicit no-vehicle suppresses vehicle work", () => {
+  const noVehicle = preferences.sanitizePreferences({...scaler,
+    jobTypes: ["dump_run"], vehicleType: "no_vehicle"}, "scaler");
+  assert.equal(preferences.matchOpportunity(noVehicle, {
+    location: {latitude: 39.3, longitude: -76.62}, jobType: "dump_run"}).matched, false);
+});
 test("three sequential saved areas remain distinct with one primary", () => {
   const result = preferences.sanitizePreferences({...business, areas: [
     business.areas[0],

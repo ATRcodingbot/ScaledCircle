@@ -41,6 +41,9 @@ const expectedExports = [
   "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences",
+  "getMarketplaceWorkTypes",
+  "getPendingScalerPreferences",
+  "savePendingScalerPreferences",
   "resolveServiceAreaPlace",
   "evaluateOpportunityMatch",
 ];

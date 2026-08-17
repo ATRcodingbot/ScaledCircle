@@ -1,6 +1,7 @@
 "use strict";
 
 const geometryCodec = require("./service_area_geometry_codec");
+const workTypes = require("./marketplace_work_types");
 
 const SCHEMA_VERSION = "ServiceAreaPreferencesV1";
 const BUSINESS_SCHEMA_VERSION = "BusinessDiscoveryPreferencesV1";
@@ -12,8 +13,8 @@ const MAX_GOALS = 20;
 const BUSINESS_OUTSIDE = new Set(["none", "nearby", "maryland", "followed"]);
 const SCALER_TRAVEL = new Set(["never", "nearby", "worth_drive", "up_to_miles", "anywhere"]);
 const AREA_TYPES = new Set(["around_business", "place", "postal_codes", "drawn"]);
-const JOB_TYPES = new Set(["flyer_distribution", "door_hangers", "material_pickup",
-  "crew_jobs", "short_local", "long_high_paying", "door_to_door"]);
+const VEHICLE_TYPES = new Set(["car", "pickup_truck", "van", "box_truck", "no_vehicle"]);
+const VEHICLE_BEDS = new Set(["open", "covered"]);
 
 function text(value, max = 160) {
   return value == null ? "" : String(value).trim().slice(0, max);
@@ -112,12 +113,15 @@ function sanitizePreferences(input, authoritativeRole) {
     defaultResponseGoal: text(input.defaultResponseGoal, 160)};
   const travelMode = SCALER_TRAVEL.has(input.travelMode) ? input.travelMode : "nearby";
   const maxTravelMiles = Number(input.maxTravelMiles);
-  const jobTypes = list(input.jobTypes).filter((item) => JOB_TYPES.has(item));
+  const jobTypes = [...new Set(list(input.jobTypes).map(workTypes.canonicalId)
+    .filter((id) => id && workTypes.resolve(id).scalerSelectable))];
   const outreachOptIn = input.outreachOptIn === true;
   return {...base, roleSchemaVersion: SCALER_SCHEMA_VERSION, jobTypes,
     travelMode, maxTravelMiles: Number.isFinite(maxTravelMiles) && maxTravelMiles >= 1 &&
       maxTravelMiles <= 500 ? maxTravelMiles : 20, crewOptIn: input.crewOptIn === true,
-    outreachOptIn, notifications: {...base.notifications,
+    outreachOptIn, vehicleType: VEHICLE_TYPES.has(input.vehicleType) ? input.vehicleType : "",
+    vehicleBed: VEHICLE_BEDS.has(input.vehicleBed) ? input.vehicleBed : "",
+    notifications: {...base.notifications,
       doorToDoorOpportunities: outreachOptIn && base.notifications.doorToDoorOpportunities}};
 }
 function radians(value) { return value * Math.PI / 180; }
@@ -165,8 +169,11 @@ function matchOpportunity(preferences, opportunity, scope = "push") {
   const distances = matches.map((item) => item.distance).filter(Number.isFinite);
   const distance = distances.length ? Math.min(...distances) : null;
   const desired = preferences.role === "business" ? preferences.priorityServices : preferences.jobTypes;
-  const service = text(opportunity.service || opportunity.jobType, 100);
-  const serviceMatch = !service || !desired.length || desired.some((item) => item.toLowerCase() === service.toLowerCase());
+  const service = text(opportunity.workType || opportunity.jobType || opportunity.service, 100);
+  const canonicalService = preferences.role === "scaler" ? workTypes.canonicalId(service) : service;
+  const serviceMatch = preferences.role === "scaler" ?
+    (!service ? true : Boolean(canonicalService) && (!desired.length || desired.includes(canonicalService))) :
+    (!service || !desired.length || desired.some((item) => item.toLowerCase() === service.toLowerCase()));
   let travelMatch = area != null;
   if (preferences.role === "business" && !travelMatch) {
     travelMatch = preferences.outsideOpportunityScope === "maryland" &&
@@ -181,8 +188,11 @@ function matchOpportunity(preferences, opportunity, scope = "push") {
       (preferences.travelMode === "worth_drive" && distance != null &&
         Number(opportunity.pay) >= Math.max(100, distance * 3));
   }
-  if (opportunity.jobType === "door_to_door" && preferences.outreachOptIn !== true) travelMatch = false;
-  const matched = serviceMatch && (area != null || travelMatch);
+  const typeDefinition = preferences.role === "scaler" ? workTypes.resolve(canonicalService) : null;
+  if (typeDefinition?.requiresOutreachConsent && preferences.outreachOptIn !== true) travelMatch = false;
+  const capabilityMatch = !(typeDefinition?.requiresVehicle && preferences.vehicleType === "no_vehicle");
+  const consentMatch = !(typeDefinition?.requiresOutreachConsent && preferences.outreachOptIn !== true);
+  const matched = serviceMatch && capabilityMatch && consentMatch && (area != null || travelMatch);
   const reasons = [];
   if (area) reasons.push(`Inside ${area.area.name}.`);
   if (service && serviceMatch) reasons.push(`Matches your ${service} preference.`);
@@ -191,7 +201,7 @@ function matchOpportunity(preferences, opportunity, scope = "push") {
   if (!matched) reasons.push("Outside your saved notification preferences.");
   return {version: MATCH_VERSION, matched, matchScore: matched ? (area ? 100 : 70) : 0,
     distance: distance == null ? null : Math.round(distance * 10) / 10,
-    serviceAreaMatch: Boolean(area), serviceMatch, travelMatch, reasons};
+    serviceAreaMatch: Boolean(area), serviceMatch, travelMatch, capabilityMatch, reasons};
 }
 
 module.exports = {SCHEMA_VERSION, BUSINESS_SCHEMA_VERSION, SCALER_SCHEMA_VERSION,

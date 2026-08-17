@@ -27,6 +27,7 @@ const expected = [
   "approveSocialPostDraft", "scheduleSocialPostDraft", "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
   "saveDiscoveryPreferences", "evaluateOpportunityMatch",
+  "getMarketplaceWorkTypes", "getPendingScalerPreferences", "savePendingScalerPreferences",
   "resolveServiceAreaPlace",
 ];
 

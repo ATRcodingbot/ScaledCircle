@@ -30,6 +30,7 @@ const {
 const marketplace = require("./marketplace_finance");
 const campaignFundingQuote = require("./campaign_funding_quote");
 const discoveryPreferences = require("./discovery_preferences");
+const marketplaceWorkTypes = require("./marketplace_work_types");
 const serviceAreaGeometryCodec = require("./service_area_geometry_codec");
 const serviceAreaResolution = require("./service_area_resolution");
 const {scalerOpportunityDecision} = require("./opportunity_notification_policy");
@@ -160,6 +161,15 @@ async function requireVerifiedUser(request, message) {
       "permission-denied",
       "Verify your email address before using billing or receiving payments.",
     );
+  }
+  return context;
+}
+
+async function requirePendingScaler(request) {
+  const context = await requireVerifiedUser(request, "Verify your email to set up work preferences.");
+  if (context.role !== "scaler" || context.user.active === true ||
+      context.user.betaAccess === "approved") {
+    throw new HttpsError("permission-denied", "Pending Scaler setup is not available for this account.");
   }
   return context;
 }
@@ -4029,6 +4039,51 @@ exports.saveDiscoveryPreferences = onCall(
     const savedSnapshot = await reference.get();
     const authoritative = discoveryPreferences.sanitizePreferences(savedSnapshot.data(), context.role);
     return {preferences: {...authoritative, userUid: context.uid, preferenceVersion}};
+  },
+);
+
+/** Returns the one server-authored taxonomy projection used by Scaler setup. */
+exports.getMarketplaceWorkTypes = onCall(
+  {enforceAppCheck: false, maxInstances: 8},
+  async (request) => {
+    await requireVerifiedUser(request, "Sign in to view work preferences.");
+    return marketplaceWorkTypes.publicProjection();
+  },
+);
+
+/** Owner-only safe projection for verified Scalers who remain pending. */
+exports.getPendingScalerPreferences = onCall(
+  {enforceAppCheck: false, maxInstances: 8},
+  async (request) => {
+    const context = await requirePendingScaler(request);
+    const snapshot = await db.collection("discoveryPreferences").doc(context.uid).get();
+    return {preferences: snapshot.exists ?
+      discoveryPreferences.sanitizePreferences(snapshot.data(), "scaler") : null};
+  },
+);
+
+/** Saves only the pending Scaler's sanitized preference document; grants no access. */
+exports.savePendingScalerPreferences = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const context = await requirePendingScaler(request);
+    let value;
+    try { value = discoveryPreferences.sanitizePreferences(request.data?.preferences, "scaler"); }
+    catch (_) { throw new HttpsError("invalid-argument", "Check the saved work preferences."); }
+    const reference = db.collection("discoveryPreferences").doc(context.uid);
+    let preferenceVersion;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(reference);
+      preferenceVersion = Number(existing.data()?.preferenceVersion || 0) + 1;
+      const storedValue = serviceAreaGeometryCodec.encodeDiscoveryPreferencesForFirestore(value);
+      if (serviceAreaGeometryCodec.containsDirectNestedArray(storedValue)) {
+        throw new Error("invalid_nested_array_storage");
+      }
+      transaction.set(reference, {...storedValue, userUid: context.uid, preferenceVersion,
+        updatedBy: context.uid, updatedAt: FieldValue.serverTimestamp(),
+        createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp()});
+    });
+    return {preferences: {...value, userUid: context.uid, preferenceVersion}};
   },
 );
 

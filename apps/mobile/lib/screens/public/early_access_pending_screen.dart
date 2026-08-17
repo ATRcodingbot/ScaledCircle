@@ -2,11 +2,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'public_landing_screen.dart';
+import '../preferences/areas_preferences_screen.dart';
+import '../../services/discovery_preferences_service.dart';
 
-class EarlyAccessPendingScreen extends StatelessWidget {
+class EarlyAccessPendingScreen extends StatefulWidget {
   final String email;
+  final String? role;
 
-  const EarlyAccessPendingScreen({super.key, required this.email});
+  const EarlyAccessPendingScreen({super.key, required this.email, this.role});
+
+  @override
+  State<EarlyAccessPendingScreen> createState() => _EarlyAccessPendingScreenState();
+}
+
+class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
+  final _preferences = DiscoveryPreferencesService();
+  Map<String, dynamic>? _summary;
 
   Future<void> _returnToSite(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
@@ -54,7 +65,7 @@ class EarlyAccessPendingScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Your ScaledCircle account has been created for $email. '
+                      'Your ScaledCircle account has been created for ${widget.email}. '
                       "We're rolling out marketplace access in stages. We'll let you know when your account is ready.",
                       textAlign: TextAlign.center,
                       style: const TextStyle(
@@ -63,6 +74,57 @@ class EarlyAccessPendingScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    if (widget.role == 'scaler') ...[
+                      if (_summary != null)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.tune),
+                            title: const Text("You're set up"),
+                            subtitle: Text(
+                              '${(_summary!['areas'] as List? ?? const []).length} Work Areas • '
+                              '${(_summary!['jobTypes'] as List? ?? const []).length} Job Interests • '
+                              'Email ${(_summary!['alertDelivery'] as Map?)?['email'] == true ? 'On' : 'Off'}',
+                            ),
+                          ),
+                        ),
+                      FilledButton.tonalIcon(
+                        onPressed: () async {
+                          await FirebaseAuth.instance.currentUser?.reload();
+                          if (FirebaseAuth.instance.currentUser?.emailVerified != true) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Verify your email first, then try again.'),
+                            ));
+                            return;
+                          }
+                          if (!context.mounted) return;
+                          await Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => AreasPreferencesScreen(
+                              role: 'scaler',
+                              onboarding: true,
+                              loadPreferences: _preferences.loadPendingScaler,
+                              savePreferences: _preferences.savePendingScaler,
+                              onSaved: (saved) {
+                                setState(() => _summary = saved);
+                                Navigator.of(context).pop();
+                              },
+                              onSkip: () => Navigator.of(context).pop(),
+                            ),
+                          ));
+                        },
+                        icon: const Icon(Icons.work_outline),
+                        label: Text(_summary == null
+                            ? 'Set Up Work Preferences'
+                            : 'Edit Work Preferences'),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Choose Work Areas, job interests, travel, and alerts. This does not grant marketplace access.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Color(0xFFB8C9D8)),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                     FilledButton(
                       onPressed: () => _returnToSite(context),
                       style: FilledButton.styleFrom(

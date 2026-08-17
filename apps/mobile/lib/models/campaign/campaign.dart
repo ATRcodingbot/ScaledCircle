@@ -319,6 +319,22 @@ class Campaign {
 
   static CampaignType _campaignTypeFromString(String? value) {
     switch (value) {
+      case 'Neighborhood Canvassing':
+      case 'neighborhood_canvassing':
+      case 'door_to_door':
+      case 'door_to_door_outreach':
+        return CampaignType.neighborhoodCanvassing;
+
+      case 'Yard Cleanup':
+      case 'yard_cleanup':
+        return CampaignType.yardCleanup;
+
+      case 'Junk Removal':
+      case 'junkRemoval':
+      case 'junk_removal':
+        return CampaignType.junkRemoval;
+
+      case 'door_hangers':
       case 'door_hanger_distribution':
         return CampaignType.doorHangerDistribution;
 
@@ -404,13 +420,13 @@ class Campaign {
         return 'flyer_distribution';
 
       case CampaignType.neighborhoodCanvassing:
-        return "Neighborhood Canvassing";
+        return 'door_to_door_outreach';
 
       case CampaignType.yardCleanup:
-        return "Yard Cleanup";
+        return 'yard_cleanup';
 
       case CampaignType.junkRemoval:
-        return "Junk Removal";
+        return 'junk_removal';
 
       case CampaignType.doorHangerDistribution:
         return 'door_hanger_distribution';
