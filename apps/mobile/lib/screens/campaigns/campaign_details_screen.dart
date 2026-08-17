@@ -32,6 +32,18 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
   final PlatformBillingService _billingService = PlatformBillingService();
   final SecureFunctionService _secureFunctions = const SecureFunctionService();
+  int? _reviewQuoteWorkerCents;
+  Future<CampaignCostQuote>? _reviewQuoteFuture;
+
+  Future<CampaignCostQuote> _reviewQuote(double workerBudget) {
+    final workerCents = (workerBudget * 100).round();
+    if (_reviewQuoteFuture == null ||
+        _reviewQuoteWorkerCents != workerCents) {
+      _reviewQuoteWorkerCents = workerCents;
+      _reviewQuoteFuture = _billingService.campaignCostQuote(workerBudget);
+    }
+    return _reviewQuoteFuture!;
+  }
   Future<void> _openScalerReviews(BuildContext context, String scalerId) async {
     await Navigator.push(
       context,
@@ -1823,20 +1835,65 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
               const SizedBox(height: 12),
 
               Card(
-                child: ListTile(
-                  leading: Icon(
-                    fundingStatus == 'reserved'
-                        ? Icons.lock
-                        : Icons.lock_open_outlined,
-                  ),
-                  title: const Text('Worker Funding'),
-                  subtitle: Text(
-                    fundingStatus == 'reserved'
-                        ? '\$${reservedWorkerBudget.toStringAsFixed(2)} secured for Scaler pay'
-                        : maximumWorkerBudget > 0
-                        ? '\$${maximumWorkerBudget.toStringAsFixed(2)} required before campaign launch'
-                        : 'Worker funding has not been secured.',
-                  ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: maximumWorkerBudget <= 0 || fundingStatus == 'reserved'
+                      ? ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            fundingStatus == 'reserved'
+                                ? Icons.lock
+                                : Icons.lock_open_outlined,
+                          ),
+                          title: const Text('Worker Funding'),
+                          subtitle: Text(
+                            fundingStatus == 'reserved'
+                                ? '\$${reservedWorkerBudget.toStringAsFixed(2)} secured for Scaler pay'
+                                : 'Worker funding has not been secured.',
+                          ),
+                        )
+                      : FutureBuilder<CampaignCostQuote>(
+                          future: _reviewQuote(maximumWorkerBudget),
+                          builder: (context, snapshot) {
+                            final quote = snapshot.data;
+                            if (quote == null) {
+                              return const ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.lock_open_outlined),
+                                title: Text('Campaign Cost'),
+                                subtitle: Text(
+                                  'Confirming the current total...',
+                                ),
+                              );
+                            }
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'CAMPAIGN COST',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Worker compensation  \$${quote.workerCompensation.toStringAsFixed(2)}',
+                                ),
+                                Text(
+                                  'Platform fee (${quote.platformFeePercentLabel})  \$${quote.platformFee.toStringAsFixed(2)}',
+                                ),
+                                Text(
+                                  'Estimated total  \$${quote.estimatedTotal.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'The final campaign amount is confirmed again before funding.',
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                 ),
               ),
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -23,6 +25,7 @@ class FlyerCampaignScreen extends StatefulWidget {
   final String? initialService;
   final String? propertyIntelligenceAnalysisId;
   final PlatformBillingService? billingService;
+  final Future<CampaignCostQuote> Function(double workerBudget)? quoteLoader;
   final Future<Map<String, dynamic>?> Function()? loadPreferences;
   final Future<void> Function(BuildContext context)? draftAndAreaFlowOverride;
 
@@ -35,6 +38,7 @@ class FlyerCampaignScreen extends StatefulWidget {
     this.initialService,
     this.propertyIntelligenceAnalysisId,
     this.billingService,
+    this.quoteLoader,
     this.loadPreferences,
     this.draftAndAreaFlowOverride,
   });
@@ -79,6 +83,11 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   bool _trackingEnabled = false;
 
   bool publishing = false;
+  Timer? _quoteDebounce;
+  CampaignCostQuote? _costQuote;
+  bool _quoteUpdating = false;
+  String? _quoteError;
+  int _quoteRequestSequence = 0;
   List<Map<String, double>> _campaignArea = const [];
   String? _campaignAreaName;
   List<SavedPropertyAreaContext> _savedAreas = const [];
@@ -189,6 +198,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
   @override
   void dispose() {
+    _quoteDebounce?.cancel();
     campaignNameController.dispose();
     descriptionController.dispose();
     payController.dispose();
@@ -198,6 +208,80 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     _formScrollController.dispose();
 
     super.dispose();
+  }
+
+  double get _currentWorkerBudget {
+    final basePay = double.tryParse(payController.text.trim()) ?? 0;
+    final bonus = double.tryParse(bonusController.text.trim()) ?? 0;
+    final scalers = AppEnvironmentConfig.isLocal
+        ? int.tryParse(scalerCountController.text.trim()) ?? 1
+        : 1;
+    return (basePay + bonus) * scalers;
+  }
+
+  void _scheduleCampaignCostQuote() {
+    _quoteDebounce?.cancel();
+    final workerBudget = _currentWorkerBudget;
+    if (workerBudget <= 0) {
+      setState(() {
+        _costQuote = null;
+        _quoteUpdating = false;
+        _quoteError = null;
+      });
+      return;
+    }
+    setState(() {
+      _quoteUpdating = true;
+      _quoteError = null;
+    });
+    _quoteDebounce = Timer(
+      const Duration(milliseconds: 400),
+      () => _requestCampaignCostQuote(workerBudget),
+    );
+  }
+
+  Future<void> _requestCampaignCostQuote([double? requestedBudget]) async {
+    _quoteDebounce?.cancel();
+    final workerBudget = requestedBudget ?? _currentWorkerBudget;
+    if (workerBudget <= 0) return;
+    final requestSequence = ++_quoteRequestSequence;
+    if (!_quoteUpdating && mounted) {
+      setState(() {
+        _quoteUpdating = true;
+        _quoteError = null;
+      });
+    }
+    try {
+      final quote = await (widget.quoteLoader != null
+          ? widget.quoteLoader!(workerBudget)
+          : _billingService.campaignCostQuote(workerBudget));
+      if (!mounted || requestSequence != _quoteRequestSequence) return;
+      if ((quote.workerCompensation - _currentWorkerBudget).abs() > 0.001) {
+        return;
+      }
+      setState(() {
+        _costQuote = quote;
+        _quoteUpdating = false;
+        _quoteError = null;
+      });
+    } catch (_) {
+      if (!mounted || requestSequence != _quoteRequestSequence) return;
+      setState(() {
+        _quoteUpdating = false;
+        _quoteError = "We couldn't update the campaign total right now.";
+      });
+    }
+  }
+
+  String _platformFeeLabel(CampaignCostQuote quote) {
+    final percent = quote.platformFeeRateBps / 100;
+    final formatted = percent == percent.roundToDouble()
+        ? percent.toStringAsFixed(0)
+        : percent
+              .toStringAsFixed(2)
+              .replaceFirst(RegExp(r'0+$'), '')
+              .replaceFirst(RegExp(r'\.$'), '');
+    return 'PLATFORM FEE ($formatted%)';
   }
 
   Future<bool> _validateAndRevealFirstError() async {
@@ -865,9 +949,6 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         ? int.tryParse(scalerCountController.text.trim()) ?? 1
         : 1;
 
-    final previewWorkerBudget =
-        (previewBasePay + previewBonus) * previewScalers;
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Create ${_campaignTypeLabel(_campaignType)}'),
@@ -1259,9 +1340,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                     enabled: AppEnvironmentConfig.isLocal,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.next,
-                    onChanged: (_) {
-                      setState(() {});
-                    },
+                    onChanged: (_) => _scheduleCampaignCostQuote(),
                     decoration: InputDecoration(
                       labelText: 'Scalers Needed',
                       helperText: AppEnvironmentConfig.isLocal
@@ -1301,9 +1380,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                       decimal: true,
                     ),
                     textInputAction: TextInputAction.next,
-                    onChanged: (_) {
-                      setState(() {});
-                    },
+                    onChanged: (_) => _scheduleCampaignCostQuote(),
                     decoration: const InputDecoration(
                       labelText: 'Base Pay per Scaler (\$)',
                       border: OutlineInputBorder(),
@@ -1331,9 +1408,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                       decimal: true,
                     ),
                     textInputAction: TextInputAction.done,
-                    onChanged: (_) {
-                      setState(() {});
-                    },
+                    onChanged: (_) => _scheduleCampaignCostQuote(),
                     decoration: const InputDecoration(
                       labelText: 'Completion Bonus per Scaler (\$)',
                       helperText: 'Paid when completion requirements are met.',
@@ -1380,26 +1455,64 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
                           _costRow(
                             'SCALER PAY',
-                            previewWorkerBudget,
+                            previewBasePay * previewScalers,
                             bold: true,
                           ),
 
+                          if (previewBonus > 0) ...[
+                            const SizedBox(height: 8),
+                            _costRow(
+                              'COMPLETION BONUS',
+                              previewBonus * previewScalers,
+                            ),
+                          ],
+
                           const SizedBox(height: 8),
 
-                          const Text(
-                            'PLATFORM FEE\nCalculated before checkout',
-                          ),
+                          if (_costQuote != null)
+                            _costRow(
+                              _platformFeeLabel(_costQuote!),
+                              _costQuote!.platformFee,
+                              key: const Key('campaign-platform-fee'),
+                            )
+                          else if (_quoteError == null)
+                            const Text(
+                              'PLATFORM FEE\nEnter Scaler pay to calculate',
+                            ),
 
                           const SizedBox(height: 8),
 
-                          const Text(
-                            'ESTIMATED TOTAL\nShown when the authoritative amount is available',
-                          ),
+                          if (_costQuote != null)
+                            _costRow(
+                              'ESTIMATED TOTAL',
+                              _costQuote!.estimatedTotal,
+                              key: const Key('campaign-estimated-total'),
+                              bold: true,
+                            ),
+
+                          if (_quoteUpdating)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 10),
+                              child: Text('Updating total...'),
+                            ),
+
+                          if (_quoteError != null) ...[
+                            const SizedBox(height: 10),
+                            Text(_quoteError!),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                onPressed: _requestCampaignCostQuote,
+                                child: const Text('Try Again'),
+                              ),
+                            ),
+                          ],
 
                           const SizedBox(height: 12),
 
                           const Text(
-                            '1 credit = \$1. An active monthly subscription '
+                            'Your final campaign amount is confirmed again '
+                            'before funding. An active monthly subscription '
                             'is required to publish campaigns.',
                             style: TextStyle(fontSize: 12),
                           ),
@@ -1466,8 +1579,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     );
   }
 
-  Widget _costRow(String label, double amount, {bool bold = false}) {
+  Widget _costRow(String label, double amount, {Key? key, bool bold = false}) {
     return Row(
+      key: key,
       children: [
         Expanded(
           child: Text(

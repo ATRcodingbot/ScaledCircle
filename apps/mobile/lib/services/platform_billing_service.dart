@@ -4,6 +4,62 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'secure_function_service.dart';
 
+class CampaignCostQuote {
+  const CampaignCostQuote({
+    required this.workerCompensationCents,
+    required this.platformFeeRateBps,
+    required this.platformFeeCents,
+    required this.estimatedTotalCents,
+    required this.currency,
+    required this.policyVersion,
+  });
+
+  final int workerCompensationCents;
+  final int platformFeeRateBps;
+  final int platformFeeCents;
+  final int estimatedTotalCents;
+  final String currency;
+  final String policyVersion;
+
+  double get workerCompensation => workerCompensationCents / 100;
+  double get platformFee => platformFeeCents / 100;
+  double get estimatedTotal => estimatedTotalCents / 100;
+  String get platformFeePercentLabel {
+    final percent = platformFeeRateBps / 100;
+    return percent == percent.roundToDouble()
+        ? '${percent.toInt()}%'
+        : '${percent.toStringAsFixed(2)}%';
+  }
+
+  factory CampaignCostQuote.fromCallable(Map<String, dynamic> result) {
+    final worker = (result['workerAmountCents'] as num?)?.toInt();
+    final rate = (result['platformFeeRateBasisPoints'] as num?)?.toInt();
+    final fee = (result['platformFeeCents'] as num?)?.toInt();
+    final total = (result['businessChargeCents'] as num?)?.toInt();
+    final currency = result['currency']?.toString().toLowerCase();
+    if (worker == null ||
+        worker <= 0 ||
+        rate == null ||
+        rate < 0 ||
+        fee == null ||
+        fee < 0 ||
+        total == null ||
+        total != worker + fee ||
+        currency == null ||
+        currency.isEmpty) {
+      throw Exception('Marketplace pricing policy is unavailable.');
+    }
+    return CampaignCostQuote(
+      workerCompensationCents: worker,
+      platformFeeRateBps: rate,
+      platformFeeCents: fee,
+      estimatedTotalCents: total,
+      currency: currency,
+      policyVersion: 'CampaignCostQuoteV${result['quoteVersion'] ?? 1}',
+    );
+  }
+}
+
 class PlatformBillingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final SecureFunctionService _secureFunctions = const SecureFunctionService();
@@ -134,9 +190,7 @@ class PlatformBillingService {
     await _openStripeUrl(result['url']);
   }
 
-  Future<Map<String, dynamic>> marketplacePolicy({
-    required String businessId,
-  }) {
+  Future<Map<String, dynamic>> marketplacePolicy({required String businessId}) {
     return _callSecureFunction(
       businessId: businessId,
       functionName: 'getMarketplacePolicy',
@@ -146,7 +200,7 @@ class PlatformBillingService {
 
   /// Server-authoritative marketplace quote. Flutter formats returned cents;
   /// it never owns the platform-fee policy.
-  Future<Map<String, double>> campaignQuoteEstimate(double workerBudget) async {
+  Future<CampaignCostQuote> campaignCostQuote(double workerBudget) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception('You must be logged in.');
     final result = await _callSecureFunction(
@@ -154,17 +208,15 @@ class PlatformBillingService {
       functionName: 'quoteCampaignFunding',
       data: {'workerAmountCents': (workerBudget * 100).round()},
     );
-    final workerAmountCents = (result['workerAmountCents'] as num?)?.toInt();
-    final platformFeeCents = (result['platformFeeCents'] as num?)?.toInt();
-    final businessChargeCents = (result['businessChargeCents'] as num?)?.toInt();
-    if (workerAmountCents == null || platformFeeCents == null ||
-        businessChargeCents == null) {
-      throw Exception('Marketplace pricing policy is unavailable.');
-    }
+    return CampaignCostQuote.fromCallable(result);
+  }
+
+  Future<Map<String, double>> campaignQuoteEstimate(double workerBudget) async {
+    final quote = await campaignCostQuote(workerBudget);
     return {
-      'workerBudget': workerAmountCents / 100,
-      'platformFee': platformFeeCents / 100,
-      'totalCharge': businessChargeCents / 100,
+      'workerBudget': quote.workerCompensation,
+      'platformFee': quote.platformFee,
+      'totalCharge': quote.estimatedTotal,
     };
   }
 
@@ -238,5 +290,4 @@ class PlatformBillingService {
 
     return expires.toDate().isAfter(DateTime.now());
   }
-
 }
