@@ -29,6 +29,7 @@ const {
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
 const discoveryPreferences = require("./discovery_preferences");
+const serviceAreaGeometryCodec = require("./service_area_geometry_codec");
 const serviceAreaResolution = require("./service_area_resolution");
 const {scalerOpportunityDecision} = require("./opportunity_notification_policy");
 const scalerCapacity = require("./scaler_notification_capacity");
@@ -4016,11 +4017,17 @@ exports.saveDiscoveryPreferences = onCall(
     await db.runTransaction(async (transaction) => {
       const existing = await transaction.get(reference);
       preferenceVersion = Number(existing.data()?.preferenceVersion || 0) + 1;
-      transaction.set(reference, {...value, userUid: context.uid, preferenceVersion,
+      const storedValue = serviceAreaGeometryCodec.encodeDiscoveryPreferencesForFirestore(value);
+      if (serviceAreaGeometryCodec.containsDirectNestedArray(storedValue)) {
+        throw new Error("invalid_nested_array_storage");
+      }
+      transaction.set(reference, {...storedValue, userUid: context.uid, preferenceVersion,
         updatedBy: context.uid, updatedAt: FieldValue.serverTimestamp(),
         createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp()});
     });
-    return {preferences: {...value, userUid: context.uid, preferenceVersion}};
+    const savedSnapshot = await reference.get();
+    const authoritative = discoveryPreferences.sanitizePreferences(savedSnapshot.data(), context.role);
+    return {preferences: {...authoritative, userUid: context.uid, preferenceVersion}};
   },
 );
 

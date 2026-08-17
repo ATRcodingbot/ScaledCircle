@@ -501,8 +501,8 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                                   : 'Choose a Nearby Map Area')
                             : geometry.length >= 3
                             ? (_business
-                                  ? 'Use This Area'
-                                  : 'Use This Work Area')
+                                  ? 'Adjust Boundary'
+                                  : 'Adjust Work Area')
                             : 'Choose a Nearby Map Area',
                       ),
                     ),
@@ -600,7 +600,16 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                         });
                       }
                     },
-              child: Text(dialogSaving ? 'Saving…' : 'Save Area'),
+              child: Text(
+                dialogSaving
+                    ? 'Saving…'
+                    : resolutionError ==
+                          "We couldn't save this service area."
+                    ? 'Try Again'
+                    : _business
+                    ? 'Save Service Area'
+                    : 'Save Work Area',
+              ),
             ),
           ],
         ),

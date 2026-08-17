@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const geometryCodec = require("./service_area_geometry_codec");
 const CACHE_VERSION = "USBoundaryCacheV3";
 const LEGACY_CACHE_VERSION = "NominatimBoundaryCacheV1";
 const RESOLUTION_VERSION = "ServiceAreaResolutionV2";
@@ -48,9 +49,7 @@ function normalizePoints(value) {
   })) : [];
 }
 function encodeCacheResult(result) {
-  const geometry = normalizePoints(result.geometry);
-  const geometryParts = Array.isArray(result.geometryParts) ? result.geometryParts
-    .map((points) => ({points: normalizePoints(points)})).filter((part) => part.points.length >= 3) : [];
+  const encodedGeometry = geometryCodec.encodeServiceAreaGeometryForFirestore(result);
   return {id: String(result.id || ""), primaryText: String(result.primaryText || ""),
     secondaryText: String(result.secondaryText || ""), fullAddress: String(result.fullAddress || ""),
     canonicalName: String(result.fullAddress || result.primaryText || ""),
@@ -64,15 +63,12 @@ function encodeCacheResult(result) {
     geographicId: String(result.geographicId || ""), sourceVintage: String(result.sourceVintage || ""),
     provider: String(result.resolutionSource || ""), resolutionSource: String(result.resolutionSource || ""),
     resolutionVersion: String(result.resolutionVersion || RESOLUTION_VERSION),
-    geometry: {points: geometry}, geometryParts};
+    geometryEncoding: geometryCodec.GEOMETRY_ENCODING,
+    geometry: encodedGeometry.geometry, geometryParts: encodedGeometry.geometryParts};
 }
 function decodeCacheResult(stored) {
   if (!stored || typeof stored !== "object") return null;
-  const geometry = normalizePoints(stored.geometry?.points || stored.geometry);
-  const geometryParts = Array.isArray(stored.geometryParts) ? stored.geometryParts
-    .map((part) => normalizePoints(part?.points)).filter((points) => points.length >= 3) : [];
-  return {...stored, geometry, geometryParts: geometryParts.length ? geometryParts :
-    (geometry.length >= 3 ? [geometry] : [])};
+  return geometryCodec.decodeServiceAreaGeometryFromFirestore(stored);
 }
 function encodeCacheDocument(results, now) {
   return {cacheVersion: CACHE_VERSION, resolutionVersion: RESOLUTION_VERSION,

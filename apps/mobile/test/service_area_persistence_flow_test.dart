@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/preferences/areas_preferences_screen.dart';
 import 'package:flutter_app/services/address_search_service.dart';
+import 'package:flutter_app/services/service_area_geometry_codec.dart';
 
 void main() {
   testWidgets(
@@ -37,7 +38,23 @@ void main() {
             searchAddresses: (query) async => [callableSuggestion],
             savePreferences: (payload) async {
               persisted = payload;
-              return {...payload, 'preferenceVersion': 1};
+              final stored = Map<String, dynamic>.from(payload);
+              stored['geometryEncoding'] = ServiceAreaGeometryCodec.encoding;
+              stored['areas'] = (payload['areas'] as List).map((raw) {
+                final area = Map<String, dynamic>.from(raw as Map);
+                return {
+                  ...area,
+                  'geometryEncoding': ServiceAreaGeometryCodec.encoding,
+                  'geometry': {'points': area['geometry']},
+                  'geometryParts': (area['geometryParts'] as List)
+                      .map((part) => {'points': part})
+                      .toList(),
+                };
+              }).toList();
+              return ServiceAreaGeometryCodec.decodePreferences({
+                ...stored,
+                'preferenceVersion': 1,
+              });
             },
           ),
         ),
@@ -48,7 +65,7 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Save Area'),
+              find.widgetWithText(FilledButton, 'Save Service Area'),
             )
             .onPressed,
         isNull,
@@ -64,12 +81,12 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Save Area'),
+              find.widgetWithText(FilledButton, 'Save Service Area'),
             )
             .onPressed,
         isNotNull,
       );
-      await tester.tap(find.widgetWithText(FilledButton, 'Save Area'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Save Service Area'));
       await tester.pumpAndSettle();
       expect((persisted?['areas'] as List).single['geometry'], hasLength(3));
       expect((persisted?['areas'] as List).single['geographicId'], '24003');
@@ -79,7 +96,7 @@ void main() {
   );
 
   testWidgets(
-    'Save Area waits for authoritative preferences and refreshes the card',
+    'Save Service Area waits for authoritative preferences and refreshes the card',
     (tester) async {
       final initial = <String, dynamic>{
         'areas': [
@@ -121,7 +138,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Edit'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Save Area'));
+      await tester.tap(find.text('Save Service Area'));
       await tester.pumpAndSettle();
 
       expect(saveCalls, 1);

@@ -194,7 +194,7 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
                             );
                           }
                         : null,
-                    child: const Text('Use This Area'),
+                    child: const Text('Apply Boundary'),
                   ),
                 ],
               ),

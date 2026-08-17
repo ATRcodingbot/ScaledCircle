@@ -1,5 +1,7 @@
 "use strict";
 
+const geometryCodec = require("./service_area_geometry_codec");
+
 const SCHEMA_VERSION = "ServiceAreaPreferencesV1";
 const BUSINESS_SCHEMA_VERSION = "BusinessDiscoveryPreferencesV1";
 const SCALER_SCHEMA_VERSION = "ScalerDiscoveryPreferencesV1";
@@ -89,6 +91,7 @@ function sanitizeAlertDelivery(role, value) {
   };
 }
 function sanitizePreferences(input, authoritativeRole) {
+  input = geometryCodec.decodeDiscoveryPreferencesFromFirestore(input);
   if (!input || typeof input !== "object" || !["business", "scaler"].includes(authoritativeRole)) {
     throw new Error("invalid_discovery_preferences");
   }

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'service_area_geometry_codec.dart';
 
 class DiscoveryPreferencesService {
   DiscoveryPreferencesService({
@@ -23,16 +24,17 @@ class DiscoveryPreferencesService {
         .collection('discoveryPreferences')
         .doc(_uid)
         .get();
-    return snapshot.data();
+    final data = snapshot.data();
+    return data == null ? null : ServiceAreaGeometryCodec.decodePreferences(data);
   }
 
   Future<Map<String, dynamic>> save(Map<String, dynamic> preferences) async {
     final result = await _functions
         .httpsCallable('saveDiscoveryPreferences')
         .call({'preferences': preferences});
-    return Map<String, dynamic>.from(
+    return ServiceAreaGeometryCodec.decodePreferences(Map<String, dynamic>.from(
       Map<String, dynamic>.from(result.data as Map)['preferences'] as Map,
-    );
+    ));
   }
 
   Future<Map<String, dynamic>> explainMatch(
