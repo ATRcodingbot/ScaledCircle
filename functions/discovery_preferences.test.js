@@ -75,6 +75,33 @@ test("vehicle capability is optional but explicit no-vehicle suppresses vehicle 
   assert.equal(preferences.matchOpportunity(noVehicle, {
     location: {latitude: 39.3, longitude: -76.62}, jobType: "dump_run"}).matched, false);
 });
+test("Scaler other work interests are bounded plain text and survive sanitization", () => {
+  const value = preferences.sanitizePreferences({...scaler,
+    otherWorkInterests: "  <script>alert('x')</script> Junk removal and hauling  "}, "scaler");
+  assert.equal(value.otherWorkInterests,
+    "<script>alert('x')</script> Junk removal and hauling");
+  assert.equal(preferences.sanitizePreferences({...value}, "scaler").otherWorkInterests,
+    value.otherWorkInterests);
+  assert.equal(preferences.sanitizePreferences({...scaler, otherWorkInterests: ""}, "scaler")
+    .otherWorkInterests, "");
+  assert.throws(() => preferences.sanitizePreferences({...scaler,
+    otherWorkInterests: "x".repeat(preferences.MAX_OTHER_WORK_INTERESTS + 1)}, "scaler"),
+  /invalid_other_work_interests/);
+  assert.throws(() => preferences.sanitizePreferences({...scaler,
+    otherWorkInterests: {unexpected: true}}, "scaler"), /invalid_other_work_interests/);
+});
+test("Business payloads cannot write Scaler other interests", () => {
+  const value = preferences.sanitizePreferences({otherWorkInterests: "Dump Runs"}, "business");
+  assert.equal(value.otherWorkInterests, undefined);
+});
+test("free-text interests never affect OpportunityMatchV1", () => {
+  const withText = preferences.sanitizePreferences({...scaler,
+    jobTypes: ["flyer_distribution"], otherWorkInterests: "mystery_job dump runs"}, "scaler");
+  const opportunity = {location: {latitude: 39.3, longitude: -76.62}, jobType: "dump_run"};
+  assert.equal(preferences.matchOpportunity(withText, opportunity).matched, false);
+  assert.deepEqual(preferences.matchOpportunity(withText, opportunity),
+    preferences.matchOpportunity({...withText, otherWorkInterests: ""}, opportunity));
+});
 test("three sequential saved areas remain distinct with one primary", () => {
   const result = preferences.sanitizePreferences({...business, areas: [
     business.areas[0],

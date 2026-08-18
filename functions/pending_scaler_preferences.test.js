@@ -21,6 +21,8 @@ test("pending preference callables only read or write the caller-owned projectio
   const callables = source.slice(start, end);
   assert.match(callables, /doc\(context\.uid\)/);
   assert.match(callables, /sanitizePreferences\([^)]*, "scaler"\)/);
+  assert.match(callables, /collection\("discoveryPreferences"\)\.doc\(context\.uid\)/);
+  assert.match(callables, /request\.data\?\.preferences/);
   for (const forbidden of ["campaigns", "campaignApplications", "jobRooms", "trackingSessions",
     "wallets", "payments", "payout", "betaAccess:", "active:", "role:"])
     assert.doesNotMatch(callables, new RegExp(forbidden));

@@ -51,6 +51,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   bool _crew = false;
   String _vehicleType = '';
   String _vehicleBed = '';
+  late final TextEditingController _otherWorkInterests;
   List<MarketplaceWorkType> _workTypes = const [];
   bool _loading = true;
   bool _saving = false;
@@ -66,6 +67,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   @override
   void initState() {
     super.initState();
+    _otherWorkInterests = TextEditingController();
     _priorities.addAll(widget.initialServices);
     _notifications = _business
         ? {
@@ -115,6 +117,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
       _crew = data['crewOptIn'] == true;
       _vehicleType = data['vehicleType']?.toString() ?? '';
       _vehicleBed = data['vehicleBed']?.toString() ?? '';
+      _otherWorkInterests.text = data['otherWorkInterests']?.toString() ?? '';
       _notifications = Map<String, bool>.from(
         (data['notifications'] as Map? ?? const {}).map(
           (key, value) => MapEntry(key.toString(), value == true),
@@ -130,6 +133,12 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
       _alertDelivery['push'] = false;
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  void dispose() {
+    _otherWorkInterests.dispose();
+    super.dispose();
   }
 
   List<String> _strings(dynamic value) => (value as List? ?? const [])
@@ -622,8 +631,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               child: Text(
                 dialogSaving
                     ? 'Saving…'
-                    : resolutionError ==
-                          "We couldn't save this service area."
+                    : resolutionError == "We couldn't save this service area."
                     ? 'Try Again'
                     : _business
                     ? 'Save Service Area'
@@ -689,6 +697,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
         'crewOptIn': _crew,
         'vehicleType': _vehicleType,
         'vehicleBed': _vehicleBed,
+        'otherWorkInterests': _otherWorkInterests.text.trim(),
       });
     }
     return payload;
@@ -869,7 +878,11 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.onboarding ? 'Set Up Work Preferences' : 'Areas & Preferences')),
+    appBar: AppBar(
+      title: Text(
+        widget.onboarding ? 'Set Up Work Preferences' : 'Areas & Preferences',
+      ),
+    ),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : ListView(
@@ -975,15 +988,37 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: _workTypes
-                      .where((type) => type.scalerSelectable && !type.requiresOutreachConsent)
-                      .map((type) => FilterChip(
-                            label: Text(type.customerLabel),
-                            selected: _jobTypes.contains(type.id),
-                            onSelected: (value) => setState(() => value
+                      .where(
+                        (type) =>
+                            type.scalerSelectable &&
+                            !type.requiresOutreachConsent,
+                      )
+                      .map(
+                        (type) => FilterChip(
+                          label: Text(type.customerLabel),
+                          selected: _jobTypes.contains(type.id),
+                          onSelected: (value) => setState(
+                            () => value
                                 ? _jobTypes.add(type.id)
-                                : _jobTypes.remove(type.id)),
-                          ))
+                                : _jobTypes.remove(type.id),
+                          ),
+                        ),
+                      )
                       .toList(),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _otherWorkInterests,
+                  onChanged: (_) => setState(() {}),
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: "Other work you're interested in (optional)",
+                    helperText:
+                        "Tell us about other work you'd be interested in as we add more job categories.",
+                    hintText:
+                        'Junk removal, hauling, moving help, cleanup work…',
+                  ),
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: _travelMode,
@@ -1042,8 +1077,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                     'Off by default. Other field work does not turn this on.',
                   ),
                 ),
-                if (_workTypes.any((type) =>
-                    type.requiresVehicle && _jobTypes.contains(type.id))) ...[
+                if (_workTypes.any(
+                  (type) => type.requiresVehicle && _jobTypes.contains(type.id),
+                )) ...[
                   DropdownButtonFormField<String>(
                     initialValue: _vehicleType.isEmpty ? null : _vehicleType,
                     decoration: const InputDecoration(
@@ -1051,22 +1087,43 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                     ),
                     items: const [
                       DropdownMenuItem(value: 'car', child: Text('Car')),
-                      DropdownMenuItem(value: 'pickup_truck', child: Text('Pickup Truck')),
+                      DropdownMenuItem(
+                        value: 'pickup_truck',
+                        child: Text('Pickup Truck'),
+                      ),
                       DropdownMenuItem(value: 'van', child: Text('Van')),
-                      DropdownMenuItem(value: 'box_truck', child: Text('Box Truck')),
-                      DropdownMenuItem(value: 'no_vehicle', child: Text('No Vehicle')),
+                      DropdownMenuItem(
+                        value: 'box_truck',
+                        child: Text('Box Truck'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'no_vehicle',
+                        child: Text('No Vehicle'),
+                      ),
                     ],
-                    onChanged: (value) => setState(() => _vehicleType = value ?? ''),
+                    onChanged: (value) =>
+                        setState(() => _vehicleType = value ?? ''),
                   ),
-                  if (_vehicleType == 'pickup_truck' || _vehicleType == 'van' || _vehicleType == 'box_truck')
+                  if (_vehicleType == 'pickup_truck' ||
+                      _vehicleType == 'van' ||
+                      _vehicleType == 'box_truck')
                     DropdownButtonFormField<String>(
                       initialValue: _vehicleBed.isEmpty ? null : _vehicleBed,
-                      decoration: const InputDecoration(labelText: 'Cargo area (optional)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Cargo area (optional)',
+                      ),
                       items: const [
-                        DropdownMenuItem(value: 'open', child: Text('Open bed')),
-                        DropdownMenuItem(value: 'covered', child: Text('Covered / enclosed')),
+                        DropdownMenuItem(
+                          value: 'open',
+                          child: Text('Open bed'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'covered',
+                          child: Text('Covered / enclosed'),
+                        ),
                       ],
-                      onChanged: (value) => setState(() => _vehicleBed = value ?? ''),
+                      onChanged: (value) =>
+                          setState(() => _vehicleBed = value ?? ''),
                     ),
                 ],
               ],
@@ -1167,16 +1224,40 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                           (_business ? _priorities : _jobTypes).isEmpty
                               ? 'You can choose this later.'
                               : _business
-                                  ? _priorities.join(' • ')
-                                  : _jobTypes.map((id) => _workTypes
-                                      .where((type) => type.id == id)
-                                      .map((type) => type.customerLabel)
-                                      .firstOrNull ?? id).join(' • '),
+                              ? _priorities.join(' • ')
+                              : _jobTypes
+                                    .map(
+                                      (id) =>
+                                          _workTypes
+                                              .where((type) => type.id == id)
+                                              .map((type) => type.customerLabel)
+                                              .firstOrNull ??
+                                          id,
+                                    )
+                                    .join(' • '),
                         ),
                         if (!_business) ...[
+                          if (_otherWorkInterests.text.trim().isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            const Text(
+                              'OTHER INTERESTS',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(_otherWorkInterests.text.trim()),
+                            const Text(
+                              'Informational only — not used for automatic job matching.',
+                            ),
+                          ],
                           const SizedBox(height: 12),
-                          const Text('TRAVEL', style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text(_travelMode == 'anywhere' ? 'Anywhere' : 'Up to ${_travelMiles.round()} miles'),
+                          const Text(
+                            'TRAVEL',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            _travelMode == 'anywhere'
+                                ? 'Anywhere'
+                                : 'Up to ${_travelMiles.round()} miles',
+                          ),
                           const SizedBox(height: 12),
                           const Text(
                             'ALERTS',
@@ -1197,10 +1278,19 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: const Icon(Icons.save_outlined),
-                label: Text(_saving ? 'Saving…' : widget.onboarding ? 'Save & Continue' : 'Save Areas & Preferences'),
+                label: Text(
+                  _saving
+                      ? 'Saving…'
+                      : widget.onboarding
+                      ? 'Save & Continue'
+                      : 'Save Areas & Preferences',
+                ),
               ),
               if (widget.onboarding)
-                TextButton(onPressed: widget.onSkip, child: const Text('Skip for Now')),
+                TextButton(
+                  onPressed: widget.onSkip,
+                  child: const Text('Skip for Now'),
+                ),
             ],
           ),
   );

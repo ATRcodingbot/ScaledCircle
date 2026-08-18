@@ -10,6 +10,7 @@ const MATCH_VERSION = "OpportunityMatchV1";
 const MAX_AREAS = 8;
 const MAX_POINTS = 100;
 const MAX_GOALS = 20;
+const MAX_OTHER_WORK_INTERESTS = 500;
 const BUSINESS_OUTSIDE = new Set(["none", "nearby", "maryland", "followed"]);
 const SCALER_TRAVEL = new Set(["never", "nearby", "worth_drive", "up_to_miles", "anywhere"]);
 const AREA_TYPES = new Set(["around_business", "place", "postal_codes", "drawn"]);
@@ -22,6 +23,13 @@ function text(value, max = 160) {
 function list(value, max = 30, itemMax = 100) {
   return Array.isArray(value) ? value.slice(0, max).map((item) => text(item, itemMax))
     .filter(Boolean) : [];
+}
+function sanitizeOtherWorkInterests(value) {
+  if (value == null) return "";
+  if (typeof value !== "string" || value.length > MAX_OTHER_WORK_INTERESTS) {
+    throw new Error("invalid_other_work_interests");
+  }
+  return value.trim();
 }
 function point(value) {
   const latitude = Number(value?.latitude);
@@ -117,6 +125,7 @@ function sanitizePreferences(input, authoritativeRole) {
     .filter((id) => id && workTypes.resolve(id).scalerSelectable))];
   const outreachOptIn = input.outreachOptIn === true;
   return {...base, roleSchemaVersion: SCALER_SCHEMA_VERSION, jobTypes,
+    otherWorkInterests: sanitizeOtherWorkInterests(input.otherWorkInterests),
     travelMode, maxTravelMiles: Number.isFinite(maxTravelMiles) && maxTravelMiles >= 1 &&
       maxTravelMiles <= 500 ? maxTravelMiles : 20, crewOptIn: input.crewOptIn === true,
     outreachOptIn, vehicleType: VEHICLE_TYPES.has(input.vehicleType) ? input.vehicleType : "",
@@ -206,4 +215,4 @@ function matchOpportunity(preferences, opportunity, scope = "push") {
 
 module.exports = {SCHEMA_VERSION, BUSINESS_SCHEMA_VERSION, SCALER_SCHEMA_VERSION,
   MATCH_VERSION, sanitizePreferences, matchOpportunity, distanceMiles, insidePolygon,
-  notificationDefaults};
+  notificationDefaults, MAX_OTHER_WORK_INTERESTS};

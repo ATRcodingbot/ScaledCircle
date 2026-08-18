@@ -32,3 +32,9 @@ test("wrong job type, crew, and outreach are suppressed", () => {
   assert.equal(scalerOpportunityDecision(prefs({jobTypes: ["door_to_door"]}), {jobType: "door_to_door",
     location: {latitude: 39.01, longitude: -76.6}}).matched, false);
 });
+test("informational other work interests never create an email-notification match", () => {
+  const result = scalerOpportunityDecision(prefs({
+    otherWorkInterests: "Material pickup and dump runs",
+  }), {jobType: "dump_run", location: {latitude: 39.01, longitude: -76.6}});
+  assert.equal(result.matched, false);
+});
