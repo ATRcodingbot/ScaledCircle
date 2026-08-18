@@ -21,6 +21,12 @@ void main() {
         service,
         contains("httpsCallable('savePendingScalerPreferences')"),
       );
+      expect(service, contains("'initialSetupCompleted': true"));
+      expect(pending, contains('completePendingScalerSetup'));
+      final screen = File(
+        'lib/screens/preferences/areas_preferences_screen.dart',
+      ).readAsStringSync();
+      expect(screen, contains('completePreferences'));
     },
   );
 

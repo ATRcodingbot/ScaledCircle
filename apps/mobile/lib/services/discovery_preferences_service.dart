@@ -37,6 +37,17 @@ class DiscoveryPreferencesService {
     ));
   }
 
+  Future<Map<String, dynamic>> completeScalerSetup(
+    Map<String, dynamic> preferences,
+  ) async {
+    final result = await _functions
+        .httpsCallable('saveDiscoveryPreferences')
+        .call({'preferences': preferences, 'initialSetupCompleted': true});
+    return ServiceAreaGeometryCodec.decodePreferences(Map<String, dynamic>.from(
+      Map<String, dynamic>.from(result.data as Map)['preferences'] as Map,
+    ));
+  }
+
   Future<Map<String, dynamic>?> loadPendingScaler() async {
     final result = await _functions
         .httpsCallable('getPendingScalerPreferences')
@@ -55,6 +66,19 @@ class DiscoveryPreferencesService {
     final result = await _functions
         .httpsCallable('savePendingScalerPreferences')
         .call({'preferences': preferences});
+    return ServiceAreaGeometryCodec.decodePreferences(
+      Map<String, dynamic>.from(
+        Map<String, dynamic>.from(result.data as Map)['preferences'] as Map,
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> completePendingScalerSetup(
+    Map<String, dynamic> preferences,
+  ) async {
+    final result = await _functions
+        .httpsCallable('savePendingScalerPreferences')
+        .call({'preferences': preferences, 'initialSetupCompleted': true});
     return ServiceAreaGeometryCodec.decodePreferences(
       Map<String, dynamic>.from(
         Map<String, dynamic>.from(result.data as Map)['preferences'] as Map,

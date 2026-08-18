@@ -4038,6 +4038,14 @@ exports.saveDiscoveryPreferences = onCall(
     });
     const savedSnapshot = await reference.get();
     const authoritative = discoveryPreferences.sanitizePreferences(savedSnapshot.data(), context.role);
+    if (context.role === "scaler" && request.data?.initialSetupCompleted === true) {
+      const authUser = await getAuth().getUser(context.uid);
+      await require("./scaler_profile_notifications").queueScalerProfileCompletion({
+        db, serverTimestamp: FieldValue.serverTimestamp(), uid: context.uid,
+        authUser, profile: context.user, preferences: authoritative,
+        occurredAt: new Date().toISOString(),
+      });
+    }
     return {preferences: {...authoritative, userUid: context.uid, preferenceVersion}};
   },
 );
@@ -4083,6 +4091,14 @@ exports.savePendingScalerPreferences = onCall(
         updatedBy: context.uid, updatedAt: FieldValue.serverTimestamp(),
         createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp()});
     });
+    if (request.data?.initialSetupCompleted === true) {
+      const authUser = await getAuth().getUser(context.uid);
+      await require("./scaler_profile_notifications").queueScalerProfileCompletion({
+        db, serverTimestamp: FieldValue.serverTimestamp(), uid: context.uid,
+        authUser, profile: context.user, preferences: value,
+        occurredAt: new Date().toISOString(),
+      });
+    }
     return {preferences: {...value, userUid: context.uid, preferenceVersion}};
   },
 );

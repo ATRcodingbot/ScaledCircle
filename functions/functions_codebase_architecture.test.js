@@ -127,6 +127,16 @@ test("platform-core is isolated from legacy and unrelated provider secrets", () 
   assert.match(platform, /const OPENAI_API_KEY = defineSecret\("OPENAI_API_KEY"\)/);
 });
 
+test("Scaler profile email producer is platform-only and default signup stays isolated", () => {
+  assert.equal(fs.existsSync(path.join(root, "functions-platform",
+    "scaler_profile_notifications.js")), true);
+  assert.equal(fs.existsSync(path.join(root, "functions-legacy",
+    "scaler_profile_notifications.js")), false);
+  assert.doesNotMatch(legacy, /scalerProfileCompletion|scaler-profile-completed/);
+  assert.doesNotMatch(legacy, /initialSetupCompleted/);
+  assert.match(platform, /scaler_profile_notifications/);
+});
+
 test("provider secrets bind only to their reviewed intelligence functions", () => {
   assert.match(platform, /exports\.analyzePropertyIntelligence[\s\S]*?secrets:\s*\[CENSUS_API_KEY\]/);
   assert.match(platform, /exports\.analyzeScaleIntelligence[\s\S]*?secrets:\s*\[OPENAI_API_KEY\]/);

@@ -104,6 +104,8 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                               onboarding: true,
                               loadPreferences: _preferences.loadPendingScaler,
                               savePreferences: _preferences.savePendingScaler,
+                              completePreferences:
+                                  _preferences.completePendingScalerSetup,
                               onSaved: (saved) {
                                 setState(() => _summary = saved);
                                 Navigator.of(context).pop();

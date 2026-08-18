@@ -15,6 +15,7 @@ class AreasPreferencesScreen extends StatefulWidget {
     this.onSaved,
     this.loadPreferences,
     this.savePreferences,
+    this.completePreferences,
     this.searchAddresses,
     this.onboarding = false,
     this.onSkip,
@@ -26,6 +27,8 @@ class AreasPreferencesScreen extends StatefulWidget {
   final Future<Map<String, dynamic>?> Function()? loadPreferences;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic>)?
   savePreferences;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic>)?
+  completePreferences;
   final Future<List<AddressSuggestion>> Function(String query)? searchAddresses;
   final bool onboarding;
   final VoidCallback? onSkip;
@@ -790,8 +793,11 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
     setState(() => _saving = true);
     try {
       final saved =
-          await (widget.savePreferences?.call(_payload()) ??
-              _service.save(_payload()));
+          await (widget.completePreferences?.call(_payload()) ??
+              (!_business
+                  ? _service.completeScalerSetup(_payload())
+                  : widget.savePreferences?.call(_payload()) ??
+                      _service.save(_payload())));
       _authoritative = Map<String, dynamic>.from(saved);
       widget.onSaved?.call(saved);
       if (mounted) {
