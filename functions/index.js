@@ -56,6 +56,7 @@ const managedGrowthDelivery = require("./managed_growth_delivery");
 const socialWorkflow = require("./social_workflow");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
+const scalerProfile = require("./scaler_profile");
 
 initializeApp();
 
@@ -81,6 +82,10 @@ const internalBetaEntitlementService = internalBetaEntitlements
 const adminOperationsService = adminOperations.createAdminOperationsService({
   db,
   auth: getAuth(),
+  FieldValue,
+});
+const scalerProfileService = scalerProfile.createScalerProfileService({
+  db,
   FieldValue,
 });
 
@@ -276,6 +281,40 @@ exports.adminGetScalerAffiliateOverview = onCall(
     const context = await requireVerifiedUser(request, "Log in as an administrator.");
     if (!context.isAdmin) throw new HttpsError("permission-denied", "Administrator access is required.");
     return {affiliates: await affiliateProgramService.adminOverview()};
+  },
+);
+
+exports.updateScalerProfile = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    const context = await requireVerifiedUser(
+      request,
+      "Verify your email before editing your Scaler profile.",
+    );
+    if (context.role !== "scaler") {
+      throw new HttpsError("permission-denied", "A Scaler account is required.");
+    }
+    try {
+      return await scalerProfileService.update({
+        uid: context.uid,
+        input: request.data,
+      });
+    } catch (error) {
+      const invalid = new Set([
+        "profile_payload_invalid",
+        "profile_text_invalid",
+        "display_name_required",
+        "profile_text_too_long",
+        "profile_field_not_allowed",
+      ]);
+      if (invalid.has(error?.message)) {
+        throw new HttpsError("invalid-argument", "Check your profile details and try again.");
+      }
+      if (error?.message === "scaler_role_required") {
+        throw new HttpsError("permission-denied", "A Scaler account is required.");
+      }
+      throw new HttpsError("internal", "We couldn't update your profile right now.");
+    }
   },
 );
 

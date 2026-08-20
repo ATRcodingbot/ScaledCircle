@@ -52,6 +52,7 @@ const expectedExports = [
   "recordBusinessReferralAttribution",
   "adminSetScalerAffiliateRate",
   "adminGetScalerAffiliateOverview",
+  "updateScalerProfile",
 ];
 
 function resolveFrom(packageName, packageRoot) {

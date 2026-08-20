@@ -57,6 +57,7 @@ const platformExports = new Set([
   "recordBusinessReferralAttribution",
   "adminSetScalerAffiliateRate",
   "adminGetScalerAffiliateOverview",
+  "updateScalerProfile",
 ]);
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);

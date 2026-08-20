@@ -32,6 +32,7 @@ const expected = [
   "joinScalerAffiliateProgram", "getScalerAffiliateDashboard",
   "recordBusinessReferralAttribution", "adminSetScalerAffiliateRate",
   "adminGetScalerAffiliateOverview",
+  "updateScalerProfile",
 ];
 
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
