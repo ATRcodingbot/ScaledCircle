@@ -19,25 +19,31 @@ void main() {
     );
   });
 
-  test('Business public and pricing screens contain no affiliate disclosures', () {
-    final business = File('lib/screens/public/business_funnel_screen.dart')
-        .readAsStringSync();
-    final pricing = File('lib/screens/business/subscription_screen.dart')
-        .readAsStringSync();
-    final forbidden = RegExp(
-      r'affiliate|commission percentage|referral discount|ask for a discount',
-      caseSensitive: false,
-    );
-    expect(business, isNot(matches(forbidden)));
-    expect(pricing, isNot(matches(forbidden)));
-  });
+  test(
+    'Business public and pricing screens contain no affiliate disclosures',
+    () {
+      final business = File(
+        'lib/screens/public/business_funnel_screen.dart',
+      ).readAsStringSync();
+      final pricing = File(
+        'lib/screens/business/subscription_screen.dart',
+      ).readAsStringSync();
+      final forbidden = RegExp(
+        r'affiliate|commission percentage|referral discount|ask for a discount',
+        caseSensitive: false,
+      );
+      expect(business, isNot(matches(forbidden)));
+      expect(pricing, isNot(matches(forbidden)));
+    },
+  );
 
   test('Scaler dashboard alone links the referral experience', () {
     final scaler = File(
       'lib/screens/scaler/dashboard/scaler_dashboard_screen.dart',
     ).readAsStringSync();
-    final business = File('lib/screens/business/business_dashboard.dart')
-        .readAsStringSync();
+    final business = File(
+      'lib/screens/business/business_dashboard.dart',
+    ).readAsStringSync();
     expect(scaler, contains('Earn with Referrals'));
     expect(business, isNot(contains('Earn with Referrals')));
   });
@@ -51,4 +57,20 @@ void main() {
     expect(source, isNot(contains('guaranteed income')));
     expect(source, isNot(contains('discount')));
   });
+
+  test(
+    'affiliate callable uses production region and refreshes verification',
+    () {
+      final source = File(
+        'lib/services/affiliate_service.dart',
+      ).readAsStringSync();
+      expect(
+        source,
+        contains("FirebaseFunctions.instanceFor(region: 'us-east1')"),
+      );
+      expect(source, contains('await current.reload()'));
+      expect(source, contains('getIdToken(true)'));
+      expect(source, isNot(contains('FirebaseFunctions.instance;')));
+    },
+  );
 }

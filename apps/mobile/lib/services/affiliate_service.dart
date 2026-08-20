@@ -1,4 +1,8 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+enum AffiliateEligibility { pending, unverified, eligible }
 
 class AffiliateDashboard {
   const AffiliateDashboard({
@@ -14,12 +18,49 @@ class AffiliateDashboard {
   final int referralCount;
 }
 
-class AffiliateService {
-  AffiliateService({FirebaseFunctions? functions})
-    : _functions = functions ?? FirebaseFunctions.instance;
+abstract interface class AffiliateGateway {
+  Future<AffiliateEligibility> eligibility();
+  Future<AffiliateDashboard> dashboard();
+  Future<AffiliateDashboard> join();
+}
+
+class AffiliateService implements AffiliateGateway {
+  AffiliateService({
+    FirebaseFunctions? functions,
+    FirebaseAuth? auth,
+    FirebaseFirestore? firestore,
+  }) : _functions =
+           functions ?? FirebaseFunctions.instanceFor(region: 'us-east1'),
+       _auth = auth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const termsVersion = 'scaler-affiliate-v1-2026-08-20';
   final FirebaseFunctions _functions;
+  final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
+
+  @override
+  Future<AffiliateEligibility> eligibility() async {
+    final current = _auth.currentUser;
+    if (current == null) {
+      throw StateError('A signed-in Scaler is required.');
+    }
+    await current.reload();
+    final refreshed = _auth.currentUser;
+    await refreshed?.getIdToken(true);
+    final profile = await _firestore.collection('users').doc(current.uid).get();
+    final data = profile.data() ?? const <String, dynamic>{};
+    final role = data['role']?.toString().toLowerCase();
+    if (role != 'scaler') {
+      throw StateError('The referral program is available only to Scalers.');
+    }
+    final approved = data['active'] == true || data['betaAccess'] == 'approved';
+    if (!approved) return AffiliateEligibility.pending;
+    if (refreshed?.emailVerified != true) {
+      return AffiliateEligibility.unverified;
+    }
+    return AffiliateEligibility.eligible;
+  }
 
   static String? referralCodeFromUri(Uri uri) {
     final direct = uri.queryParameters['ref']?.trim();
@@ -27,11 +68,12 @@ class AffiliateService {
     final fragment = uri.fragment;
     final queryIndex = fragment.indexOf('?');
     if (queryIndex < 0) return null;
-    return Uri.splitQueryString(fragment.substring(queryIndex + 1))['ref']
-        ?.trim()
-        .toUpperCase();
+    return Uri.splitQueryString(
+      fragment.substring(queryIndex + 1),
+    )['ref']?.trim().toUpperCase();
   }
 
+  @override
   Future<AffiliateDashboard> dashboard() async {
     final result = await _functions
         .httpsCallable('getScalerAffiliateDashboard')
@@ -45,6 +87,7 @@ class AffiliateService {
     );
   }
 
+  @override
   Future<AffiliateDashboard> join() async {
     await _functions.httpsCallable('joinScalerAffiliateProgram').call({
       'termsVersion': termsVersion,
