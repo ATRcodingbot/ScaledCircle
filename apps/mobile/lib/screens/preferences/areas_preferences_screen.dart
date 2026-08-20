@@ -41,6 +41,12 @@ class AreasPreferencesScreen extends StatefulWidget {
 }
 
 class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
+  static const _legacyOutreachWorkTypeIds = {
+    'door_to_door',
+    'door_to_door_outreach',
+    'neighborhood_canvassing',
+  };
+
   DiscoveryPreferencesService get _service => DiscoveryPreferencesService();
   final _areaResolver = const ServiceAreaResolutionService();
   final List<Map<String, dynamic>> _areas = [];
@@ -68,6 +74,9 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   };
 
   bool get _business => widget.role == 'business';
+
+  Iterable<MarketplaceWorkType> get _selectedScalerWorkTypes => _workTypes
+      .where((type) => type.scalerSelectable && _jobTypes.contains(type.id));
 
   @override
   void initState() {
@@ -114,11 +123,20 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
         ..addAll(_strings(data['priorityServices']));
       _otherServices.addAll(_strings(data['otherServices']));
       _excluded.addAll(_strings(data['excludedServices']));
-      _jobTypes.addAll(_strings(data['jobTypes']));
+      final storedJobTypes = _strings(data['jobTypes']);
+      _jobTypes.addAll(
+        storedJobTypes.where(
+          (id) => !_legacyOutreachWorkTypeIds.contains(id.toLowerCase()),
+        ),
+      );
       _outsideScope = data['outsideOpportunityScope']?.toString() ?? 'none';
       _travelMode = data['travelMode']?.toString() ?? 'nearby';
       _travelMiles = (data['maxTravelMiles'] as num?)?.toDouble() ?? 20;
-      _outreach = data['outreachOptIn'] == true;
+      _outreach =
+          data['outreachOptIn'] == true ||
+          storedJobTypes.any(
+            (id) => _legacyOutreachWorkTypeIds.contains(id.toLowerCase()),
+          );
       _crew = data['crewOptIn'] == true;
       _vehicleType = data['vehicleType']?.toString() ?? '';
       _vehicleBed = data['vehicleBed']?.toString() ?? '';
@@ -1073,14 +1091,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                 ),
                 SwitchListTile(
                   value: _outreach,
-                  onChanged: (value) => setState(() {
-                    _outreach = value;
-                    if (value) {
-                      _jobTypes.add('door_to_door');
-                    } else {
-                      _jobTypes.remove('door_to_door');
-                    }
-                  }),
+                  onChanged: (value) => setState(() => _outreach = value),
                   title: const Text('I am willing to do door-to-door outreach'),
                   subtitle: const Text(
                     'Off by default. Other field work does not turn this on.',
@@ -1230,19 +1241,14 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          (_business ? _priorities : _jobTypes).isEmpty
+                          (_business
+                                  ? _priorities.isEmpty
+                                  : _selectedScalerWorkTypes.isEmpty)
                               ? 'You can choose this later.'
                               : _business
                               ? _priorities.join(' • ')
-                              : _jobTypes
-                                    .map(
-                                      (id) =>
-                                          _workTypes
-                                              .where((type) => type.id == id)
-                                              .map((type) => type.customerLabel)
-                                              .firstOrNull ??
-                                          id,
-                                    )
+                              : _selectedScalerWorkTypes
+                                    .map((type) => type.customerLabel)
                                     .join(' • '),
                         ),
                         if (!_business) ...[
@@ -1266,6 +1272,15 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                             _travelMode == 'anywhere'
                                 ? 'Anywhere'
                                 : 'Up to ${_travelMiles.round()} miles',
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'WORK PREFERENCES',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text('Crew Work: ${_crew ? 'Yes' : 'No'}'),
+                          Text(
+                            'Door-to-Door Outreach: ${_outreach ? 'Yes' : 'No'}',
                           ),
                           const SizedBox(height: 12),
                           const Text(
