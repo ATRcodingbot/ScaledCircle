@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
 import '../../services/transactional_email_service.dart';
+import '../../theme/app_theme.dart';
 import 'login_screen.dart';
 
 enum VerificationViewState { verifying, success, alreadyVerified, expired, invalid }
@@ -92,11 +93,16 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           Icon(success ? Icons.verified : Icons.mark_email_read_outlined,
             color: success ? const Color(0xFF0C9F73) : const Color(0xFF1769E0), size: 64),
           const SizedBox(height: 20),
-          Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Color(0xFF10243E))),
+          Text(title, textAlign: TextAlign.center, style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            color: success ? AppColors.textPrimary : const Color(0xFF10243E),
+          )),
           const SizedBox(height: 12),
           Text(success ? "You're ready to finish setting up your Scaler profile." :
             verifying ? 'Please keep this page open while Firebase confirms your verification.' :
-            'Request a fresh verification email and try again.', textAlign: TextAlign.center),
+            'Request a fresh verification email and try again.', textAlign: TextAlign.center,
+            style: success ? const TextStyle(color: AppColors.textSecondary) : null),
           if (verifying) ...[const SizedBox(height: 24), const CircularProgressIndicator()],
           if (success) ...[const SizedBox(height: 24), FilledButton(onPressed: _continue, child: const Text('COMPLETE MY PROFILE'))],
           if (!verifying && !success) ...[const SizedBox(height: 24), FilledButton(
