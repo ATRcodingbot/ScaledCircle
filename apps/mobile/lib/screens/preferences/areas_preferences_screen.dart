@@ -1034,46 +1034,84 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                       .toList(),
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _otherWorkInterests,
-                  onChanged: (_) => setState(() {}),
-                  maxLength: 500,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: "Other work you're interested in (optional)",
-                    helperText:
-                        "Tell us about other work you'd be interested in as we add more job categories.",
-                    hintText:
-                        'Junk removal, hauling, moving help, cleanup work…',
-                  ),
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: _travelMode,
-                  decoration: const InputDecoration(
-                    labelText:
-                        'When should we tell you about jobs outside your normal area?',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'never', child: Text('Never')),
-                    DropdownMenuItem(
-                      value: 'nearby',
-                      child: Text('Nearby only'),
+                Column(
+                  key: const ValueKey('other-work-interests-block'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Other work you're interested in (optional)",
+                      style: Theme.of(context).textTheme.labelLarge,
                     ),
-                    DropdownMenuItem(
-                      value: 'worth_drive',
-                      child: Text('Only if the pay is worth the drive'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _otherWorkInterests,
+                      onChanged: (_) => setState(() {}),
+                      maxLength: 500,
+                      minLines: 3,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        hintText:
+                            'Junk removal, hauling, moving help, cleanup work…',
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                      ),
                     ),
-                    DropdownMenuItem(
-                      value: 'up_to_miles',
-                      child: Text('Up to my selected distance'),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Tell us about other work you'd be interested in as we add more job categories.",
+                      key: ValueKey('other-work-interests-helper'),
                     ),
-                    DropdownMenuItem(
-                      value: 'anywhere',
-                      child: Text("Anywhere — I'm willing to travel"),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '${_otherWorkInterests.text.characters.length} / 500',
+                        key: const ValueKey('other-work-interests-counter'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _travelMode = value ?? _travelMode),
+                ),
+                const SizedBox(height: 24),
+                Column(
+                  key: const ValueKey('travel-preference-block'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'When should we tell you about jobs outside your normal area?',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      key: const ValueKey('travel-preference-field'),
+                      initialValue: _travelMode,
+                      isExpanded: true,
+                      items: const [
+                        DropdownMenuItem(value: 'never', child: Text('Never')),
+                        DropdownMenuItem(
+                          value: 'nearby',
+                          child: Text('Nearby only'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'worth_drive',
+                          child: Text('Only if the pay is worth the drive'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'up_to_miles',
+                          child: Text('Up to my selected distance'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'anywhere',
+                          child: Text("Anywhere — I'm willing to travel"),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _travelMode = value ?? _travelMode),
+                    ),
+                  ],
                 ),
                 if (_travelMode == 'nearby' || _travelMode == 'up_to_miles')
                   Slider(
