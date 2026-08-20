@@ -12,6 +12,8 @@ import 'navigation/app_routes.dart';
 import 'screens/business/business_dashboard.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'screens/auth/verify_email_screen.dart';
+import 'screens/auth/complete_scaler_profile_screen.dart';
 import 'screens/public/public_landing_screen.dart';
 import 'screens/public/business_funnel_screen.dart';
 import 'screens/public/scaler_funnel_screen.dart';
@@ -79,6 +81,16 @@ class ScaledCircleApp extends StatelessWidget {
         AppRoutes.scalerDashboard: (_) => const ScalerDashboardScreen(),
         AppRoutes.adminLogin: (_) => const AdminLoginScreen(),
         AppRoutes.adminDashboard: (_) => const AdminDashboardScreen(),
+        AppRoutes.completeScalerProfile: (_) => const CompleteScalerProfileScreen(),
+      },
+      onGenerateRoute: (settings) {
+        final route = Uri.tryParse(settings.name ?? '');
+        if (route?.path == AppRoutes.verifyEmail) {
+          return MaterialPageRoute(builder: (_) => VerifyEmailScreen(
+            actionCode: route?.queryParameters['oobCode'],
+          ));
+        }
+        return null;
       },
       builder: (context, child) {
         if (!AppEnvironmentConfig.isLocal) return child ?? const SizedBox();

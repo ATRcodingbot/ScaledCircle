@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'public_landing_screen.dart';
 import '../preferences/areas_preferences_screen.dart';
 import '../../services/discovery_preferences_service.dart';
+import '../../services/transactional_email_service.dart';
 
 class EarlyAccessPendingScreen extends StatefulWidget {
   final String email;
@@ -18,6 +19,33 @@ class EarlyAccessPendingScreen extends StatefulWidget {
 class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
   final _preferences = DiscoveryPreferencesService();
   Map<String, dynamic>? _summary;
+  bool _emailVerified = false;
+  bool _resending = false;
+  String? _verificationNotice;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshVerification();
+  }
+
+  Future<void> _refreshVerification() async {
+    await FirebaseAuth.instance.currentUser?.reload();
+    if (mounted) setState(() => _emailVerified = FirebaseAuth.instance.currentUser?.emailVerified == true);
+  }
+
+  Future<void> _resendVerification() async {
+    if (_resending) return;
+    setState(() { _resending = true; _verificationNotice = null; });
+    try {
+      await TransactionalEmailService().resendVerification();
+      if (mounted) setState(() => _verificationNotice = 'A new verification email is on its way.');
+    } catch (_) {
+      if (mounted) setState(() => _verificationNotice = 'Please wait a few minutes before requesting another email.');
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
+  }
 
   Future<void> _returnToSite(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
@@ -74,6 +102,21 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    if (!_emailVerified) ...[
+                      OutlinedButton.icon(
+                        onPressed: _resending ? null : _resendVerification,
+                        icon: _resending
+                            ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.mark_email_unread_outlined),
+                        label: const Text('Resend Verification Email'),
+                      ),
+                      if (_verificationNotice != null) ...[
+                        const SizedBox(height: 8),
+                        Text(_verificationNotice!, textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFFB8C9D8))),
+                      ],
+                      const SizedBox(height: 18),
+                    ],
                     if (widget.role == 'scaler') ...[
                       if (_summary != null)
                         Card(

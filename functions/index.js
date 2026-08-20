@@ -44,6 +44,7 @@ const {
 const {runFinancialOperation} = require("./marketplace_operations");
 const operations = require("./operational_layer");
 const signupNotifications = require("./signup_notifications");
+const transactionalEmail = require("./transactional_email");
 const propertyIntelligence = require("./property_intelligence");
 const scaledCircleIntelligence = require("./scaled_circle_intelligence");
 const groupAssignment = require("./group_assignment");
@@ -762,14 +763,64 @@ exports.notifyAdminOnWaitlistSignup = onDocumentCreated(
   },
 );
 
+function signupEmailError(error) {
+  const code = error?.message || "signup_email_failed";
+  if (["signup_input_invalid", "referrer_required"].includes(code)) {
+    return new HttpsError("invalid-argument", "Check the account details and try again.");
+  }
+  if (code === "signup_already_finalized") {
+    return new HttpsError("already-exists", "This account has already been finalized.");
+  }
+  if (code === "already_verified") {
+    return new HttpsError("failed-precondition", "Your email is already verified.");
+  }
+  if (code === "verification_rate_limited") {
+    return new HttpsError("resource-exhausted", "Please wait a few minutes before requesting another email.");
+  }
+  return new HttpsError("internal", "We couldn't prepare the account email right now. Please try again.");
+}
+
+/** Atomically finalize a public account and reserve both deterministic signup emails. */
+exports.finalizePublicAccountSignup = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to finish creating your account.");
+    const auth = getAuth();
+    const authUser = await auth.getUser(request.auth.uid);
+    const service = transactionalEmail.createService({db, auth, FieldValue});
+    try {
+      return await service.finalize({uid: request.auth.uid, authUser, data: request.data});
+    } catch (error) {
+      logger.error("Public signup finalization failed.", {uid: request.auth.uid, code: error?.message});
+      throw signupEmailError(error);
+    }
+  },
+);
+
+/** Queue a verification-only message for the authenticated account owner. */
+exports.resendEmailVerification = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to request another verification email.");
+    const auth = getAuth();
+    const authUser = await auth.getUser(request.auth.uid);
+    const service = transactionalEmail.createService({db, auth, FieldValue});
+    try {
+      return await service.resend({uid: request.auth.uid, authUser});
+    } catch (error) {
+      throw signupEmailError(error);
+    }
+  },
+);
+
 /**
  * Deliver deterministic server-authored signup and operational email jobs.
  * This sender fails closed unless the deployed SMTP identity is the authorized
  * support@scaledcircle.com mailbox. Clients cannot create queue records.
  */
-exports.sendOutboundEmailJob = onDocumentCreated(
+exports.sendTransactionalEmailJob = onDocumentCreated(
   {
-    document: `${signupNotifications.EMAIL_JOB_COLLECTION}/{jobId}`,
+    document: "outboundEmailJobs/{jobId}",
     secrets: [SUPPORT_EMAIL_SMTP_PASSWORD],
     retry: false,
     maxInstances: 5,
@@ -786,11 +837,7 @@ exports.sendOutboundEmailJob = onDocumentCreated(
     const destination = readText(queued.to, 254).toLowerCase();
     const fromAddress = readText(queued.fromAddress, 254).toLowerCase();
     const template = readText(queued.template, 80);
-    const allowedTemplate = template.startsWith("welcome_") ||
-      template.startsWith("support_");
-    const recipientAllowed = destination === SUPPORT_EMAIL ||
-      template.startsWith("welcome_");
-    if (fromAddress !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed) {
+    if (!transactionalEmail.validateDeliveryJob(queued)) {
       await snapshot.ref.set({
         status: "rejected",
         errorCode: "invalid_server_email_job",
@@ -800,33 +847,27 @@ exports.sendOutboundEmailJob = onDocumentCreated(
     }
 
     const leaseId = crypto.randomUUID();
-    const claimed = await db.runTransaction(async (transaction) => {
-      const current = await transaction.get(snapshot.ref);
-      if (current.data()?.status !== "queued") return false;
-      transaction.update(snapshot.ref, {
-        status: "sending",
-        leaseId,
-        attempts: FieldValue.increment(1),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-      return true;
+    const claimed = await transactionalEmail.claimQueuedJob({
+      db, reference: snapshot.ref, FieldValue, leaseId,
     });
     if (!claimed) return;
 
     const transport = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: SUPPORT_EMAIL,
+        user: transactionalEmail.SUPPORT_EMAIL,
         pass: SUPPORT_EMAIL_SMTP_PASSWORD.value(),
       },
     });
     try {
       const result = await transport.sendMail({
-        from: `${signupNotifications.SUPPORT_FROM_NAME} <${SUPPORT_EMAIL}>`,
+        from: `${transactionalEmail.SUPPORT_NAME} <${transactionalEmail.SUPPORT_EMAIL}>`,
         to: destination,
-        replyTo: SUPPORT_EMAIL,
+        replyTo: transactionalEmail.SUPPORT_EMAIL,
         subject: readText(queued.subject, 180),
         text: String(queued.text || "").slice(0, 12000),
+        ...(queued.html && queued.trustedHtml === true ?
+          {html: String(queued.html).slice(0, 60000)} : {}),
         headers: {"X-Scaled-Circle-Notification": jobId},
       });
       await snapshot.ref.set({

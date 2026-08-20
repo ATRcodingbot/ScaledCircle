@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../user/user_service.dart';
 import '../../models/user/user_profile.dart';
 import '../affiliate_service.dart';
+import '../transactional_email_service.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth, UserService? userService})
@@ -96,19 +97,20 @@ class AuthService {
       throw Exception('Password must be at least 8 characters.');
     }
 
-    final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
-    final user = credential.user;
+    User? user = _auth.currentUser;
+    if (user == null || user.email?.toLowerCase() != email.trim().toLowerCase()) {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      user = credential.user;
+    }
     if (user == null) throw Exception('Unable to create user account.');
 
     try {
       await user.updateDisplayName(displayName.trim());
-      await user.sendEmailVerification();
-      await _userService.createEarlyAccessProfile(
-        user: user,
-        role: role,
+      await TransactionalEmailService().finalizePublicSignup(
+        role: UserProfile.roleValue(role),
         displayName: displayName,
         postalCode: postalCode,
         contactNumber: contactNumber,
@@ -132,9 +134,8 @@ class AuthService {
       }
       return user;
     } catch (_) {
-      // Avoid an orphaned authentication account if the protected profile
-      // cannot be created.
-      await user.delete();
+      // The authenticated identity is deliberately retained so an idempotent
+      // finalization can be retried after a transient network failure.
       rethrow;
     }
   }

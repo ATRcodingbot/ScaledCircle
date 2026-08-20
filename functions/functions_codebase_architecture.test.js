@@ -49,6 +49,12 @@ const campaignFundingPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-campaign-funding", "package.json"), "utf8"));
 const campaignFundingLock = fs.readFileSync(
   path.join(root, "functions-campaign-funding", "package-lock.json"), "utf8");
+const transactionalEmail = fs.readFileSync(
+  path.join(root, "functions-transactional-email", "index.js"), "utf8");
+const transactionalEmailPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-transactional-email", "package.json"), "utf8"));
+const transactionalEmailLock = fs.readFileSync(
+  path.join(root, "functions-transactional-email", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -95,7 +101,7 @@ test("wallet-core owns exactly one secret-free callable with no duplicate assign
     assert.doesNotMatch(walletLock, new RegExp(forbiddenPackage));
   }
   const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet),
-    exportsIn(artifactEmail)]
+    exportsIn(artifactEmail), exportsIn(transactionalEmail)]
     .map((exports) => [...new Set(exports)]);
   const all = inventories.flat();
   assert.equal(new Set(all).size, all.length);
@@ -128,6 +134,29 @@ test("platform-core is isolated from legacy and unrelated provider secrets", () 
   ]) assert.doesNotMatch(platform, new RegExp(forbidden));
   assert.match(platform, /const CENSUS_API_KEY = defineSecret\("CENSUS_API_KEY"\)/);
   assert.match(platform, /const OPENAI_API_KEY = defineSecret\("OPENAI_API_KEY"\)/);
+});
+
+test("transactional-email exclusively owns signup callables and durable queue worker", () => {
+  assert.deepEqual([...new Set(exportsIn(transactionalEmail))].sort(), [
+    "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
+  ].sort());
+  for (const name of ["finalizePublicAccountSignup", "resendEmailVerification",
+    "sendTransactionalEmailJob", "sendOutboundEmailJob"]) {
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.match(transactionalEmail, /outboundEmailJobs\/\{jobId\}/);
+  assert.match(transactionalEmail,
+    /const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret\("SUPPORT_EMAIL_SMTP_PASSWORD"\)/);
+  assert.deepEqual(Object.keys(transactionalEmailPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions", "nodemailer",
+  ]);
+  for (const forbidden of ["STRIPE_SECRET_KEY", "STRIPE_THIN_WEBHOOK_SECRET",
+    "OPENAI_API_KEY", "CENSUS_API_KEY", "campaignFunding", "wallet"]) {
+    assert.doesNotMatch(transactionalEmail, new RegExp(forbidden));
+  }
+  for (const forbiddenPackage of ["node_modules/stripe", "openai"]) {
+    assert.doesNotMatch(transactionalEmailLock, new RegExp(forbiddenPackage));
+  }
 });
 
 test("Scaler profile email producer is platform-only and default signup stays isolated", () => {

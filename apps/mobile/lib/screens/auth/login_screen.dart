@@ -41,7 +41,8 @@ int compareLoginNotificationsNewestFirst(
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.returnRoute});
+  final String? returnRoute;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -109,6 +110,10 @@ class _LoginScreenState extends State<LoginScreen> {
           userData?['betaAccess'] == 'approved';
 
       if (!approvedForBeta) {
+        if (widget.returnRoute != null) {
+          Navigator.pushReplacementNamed(context, widget.returnRoute!);
+          return;
+        }
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
