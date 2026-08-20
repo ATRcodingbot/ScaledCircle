@@ -46,6 +46,11 @@ const expectedExports = [
   "savePendingScalerPreferences",
   "resolveServiceAreaPlace",
   "evaluateOpportunityMatch",
+  "joinScalerAffiliateProgram",
+  "getScalerAffiliateDashboard",
+  "recordBusinessReferralAttribution",
+  "adminSetScalerAffiliateRate",
+  "adminGetScalerAffiliateOverview",
 ];
 
 function resolveFrom(packageName, packageRoot) {

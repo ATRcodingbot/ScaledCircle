@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../user/user_service.dart';
 import '../../models/user/user_profile.dart';
+import '../affiliate_service.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth, UserService? userService})
@@ -84,6 +85,8 @@ class AuthService {
     String companyName = '',
     required String discoverySource,
     String referrerName = '',
+    String? affiliateReferralCode,
+    int? affiliateCapturedAtMillis,
   }) async {
     if (role != UserRole.business && role != UserRole.scaler) {
       throw ArgumentError('Choose Business or Scaler.');
@@ -113,6 +116,20 @@ class AuthService {
         discoverySource: discoverySource,
         referrerName: referrerName,
       );
+      if (role == UserRole.business &&
+          affiliateReferralCode != null &&
+          affiliateCapturedAtMillis != null) {
+        try {
+          await AffiliateService().recordBusinessAttribution(
+            referralCode: affiliateReferralCode,
+            capturedAtMillis: affiliateCapturedAtMillis,
+          );
+        } catch (_) {
+          // Account creation and normal pricing never depend on referral
+          // attribution. Invalid/expired codes fail closed without changing
+          // the Business signup experience.
+        }
+      }
       return user;
     } catch (_) {
       // Avoid an orphaned authentication account if the protected profile

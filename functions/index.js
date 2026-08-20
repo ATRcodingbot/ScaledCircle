@@ -174,6 +174,110 @@ async function requirePendingScaler(request) {
   return context;
 }
 
+function affiliateError(error) {
+  const code = error?.message || "affiliate_operation_failed";
+  const invalid = new Set([
+    "affiliate_terms_required", "affiliate_rate_invalid",
+    "affiliate_rate_reason_required", "referral_invalid_or_expired",
+  ]);
+  const denied = new Set([
+    "approved_scaler_required", "business_required", "self_referral_denied",
+  ]);
+  const missing = new Set(["referral_code_not_found", "affiliate_not_found"]);
+  if (invalid.has(code)) return new HttpsError("invalid-argument", code.replaceAll("_", " "));
+  if (denied.has(code)) return new HttpsError("permission-denied", code.replaceAll("_", " "));
+  if (missing.has(code)) return new HttpsError("not-found", code.replaceAll("_", " "));
+  if (code === "affiliate_not_active") return new HttpsError("failed-precondition", "This referral program account is not active.");
+  return new HttpsError("internal", "The referral program is temporarily unavailable.");
+}
+
+exports.joinScalerAffiliateProgram = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    const affiliateProgram = require("./affiliate_program");
+    const affiliateProgramService = affiliateProgram.createAffiliateService({db, FieldValue, Timestamp});
+    const context = await requireVerifiedUser(request, "Verify your email before joining the referral program.");
+    try {
+      const profile = await affiliateProgramService.join({
+        uid: context.uid,
+        user: context.user,
+        acceptedTermsVersion: request.data?.termsVersion,
+      });
+      return {
+        joined: true,
+        referralCode: profile.referralCode,
+        commissionRateBps: profile.commissionRateBps,
+        termsVersion: profile.termsVersion,
+      };
+    } catch (error) {
+      throw affiliateError(error);
+    }
+  },
+);
+
+exports.getScalerAffiliateDashboard = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    const affiliateProgram = require("./affiliate_program");
+    const affiliateProgramService = affiliateProgram.createAffiliateService({db, FieldValue, Timestamp});
+    const context = await requireVerifiedUser(request, "Verify your email to view referrals.");
+    if (!affiliateProgram.isApprovedScaler(context.user)) {
+      throw new HttpsError("permission-denied", "The referral program is available to approved Scalers.");
+    }
+    return affiliateProgramService.dashboard(context.uid);
+  },
+);
+
+exports.recordBusinessReferralAttribution = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    const affiliateProgram = require("./affiliate_program");
+    const affiliateProgramService = affiliateProgram.createAffiliateService({db, FieldValue, Timestamp});
+    const context = await authenticatedUserContext(request, "Log in to record a referral.");
+    try {
+      return await affiliateProgramService.attributeBusiness({
+        businessUid: context.uid,
+        businessUser: context.user,
+        code: request.data?.referralCode,
+        capturedAtMillis: request.data?.capturedAtMillis,
+      });
+    } catch (error) {
+      throw affiliateError(error);
+    }
+  },
+);
+
+exports.adminSetScalerAffiliateRate = onCall(
+  {enforceAppCheck: false, maxInstances: 5},
+  async (request) => {
+    const affiliateProgram = require("./affiliate_program");
+    const affiliateProgramService = affiliateProgram.createAffiliateService({db, FieldValue, Timestamp});
+    const context = await requireVerifiedUser(request, "Log in as an administrator.");
+    if (!context.isAdmin) throw new HttpsError("permission-denied", "Administrator access is required.");
+    try {
+      return await affiliateProgramService.setRate({
+        adminUid: context.uid,
+        affiliateUid: cleanId(request.data?.affiliateUid),
+        rateBps: request.data?.rateBps,
+        reason: request.data?.reason,
+      });
+    } catch (error) {
+      throw affiliateError(error);
+    }
+  },
+);
+
+exports.adminGetScalerAffiliateOverview = onCall(
+  {enforceAppCheck: false, maxInstances: 5},
+  async (request) => {
+    const affiliateProgramService = require("./affiliate_program")
+      .createAffiliateService({db, FieldValue, Timestamp});
+    const context = await requireVerifiedUser(request, "Log in as an administrator.");
+    if (!context.isAdmin) throw new HttpsError("permission-denied", "Administrator access is required.");
+    return {affiliates: await affiliateProgramService.adminOverview()};
+  },
+);
+
 async function grantAdminScaleSubscription(adminId) {
   const walletReference = db.collection("wallets").doc(adminId);
   const subscriptionReference = db

@@ -51,6 +51,11 @@ const platformExports = new Set([
   "savePendingScalerPreferences",
   "resolveServiceAreaPlace",
   "evaluateOpportunityMatch",
+  "joinScalerAffiliateProgram",
+  "getScalerAffiliateDashboard",
+  "recordBusinessReferralAttribution",
+  "adminSetScalerAffiliateRate",
+  "adminGetScalerAffiliateOverview",
 ]);
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);
@@ -178,7 +183,7 @@ function copyPackage(destination, mode) {
     if (name === "index.js" || (!name.endsWith(".js") &&
         !["package.json", "package-lock.json"].includes(name))) continue;
     if (mode === "wallet" && name.endsWith(".js")) continue;
-    if (mode === "legacy" && name === "scaler_profile_notifications.js") continue;
+    if (mode === "legacy" && ["scaler_profile_notifications.js", "affiliate_program.js"].includes(name)) continue;
     if (mode === "artifact-email" && name.endsWith(".js") &&
         name !== "managed_growth_delivery.js") continue;
     if (mode === "job-alert-email" && name.endsWith(".js") &&

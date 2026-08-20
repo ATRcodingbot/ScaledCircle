@@ -13,6 +13,7 @@ import '../../notifications/notifications_screen.dart';
 import '../campaigns/scaler_applied_campaigns_screen.dart';
 import '../campaigns/scaler_campaign_marketplace_screen.dart';
 import '../profile/scaler_profile_screen.dart';
+import '../affiliate/scaler_affiliate_screen.dart';
 
 class ScalerDashboardScreen extends StatelessWidget {
   const ScalerDashboardScreen({super.key});
@@ -402,6 +403,21 @@ class ScalerDashboardScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => const ScalerWalletScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _navigationCard(
+                      context: context,
+                      icon: Icons.handshake_outlined,
+                      title: 'Earn with Referrals',
+                      subtitle: 'Introduce local businesses and track referral status.',
+                      accent: AppColors.blue,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ScalerAffiliateScreen(),
                           ),
                         );
                       },

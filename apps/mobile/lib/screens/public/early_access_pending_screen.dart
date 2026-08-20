@@ -125,6 +125,12 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Color(0xFFB8C9D8)),
                       ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'The Business Referral Program becomes available after Scaler access is approved.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Color(0xFF7FA0B8)),
+                      ),
                       const SizedBox(height: 24),
                     ],
                     FilledButton(

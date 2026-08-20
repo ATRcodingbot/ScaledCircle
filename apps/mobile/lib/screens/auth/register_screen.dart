@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/user/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/public_site_service.dart';
+import '../../services/affiliate_service.dart';
 import '../public/early_access_pending_screen.dart';
 import '../../widgets/referral_source_fields.dart';
 
@@ -33,6 +34,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _emailUpdates = true;
   bool _obscurePassword = true;
   bool _loading = false;
+  String? _affiliateReferralCode;
+  late final int _affiliateCapturedAtMillis;
 
   @override
   void initState() {
@@ -40,6 +43,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _role = widget.initialRole == UserRole.scaler
         ? UserRole.scaler
         : UserRole.business;
+    _affiliateReferralCode = AffiliateService.referralCodeFromUri(Uri.base);
+    _affiliateCapturedAtMillis = DateTime.now().millisecondsSinceEpoch;
   }
 
   @override
@@ -75,6 +80,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         referrerName: _discoverySource == ReferralSourceFields.personalReferral
             ? _referrerNameController.text.trim()
             : '',
+        affiliateReferralCode: _role == UserRole.business
+            ? _affiliateReferralCode
+            : null,
+        affiliateCapturedAtMillis: _role == UserRole.business &&
+                _affiliateReferralCode != null
+            ? _affiliateCapturedAtMillis
+            : null,
       );
 
       if (_emailUpdates) {

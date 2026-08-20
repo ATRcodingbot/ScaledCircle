@@ -29,6 +29,9 @@ const expected = [
   "saveDiscoveryPreferences", "evaluateOpportunityMatch",
   "getMarketplaceWorkTypes", "getPendingScalerPreferences", "savePendingScalerPreferences",
   "resolveServiceAreaPlace",
+  "joinScalerAffiliateProgram", "getScalerAffiliateDashboard",
+  "recordBusinessReferralAttribution", "adminSetScalerAffiliateRate",
+  "adminGetScalerAffiliateOverview",
 ];
 
 const firebaseConfig = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
@@ -135,6 +138,19 @@ test("Scaler profile email producer is platform-only and default signup stays is
   assert.doesNotMatch(legacy, /scalerProfileCompletion|scaler-profile-completed/);
   assert.doesNotMatch(legacy, /initialSetupCompleted/);
   assert.match(platform, /scaler_profile_notifications/);
+});
+
+test("affiliate authority is platform-only and carries no provider secrets", () => {
+  assert.equal(fs.existsSync(path.join(root, "functions-platform", "affiliate_program.js")), true);
+  assert.equal(fs.existsSync(path.join(root, "functions-legacy", "affiliate_program.js")), false);
+  for (const name of ["joinScalerAffiliateProgram", "getScalerAffiliateDashboard",
+    "recordBusinessReferralAttribution", "adminSetScalerAffiliateRate",
+    "adminGetScalerAffiliateOverview"]) {
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+    const start = platform.indexOf(`exports.${name}`);
+    assert.notEqual(start, -1);
+    assert.doesNotMatch(platform.slice(start, start + 1200), /secrets\s*:/);
+  }
 });
 
 test("provider secrets bind only to their reviewed intelligence functions", () => {
