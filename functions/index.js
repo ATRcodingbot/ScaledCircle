@@ -4177,7 +4177,10 @@ exports.saveDiscoveryPreferences = onCall(
       if (serviceAreaGeometryCodec.containsDirectNestedArray(storedValue)) {
         throw new Error("invalid_nested_array_storage");
       }
+      const initialSetupCompletedAt = existing.data()?.initialSetupCompletedAt ||
+        (request.data?.initialSetupCompleted === true ? FieldValue.serverTimestamp() : null);
       transaction.set(reference, {...storedValue, userUid: context.uid, preferenceVersion,
+        initialSetupCompletedAt,
         updatedBy: context.uid, updatedAt: FieldValue.serverTimestamp(),
         createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp()});
     });
@@ -4191,7 +4194,8 @@ exports.saveDiscoveryPreferences = onCall(
         occurredAt: new Date().toISOString(),
       });
     }
-    return {preferences: {...authoritative, userUid: context.uid, preferenceVersion}};
+    return {preferences: {...authoritative, userUid: context.uid, preferenceVersion,
+      initialSetupCompleted: savedSnapshot.data()?.initialSetupCompletedAt != null}};
   },
 );
 
@@ -4211,7 +4215,8 @@ exports.getPendingScalerPreferences = onCall(
     const context = await requirePendingScaler(request);
     const snapshot = await db.collection("discoveryPreferences").doc(context.uid).get();
     return {preferences: snapshot.exists ?
-      discoveryPreferences.sanitizePreferences(snapshot.data(), "scaler") : null};
+      {...discoveryPreferences.sanitizePreferences(snapshot.data(), "scaler"),
+        initialSetupCompleted: snapshot.data()?.initialSetupCompletedAt != null} : null};
   },
 );
 
@@ -4225,6 +4230,7 @@ exports.savePendingScalerPreferences = onCall(
     catch (_) { throw new HttpsError("invalid-argument", "Check the saved work preferences."); }
     const reference = db.collection("discoveryPreferences").doc(context.uid);
     let preferenceVersion;
+    let initialSetupCompleted = false;
     await db.runTransaction(async (transaction) => {
       const existing = await transaction.get(reference);
       preferenceVersion = Number(existing.data()?.preferenceVersion || 0) + 1;
@@ -4232,7 +4238,11 @@ exports.savePendingScalerPreferences = onCall(
       if (serviceAreaGeometryCodec.containsDirectNestedArray(storedValue)) {
         throw new Error("invalid_nested_array_storage");
       }
+      initialSetupCompleted = existing.data()?.initialSetupCompletedAt != null ||
+        request.data?.initialSetupCompleted === true;
       transaction.set(reference, {...storedValue, userUid: context.uid, preferenceVersion,
+        initialSetupCompletedAt: existing.data()?.initialSetupCompletedAt ||
+          (request.data?.initialSetupCompleted === true ? FieldValue.serverTimestamp() : null),
         updatedBy: context.uid, updatedAt: FieldValue.serverTimestamp(),
         createdAt: existing.exists ? existing.data().createdAt : FieldValue.serverTimestamp()});
     });
@@ -4244,7 +4254,8 @@ exports.savePendingScalerPreferences = onCall(
         occurredAt: new Date().toISOString(),
       });
     }
-    return {preferences: {...value, userUid: context.uid, preferenceVersion}};
+    return {preferences: {...value, userUid: context.uid, preferenceVersion,
+      initialSetupCompleted}};
   },
 );
 

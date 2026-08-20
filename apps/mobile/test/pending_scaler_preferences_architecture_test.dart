@@ -23,6 +23,7 @@ void main() {
       );
       expect(service, contains("'initialSetupCompleted': true"));
       expect(pending, contains('completePendingScalerSetup'));
+      expect(pending, contains('onCompleted:'));
       final screen = File(
         'lib/screens/preferences/areas_preferences_screen.dart',
       ).readAsStringSync();

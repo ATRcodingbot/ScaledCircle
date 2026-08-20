@@ -10,6 +10,8 @@ import '../../../widgets/scaled_circle_brand.dart';
 import '../../jobs/jobs_marketplace_screen.dart';
 import '../../jobs/scaler_wallet_screen.dart';
 import '../../notifications/notifications_screen.dart';
+import '../../preferences/areas_preferences_screen.dart';
+import '../../../services/discovery_preferences_service.dart';
 import '../campaigns/scaler_applied_campaigns_screen.dart';
 import '../campaigns/scaler_campaign_marketplace_screen.dart';
 import '../profile/scaler_profile_screen.dart';
@@ -17,6 +19,78 @@ import '../affiliate/scaler_affiliate_screen.dart';
 
 class ScalerDashboardScreen extends StatelessWidget {
   const ScalerDashboardScreen({super.key});
+
+  Widget _workPreferencesEntry(BuildContext context, String userId) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('discoveryPreferences')
+          .doc(userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final complete =
+            snapshot.data?.data()?['initialSetupCompletedAt'] != null;
+        void openPreferences() {
+          final service = DiscoveryPreferencesService();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => AreasPreferencesScreen(
+                role: 'scaler',
+                onboarding: !complete,
+                loadPreferences: service.load,
+                savePreferences: service.save,
+                completePreferences: service.completeScalerSetup,
+                onCompleted: (_) => Navigator.of(context).pop(),
+                onSkip: () => Navigator.of(context).pop(),
+              ),
+            ),
+          );
+        }
+
+        if (complete) {
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.tune, color: AppColors.primary),
+              title: const Text('Edit Work Preferences'),
+              subtitle: const Text(
+                'Update your Work Areas, interests, travel, vehicle, and alerts.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: openPreferences,
+            ),
+          );
+        }
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'FINISH SETTING UP YOUR WORK PREFERENCES',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Tell us where you want to work and which opportunities interest you.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: openPreferences,
+                  icon: const Icon(Icons.tune),
+                  label: const Text('COMPLETE SETUP'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Widget _earningsSnapshot(BuildContext context, String userId) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -331,6 +405,8 @@ class ScalerDashboardScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
+              _workPreferencesEntry(context, user.uid),
+              const SizedBox(height: 24),
               _earningsSnapshot(context, user.uid),
               const SizedBox(height: 24),
               ReputationCard(
@@ -411,7 +487,8 @@ class ScalerDashboardScreen extends StatelessWidget {
                       context: context,
                       icon: Icons.handshake_outlined,
                       title: 'Earn with Referrals',
-                      subtitle: 'Introduce local businesses and track referral status.',
+                      subtitle:
+                          'Introduce local businesses and track referral status.',
                       accent: AppColors.blue,
                       onTap: () {
                         Navigator.push(

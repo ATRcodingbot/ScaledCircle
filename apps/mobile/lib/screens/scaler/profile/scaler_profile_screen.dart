@@ -1,7 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../services/discovery_preferences_service.dart';
 import '../../../services/profile_service.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/reputation_card.dart';
 import '../../preferences/areas_preferences_screen.dart';
 
@@ -9,6 +12,35 @@ class ScalerProfileScreen extends StatelessWidget {
   final String? scalerId;
 
   const ScalerProfileScreen({super.key, this.scalerId});
+
+  String _areaSummary(Map<String, dynamic> preferences) {
+    final areas = (preferences['areas'] as List? ?? const [])
+        .whereType<Map>()
+        .where((area) => area['enabled'] != false)
+        .toList();
+    if (areas.isEmpty) return 'Not set';
+    final first =
+        areas.first['displayName']?.toString().trim().isNotEmpty == true
+        ? areas.first['displayName'].toString()
+        : areas.first['name']?.toString() ?? 'Work Area';
+    return areas.length == 1 ? first : '$first + ${areas.length - 1} more';
+  }
+
+  String _travelSummary(Map<String, dynamic> preferences) {
+    final miles = (preferences['maxTravelMiles'] as num?)?.round();
+    return miles == null ? 'Not set' : 'Up to $miles miles';
+  }
+
+  String _vehicleSummary(Map<String, dynamic> preferences) {
+    const labels = {
+      'car': 'Car',
+      'pickup_truck': 'Pickup Truck',
+      'van': 'Van',
+      'box_truck': 'Box Truck',
+      'no_vehicle': 'No Vehicle',
+    };
+    return labels[preferences['vehicleType']] ?? 'Not provided';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,14 +71,6 @@ class ScalerProfileScreen extends StatelessWidget {
 
           final bio = data['bio']?.toString() ?? "No bio added yet.";
 
-          final city = data['city']?.toString() ?? "";
-
-          final state = data['state']?.toString() ?? "";
-
-          final location = city.isEmpty && state.isEmpty
-              ? "Location not set"
-              : "$city, $state";
-
           return ListView(
             padding: const EdgeInsets.all(20),
 
@@ -75,6 +99,16 @@ class ScalerProfileScreen extends StatelessWidget {
               Center(child: Text("Independent Marketing Professional")),
 
               const SizedBox(height: 25),
+
+              const Text(
+                'PROFILE & REPUTATION',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+
+              const SizedBox(height: 10),
 
               ReputationCard(
                 userId: userId,
@@ -111,31 +145,129 @@ class ScalerProfileScreen extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.location_on),
-
-                  title: const Text("Service Area"),
-
-                  subtitle: Text(location),
-                  trailing: scalerId == null
-                      ? const Icon(Icons.chevron_right)
-                      : null,
-                  onTap: scalerId == null
-                      ? () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const AreasPreferencesScreen(role: 'scaler'),
+              if (scalerId == null)
+                StreamBuilder<Map<String, dynamic>?>(
+                  stream: FirebaseFirestore.instance
+                      .collection('discoveryPreferences')
+                      .doc(userId)
+                      .snapshots()
+                      .map((snapshot) => snapshot.data()),
+                  builder: (context, preferenceSnapshot) {
+                    final preferences = preferenceSnapshot.data ?? const {};
+                    return FutureBuilder<List<MarketplaceWorkType>>(
+                      future: DiscoveryPreferencesService()
+                          .loadMarketplaceWorkTypes(),
+                      builder: (context, typeSnapshot) {
+                        final labels = {
+                          for (final type
+                              in typeSnapshot.data ??
+                                  const <MarketplaceWorkType>[])
+                            type.id: type.customerLabel,
+                        };
+                        final selected =
+                            (preferences['jobTypes'] as List? ?? const [])
+                                .map(
+                                  (value) =>
+                                      labels[value.toString()] ??
+                                      value.toString(),
+                                )
+                                .where((value) => value.isNotEmpty)
+                                .toList();
+                        return Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'WORK PREFERENCES',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _PreferenceLine(
+                                  'Work Areas',
+                                  _areaSummary(preferences),
+                                ),
+                                _PreferenceLine(
+                                  'Travel',
+                                  _travelSummary(preferences),
+                                ),
+                                _PreferenceLine(
+                                  'Interested Work',
+                                  selected.isEmpty
+                                      ? 'Not selected'
+                                      : selected.join(', '),
+                                ),
+                                _PreferenceLine(
+                                  'Vehicle',
+                                  _vehicleSummary(preferences),
+                                ),
+                                _PreferenceLine(
+                                  'Email Alerts',
+                                  (preferences['alertDelivery']
+                                              as Map?)?['email'] ==
+                                          true
+                                      ? 'On'
+                                      : 'Off',
+                                ),
+                                const SizedBox(height: 14),
+                                FilledButton.icon(
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const AreasPreferencesScreen(
+                                            role: 'scaler',
+                                          ),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.tune),
+                                  label: const Text('EDIT WORK PREFERENCES'),
+                                ),
+                              ],
+                            ),
                           ),
-                        )
-                      : null,
+                        );
+                      },
+                    );
+                  },
                 ),
-              ),
             ],
           );
         },
       ),
     );
   }
+}
+
+class _PreferenceLine extends StatelessWidget {
+  const _PreferenceLine(this.label, this.value);
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 130,
+          child: Text(
+            label,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    ),
+  );
 }

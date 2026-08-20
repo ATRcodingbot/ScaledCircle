@@ -13,6 +13,7 @@ class AreasPreferencesScreen extends StatefulWidget {
     required this.role,
     this.initialServices = const [],
     this.onSaved,
+    this.onCompleted,
     this.loadPreferences,
     this.savePreferences,
     this.completePreferences,
@@ -24,6 +25,7 @@ class AreasPreferencesScreen extends StatefulWidget {
   final String role;
   final List<String> initialServices;
   final ValueChanged<Map<String, dynamic>>? onSaved;
+  final ValueChanged<Map<String, dynamic>>? onCompleted;
   final Future<Map<String, dynamic>?> Function()? loadPreferences;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic>)?
   savePreferences;
@@ -797,9 +799,10 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
               (!_business
                   ? _service.completeScalerSetup(_payload())
                   : widget.savePreferences?.call(_payload()) ??
-                      _service.save(_payload())));
+                        _service.save(_payload())));
       _authoritative = Map<String, dynamic>.from(saved);
       widget.onSaved?.call(saved);
+      widget.onCompleted?.call(saved);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Areas & Preferences saved.')),

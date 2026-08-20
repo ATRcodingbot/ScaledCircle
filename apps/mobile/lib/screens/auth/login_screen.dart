@@ -126,6 +126,11 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      if (widget.returnRoute != null) {
+        Navigator.pushReplacementNamed(context, widget.returnRoute!);
+        return;
+      }
+
       var accountType = (userData?['activeView'] ?? userData?['accountType'])
           ?.toString()
           .toLowerCase();
