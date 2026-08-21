@@ -10,6 +10,7 @@ const platform = fs.readFileSync(path.join(root, "functions-platform", "index.js
 const legacy = fs.readFileSync(path.join(root, "functions-legacy", "index.js"), "utf8");
 const wallet = fs.readFileSync(path.join(root, "functions-wallet", "index.js"), "utf8");
 const artifactEmail = fs.readFileSync(path.join(root, "functions-artifact-email", "index.js"), "utf8");
+const jobAlertEmail = fs.readFileSync(path.join(root, "functions-job-alert-email", "index.js"), "utf8");
 const artifactEmailDelivery = fs.readFileSync(
   path.join(root, "functions-artifact-email", "managed_growth_delivery.js"), "utf8");
 const expected = [
@@ -135,6 +136,18 @@ test("platform-core is isolated from legacy and unrelated provider secrets", () 
   ]) assert.doesNotMatch(platform, new RegExp(forbidden));
   assert.match(platform, /const CENSUS_API_KEY = defineSecret\("CENSUS_API_KEY"\)/);
   assert.match(platform, /const OPENAI_API_KEY = defineSecret\("OPENAI_API_KEY"\)/);
+});
+
+test("retired legacy GPS endpoint is absent from every deployable codebase", () => {
+  const deployableSources = [platform, legacy, wallet, artifactEmail,
+    jobAlertEmail, transactionalEmail, campaignFunding];
+  for (const source of deployableSources) {
+    assert.doesNotMatch(source, /exports\.saveLegacyTrackingRoute\s*=/);
+  }
+  const generator = fs.readFileSync(path.join(
+    root, "functions", "scripts", "generate_functions_codebases.js"), "utf8");
+  assert.match(generator,
+    /retiredProductionExports = new Set\(\["saveLegacyTrackingRoute"\]\)/);
 });
 
 test("transactional-email exclusively owns signup callables and durable queue worker", () => {

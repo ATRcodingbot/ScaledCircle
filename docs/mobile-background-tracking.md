@@ -6,7 +6,8 @@ Scaled Circle remains one Flutter application for web, Android, and iOS. Busines
 
 - Android: `FusedLocationProviderClient` in a non-exported location foreground service.
 - iOS: `CLLocationManager` with the location background mode.
-- Web: the existing foreground-only route workflow; it is not represented as background-capable.
+- Web: active-job GPS capture is unavailable. The web UI directs Scalers to the
+  Android or iOS app rather than using a weaker foreground-only evidence path.
 
 The client records raw measurements and queues them durably. Cloud Functions are authoritative for identity, assignment, session state, ordering, validation flags, aggregate counters, final route creation, and workflow fields. Client values named `accepted`, `rejected`, `suspicious`, or similar are rejected as unknown fields and are never trusted.
 
@@ -75,7 +76,10 @@ Adjacent measurements are compared with Haversine distance and elapsed time. Mov
 - `trackingSessions/{sessionId}/chunks/{canonicalRange}`: immutable raw evidence plus server validation metadata/digest.
 - `trackingSessions/{sessionId}/checkpoints/{checkpointId}`: immutable Storage path/generation, image metadata, raw measurement, server flags, and server `receivedAt`.
 - `activeTrackingSessions/{scalerId}`: server-only singleton pointer.
-- `campaignRoutes/{sessionId}`: trusted immutable `native_background_v1` compatibility record. Real legacy browser routes use the trusted `saveLegacyTrackingRoute` callable and `legacy_browser_v1`; clients cannot self-declare a source or simulation marker. Historical development routes retain their existing simulated provenance so later saves cannot launder them into real evidence.
+- `campaignRoutes/{sessionId}`: trusted immutable `native_background_v1`
+  compatibility record. Historical `legacy_browser_v1` records remain stored
+  with their original provenance, but the retired `saveLegacyTrackingRoute`
+  endpoint is excluded from every deployable Functions codebase.
 
 Clients cannot write tracking evidence, active pointers, or any campaign route. The owning Scaler, owning campaign business, and trusted admin can read only the evidence allowed by rules; other Scalers/businesses cannot. Businesses cannot alter raw evidence.
 

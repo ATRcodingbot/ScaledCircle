@@ -5585,9 +5585,10 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
   }
 }
 
-// Compatibility bridge for real browser GPS. Client writes to campaignRoutes
-// are denied by rules; this callable is the sole writer for legacy route
-// documents and never accepts or records simulated evidence.
+// RETIRED compatibility implementation retained only to audit historical
+// legacy_browser_v1 records and its former contract. The codebase generator
+// excludes this export from every deployable Functions package. Production
+// clients do not call it; active jobs use the tracking-session/chunk pipeline.
 exports.saveLegacyTrackingRoute = trackingCallable(
   "saveLegacyTrackingRoute",
   async (request) => {

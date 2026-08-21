@@ -12,9 +12,7 @@ import '../../services/campaign_service.dart';
 import '../../services/campaign/campaign_proof_policy.dart';
 import '../../services/active_job_tracking_service.dart';
 import '../../services/tracking_runtime_policy.dart';
-import '../../services/secure_function_service.dart';
 import '../../widgets/home_completion_counter.dart';
-import 'job_tracking_screen.dart';
 import 'native_job_in_progress_screen.dart';
 
 class JobDetailsScreen extends StatefulWidget {
@@ -165,9 +163,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           ),
         );
       } else {
-        await const SecureFunctionService().call(
-          functionName: 'startAssignedZone',
-          data: {'campaignId': widget.campaign.id, 'zoneId': zone.id},
+        throw UnsupportedError(
+          'Active-job GPS tracking requires the ScaledCircle Android or iOS app.',
         );
       }
 
@@ -519,9 +516,13 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             width: double.infinity,
             height: 55,
             child: ElevatedButton.icon(
-              onPressed: startZoneJob,
+              onPressed: _usesNativeTracking ? startZoneJob : null,
               icon: const Icon(Icons.play_arrow),
-              label: Text('Start $zoneName'),
+              label: Text(
+                _usesNativeTracking
+                    ? 'Start $zoneName'
+                    : 'Use the mobile app to start this job',
+              ),
             ),
           );
         }
@@ -545,30 +546,27 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                   minimumSize: const Size(double.infinity, 55),
                 ),
 
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => _usesNativeTracking
-                          ? NativeJobInProgressScreen(
+                onPressed: _usesNativeTracking
+                    ? () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => NativeJobInProgressScreen(
                               campaign: widget.campaign,
                               zone: zone,
                               trackingService: _nativeTracking,
-                            )
-                          : JobTrackingScreen(
-                              campaign: widget.campaign,
-                              zone: zone,
                             ),
-                    ),
-                  );
-                },
+                          ),
+                        );
+                      }
+                    : null,
 
                 icon: const Icon(Icons.my_location),
 
                 label: Text(
                   _usesNativeTracking
                       ? 'Return to Active Job'
-                      : 'Open GPS Tracker',
+                      : 'Continue in the mobile app',
                 ),
               ),
 

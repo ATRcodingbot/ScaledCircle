@@ -3,13 +3,18 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('legacy production web tracker exposes no simulated route action', () {
-    final source = File(
-      'lib/screens/jobs/job_tracking_screen.dart',
+  test('production client has no retired legacy tracking endpoint', () {
+    final details = File(
+      'lib/screens/jobs/job_details_screen.dart',
     ).readAsStringSync();
-    expect(source, isNot(contains('Simulate Walking Route')));
-    expect(source, isNot(contains('_simulateMovement')));
-    expect(source, isNot(contains("'simulated':")));
+    expect(
+      File('lib/screens/jobs/job_tracking_screen.dart').existsSync(),
+      isFalse,
+    );
+    expect(details, isNot(contains('JobTrackingScreen')));
+    expect(details, isNot(contains('saveLegacyTrackingRoute')));
+    expect(details, isNot(contains("functionName: 'startAssignedZone'")));
+    expect(details, contains('requires the ScaledCircle Android or iOS app'));
   });
 
   test('test harness selection is compile-time local and identity-neutral', () {
