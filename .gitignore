@@ -9,6 +9,7 @@
 
 .vscode/
 .firebase/
+**/.secret.local
 
 # Flutter repo-specific
 /bin/cache/

@@ -15,20 +15,22 @@ Flutter requires one explicit compile-time value:
   resolves to project `scaled-circle`.
 
 Cloud Functions emulator reads `functions/.env.demo-scaledcircle`, which sets
-`SCALEDCIRCLE_ENV=local` and a localhost public URL. Stripe code refuses live
-keys outside production and refuses test keys in production.
+`SCALEDCIRCLE_ENV=local` and a localhost public URL. The isolated campaign
+funding source is `functions-campaign-funding`, so Firebase-supported secret
+overrides for that codebase belong in
+`functions-campaign-funding/.secret.local`. This filename is ignored
+repository-wide.
 
-Copy `functions/.secret.local.example` to `functions/.secret.local` and replace
-the placeholders locally. Firebase loads this ignored file for secret
-parameters in the Functions emulator. Never commit, expose to Flutter, or log
-these values:
+Copy `functions-campaign-funding/.secret.local.example` to
+`functions-campaign-funding/.secret.local` and replace the placeholders
+locally. Never commit, expose to Flutter, or log these values:
 
-- `STRIPE_SECRET_KEY`: sandbox `sk_test_` key only
-- `STRIPE_WEBHOOK_SECRET`: snapshot listener signing secret
-- `STRIPE_THIN_WEBHOOK_SECRET`: Accounts v2 thin listener signing secret
+- `STRIPE_TEST_SECRET_KEY`: sandbox key beginning `sk_test_`
+- `STRIPE_TEST_WEBHOOK_SECRET`: local Stripe CLI snapshot-listener secret
+  beginning `whsec_`
 
-The two webhook signing secrets are deliberately different and are not
-interchangeable.
+Do not use generic or production Stripe secrets for this campaign-funding test
+path. Do not create the real override file until the TEST key is available.
 
 ## Stable ports
 
@@ -43,7 +45,8 @@ interchangeable.
 
 ## Start the local stack on Windows
 
-From the repository root:
+From the repository root, prepare the generated codebases and start only the
+local Firebase project:
 
 ```powershell
 cd functions
@@ -109,41 +112,26 @@ Forward canonical snapshot events to the Functions emulator:
 
 ```powershell
 stripe listen `
-  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,payment_intent.succeeded,payment_intent.payment_failed,charge.refunded,charge.dispute.created,charge.dispute.updated,charge.dispute.closed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,transfer.created,transfer.reversed,payout.failed `
+  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,payment_intent.payment_failed,charge.refunded,refund.updated,charge.dispute.created,charge.dispute.updated,charge.dispute.closed `
   --forward-to http://127.0.0.1:5001/demo-scaledcircle/us-east1/stripeWebhook
 ```
 
 The command prints a temporary snapshot webhook signing secret (`whsec_...`).
-Store it only in ignored local Functions secret/environment configuration.
-
-Accounts v2 events are thin events and require current-resource retrieval.
-Use the separate canonical thin endpoint and its independent signing secret:
-
-```powershell
-stripe listen `
-  --thin-events 'v2.core.account[requirements].updated,v2.core.account[configuration.recipient].capability_status_updated' `
-  --forward-thin-to http://127.0.0.1:5001/demo-scaledcircle/us-east1/stripeThinWebhook
-```
-
-The snapshot listener's `whsec_` belongs only in `STRIPE_WEBHOOK_SECRET`. The
-thin listener's separate `whsec_` belongs only in
-`STRIPE_THIN_WEBHOOK_SECRET`. Restart the Functions emulator after changing
-either local secret. Do not run either listener before approval.
+Store it only as `STRIPE_TEST_WEBHOOK_SECRET` in the ignored campaign-funding
+secret override. Restart the Functions emulator after changing this value. Do
+not subscribe this listener to subscription, Connect, transfer, or payout
+events.
 
 Local Functions emulator URLs:
 
-- snapshot: `http://127.0.0.1:5001/demo-scaledcircle/us-east1/stripeWebhook`
-- Accounts v2 thin: `http://127.0.0.1:5001/demo-scaledcircle/us-east1/stripeThinWebhook`
+- campaign funding: `http://127.0.0.1:5001/demo-scaledcircle/us-east1/stripeWebhook`
 
 ## Sandbox values needed later
 
 Keep every secret server-side and out of chat/source control:
 
-- Stripe sandbox/test secret API key (`sk_test_...`)
-- snapshot webhook signing secret from `stripe listen`
-- separate Accounts v2 thin-event signing secret from the thin listener
-- sandbox subscription Price IDs for Starter, Growth, and Scale testing
-- sandbox promotional coupon/promotion-code identifiers if tested
+- `STRIPE_TEST_SECRET_KEY` (`sk_test_...`)
+- `STRIPE_TEST_WEBHOOK_SECRET` from the campaign-funding `stripe listen`
 
 Flutter may receive only non-secret publishable configuration if a later flow
 requires it. It never receives secret keys or webhook secrets.
@@ -152,15 +140,27 @@ requires it. It never receives secret keys or webhook secrets.
 
 After secrets are configured and explicit approval is given:
 
-1. Seed Local Business and Local Scaler.
-2. Create a local campaign quote: $100 worker allocation, $20 platform fee,
-   $120 business charge.
-3. Create sandbox Checkout and complete it with Stripe test data.
-4. Forward the signed webhook and verify local campaign funding.
-5. Accept the zone as Local Scaler, record synthetic/local tracking, submit,
-   and approve verification.
-6. Create exactly one $100 sandbox Connect transfer through the trusted
-   operation and reconcile the local ledger/campaign route.
+1. Seed emulator-only Admin, Business, and Scaler identities.
+2. Create the controlled campaign and prove Checkout rejects a missing Zone.
+3. Add a mapped Zone and obtain the authoritative funding quote.
+4. Prove a stale approval digest is rejected, then approve the current quote.
+5. Create Stripe TEST Checkout and pause for manual hosted Checkout completion.
+6. Confirm redirect is not authority; wait for the signed local webhook.
+7. Verify paid/funded state, replay idempotency, and publish in the emulator.
+8. Exercise cancellation, expiration, failure, refund, and dispute fixtures.
+
+## Safe restart and shutdown
+
+After the Stripe listener supplies a new local `whsec_...`, update only the
+ignored `.secret.local`, stop the Functions emulator with `Ctrl+C`, and restart
+`npm run serve` so secret parameters reload. Keep the project explicitly set to
+`demo-scaledcircle`.
+
+At the manual Checkout checkpoint, leave the emulators and Stripe listener
+running and complete only the hosted TEST Checkout URL. After QA, stop the
+Stripe listener and emulator process with `Ctrl+C`. Confirm no Java, Firebase,
+or Stripe listener process from this run remains active. Never run
+`firebase deploy` from this procedure.
 
 Stop before step 3 until the first external Stripe API call is separately
 approved.
