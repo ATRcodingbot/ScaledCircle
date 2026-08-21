@@ -149,7 +149,16 @@ test("retired legacy GPS endpoint is absent from every deployable codebase", () 
   const generator = fs.readFileSync(path.join(
     root, "functions", "scripts", "generate_functions_codebases.js"), "utf8");
   assert.match(generator,
-    /retiredProductionExports = new Set\(\["saveLegacyTrackingRoute"\]\)/);
+    /retiredProductionExports = new Set\(\["saveLegacyTrackingRoute", "fundCampaign"\]\)/);
+});
+
+test("legacy wallet campaign funding cannot be regenerated", () => {
+  for (const source of [legacy, platform, campaignFunding]) {
+    assert.doesNotMatch(source, /exports\.fundCampaign\s*=/);
+  }
+  const generator = fs.readFileSync(path.join(
+    root, "functions", "scripts", "generate_functions_codebases.js"), "utf8");
+  assert.match(generator, /retiredProductionExports[\s\S]*fundCampaign/);
 });
 
 test("transactional-email exclusively owns signup callables and durable queue worker", () => {

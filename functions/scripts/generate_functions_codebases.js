@@ -78,7 +78,7 @@ const transactionalEmailExports = new Set([
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.
-const retiredProductionExports = new Set(["saveLegacyTrackingRoute"]);
+const retiredProductionExports = new Set(["saveLegacyTrackingRoute", "fundCampaign"]);
 const allSecretNames = new Set([
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD",
   "SUPPORT_EMAIL_SMTP_PASSWORD",
