@@ -45,7 +45,7 @@ void main() {
     expect(environmentSource, contains("actual == 'scaled-circle'"));
     expect(
       environmentSource,
-      contains('APP_ENV=local must never connect to production project'),
+      contains('Non-production APP_ENV must never connect to scaled-circle'),
     );
   });
 

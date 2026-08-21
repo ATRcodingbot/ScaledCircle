@@ -8,21 +8,16 @@ const logger = require("firebase-functions/logger");
 const lifecycle = require("./campaign_funding_lifecycle");
 initializeApp();
 const db = getFirestore();
-const STRIPE_TEST_SECRET_KEY = defineSecret("STRIPE_TEST_SECRET_KEY");
-const STRIPE_TEST_WEBHOOK_SECRET = defineSecret("STRIPE_TEST_WEBHOOK_SECRET");
+const PAYMENT_ENVIRONMENT = lifecycle.paymentEnvironment(process.env);
+const STRIPE_SECRET_KEY = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live" ?
+  "STRIPE_LIVE_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
+const STRIPE_WEBHOOK_SECRET = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live" ?
+  "STRIPE_LIVE_WEBHOOK_SECRET" : "STRIPE_TEST_WEBHOOK_SECRET");
 const OPTIONS = {region: "us-east1", timeoutSeconds: 60, memory: "256MiB", maxInstances: 10};
 const cleanId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || "").trim()) ? String(value).trim() : "";
 
 function checkoutReturnBaseUrl() {
-  const projectId = String(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || "").trim();
-  if (projectId === "scaledcircle-staging") return "https://scaledcircle-staging.web.app";
-  if (projectId === "demo-scaledcircle" && process.env.FIRESTORE_EMULATOR_HOST) {
-    return "http://127.0.0.1:5000";
-  }
-  throw new HttpsError(
-    "failed-precondition",
-    "Stripe TEST campaign funding is available only in the approved staging or local emulator environment.",
-  );
+  return PAYMENT_ENVIRONMENT.returnBaseUrl;
 }
 
 async function ownedCampaign(request) {
@@ -56,8 +51,8 @@ async function assertFundable(input) {
 }
 
 function stripeClient() {
-  try { return new Stripe(lifecycle.assertTestSecret(STRIPE_TEST_SECRET_KEY.value())); } catch (_) {
-    throw new HttpsError("failed-precondition", "Stripe TEST mode is not safely configured.");
+  try { return new Stripe(lifecycle.assertStripeSecret(STRIPE_SECRET_KEY.value(), PAYMENT_ENVIRONMENT.stripeMode)); } catch (_) {
+    throw new HttpsError("failed-precondition", "Stripe campaign funding is not safely configured for this environment.");
   }
 }
 
@@ -69,7 +64,7 @@ exports.quoteCampaignFunding = onCall({...OPTIONS, timeoutSeconds: 30}, async (r
   }
 });
 
-exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STRIPE_TEST_SECRET_KEY]}, async (request) => {
+exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STRIPE_SECRET_KEY]}, async (request) => {
   const input = await ownedCampaign(request);
   await assertFundable(input);
   const quote = lifecycle.quoteForCampaign(input.campaign);
@@ -86,10 +81,10 @@ exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STR
     const current = await stripe.checkout.sessions.retrieve(existing.stripeCheckoutSessionId);
     const decision = lifecycle.checkoutRecoveryDecision(existing, current, Math.floor(Date.now() / 1000));
     if (existing.status === "payment_pending" && decision.action === "recover") {
-      return {paymentId, ...decision, quote, testMode: true};
+      return {paymentId, ...decision, quote, paymentMode: PAYMENT_ENVIRONMENT.stripeMode};
     }
     if (existing.status === "payment_pending" && decision.action === "await_webhook") {
-      return {paymentId, processing: true, quote, testMode: true};
+      return {paymentId, processing: true, quote, paymentMode: PAYMENT_ENVIRONMENT.stripeMode};
     }
     checkoutAttempt += 1;
     if (checkoutAttempt > 3) {
@@ -104,7 +99,7 @@ exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STR
     await paymentRef.set({status: "checkout_expired", stripeCheckoutUrl: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   }
   await paymentRef.set({paymentId, campaignId: input.campaignId, businessUid: input.uid, businessId: input.uid,
-    ...quote, fundingVersion: version, checkoutAttempt, status: "created", stripeMode: "test",
+    ...quote, fundingVersion: version, checkoutAttempt, status: "created", stripeMode: PAYMENT_ENVIRONMENT.stripeMode,
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   const returnBaseUrl = checkoutReturnBaseUrl();
   const session = await stripe.checkout.sessions.create({mode: "payment", client_reference_id: paymentId,
@@ -113,17 +108,19 @@ exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STR
     payment_intent_data: {metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid}},
     success_url: `${returnBaseUrl}/#/campaign-funding-return?status=processing`,
     cancel_url: `${returnBaseUrl}/#/campaign/${input.campaignId}?funding=cancelled`,
-    metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid, purchaseType: "campaign_funding_test_v1"},
+    metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid,
+      purchaseType: `campaign_funding_${PAYMENT_ENVIRONMENT.stripeMode}_v1`},
     expires_at: Math.floor(Date.now() / 1000) + 1800,
-  }, {idempotencyKey: lifecycle.stripeIdempotencyKey(`${paymentId}:${checkoutAttempt}`)});
-  if (session.livemode !== false) throw new Error("stripe_live_session_rejected");
+  }, {idempotencyKey: lifecycle.stripeIdempotencyKey(`${paymentId}:${checkoutAttempt}`, PAYMENT_ENVIRONMENT.stripeMode)});
+  lifecycle.assertStripeEvent(session, PAYMENT_ENVIRONMENT.stripeMode);
   await db.runTransaction(async (transaction) => {
     transaction.set(paymentRef, {status: "payment_pending", stripeCheckoutSessionId: session.id,
       stripeCheckoutUrl: session.url, stripeCheckoutExpiresAt: session.expires_at, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
     transaction.set(input.ref, {fundingStatus: "payment_pending", fundingPaymentId: paymentId,
       fundingCheckoutVersion: version, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   });
-  return {paymentId, sessionId: session.id, url: session.url, quote, testMode: true};
+  return {paymentId, sessionId: session.id, url: session.url, quote,
+    paymentMode: PAYMENT_ENVIRONMENT.stripeMode};
 });
 
 async function transition(paymentId, paymentUpdate, campaignUpdate) {
@@ -141,11 +138,12 @@ async function transition(paymentId, paymentUpdate, campaignUpdate) {
 }
 
 async function processEvent(stripe, event) {
-  lifecycle.assertTestEvent(event);
+  lifecycle.assertStripeEvent(event, PAYMENT_ENVIRONMENT.stripeMode);
   const object = event.data?.object || {};
   if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) {
     const session = await stripe.checkout.sessions.retrieve(object.id);
-    if (session.livemode !== false || session.payment_status !== "paid") throw new Error("campaign_payment_not_paid");
+    lifecycle.assertStripeEvent(session, PAYMENT_ENVIRONMENT.stripeMode);
+    if (session.payment_status !== "paid") throw new Error("campaign_payment_not_paid");
     const paymentId = cleanId(session.client_reference_id);
     const payment = (await db.collection("campaignPayments").doc(paymentId).get()).data() || {};
     if (session.amount_total !== payment.totalChargeCents || session.currency !== payment.currency ||
@@ -177,14 +175,14 @@ async function processEvent(stripe, event) {
     {fundingStatus: state.fundingStatus, ...(state.campaignStatus ? {status: state.campaignStatus, fundingReviewRequired: true} : {})});
 }
 
-exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_TEST_SECRET_KEY, STRIPE_TEST_WEBHOOK_SECRET]}, async (request, response) => {
+exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET]}, async (request, response) => {
   if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
   let event;
   try {
     const stripe = stripeClient();
-    const webhookSecret = lifecycle.assertTestWebhookSecret(STRIPE_TEST_WEBHOOK_SECRET.value());
+    const webhookSecret = lifecycle.assertWebhookSecret(STRIPE_WEBHOOK_SECRET.value());
     event = stripe.webhooks.constructEvent(request.rawBody, request.headers["stripe-signature"], webhookSecret);
-    lifecycle.assertTestEvent(event);
+    lifecycle.assertStripeEvent(event, PAYMENT_ENVIRONMENT.stripeMode);
     const eventRef = db.collection("stripeCampaignEvents").doc(event.id);
     let claimed = false;
     await db.runTransaction(async (transaction) => {
@@ -192,7 +190,8 @@ exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_TEST_SECRET_KEY,
       if (snapshot.data()?.status === "processed") return;
       const updatedAt = snapshot.data()?.updatedAt;
       if (snapshot.data()?.status === "processing" && updatedAt instanceof Timestamp && Date.now() - updatedAt.toMillis() < 300000) return;
-      transaction.set(eventRef, {eventId: event.id, type: event.type, livemode: false, status: "processing",
+      transaction.set(eventRef, {eventId: event.id, type: event.type, livemode: event.livemode,
+        stripeMode: PAYMENT_ENVIRONMENT.stripeMode, status: "processing",
         attempts: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp(),
         createdAt: snapshot.exists ? snapshot.data().createdAt : FieldValue.serverTimestamp()}, {merge: true});
       claimed = true;
@@ -215,8 +214,9 @@ exports.publishFundedCampaign = onCall(OPTIONS, async (request) => {
   const paymentId = cleanId(input.campaign.fundingPaymentId);
   const payment = paymentId ? (await db.collection("campaignPayments").doc(paymentId).get()).data() : null;
   if (!zones.length || input.campaign.fundingStatus !== "funded" || payment?.status !== "paid" ||
-      payment.stripeMode !== "test" || payment.campaignId !== input.campaignId || payment.businessUid !== input.uid) {
-    throw new HttpsError("failed-precondition", "Signed Stripe TEST payment and a valid mapped Zone are required.");
+      payment.stripeMode !== PAYMENT_ENVIRONMENT.stripeMode || payment.campaignId !== input.campaignId ||
+      payment.businessUid !== input.uid) {
+    throw new HttpsError("failed-precondition", "Signed Stripe payment and a valid mapped Zone are required.");
   }
   await input.ref.set({status: "open", publishedAt: FieldValue.serverTimestamp(), zonesLockedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()}, {merge: true});

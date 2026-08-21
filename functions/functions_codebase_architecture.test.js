@@ -77,10 +77,12 @@ test("campaign-funding owns the isolated TEST-mode campaign payment boundary", (
   assert.match(campaignFunding, /async function ownedCampaign/);
   assert.match(campaignFunding, /lifecycle\.quoteForCampaign\(input\.campaign\)/);
   for (const forbidden of [
-    "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_THIN_WEBHOOK_SECRET",
     "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
     "OPENAI_API_KEY", "CENSUS_API_KEY", "stripeThinWebhook", "fundCampaign",
   ]) assert.doesNotMatch(campaignFunding, new RegExp(forbidden));
+  assert.doesNotMatch(campaignFunding, /defineSecret\(["']STRIPE_SECRET_KEY["']\)/);
+  assert.doesNotMatch(campaignFunding, /defineSecret\(["']STRIPE_WEBHOOK_SECRET["']\)/);
   for (const writeOrProvider of [
     /wallets/, /createCreditCheckoutSession/, /createScalerConnectedAccount/,
     /stripeThinWebhook/, /STRIPE_THIN_WEBHOOK_SECRET/,

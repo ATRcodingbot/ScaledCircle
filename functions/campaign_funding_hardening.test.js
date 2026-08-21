@@ -5,12 +5,25 @@ const lifecycle = require("../functions-campaign-funding/campaign_funding_lifecy
 const fs = require("node:fs");
 const path = require("node:path");
 const fundingSource = fs.readFileSync(path.join(__dirname, "..", "functions-campaign-funding", "index.js"), "utf8");
+const fundingRoot = path.join(__dirname, "..", "functions-campaign-funding");
 
-test("TEST Checkout is fail-closed to staging or the demo emulator", () => {
-  assert.match(fundingSource, /projectId === "scaledcircle-staging"/);
-  assert.match(fundingSource, /projectId === "demo-scaledcircle" && process\.env\.FIRESTORE_EMULATOR_HOST/);
-  assert.doesNotMatch(fundingSource, /https:\/\/scaledcircle\.com\/#\/campaign-funding-return/);
-  assert.match(fundingSource, /Stripe TEST campaign funding is available only/);
+test("campaign funding environments are explicit and fail closed", () => {
+  assert.equal(lifecycle.paymentEnvironment({APP_ENV: "local", GCLOUD_PROJECT: "demo-scaledcircle",
+    FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080"}).stripeMode, "test");
+  assert.equal(lifecycle.paymentEnvironment({APP_ENV: "staging", GCLOUD_PROJECT: "scaledcircle-staging"})
+    .stripeMode, "test");
+  assert.equal(lifecycle.paymentEnvironment({APP_ENV: "production", GCLOUD_PROJECT: "scaled-circle"})
+    .stripeMode, "live");
+  assert.throws(() => lifecycle.paymentEnvironment({APP_ENV: "production", GCLOUD_PROJECT: "scaledcircle-staging"}));
+  assert.throws(() => lifecycle.paymentEnvironment({APP_ENV: "staging", GCLOUD_PROJECT: "scaled-circle"}));
+  assert.throws(() => lifecycle.paymentEnvironment({APP_ENV: "unknown", GCLOUD_PROJECT: "scaled-circle"}));
+  assert.equal(fs.readFileSync(path.join(fundingRoot, ".env.scaled-circle"), "utf8").trim(),
+    "APP_ENV=production");
+  assert.equal(fs.readFileSync(path.join(fundingRoot, ".env.scaledcircle-staging"), "utf8").trim(),
+    "APP_ENV=staging");
+  assert.match(fundingSource, /STRIPE_LIVE_SECRET_KEY/);
+  assert.match(fundingSource, /STRIPE_LIVE_WEBHOOK_SECRET/);
+  assert.match(fundingSource, /PAYMENT_ENVIRONMENT\.stripeMode === "live"/);
 });
 
 test("authoritative worker pool includes bonus once and applies 20 percent half-up", () => {
@@ -39,14 +52,17 @@ test("mapped Zone must belong to campaign and owner", () => {
   assert.equal(lifecycle.mappedZoneIsValid({campaignId: "c", serviceAreaPointCount: 2}, "c", "b"), false);
 });
 
-test("test-only secrets and events fail closed", () => {
-  assert.equal(lifecycle.assertTestSecret("sk_test_fixture"), "sk_test_fixture");
-  assert.equal(lifecycle.assertTestSecret("  sk_test_fixture\r\n"), "sk_test_fixture");
-  assert.throws(() => lifecycle.assertTestSecret("sk_live_forbidden"));
-  assert.equal(lifecycle.assertTestWebhookSecret("  whsec_fixture\r\n"), "whsec_fixture");
-  assert.throws(() => lifecycle.assertTestWebhookSecret("not_a_webhook_secret"));
-  assert.equal(lifecycle.assertTestEvent({livemode: false}).livemode, false);
-  assert.throws(() => lifecycle.assertTestEvent({livemode: true}));
+test("Stripe secrets and events must match the authoritative environment mode", () => {
+  assert.equal(lifecycle.assertStripeSecret("  sk_test_fixture\r\n", "test"), "sk_test_fixture");
+  assert.equal(lifecycle.assertStripeSecret("  sk_live_fixture\r\n", "live"), "sk_live_fixture");
+  assert.throws(() => lifecycle.assertStripeSecret("sk_live_forbidden", "test"));
+  assert.throws(() => lifecycle.assertStripeSecret("sk_test_forbidden", "live"));
+  assert.equal(lifecycle.assertWebhookSecret("  whsec_fixture\r\n"), "whsec_fixture");
+  assert.throws(() => lifecycle.assertWebhookSecret("not_a_webhook_secret"));
+  assert.equal(lifecycle.assertStripeEvent({livemode: false}, "test").livemode, false);
+  assert.equal(lifecycle.assertStripeEvent({livemode: true}, "live").livemode, true);
+  assert.throws(() => lifecycle.assertStripeEvent({livemode: true}, "test"));
+  assert.throws(() => lifecycle.assertStripeEvent({livemode: false}, "live"));
 });
 
 test("checkout recovery never returns an expired or closed URL", () => {
@@ -74,6 +90,7 @@ test("checkout and Stripe idempotency identifiers are deterministic", () => {
   assert.equal(lifecycle.paymentId("campaign", 1), lifecycle.paymentId("campaign", 1));
   assert.notEqual(lifecycle.paymentId("campaign", 1), lifecycle.paymentId("campaign", 2));
   assert.match(lifecycle.stripeIdempotencyKey("payment"), /^scaledcircle:test:/);
+  assert.match(lifecycle.stripeIdempotencyKey("payment", "live"), /^scaledcircle:live:/);
 });
 
 test("expiration and failure restore truthful non-funded states", () => {
@@ -111,7 +128,8 @@ test("out-of-order events cannot revive refunded or disputed funding", () => {
 
 test("signed raw-body webhook is the only campaign payment authority", () => {
   assert.match(fundingSource, /webhooks\.constructEvent\(request\.rawBody/);
-  assert.match(fundingSource, /assertTestWebhookSecret\(STRIPE_TEST_WEBHOOK_SECRET\.value\(\)\)/);
+  assert.match(fundingSource, /assertWebhookSecret\(STRIPE_WEBHOOK_SECRET\.value\(\)\)/);
+  assert.match(fundingSource, /assertStripeEvent\(event, PAYMENT_ENVIRONMENT\.stripeMode\)/);
   assert.doesNotMatch(fundingSource, /success_url[\s\S]{0,300}fundingStatus:\s*["']funded/);
   assert.doesNotMatch(fundingSource, /stripeThinWebhook|customer\.subscription|payout\.|transfer\./);
 });

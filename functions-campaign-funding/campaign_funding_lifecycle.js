@@ -71,19 +71,37 @@ function paymentId(campaignId, fundingVersion) {
   return `campaign-payment_${digest}`;
 }
 
-function stripeIdempotencyKey(campaignPaymentId) {
-  return `scaledcircle:test:campaign-checkout:${campaignPaymentId}`;
+function stripeIdempotencyKey(campaignPaymentId, stripeMode = "test") {
+  if (!new Set(["test", "live"]).has(stripeMode)) throw new Error("stripe_mode_invalid");
+  return `scaledcircle:${stripeMode}:campaign-checkout:${campaignPaymentId}`;
 }
 
-function assertTestSecret(key) {
+function paymentEnvironment(environment = {}) {
+  const appEnv = String(environment.APP_ENV || "").trim();
+  const projectId = String(environment.GCLOUD_PROJECT || environment.GOOGLE_CLOUD_PROJECT || "").trim();
+  const emulatorActive = Boolean(String(environment.FIRESTORE_EMULATOR_HOST || "").trim());
+  if (appEnv === "local" && projectId === "demo-scaledcircle" && emulatorActive) {
+    return Object.freeze({appEnv, projectId, stripeMode: "test", returnBaseUrl: "http://127.0.0.1:5000"});
+  }
+  if (appEnv === "staging" && projectId === "scaledcircle-staging") {
+    return Object.freeze({appEnv, projectId, stripeMode: "test", returnBaseUrl: "https://scaledcircle-staging.web.app"});
+  }
+  if (appEnv === "production" && projectId === "scaled-circle") {
+    return Object.freeze({appEnv, projectId, stripeMode: "live", returnBaseUrl: "https://scaledcircle.com"});
+  }
+  throw new Error("campaign_funding_environment_mismatch");
+}
+
+function assertStripeSecret(key, stripeMode) {
   const normalized = typeof key === "string" ? key.trim() : "";
-  if (!normalized.startsWith("sk_test_")) {
-    throw new Error("stripe_test_mode_required");
+  const prefix = stripeMode === "live" ? "sk_live_" : stripeMode === "test" ? "sk_test_" : "";
+  if (!prefix || !normalized.startsWith(prefix)) {
+    throw new Error("stripe_secret_mode_mismatch");
   }
   return normalized;
 }
 
-function assertTestWebhookSecret(secret) {
+function assertWebhookSecret(secret) {
   const normalized = typeof secret === "string" ? secret.trim() : "";
   if (!normalized.startsWith("whsec_")) {
     throw new Error("stripe_test_webhook_secret_required");
@@ -91,8 +109,11 @@ function assertTestWebhookSecret(secret) {
   return normalized;
 }
 
-function assertTestEvent(event) {
-  if (!event || event.livemode !== false) throw new Error("stripe_test_event_required");
+function assertStripeEvent(event, stripeMode) {
+  const expectedLivemode = stripeMode === "live" ? true : stripeMode === "test" ? false : null;
+  if (!event || expectedLivemode === null || event.livemode !== expectedLivemode) {
+    throw new Error("stripe_event_mode_mismatch");
+  }
   return event;
 }
 
@@ -143,12 +164,13 @@ function transitionAllowed(current, next) {
 
 module.exports = {
   PLATFORM_FEE_BASIS_POINTS,
-  assertTestEvent,
-  assertTestSecret,
-  assertTestWebhookSecret,
+  assertStripeEvent,
+  assertStripeSecret,
+  assertWebhookSecret,
   campaignStateForPaymentEvent,
   checkoutRecoveryDecision,
   mappedZoneIsValid,
+  paymentEnvironment,
   paymentId,
   quoteDigest,
   quoteForCampaign,
