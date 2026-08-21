@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart';
 
 import '../firebase_options.dart';
 import 'firebase_options_local.dart';
+import 'firebase_options_staging.dart';
 
-enum AppEnvironment { local, production }
+enum AppEnvironment { local, staging, production }
 
 /// Single source of truth for runtime environment selection.
 ///
@@ -17,28 +18,41 @@ abstract final class AppEnvironmentConfig {
   );
 
   static const bool isLocal = _rawEnvironment == 'local';
+  static const bool isStaging = _rawEnvironment == 'staging';
   static const bool isProduction = _rawEnvironment == 'production';
 
   static AppEnvironment get environment => switch (_rawEnvironment) {
     'local' => AppEnvironment.local,
+    'staging' => AppEnvironment.staging,
     'production' => AppEnvironment.production,
     _ => throw StateError(
-      'APP_ENV must be exactly "local" or "production". '
+      'APP_ENV must be exactly "local", "staging", or "production". '
       'Refusing to start with APP_ENV="$_rawEnvironment".',
     ),
   };
 
-  static String get diagnosticsLabel => isLocal ? 'LOCAL / TEST' : 'PRODUCTION';
-  static String get firebaseProjectId =>
-      isLocal ? 'demo-scaledcircle' : 'scaled-circle';
+  static String get diagnosticsLabel => switch (environment) {
+    AppEnvironment.local => 'LOCAL / TEST',
+    AppEnvironment.staging => 'STAGING • TEST PAYMENTS',
+    AppEnvironment.production => 'PRODUCTION',
+  };
+  static String get firebaseProjectId => switch (environment) {
+    AppEnvironment.local => 'demo-scaledcircle',
+    AppEnvironment.staging => 'scaledcircle-staging',
+    AppEnvironment.production => 'scaled-circle',
+  };
   static String get functionsRegion => 'us-east1';
-  static Uri get publicBaseUrl =>
-      Uri.parse(isLocal ? 'http://127.0.0.1:5000' : 'https://scaledcircle.com');
+  static Uri get publicBaseUrl => switch (environment) {
+    AppEnvironment.local => Uri.parse('http://127.0.0.1:5000'),
+    AppEnvironment.staging => Uri.parse('https://scaledcircle-staging.web.app'),
+    AppEnvironment.production => Uri.parse('https://scaledcircle.com'),
+  };
 
-  static FirebaseOptions get firebaseOptions =>
-      isLocal
-      ? LocalFirebaseOptions.currentPlatform
-      : DefaultFirebaseOptions.currentPlatform;
+  static FirebaseOptions get firebaseOptions => switch (environment) {
+    AppEnvironment.local => LocalFirebaseOptions.currentPlatform,
+    AppEnvironment.staging => StagingFirebaseOptions.currentPlatform,
+    AppEnvironment.production => DefaultFirebaseOptions.currentPlatform,
+  };
 
   static String get emulatorHost {
     if (!isLocal) {
@@ -72,9 +86,9 @@ abstract final class AppEnvironmentConfig {
         '"$firebaseProjectId", received "$actual". Startup stopped.',
       );
     }
-    if (isLocal && actual == 'scaled-circle') {
+    if (!isProduction && actual == 'scaled-circle') {
       throw StateError(
-        'APP_ENV=local must never connect to production project scaled-circle.',
+        'Non-production APP_ENV must never connect to scaled-circle.',
       );
     }
   }

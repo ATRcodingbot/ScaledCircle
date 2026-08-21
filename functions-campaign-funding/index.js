@@ -13,6 +13,18 @@ const STRIPE_TEST_WEBHOOK_SECRET = defineSecret("STRIPE_TEST_WEBHOOK_SECRET");
 const OPTIONS = {region: "us-east1", timeoutSeconds: 60, memory: "256MiB", maxInstances: 10};
 const cleanId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || "").trim()) ? String(value).trim() : "";
 
+function checkoutReturnBaseUrl() {
+  const projectId = String(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || "").trim();
+  if (projectId === "scaledcircle-staging") return "https://scaledcircle-staging.web.app";
+  if (projectId === "demo-scaledcircle" && process.env.FIRESTORE_EMULATOR_HOST) {
+    return "http://127.0.0.1:5000";
+  }
+  throw new HttpsError(
+    "failed-precondition",
+    "Stripe TEST campaign funding is available only in the approved staging or local emulator environment.",
+  );
+}
+
 async function ownedCampaign(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in as a Business.");
   if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "Verify your email first.");
@@ -94,12 +106,13 @@ exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STR
   await paymentRef.set({paymentId, campaignId: input.campaignId, businessUid: input.uid, businessId: input.uid,
     ...quote, fundingVersion: version, checkoutAttempt, status: "created", stripeMode: "test",
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+  const returnBaseUrl = checkoutReturnBaseUrl();
   const session = await stripe.checkout.sessions.create({mode: "payment", client_reference_id: paymentId,
     line_items: [{quantity: 1, price_data: {currency: quote.currency, unit_amount: quote.totalChargeCents,
       product_data: {name: `ScaledCircle campaign funding: ${String(input.campaign.name || input.campaignId).slice(0, 80)}`}}}],
     payment_intent_data: {metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid}},
-    success_url: "https://scaledcircle.com/#/campaign-funding-return?status=processing",
-    cancel_url: `https://scaledcircle.com/#/campaign/${input.campaignId}?funding=cancelled`,
+    success_url: `${returnBaseUrl}/#/campaign-funding-return?status=processing`,
+    cancel_url: `${returnBaseUrl}/#/campaign/${input.campaignId}?funding=cancelled`,
     metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid, purchaseType: "campaign_funding_test_v1"},
     expires_at: Math.floor(Date.now() / 1000) + 1800,
   }, {idempotencyKey: lifecycle.stripeIdempotencyKey(`${paymentId}:${checkoutAttempt}`)});

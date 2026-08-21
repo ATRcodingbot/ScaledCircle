@@ -93,11 +93,15 @@ class ScaledCircleApp extends StatelessWidget {
         return null;
       },
       builder: (context, child) {
-        if (!AppEnvironmentConfig.isLocal) return child ?? const SizedBox();
+        if (AppEnvironmentConfig.isProduction) {
+          return child ?? const SizedBox();
+        }
         return Banner(
           message: AppEnvironmentConfig.diagnosticsLabel,
           location: BannerLocation.topEnd,
-          color: const Color(0xFFD97706),
+          color: AppEnvironmentConfig.isStaging
+              ? const Color(0xFF7C3AED)
+              : const Color(0xFFD97706),
           child: child ?? const SizedBox(),
         );
       },

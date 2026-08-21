@@ -6,6 +6,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const fundingSource = fs.readFileSync(path.join(__dirname, "..", "functions-campaign-funding", "index.js"), "utf8");
 
+test("TEST Checkout is fail-closed to staging or the demo emulator", () => {
+  assert.match(fundingSource, /projectId === "scaledcircle-staging"/);
+  assert.match(fundingSource, /projectId === "demo-scaledcircle" && process\.env\.FIRESTORE_EMULATOR_HOST/);
+  assert.doesNotMatch(fundingSource, /https:\/\/scaledcircle\.com\/#\/campaign-funding-return/);
+  assert.match(fundingSource, /Stripe TEST campaign funding is available only/);
+});
+
 test("authoritative worker pool includes bonus once and applies 20 percent half-up", () => {
   const quote = lifecycle.quoteForCampaign({basePay: 100, bonus: 23.45, requestedScalerCount: 9});
   assert.equal(quote.workerCompensationCents, 12345);

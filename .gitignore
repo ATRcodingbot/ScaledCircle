@@ -10,6 +10,7 @@
 .vscode/
 .firebase/
 **/.secret.local
+**/.staging-qa.local
 
 # Flutter repo-specific
 /bin/cache/
