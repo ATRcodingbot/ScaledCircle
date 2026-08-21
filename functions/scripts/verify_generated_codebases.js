@@ -90,7 +90,10 @@ const transactionalEmail = require(path.join(transactionalEmailRoot, "index.js")
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
 assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);
-assert.deepEqual(Object.keys(campaignFunding).sort(), ["quoteCampaignFunding"]);
+assert.deepEqual(Object.keys(campaignFunding).filter((name) => !name.startsWith("_")).sort(), [
+  "createCampaignFundingCheckoutSession", "publishFundedCampaign",
+  "quoteCampaignFunding", "stripeWebhook",
+]);
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
 ].sort());
@@ -98,6 +101,9 @@ assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendScalerJobAlertEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "quoteCampaignFunding"), false);
+assert.equal(Object.hasOwn(legacy, "createCampaignFundingCheckoutSession"), false);
+assert.equal(Object.hasOwn(legacy, "publishFundedCampaign"), false);
+assert.equal(Object.hasOwn(legacy, "stripeWebhook"), false);
 assert.equal(Object.hasOwn(legacy, "sendOutboundEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendTransactionalEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "finalizePublicAccountSignup"), false);
@@ -162,10 +168,11 @@ const campaignFundingLock = require("node:fs").readFileSync(
 for (const forbidden of [
   "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
-  "OPENAI_API_KEY", "CENSUS_API_KEY", "stripeClient", "stripeWebhook",
-  "createCampaignFundingCheckoutSession", "publishFundedCampaign", "fundCampaign",
+  "OPENAI_API_KEY", "CENSUS_API_KEY", "stripeThinWebhook", "fundCampaign",
 ]) assert.doesNotMatch(campaignFundingSource, new RegExp(forbidden));
-for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+assert.match(campaignFundingSource, /STRIPE_TEST_SECRET_KEY/);
+assert.match(campaignFundingSource, /STRIPE_TEST_WEBHOOK_SECRET/);
+for (const forbiddenPackage of ["node_modules/nodemailer", "openai"]) {
   assert.doesNotMatch(campaignFundingLock, new RegExp(forbiddenPackage));
 }
 

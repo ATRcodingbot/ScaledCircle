@@ -16,6 +16,7 @@ void main() {
       estimatedTotalCents: workerCents + feeCents,
       currency: 'usd',
       policyVersion: 'CampaignCostQuoteV1',
+      quoteDigest: 'test-quote-digest',
     );
   }
 
@@ -163,8 +164,13 @@ void main() {
     final reviewSource = File(
       'lib/screens/campaigns/campaign_details_screen.dart',
     ).readAsStringSync();
-    expect(reviewSource, contains('_billingService.campaignCostQuote(workerBudget)'));
-    expect(reviewSource, contains('confirmed again before funding'));
+    expect(
+      reviewSource,
+      contains('_billingService.campaignCostQuoteForCampaign(campaign.id)'),
+    );
+    expect(reviewSource, contains('Campaign pricing changed'));
+    expect(reviewSource, contains('approvedQuoteDigest'));
+    expect(reviewSource, contains('approve again'));
     expect(reviewSource, contains('fundCampaignWithCard'));
     expect(reviewSource, isNot(contains('PLATFORM FEE (20%)')));
   });

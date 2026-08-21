@@ -40,7 +40,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     if (_reviewQuoteFuture == null ||
         _reviewQuoteWorkerCents != workerCents) {
       _reviewQuoteWorkerCents = workerCents;
-      _reviewQuoteFuture = _billingService.campaignCostQuote(workerBudget);
+      _reviewQuoteFuture =
+          _billingService.campaignCostQuoteForCampaign(campaign.id);
     }
     return _reviewQuoteFuture!;
   }
@@ -254,9 +255,23 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       });
 
       if (fundingStatus != 'funded') {
+        final reviewedQuote = await _reviewQuote(workerBudget);
+        final freshQuote = await _billingService.campaignCostQuoteForCampaign(
+          liveCampaign.id,
+        );
+        if (reviewedQuote.quoteDigest != freshQuote.quoteDigest) {
+          setState(() {
+            _reviewQuoteFuture = Future.value(freshQuote);
+            _reviewQuoteWorkerCents = freshQuote.workerCompensationCents;
+          });
+          throw Exception(
+            'Campaign pricing changed. Review the updated total and approve again.',
+          );
+        }
         await _billingService.fundCampaignWithCard(
           businessId: businessId,
           campaignId: liveCampaign.id,
+          approvedQuoteDigest: freshQuote.quoteDigest,
         );
         return;
       }
@@ -545,8 +560,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
             : const Icon(Icons.publish),
         label: Text(
           _publishingDraft
-              ? 'Launching & Securing Funds...'
-              : 'Launch Campaign & Secure Worker Pay',
+              ? 'Preparing Secure TEST Checkout...'
+              : 'Approve & Continue to Funding',
         ),
       ),
     );

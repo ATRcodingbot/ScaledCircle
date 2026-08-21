@@ -67,10 +67,10 @@ void main() {
     expect(error.toString(), 'Campaign funding is unavailable.');
   });
 
-  test('funding action is truthfully gated until backend is live', () {
+  test('funding action is enabled only for the reviewed isolated boundary', () {
     expect(
       PlatformBillingService.authoritativeCampaignFundingAvailable,
-      isFalse,
+      isTrue,
     );
   });
 

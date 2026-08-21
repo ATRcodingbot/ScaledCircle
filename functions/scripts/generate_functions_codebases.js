@@ -66,7 +66,12 @@ const artifactEmailExports = new Set(["sendArtifactDeliveryEmailJob"]);
 const artifactEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
 const jobAlertEmailExports = new Set(["sendScalerJobAlertEmailJob"]);
 const jobAlertEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
-const campaignFundingExports = new Set(["quoteCampaignFunding"]);
+const campaignFundingExports = new Set([
+  "quoteCampaignFunding",
+  "createCampaignFundingCheckoutSession",
+  "publishFundedCampaign",
+  "stripeWebhook",
+]);
 const transactionalEmailExports = new Set([
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
 ]);
@@ -85,6 +90,8 @@ const allSecretNames = new Set([
   "STRIPE_STARTER_PRICE_ID",
   "STRIPE_GROWTH_PRICE_ID",
   "STRIPE_SCALE_PRICE_ID",
+  "STRIPE_TEST_SECRET_KEY",
+  "STRIPE_TEST_WEBHOOK_SECRET",
 ]);
 
 function exportedName(statement) {
@@ -259,6 +266,11 @@ for (const [mode, destination] of [
   ["campaign-funding", campaignFundingRoot],
   ["transactional-email", transactionalEmailRoot],
 ]) {
+  // Campaign funding is deliberately hand-maintained as a small, auditable
+  // payment boundary. Never regenerate it from the subscription/payout-heavy
+  // legacy monolith; the export set above still removes its four authorities
+  // from the default deployment package.
+  if (mode === "campaign-funding") continue;
   resetDirectory(destination);
   copyPackage(destination, mode);
   writePackageManifest(mode, destination);

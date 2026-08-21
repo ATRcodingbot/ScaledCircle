@@ -752,9 +752,12 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         final fundingStatus = latestCampaignData['fundingStatus']?.toString();
 
         if (fundingStatus != 'funded') {
+          final approvedQuote = await _billingService
+              .campaignCostQuoteForCampaign(campaignReference.id);
           await _billingService.fundCampaignWithCard(
             businessId: user.uid,
             campaignId: campaignReference.id,
+            approvedQuoteDigest: approvedQuote.quoteDigest,
           );
           return;
         }
@@ -880,7 +883,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         const SnackBar(
           content: Text(
             'Zones saved. Review the campaign data, then launch when ready. '
-            'No credits have been charged yet.',
+            'No payment has been made.',
           ),
         ),
       );

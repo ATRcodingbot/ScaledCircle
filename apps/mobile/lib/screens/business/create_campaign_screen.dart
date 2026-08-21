@@ -556,9 +556,12 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         final fundingStatus = latestCampaignData['fundingStatus']?.toString();
 
         if (fundingStatus != 'funded') {
+          final approvedQuote = await _billingService
+              .campaignCostQuoteForCampaign(campaignReference.id);
           await _billingService.fundCampaignWithCard(
             businessId: user.uid,
             campaignId: campaignReference.id,
+            approvedQuoteDigest: approvedQuote.quoteDigest,
           );
           return;
         }
@@ -685,9 +688,12 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       final fundingStatus = latestCampaignData['fundingStatus']?.toString();
 
       if (fundingStatus != 'funded') {
+        final approvedQuote = await _billingService
+            .campaignCostQuoteForCampaign(campaignReference.id);
         await _billingService.fundCampaignWithCard(
           businessId: user.uid,
           campaignId: campaignReference.id,
+          approvedQuoteDigest: approvedQuote.quoteDigest,
         );
         return;
       }

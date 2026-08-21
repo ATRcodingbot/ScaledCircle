@@ -12,6 +12,7 @@ class CampaignCostQuote {
     required this.estimatedTotalCents,
     required this.currency,
     required this.policyVersion,
+    required this.quoteDigest,
   });
 
   final int workerCompensationCents;
@@ -20,6 +21,7 @@ class CampaignCostQuote {
   final int estimatedTotalCents;
   final String currency;
   final String policyVersion;
+  final String quoteDigest;
 
   double get workerCompensation => workerCompensationCents / 100;
   double get platformFee => platformFeeCents / 100;
@@ -56,6 +58,7 @@ class CampaignCostQuote {
       estimatedTotalCents: total,
       currency: currency,
       policyVersion: 'CampaignCostQuoteV${result['quoteVersion'] ?? 1}',
+      quoteDigest: result['quoteDigest']?.toString() ?? '',
     );
   }
 }
@@ -69,7 +72,7 @@ class PlatformBillingService {
   /// Temporary production capability gate. The reviewed funding callables are
   /// not live yet, so drafts must remain safely saved without presenting a
   /// launch action that cannot succeed.
-  static const bool authoritativeCampaignFundingAvailable = false;
+  static const bool authoritativeCampaignFundingAvailable = true;
 
   static const Map<String, double> subscriptionPrices = {
     'starter': 99.0,
@@ -180,13 +183,21 @@ class PlatformBillingService {
   Future<void> fundCampaignWithCard({
     required String businessId,
     required String campaignId,
+    String? approvedQuoteDigest,
   }) async {
+    if (approvedQuoteDigest == null || approvedQuoteDigest.isEmpty) {
+      throw Exception('Review and approve the latest campaign funding quote.');
+    }
     final result = await _callSecureFunction(
       businessId: businessId,
       functionName: 'createCampaignFundingCheckoutSession',
-      data: {'campaignId': campaignId},
+      data: {
+        'campaignId': campaignId,
+        'approvedQuoteDigest': approvedQuoteDigest,
+      },
     );
     if (result['alreadyFunded'] == true) return;
+    if (result['processing'] == true) return;
     await _openStripeUrl(result['url']);
   }
 
@@ -207,6 +218,19 @@ class PlatformBillingService {
       businessId: user.uid,
       functionName: 'quoteCampaignFunding',
       data: {'workerAmountCents': (workerBudget * 100).round()},
+    );
+    return CampaignCostQuote.fromCallable(result);
+  }
+
+  Future<CampaignCostQuote> campaignCostQuoteForCampaign(
+    String campaignId,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('You must be logged in.');
+    final result = await _callSecureFunction(
+      businessId: user.uid,
+      functionName: 'quoteCampaignFunding',
+      data: {'campaignId': campaignId},
     );
     return CampaignCostQuote.fromCallable(result);
   }

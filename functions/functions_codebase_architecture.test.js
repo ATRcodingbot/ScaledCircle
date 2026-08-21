@@ -67,26 +67,28 @@ test("platform-core has the exact reviewed public exports", () => {
   for (const name of expected) assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
 });
 
-test("campaign-funding owns exactly one secret-free quote callable", () => {
-  assert.deepEqual(exportsIn(campaignFunding), ["quoteCampaignFunding"]);
+test("campaign-funding owns the isolated TEST-mode campaign payment boundary", () => {
+  assert.deepEqual(exportsIn(campaignFunding), [
+    "quoteCampaignFunding", "createCampaignFundingCheckoutSession",
+    "stripeWebhook", "publishFundedCampaign",
+  ]);
   assert.doesNotMatch(legacy, /exports\.quoteCampaignFunding\s*=/);
-  assert.match(campaignFunding, /safeCampaignQuoteCallable\("quoteCampaignFunding"/);
-  assert.match(campaignFunding, /requireFinancialRole[\s\S]*?"business"/);
-  assert.match(campaignFunding, /campaignFundingQuote\.quoteCampaignFunding\(workerAmountCents\)/);
+  assert.match(campaignFunding, /exports\.quoteCampaignFunding\s*=\s*onCall/);
+  assert.match(campaignFunding, /async function ownedCampaign/);
+  assert.match(campaignFunding, /lifecycle\.quoteForCampaign\(input\.campaign\)/);
   for (const forbidden of [
     "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
     "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
-    "OPENAI_API_KEY", "CENSUS_API_KEY", "createCampaignFundingCheckoutSession",
-    "publishFundedCampaign", "stripeWebhook", "stripeThinWebhook", "fundCampaign",
+    "OPENAI_API_KEY", "CENSUS_API_KEY", "stripeThinWebhook", "fundCampaign",
   ]) assert.doesNotMatch(campaignFunding, new RegExp(forbidden));
   for (const writeOrProvider of [
-    /\.set\(/, /\.update\(/, /runTransaction\(/, /wallets/, /campaignPayments/,
-    /checkout\.sessions/, /paymentIntents/, /require\(["']stripe["']\)/,
+    /wallets/, /createCreditCheckoutSession/, /createScalerConnectedAccount/,
+    /stripeThinWebhook/, /STRIPE_THIN_WEBHOOK_SECRET/,
   ]) assert.doesNotMatch(campaignFunding, writeOrProvider);
   assert.deepEqual(Object.keys(campaignFundingPackage.dependencies).sort(), [
-    "firebase-admin", "firebase-functions",
+    "firebase-admin", "firebase-functions", "stripe",
   ]);
-  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+  for (const forbiddenPackage of ["node_modules/nodemailer", "openai"]) {
     assert.doesNotMatch(campaignFundingLock, new RegExp(forbiddenPackage));
   }
 });
@@ -267,6 +269,6 @@ test("generated codebase preparation installs dependencies after regeneration", 
     "firebase-admin", "firebase-functions", "nodemailer",
   ]);
   assert.deepEqual(Object.keys(campaignFundingPackage.dependencies).sort(), [
-    "firebase-admin", "firebase-functions",
+    "firebase-admin", "firebase-functions", "stripe",
   ]);
 });
