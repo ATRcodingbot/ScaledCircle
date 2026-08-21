@@ -41,7 +41,10 @@ test("mapped Zone must belong to campaign and owner", () => {
 
 test("test-only secrets and events fail closed", () => {
   assert.equal(lifecycle.assertTestSecret("sk_test_fixture"), "sk_test_fixture");
+  assert.equal(lifecycle.assertTestSecret("  sk_test_fixture\r\n"), "sk_test_fixture");
   assert.throws(() => lifecycle.assertTestSecret("sk_live_forbidden"));
+  assert.equal(lifecycle.assertTestWebhookSecret("  whsec_fixture\r\n"), "whsec_fixture");
+  assert.throws(() => lifecycle.assertTestWebhookSecret("not_a_webhook_secret"));
   assert.equal(lifecycle.assertTestEvent({livemode: false}).livemode, false);
   assert.throws(() => lifecycle.assertTestEvent({livemode: true}));
 });
@@ -108,7 +111,7 @@ test("out-of-order events cannot revive refunded or disputed funding", () => {
 
 test("signed raw-body webhook is the only campaign payment authority", () => {
   assert.match(fundingSource, /webhooks\.constructEvent\(request\.rawBody/);
-  assert.match(fundingSource, /STRIPE_TEST_WEBHOOK_SECRET/);
+  assert.match(fundingSource, /assertTestWebhookSecret\(STRIPE_TEST_WEBHOOK_SECRET\.value\(\)\)/);
   assert.doesNotMatch(fundingSource, /success_url[\s\S]{0,300}fundingStatus:\s*["']funded/);
   assert.doesNotMatch(fundingSource, /stripeThinWebhook|customer\.subscription|payout\.|transfer\./);
 });

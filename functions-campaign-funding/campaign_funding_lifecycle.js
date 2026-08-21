@@ -76,10 +76,19 @@ function stripeIdempotencyKey(campaignPaymentId) {
 }
 
 function assertTestSecret(key) {
-  if (typeof key !== "string" || !key.startsWith("sk_test_")) {
+  const normalized = typeof key === "string" ? key.trim() : "";
+  if (!normalized.startsWith("sk_test_")) {
     throw new Error("stripe_test_mode_required");
   }
-  return key;
+  return normalized;
+}
+
+function assertTestWebhookSecret(secret) {
+  const normalized = typeof secret === "string" ? secret.trim() : "";
+  if (!normalized.startsWith("whsec_")) {
+    throw new Error("stripe_test_webhook_secret_required");
+  }
+  return normalized;
 }
 
 function assertTestEvent(event) {
@@ -136,6 +145,7 @@ module.exports = {
   PLATFORM_FEE_BASIS_POINTS,
   assertTestEvent,
   assertTestSecret,
+  assertTestWebhookSecret,
   campaignStateForPaymentEvent,
   checkoutRecoveryDecision,
   mappedZoneIsValid,

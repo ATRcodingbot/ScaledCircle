@@ -182,7 +182,8 @@ exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_TEST_SECRET_KEY,
   let event;
   try {
     const stripe = stripeClient();
-    event = stripe.webhooks.constructEvent(request.rawBody, request.headers["stripe-signature"], STRIPE_TEST_WEBHOOK_SECRET.value());
+    const webhookSecret = lifecycle.assertTestWebhookSecret(STRIPE_TEST_WEBHOOK_SECRET.value());
+    event = stripe.webhooks.constructEvent(request.rawBody, request.headers["stripe-signature"], webhookSecret);
     lifecycle.assertTestEvent(event);
     const eventRef = db.collection("stripeCampaignEvents").doc(event.id);
     let claimed = false;
