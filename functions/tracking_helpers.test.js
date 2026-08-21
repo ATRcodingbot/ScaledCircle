@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 const {
   LIMITS,
@@ -96,4 +98,17 @@ test("application payload measurement rejects unserializable/giant structures", 
   const cyclic = {}; cyclic.self = cyclic;
   assert.equal(serializedBytes(cyclic), Number.POSITIVE_INFINITY);
   assert.ok(serializedBytes({points: "x".repeat(200_000)}) > LIMITS.maxUploadPayloadBytes);
+});
+
+test("legacy browser GPS rejects client-selected simulation", () => {
+  const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+  const start = source.indexOf("exports.saveLegacyTrackingRoute");
+  const end = source.indexOf("function campaignWorkPolicy", start);
+  const callable = source.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.doesNotMatch(callable, /request\.data\?\.simulated/);
+  assert.doesNotMatch(callable, /"tracking",\s*"simulated"/);
+  assert.match(callable, /historicallySimulated = existing\?\.simulated === true/);
+  assert.match(callable, /simulated:\s*historicallySimulated/);
+  assert.match(callable, /gpsRouteSimulated:\s*historicallySimulated/);
 });

@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../models/tracking_models.dart';
 import '../../services/active_job_tracking_service.dart';
+import '../../services/native_tracking_bridge.dart';
 import '../scaler/completion/submit_completion_screen.dart';
 
 class NativeJobInProgressScreen extends StatefulWidget {
@@ -15,10 +16,12 @@ class NativeJobInProgressScreen extends StatefulWidget {
     super.key,
     required this.campaign,
     required this.zone,
+    this.trackingService,
   });
 
   final DocumentSnapshot campaign;
   final DocumentSnapshot zone;
+  final ActiveJobTrackingService? trackingService;
 
   @override
   State<NativeJobInProgressScreen> createState() =>
@@ -27,7 +30,7 @@ class NativeJobInProgressScreen extends StatefulWidget {
 
 class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     with WidgetsBindingObserver {
-  final ActiveJobTrackingService _tracking = ActiveJobTrackingService();
+  late final ActiveJobTrackingService _tracking;
   ActiveTrackingState _state = ActiveTrackingState.inactive;
   Timer? _refreshTimer;
   Timer? _syncTimer;
@@ -42,6 +45,9 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
   @override
   void initState() {
     super.initState();
+    _tracking =
+        widget.trackingService ??
+        ActiveJobTrackingService.forCurrentEnvironment();
     WidgetsBinding.instance.addObserver(this);
     _refresh();
     _refreshTimer = Timer.periodic(
@@ -91,6 +97,70 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
         );
       }
     }
+  }
+
+  List<TestRouteCoordinate> _testZone() {
+    List<TestRouteCoordinate> parse(dynamic raw) {
+      if (raw is! List) return const [];
+      return raw
+          .map((value) {
+            if (value is GeoPoint) {
+              return TestRouteCoordinate(value.latitude, value.longitude);
+            }
+            if (value is Map) {
+              final latitude = value['latitude'] ?? value['lat'];
+              final longitude = value['longitude'] ?? value['lng'];
+              if (latitude is num && longitude is num) {
+                return TestRouteCoordinate(
+                  latitude.toDouble(),
+                  longitude.toDouble(),
+                );
+              }
+            }
+            return null;
+          })
+          .whereType<TestRouteCoordinate>()
+          .toList(growable: false);
+    }
+
+    final zone = parse(_zoneData['serviceArea']);
+    if (zone.length >= 3) return zone;
+    return parse(_campaignData['serviceArea']);
+  }
+
+  Future<void> _runTestRoute() async {
+    final harness = _tracking.emulatorHarness;
+    if (_working || harness == null) return;
+    setState(() => _working = true);
+    try {
+      final count = await harness.runDeterministicRoute(_testZone());
+      await _sync();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$count deterministic test samples synced.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Test route unavailable: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  void _toggleTestPause() {
+    final harness = _tracking.emulatorHarness;
+    if (harness == null) return;
+    setState(() {
+      if (harness.paused) {
+        harness.resume();
+      } else {
+        harness.pause();
+      }
+    });
   }
 
   String _elapsed() {
@@ -250,6 +320,56 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (_tracking.emulatorHarness != null) ...[
+              Card(
+                color: const Color(0xFFFFE8A3),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'TEST / EMULATOR ONLY',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF6B3D00),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Deterministic location samples use the normal secure '
+                        'session, queue, chunk, and completion pipeline.',
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: _working || !_state.active
+                            ? null
+                            : _runTestRoute,
+                        icon: const Icon(Icons.route),
+                        label: const Text('Run Simulated Route'),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _working || !_state.active
+                            ? null
+                            : _toggleTestPause,
+                        icon: Icon(
+                          _tracking.emulatorHarness!.paused
+                              ? Icons.play_arrow
+                              : Icons.pause,
+                        ),
+                        label: Text(
+                          _tracking.emulatorHarness!.paused
+                              ? 'Resume'
+                              : 'Pause',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
               child: const ListTile(

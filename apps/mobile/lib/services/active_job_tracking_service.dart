@@ -2,8 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/tracking_models.dart';
+import 'emulator_test_tracking_bridge.dart';
 import 'native_tracking_bridge.dart';
 import 'secure_function_service.dart';
+import 'tracking_runtime_policy.dart';
 
 abstract interface class TrackingSessionGateway {
   Future<Map<String, dynamic>> startSession({
@@ -80,8 +82,24 @@ class ActiveJobTrackingService {
     TrackingSessionGateway? gateway,
   }) : _native = nativeBridge ?? const MethodChannelNativeTrackingBridge(),
        _gateway = gateway ?? const FirebaseTrackingSessionGateway();
+
+  factory ActiveJobTrackingService.forCurrentEnvironment({
+    TrackingSessionGateway? gateway,
+  }) {
+    if (TrackingRuntimePolicy.emulatorGpsHarnessEnabled) {
+      return ActiveJobTrackingService(
+        nativeBridge: EmulatorTestTrackingBridge.create(),
+        gateway: gateway,
+      );
+    }
+    return ActiveJobTrackingService(gateway: gateway);
+  }
   final NativeTrackingBridge _native;
   final TrackingSessionGateway _gateway;
+  EmulatorTrackingHarness? get emulatorHarness =>
+      _native is EmulatorTrackingHarness
+      ? _native as EmulatorTrackingHarness
+      : null;
   Future<void>? _startOperation;
   Future<void>? _syncOperation;
   Future<ActiveTrackingState> recover({bool reconcileWithServer = true}) async {
@@ -144,20 +162,22 @@ class ActiveJobTrackingService {
     if (user == null) {
       throw Exception('You must be logged in.');
     }
-    if (!await Geolocator.isLocationServiceEnabled()) {
-      throw Exception('Turn on Location Services before starting this job.');
-    }
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      throw Exception(
-        permission == LocationPermission.deniedForever
-            ? 'Location permission is disabled in system settings.'
-            : 'Location permission is required only while an active job is running.',
-      );
+    if (emulatorHarness == null) {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw Exception('Turn on Location Services before starting this job.');
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw Exception(
+          permission == LocationPermission.deniedForever
+              ? 'Location permission is disabled in system settings.'
+              : 'Location permission is required only while an active job is running.',
+        );
+      }
     }
     await startAuthorized(
       scalerId: user.uid,

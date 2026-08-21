@@ -75,7 +75,7 @@ Adjacent measurements are compared with Haversine distance and elapsed time. Mov
 - `trackingSessions/{sessionId}/chunks/{canonicalRange}`: immutable raw evidence plus server validation metadata/digest.
 - `trackingSessions/{sessionId}/checkpoints/{checkpointId}`: immutable Storage path/generation, image metadata, raw measurement, server flags, and server `receivedAt`.
 - `activeTrackingSessions/{scalerId}`: server-only singleton pointer.
-- `campaignRoutes/{sessionId}`: trusted immutable `native_background_v1` compatibility record. Legacy browser/simulation routes use the trusted `saveLegacyTrackingRoute` callable and `legacy_browser_v1`; clients cannot self-declare a source.
+- `campaignRoutes/{sessionId}`: trusted immutable `native_background_v1` compatibility record. Real legacy browser routes use the trusted `saveLegacyTrackingRoute` callable and `legacy_browser_v1`; clients cannot self-declare a source or simulation marker. Historical development routes retain their existing simulated provenance so later saves cannot launder them into real evidence.
 
 Clients cannot write tracking evidence, active pointers, or any campaign route. The owning Scaler, owning campaign business, and trusted admin can read only the evidence allowed by rules; other Scalers/businesses cannot. Businesses cannot alter raw evidence.
 
@@ -125,3 +125,35 @@ flutter build web --release
 An iOS release requires macOS/Xcode and remains manual. Do not ship Android until the permanent ID, matching Firebase app, release signing, production notification icon, disclosures, and physical-device checklist are complete.
 
 See `MANUAL_DEVICE_TESTING.md` for the physical-device release gate.
+
+## Emulator-only deterministic GPS harness
+
+The local QA harness replaces only the source of location samples. It implements
+the same `NativeTrackingBridge` consumed by `ActiveJobTrackingService`, so server
+session creation, the local pending queue, canonical chunk sequencing,
+acknowledgement, retry, validation, SHA-256 evidence digests, completion, and
+cancellation remain on the maintained path.
+
+The harness is available only when all of these conditions are true:
+
+- the compile-time `APP_ENV` is `local`;
+- the Flutter build is not a release build;
+- the Firebase project is the fixed demo project `demo-scaledcircle`; and
+- a Firebase emulator host is configured.
+
+Run Firebase Auth/Firestore/Functions/Storage emulators for the demo project,
+then launch the Flutter client with:
+
+```powershell
+flutter run -d chrome --dart-define=APP_ENV=local --dart-define=FIREBASE_EMULATOR_HOST=127.0.0.1
+```
+
+After a test Scaler accepts and starts an emulator-backed job, the active-job
+screen shows an unmistakable **TEST / EMULATOR ONLY** panel. **Run Simulated
+Route** generates ordered, realistic samples strictly inside the assigned Zone;
+pause, normal completion, and normal cancellation use the same coordinator.
+
+Do not add identity flags, Firestore flags, Remote Config flags, URLs, query
+parameters, admin controls, or callable parameters that select this provider.
+Production builds use the native/real provider, and release bundle tests must
+continue proving that the test panel and provider are tree-shaken from output.

@@ -28,8 +28,6 @@ class JobTrackingScreen extends StatefulWidget {
 
 class _JobTrackingScreenState extends State<JobTrackingScreen>
     with WidgetsBindingObserver {
-  static const bool _allowGpsSimulation = !kReleaseMode;
-
   final MapController _mapController = MapController();
 
   StreamSubscription<Position>? _positionSubscription;
@@ -39,8 +37,6 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
   List<LatLng> _serviceArea = [];
 
   Position? _currentPosition;
-
-  LatLng? _simulatedPosition;
 
   late DocumentReference<Map<String, dynamic>> _routeReference;
 
@@ -52,9 +48,9 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
 
   bool _saving = false;
 
-  bool _simulating = false;
-
-  bool _routeIsSimulated = false;
+  // Read-only provenance for routes created by the removed development
+  // simulator. It cannot be selected by this UI or sent to the backend.
+  bool _historicalRouteWasSimulated = false;
 
   String? _errorMessage;
 
@@ -69,7 +65,6 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
   Future<void> _saveLegacyRoute({
     String operation = 'save',
     bool? tracking,
-    bool? simulated,
     List<Map<String, dynamic>>? points,
   }) async {
     final result = await const SecureFunctionService().call(
@@ -81,7 +76,6 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
         'operation': operation,
         'points': points ?? _serializePoints(),
         'tracking': tracking ?? _tracking,
-        'simulated': simulated ?? _routeIsSimulated,
         if (_lastAccuracyMeters != null)
           'lastAccuracyMeters': _lastAccuracyMeters,
       },
@@ -199,8 +193,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
       }
 
       final existingRoute = _parsePoints(routeData?['points']);
-
-      final simulated = routeData?['simulated'] == true;
+      final historicalRouteWasSimulated = routeData?['simulated'] == true;
 
       var tracking = routeData?['tracking'] == true;
 
@@ -210,12 +203,13 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
         // instead of leaving the assignment permanently stuck "tracking".
         await _saveLegacyRoute(
           tracking: false,
-          simulated: simulated,
           points: existingRoute
-              .map((point) => {
-                    'latitude': point.latitude,
-                    'longitude': point.longitude,
-                  })
+              .map(
+                (point) => {
+                  'latitude': point.latitude,
+                  'longitude': point.longitude,
+                },
+              )
               .toList(),
         );
         tracking = false;
@@ -232,13 +226,9 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
           ..clear()
           ..addAll(existingRoute);
 
-        _routeIsSimulated = simulated;
-
         _tracking = tracking;
 
-        if (_routePoints.isNotEmpty && simulated) {
-          _simulatedPosition = _routePoints.last;
-        }
+        _historicalRouteWasSimulated = historicalRouteWasSimulated;
 
         _loading = false;
       });
@@ -337,8 +327,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
       final angle = (2 * math.pi * index) / pointCount;
 
       return LatLng(
-        center!.latitude +
-            (math.sin(angle) * radius / metersPerDegreeLatitude),
+        center!.latitude + (math.sin(angle) * radius / metersPerDegreeLatitude),
         center.longitude +
             (math.cos(angle) * radius / metersPerDegreeLongitude),
       );
@@ -471,7 +460,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
 
       _addRoutePoint(point);
 
-      await _saveLegacyRoute(tracking: true, simulated: false);
+      await _saveLegacyRoute(tracking: true);
 
       if (!mounted) {
         return;
@@ -480,11 +469,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
       setState(() {
         _currentPosition = position;
 
-        _simulatedPosition = null;
-
         _tracking = true;
-
-        _routeIsSimulated = false;
 
         _errorMessage = null;
       });
@@ -534,9 +519,9 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
         _errorMessage = 'Unable to start GPS tracking: $e';
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_errorMessage!)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_errorMessage!)));
     }
   }
 
@@ -575,14 +560,9 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
   void _queueRouteSave() {
     final points = _serializePoints();
     final tracking = _tracking;
-    final simulated = _routeIsSimulated;
     _routeSaveChain = _routeSaveChain.then((_) async {
       try {
-        await _saveLegacyRoute(
-          points: points,
-          tracking: tracking,
-          simulated: simulated,
-        );
+        await _saveLegacyRoute(points: points, tracking: tracking);
         if (mounted) {
           setState(() => _lastSavedAt = DateTime.now());
         }
@@ -654,182 +634,6 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
     }
   }
 
-  List<LatLng> _buildSimulatedRoute() {
-    if (_serviceArea.length < 3) {
-      return [];
-    }
-
-    final latitudes = _serviceArea.map((p) => p.latitude).toList();
-
-    final minLat = latitudes.reduce(math.min);
-
-    final maxLat = latitudes.reduce(math.max);
-
-    const metersPerDegreeLatitude = 111320.0;
-
-    final spacing = 20 / metersPerDegreeLatitude;
-
-    final route = <LatLng>[];
-
-    int row = 0;
-
-    for (double lat = minLat; lat <= maxLat; lat += spacing) {
-      final intersections = <double>[];
-
-      for (int i = 0; i < _serviceArea.length; i++) {
-        final current = _serviceArea[i];
-
-        final next = _serviceArea[(i + 1) % _serviceArea.length];
-
-        if (current.latitude == next.latitude) {
-          continue;
-        }
-
-        if (lat < math.min(current.latitude, next.latitude) ||
-            lat >= math.max(current.latitude, next.latitude)) {
-          continue;
-        }
-
-        final ratio =
-            (lat - current.latitude) / (next.latitude - current.latitude);
-
-        final lng =
-            current.longitude + (next.longitude - current.longitude) * ratio;
-
-        intersections.add(lng);
-      }
-
-      intersections.sort();
-
-      for (int i = 0; i + 1 < intersections.length; i += 2) {
-        var startLng = intersections[i];
-
-        var endLng = intersections[i + 1];
-
-        final left = LatLng(lat, startLng);
-
-        final right = LatLng(lat, endLng);
-
-        final start = row.isEven ? left : right;
-
-        final end = row.isEven ? right : left;
-
-        final distance = Distance().as(LengthUnit.Meter, start, end);
-
-        final steps = math.max(1, (distance / 10).ceil());
-
-        for (int step = 0; step <= steps; step++) {
-          final percent = step / steps;
-
-          route.add(
-            LatLng(
-              start.latitude,
-
-              start.longitude + (end.longitude - start.longitude) * percent,
-            ),
-          );
-        }
-
-        row++;
-      }
-    }
-
-    if (route.length >= 2) {
-      return route;
-    }
-
-    return _buildSimulatedPerimeterRoute();
-  }
-
-  List<LatLng> _buildSimulatedPerimeterRoute() {
-    final route = <LatLng>[];
-
-    for (int i = 0; i < _serviceArea.length; i++) {
-      final start = _serviceArea[i];
-
-      final end = _serviceArea[(i + 1) % _serviceArea.length];
-
-      final distance = const Distance().as(LengthUnit.Meter, start, end);
-
-      final steps = math.max(1, (distance / 10).ceil());
-
-      for (int step = 0; step <= steps; step++) {
-        final percent = step / steps;
-
-        route.add(
-          LatLng(
-            start.latitude + (end.latitude - start.latitude) * percent,
-            start.longitude + (end.longitude - start.longitude) * percent,
-          ),
-        );
-      }
-    }
-
-    return route;
-  }
-
-  Future<void> _simulateMovement() async {
-    if (!_tracking || _simulating) {
-      return;
-    }
-
-    setState(() {
-      _simulating = true;
-    });
-
-    try {
-      if (_serviceArea.length < 3) {
-        throw Exception(
-          'The assigned zone does not contain a usable mapped service area.',
-        );
-      }
-
-      final simulatedRoute = _buildSimulatedRoute();
-
-      if (simulatedRoute.length < 2) {
-        throw Exception('Could not generate walking route.');
-      }
-
-      setState(() {
-        _routePoints
-          ..clear()
-          ..addAll(simulatedRoute);
-
-        _simulatedPosition = simulatedRoute.last;
-
-        _routeIsSimulated = true;
-
-        _currentPosition = null;
-      });
-
-      await _saveLegacyRoute(tracking: true, simulated: true);
-
-      _mapController.move(_calculateCenter(simulatedRoute), 16);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Generated ${_routePoints.length} GPS coverage points.',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Route generation failed: $e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _simulating = false;
-        });
-      }
-    }
-  }
-
   Future<void> _clearRoute() async {
     if (_tracking) {
       return;
@@ -838,14 +642,11 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
     await _saveLegacyRoute(
       operation: 'clear',
       tracking: false,
-      simulated: false,
       points: const [],
     );
 
     setState(() {
       _routePoints.clear();
-
-      _simulatedPosition = null;
     });
   }
 
@@ -855,20 +656,16 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final center =
-        _simulatedPosition ??
-        (_currentPosition != null
-            ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
-            : _calculateCenter(_serviceArea));
+    final center = (_currentPosition != null
+        ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+        : _calculateCenter(_serviceArea));
 
     final rawCampaignData = widget.campaign.data();
     final campaignData = rawCampaignData is Map
         ? Map<String, dynamic>.from(rawCampaignData)
         : <String, dynamic>{};
     final campaignType = campaignData['campaignType']?.toString();
-    final requiresPhotoProof = CampaignProofPolicy.requiresPhotos(
-      campaignType,
-    );
+    final requiresPhotoProof = CampaignProofPolicy.requiresPhotos(campaignType);
 
     return Scaffold(
       appBar: AppBar(title: Text('${_zoneName()} GPS')),
@@ -902,8 +699,7 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
 
                 MarkerLayer(
                   markers: [
-                    if (_currentPosition != null &&
-                        _simulatedPosition == null)
+                    if (_currentPosition != null)
                       Marker(
                         point: LatLng(
                           _currentPosition!.latitude,
@@ -916,16 +712,6 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
                           size: 38,
                           color: Colors.blue,
                         ),
-                      ),
-                    if (_simulatedPosition != null)
-                      Marker(
-                        point: _simulatedPosition!,
-
-                        width: 45,
-
-                        height: 45,
-
-                        child: const Icon(Icons.location_on, size: 40),
                       ),
                   ],
                 ),
@@ -942,7 +728,9 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
                   Text(
                     _errorMessage!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
 
                   const SizedBox(height: 12),
@@ -978,17 +766,6 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
 
                   child: const Text('Start GPS Tracking'),
                 ),
-
-                if (_allowGpsSimulation)
-                  ElevatedButton(
-                    onPressed: _tracking ? _simulateMovement : null,
-
-                    child: Text(
-                      _simulating
-                          ? 'Generating Test Route...'
-                          : 'Simulate Walking Route (Test Only)',
-                    ),
-                  ),
 
                 ElevatedButton(
                   onPressed: _tracking && !_saving ? _stopTracking : null,
@@ -1040,7 +817,8 @@ class _JobTrackingScreenState extends State<JobTrackingScreen>
                                   zoneName: _zoneName(),
                                   routeId: _routeReference.id,
                                   gpsPointCount: _routePoints.length,
-                                  routeSimulated: _routeIsSimulated,
+                                  routeSimulated:
+                                      _historicalRouteWasSimulated,
                                 ),
                               ),
                             );

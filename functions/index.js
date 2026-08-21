@@ -5585,9 +5585,9 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
   }
 }
 
-// Compatibility bridge for the development/browser GPS simulator. Client
-// writes to campaignRoutes are denied by rules; this callable is the sole
-// writer for legacy route documents and stamps an unforgeable server source.
+// Compatibility bridge for real browser GPS. Client writes to campaignRoutes
+// are denied by rules; this callable is the sole writer for legacy route
+// documents and never accepts or records simulated evidence.
 exports.saveLegacyTrackingRoute = trackingCallable(
   "saveLegacyTrackingRoute",
   async (request) => {
@@ -5595,7 +5595,7 @@ exports.saveLegacyTrackingRoute = trackingCallable(
       request.data,
       new Set([
         "campaignId", "zoneId", "routeId", "operation", "points",
-        "tracking", "simulated", "lastAccuracyMeters",
+        "tracking", "lastAccuracyMeters",
       ]),
       393216,
     );
@@ -5665,7 +5665,10 @@ exports.saveLegacyTrackingRoute = trackingCallable(
         return;
       }
       const tracking = request.data?.tracking === true;
-      const simulated = request.data?.simulated === true;
+      // Preserve the provenance of any historical development route. The
+      // client cannot create or clear this marker, so an old simulated route
+      // can never be laundered into production GPS evidence by a later save.
+      const historicallySimulated = existing?.simulated === true;
       transaction.set(routeRef, {
         source: "legacy_browser_v1",
         schemaVersion: 1,
@@ -5677,7 +5680,7 @@ exports.saveLegacyTrackingRoute = trackingCallable(
         points,
         pointCount: points.length,
         tracking,
-        simulated,
+        simulated: historicallySimulated,
         lastAccuracyMeters: Number.isFinite(Number(request.data?.lastAccuracyMeters)) ?
           Math.max(0, Number(request.data.lastAccuracyMeters)) : null,
         updatedAt: FieldValue.serverTimestamp(),
@@ -5687,7 +5690,7 @@ exports.saveLegacyTrackingRoute = trackingCallable(
         routeId,
         gpsTracking: tracking,
         gpsRoutePointCount: points.length,
-        gpsRouteSimulated: simulated,
+        gpsRouteSimulated: historicallySimulated,
         updatedAt: FieldValue.serverTimestamp(),
       });
     });

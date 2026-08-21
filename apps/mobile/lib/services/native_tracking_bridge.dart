@@ -20,6 +20,20 @@ abstract interface class NativeTrackingBridge {
   Future<void> stop({required String reason, required bool captureFinalPoint});
 }
 
+class TestRouteCoordinate {
+  const TestRouteCoordinate(this.latitude, this.longitude);
+  final double latitude;
+  final double longitude;
+}
+
+/// Capability implemented only by the APP_ENV=local, non-release bridge.
+abstract interface class EmulatorTrackingHarness {
+  bool get paused;
+  Future<int> runDeterministicRoute(List<TestRouteCoordinate> zone);
+  void pause();
+  void resume();
+}
+
 class MethodChannelNativeTrackingBridge implements NativeTrackingBridge {
   const MethodChannelNativeTrackingBridge();
   static const MethodChannel _channel = MethodChannel(

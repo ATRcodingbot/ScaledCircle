@@ -11,6 +11,7 @@ import '../../services/completion_tracking_service.dart';
 import '../../services/campaign_service.dart';
 import '../../services/campaign/campaign_proof_policy.dart';
 import '../../services/active_job_tracking_service.dart';
+import '../../services/tracking_runtime_policy.dart';
 import '../../services/secure_function_service.dart';
 import '../../widgets/home_completion_counter.dart';
 import 'job_tracking_screen.dart';
@@ -27,12 +28,14 @@ class JobDetailsScreen extends StatefulWidget {
 
 class _JobDetailsScreenState extends State<JobDetailsScreen> {
   final CampaignService _campaignService = CampaignService();
-  final ActiveJobTrackingService _nativeTracking = ActiveJobTrackingService();
+  final ActiveJobTrackingService _nativeTracking =
+      ActiveJobTrackingService.forCurrentEnvironment();
 
   bool get _usesNativeTracking =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+      TrackingRuntimePolicy.emulatorGpsHarnessEnabled ||
+      (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS));
 
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
@@ -157,6 +160,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             builder: (_) => NativeJobInProgressScreen(
               campaign: widget.campaign,
               zone: zone,
+              trackingService: _nativeTracking,
             ),
           ),
         );
@@ -532,8 +536,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                 completedHomes: (data['completedHomes'] as num?)?.toInt() ?? 0,
 
-                basePay:
-                    (campaignData['basePay'] as num?)?.toDouble() ?? 0,
+                basePay: (campaignData['basePay'] as num?)?.toDouble() ?? 0,
               ),
 
               const SizedBox(height: 20),
@@ -550,6 +553,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           ? NativeJobInProgressScreen(
                               campaign: widget.campaign,
                               zone: zone,
+                              trackingService: _nativeTracking,
                             )
                           : JobTrackingScreen(
                               campaign: widget.campaign,
