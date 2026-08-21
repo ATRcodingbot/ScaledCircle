@@ -70,13 +70,23 @@ exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STR
   const stripe = stripeClient();
   const existing = (await paymentRef.get()).data();
   let checkoutAttempt = Math.max(1, Number(existing?.checkoutAttempt || 1));
-  if (existing?.status === "payment_pending" && existing.stripeCheckoutSessionId) {
+  if (existing?.stripeCheckoutSessionId) {
     const current = await stripe.checkout.sessions.retrieve(existing.stripeCheckoutSessionId);
     const decision = lifecycle.checkoutRecoveryDecision(existing, current, Math.floor(Date.now() / 1000));
-    if (decision.action === "recover") return {paymentId, ...decision, quote, testMode: true};
-    if (decision.action === "await_webhook") return {paymentId, processing: true, quote, testMode: true};
+    if (existing.status === "payment_pending" && decision.action === "recover") {
+      return {paymentId, ...decision, quote, testMode: true};
+    }
+    if (existing.status === "payment_pending" && decision.action === "await_webhook") {
+      return {paymentId, processing: true, quote, testMode: true};
+    }
     checkoutAttempt += 1;
     if (checkoutAttempt > 3) {
+      await Promise.all([
+        paymentRef.set({status: "checkout_retry_exhausted", settlementFrozen: true,
+          updatedAt: FieldValue.serverTimestamp()}, {merge: true}),
+        input.ref.set({fundingStatus: "payment_failed", status: "funding_review_required",
+          fundingReviewRequired: true, updatedAt: FieldValue.serverTimestamp()}, {merge: true}),
+      ]);
       throw new HttpsError("resource-exhausted", "This campaign reached its safe Checkout retry limit.");
     }
     await paymentRef.set({status: "checkout_expired", stripeCheckoutUrl: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});

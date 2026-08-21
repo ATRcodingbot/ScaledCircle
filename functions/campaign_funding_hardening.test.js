@@ -51,6 +51,15 @@ test("checkout recovery never returns an expired or closed URL", () => {
     expires_at: 101}, 100).action, "await_webhook");
 });
 
+test("post-webhook expiration increments attempt and freezes exhausted retries", () => {
+  assert.match(fundingSource, /if \(existing\?\.stripeCheckoutSessionId\)/);
+  assert.match(fundingSource, /existing\.status === "payment_pending" && decision\.action === "recover"/);
+  assert.match(fundingSource, /checkoutAttempt \+= 1/);
+  assert.match(fundingSource, /status: "checkout_retry_exhausted"/);
+  assert.match(fundingSource, /status: "funding_review_required"/);
+  assert.match(fundingSource, /new HttpsError\("resource-exhausted"/);
+});
+
 test("checkout and Stripe idempotency identifiers are deterministic", () => {
   assert.equal(lifecycle.paymentId("campaign", 1), lifecycle.paymentId("campaign", 1));
   assert.notEqual(lifecycle.paymentId("campaign", 1), lifecycle.paymentId("campaign", 2));
@@ -67,6 +76,7 @@ test("expiration and failure restore truthful non-funded states", () => {
 test("refund and dispute reconcile campaign authority", () => {
   assert.deepEqual(lifecycle.campaignStateForPaymentEvent("charge.refunded", "open"), {
     paymentStatus: "refunded", fundingStatus: "refunded", campaignStatus: "funding_review_required",
+    settlementFrozen: true,
   });
   assert.deepEqual(lifecycle.campaignStateForPaymentEvent("charge.dispute.created", "open"), {
     paymentStatus: "disputed", fundingStatus: "disputed", campaignStatus: "funding_review_required",
@@ -84,6 +94,9 @@ test("out-of-order events cannot revive refunded or disputed funding", () => {
   assert.equal(lifecycle.transitionAllowed("paid", "refunded"), true);
   assert.equal(lifecycle.transitionAllowed("refunded", "paid"), false);
   assert.equal(lifecycle.transitionAllowed("disputed", "paid"), false);
+  assert.equal(lifecycle.transitionAllowed("paid", "refund_pending"), true);
+  assert.equal(lifecycle.transitionAllowed("refund_pending", "refunded"), true);
+  assert.equal(lifecycle.transitionAllowed("refund_pending", "disputed"), true);
 });
 
 test("signed raw-body webhook is the only campaign payment authority", () => {

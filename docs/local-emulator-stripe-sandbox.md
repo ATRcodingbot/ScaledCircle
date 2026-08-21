@@ -156,6 +156,33 @@ ignored `.secret.local`, stop the Functions emulator with `Ctrl+C`, and restart
 `npm run serve` so secret parameters reload. Keep the project explicitly set to
 `demo-scaledcircle`.
 
+Before restarting an emulator that contains QA evidence, export it outside the
+repository:
+
+```powershell
+npx firebase-tools emulators:export $env:TEMP\scaledcircle-stripe-e2e\firebase-export `
+  --project demo-scaledcircle
+```
+
+Restore only from a confirmed local export by adding `--import <export-path>`
+to the emulator startup command. Never point export/import at production or put
+an emulator export containing QA identities into source control.
+
+Stripe Dashboard CLI authorization can select a different account or sandbox
+than the one represented by `STRIPE_TEST_SECRET_KEY`. Compare safe account IDs
+before listening. For local QA, Stripe CLI supports receiving the ignored TEST
+key through the listener process environment (`STRIPE_API_KEY`); do not put the
+key in command arguments, shell history, Flutter, or a tracked file. The key
+must still start with `sk_test_`.
+
+An ephemeral `stripe listen` connection receives new events only. It does not
+automatically replay events created before that correctly aligned listener was
+active. For a historical TEST event, retrieve that exact event from the same
+TEST account and deliver its unchanged raw JSON to the local endpoint with a
+valid signature derived from the current local listener secret. Re-deliver the
+same event ID to prove the durable `stripeCampaignEvents` claim is idempotent.
+Do not create another Checkout merely to compensate for a missed local event.
+
 At the manual Checkout checkpoint, leave the emulators and Stripe listener
 running and complete only the hosted TEST Checkout URL. After QA, stop the
 Stripe listener and emulator process with `Ctrl+C`. Confirm no Java, Firebase,

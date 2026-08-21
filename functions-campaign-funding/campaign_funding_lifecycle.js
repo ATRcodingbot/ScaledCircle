@@ -111,7 +111,8 @@ function campaignStateForPaymentEvent(type, campaignStatus) {
   }
   if (type === "charge.refunded" || type === "refund.updated") {
     return {paymentStatus: "refunded", fundingStatus: "refunded",
-      campaignStatus: campaignStatus === "draft" ? "draft" : "funding_review_required"};
+      campaignStatus: campaignStatus === "draft" ? "draft" : "funding_review_required",
+      settlementFrozen: true};
   }
   if (type.startsWith("charge.dispute.")) {
     return {paymentStatus: "disputed", fundingStatus: "disputed",
@@ -126,7 +127,8 @@ function transitionAllowed(current, next) {
   if (terminal.has(current)) return false;
   if (next === "paid") return ["created", "payment_pending"].includes(current);
   if (["checkout_expired", "payment_failed"].includes(next)) return current === "payment_pending";
-  if (terminal.has(next)) return current === "paid";
+  if (next === "refund_pending") return current === "paid";
+  if (terminal.has(next)) return ["paid", "refund_pending"].includes(current);
   return false;
 }
 
