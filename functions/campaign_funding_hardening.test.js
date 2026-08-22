@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const fundingSource = fs.readFileSync(path.join(__dirname, "..", "functions-campaign-funding", "index.js"), "utf8");
 const fundingRoot = path.join(__dirname, "..", "functions-campaign-funding");
+const maintainedBackendSource = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
 
 test("campaign funding environments are explicit and fail closed", () => {
   assert.equal(lifecycle.paymentEnvironment({APP_ENV: "local", GCLOUD_PROJECT: "demo-scaledcircle",
@@ -99,6 +100,49 @@ test("checkout and Stripe idempotency identifiers are deterministic", () => {
   assert.notEqual(lifecycle.paymentId("campaign", 1), lifecycle.paymentId("campaign", 2));
   assert.match(lifecycle.stripeIdempotencyKey("payment"), /^scaledcircle:test:/);
   assert.match(lifecycle.stripeIdempotencyKey("payment", "live"), /^scaledcircle:live:/);
+  assert.equal(lifecycle.stripeRefundIdempotencyKey("payment", "live"),
+    lifecycle.stripeRefundIdempotencyKey("payment", "live"));
+  assert.match(lifecycle.stripeRefundIdempotencyKey("payment", "live"),
+    /^scaledcircle:live:campaign-refund:/);
+});
+
+test("only paid, unassigned, unstarted campaigns qualify for self-service refund", () => {
+  const campaign = {status: "open", fundingStatus: "funded", assignedScalerCount: 0};
+  const payment = {status: "paid"};
+  assert.deepEqual(lifecycle.cancelRefundEligibility({campaign, payment}),
+    {eligible: true, blockers: []});
+  assert.equal(lifecycle.cancelRefundEligibility({campaign, payment, applicantCount: 3}).eligible, true);
+  for (const blocker of [
+    {hasAssignedZone: true}, {hasAcceptedApplication: true}, {hasAssignedScalerRecord: true},
+    {hasTrackingSession: true}, {hasCompletionEvidence: true}, {hasMaterialHandoff: true},
+    {hasWorkerEarning: true}, {hasSettlement: true}, {hasPayout: true}, {hasDispute: true},
+  ]) assert.equal(lifecycle.cancelRefundEligibility({campaign, payment, ...blocker}).eligible, false);
+});
+
+test("refund lifecycle closes canceling campaigns without erasing financial history", () => {
+  assert.deepEqual(lifecycle.campaignStateForPaymentEvent("charge.refunded", "canceling"), {
+    paymentStatus: "refunded", fundingStatus: "refunded", campaignStatus: "canceled",
+    settlementFrozen: true,
+  });
+  assert.match(fundingSource, /exports\.cancelUnassignedFundedCampaign\s*=\s*onCall/);
+  assert.match(fundingSource, /status: "canceling"/);
+  assert.match(fundingSource, /marketplaceVisible: false, acceptingApplications: false/);
+  assert.match(fundingSource, /stripe\.refunds\.create/);
+  assert.match(fundingSource, /stripeRefundIdempotencyKey/);
+  assert.match(fundingSource, /exports\.archiveCanceledCampaign\s*=\s*onCall/);
+  assert.match(fundingSource, /hiddenFromBusinessHistory: true/);
+  assert.doesNotMatch(fundingSource, /campaignPayments[^\n]*\.delete\(/);
+});
+
+test("cancellation lock wins assignment races in every maintained assignment path", () => {
+  const assignmentGuard = /This campaign is no longer accepting Scaler assignments\./g;
+  assert.equal([...maintainedBackendSource.matchAll(assignmentGuard)].length, 3);
+  assert.match(maintainedBackendSource,
+    /exports\.assignScalerToZone[\s\S]*String\(campaign\.status \|\| ""\) !== "open"/);
+  assert.match(maintainedBackendSource,
+    /exports\.configureZoneGroupAssignment[\s\S]*String\(campaign\.status \|\| ""\) !== "open"/);
+  assert.match(maintainedBackendSource,
+    /exports\.acceptZoneGroupSlot[\s\S]*String\(campaign\.status \|\| ""\) !== "open"/);
 });
 
 test("expiration and failure restore truthful non-funded states", () => {

@@ -137,6 +137,150 @@ async function transition(paymentId, paymentUpdate, campaignUpdate) {
   });
 }
 
+async function cancellationFacts(campaignId) {
+  const campaignRef = db.collection("campaigns").doc(campaignId);
+  const [zones, locations, applications, assignedScalers, participants, jobRooms,
+    tracking, completions, handoffs, compensation, payouts] = await Promise.all([
+    db.collection("campaignZones").where("campaignId", "==", campaignId).get(),
+    db.collection("campaignLocations").where("campaignId", "==", campaignId).get(),
+    campaignRef.collection("applications").get(),
+    campaignRef.collection("assignedScalers").limit(1).get(),
+    db.collection("zoneScalerParticipations").where("campaignId", "==", campaignId).limit(1).get(),
+    db.collection("jobRooms").where("campaignId", "==", campaignId).limit(1).get(),
+    db.collection("trackingSessions").where("campaignId", "==", campaignId).limit(1).get(),
+    db.collection("campaignCompletions").where("campaignId", "==", campaignId).limit(1).get(),
+    db.collection("materialHandoffs").where("campaignId", "==", campaignId).limit(1).get(),
+    db.collection("assignmentCompensations").where("campaignId", "==", campaignId).limit(1).get(),
+    db.collection("payouts").where("campaignId", "==", campaignId).limit(1).get(),
+  ]);
+  const assignedDocuments = [...zones.docs, ...locations.docs].some((snapshot) => {
+    const data = snapshot.data() || {};
+    return Boolean(cleanId(data.assignedScalerId)) ||
+      (Array.isArray(data.assignedScalerIds) && data.assignedScalerIds.some(cleanId));
+  });
+  const acceptedApplication = applications.docs.some((snapshot) =>
+    ["accepted", "assigned"].includes(String(snapshot.data()?.status || "")));
+  const materialHandoff = [...zones.docs, ...locations.docs].some((snapshot) => {
+    const data = snapshot.data() || {};
+    return Boolean(data.materialHandoffAt || data.materialHandoffStatus || data.materialAcceptedAt);
+  });
+  const workerEarning = compensation.docs.some((snapshot) => {
+    const data = snapshot.data() || {};
+    return Number(data.earnedCents || data.amountEarnedCents || data.payableCents || 0) > 0 ||
+      !["", "draft", "void", "canceled"].includes(String(data.status || ""));
+  });
+  return {zones, locations, applications,
+    policy: {hasAssignedZone: assignedDocuments, hasAcceptedApplication: acceptedApplication,
+      hasAssignedScalerRecord: !assignedScalers.empty || !participants.empty || !jobRooms.empty,
+      hasTrackingSession: !tracking.empty,
+      hasCompletionEvidence: !completions.empty, hasMaterialHandoff: materialHandoff || !handoffs.empty,
+      hasWorkerEarning: workerEarning, hasSettlement: !compensation.empty,
+      hasPayout: !payouts.empty}};
+}
+
+exports.cancelUnassignedFundedCampaign = onCall({...OPTIONS, secrets: [STRIPE_SECRET_KEY]}, async (request) => {
+  const input = await ownedCampaign(request);
+  const paymentId = cleanId(input.campaign.fundingPaymentId);
+  if (!paymentId) throw new HttpsError("failed-precondition", "No funded campaign payment was found.");
+  const paymentRef = db.collection("campaignPayments").doc(paymentId);
+  const facts = await cancellationFacts(input.campaignId);
+  const payment = (await paymentRef.get()).data() || {};
+  const resumeCancellation = input.campaign.status === "canceling" &&
+    input.campaign.fundingStatus === "refund_pending" && payment.status === "refund_pending";
+  if (resumeCancellation && payment.stripeRefundId) {
+    return {campaignId: input.campaignId, paymentId, status: "refund_pending",
+      refundableAmountCents: Number(input.campaign.refundAmountCents || payment.refundableAmountCents ||
+        payment.totalChargeCents || 0), currency: payment.currency, duplicate: true};
+  }
+  const policy = resumeCancellation ? {eligible: true, blockers: []} :
+    lifecycle.cancelRefundEligibility({campaign: input.campaign, payment, ...facts.policy,
+    hasDispute: payment.status === "disputed"});
+  if (!policy.eligible) {
+    const assigned = policy.blockers.includes("scaler_assigned") || policy.blockers.includes("work_started") ||
+      policy.blockers.includes("worker_obligation");
+    throw new HttpsError("failed-precondition", assigned ?
+      "A Scaler has already been assigned to this campaign. Cancellation requires a different review process." :
+      "This campaign is not eligible for an instant self-service refund.", {blockers: policy.blockers});
+  }
+  if (!resumeCancellation) await db.runTransaction(async (transaction) => {
+    const [campaignSnapshot, paymentSnapshot] = await Promise.all([
+      transaction.get(input.ref), transaction.get(paymentRef),
+    ]);
+    const currentPolicy = lifecycle.cancelRefundEligibility({campaign: campaignSnapshot.data(),
+      payment: paymentSnapshot.data(), ...facts.policy, hasDispute: paymentSnapshot.data()?.status === "disputed"});
+    if (!currentPolicy.eligible) throw new HttpsError("failed-precondition", "Campaign refund eligibility changed. Refresh and review it again.");
+    transaction.set(input.ref, {status: "canceling", fundingStatus: "refund_pending",
+      marketplaceVisible: false, acceptingApplications: false, cancellationReason: cleanId(request.data?.reason) || null,
+      cancellationApplicantCount: facts.applications.size, cancellationAssignmentCount: 0,
+      cancellationPolicyVersion: "unassigned_full_refund_v1",
+      refundRequestedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    transaction.set(paymentRef, {status: "refund_pending", settlementFrozen: true,
+      cancellationReason: cleanId(request.data?.reason) || null,
+      cancellationPolicyVersion: "unassigned_full_refund_v1",
+      refundRequestedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+  });
+  try {
+    const stripe = stripeClient();
+    const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+    lifecycle.assertStripeEvent(paymentIntent, PAYMENT_ENVIRONMENT.stripeMode);
+    const chargeId = typeof paymentIntent.latest_charge === "string" ? paymentIntent.latest_charge : paymentIntent.latest_charge?.id;
+    if (!chargeId) throw new Error("campaign_charge_missing");
+    const charge = await stripe.charges.retrieve(chargeId);
+    lifecycle.assertStripeEvent(charge, PAYMENT_ENVIRONMENT.stripeMode);
+    const refundableCents = Number(charge.amount || 0) - Number(charge.amount_refunded || 0);
+    if (refundableCents !== Number(payment.totalChargeCents || 0) || refundableCents <= 0) {
+      throw new Error("campaign_full_refund_amount_mismatch");
+    }
+    const refund = await stripe.refunds.create({charge: charge.id,
+      metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid,
+        refundReason: "unassigned_campaign_cancellation"}},
+    {idempotencyKey: lifecycle.stripeRefundIdempotencyKey(paymentId, PAYMENT_ENVIRONMENT.stripeMode)});
+    await Promise.all([
+      paymentRef.set({stripeRefundId: refund.id, refundableAmountCents: refundableCents,
+        refundRequestStatus: String(refund.status || "pending"), updatedAt: FieldValue.serverTimestamp()}, {merge: true}),
+      input.ref.set({refundAmountCents: refundableCents, updatedAt: FieldValue.serverTimestamp()}, {merge: true}),
+    ]);
+    const batch = db.batch();
+    for (const application of facts.applications.docs) {
+      batch.set(application.ref,
+        {status: "canceled", campaignCanceledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      const scalerId = cleanId(application.data()?.scalerId || application.id);
+      if (scalerId) batch.set(db.collection("notifications")
+        .doc(`campaign_canceled_${input.campaignId}_${scalerId}`), {
+        id: `campaign_canceled_${input.campaignId}_${scalerId}`, userId: scalerId,
+        type: "campaign_canceled", title: "Campaign canceled",
+        message: "Campaign canceled by the Business.", campaignId: input.campaignId,
+        read: false, createdAt: FieldValue.serverTimestamp(),
+      }, {merge: false});
+    }
+    await batch.commit();
+    return {campaignId: input.campaignId, paymentId, status: "refund_pending", refundableAmountCents: refundableCents,
+      currency: payment.currency, applicantCount: facts.applications.size};
+  } catch (error) {
+    await Promise.all([
+      paymentRef.set({status: "refund_review_required", settlementFrozen: true,
+        refundFailureCode: String(error?.code || error?.message || "refund_request_failed").slice(0, 120),
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true}),
+      input.ref.set({status: "funding_review_required", fundingStatus: "refund_review_required",
+        marketplaceVisible: false, acceptingApplications: false, fundingReviewRequired: true,
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true}),
+    ]);
+    logger.error("Unassigned campaign refund requires review.", {campaignId: input.campaignId, paymentId,
+      code: error?.code || "refund_request_failed"});
+    throw new HttpsError("internal", "The campaign is safely blocked, but the refund requires review.");
+  }
+});
+
+exports.archiveCanceledCampaign = onCall(OPTIONS, async (request) => {
+  const input = await ownedCampaign(request);
+  if (input.campaign.status !== "canceled" || input.campaign.fundingStatus !== "refunded") {
+    throw new HttpsError("failed-precondition", "Only a canceled, refunded campaign can be removed from My Campaigns.");
+  }
+  await input.ref.set({archived: true, hiddenFromBusinessHistory: true, archivedBy: input.uid,
+    archivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+  return {campaignId: input.campaignId, archived: true};
+});
+
 async function processEvent(stripe, event) {
   lifecycle.assertStripeEvent(event, PAYMENT_ENVIRONMENT.stripeMode);
   const object = event.data?.object || {};
@@ -167,12 +311,22 @@ async function processEvent(stripe, event) {
   const state = lifecycle.campaignStateForPaymentEvent(event.type, campaign.status);
   if (!state) return;
   if (event.type === "refund.updated" && object.status !== "succeeded") return;
+  const eventRefundAmount = Number(object.amount || object.amount_refunded || 0);
+  if (event.type === "refund.updated" && eventRefundAmount > 0 && eventRefundAmount < Number(payment.totalChargeCents || 0)) {
+    return transition(paymentId, {status: "refund_pending", settlementFrozen: true},
+      {fundingStatus: "refund_pending", status: "funding_review_required", fundingReviewRequired: true,
+        marketplaceVisible: false, acceptingApplications: false});
+  }
   if (event.type === "charge.refunded" && Number(object.amount_refunded || 0) < Number(object.amount || 0)) {
     return transition(paymentId, {status: "refund_pending", settlementFrozen: true},
       {fundingStatus: "refund_pending", status: "funding_review_required", fundingReviewRequired: true});
   }
-  return transition(paymentId, {status: state.paymentStatus, settlementFrozen: state.settlementFrozen === true},
-    {fundingStatus: state.fundingStatus, ...(state.campaignStatus ? {status: state.campaignStatus, fundingReviewRequired: true} : {})});
+  return transition(paymentId, {status: state.paymentStatus, settlementFrozen: state.settlementFrozen === true,
+    ...(state.paymentStatus === "refunded" ? {refundedAt: FieldValue.serverTimestamp()} : {})},
+  {fundingStatus: state.fundingStatus, marketplaceVisible: false, acceptingApplications: false,
+    ...(state.campaignStatus ? {status: state.campaignStatus,
+      fundingReviewRequired: state.campaignStatus !== "canceled"} : {}),
+    ...(state.campaignStatus === "canceled" ? {canceledAt: FieldValue.serverTimestamp()} : {})});
 }
 
 exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET]}, async (request, response) => {

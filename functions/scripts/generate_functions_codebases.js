@@ -69,6 +69,8 @@ const jobAlertEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
 const campaignFundingExports = new Set([
   "quoteCampaignFunding",
   "createCampaignFundingCheckoutSession",
+  "cancelUnassignedFundedCampaign",
+  "archiveCanceledCampaign",
   "publishFundedCampaign",
   "stripeWebhook",
 ]);

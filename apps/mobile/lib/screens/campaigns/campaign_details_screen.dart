@@ -12,6 +12,7 @@ import '../../services/secure_function_service.dart';
 import '../../services/wallet_service.dart';
 import '../business/campaign_zones_screen.dart';
 import '../business/edit_campaign_screen.dart';
+import '../business/create_campaign_screen.dart' as business_campaign;
 import '../jobs/job_room_screen.dart';
 import 'campaign_applicants_screen.dart';
 import 'campaign_tracking_screen.dart';
@@ -37,14 +38,13 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
   Future<CampaignCostQuote> _reviewQuote(double workerBudget) {
     final workerCents = (workerBudget * 100).round();
-    if (_reviewQuoteFuture == null ||
-        _reviewQuoteWorkerCents != workerCents) {
+    if (_reviewQuoteFuture == null || _reviewQuoteWorkerCents != workerCents) {
       _reviewQuoteWorkerCents = workerCents;
-      _reviewQuoteFuture =
-          _billingService.campaignCostQuoteForCampaign(campaign.id);
+      _reviewQuoteFuture = _billingService.campaignCostQuoteForCampaign(campaign.id);
     }
     return _reviewQuoteFuture!;
   }
+
   Future<void> _openScalerReviews(BuildContext context, String scalerId) async {
     await Navigator.push(
       context,
@@ -55,6 +55,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   }
 
   bool _publishingDraft = false;
+  bool _campaignActionPending = false;
 
   DocumentSnapshot get campaign => widget.campaign;
 
@@ -221,7 +222,6 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           final data = zone.data();
 
           estimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-
         }
       }
 
@@ -890,6 +890,226 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Unable to delete campaign: $e')));
     }
+  }
+
+  Future<void> _cancelAndRefundCampaign(
+    BuildContext context,
+    DocumentSnapshot liveCampaign,
+  ) async {
+    if (_campaignActionPending) return;
+    String reason = 'campaign_no_longer_needed';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Cancel this campaign?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'No Scaler has been assigned, so the campaign can be canceled and its eligible funding returned to the original payment method.\n\nThe campaign will be removed from available work.',
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: reason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (optional)',
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'no_suitable_scaler',
+                    child: Text('No suitable Scaler'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'pay_needs_adjustment',
+                    child: Text('Pay needs adjustment'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'campaign_no_longer_needed',
+                    child: Text('Campaign no longer needed'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'schedule_changed',
+                    child: Text('Schedule changed'),
+                  ),
+                  DropdownMenuItem(value: 'other', child: Text('Other')),
+                ],
+                onChanged: (value) =>
+                    setDialogState(() => reason = value ?? reason),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep Campaign'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Cancel & Request Refund'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _campaignActionPending = true);
+    try {
+      final result = await _secureFunctions.call(
+        functionName: 'cancelUnassignedFundedCampaign',
+        data: {'campaignId': liveCampaign.id, 'reason': reason},
+      );
+      if (!context.mounted) return;
+      final cents = (result['refundableAmountCents'] as num?)?.toInt();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            cents == null
+                ? 'Campaign canceled. Refund processing has started.'
+                : 'Campaign canceled. ${(cents / 100).toStringAsFixed(2)} ${result['currency']?.toString().toUpperCase() ?? 'USD'} is processing to the original payment method.',
+          ),
+        ),
+      );
+    } on SecureFunctionError catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _campaignActionPending = false);
+    }
+  }
+
+  Future<void> _archiveCanceledCampaign(
+    BuildContext context,
+    DocumentSnapshot liveCampaign,
+  ) async {
+    if (_campaignActionPending) return;
+    setState(() => _campaignActionPending = true);
+    try {
+      await _secureFunctions.call(
+        functionName: 'archiveCanceledCampaign',
+        data: {'campaignId': liveCampaign.id},
+      );
+      if (!context.mounted) return;
+      Navigator.pop(context);
+    } on SecureFunctionError catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _campaignActionPending = false);
+    }
+  }
+
+  Widget _cancellationOptions(
+    BuildContext context,
+    DocumentSnapshot liveCampaign,
+    Map<String, dynamic> data,
+  ) {
+    final status = data['status']?.toString() ?? '';
+    final fundingStatus = data['fundingStatus']?.toString() ?? '';
+    if (status == 'canceling' || fundingStatus == 'refund_pending') {
+      return const Card(
+        child: ListTile(
+          leading: Icon(Icons.hourglass_top),
+          title: Text('Refund Processing'),
+          subtitle: Text(
+            'The campaign is closed to new work while the refund is reconciled.',
+          ),
+        ),
+      );
+    }
+    if (status == 'canceled' && fundingStatus == 'refunded') {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'CANCELED / REFUNDED',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Payment and refund history remain preserved for your records.',
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _campaignActionPending
+                    ? null
+                    : () => _archiveCanceledCampaign(context, liveCampaign),
+                icon: const Icon(Icons.archive_outlined),
+                label: const Text('Remove from My Campaigns'),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const business_campaign.CreateCampaignScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.copy_outlined),
+                label: const Text('Create Revised Campaign'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (status != 'open' || fundingStatus != 'funded') {
+      return const SizedBox.shrink();
+    }
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _zonesCollection
+          .where('campaignId', isEqualTo: liveCampaign.id)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final assigned =
+            (data['assignedScalerCount'] as num? ?? 0).toInt() > 0 ||
+            (snapshot.data?.docs.any((zone) {
+                  final zoneData = zone.data();
+                  return (zoneData['assignedScalerId']?.toString().isNotEmpty ??
+                          false) ||
+                      (zoneData['assignedScalerIds'] as List?)?.isNotEmpty ==
+                          true;
+                }) ??
+                false);
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'CAMPAIGN OPTIONS',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                if (assigned)
+                  const Text(
+                    'A Scaler has already been assigned to this campaign. Cancellation requires a different review process.',
+                  )
+                else
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: _campaignActionPending
+                        ? null
+                        : () => _cancelAndRefundCampaign(context, liveCampaign),
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: const Text('Cancel Campaign & Refund'),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   List<LatLng> _parsePoints(dynamic rawPoints) {
@@ -2136,6 +2356,13 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                 ),
               ],
               const SizedBox(height: 30),
+
+              _cancellationOptions(context, liveCampaign, data),
+
+              if (status == 'open' ||
+                  status == 'canceling' ||
+                  status == 'canceled')
+                const SizedBox(height: 15),
 
               if (status != 'completed') ...[
                 SizedBox(

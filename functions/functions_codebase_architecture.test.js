@@ -70,6 +70,7 @@ test("platform-core has the exact reviewed public exports", () => {
 test("campaign-funding owns the isolated TEST-mode campaign payment boundary", () => {
   assert.deepEqual(exportsIn(campaignFunding), [
     "quoteCampaignFunding", "createCampaignFundingCheckoutSession",
+    "cancelUnassignedFundedCampaign", "archiveCanceledCampaign",
     "stripeWebhook", "publishFundedCampaign",
   ]);
   assert.doesNotMatch(legacy, /exports\.quoteCampaignFunding\s*=/);

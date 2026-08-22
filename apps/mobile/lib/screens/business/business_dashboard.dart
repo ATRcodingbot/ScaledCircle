@@ -793,7 +793,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final campaigns = snapshot.data?.docs ?? [];
+            final campaigns = (snapshot.data?.docs ?? []).where((campaign) {
+              final data = campaign.data() as Map<String, dynamic>;
+              return data['archived'] != true &&
+                  data['hiddenFromBusinessHistory'] != true;
+            }).toList();
 
             final activeCampaigns = campaigns.where((campaign) {
               final data = campaign.data() as Map<String, dynamic>;

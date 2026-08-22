@@ -76,6 +76,29 @@ function stripeIdempotencyKey(campaignPaymentId, stripeMode = "test") {
   return `scaledcircle:${stripeMode}:campaign-checkout:${campaignPaymentId}`;
 }
 
+function stripeRefundIdempotencyKey(campaignPaymentId, stripeMode = "test") {
+  if (!new Set(["test", "live"]).has(stripeMode)) throw new Error("stripe_mode_invalid");
+  return `scaledcircle:${stripeMode}:campaign-refund:${campaignPaymentId}`;
+}
+
+function cancelRefundEligibility(input = {}) {
+  const campaign = input.campaign || {};
+  const payment = input.payment || {};
+  const blockers = [];
+  if (!new Set(["open", "funded"]).has(String(campaign.status || "")) ||
+      campaign.fundingStatus !== "funded" || payment.status !== "paid") blockers.push("not_funded");
+  if (campaign.fundingReviewRequired === true || payment.settlementFrozen === true) blockers.push("financial_review");
+  if (campaign.refundRequestedAt || payment.refundRequestedAt ||
+      new Set(["canceling", "refund_pending", "refunded", "canceled"])
+        .has(String(campaign.status || ""))) blockers.push("refund_in_progress");
+  if (input.hasAssignedZone || input.hasAcceptedApplication || input.hasAssignedScalerRecord ||
+      Number(campaign.assignedScalerCount || 0) > 0) blockers.push("scaler_assigned");
+  if (input.hasTrackingSession || input.hasCompletionEvidence || input.hasMaterialHandoff) blockers.push("work_started");
+  if (input.hasWorkerEarning || input.hasSettlement || input.hasPayout) blockers.push("worker_obligation");
+  if (input.hasDispute || payment.status === "disputed") blockers.push("dispute");
+  return Object.freeze({eligible: blockers.length === 0, blockers: [...new Set(blockers)]});
+}
+
 function paymentEnvironment(environment = {}) {
   let firebaseProjectId = "";
   try {
@@ -157,7 +180,8 @@ function campaignStateForPaymentEvent(type, campaignStatus) {
   }
   if (type === "charge.refunded" || type === "refund.updated") {
     return {paymentStatus: "refunded", fundingStatus: "refunded",
-      campaignStatus: campaignStatus === "draft" ? "draft" : "funding_review_required",
+      campaignStatus: campaignStatus === "canceling" ? "canceled" :
+        campaignStatus === "draft" ? "draft" : "funding_review_required",
       settlementFrozen: true};
   }
   if (type.startsWith("charge.dispute.")) {
@@ -185,12 +209,14 @@ module.exports = {
   assertWebhookSecret,
   campaignStateForPaymentEvent,
   checkoutRecoveryDecision,
+  cancelRefundEligibility,
   mappedZoneIsValid,
   paymentEnvironment,
   paymentId,
   quoteDigest,
   quoteForCampaign,
   stripeIdempotencyKey,
+  stripeRefundIdempotencyKey,
   transitionAllowed,
   workerCompensationCents,
 };

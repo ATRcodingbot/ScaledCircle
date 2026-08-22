@@ -6215,6 +6215,9 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
     if (!context.isAdmin && campaign.businessId !== context.uid) {
       throw new HttpsError("permission-denied", "This campaign does not belong to you.");
     }
+    if (String(campaign.status || "") !== "open") {
+      throw new HttpsError("failed-precondition", "This campaign is no longer accepting Scaler assignments.");
+    }
     if (zone.campaignId !== campaignId || zone.businessId !== campaign.businessId) {
       throw new HttpsError("failed-precondition", "The zone does not belong to this campaign.");
     }
@@ -6409,6 +6412,7 @@ exports.configureZoneGroupAssignment = trackingCallable(
       if (!campaignSnapshot.exists || !zoneSnapshot.exists) throw new HttpsError("not-found", "Campaign zone not found.");
       const campaign = campaignSnapshot.data() || {}; const zone = zoneSnapshot.data() || {};
       if ((!context.isAdmin && campaign.businessId !== context.uid) || zone.campaignId !== campaignId) throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+      if (String(campaign.status || "") !== "open") throw new HttpsError("failed-precondition", "This campaign is no longer accepting Scaler assignments.");
       if (zone.assignedScalerId || groupSnapshot.exists || !["unassigned", "available"].includes(String(zone.status))) {
         throw new HttpsError("failed-precondition", "Group size is locked after assignment begins.");
       }
@@ -6498,6 +6502,9 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
     const participant = groupAssignment.initialParticipant({zoneId, campaignId, businessId: group.businessId,
       scalerUid, slotNumber: slot, shareCents: share});
     const campaign = campaignSnapshot.data() || {}; const materialRequired = materialRequiredForCampaign(campaign);
+    if (String(campaign.status || "") !== "open") {
+      throw new HttpsError("failed-precondition", "This campaign is no longer accepting Scaler assignments.");
+    }
     const materialLogistics = operations.materialLogisticsFromCampaign(campaign);
     const materialLogisticsDigest = operations.materialLogisticsDigest(materialLogistics);
     const materialLogisticsVersion = Number(campaign.materialLogisticsVersion || 1);

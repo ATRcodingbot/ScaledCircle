@@ -499,6 +499,16 @@ class CampaignApplicantsScreen extends StatelessWidget {
           throw Exception('This campaign no longer exists.');
         }
 
+        final latestCampaignData =
+            latestCampaign.data() as Map<String, dynamic>? ?? {};
+        final latestCampaignStatus =
+            latestCampaignData['status']?.toString() ?? '';
+        if (latestCampaignStatus != 'open') {
+          throw Exception(
+            'This campaign is no longer accepting Scaler assignments.',
+          );
+        }
+
         final latestApplicationData = latestApplication.data()!;
 
         final applicationStatus =
