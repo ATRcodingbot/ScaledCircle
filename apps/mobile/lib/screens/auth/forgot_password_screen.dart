@@ -138,7 +138,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                     Expanded(
                                       child: Text(
                                         'Resetting your password does not remove '
-                                        'credits, earnings, campaigns, GPS work, '
+                                        'payments, earnings, campaigns, GPS work, '
                                         'or account history.',
                                       ),
                                     ),

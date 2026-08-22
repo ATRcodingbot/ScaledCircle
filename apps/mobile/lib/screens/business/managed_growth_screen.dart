@@ -898,7 +898,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const Text(
-                'The \$999 list-price subscription covers software, intelligence, planning, and creative drafts. Worker pay, advertising spend, printing, postage, fulfillment, vendor costs, and future overages remain separate.',
+                'The \$999 list-price subscription covers software, intelligence, planning, and creative drafts. Worker pay, advertising spend, printing, postage, fulfillment, vendor costs, and future overages remain separate. Social advertising spend passes through at actual cost with no percentage markup. Direct-mail estimates keep printing, postage, and vendor costs separate from the 20% management fee.',
               ),
             ],
           ),

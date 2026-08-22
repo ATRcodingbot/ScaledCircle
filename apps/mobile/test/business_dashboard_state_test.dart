@@ -19,21 +19,9 @@ void main() {
     ).readAsStringSync();
   });
 
-  String methodBody(String methodName) {
-    final start = dashboardSource.indexOf('Future<void> $methodName(');
-    expect(start, isNonNegative, reason: '$methodName must exist');
-
-    final nextMethod = dashboardSource.indexOf('\n  Future<', start + 1);
-    final end = nextMethod == -1 ? dashboardSource.length : nextMethod;
-    return dashboardSource.substring(start, end);
-  }
-
-  group('Business dashboard lifecycle state safety', () {
-    test('wallet initialization does not use a Future-returning setState', () {
-      expect(
-        dashboardSource,
-        contains('Future<void> _initializeWallet() async'),
-      );
+  group('Business dashboard lifecycle and payment-model safety', () {
+    test('weather initialization never returns a Future from setState', () {
+      expect(dashboardSource, contains('Future<void> _loadWeather() async'));
       expect(dashboardSource, isNot(contains('setState(() async')));
       expect(dashboardSource, isNot(contains('setState(async')));
       expect(
@@ -45,36 +33,14 @@ void main() {
       );
     });
 
-    test(
-      'wallet loading has mounted guards before successful state updates',
-      () {
-        final walletLoad = methodBody('_loadWallet');
-
-        expect(walletLoad, contains('if (!mounted)'));
-        expect(walletLoad, contains('_availableCredits = availableCredits;'));
-        expect(walletLoad, contains('_reservedCredits = reservedCredits;'));
-        expect(walletLoad, contains('_walletLoading = false;'));
-      },
-    );
-
-    test('wallet failure is handled synchronously while mounted', () {
-      final walletLoad = methodBody('_loadWallet');
-
-      expect(walletLoad, contains('catch (e)'));
-      expect(walletLoad, contains('if (!mounted)'));
-      expect(
-        walletLoad,
-        contains("_walletError = 'Unable to load wallet: \$e';"),
-      );
-      expect(walletLoad, isNot(contains('setState(() async')));
-    });
-
-    test('initialization does not update state after disposal', () {
-      final initialization = methodBody('_initializeWallet');
-
-      expect(initialization, contains('if (!mounted)'));
-      expect(initialization, contains('return;'));
-      expect(initialization, isNot(contains('setState(() async')));
+    test('Business dashboard is Stripe-first and does not expose a wallet', () {
+      expect(dashboardSource, contains('Campaign Payments'));
+      expect(dashboardSource, contains('completed securely through Stripe'));
+      expect(dashboardSource, isNot(contains('BusinessWalletScreen')));
+      expect(dashboardSource, isNot(contains('Available Credits')));
+      expect(dashboardSource, isNot(contains('Reserved Credits')));
+      expect(dashboardSource, isNot(contains('1 credit equals')));
+      expect(dashboardSource, isNot(contains('Retry Wallet')));
     });
 
     test('existing dashboard campaign status still renders', () {

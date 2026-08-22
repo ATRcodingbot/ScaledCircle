@@ -3296,21 +3296,20 @@ exports.analyzeCampaignZone = onCall(
         );
       }
 
-      const areaSquareMeters = readNumber(
-        zoneData.zoneAreaSquareMeters,
-      );
+      const serverWalkingEstimate =
+        operations.calculateGeometryWalkingEstimate(validPoints);
 
-      let areaAcres = readNumber(
-        zoneData.zoneAreaAcres,
-      );
+      const areaSquareMeters =
+        serverWalkingEstimate.areaSquareMeters;
 
-      const areaSquareMiles = readNumber(
-        zoneData.zoneAreaSquareMiles,
-      );
+      const areaAcres =
+        areaSquareMeters / 4046.8564224;
 
-      const perimeterMeters = readNumber(
-        zoneData.zonePerimeterMeters,
-      );
+      const areaSquareMiles =
+        areaSquareMeters / 2589988.110336;
+
+      const perimeterMeters =
+        serverWalkingEstimate.perimeterMeters;
 
       const estimatedWalkingMiles = readNumber(
         zoneData.estimatedWalkingMiles,
@@ -3320,8 +3319,6 @@ exports.analyzeCampaignZone = onCall(
         zoneData.estimatedMinutes,
       );
 
-      const serverWalkingEstimate =
-        operations.calculateGeometryWalkingEstimate(validPoints);
       // Zones are intentionally bounded for one Scaler. Parallel staffing is
       // optional, so the neutral server recommendation remains one unless a
       // future version has a separately reviewed scheduling policy.
@@ -3331,14 +3328,6 @@ exports.analyzeCampaignZone = onCall(
       ) / 100;
       const serverZoneGeometryDigest =
         operations.zoneGeometryDigest(validPoints);
-
-      if (
-        areaAcres <= 0 &&
-        areaSquareMeters > 0
-      ) {
-        areaAcres =
-          areaSquareMeters / 4046.8564224;
-      }
 
       await zoneReference.update({
         analysisStatus: "analyzing",

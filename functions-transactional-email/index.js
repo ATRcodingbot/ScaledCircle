@@ -57,6 +57,7 @@ const transactionalEmail = require("./transactional_email");
 
 
 
+
 initializeApp();
 
 
@@ -71,6 +72,10 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
 
 
 
@@ -108,6 +113,40 @@ setGlobalOptions({
 
 
 const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -280,7 +280,7 @@ class _EarlyAccessDialogState extends State<_EarlyAccessDialog> {
                                   const SizedBox(height: 14),
                                   Text(
                                     _role == 'business'
-                                        ? 'Business launch benefit: free subscription. The 10% platform fee and Scaler pay still apply.'
+                                        ? 'Business launch benefit: free subscription. The 20% campaign platform fee and Scaler pay still apply.'
                                         : 'Early Scalers can build verified history before the broader launch.',
                                     style: const TextStyle(
                                       color: Color(0xFF88A0B3),

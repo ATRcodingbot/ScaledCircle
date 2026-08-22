@@ -11,6 +11,7 @@ const artifactEmailRoot = path.join(root, "functions-artifact-email");
 const jobAlertEmailRoot = path.join(root, "functions-job-alert-email");
 const campaignFundingRoot = path.join(root, "functions-campaign-funding");
 const assignmentRoot = path.join(root, "functions-assignment");
+const discoveryRoot = path.join(root, "functions-discovery");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const expectedExports = [
   "analyzePropertyIntelligence",
@@ -42,7 +43,6 @@ const expectedExports = [
   "scheduleSocialPostDraft",
   "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
-  "saveDiscoveryPreferences",
   "getMarketplaceWorkTypes",
   "getPendingScalerPreferences",
   "savePendingScalerPreferences",
@@ -76,6 +76,7 @@ for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"])
 for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, campaignFundingRoot);
   resolveFrom(dependency, assignmentRoot);
+  resolveFrom(dependency, discoveryRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
@@ -95,6 +96,7 @@ process.env.APP_ENV = "production";
 process.env.GCLOUD_PROJECT = "scaled-circle";
 const campaignFunding = require(path.join(campaignFundingRoot, "index.js"));
 const assignment = require(path.join(assignmentRoot, "index.js"));
+const discovery = require(path.join(discoveryRoot, "index.js"));
 for (const [name, value] of Object.entries(priorPaymentEnvironment)) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
@@ -110,6 +112,9 @@ assert.deepEqual(Object.keys(campaignFunding).filter((name) => !name.startsWith(
 ]);
 assert.deepEqual(Object.keys(assignment).sort(), [
   "acceptZoneGroupSlot", "assignScalerToZone", "configureZoneGroupAssignment",
+]);
+assert.deepEqual(Object.keys(discovery).sort(), [
+  "analyzeCampaignZone", "saveDiscoveryPreferences",
 ]);
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
@@ -133,6 +138,7 @@ const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wal
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
   Object.keys(transactionalEmail)];
 inventories.push(Object.keys(assignment));
+inventories.push(Object.keys(discovery));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 
@@ -149,6 +155,8 @@ for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer"
 
 const assignmentSource = require("node:fs").readFileSync(path.join(assignmentRoot, "index.js"), "utf8");
 const assignmentLock = require("node:fs").readFileSync(path.join(assignmentRoot, "package-lock.json"), "utf8");
+const discoverySource = require("node:fs").readFileSync(path.join(discoveryRoot, "index.js"), "utf8");
+const discoveryLock = require("node:fs").readFileSync(path.join(discoveryRoot, "package-lock.json"), "utf8");
 for (const forbidden of [
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
   "STRIPE_SECRET_KEY", "STRIPE_TEST_SECRET_KEY", "STRIPE_LIVE_SECRET_KEY",
@@ -156,6 +164,12 @@ for (const forbidden of [
 ]) assert.doesNotMatch(assignmentSource, new RegExp(forbidden));
 for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
   assert.doesNotMatch(assignmentLock, new RegExp(forbiddenPackage));
+}
+for (const forbidden of ["CENSUS_API_KEY", "OPENAI_API_KEY", "SMTP_PASSWORD", "STRIPE_", "defineSecret"]) {
+  assert.doesNotMatch(discoverySource, new RegExp(forbidden));
+}
+for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+  assert.doesNotMatch(discoveryLock, new RegExp(forbiddenPackage));
 }
 
 const transactionalSource = require("node:fs").readFileSync(
@@ -212,4 +226,4 @@ for (const forbiddenPackage of ["node_modules/nodemailer", "openai"]) {
   assert.doesNotMatch(campaignFundingLock, new RegExp(forbiddenPackage));
 }
 
-console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email exports.`);
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, discovery-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email exports.`);

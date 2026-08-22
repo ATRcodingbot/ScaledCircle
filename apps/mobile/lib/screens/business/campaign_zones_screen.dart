@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../jobs/job_room_screen.dart';
 
@@ -64,6 +65,30 @@ class CampaignZonesScreen extends StatelessWidget {
   int? get _materialQuantity {
     final data = campaign.data() as Map<String, dynamic>?;
     return (data?['materialQuantity'] as num?)?.toInt();
+  }
+
+  Future<void> _retryZoneAnalysis(
+    BuildContext context,
+    DocumentSnapshot<Map<String, dynamic>> zone,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final callable = FirebaseFunctions.instanceFor(
+        region: 'us-east1',
+      ).httpsCallable('analyzeCampaignZone');
+      await callable.call({'zoneId': zone.id});
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Zone analysis updated.')),
+      );
+    } on FirebaseFunctionsException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error.message ?? 'Zone analysis could not be updated right now.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<String?> _askForZoneName(
@@ -1438,6 +1463,17 @@ class CampaignZonesScreen extends StatelessWidget {
                                 _editZoneArea(context, zone);
                               },
                       ),
+
+                      if (data['analysisStatus'] != 'complete' ||
+                          data['serverZoneMetricsVersion'] !=
+                              'geometry_v1_server') ...[
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _retryZoneAnalysis(context, zone),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry Zone Analysis'),
+                        ),
+                      ],
 
                       if (!_campaignLocked) ...[
                         const SizedBox(height: 8),

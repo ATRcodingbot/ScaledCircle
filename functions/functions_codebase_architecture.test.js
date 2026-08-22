@@ -27,7 +27,7 @@ const expected = [
   "getSocialProviderAvailability", "createSocialPostDraft", "updateSocialPostDraft",
   "approveSocialPostDraft", "scheduleSocialPostDraft", "registerSocialMediaItem",
   "suggestBusinessGrowthProfileFromWebsite",
-  "saveDiscoveryPreferences", "evaluateOpportunityMatch",
+  "evaluateOpportunityMatch",
   "getMarketplaceWorkTypes", "getPendingScalerPreferences", "savePendingScalerPreferences",
   "resolveServiceAreaPlace",
   "joinScalerAffiliateProgram", "getScalerAffiliateDashboard",
@@ -53,10 +53,16 @@ const campaignFundingLock = fs.readFileSync(
   path.join(root, "functions-campaign-funding", "package-lock.json"), "utf8");
 const assignment = fs.readFileSync(
   path.join(root, "functions-assignment", "index.js"), "utf8");
+const discovery = fs.readFileSync(
+  path.join(root, "functions-discovery", "index.js"), "utf8");
 const assignmentPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-assignment", "package.json"), "utf8"));
 const assignmentLock = fs.readFileSync(
   path.join(root, "functions-assignment", "package-lock.json"), "utf8");
+const discoveryPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-discovery", "package.json"), "utf8"));
+const discoveryLock = fs.readFileSync(
+  path.join(root, "functions-discovery", "package-lock.json"), "utf8");
 const transactionalEmail = fs.readFileSync(
   path.join(root, "functions-transactional-email", "index.js"), "utf8");
 const transactionalEmailPackage = JSON.parse(fs.readFileSync(
@@ -102,6 +108,35 @@ test("campaign-funding owns the isolated TEST-mode campaign payment boundary", (
   }
 });
 
+test("discovery-core exclusively owns the secret-free discovery and Zone analysis callables", () => {
+  const names = ["saveDiscoveryPreferences", "analyzeCampaignZone"];
+  assert.deepEqual(exportsIn(discovery).sort(), [...names].sort());
+  for (const name of names) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.match(discovery, /exports\.saveDiscoveryPreferences\s*=\s*onCall/);
+  assert.match(discovery, /exports\.analyzeCampaignZone\s*=\s*onCall/);
+  assert.match(discovery, /analysisStatus:\s*"complete"/);
+  assert.match(discovery, /serverZoneMetricsVersion/);
+  assert.match(discovery,
+    /const areaSquareMeters\s*=\s*serverWalkingEstimate\.areaSquareMeters/);
+  assert.doesNotMatch(discovery,
+    /readNumber\(\s*zoneData\.zoneAreaSquareMeters/);
+  assert.deepEqual(Object.keys(discoveryPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of [
+    "CENSUS_API_KEY", "OPENAI_API_KEY", "SMTP_PASSWORD", "STRIPE_",
+    "WEATHER_API", "defineSecret",
+  ]) assert.doesNotMatch(discovery, new RegExp(forbidden));
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(discoveryLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "discovery-core")?.source, "functions-discovery");
+});
+
 test("assignment-core exclusively owns the maintained assignment callable IDs", () => {
   const names = ["assignScalerToZone", "configureZoneGroupAssignment", "acceptZoneGroupSlot"];
   assert.deepEqual(exportsIn(assignment).sort(), [...names].sort());
@@ -144,7 +179,8 @@ test("wallet-core owns exactly one secret-free callable with no duplicate assign
     assert.doesNotMatch(walletLock, new RegExp(forbiddenPackage));
   }
   const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet),
-    exportsIn(artifactEmail), exportsIn(transactionalEmail), exportsIn(assignment)]
+    exportsIn(artifactEmail), exportsIn(transactionalEmail), exportsIn(assignment),
+    exportsIn(discovery)]
     .map((exports) => [...new Set(exports)]);
   const all = inventories.flat();
   assert.equal(new Set(all).size, all.length);
@@ -181,7 +217,7 @@ test("platform-core is isolated from legacy and unrelated provider secrets", () 
 
 test("retired legacy GPS endpoint is absent from every deployable codebase", () => {
   const deployableSources = [platform, legacy, wallet, artifactEmail,
-    jobAlertEmail, transactionalEmail, campaignFunding, assignment];
+    jobAlertEmail, transactionalEmail, campaignFunding, assignment, discovery];
   for (const source of deployableSources) {
     assert.doesNotMatch(source, /exports\.saveLegacyTrackingRoute\s*=/);
   }
@@ -252,7 +288,7 @@ test("provider secrets bind only to their reviewed intelligence functions", () =
   const growthStart = platform.indexOf("exports.generateManagedGrowthArtifact");
   assert.match(platform.slice(growthStart, growthStart + 900), /secrets:\s*\[OPENAI_API_KEY\]/);
   for (const name of ["saveBusinessGrowthProfile", "suggestBusinessGrowthProfileFromWebsite",
-    "saveDiscoveryPreferences", "evaluateOpportunityMatch"]) {
+    "evaluateOpportunityMatch"]) {
     const start = platform.indexOf(`exports.${name}`);
     assert.doesNotMatch(platform.slice(start, start + 1200), /secrets\s*:/);
   }

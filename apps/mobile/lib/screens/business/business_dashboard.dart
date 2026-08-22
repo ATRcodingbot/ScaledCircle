@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../models/user/user_profile.dart';
 import '../../models/campaign_card_compensation.dart';
 import '../../services/subscription_plan_service.dart';
-import '../../services/wallet_service.dart';
 import '../../services/maryland_weather_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/account_mode_switch_button.dart';
@@ -16,7 +15,6 @@ import '../notifications/notifications_screen.dart';
 import 'create/create_campaign_screen.dart';
 import 'subscription_screen.dart';
 import 'managed_growth_screen.dart';
-import 'business_wallet_screen.dart';
 import 'weather_alerts_screen.dart';
 import '../../widgets/reputation_card.dart';
 import 'profile/business_profile_screen.dart';
@@ -204,8 +202,6 @@ class _BusinessToday extends StatelessWidget {
 }
 
 class _BusinessDashboardState extends State<BusinessDashboard> {
-  final WalletService _walletService = WalletService();
-
   final SubscriptionPlanService _planService = SubscriptionPlanService();
 
   final MarylandWeatherService _weatherService = MarylandWeatherService();
@@ -214,19 +210,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
   WeatherEntitlement? _weatherEntitlement;
 
-  bool _walletLoading = true;
-
-  String? _walletError;
-
-  double _availableCredits = 0.0;
-
-  double _reservedCredits = 0.0;
-
   @override
   void initState() {
     super.initState();
-
-    _initializeWallet();
+    _loadWeather();
   }
 
   Future<void> _loadWeather() async {
@@ -266,75 +253,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
   }
 
   Future<void> _refreshDashboard() async {
-    await Future.wait([_loadWallet(), _loadWeather()]);
-  }
-
-  Future<void> _initializeWallet() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-
-      if (user == null) {
-        throw Exception('You must be logged in.');
-      }
-
-      await _walletService.createWallet(
-        userId: user.uid,
-        ownerType: 'business',
-      );
-
-      await _loadWallet();
-      await _loadWeather();
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _walletError = 'Unable to initialize wallet: $e';
-
-        _walletLoading = false;
-      });
-    }
-  }
-
-  Future<void> _loadWallet() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return;
-    }
-
-    try {
-      final availableCredits = await _walletService.getAvailableCredits(
-        user.uid,
-      );
-
-      final reservedCredits = await _walletService.getReservedCredits(user.uid);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _availableCredits = availableCredits;
-
-        _reservedCredits = reservedCredits;
-
-        _walletError = null;
-
-        _walletLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _walletError = 'Unable to load wallet: $e';
-
-        _walletLoading = false;
-      });
-    }
+    await _loadWeather();
   }
 
   Future<void> _openCreateCampaign(BuildContext context, String userId) async {
@@ -376,8 +295,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         if (!context.mounted) {
           return;
         }
-
-        await _loadWallet();
 
         if (!context.mounted) {
           return;
@@ -470,7 +387,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         return;
       }
 
-      await _loadWallet();
     } catch (e) {
       if (!context.mounted) {
         return;
@@ -913,7 +829,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 if (activeCampaigns.isNotEmpty || submittedCampaigns.isNotEmpty)
                   const SizedBox(height: 24),
 
-                _buildWalletSection(),
+                _buildBusinessPaymentsSection(),
                 const SizedBox(height: 16),
                 _buildPropertyIntelligenceCard(user.uid),
                 _buildManagedGrowthCard(user.uid),
@@ -1055,7 +971,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                             ),
                           );
 
-                          await _loadWallet();
                         },
                       ),
                     );
@@ -1202,7 +1117,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                               ),
                             );
 
-                            await _loadWallet();
                           },
                         ),
                       );
@@ -1217,167 +1131,36 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
     );
   }
 
-  Widget _buildWalletSection() {
-    if (_walletLoading) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
-
-    if (_walletError != null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            children: [
-              const Icon(Icons.error_outline, size: 38),
-              const SizedBox(height: 10),
-              Text(_walletError!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: _initializeWallet,
-                child: const Text('Retry Wallet'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(18),
-          child: Text('Sign in to view campaign funding.'),
-        ),
-      );
-    }
-
-    final walletReference = FirebaseFirestore.instance
-        .collection('wallets')
-        .doc(user.uid);
-
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: walletReference.snapshots(),
-      builder: (context, walletSnapshot) {
-        final wallet = walletSnapshot.data?.data();
-        final available =
-            (wallet?['availableCredits'] as num?)?.toDouble() ??
-            _availableCredits;
-        final reserved =
-            (wallet?['reservedCredits'] as num?)?.toDouble() ??
-            _reservedCredits;
-        final recordedPaidOut =
-            (wallet?['totalPaidOut'] as num?)?.toDouble() ?? 0.0;
-
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: walletReference
-              .collection('transactions')
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
-          builder: (context, transactionSnapshot) {
-            final ledgerPaidOut =
-                transactionSnapshot.data?.docs
-                    .where(
-                      (transaction) =>
-                          transaction.data()['type']?.toString() ==
-                          'reserved_payment',
-                    )
-                    .fold<double>(
-                      0.0,
-                      (total, transaction) =>
-                          total +
-                          ((transaction.data()['amount'] as num?)?.toDouble() ??
-                              0.0),
-                    ) ??
-                0.0;
-            final paidOut = ledgerPaidOut > recordedPaidOut
-                ? ledgerPaidOut
-                : recordedPaidOut;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Campaign Funding',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final columns = constraints.maxWidth >= 700 ? 3 : 2;
-                    final width =
-                        (constraints.maxWidth - ((columns - 1) * 12)) / columns;
-
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        _walletCard(
-                          width: width,
-                          icon: Icons.account_balance_wallet_outlined,
-                          title: 'Available',
-                          amount: available,
-                          onTap: () => _openBusinessWallet(context),
-                        ),
-                        _walletCard(
-                          width: width,
-                          icon: Icons.lock_outline,
-                          title: 'Reserved',
-                          amount: reserved,
-                          onTap: () => _openBusinessWallet(context),
-                        ),
-                        _walletCard(
-                          width: width,
-                          icon: Icons.payments_outlined,
-                          title: 'Paid Out',
-                          amount: paidOut,
-                          onTap: () => _openBusinessWallet(context),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.science_outlined),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Add campaign credits securely with Stripe, or pay '
-                            'the exact worker funding amount when launching a '
-                            'campaign. 1 credit equals \$1.',
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+  Widget _buildBusinessPaymentsSection() {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(18),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.receipt_long_outlined),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Campaign Payments',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _openBusinessWallet(BuildContext context) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const BusinessWalletScreen()),
+                  SizedBox(height: 8),
+                  Text(
+                    'Each campaign shows its authoritative worker compensation, '
+                    'platform fee, total payment, and refund status. Payments are '
+                    'completed securely through Stripe when you approve funding.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1580,7 +1363,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         return;
                       }
 
-                      await _loadWallet();
                     },
                     icon: const Icon(Icons.credit_card),
                     label: Text(
@@ -1593,52 +1375,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
           ),
         );
       },
-    );
-  }
-
-  Widget _walletCard({
-    required double width,
-    required IconData icon,
-    required String title,
-    required double amount,
-    required VoidCallback onTap,
-  }) {
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              children: [
-                Icon(icon, size: 30),
-                const SizedBox(height: 8),
-                Text(
-                  amount == amount.roundToDouble()
-                      ? '${amount.toStringAsFixed(0)} credits'
-                      : '${amount.toStringAsFixed(2)} credits',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(title, textAlign: TextAlign.center),
-                const SizedBox(height: 3),
-                Text(
-                  'View Wallet',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 

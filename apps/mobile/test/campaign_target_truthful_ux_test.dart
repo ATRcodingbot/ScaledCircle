@@ -7,7 +7,9 @@ import 'package:flutter_app/services/secure_function_service.dart';
 import 'package:flutter_app/widgets/zone_intelligence_card.dart';
 
 void main() {
-  testWidgets('saved target remains visible while analysis is pending', (tester) async {
+  testWidgets('saved target remains visible while analysis is pending', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -32,7 +34,9 @@ void main() {
     expect(find.textContaining('Recommended Pay'), findsNothing);
   });
 
-  testWidgets('unavailable home analysis does not invalidate target', (tester) async {
+  testWidgets('unavailable home analysis does not invalidate target', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -74,21 +78,39 @@ void main() {
     );
   });
 
-  test('persistence returns before optional analysis and fake formulas are gone', () {
-    final source = File(
-      'lib/screens/business/campaign_area_screen.dart',
-    ).readAsStringSync();
-    final write = source.indexOf('await widget.campaignReference.set(createData)');
-    final backgroundAnalysis = source.indexOf('unawaited(_analyzeSavedZone())');
-    final leaveMap = source.indexOf('Navigator.pop(context, true)', backgroundAnalysis);
+  test(
+    'persistence returns before optional analysis and fake formulas are gone',
+    () {
+      final source = File(
+        'lib/screens/business/campaign_area_screen.dart',
+      ).readAsStringSync();
+      final write = source.indexOf(
+        'await widget.campaignReference.set(createData)',
+      );
+      final backgroundAnalysis = source.indexOf(
+        'unawaited(_analyzeSavedZone())',
+      );
+      final leaveMap = source.indexOf(
+        'Navigator.pop(context, true)',
+        backgroundAnalysis,
+      );
 
-    expect(write, greaterThan(-1));
-    expect(backgroundAnalysis, greaterThan(write));
-    expect(leaveMap, greaterThan(backgroundAnalysis));
-    expect(source, isNot(contains('_estimatedSweepSpacingMeters')));
-    expect(source, isNot(contains('_walkingMetersPerMinute')));
-    expect(source, isNot(contains('_preliminaryHourlyRate')));
-    expect(source, isNot(contains('preliminary pay')));
-    expect(source, contains('This target looks much larger than your flyer quantity.'));
-  });
+      expect(write, greaterThan(-1));
+      expect(backgroundAnalysis, greaterThan(write));
+      expect(leaveMap, greaterThan(backgroundAnalysis));
+      expect(source, isNot(contains('_estimatedSweepSpacingMeters')));
+      expect(source, isNot(contains('_walkingMetersPerMinute')));
+      expect(source, isNot(contains('_preliminaryHourlyRate')));
+      expect(source, isNot(contains('preliminary pay')));
+      expect(
+        source,
+        contains('This target looks much larger than your flyer quantity.'),
+      );
+      expect(
+        source,
+        contains("'zoneAreaSquareMeters': metrics.areaSquareMeters"),
+      );
+      expect(source, contains("'zoneAreaAcres': metrics.areaAcres"));
+    },
+  );
 }

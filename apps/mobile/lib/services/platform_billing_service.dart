@@ -168,18 +168,6 @@ class PlatformBillingService {
     return false;
   }
 
-  Future<void> purchaseCredits({
-    required String businessId,
-    required int credits,
-  }) async {
-    final result = await _callSecureFunction(
-      businessId: businessId,
-      functionName: 'createCreditCheckoutSession',
-      data: {'credits': credits},
-    );
-    await _openStripeUrl(result['url']);
-  }
-
   Future<void> fundCampaignWithCard({
     required String businessId,
     required String campaignId,

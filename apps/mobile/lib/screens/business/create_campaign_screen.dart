@@ -1235,8 +1235,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                       const SizedBox(height: 12),
 
                       const Text(
-                        '1 credit = \$1. An active monthly subscription '
-                        'is required to publish campaigns.',
+                        'The final amount is paid securely through Stripe. '
+                        'An active monthly subscription is required to '
+                        'publish campaigns.',
                         style: TextStyle(fontSize: 12),
                       ),
                     ],
