@@ -108,9 +108,13 @@ void main() {
       );
       expect(
         source,
-        contains("'zoneAreaSquareMeters': metrics.areaSquareMeters"),
+        isNot(contains("'zoneAreaSquareMeters': metrics.areaSquareMeters")),
       );
-      expect(source, contains("'zoneAreaAcres': metrics.areaAcres"));
+      expect(
+        source,
+        isNot(contains("'zoneAreaAcres': metrics.areaAcres")),
+      );
+      expect(source, contains('unawaited(_analyzeSavedZone())'));
     },
   );
 }

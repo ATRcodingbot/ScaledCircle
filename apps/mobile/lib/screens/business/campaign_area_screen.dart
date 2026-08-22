@@ -850,10 +850,6 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
         'serviceAreaPointCount': polygonPoints.length,
 
-        'zoneAreaSquareMeters': metrics.areaSquareMeters,
-
-        'zoneAreaAcres': metrics.areaAcres,
-
         'analysisStatus': 'waiting',
 
         'homeCountStatus': 'pending',
