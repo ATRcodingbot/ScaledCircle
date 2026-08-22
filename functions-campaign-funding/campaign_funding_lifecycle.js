@@ -77,8 +77,24 @@ function stripeIdempotencyKey(campaignPaymentId, stripeMode = "test") {
 }
 
 function paymentEnvironment(environment = {}) {
-  const appEnv = String(environment.APP_ENV || "").trim();
-  const projectId = String(environment.GCLOUD_PROJECT || environment.GOOGLE_CLOUD_PROJECT || "").trim();
+  let firebaseProjectId = "";
+  try {
+    const firebaseConfig = typeof environment.FIREBASE_CONFIG === "string" ?
+      JSON.parse(environment.FIREBASE_CONFIG) : environment.FIREBASE_CONFIG;
+    firebaseProjectId = String(firebaseConfig?.projectId || "").trim();
+  } catch (_) {
+    throw new Error("campaign_funding_environment_mismatch");
+  }
+  const discoveryActive = environment.FUNCTIONS_CONTROL_API === "true" ||
+    Boolean(String(environment.FUNCTIONS_MANIFEST_OUTPUT_PATH || "").trim());
+  const configuredAppEnv = String(environment.APP_ENV || "").trim();
+  const projectId = String(environment.GCLOUD_PROJECT || environment.GOOGLE_CLOUD_PROJECT ||
+    firebaseProjectId).trim();
+  const discoveredAppEnv = discoveryActive && !configuredAppEnv ? ({
+    "scaledcircle-staging": "staging",
+    "scaled-circle": "production",
+  })[projectId] || "" : "";
+  const appEnv = configuredAppEnv || discoveredAppEnv;
   const emulatorActive = Boolean(String(environment.FIRESTORE_EMULATOR_HOST || "").trim());
   if (appEnv === "local" && projectId === "demo-scaledcircle" && emulatorActive) {
     return Object.freeze({appEnv, projectId, stripeMode: "test", returnBaseUrl: "http://127.0.0.1:5000"});

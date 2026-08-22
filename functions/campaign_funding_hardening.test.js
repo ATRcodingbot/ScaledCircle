@@ -17,6 +17,14 @@ test("campaign funding environments are explicit and fail closed", () => {
   assert.throws(() => lifecycle.paymentEnvironment({APP_ENV: "production", GCLOUD_PROJECT: "scaledcircle-staging"}));
   assert.throws(() => lifecycle.paymentEnvironment({APP_ENV: "staging", GCLOUD_PROJECT: "scaled-circle"}));
   assert.throws(() => lifecycle.paymentEnvironment({APP_ENV: "unknown", GCLOUD_PROJECT: "scaled-circle"}));
+  assert.equal(lifecycle.paymentEnvironment({FUNCTIONS_CONTROL_API: "true",
+    FIREBASE_CONFIG: JSON.stringify({projectId: "scaled-circle"})}).stripeMode, "live");
+  assert.equal(lifecycle.paymentEnvironment({FUNCTIONS_MANIFEST_OUTPUT_PATH: "manifest.json",
+    FIREBASE_CONFIG: JSON.stringify({projectId: "scaledcircle-staging"})}).stripeMode, "test");
+  assert.throws(() => lifecycle.paymentEnvironment({FIREBASE_CONFIG:
+    JSON.stringify({projectId: "scaled-circle"})}));
+  assert.throws(() => lifecycle.paymentEnvironment({FUNCTIONS_CONTROL_API: "true",
+    FIREBASE_CONFIG: JSON.stringify({projectId: "unknown-project"})}));
   assert.equal(fs.readFileSync(path.join(fundingRoot, ".env.scaled-circle"), "utf8").trim(),
     "APP_ENV=production");
   assert.equal(fs.readFileSync(path.join(fundingRoot, ".env.scaledcircle-staging"), "utf8").trim(),
