@@ -12,6 +12,12 @@ function safeReference(value) {
   return text.length <= 12 ? text : `...${text.slice(-8)}`;
 }
 
+function authoritativeTimestamp(value) {
+  if (value && typeof value.toDate === "function") return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === "string" && value ? value : "server-recorded";
+}
+
 function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
   if (!paymentId || !["payment", "refund"].includes(kind)) {
     throw new Error("invalid_admin_financial_event");
@@ -24,12 +30,14 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
   const refundCents = Number(payment.refundableAmountCents || grossCents);
   const currency = String(payment.currency || "usd").toLowerCase();
   const isRefund = kind === "refund";
+  const businessIdentity = String(payment.businessIdentity ||
+    payment.businessUid || payment.businessId || "unknown").slice(0, 254);
   const stableId = `admin-revenue-${kind}_${paymentId}`;
   const title = isRefund ? "Campaign refund completed" : "Campaign payment received";
   const lines = isRefund ? [
     `Campaign: ${campaignName}`,
     `Campaign ID: ${campaignId}`,
-    `Business UID: ${String(payment.businessUid || payment.businessId || "unknown")}`,
+    `Business: ${businessIdentity}`,
     `Original payment: ${money(grossCents, currency)}`,
     `Refund: ${money(refundCents, currency)}`,
     `ScaledCircle retained from campaign charge: ${money(Math.max(0, grossCents - refundCents), currency)}`,
@@ -37,7 +45,7 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
   ] : [
     `Campaign: ${campaignName}`,
     `Campaign ID: ${campaignId}`,
-    `Business UID: ${String(payment.businessUid || payment.businessId || "unknown")}`,
+    `Business: ${businessIdentity}`,
     `Customer payment: ${money(grossCents, currency)}`,
     `Worker compensation: ${money(workerCents, currency)}`,
     `ScaledCircle platform fee: ${money(feeCents, currency)}`,
@@ -46,7 +54,7 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
   lines.push(
     `Stripe mode: ${String(payment.stripeMode || "unknown").toUpperCase()}`,
     `Payment reference: ${safeReference(paymentId)}`,
-    `Timestamp: ${occurredAt || "server-recorded"}`,
+    `Timestamp: ${occurredAt || authoritativeTimestamp(isRefund ? payment.refundedAt : payment.paidAt)}`,
   );
   return {
     stableId,
@@ -80,7 +88,15 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
 
 async function queueAdminFinancialEvent({db, auth, FieldValue, kind, paymentId, campaign, payment}) {
   const admin = await auth.getUserByEmail(SUPPORT_EMAIL);
-  const spec = financialEvent({kind, paymentId, campaign, payment});
+  let businessIdentity = String(payment.businessUid || payment.businessId || "unknown");
+  try {
+    const business = await auth.getUser(String(payment.businessUid || payment.businessId || ""));
+    businessIdentity = business.displayName || business.email || businessIdentity;
+  } catch (_) {
+    // The authoritative UID remains a safe identity if the Auth profile is unavailable.
+  }
+  const spec = financialEvent({kind, paymentId, campaign,
+    payment: {...payment, businessIdentity}});
   const notificationRef = db.collection("notifications").doc(spec.stableId);
   const emailRef = db.collection(EMAIL_JOB_COLLECTION).doc(spec.stableId);
   return db.runTransaction(async (transaction) => {

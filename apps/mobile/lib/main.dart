@@ -10,6 +10,7 @@ import 'config/app_environment.dart';
 import 'config/firebase_auth_emulator_session.dart';
 import 'navigation/app_routes.dart';
 import 'screens/business/business_dashboard.dart';
+import 'screens/campaigns/campaign_funding_return_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/verify_email_screen.dart';
@@ -89,6 +90,13 @@ class ScaledCircleApp extends StatelessWidget {
           return MaterialPageRoute(builder: (_) => VerifyEmailScreen(
             actionCode: route?.queryParameters['oobCode'],
           ));
+        }
+        if (route?.path == AppRoutes.campaignFundingReturn) {
+          return MaterialPageRoute(
+            builder: (_) => CampaignFundingReturnScreen(
+              campaignId: route?.queryParameters['campaignId'] ?? '',
+            ),
+          );
         }
         return null;
       },

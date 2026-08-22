@@ -109,7 +109,7 @@ exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STR
     line_items: [{quantity: 1, price_data: {currency: quote.currency, unit_amount: quote.totalChargeCents,
       product_data: {name: `ScaledCircle campaign funding: ${String(input.campaign.name || input.campaignId).slice(0, 80)}`}}}],
     payment_intent_data: {metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid}},
-    success_url: `${returnBaseUrl}/#/campaign-funding-return?status=processing`,
+    success_url: `${returnBaseUrl}/#/campaign-funding-return?status=processing&campaignId=${encodeURIComponent(input.campaignId)}`,
     cancel_url: `${returnBaseUrl}/#/campaign/${input.campaignId}?funding=cancelled`,
     metadata: {paymentId, campaignId: input.campaignId, businessUid: input.uid,
       purchaseType: `campaign_funding_${PAYMENT_ENVIRONMENT.stripeMode}_v1`},

@@ -541,6 +541,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         ),
       );
     }
+    final liveData = liveCampaign.data() as Map<String, dynamic>? ?? const {};
+    final alreadyFunded = liveData['fundingStatus']?.toString() == 'funded';
     return SizedBox(
       width: double.infinity,
       height: 55,
@@ -557,11 +559,15 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Icon(Icons.publish),
+            : Icon(alreadyFunded ? Icons.publish : Icons.lock_outline),
         label: Text(
           _publishingDraft
-              ? 'Preparing Secure TEST Checkout...'
-              : 'Approve & Continue to Funding',
+              ? (alreadyFunded
+                    ? 'Publishing Campaign...'
+                    : 'Preparing Secure Checkout...')
+              : (alreadyFunded
+                    ? 'Publish Funded Campaign'
+                    : 'Approve & Continue to Funding'),
         ),
       ),
     );
@@ -2072,7 +2078,14 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: maximumWorkerBudget <= 0 || fundingStatus == 'reserved'
+                  child: fundingStatus == 'funded'
+                      ? const ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.check_circle, color: Colors.green),
+                          title: Text('Payment confirmed'),
+                          subtitle: Text('Campaign funded and ready to publish.'),
+                        )
+                      : maximumWorkerBudget <= 0 || fundingStatus == 'reserved'
                       ? ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(

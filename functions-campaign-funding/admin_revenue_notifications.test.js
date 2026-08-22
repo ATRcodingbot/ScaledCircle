@@ -19,6 +19,7 @@ function input(kind = "payment") {
       refundableAmountCents: 960,
       currency: "usd",
       stripeMode: "live",
+      businessIdentity: "Attractive Remodel",
     },
   });
 }
@@ -32,6 +33,8 @@ test("paid campaign notification reports gross, worker compensation, and revenue
   assert.match(event.email.text, /Worker compensation: USD 8\.00/);
   assert.match(event.email.text, /ScaledCircle platform fee: USD 1\.60/);
   assert.match(event.email.text, /Stripe mode: LIVE/);
+  assert.match(event.email.text, /Business: Attractive Remodel/);
+  assert.match(event.email.text, /Timestamp: 2026-08-22T23:02:27Z/);
   assert.doesNotMatch(event.email.text, /card|secret key|payment method/i);
 });
 
