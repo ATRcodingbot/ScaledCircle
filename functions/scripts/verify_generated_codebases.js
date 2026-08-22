@@ -85,7 +85,17 @@ const legacy = require(path.join(legacyRoot, "index.js"));
 const wallet = require(path.join(walletRoot, "index.js"));
 const artifactEmail = require(path.join(artifactEmailRoot, "index.js"));
 const jobAlertEmail = require(path.join(jobAlertEmailRoot, "index.js"));
+const priorPaymentEnvironment = {
+  APP_ENV: process.env.APP_ENV,
+  GCLOUD_PROJECT: process.env.GCLOUD_PROJECT,
+};
+process.env.APP_ENV = "production";
+process.env.GCLOUD_PROJECT = "scaled-circle";
 const campaignFunding = require(path.join(campaignFundingRoot, "index.js"));
+for (const [name, value] of Object.entries(priorPaymentEnvironment)) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
 const transactionalEmail = require(path.join(transactionalEmailRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
@@ -118,7 +128,7 @@ assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs
 const walletSource = require("node:fs").readFileSync(path.join(walletRoot, "index.js"), "utf8");
 const walletLock = require("node:fs").readFileSync(path.join(walletRoot, "package-lock.json"), "utf8");
 for (const forbidden of [
-  "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_THIN_WEBHOOK_SECRET",
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
   "OPENAI_API_KEY", "CENSUS_API_KEY", "stripeClient", "stripeWebhook",
 ]) assert.doesNotMatch(walletSource, new RegExp(forbidden));
@@ -166,12 +176,16 @@ const campaignFundingSource = require("node:fs").readFileSync(
 const campaignFundingLock = require("node:fs").readFileSync(
   path.join(campaignFundingRoot, "package-lock.json"), "utf8");
 for (const forbidden of [
-  "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_THIN_WEBHOOK_SECRET",
   "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
   "OPENAI_API_KEY", "CENSUS_API_KEY", "stripeThinWebhook", "fundCampaign",
 ]) assert.doesNotMatch(campaignFundingSource, new RegExp(forbidden));
+assert.doesNotMatch(campaignFundingSource, /defineSecret\(["']STRIPE_SECRET_KEY["']\)/);
+assert.doesNotMatch(campaignFundingSource, /defineSecret\(["']STRIPE_WEBHOOK_SECRET["']\)/);
 assert.match(campaignFundingSource, /STRIPE_TEST_SECRET_KEY/);
 assert.match(campaignFundingSource, /STRIPE_TEST_WEBHOOK_SECRET/);
+assert.match(campaignFundingSource, /STRIPE_LIVE_SECRET_KEY/);
+assert.match(campaignFundingSource, /STRIPE_LIVE_WEBHOOK_SECRET/);
 for (const forbiddenPackage of ["node_modules/nodemailer", "openai"]) {
   assert.doesNotMatch(campaignFundingLock, new RegExp(forbiddenPackage));
 }
