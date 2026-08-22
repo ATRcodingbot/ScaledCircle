@@ -91,6 +91,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   List<Map<String, double>> _campaignArea = const [];
   String? _campaignAreaName;
   List<SavedPropertyAreaContext> _savedAreas = const [];
+  String? _businessAddress;
+  double? _businessLatitude;
+  double? _businessLongitude;
   @override
   void initState() {
     super.initState();
@@ -107,6 +110,56 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       ].join('\n');
     }
     _loadSavedAreas();
+    _loadBusinessPickupAddress();
+  }
+
+  Future<void> _loadBusinessPickupAddress() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final data = snapshot.data() ?? const <String, dynamic>{};
+      String readAddress() {
+        for (final key in const [
+          'businessAddress',
+          'streetAddress',
+          'address',
+          'pickupAddress',
+        ]) {
+          final raw = data[key];
+          final value = raw is Map
+              ? [
+                      raw['street'] ?? raw['streetAddress'] ?? raw['line1'],
+                      raw['city'],
+                      raw['state'],
+                      raw['postalCode'] ?? raw['zipCode'],
+                    ]
+                    .where((part) => part?.toString().trim().isNotEmpty == true)
+                    .map((part) => part.toString().trim())
+                    .join(', ')
+              : raw?.toString().trim() ?? '';
+          if (value.isNotEmpty) return value;
+        }
+        return '';
+      }
+
+      final address = readAddress();
+      if (!mounted || address.isEmpty) return;
+      final rawLatitude = data['businessLatitude'] ?? data['latitude'];
+      final rawLongitude = data['businessLongitude'] ?? data['longitude'];
+      setState(() {
+        _businessAddress = address;
+        _businessLatitude = rawLatitude is num ? rawLatitude.toDouble() : null;
+        _businessLongitude = rawLongitude is num
+            ? rawLongitude.toDouble()
+            : null;
+      });
+    } catch (_) {
+      // Manual pickup entry remains available when no profile address exists.
+    }
   }
 
   Future<void> _loadSavedAreas() async {
@@ -268,7 +321,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       if (!mounted || requestSequence != _quoteRequestSequence) return;
       setState(() {
         _quoteUpdating = false;
-        _quoteError = "We couldn't update the campaign total right now.";
+        _quoteError = _costQuote == null
+            ? 'Unable to calculate the campaign total.'
+            : "Couldn't refresh — Retry";
       });
     }
   }
@@ -854,7 +909,6 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         final data = zone.data();
 
         totalEstimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-
       }
 
       await campaignReference.update({
@@ -1199,6 +1253,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                       MaterialFulfillmentForm(
                         value: _materialLogistics,
                         enabled: !publishing,
+                        businessAddress: _businessAddress,
+                        businessLatitude: _businessLatitude,
+                        businessLongitude: _businessLongitude,
                         onChanged: (value) {
                           setState(() => _materialLogistics = value);
                         },
@@ -1505,7 +1562,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                             Align(
                               alignment: Alignment.centerLeft,
                               child: TextButton(
-                                onPressed: _requestCampaignCostQuote,
+                                onPressed: _quoteUpdating
+                                    ? null
+                                    : _requestCampaignCostQuote,
                                 child: const Text('Try Again'),
                               ),
                             ),

@@ -12,6 +12,8 @@ class MappedAddressField extends StatefulWidget {
     this.onChanged,
     this.onSelected,
     this.searchAddresses,
+    this.allowManualAddress = false,
+    this.onManualAccepted,
     this.enabled = true,
   });
 
@@ -22,6 +24,8 @@ class MappedAddressField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<AddressSuggestion>? onSelected;
   final Future<List<AddressSuggestion>> Function(String query)? searchAddresses;
+  final bool allowManualAddress;
+  final ValueChanged<String>? onManualAccepted;
   final bool enabled;
 
   @override
@@ -34,6 +38,7 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
   List<AddressSuggestion> _suggestions = const [];
   bool _searching = false;
   String? _error;
+  String? _manualAddress;
 
   Future<void> _search() async {
     final query = widget.controller.text.trim();
@@ -57,7 +62,9 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
       setState(() {
         _suggestions = suggestions;
         _error = suggestions.isEmpty
-            ? 'No map matches found. Add city, state, or ZIP and try again.'
+            ? widget.allowManualAddress
+                  ? "We couldn't confirm this address on the map."
+                  : 'No map matches found. Add city, state, or ZIP and try again.'
             : null;
       });
       // The explicit Search action is sufficient confirmation when there is one
@@ -91,6 +98,7 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
     setState(() {
       _suggestions = const [];
       _error = null;
+      _manualAddress = null;
     });
     widget.onChanged?.call(suggestion.fullAddress);
     widget.onSelected?.call(suggestion);
@@ -110,10 +118,13 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
           autofillHints: const [AutofillHints.fullStreetAddress],
           onChanged: (value) {
             widget.onChanged?.call(value);
-            if (_suggestions.isNotEmpty || _error != null) {
+            if (_suggestions.isNotEmpty ||
+                _error != null ||
+                _manualAddress != null) {
               setState(() {
                 _suggestions = const [];
                 _error = null;
+                _manualAddress = null;
               });
             }
           },
@@ -171,12 +182,32 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
                               onPressed: _searching ? null : _search,
                               child: const Text('Try Again'),
                             ),
+                            if (widget.allowManualAddress &&
+                                widget.controller.text.trim().isNotEmpty)
+                              FilledButton.tonal(
+                                key: const Key('use-address-anyway'),
+                                onPressed: () {
+                                  final address = widget.controller.text.trim();
+                                  setState(() {
+                                    _error = null;
+                                    _manualAddress = address;
+                                  });
+                                  widget.onManualAccepted?.call(address);
+                                },
+                                child: const Text('Use This Address Anyway'),
+                              ),
                             TextButton(
                               onPressed: () {
-                                widget.controller.clear();
+                                if (!widget.allowManualAddress) {
+                                  widget.controller.clear();
+                                }
                                 setState(() => _error = null);
                               },
-                              child: const Text('Choose Another Area'),
+                              child: Text(
+                                widget.allowManualAddress
+                                    ? 'Edit Address'
+                                    : 'Choose Another Area',
+                              ),
                             ),
                           ],
                         ),
@@ -229,6 +260,22 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
                       ),
                     ],
                   ),
+          ),
+        if (_manualAddress != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.edit_location_alt_outlined, size: 18),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Address saved as entered • map not confirmed',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
           ),
       ],
     );

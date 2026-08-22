@@ -10,12 +10,18 @@ class MaterialFulfillmentForm extends StatefulWidget {
     required this.onChanged,
     this.enabled = true,
     this.lockMessage,
+    this.businessAddress,
+    this.businessLatitude,
+    this.businessLongitude,
   });
 
   final MaterialLogisticsDraft value;
   final ValueChanged<MaterialLogisticsDraft> onChanged;
   final bool enabled;
   final String? lockMessage;
+  final String? businessAddress;
+  final double? businessLatitude;
+  final double? businessLongitude;
 
   @override
   State<MaterialFulfillmentForm> createState() =>
@@ -157,6 +163,32 @@ class _MaterialFulfillmentFormState extends State<MaterialFulfillmentForm> {
             if (value.materialsRequired) ...[
               const SizedBox(height: 8),
               if (value.fulfillmentType ==
+                      MaterialLogisticsDraft.scalerPickupBusiness &&
+                  widget.businessAddress?.trim().isNotEmpty == true) ...[
+                OutlinedButton.icon(
+                  key: const Key('use-my-business-address'),
+                  onPressed: enabled
+                      ? () {
+                          final address = widget.businessAddress!.trim();
+                          _location.text = address;
+                          _emit(
+                            value.copyWith(
+                              location: address,
+                              latitude: widget.businessLatitude,
+                              longitude: widget.businessLongitude,
+                              clearCoordinates:
+                                  widget.businessLatitude == null ||
+                                  widget.businessLongitude == null,
+                            ),
+                          );
+                        }
+                      : null,
+                  icon: const Icon(Icons.business_outlined),
+                  label: const Text('Use My Business Address'),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (value.fulfillmentType ==
                   MaterialLogisticsDraft.scalerPickupPrintShop) ...[
                 TextFormField(
                   controller: _printingShop,
@@ -188,7 +220,8 @@ class _MaterialFulfillmentFormState extends State<MaterialFulfillmentForm> {
                     'Business pickup location',
                   _ => 'Delivery / meetup location',
                 },
-                hintText: 'Enter a complete staging address',
+                hintText: 'Street, city, state, ZIP',
+                allowManualAddress: true,
                 onChanged: (text) => _emit(
                   value.copyWith(location: text, clearCoordinates: true),
                 ),
@@ -198,6 +231,9 @@ class _MaterialFulfillmentFormState extends State<MaterialFulfillmentForm> {
                     latitude: suggestion.latitude,
                     longitude: suggestion.longitude,
                   ),
+                ),
+                onManualAccepted: (address) => _emit(
+                  value.copyWith(location: address, clearCoordinates: true),
                 ),
                 validator: (text) => text == null || text.trim().isEmpty
                     ? 'Enter the pickup or delivery location.'

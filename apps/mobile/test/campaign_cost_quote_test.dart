@@ -139,7 +139,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 450));
     await tester.pump();
     expect(
-      find.text("We couldn't update the campaign total right now."),
+      find.text('Unable to calculate the campaign total.'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('campaign-platform-fee')), findsNothing);
@@ -150,6 +150,35 @@ void main() {
     expect(find.text('PLATFORM FEE (20%)'), findsOneWidget);
     expect(find.text(r'$60.00'), findsOneWidget);
   });
+
+  testWidgets(
+    'known-good quote remains visible when refresh temporarily fails',
+    (tester) async {
+      var fail = false;
+      await tester.pumpWidget(
+        app((worker) async {
+          if (fail) throw Exception('temporary');
+          return quote(worker: worker);
+        }),
+      );
+      await enterCompensation(tester, pay: '5', bonus: '3');
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pump();
+      expect(find.text(r'$1.60'), findsOneWidget);
+      expect(find.text(r'$9.60'), findsOneWidget);
+
+      fail = true;
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Completion Bonus per Scaler (\$)'),
+        '4',
+      );
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pump();
+      expect(find.text(r'$1.60'), findsOneWidget);
+      expect(find.text(r'$9.60'), findsOneWidget);
+      expect(find.text("Couldn't refresh — Retry"), findsOneWidget);
+    },
+  );
 
   test('campaign UI has no hardcoded fee and review remains authoritative', () {
     final source = File(
