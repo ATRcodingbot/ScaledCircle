@@ -1,13 +1,16 @@
 "use strict";
 const Stripe = require("stripe");
 const {initializeApp} = require("firebase-admin/app");
+const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const lifecycle = require("./campaign_funding_lifecycle");
+const adminRevenueNotifications = require("./admin_revenue_notifications");
 initializeApp();
 const db = getFirestore();
+const auth = getAuth();
 const PAYMENT_ENVIRONMENT = lifecycle.paymentEnvironment(process.env);
 const STRIPE_SECRET_KEY = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live" ?
   "STRIPE_LIVE_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
@@ -134,6 +137,19 @@ async function transition(paymentId, paymentUpdate, campaignUpdate) {
     if (!(await transaction.get(campaignRef)).exists) throw new Error("campaign_missing");
     transaction.set(paymentRef, {...paymentUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
     transaction.set(campaignRef, {...campaignUpdate, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+  });
+}
+
+async function notifyAdminFinancialEvent(kind, paymentId) {
+  const paymentSnapshot = await db.collection("campaignPayments").doc(paymentId).get();
+  if (!paymentSnapshot.exists) throw new Error("campaign_payment_missing_for_admin_notification");
+  const payment = paymentSnapshot.data() || {};
+  const campaignSnapshot = await db.collection("campaigns").doc(payment.campaignId || "missing").get();
+  if (!campaignSnapshot.exists) throw new Error("campaign_missing_for_admin_notification");
+  await adminRevenueNotifications.queueAdminFinancialEvent({
+    db, auth, FieldValue, kind, paymentId,
+    payment,
+    campaign: {id: campaignSnapshot.id, ...(campaignSnapshot.data() || {})},
   });
 }
 
@@ -294,9 +310,11 @@ async function processEvent(stripe, event) {
         session.metadata?.campaignId !== payment.campaignId || session.metadata?.businessUid !== payment.businessUid) {
       throw new Error("campaign_payment_reconciliation_failed");
     }
-    return transition(paymentId, {status: "paid", stripePaymentIntentId: session.payment_intent,
+    await transition(paymentId, {status: "paid", stripePaymentIntentId: session.payment_intent,
       paidAt: FieldValue.serverTimestamp()}, {fundingStatus: "funded", fundingPaymentId: paymentId,
       fundingVersion: payment.fundingVersion, fundedAt: FieldValue.serverTimestamp()});
+    await notifyAdminFinancialEvent("payment", paymentId);
+    return;
   }
   let paymentId = cleanId(object.metadata?.paymentId || object.client_reference_id);
   if (!paymentId && typeof object.payment_intent === "string") {
@@ -321,12 +339,13 @@ async function processEvent(stripe, event) {
     return transition(paymentId, {status: "refund_pending", settlementFrozen: true},
       {fundingStatus: "refund_pending", status: "funding_review_required", fundingReviewRequired: true});
   }
-  return transition(paymentId, {status: state.paymentStatus, settlementFrozen: state.settlementFrozen === true,
+  await transition(paymentId, {status: state.paymentStatus, settlementFrozen: state.settlementFrozen === true,
     ...(state.paymentStatus === "refunded" ? {refundedAt: FieldValue.serverTimestamp()} : {})},
   {fundingStatus: state.fundingStatus, marketplaceVisible: false, acceptingApplications: false,
     ...(state.campaignStatus ? {status: state.campaignStatus,
       fundingReviewRequired: state.campaignStatus !== "canceled"} : {}),
     ...(state.campaignStatus === "canceled" ? {canceledAt: FieldValue.serverTimestamp()} : {})});
+  if (state.paymentStatus === "refunded") await notifyAdminFinancialEvent("refund", paymentId);
 }
 
 exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET]}, async (request, response) => {
