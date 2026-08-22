@@ -101,6 +101,7 @@ assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
 assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);
 assert.deepEqual(Object.keys(campaignFunding).filter((name) => !name.startsWith("_")).sort(), [
+  "archiveCanceledCampaign", "cancelUnassignedFundedCampaign",
   "createCampaignFundingCheckoutSession", "publishFundedCampaign",
   "quoteCampaignFunding", "stripeWebhook",
 ]);
