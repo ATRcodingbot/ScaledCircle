@@ -14,6 +14,7 @@ const walletRoot = path.join(root, "functions-wallet");
 const artifactEmailRoot = path.join(root, "functions-artifact-email");
 const jobAlertEmailRoot = path.join(root, "functions-job-alert-email");
 const campaignFundingRoot = path.join(root, "functions-campaign-funding");
+const assignmentRoot = path.join(root, "functions-assignment");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 
 const platformExports = new Set([
@@ -73,6 +74,11 @@ const campaignFundingExports = new Set([
   "archiveCanceledCampaign",
   "publishFundedCampaign",
   "stripeWebhook",
+]);
+const assignmentExports = new Set([
+  "assignScalerToZone",
+  "configureZoneGroupAssignment",
+  "acceptZoneGroupSlot",
 ]);
 const transactionalEmailExports = new Set([
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
@@ -153,12 +159,14 @@ function transformIndex(mode) {
   if (mode === "artifact-email") selectedProgram(ast, artifactEmailExports);
   if (mode === "job-alert-email") selectedProgram(ast, jobAlertEmailExports);
   if (mode === "campaign-funding") selectedProgram(ast, campaignFundingExports);
+  if (mode === "assignment") selectedProgram(ast, assignmentExports);
   if (mode === "transactional-email") selectedProgram(ast, transactionalEmailExports);
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
     const excludedFromLegacy = new Set([
       ...platformExports, ...walletExports, ...artifactEmailExports, ...jobAlertEmailExports,
       ...campaignFundingExports,
+      ...assignmentExports,
       ...transactionalEmailExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
@@ -169,6 +177,7 @@ function transformIndex(mode) {
       (mode === "artifact-email" && !artifactEmailExports.has(name)) ||
       (mode === "job-alert-email" && !jobAlertEmailExports.has(name)) ||
       (mode === "campaign-funding" && !campaignFundingExports.has(name)) ||
+      (mode === "assignment" && !assignmentExports.has(name)) ||
       (mode === "transactional-email" && !transactionalEmailExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
@@ -184,6 +193,7 @@ function transformIndex(mode) {
       if (mode === "artifact-email") return artifactEmailSecrets.has(identifier);
       if (mode === "job-alert-email") return jobAlertEmailSecrets.has(identifier);
       if (mode === "campaign-funding") return false;
+      if (mode === "assignment") return false;
       if (mode === "transactional-email") return identifier === "SUPPORT_EMAIL_SMTP_PASSWORD";
       return !platformSecrets.has(identifier);
     });
@@ -216,6 +226,10 @@ function copyPackage(destination, mode) {
         name !== "scaler_job_alert_email.js") continue;
     if (mode === "campaign-funding" && name.endsWith(".js") &&
         name !== "campaign_funding_quote.js") continue;
+    if (mode === "assignment" && name.endsWith(".js") &&
+        !["campaign_funding_quote.js", "marketplace_finance.js",
+          "operational_layer.js", "group_assignment.js", "multi_scaler_rollout.js",
+          "tracking_security.js"].includes(name)) continue;
     if (mode === "transactional-email" && name.endsWith(".js") &&
         name !== "transactional_email.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
@@ -234,6 +248,8 @@ function writePackageManifest(mode, destination) {
       : mode === "job-alert-email"
         ? ["firebase-admin", "firebase-functions", "nodemailer"]
       : mode === "campaign-funding"
+        ? ["firebase-admin", "firebase-functions"]
+      : mode === "assignment"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "transactional-email"
         ? ["firebase-admin", "firebase-functions", "nodemailer"]
@@ -266,6 +282,7 @@ for (const [mode, destination] of [
   ["artifact-email", artifactEmailRoot],
   ["job-alert-email", jobAlertEmailRoot],
   ["campaign-funding", campaignFundingRoot],
+  ["assignment", assignmentRoot],
   ["transactional-email", transactionalEmailRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
@@ -281,4 +298,4 @@ for (const [mode, destination] of [
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
 
-console.log("Generated isolated legacy, platform-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email Functions packages.");

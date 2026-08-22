@@ -10,6 +10,7 @@ const walletRoot = path.join(root, "functions-wallet");
 const artifactEmailRoot = path.join(root, "functions-artifact-email");
 const jobAlertEmailRoot = path.join(root, "functions-job-alert-email");
 const campaignFundingRoot = path.join(root, "functions-campaign-funding");
+const assignmentRoot = path.join(root, "functions-assignment");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const expectedExports = [
   "analyzePropertyIntelligence",
@@ -74,6 +75,7 @@ for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"])
 }
 for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, campaignFundingRoot);
+  resolveFrom(dependency, assignmentRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
@@ -92,6 +94,7 @@ const priorPaymentEnvironment = {
 process.env.APP_ENV = "production";
 process.env.GCLOUD_PROJECT = "scaled-circle";
 const campaignFunding = require(path.join(campaignFundingRoot, "index.js"));
+const assignment = require(path.join(assignmentRoot, "index.js"));
 for (const [name, value] of Object.entries(priorPaymentEnvironment)) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
@@ -105,6 +108,9 @@ assert.deepEqual(Object.keys(campaignFunding).filter((name) => !name.startsWith(
   "createCampaignFundingCheckoutSession", "publishFundedCampaign",
   "quoteCampaignFunding", "stripeWebhook",
 ]);
+assert.deepEqual(Object.keys(assignment).sort(), [
+  "acceptZoneGroupSlot", "assignScalerToZone", "configureZoneGroupAssignment",
+]);
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
 ].sort());
@@ -115,6 +121,9 @@ assert.equal(Object.hasOwn(legacy, "quoteCampaignFunding"), false);
 assert.equal(Object.hasOwn(legacy, "createCampaignFundingCheckoutSession"), false);
 assert.equal(Object.hasOwn(legacy, "publishFundedCampaign"), false);
 assert.equal(Object.hasOwn(legacy, "stripeWebhook"), false);
+for (const name of ["assignScalerToZone", "configureZoneGroupAssignment", "acceptZoneGroupSlot"]) {
+  assert.equal(Object.hasOwn(legacy, name), false);
+}
 assert.equal(Object.hasOwn(legacy, "sendOutboundEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendTransactionalEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "finalizePublicAccountSignup"), false);
@@ -123,6 +132,7 @@ assert.equal(Object.hasOwn(legacy, "resendEmailVerification"), false);
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
   Object.keys(transactionalEmail)];
+inventories.push(Object.keys(assignment));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 
@@ -135,6 +145,17 @@ for (const forbidden of [
 ]) assert.doesNotMatch(walletSource, new RegExp(forbidden));
 for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
   assert.doesNotMatch(walletLock, new RegExp(forbiddenPackage));
+}
+
+const assignmentSource = require("node:fs").readFileSync(path.join(assignmentRoot, "index.js"), "utf8");
+const assignmentLock = require("node:fs").readFileSync(path.join(assignmentRoot, "package-lock.json"), "utf8");
+for (const forbidden of [
+  "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
+  "STRIPE_SECRET_KEY", "STRIPE_TEST_SECRET_KEY", "STRIPE_LIVE_SECRET_KEY",
+  "signupNotifications", "nodemailer",
+]) assert.doesNotMatch(assignmentSource, new RegExp(forbidden));
+for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+  assert.doesNotMatch(assignmentLock, new RegExp(forbiddenPackage));
 }
 
 const transactionalSource = require("node:fs").readFileSync(
@@ -191,4 +212,4 @@ for (const forbiddenPackage of ["node_modules/nodemailer", "openai"]) {
   assert.doesNotMatch(campaignFundingLock, new RegExp(forbiddenPackage));
 }
 
-console.log(`Verified ${expectedExports.length} platform-core exports plus isolated wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email exports.`);
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email exports.`);

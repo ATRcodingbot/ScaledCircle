@@ -51,6 +51,12 @@ const campaignFundingPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-campaign-funding", "package.json"), "utf8"));
 const campaignFundingLock = fs.readFileSync(
   path.join(root, "functions-campaign-funding", "package-lock.json"), "utf8");
+const assignment = fs.readFileSync(
+  path.join(root, "functions-assignment", "index.js"), "utf8");
+const assignmentPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-assignment", "package.json"), "utf8"));
+const assignmentLock = fs.readFileSync(
+  path.join(root, "functions-assignment", "package-lock.json"), "utf8");
 const transactionalEmail = fs.readFileSync(
   path.join(root, "functions-transactional-email", "index.js"), "utf8");
 const transactionalEmailPackage = JSON.parse(fs.readFileSync(
@@ -96,6 +102,36 @@ test("campaign-funding owns the isolated TEST-mode campaign payment boundary", (
   }
 });
 
+test("assignment-core exclusively owns the maintained assignment callable IDs", () => {
+  const names = ["assignScalerToZone", "configureZoneGroupAssignment", "acceptZoneGroupSlot"];
+  assert.deepEqual(exportsIn(assignment).sort(), [...names].sort());
+  for (const name of names) assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  assert.deepEqual(Object.keys(assignmentPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of [
+    "SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD", "SUPPORT_EMAIL_SMTP_PASSWORD",
+    "STRIPE_SECRET_KEY", "STRIPE_TEST_SECRET_KEY", "STRIPE_LIVE_SECRET_KEY",
+    "signupNotifications", "nodemailer",
+  ]) assert.doesNotMatch(assignment, new RegExp(forbidden));
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(assignmentLock, new RegExp(forbiddenPackage));
+  }
+});
+
+test("assignment-core preserves ownership, Zone, duplicate, and rollout authority", () => {
+  assert.match(assignment,
+    /context\.role !== "business"[\s\S]*campaign\.businessId !== context\.uid/);
+  assert.match(assignment,
+    /zone\.campaignId !== campaignId \|\| zone\.businessId !== campaign\.businessId/);
+  assert.match(assignment, /if \(zone\.assignedScalerId\)/);
+  assert.match(assignment, /if \(compensationSnapshot\.exists\)/);
+  assert.match(assignment, /assertProductionScalerCount\([\s\S]*requiredScalerCount/);
+  assert.match(assignment, /groupAssignment\.assertSlotAvailable/);
+  assert.match(assignment, /transaction\.create\(participantRef/);
+  assert.match(assignment, /type: "job_assignment"/);
+});
+
 test("wallet-core owns exactly one secret-free callable with no duplicate assignment", () => {
   assert.deepEqual(exportsIn(wallet), ["ensureLegacyWalletProjection"]);
   assert.doesNotMatch(legacy, /exports\.ensureLegacyWalletProjection\s*=/);
@@ -108,7 +144,7 @@ test("wallet-core owns exactly one secret-free callable with no duplicate assign
     assert.doesNotMatch(walletLock, new RegExp(forbiddenPackage));
   }
   const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet),
-    exportsIn(artifactEmail), exportsIn(transactionalEmail)]
+    exportsIn(artifactEmail), exportsIn(transactionalEmail), exportsIn(assignment)]
     .map((exports) => [...new Set(exports)]);
   const all = inventories.flat();
   assert.equal(new Set(all).size, all.length);
@@ -145,7 +181,7 @@ test("platform-core is isolated from legacy and unrelated provider secrets", () 
 
 test("retired legacy GPS endpoint is absent from every deployable codebase", () => {
   const deployableSources = [platform, legacy, wallet, artifactEmail,
-    jobAlertEmail, transactionalEmail, campaignFunding];
+    jobAlertEmail, transactionalEmail, campaignFunding, assignment];
   for (const source of deployableSources) {
     assert.doesNotMatch(source, /exports\.saveLegacyTrackingRoute\s*=/);
   }

@@ -37,10 +37,11 @@ run(process.execPath, [path.join(__dirname, "generate_functions_codebases.js")],
 for (const directory of [
   "functions-platform", "functions-legacy", "functions-wallet", "functions-artifact-email", "functions-job-alert-email",
   "functions-campaign-funding",
+  "functions-assignment",
   "functions-transactional-email",
 ]) {
   if (["functions-wallet", "functions-artifact-email", "functions-job-alert-email",
-    "functions-campaign-funding", "functions-transactional-email"].includes(directory)) {
+    "functions-campaign-funding", "functions-assignment", "functions-transactional-email"].includes(directory)) {
     prunePackageLock(path.join(root, directory));
   }
   runNpmCi(path.join(root, directory));
