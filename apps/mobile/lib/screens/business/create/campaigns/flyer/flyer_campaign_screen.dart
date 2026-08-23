@@ -6,6 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../../config/app_environment.dart';
+import '../../../../../navigation/app_routes.dart';
+import '../../../../../navigation/app_router.dart';
 import '../../../../../services/platform_billing_service.dart';
 import '../../../../../services/discovery_preferences_service.dart';
 import '../../../../../services/property_area_context_service.dart';
@@ -13,7 +15,6 @@ import '../../../../../services/property_area_context_service.dart';
 import '../../../campaign_zones_screen.dart';
 
 import '../../../campaign/campaign_locations_screen.dart';
-import '../../../../campaigns/campaign_details_screen.dart';
 import '../../../../../models/material_logistics.dart';
 import '../../../../../widgets/material_fulfillment_form.dart';
 
@@ -942,12 +943,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         ),
       );
 
-      await Navigator.pushReplacement(
+      AppNavigation.replace(
         context,
-        MaterialPageRoute(
-          builder: (_) =>
-              CampaignDetailsScreen(campaign: latestCampaignSnapshot),
-        ),
+        AppRoutes.campaignDetail(latestCampaignSnapshot.id),
       );
     } catch (e) {
       if (campaignReference != null) {

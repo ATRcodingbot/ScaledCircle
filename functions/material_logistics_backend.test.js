@@ -132,6 +132,8 @@ test("Job Room projects required material state and viewer readiness authoritati
   assert.match(callable, /viewerReadinessAcknowledged/);
   assert.match(callable, /participant\?\.readinessAcknowledged === true/);
   assert.match(callable, /viewerReadiness:/);
+  assert.match(callable, /const receivedCount = group \? participantHandoffs\.filter/);
+  assert.match(callable, /handoff\.status === "received" \? 1 : 0/);
 });
 
 test("readiness acknowledgment retries do not rewrite the deterministic notification", () => {

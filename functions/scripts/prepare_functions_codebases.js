@@ -39,10 +39,12 @@ for (const directory of [
   "functions-campaign-funding",
   "functions-assignment",
   "functions-discovery",
+  "functions-job-room",
   "functions-transactional-email",
 ]) {
   if (["functions-wallet", "functions-artifact-email", "functions-job-alert-email",
     "functions-campaign-funding", "functions-assignment", "functions-discovery",
+    "functions-job-room",
     "functions-transactional-email"].includes(directory)) {
     prunePackageLock(path.join(root, directory));
   }

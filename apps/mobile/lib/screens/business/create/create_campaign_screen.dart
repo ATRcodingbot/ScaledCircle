@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../models/campaign/campaign.dart';
 import '../../../../navigation/app_routes.dart';
+import '../../../../navigation/app_router.dart';
 
 import 'campaigns/distribution/material_distribution_campaign_screen.dart';
 import 'campaigns/cleanup/cleanup_campaign_screen.dart';
@@ -30,7 +31,7 @@ class CreateCampaignScreen extends StatelessWidget {
               return;
             }
 
-            navigator.pushReplacementNamed(AppRoutes.businessDashboard);
+            AppNavigation.replace(context, AppRoutes.businessDashboard);
           },
         ),
         title: const Text("Create Campaign"),

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../navigation/app_routes.dart';
+import '../../../navigation/app_router.dart';
 
 import '../../../models/campaign_model.dart';
 import '../../../services/campaign_service.dart';
@@ -9,7 +11,6 @@ import '../../reviews/create_review_screen.dart';
 import '../completion/submit_completion_screen.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import '../../jobs/job_room_screen.dart';
 
 class ScalerCampaignDetailsScreen extends StatefulWidget {
   final CampaignModel campaign;
@@ -325,12 +326,9 @@ class _ScalerCampaignDetailsScreenState
                         'Open the private Job Room for meetup, materials, chat, and readiness.',
                       ),
                       FilledButton.icon(
-                        onPressed: () => Navigator.push(
+                        onPressed: () => AppNavigation.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                JobRoomScreen(zoneId: assignedGroupZone!.id),
-                          ),
+                          AppRoutes.jobRoom(assignedGroupZone!.id),
                         ),
                         icon: const Icon(Icons.meeting_room_outlined),
                         label: const Text('Open Job Room'),
@@ -648,7 +646,6 @@ class _ScalerCampaignDetailsScreenState
                       bold: true,
                     ),
                   ],
-
                 ],
               ),
             ),

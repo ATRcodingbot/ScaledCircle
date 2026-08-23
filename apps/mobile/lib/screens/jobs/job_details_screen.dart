@@ -116,8 +116,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       }
 
       final status = data['status']?.toString() ?? 'assigned';
+      final redoRequired = data['redoRequired'] == true;
 
-      if (status != 'assigned' && status != 'accepted') {
+      if (status != 'assigned' &&
+          status != 'accepted' &&
+          !(status == 'in_progress' && redoRequired)) {
         throw Exception('Zone cannot be started.');
       }
 
@@ -511,7 +514,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           campaignData['campaignType']?.toString(),
         );
 
-        if (status == 'assigned' || status == 'accepted') {
+        final restartRedo =
+            status == 'in_progress' && data['redoRequired'] == true;
+        if (status == 'assigned' || status == 'accepted' || restartRedo) {
           return SizedBox(
             width: double.infinity,
             height: 55,
@@ -520,7 +525,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
               icon: const Icon(Icons.play_arrow),
               label: Text(
                 _usesNativeTracking
-                    ? 'Start $zoneName'
+                    ? '${restartRedo ? 'Restart' : 'Start'} $zoneName'
                     : 'Use the mobile app to start this job',
               ),
             ),

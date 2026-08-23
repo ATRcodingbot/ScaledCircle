@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../navigation/app_router.dart';
+import '../../../navigation/app_routes.dart';
 import '../../../services/affiliate_service.dart';
 import '../../../theme/app_theme.dart';
 
@@ -107,7 +109,8 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
               message:
                   'Verify your ScaledCircle email before joining the Business Referral Program.',
               action: FilledButton(
-                onPressed: () => Navigator.pushNamed(context, '/verify-email'),
+                onPressed: () =>
+                    AppNavigation.push(context, AppRoutes.verifyEmail),
                 child: const Text('Verify Email'),
               ),
             );

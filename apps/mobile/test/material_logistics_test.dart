@@ -55,10 +55,10 @@ void main() {
     expect(draft.fulfillmentType, 'business_delivery');
     expect(draft.location, '100 Staging Plaza');
     expect(draft.validate(), isNull);
-    expect(draft.toCallableData(campaignId: 'campaign-1'), containsPair(
-      'campaignId',
-      'campaign-1',
-    ));
+    expect(
+      draft.toCallableData(campaignId: 'campaign-1'),
+      containsPair('campaignId', 'campaign-1'),
+    );
   });
 
   test('create and edit use one shared Material Fulfillment form', () {
@@ -86,27 +86,36 @@ void main() {
     expect(flyerSource, contains('MaterialFulfillmentForm('));
     expect(distributionSource, contains('FlyerCampaignScreen('));
     expect(flyerSource, isNot(contains("labelText: 'Material Handoff'")));
-    expect(distributionSource, isNot(contains("labelText: 'Material Handoff'")));
+    expect(
+      distributionSource,
+      isNot(contains("labelText: 'Material Handoff'")),
+    );
     for (final method in MaterialLogisticsDraft.supportedTypes) {
       expect(modelSource, contains(method));
     }
     expect(widgetSource, contains('MaterialLogisticsDraft.supportedTypes'));
     expect(editSource, contains('updateCampaignMaterialLogistics'));
     expect(editSource, contains('proposeMaterialLogisticsChange'));
-    expect(editSource, contains('Material logistics are locked because a Scaler accepted'));
+    expect(
+      editSource,
+      contains('Material logistics are locked because a Scaler accepted'),
+    );
   });
 
-  test('Campaign Details exposes locked material plan and formats legacy values', () {
-    final details = File(
-      'lib/screens/campaigns/campaign_details_screen.dart',
-    ).readAsStringSync();
-    expect(details, contains("'MATERIAL FULFILLMENT'"));
-    expect(details, contains('Editable until a Scaler is assigned'));
-    expect(details, contains('Locked — a Scaler accepted these terms'));
-    expect(details, contains("].join('\\n')"));
-    expect(details, isNot(contains("].join('\\\\n')")));
-    expect(details, contains(r'Timestamp\(seconds='));
-  });
+  test(
+    'Campaign Details exposes locked material plan and formats legacy values',
+    () {
+      final details = File(
+        'lib/screens/campaigns/campaign_details_screen.dart',
+      ).readAsStringSync();
+      expect(details, contains("'MATERIAL FULFILLMENT'"));
+      expect(details, contains('Editable until a Scaler is assigned'));
+      expect(details, contains('Locked — a Scaler accepted these terms'));
+      expect(details, contains("].join('\\n')"));
+      expect(details, isNot(contains("].join('\\\\n')")));
+      expect(details, contains(r'Timestamp\(seconds='));
+    },
+  );
 
   test('Scaler discovery displays material terms before acceptance', () {
     final screen = File(
@@ -115,7 +124,10 @@ void main() {
     final model = File('lib/models/campaign_model.dart').readAsStringSync();
     expect(model, contains('materialLogistics'));
     expect(screen, contains("'MATERIALS'"));
-    expect(screen, contains('These material terms become locked when you accept'));
+    expect(
+      screen,
+      contains('These material terms become locked when you accept'),
+    );
   });
 
   test('group campaign details never projects a zero legacy base pay', () {
@@ -133,7 +145,7 @@ void main() {
     ).readAsStringSync();
     expect(loginSource, contains("userData?['betaAccess'] == 'approved'"));
     final gateStart = loginSource.indexOf('final approvedForBeta');
-    final gateEnd = loginSource.indexOf('var accountType', gateStart);
+    final gateEnd = loginSource.indexOf('final accountType', gateStart);
     final gate = loginSource.substring(gateStart, gateEnd);
     expect(gate, isNot(contains('AppEnvironmentConfig.isLocal')));
   });

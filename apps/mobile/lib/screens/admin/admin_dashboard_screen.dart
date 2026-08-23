@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../../widgets/authenticated_sign_out_button.dart';
 
 import '../business/internal_beta_entitlements_screen.dart';
 import 'admin_dashboard_card.dart';
@@ -36,20 +37,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: const Text('ScaledCircle Admin Dashboard'),
         actions: [
-          IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/admin/login',
-                  (_) => false,
-                );
-              }
-            },
-          ),
+          const AuthenticatedSignOutButton(),
         ],
       ),
       body: ListView(

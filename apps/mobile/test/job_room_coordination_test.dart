@@ -127,7 +127,7 @@ void main() {
       jobsSource,
       contains("Filter('assignedScalerIds', arrayContains: user.uid)"),
     );
-    expect(jobsSource, contains('JobRoomScreen(zoneId: zone.id)'));
+    expect(jobsSource, contains('AppRoutes.jobRoom(zone.id)'));
     expect(
       backendSource,
       contains('assignedScalerIds: FieldValue.arrayUnion(scalerUid)'),

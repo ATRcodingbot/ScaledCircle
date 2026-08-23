@@ -2,11 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../models/user/user_profile.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/account_mode_switch_button.dart';
 import '../../../widgets/reputation_card.dart';
 import '../../../widgets/scaled_circle_brand.dart';
+import '../../../widgets/authenticated_sign_out_button.dart';
 import '../../jobs/jobs_marketplace_screen.dart';
 import '../../jobs/scaler_wallet_screen.dart';
 import '../../notifications/notifications_screen.dart';
@@ -353,7 +352,7 @@ class ScalerDashboardScreen extends StatelessWidget {
               );
             },
           ),
-          const AccountModeSwitchButton(targetView: UserRole.business),
+          const AuthenticatedSignOutButton(),
           const SizedBox(width: 8),
         ],
       ),

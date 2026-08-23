@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 import '../../services/discovery_preferences_service.dart';
 import '../preferences/areas_preferences_screen.dart';
 import '../public/early_access_pending_screen.dart';
@@ -131,9 +132,8 @@ class _CompleteScalerProfileScreenState
                   ),
                   const SizedBox(height: 18),
                   FilledButton(
-                    onPressed: () => Navigator.of(
-                      context,
-                    ).pushReplacementNamed(AppRoutes.verifyEmail),
+                    onPressed: () =>
+                        AppNavigation.replace(context, AppRoutes.verifyEmail),
                     child: const Text('VERIFY MY EMAIL'),
                   ),
                 ],

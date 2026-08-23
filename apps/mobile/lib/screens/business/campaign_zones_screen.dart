@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import '../jobs/job_room_screen.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 
 import '../../services/completion_payout_service.dart';
 import '../../widgets/zone_intelligence_card.dart';
@@ -716,6 +717,11 @@ class CampaignZonesScreen extends StatelessWidget {
       },
     );
 
+    // Let the dialog route finish detaching its TextField before disposing the
+    // controller or applying the server response to the streamed Zone card.
+    // An immediate authoritative update during the exit transition can rebuild
+    // the parent and trip Flutter's dependent-element teardown assertion.
+    await Future<void>.delayed(const Duration(milliseconds: 350));
     controller.dispose();
 
     if (feedback == null || feedback.isEmpty) {
@@ -1553,12 +1559,9 @@ class CampaignZonesScreen extends StatelessWidget {
                                     const Text('Status: Coordination required'),
                                     const SizedBox(height: 8),
                                     FilledButton.icon(
-                                      onPressed: () => Navigator.push(
+                                      onPressed: () => AppNavigation.push(
                                         context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              JobRoomScreen(zoneId: zone.id),
-                                        ),
+                                        AppRoutes.jobRoom(zone.id),
                                       ),
                                       icon: const Icon(
                                         Icons.meeting_room_outlined,

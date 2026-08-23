@@ -22,7 +22,7 @@ void main() {
   test('operational notifications deep-link to the private Job Room', () {
     expect(source, contains("'job_room'"));
     expect(source, contains("'material_change_review'"));
-    expect(source, contains('JobRoomScreen(zoneId: linkedZoneId)'));
+    expect(source, contains('AppRoutes.jobRoom(linkedZoneId)'));
     expect(source, contains("'job_room_message' => 'Open Job Room'"));
     expect(source, contains("'material_change_proposed' => 'Review Change'"));
   });

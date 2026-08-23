@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 import '../../services/subscription_plan_service.dart';
 import 'authentic_product_map.dart';
 import 'public_funnel_components.dart'
@@ -16,7 +17,7 @@ const _muted = Color(0xFFB8C9D8);
 class PublicLandingScreen extends StatelessWidget {
   const PublicLandingScreen({super.key});
 
-  void _start(BuildContext context, String role) => Navigator.pushNamed(
+  void _start(BuildContext context, String role) => AppNavigation.push(
     context,
     role == 'scaler' ? AppRoutes.scalers : AppRoutes.businesses,
   );
@@ -48,11 +49,11 @@ class PublicLandingScreen extends StatelessWidget {
               backgroundColor: const Color(0xF2020914),
               toolbarHeight: mobile ? 108 : 72,
               title: _Navigation(
-                onLogin: () => Navigator.pushNamed(context, AppRoutes.login),
+                onLogin: () => AppNavigation.push(context, AppRoutes.login),
                 onStart: () => openPublicRoleChooser(context),
                 onBusiness: () =>
-                    Navigator.pushNamed(context, AppRoutes.businesses),
-                onScaler: () => Navigator.pushNamed(context, AppRoutes.scalers),
+                    AppNavigation.push(context, AppRoutes.businesses),
+                onScaler: () => AppNavigation.push(context, AppRoutes.scalers),
                 onHowItWorks: () => reveal(howItWorksKey),
                 onPricing: () => reveal(pricingKey),
               ),
@@ -66,12 +67,10 @@ class PublicLandingScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         _Hero(
-                          onBusiness: () => Navigator.pushNamed(
-                            context,
-                            AppRoutes.businesses,
-                          ),
+                          onBusiness: () =>
+                              AppNavigation.push(context, AppRoutes.businesses),
                           onScaler: () =>
-                              Navigator.pushNamed(context, AppRoutes.scalers),
+                              AppNavigation.push(context, AppRoutes.scalers),
                         ),
                         const _Gap(),
                         _HowItWorks(key: howItWorksKey),
@@ -90,14 +89,14 @@ class PublicLandingScreen extends StatelessWidget {
                           key: pricingKey,
                           onGetStarted: () => _start(context, 'business'),
                           onCompare: () =>
-                              Navigator.pushNamed(context, AppRoutes.login),
+                              AppNavigation.push(context, AppRoutes.login),
                         ),
                         const _Gap(),
                         _FinalCta(
                           onBusiness: () => _start(context, 'business'),
                           onScaler: () => _start(context, 'scaler'),
                           onLogin: () =>
-                              Navigator.pushNamed(context, AppRoutes.login),
+                              AppNavigation.push(context, AppRoutes.login),
                         ),
                       ],
                     ),

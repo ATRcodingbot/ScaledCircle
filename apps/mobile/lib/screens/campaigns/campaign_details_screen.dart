@@ -10,10 +10,11 @@ import '../../services/platform_billing_service.dart';
 import '../../services/secure_function_service.dart';
 
 import '../../services/wallet_service.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 import '../business/campaign_zones_screen.dart';
 import '../business/edit_campaign_screen.dart';
 import '../business/create_campaign_screen.dart' as business_campaign;
-import '../jobs/job_room_screen.dart';
 import 'campaign_applicants_screen.dart';
 import 'campaign_tracking_screen.dart';
 import '../reviews/user_reviews_screen.dart';
@@ -21,8 +22,13 @@ import '../reviews/create_review_screen.dart';
 
 class CampaignDetailsScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
+  final String fallbackRoute;
 
-  const CampaignDetailsScreen({super.key, required this.campaign});
+  const CampaignDetailsScreen({
+    super.key,
+    required this.campaign,
+    this.fallbackRoute = AppRoutes.businessDashboard,
+  });
 
   @override
   State<CampaignDetailsScreen> createState() => _CampaignDetailsScreenState();
@@ -40,7 +46,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     final workerCents = (workerBudget * 100).round();
     if (_reviewQuoteFuture == null || _reviewQuoteWorkerCents != workerCents) {
       _reviewQuoteWorkerCents = workerCents;
-      _reviewQuoteFuture = _billingService.campaignCostQuoteForCampaign(campaign.id);
+      _reviewQuoteFuture = _billingService.campaignCostQuoteForCampaign(
+        campaign.id,
+      );
     }
     return _reviewQuoteFuture!;
   }
@@ -58,6 +66,16 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   bool _campaignActionPending = false;
 
   DocumentSnapshot get campaign => widget.campaign;
+
+  void _leaveCampaignDetails() {
+    AppNavigation.push(context, widget.fallbackRoute);
+  }
+
+  AppBar _campaignAppBar() => AppBar(
+    leading: BackButton(onPressed: _leaveCampaignDetails),
+    title: const Text('Campaign Details'),
+    centerTitle: true,
+  );
 
   CollectionReference<Map<String, dynamic>> get _zonesCollection {
     return FirebaseFirestore.instance.collection('campaignZones');
@@ -1057,7 +1075,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const business_campaign.CreateCampaignScreen(),
+                    builder: (_) =>
+                        const business_campaign.CreateCampaignScreen(),
                   ),
                 ),
                 icon: const Icon(Icons.copy_outlined),
@@ -1998,7 +2017,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Campaign Details')),
+            appBar: _campaignAppBar(),
             body: Center(child: Text(snapshot.error.toString())),
           );
         }
@@ -2013,7 +2032,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         if (!liveCampaign.exists) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Campaign Details')),
+            appBar: _campaignAppBar(),
             body: const Center(child: Text('This campaign no longer exists.')),
           );
         }
@@ -2048,10 +2067,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         final compensation = CampaignCardCompensation.fromCampaign(data);
 
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Campaign Details'),
-            centerTitle: true,
-          ),
+          appBar: _campaignAppBar(),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -2081,9 +2097,14 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                   child: fundingStatus == 'funded'
                       ? const ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.check_circle, color: Colors.green),
+                          leading: Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                          ),
                           title: Text('Payment confirmed'),
-                          subtitle: Text('Campaign funded and ready to publish.'),
+                          subtitle: Text(
+                            'Campaign funded and ready to publish.',
+                          ),
                         )
                       : maximumWorkerBudget <= 0 || fundingStatus == 'reserved'
                       ? ListTile(
@@ -2504,11 +2525,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                 }
                 if (locked && assigned != null) {
                   return FilledButton.icon(
-                    onPressed: () => Navigator.push(
+                    onPressed: () => AppNavigation.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => JobRoomScreen(zoneId: assigned!.id),
-                      ),
+                      AppRoutes.jobRoom(assigned!.id),
                     ),
                     icon: const Icon(Icons.meeting_room_outlined),
                     label: const Text('Open Job Room'),

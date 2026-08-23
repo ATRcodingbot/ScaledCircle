@@ -11,4 +11,12 @@ abstract final class AppRoutes {
   static const verifyEmail = '/verify-email';
   static const campaignFundingReturn = '/campaign-funding-return';
   static const completeScalerProfile = '/complete-scaler-profile';
+  static const campaignDetailPrefix = '/campaign';
+  static const jobRoomPrefix = '/job-room';
+
+  static String campaignDetail(String campaignId) =>
+      '$campaignDetailPrefix/${Uri.encodeComponent(campaignId)}';
+
+  static String jobRoom(String zoneId) =>
+      '$jobRoomPrefix/${Uri.encodeComponent(zoneId)}';
 }

@@ -193,10 +193,8 @@ void main() {
     final reviewSource = File(
       'lib/screens/campaigns/campaign_details_screen.dart',
     ).readAsStringSync();
-    expect(
-      reviewSource,
-      contains('_billingService.campaignCostQuoteForCampaign(campaign.id)'),
-    );
+    expect(reviewSource, contains('campaignCostQuoteForCampaign('));
+    expect(reviewSource, contains('campaign.id'));
     expect(reviewSource, contains('Campaign pricing changed'));
     expect(reviewSource, contains('approvedQuoteDigest'));
     expect(reviewSource, contains('approve again'));

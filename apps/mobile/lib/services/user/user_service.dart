@@ -14,27 +14,6 @@ class UserService {
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
 
-  Future<void> switchAccountView({required String accountType}) async {
-    final normalizedAccountType = accountType.trim().toLowerCase();
-
-    if (normalizedAccountType != 'business' &&
-        normalizedAccountType != 'scaler') {
-      throw ArgumentError('Account view must be business or scaler.');
-    }
-
-    final user = _auth.currentUser;
-
-    if (user == null) {
-      throw Exception('No authenticated user.');
-    }
-
-    await _users.doc(user.uid).set({
-      'accountType': normalizedAccountType,
-      'activeView': normalizedAccountType,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
   Future<void> updateUserRole({
     required UserRole role,
     required String accountType,

@@ -16,6 +16,7 @@ const jobAlertEmailRoot = path.join(root, "functions-job-alert-email");
 const campaignFundingRoot = path.join(root, "functions-campaign-funding");
 const assignmentRoot = path.join(root, "functions-assignment");
 const discoveryRoot = path.join(root, "functions-discovery");
+const jobRoomRoot = path.join(root, "functions-job-room");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 
 const platformExports = new Set([
@@ -84,6 +85,7 @@ const discoveryExports = new Set([
   "saveDiscoveryPreferences",
   "analyzeCampaignZone",
 ]);
+const jobRoomExports = new Set(["getJobRoom"]);
 const transactionalEmailExports = new Set([
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
 ]);
@@ -165,6 +167,7 @@ function transformIndex(mode) {
   if (mode === "campaign-funding") selectedProgram(ast, campaignFundingExports);
   if (mode === "assignment") selectedProgram(ast, assignmentExports);
   if (mode === "discovery") selectedProgram(ast, discoveryExports);
+  if (mode === "job-room") selectedProgram(ast, jobRoomExports);
   if (mode === "transactional-email") selectedProgram(ast, transactionalEmailExports);
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
@@ -173,6 +176,7 @@ function transformIndex(mode) {
       ...campaignFundingExports,
       ...assignmentExports,
       ...discoveryExports,
+      ...jobRoomExports,
       ...transactionalEmailExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
@@ -185,6 +189,7 @@ function transformIndex(mode) {
       (mode === "campaign-funding" && !campaignFundingExports.has(name)) ||
       (mode === "assignment" && !assignmentExports.has(name)) ||
       (mode === "discovery" && !discoveryExports.has(name)) ||
+      (mode === "job-room" && !jobRoomExports.has(name)) ||
       (mode === "transactional-email" && !transactionalEmailExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
@@ -202,6 +207,7 @@ function transformIndex(mode) {
       if (mode === "campaign-funding") return false;
       if (mode === "assignment") return false;
       if (mode === "discovery") return false;
+      if (mode === "job-room") return false;
       if (mode === "transactional-email") return identifier === "SUPPORT_EMAIL_SMTP_PASSWORD";
       return !platformSecrets.has(identifier);
     });
@@ -214,8 +220,10 @@ function transformIndex(mode) {
 }
 
 function resetDirectory(destination) {
-  fs.rmSync(destination, {recursive: true, force: true});
   fs.mkdirSync(destination, {recursive: true});
+  for (const entry of fs.readdirSync(destination)) {
+    fs.rmSync(path.join(destination, entry), {recursive: true, force: true});
+  }
 }
 
 function copyPackage(destination, mode) {
@@ -243,6 +251,10 @@ function copyPackage(destination, mode) {
           "marketplace_work_types.js", "scaler_profile_notifications.js",
           "signup_notifications.js", "operational_layer.js",
           "group_assignment.js"].includes(name)) continue;
+    if (mode === "job-room" && name.endsWith(".js") &&
+        !["marketplace_finance.js", "marketplace_operations.js", "operational_layer.js",
+          "group_assignment.js", "campaign_funding_quote.js",
+          "multi_scaler_rollout.js", "tracking_security.js"].includes(name)) continue;
     if (mode === "transactional-email" && name.endsWith(".js") &&
         name !== "transactional_email.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
@@ -266,6 +278,8 @@ function writePackageManifest(mode, destination) {
         ? ["firebase-admin", "firebase-functions"]
       : mode === "discovery"
         ? ["firebase-admin", "firebase-functions"]
+      : mode === "job-room"
+        ? ["firebase-admin", "firebase-functions"]
       : mode === "transactional-email"
         ? ["firebase-admin", "firebase-functions", "nodemailer"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
@@ -281,7 +295,7 @@ function writePackageManifest(mode, destination) {
   const generatedLock = {...sourceLock};
   generatedLock.name = generatedPackage.name;
   generatedLock.version = generatedPackage.version;
-  generatedLock.packages = {...sourceLock.packages};
+  generatedLock.packages = selectLockPackages(sourceLock.packages, dependencyNames);
   generatedLock.packages[""] = {
     name: generatedPackage.name,
     version: generatedPackage.version,
@@ -292,6 +306,42 @@ function writePackageManifest(mode, destination) {
   fs.writeFileSync(path.join(destination, "package-lock.json"), `${JSON.stringify(generatedLock, null, 2)}\n`);
 }
 
+function resolveLockedPackage(packages, fromPackagePath, dependencyName) {
+  let searchPath = fromPackagePath;
+  while (true) {
+    const candidate = searchPath ?
+      `${searchPath}/node_modules/${dependencyName}` : `node_modules/${dependencyName}`;
+    if (packages[candidate]) return candidate;
+    if (!searchPath) break;
+    const marker = searchPath.lastIndexOf("/node_modules/");
+    // A top-level package path is `node_modules/<name>` and therefore has no
+    // `/node_modules/` delimiter. Its unresolved dependencies must still be
+    // resolved from the lockfile root, just as Node/npm resolution does.
+    searchPath = marker < 0 ? "" : searchPath.slice(0, marker);
+  }
+  return null;
+}
+
+function selectLockPackages(packages, dependencyNames) {
+  const selected = {};
+  const queued = dependencyNames.map((name) => ({from: "", name}));
+  while (queued.length) {
+    const {from, name} = queued.pop();
+    const packagePath = resolveLockedPackage(packages, from, name);
+    if (!packagePath || selected[packagePath]) continue;
+    const locked = packages[packagePath];
+    selected[packagePath] = locked;
+    for (const dependencyName of new Set([
+      ...Object.keys(locked.dependencies || {}),
+      ...Object.keys(locked.optionalDependencies || {}),
+      ...Object.keys(locked.peerDependencies || {}),
+    ])) {
+      queued.push({from: packagePath, name: dependencyName});
+    }
+  }
+  return selected;
+}
+
 for (const [mode, destination] of [
   ["legacy", legacyRoot], ["platform", platformRoot], ["wallet", walletRoot],
   ["artifact-email", artifactEmailRoot],
@@ -299,6 +349,7 @@ for (const [mode, destination] of [
   ["campaign-funding", campaignFundingRoot],
   ["assignment", assignmentRoot],
   ["discovery", discoveryRoot],
+  ["job-room", jobRoomRoot],
   ["transactional-email", transactionalEmailRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
@@ -314,4 +365,4 @@ for (const [mode, destination] of [
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email Functions packages.");

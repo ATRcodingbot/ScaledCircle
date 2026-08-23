@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 
 import '../scaler/campaigns/exact_location_job_screen.dart';
 import '../reviews/create_review_screen.dart';
 import 'job_details_screen.dart';
-import 'job_room_screen.dart';
 
 class MyJobsScreen extends StatelessWidget {
   const MyJobsScreen({super.key});
@@ -370,14 +371,16 @@ class MyJobsScreen extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => zoneData['groupAssignmentId'] != null
-                      ? JobRoomScreen(zoneId: zone.id)
-                      : JobDetailsScreen(campaign: campaign),
-                ),
-              );
+              if (zoneData['groupAssignmentId'] != null) {
+                AppNavigation.push(context, AppRoutes.jobRoom(zone.id));
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => JobDetailsScreen(campaign: campaign),
+                  ),
+                );
+              }
             },
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -623,7 +626,8 @@ class MyJobsScreen extends StatelessWidget {
         final allCompleted =
             locations.isNotEmpty && completedLocations == locations.length;
 
-        final paymentComplete = locations.isNotEmpty &&
+        final paymentComplete =
+            locations.isNotEmpty &&
             locations.every((location) {
               final data = location.data();
               return data['status']?.toString() == 'completed' &&

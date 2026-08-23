@@ -5,6 +5,7 @@
     "generate:function-codebases": "node scripts/generate_functions_codebases.js",
     "prepare:function-codebases": "node scripts/prepare_functions_codebases.js",
     "verify:function-codebases": "node scripts/verify_generated_codebases.js",
+    "verify:function-codebase-installs": "node scripts/verify_generated_installability.js",
     "serve": "firebase emulators:start --project demo-scaledcircle --only auth,firestore,functions,storage,hosting",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

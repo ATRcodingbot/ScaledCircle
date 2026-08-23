@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../config/app_environment.dart';
 import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 import '../../services/secure_function_service.dart';
 
 class AdminLoginScreen extends StatefulWidget {
@@ -55,18 +57,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         data: const <String, dynamic>{},
       );
       if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.adminDashboard,
-          (_) => false,
-        );
+        AppNavigation.replace(context, AppRoutes.adminDashboard);
       }
     } on FirebaseAuthException catch (error) {
+      if (AppEnvironmentConfig.isStaging) {
+        debugPrint('Admin Firebase Auth failed: ${error.code}');
+      }
       if (mounted) {
         setState(
-          () => _error = error.code == 'invalid-credential'
-              ? 'Invalid email or password.'
-              : 'Unable to authenticate the administrator account.',
+          () => _error = switch (error.code) {
+            'invalid-credential' || 'user-not-found' || 'wrong-password' =>
+              'Incorrect email or password.',
+            'user-disabled' =>
+              'Your account is currently unavailable. Contact support.',
+            _ => 'We couldn\'t sign you in. Please try again.',
+          },
         );
       }
     } catch (error) {

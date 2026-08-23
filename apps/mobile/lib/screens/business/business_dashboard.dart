@@ -1,15 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 
-import '../../models/user/user_profile.dart';
 import '../../models/campaign_card_compensation.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../services/maryland_weather_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/account_mode_switch_button.dart';
 import '../../widgets/scaled_circle_brand.dart';
-import '../campaigns/campaign_details_screen.dart';
+import '../../widgets/authenticated_sign_out_button.dart';
 import 'campaign/sc_campaign_applicants_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'create/create_campaign_screen.dart';
@@ -386,7 +386,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       if (!context.mounted) {
         return;
       }
-
     } catch (e) {
       if (!context.mounted) {
         return;
@@ -630,7 +629,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               }
             },
           ),
-          const AccountModeSwitchButton(targetView: UserRole.scaler),
+          const AuthenticatedSignOutButton(),
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('notifications')
@@ -809,12 +808,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       _openCreateCampaign(context, user.uid),
                   onReviewResults: () {
                     if (campaigns.isEmpty) return;
-                    Navigator.push(
+                    AppNavigation.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            CampaignDetailsScreen(campaign: campaigns.first),
-                      ),
+                      AppRoutes.campaignDetail(campaigns.first.id),
                     );
                   },
                   hasResults: campaigns.isNotEmpty,
@@ -963,14 +959,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         ),
                         trailing: const Icon(Icons.arrow_forward_ios, size: 18),
                         onTap: () async {
-                          await Navigator.push(
+                          AppNavigation.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CampaignDetailsScreen(campaign: campaign),
-                            ),
+                            AppRoutes.campaignDetail(campaign.id),
                           );
-
                         },
                       ),
                     );
@@ -1109,14 +1101,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                             ],
                           ),
                           onTap: () async {
-                            await Navigator.push(
+                            AppNavigation.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    CampaignDetailsScreen(campaign: campaign),
-                              ),
+                              AppRoutes.campaignDetail(campaign.id),
                             );
-
                           },
                         ),
                       );
@@ -1362,7 +1350,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       if (!mounted) {
                         return;
                       }
-
                     },
                     icon: const Icon(Icons.credit_card),
                     label: Text(

@@ -12,6 +12,7 @@ const jobAlertEmailRoot = path.join(root, "functions-job-alert-email");
 const campaignFundingRoot = path.join(root, "functions-campaign-funding");
 const assignmentRoot = path.join(root, "functions-assignment");
 const discoveryRoot = path.join(root, "functions-discovery");
+const jobRoomRoot = path.join(root, "functions-job-room");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const expectedExports = [
   "analyzePropertyIntelligence",
@@ -77,6 +78,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, campaignFundingRoot);
   resolveFrom(dependency, assignmentRoot);
   resolveFrom(dependency, discoveryRoot);
+  resolveFrom(dependency, jobRoomRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
@@ -97,6 +99,7 @@ process.env.GCLOUD_PROJECT = "scaled-circle";
 const campaignFunding = require(path.join(campaignFundingRoot, "index.js"));
 const assignment = require(path.join(assignmentRoot, "index.js"));
 const discovery = require(path.join(discoveryRoot, "index.js"));
+const jobRoom = require(path.join(jobRoomRoot, "index.js"));
 for (const [name, value] of Object.entries(priorPaymentEnvironment)) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
@@ -116,6 +119,7 @@ assert.deepEqual(Object.keys(assignment).sort(), [
 assert.deepEqual(Object.keys(discovery).sort(), [
   "analyzeCampaignZone", "saveDiscoveryPreferences",
 ]);
+assert.deepEqual(Object.keys(jobRoom), ["getJobRoom"]);
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
 ].sort());
@@ -139,6 +143,7 @@ const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wal
   Object.keys(transactionalEmail)];
 inventories.push(Object.keys(assignment));
 inventories.push(Object.keys(discovery));
+inventories.push(Object.keys(jobRoom));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 
@@ -226,4 +231,4 @@ for (const forbiddenPackage of ["node_modules/nodemailer", "openai"]) {
   assert.doesNotMatch(campaignFundingLock, new RegExp(forbiddenPackage));
 }
 
-console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, discovery-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email exports.`);
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email exports.`);

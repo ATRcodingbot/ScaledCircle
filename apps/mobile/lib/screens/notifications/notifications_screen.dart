@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 
 import '../campaigns/campaign_applicants_screen.dart';
-import '../campaigns/campaign_details_screen.dart';
 import '../jobs/job_details_screen.dart';
 import '../jobs/scaler_wallet_screen.dart';
-import '../jobs/job_room_screen.dart';
 import '../business/weather_alerts_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -72,12 +72,7 @@ class NotificationsScreen extends StatelessWidget {
       if ({'job_room', 'material_change_review'}.contains(destination) &&
           linkedZoneId != null &&
           linkedZoneId.isNotEmpty) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => JobRoomScreen(zoneId: linkedZoneId),
-          ),
-        );
+        AppNavigation.push(context, AppRoutes.jobRoom(linkedZoneId));
         return;
       }
 
@@ -141,21 +136,13 @@ class NotificationsScreen extends StatelessWidget {
         case 'material_issue_reported':
         case 'group_assignment_progress':
           if (zoneId != null && zoneId.isNotEmpty) {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => JobRoomScreen(zoneId: zoneId)),
-            );
+            AppNavigation.push(context, AppRoutes.jobRoom(zoneId));
           }
           break;
 
         case 'zone_completion_submitted':
         case 'completion_submitted':
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CampaignDetailsScreen(campaign: campaign),
-            ),
-          );
+          AppNavigation.push(context, AppRoutes.campaignDetail(campaign.id));
           break;
 
         case 'application_accepted':

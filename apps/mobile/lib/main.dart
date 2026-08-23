@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'config/app_environment.dart';
 import 'config/firebase_auth_emulator_session.dart';
 import 'navigation/app_routes.dart';
+import 'navigation/app_router.dart';
+import 'navigation/protected_route_gate.dart';
 import 'screens/business/business_dashboard.dart';
 import 'screens/campaigns/campaign_funding_return_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -21,6 +23,8 @@ import 'screens/public/scaler_funnel_screen.dart';
 import 'screens/scaler/dashboard/scaler_dashboard_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_login_screen.dart';
+import 'screens/campaigns/campaign_details_screen.dart';
+import 'screens/jobs/job_room_screen.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -65,41 +69,184 @@ Future<void> _connectToFirebaseEmulators() async {
 class ScaledCircleApp extends StatelessWidget {
   const ScaledCircleApp({super.key});
 
+  static Route<dynamic> _generateRoute(RouteSettings settings) {
+    final route = Uri.tryParse(settings.name ?? '');
+    if (route?.path == '/') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const PublicLandingScreen(),
+      );
+    }
+    if (route?.path == AppRoutes.login) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const AuthenticatedLandingGate(),
+      );
+    }
+    if (route?.path == AppRoutes.createAccount) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const RegisterScreen(),
+      );
+    }
+    if (route?.path == AppRoutes.publicExperience) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const PublicLandingScreen(),
+      );
+    }
+    if (route?.path == AppRoutes.businesses) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const BusinessFunnelScreen(),
+      );
+    }
+    if (route?.path == AppRoutes.scalers) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const ScalerFunnelScreen(),
+      );
+    }
+    if (route?.path == AppRoutes.adminLogin) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const AdminLoginScreen(),
+      );
+    }
+    if (route?.path == AppRoutes.completeScalerProfile) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const CompleteScalerProfileScreen(),
+      );
+    }
+    if (route?.path == AppRoutes.businessDashboard) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.businessDashboard,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => LoginNotificationWrapper(
+            notification: settings.arguments as LoginNotificationData?,
+            child: const BusinessDashboard(),
+          ),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.scalerDashboard) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.scalerDashboard,
+          audience: ProtectedRouteAudience.scaler,
+          builder: (_, _) => LoginNotificationWrapper(
+            notification: settings.arguments as LoginNotificationData?,
+            child: const ScalerDashboardScreen(),
+          ),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.adminDashboard) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.adminDashboard,
+          audience: ProtectedRouteAudience.admin,
+          builder: (_, _) => const AdminDashboardScreen(),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.verifyEmail) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) =>
+            VerifyEmailScreen(actionCode: route?.queryParameters['oobCode']),
+      );
+    }
+    if (route?.path == AppRoutes.campaignFundingReturn) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => CampaignFundingReturnScreen(
+          campaignId: route?.queryParameters['campaignId'] ?? '',
+        ),
+      );
+    }
+    final segments = route?.pathSegments ?? const <String>[];
+    if (segments.length == 2 && segments.first == 'campaign') {
+      final campaignId = Uri.decodeComponent(segments.last);
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (user, profile) =>
+              FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                future: FirebaseFirestore.instance
+                    .collection('campaigns')
+                    .doc(campaignId)
+                    .get(),
+                builder: (context, snapshot) {
+                  final isAdmin =
+                      profile['role']?.toString().toLowerCase() == 'admin';
+                  final fallbackRoute = isAdmin
+                      ? AppRoutes.adminDashboard
+                      : AppRoutes.businessDashboard;
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Scaffold(
+                      body: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final campaign = snapshot.data;
+                  final data = campaign?.data();
+                  if (campaign == null || !campaign.exists) {
+                    return RouteRecoveryScreen(
+                      title: 'Campaign not available.',
+                      destination: fallbackRoute,
+                    );
+                  }
+                  if (!isAdmin && data?['businessId'] != user.uid) {
+                    return RouteRecoveryScreen(
+                      title: 'You don\'t have access to this campaign.',
+                      destination: fallbackRoute,
+                    );
+                  }
+                  return CampaignDetailsScreen(
+                    campaign: campaign,
+                    fallbackRoute: fallbackRoute,
+                  );
+                },
+              ),
+        ),
+      );
+    }
+    if (segments.length == 2 && segments.first == 'job-room') {
+      final zoneId = Uri.decodeComponent(segments.last);
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.jobRoomParticipant,
+          builder: (_, _) => JobRoomScreen(zoneId: zoneId),
+        ),
+      );
+    }
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (_) => const UnknownRouteGate(),
+    );
+  }
+
+  static final AppRouterDelegate _routerDelegate = AppRouterDelegate(
+    _generateRoute,
+  );
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Scaled Circle',
       theme: AppTheme.lightTheme,
-      home: const PublicLandingScreen(),
-      routes: {
-        AppRoutes.login: (_) => const LoginScreen(),
-        AppRoutes.createAccount: (_) => const RegisterScreen(),
-        AppRoutes.publicExperience: (_) => const PublicLandingScreen(),
-        AppRoutes.businesses: (_) => const BusinessFunnelScreen(),
-        AppRoutes.scalers: (_) => const ScalerFunnelScreen(),
-        AppRoutes.businessDashboard: (_) => const BusinessDashboard(),
-        AppRoutes.scalerDashboard: (_) => const ScalerDashboardScreen(),
-        AppRoutes.adminLogin: (_) => const AdminLoginScreen(),
-        AppRoutes.adminDashboard: (_) => const AdminDashboardScreen(),
-        AppRoutes.completeScalerProfile: (_) => const CompleteScalerProfileScreen(),
-      },
-      onGenerateRoute: (settings) {
-        final route = Uri.tryParse(settings.name ?? '');
-        if (route?.path == AppRoutes.verifyEmail) {
-          return MaterialPageRoute(builder: (_) => VerifyEmailScreen(
-            actionCode: route?.queryParameters['oobCode'],
-          ));
-        }
-        if (route?.path == AppRoutes.campaignFundingReturn) {
-          return MaterialPageRoute(
-            builder: (_) => CampaignFundingReturnScreen(
-              campaignId: route?.queryParameters['campaignId'] ?? '',
-            ),
-          );
-        }
-        return null;
-      },
+      routerDelegate: _routerDelegate,
+      routeInformationParser: const AppRouteInformationParser(),
       builder: (context, child) {
         if (AppEnvironmentConfig.isProduction) {
           return child ?? const SizedBox();

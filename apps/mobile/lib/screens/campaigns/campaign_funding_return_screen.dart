@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
-import 'campaign_details_screen.dart';
+import '../../navigation/app_router.dart';
 
 class CampaignFundingReturnScreen extends StatefulWidget {
   const CampaignFundingReturnScreen({super.key, required this.campaignId});
@@ -52,23 +52,18 @@ class _CampaignFundingReturnScreenState
         context,
         title: 'Confirming payment',
         message: 'Sign in to view the authoritative campaign payment status.',
-        action: () => Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.businessDashboard,
-          (_) => false,
-        ),
+        action: () =>
+            AppNavigation.replace(context, AppRoutes.businessDashboard),
       );
     }
     if (widget.campaignId.isEmpty) {
       return _message(
         context,
         title: 'Campaign required',
-        message: 'Return to the Business dashboard and open the campaign whose payment status you want to review.',
-        action: () => Navigator.pushNamedAndRemoveUntil(
-          context,
-          AppRoutes.businessDashboard,
-          (_) => false,
-        ),
+        message:
+            'Return to the Business dashboard and open the campaign whose payment status you want to review.',
+        action: () =>
+            AppNavigation.replace(context, AppRoutes.businessDashboard),
       );
     }
     final campaign = FirebaseFirestore.instance
@@ -92,11 +87,8 @@ class _CampaignFundingReturnScreenState
             context,
             title: 'Campaign unavailable',
             message: 'The requested campaign could not be found.',
-            action: () => Navigator.pushNamedAndRemoveUntil(
-              context,
-              AppRoutes.businessDashboard,
-              (_) => false,
-            ),
+            action: () =>
+                AppNavigation.replace(context, AppRoutes.businessDashboard),
           );
         }
         if (data != null && data['businessId'] != user.uid) {
@@ -114,13 +106,12 @@ class _CampaignFundingReturnScreenState
             context,
             icon: Icons.check_circle,
             title: 'Payment confirmed',
-            message: 'Campaign funded. Continue to the campaign review to publish.',
+            message:
+                'Campaign funded. Continue to the campaign review to publish.',
             actionLabel: 'View Campaign',
-            action: () => Navigator.pushReplacement(
+            action: () => AppNavigation.replace(
               context,
-              MaterialPageRoute(
-                builder: (_) => CampaignDetailsScreen(campaign: document),
-              ),
+              AppRoutes.campaignDetail(widget.campaignId),
             ),
           );
         }
@@ -130,13 +121,11 @@ class _CampaignFundingReturnScreenState
             context,
             icon: Icons.assignment_turned_in,
             title: 'Campaign canceled / refunded',
-            message: 'The authoritative payment and refund history remains preserved.',
+            message:
+                'The authoritative payment and refund history remains preserved.',
             actionLabel: 'Return to Business Dashboard',
-            action: () => Navigator.pushNamedAndRemoveUntil(
-              context,
-              AppRoutes.businessDashboard,
-              (_) => false,
-            ),
+            action: () =>
+                AppNavigation.replace(context, AppRoutes.businessDashboard),
           );
         }
         if (['payment_failed', 'checkout_expired'].contains(fundingStatus)) {
@@ -145,12 +134,10 @@ class _CampaignFundingReturnScreenState
             title: fundingStatus == 'checkout_expired'
                 ? 'Checkout expired'
                 : 'Payment failed',
-            message: 'No campaign funding was established. Return to the campaign to review the next step.',
-            action: () => Navigator.pushNamedAndRemoveUntil(
-              context,
-              AppRoutes.businessDashboard,
-              (_) => false,
-            ),
+            message:
+                'No campaign funding was established. Return to the campaign to review the next step.',
+            action: () =>
+                AppNavigation.replace(context, AppRoutes.businessDashboard),
           );
         }
         return _message(
@@ -162,11 +149,8 @@ class _CampaignFundingReturnScreenState
               : 'Waiting for the signed payment confirmation. You can safely keep this page open.',
           actionLabel: _takingLonger ? 'Return to Business Dashboard' : null,
           action: _takingLonger
-              ? () => Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    AppRoutes.businessDashboard,
-                    (_) => false,
-                  )
+              ? () =>
+                    AppNavigation.replace(context, AppRoutes.businessDashboard)
               : null,
         );
       },

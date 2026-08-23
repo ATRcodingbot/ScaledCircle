@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/user/user_profile.dart';
 import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 import '../auth/register_screen.dart';
 import 'waitlist_screen.dart';
 
@@ -44,7 +45,7 @@ void openPublicRoleChooser(BuildContext context) {
         OutlinedButton.icon(
           onPressed: () {
             Navigator.pop(dialogContext);
-            Navigator.pushNamed(context, AppRoutes.scalers);
+            AppNavigation.push(context, AppRoutes.scalers);
           },
           icon: const Icon(Icons.directions_walk),
           label: const Text('Find Work as a Scaler'),
@@ -52,7 +53,7 @@ void openPublicRoleChooser(BuildContext context) {
         FilledButton.icon(
           onPressed: () {
             Navigator.pop(dialogContext);
-            Navigator.pushNamed(context, AppRoutes.businesses);
+            AppNavigation.push(context, AppRoutes.businesses);
           },
           style: FilledButton.styleFrom(
             backgroundColor: businessGreen,
@@ -79,8 +80,7 @@ class ScaledCircleBrand extends StatelessWidget {
         button: true,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () =>
-              Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+          onTap: () => AppNavigation.replace(context, '/'),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
             child: Row(
@@ -134,7 +134,7 @@ class PublicTopNavigation extends StatelessWidget {
               const Expanded(child: ScaledCircleBrand(compact: true)),
               IconButton(
                 tooltip: 'Log In',
-                onPressed: () => Navigator.pushNamed(context, AppRoutes.login),
+                onPressed: () => AppNavigation.push(context, AppRoutes.login),
                 icon: const Icon(Icons.login, color: publicMuted),
               ),
               FilledButton(
@@ -164,7 +164,7 @@ class PublicTopNavigation extends StatelessWidget {
             const PublicNavLink(label: 'How It Works', route: '/#how'),
             const PublicNavLink(label: 'Pricing', route: '/#pricing'),
             TextButton(
-              onPressed: () => Navigator.pushNamed(context, AppRoutes.login),
+              onPressed: () => AppNavigation.push(context, AppRoutes.login),
               child: const Text('Log In'),
             ),
             const SizedBox(width: 6),
@@ -195,9 +195,9 @@ class PublicNavLink extends StatelessWidget {
   Widget build(BuildContext context) => TextButton(
     onPressed: () {
       if (route.startsWith('/#')) {
-        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        AppNavigation.replace(context, '/');
       } else {
-        Navigator.pushNamed(context, route);
+        AppNavigation.push(context, route);
       }
     },
     child: Text(label, style: const TextStyle(color: publicMuted)),
@@ -776,7 +776,7 @@ class FunnelFinalCta extends StatelessWidget {
             ),
             TextButton(
               key: const Key('funnel-login'),
-              onPressed: () => Navigator.pushNamed(context, AppRoutes.login),
+              onPressed: () => AppNavigation.push(context, AppRoutes.login),
               child: const Text('Log In'),
             ),
           ],

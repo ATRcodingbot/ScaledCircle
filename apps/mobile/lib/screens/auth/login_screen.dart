@@ -3,8 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../config/app_environment.dart';
-import '../business/business_dashboard.dart';
-import '../scaler/dashboard/scaler_dashboard_screen.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 
 import '../notifications/notifications_screen.dart';
 import '../public/early_access_pending_screen.dart';
@@ -111,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!approvedForBeta) {
         if (widget.returnRoute != null) {
-          Navigator.pushReplacementNamed(context, widget.returnRoute!);
+          AppNavigation.replace(context, widget.returnRoute!);
           return;
         }
         Navigator.pushReplacement(
@@ -127,20 +127,13 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (widget.returnRoute != null) {
-        Navigator.pushReplacementNamed(context, widget.returnRoute!);
+        AppNavigation.replace(context, widget.returnRoute!);
         return;
       }
 
-      var accountType = (userData?['activeView'] ?? userData?['accountType'])
+      final accountType = (userData?['activeView'] ?? userData?['accountType'])
           ?.toString()
           .toLowerCase();
-
-      if (role == 'admin' &&
-          accountType != 'business' &&
-          accountType != 'scaler' &&
-          accountType != 'marketer') {
-        accountType = 'business';
-      }
 
       final loginNotification = await _buildLoginNotification(
         userId: user.uid,
@@ -149,31 +142,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      if (accountType == 'business') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => LoginNotificationWrapper(
-              notification: loginNotification,
-              child: const BusinessDashboard(),
-            ),
-          ),
-        );
-
+      if (role == 'admin') {
+        AppNavigation.replace(context, AppRoutes.adminDashboard);
         return;
       }
-
-      if (accountType == 'scaler' || accountType == 'marketer') {
-        Navigator.pushReplacement(
+      if (accountType == 'business' ||
+          accountType == 'scaler' ||
+          accountType == 'marketer') {
+        AppNavigation.replace(
           context,
-          MaterialPageRoute(
-            builder: (_) => LoginNotificationWrapper(
-              notification: loginNotification,
-              child: const ScalerDashboardScreen(),
-            ),
-          ),
+          accountType == 'business'
+              ? AppRoutes.businessDashboard
+              : AppRoutes.scalerDashboard,
+          arguments: loginNotification,
         );
-
         return;
       }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 import '../../services/subscription_plan_service.dart';
 import 'authentic_product_map.dart';
 import 'public_funnel_components.dart';
@@ -675,7 +676,7 @@ class _BusinessPricing extends StatelessWidget {
             style: TextStyle(color: publicMuted),
           ),
           TextButton(
-            onPressed: () => Navigator.pushNamed(context, AppRoutes.businesses),
+            onPressed: () => AppNavigation.push(context, AppRoutes.businesses),
             child: const Text('View Pricing'),
           ),
         ],

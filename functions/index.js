@@ -7063,9 +7063,9 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     if (!participantData.materialHandoffId) return null;
     return db.collection("materialHandoffs").doc(participantData.materialHandoffId).get();
   })) : [];
-  const receivedCount = participantHandoffs.filter(
+  const receivedCount = group ? participantHandoffs.filter(
     (snapshot) => snapshot?.data()?.status === "received",
-  ).length;
+  ).length : (handoff.status === "received" ? 1 : 0);
   const groupMaterialStatuses = context.uid === room.businessId || context.isAdmin ?
     participantHandoffs.map((snapshot, index) => ({
       scalerId: roomScalerIds[index],
