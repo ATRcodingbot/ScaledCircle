@@ -40,7 +40,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               tooltip: 'Refresh',
               icon: const Icon(Icons.refresh),
             ),
-          const AuthenticatedSignOutButton(),
+          if (MediaQuery.sizeOf(context).width >= 520)
+            const AuthenticatedSignOutButton(),
         ],
       ),
       body: FutureBuilder<AdminOperationsSnapshot>(
@@ -183,6 +184,11 @@ class AdminOperationsContent extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(24),
     children: [
+      if (MediaQuery.sizeOf(context).width < 520)
+        const Align(
+          alignment: Alignment.centerRight,
+          child: AuthenticatedSignOutButton(),
+        ),
       Text('Needs attention', style: Theme.of(context).textTheme.headlineSmall),
       const Text('Operational exceptions that may need a human decision.'),
       const SizedBox(height: 12),

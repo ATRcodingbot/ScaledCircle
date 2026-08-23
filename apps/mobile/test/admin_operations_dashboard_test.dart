@@ -43,7 +43,7 @@ void main() {
     expect(find.text('4'), findsOneWidget);
     expect(find.text('Businesses'), findsOneWidget);
     expect(find.text('Recent activity'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.drag(find.byType(ListView), const Offset(0, -800));
     await tester.pumpAndSettle();
     expect(find.text('System health'), findsOneWidget);
     expect(find.text('Payments: HEALTHY'), findsOneWidget);
@@ -156,7 +156,7 @@ void main() {
       find.text("Some operational status couldn't be loaded."),
       findsOneWidget,
     );
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.drag(find.byType(ListView), const Offset(0, -800));
     await tester.pumpAndSettle();
     expect(find.text('Email: DEGRADED'), findsOneWidget);
     expect(tester.takeException(), isNull);
