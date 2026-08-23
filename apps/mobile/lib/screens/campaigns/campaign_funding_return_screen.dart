@@ -47,11 +47,23 @@ class _CampaignFundingReturnScreenState
   }
 
   Widget _buildForUser(BuildContext context, User? user) {
-    if (user == null || widget.campaignId.isEmpty) {
+    if (user == null) {
       return _message(
         context,
         title: 'Confirming payment',
         message: 'Sign in to view the authoritative campaign payment status.',
+        action: () => Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.businessDashboard,
+          (_) => false,
+        ),
+      );
+    }
+    if (widget.campaignId.isEmpty) {
+      return _message(
+        context,
+        title: 'Campaign required',
+        message: 'Return to the Business dashboard and open the campaign whose payment status you want to review.',
         action: () => Navigator.pushNamedAndRemoveUntil(
           context,
           AppRoutes.businessDashboard,
@@ -75,6 +87,18 @@ class _CampaignFundingReturnScreenState
         }
         final document = snapshot.data;
         final data = document?.data();
+        if (document != null && !document.exists) {
+          return _message(
+            context,
+            title: 'Campaign unavailable',
+            message: 'The requested campaign could not be found.',
+            action: () => Navigator.pushNamedAndRemoveUntil(
+              context,
+              AppRoutes.businessDashboard,
+              (_) => false,
+            ),
+          );
+        }
         if (data != null && data['businessId'] != user.uid) {
           return _message(
             context,
@@ -83,6 +107,7 @@ class _CampaignFundingReturnScreenState
           );
         }
         final fundingStatus = data?['fundingStatus']?.toString() ?? '';
+        final campaignStatus = data?['status']?.toString() ?? '';
         if (document != null && document.exists && fundingStatus == 'funded') {
           _boundedWait?.cancel();
           return _message(
@@ -96,6 +121,21 @@ class _CampaignFundingReturnScreenState
               MaterialPageRoute(
                 builder: (_) => CampaignDetailsScreen(campaign: document),
               ),
+            ),
+          );
+        }
+        if (fundingStatus == 'refunded' || campaignStatus == 'canceled') {
+          _boundedWait?.cancel();
+          return _message(
+            context,
+            icon: Icons.assignment_turned_in,
+            title: 'Campaign canceled / refunded',
+            message: 'The authoritative payment and refund history remains preserved.',
+            actionLabel: 'Return to Business Dashboard',
+            action: () => Navigator.pushNamedAndRemoveUntil(
+              context,
+              AppRoutes.businessDashboard,
+              (_) => false,
             ),
           );
         }

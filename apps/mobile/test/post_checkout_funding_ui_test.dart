@@ -16,6 +16,8 @@ void main() {
     expect(returnSource, contains('Confirming payment...'));
     expect(returnSource, contains('Payment confirmed'));
     expect(returnSource, contains('Campaign funded'));
+    expect(returnSource, contains('Campaign canceled / refunded'));
+    expect(returnSource, contains('The requested campaign could not be found.'));
     expect(returnSource, contains('your browser return does not mark the campaign funded'));
   });
 
