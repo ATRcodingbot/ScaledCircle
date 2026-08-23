@@ -28,7 +28,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: Text(
           MediaQuery.sizeOf(context).width < 520
-              ? 'Command Center'
+              ? 'Admin'
               : 'ScaledCircle Command Center',
         ),
         actions: [
