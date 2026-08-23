@@ -53,6 +53,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             onOpenSubscriptions: () =>
                 _push(const AdminSubscriptionOverviewScreen()),
             onOpenConfiguration: () => _push(const AdminPlatformHealthScreen()),
+            onOpenCampaign: (campaignId) => _push(
+              AdminCampaignTimelineScreen(
+                campaignId: campaignId,
+                service: _service,
+              ),
+            ),
           );
         },
       ),
@@ -155,6 +161,7 @@ class AdminOperationsContent extends StatelessWidget {
     required this.onOpenBeta,
     required this.onOpenSubscriptions,
     required this.onOpenConfiguration,
+    required this.onOpenCampaign,
     super.key,
   });
   final AdminOperationsSnapshot snapshot;
@@ -163,6 +170,7 @@ class AdminOperationsContent extends StatelessWidget {
       onOpenBeta,
       onOpenSubscriptions,
       onOpenConfiguration;
+  final ValueChanged<String> onOpenCampaign;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -239,9 +247,15 @@ class AdminOperationsContent extends StatelessWidget {
             .take(8)
             .map(
               (item) => ListTile(
+                onTap: item.campaignId?.isNotEmpty == true
+                    ? () => onOpenCampaign(item.campaignId!)
+                    : null,
                 leading: const Icon(Icons.history),
                 title: Text(item.title),
                 subtitle: Text(_formatTime(item.occurredAt)),
+                trailing: item.campaignId?.isNotEmpty == true
+                    ? const Icon(Icons.chevron_right)
+                    : null,
               ),
             ),
       const SizedBox(height: 24),

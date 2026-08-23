@@ -108,15 +108,18 @@ class AdminOpsActivity {
     required this.type,
     required this.title,
     required this.occurredAt,
+    this.campaignId,
   });
   factory AdminOpsActivity.fromMap(Map<String, dynamic> map) =>
       AdminOpsActivity(
         type: map['type']?.toString() ?? 'activity',
         title: map['title']?.toString() ?? 'Operational activity',
         occurredAt: _date(map['occurredAt']),
+        campaignId: map['campaignId']?.toString(),
       );
   final String type, title;
   final DateTime? occurredAt;
+  final String? campaignId;
 }
 
 class AdminOpsHealth {

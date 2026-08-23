@@ -72,6 +72,7 @@ test("timeline orders real events and separates gross payment, fee, earning, and
   const events = model.timelineEvents({
     campaign: record("campaign", {createdAt: now - 5000, publishedAt: now - 4000}),
     paymentRecords: [record("payment-secret-long-reference", {paidAt: now - 3000,
+      campaignId: "campaign",
       amountCents: 960, workerAmountCents: 800, platformFeeCents: 160,
       paymentIntentId: "pi_sensitive_reference_123456789", refundedAt: now - 1000,
       refundAmountCents: 960, refundId: "re_sensitive_reference_123456789"})],
@@ -85,6 +86,7 @@ test("timeline orders real events and separates gross payment, fee, earning, and
   const payment = events.find((item) => item.type === "payment_received");
   assert.deepEqual(payment.detail, {grossCents: 960, workerCents: 800,
     platformFeeCents: 160, reference: "pi_sen…6789"});
+  assert.equal(payment.campaignId, "campaign");
   assert.equal(events.find((item) => item.type === "worker_earning_established")
     .detail.totalEarnedCents, 264);
 });

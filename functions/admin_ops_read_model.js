@@ -178,16 +178,17 @@ function healthFromIssues(items, loadFailures = []) {
 function timelineEvents({campaign, paymentRecords, eventRecords, completionRecords,
   earningRecords, supportRecords}) {
   const events = [];
-  const add = (type, title, at, sourceId, detail = null) => {
+  const add = (type, title, at, sourceId, detail = null, campaignId = null) => {
     const timestamp = millis(at);
     if (timestamp == null) return;
-    events.push({type, title, occurredAt: timestamp, sourceId, detail});
+    events.push({type, title, occurredAt: timestamp, sourceId, detail,
+      campaignId: text(campaignId, 160) || null});
   };
   if (campaign) {
-    add("campaign_created", "Campaign created", campaign.data.createdAt, campaign.id);
-    add("campaign_published", "Campaign published", campaign.data.publishedAt, campaign.id);
-    add("refund_requested", "Refund requested", campaign.data.refundRequestedAt, campaign.id);
-    add("campaign_archived", "Campaign archived", campaign.data.archivedAt, campaign.id);
+    add("campaign_created", "Campaign created", campaign.data.createdAt, campaign.id, null, campaign.id);
+    add("campaign_published", "Campaign published", campaign.data.publishedAt, campaign.id, null, campaign.id);
+    add("refund_requested", "Refund requested", campaign.data.refundRequestedAt, campaign.id, null, campaign.id);
+    add("campaign_archived", "Campaign archived", campaign.data.archivedAt, campaign.id, null, campaign.id);
   }
   for (const record of paymentRecords) {
     const data = record.data;
@@ -195,10 +196,10 @@ function timelineEvents({campaign, paymentRecords, eventRecords, completionRecor
       {grossCents: Number(data.amountCents || data.totalCents || 0),
         workerCents: Number(data.workerAmountCents || data.workerCompensationCents || 0),
         platformFeeCents: Number(data.platformFeeCents || 0),
-        reference: safeReference(data.paymentIntentId || data.checkoutSessionId || record.id)});
+        reference: safeReference(data.paymentIntentId || data.checkoutSessionId || record.id)}, data.campaignId);
     add("refund_completed", "Refund completed", data.refundedAt, record.id,
       {refundCents: Number(data.refundedAmountCents || data.refundAmountCents || 0),
-        reference: safeReference(data.refundId)});
+        reference: safeReference(data.refundId)}, data.campaignId);
   }
   for (const record of eventRecords) {
     const data = record.data;
@@ -206,20 +207,25 @@ function timelineEvents({campaign, paymentRecords, eventRecords, completionRecor
     if (/gps|chunk|sample/i.test(type)) continue;
     add(type || "campaign_event", text(data.title || data.summary, 160) ||
       type.replaceAll("_", " ").replaceAll(".", " "),
-    data.occurredAt || data.createdAt, record.id);
+    data.occurredAt || data.createdAt, record.id, null, data.campaignId);
   }
   for (const record of completionRecords) {
-    add("completion_submitted", "Completion submitted", record.data.submittedAt, record.id);
+    add("completion_submitted", "Completion submitted", record.data.submittedAt, record.id,
+      null, record.data.campaignId);
     add("completion_reviewed", "Completion reviewed", record.data.reviewedAt || record.data.approvedAt,
-      record.id, {status: text(record.data.status || record.data.reviewStatus, 60)});
+      record.id, {status: text(record.data.status || record.data.reviewStatus, 60)},
+      record.data.campaignId);
   }
   for (const record of earningRecords) {
     add("worker_earning_established", "Worker earning established", record.data.earnedAt,
-      record.id, {totalEarnedCents: Number(record.data.totalEarnedCents || 0)});
+      record.id, {totalEarnedCents: Number(record.data.totalEarnedCents || 0)},
+      record.data.campaignId);
   }
   for (const record of supportRecords) {
-    add("support_opened", "Support case opened", record.data.createdAt, record.id);
-    add("support_resolved", "Support case resolved", record.data.resolvedAt, record.id);
+    add("support_opened", "Support case opened", record.data.createdAt, record.id,
+      null, record.data.campaignId);
+    add("support_resolved", "Support case resolved", record.data.resolvedAt, record.id,
+      null, record.data.campaignId);
   }
   return events.sort((a, b) => b.occurredAt - a.occurredAt).slice(0, 100);
 }

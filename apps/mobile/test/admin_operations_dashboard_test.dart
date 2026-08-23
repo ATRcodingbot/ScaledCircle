@@ -12,6 +12,7 @@ Widget subject(AdminOperationsSnapshot snapshot) => MaterialApp(
       onOpenBeta: () {},
       onOpenSubscriptions: () {},
       onOpenConfiguration: () {},
+      onOpenCampaign: (_) {},
     ),
   ),
 );
@@ -78,6 +79,7 @@ void main() {
             onOpenBeta: () {},
             onOpenSubscriptions: () {},
             onOpenConfiguration: () {},
+            onOpenCampaign: (_) {},
           ),
         ),
       ),
@@ -92,6 +94,42 @@ void main() {
     );
     expect(opened?.campaignId, 'campaign-one');
     expect(find.textContaining('client_secret'), findsNothing);
+  });
+
+  testWidgets('campaign activity opens the authoritative timeline', (
+    tester,
+  ) async {
+    String? openedCampaign;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AdminOperationsContent(
+            snapshot: const AdminOperationsSnapshot(
+              metrics: {},
+              exceptions: [],
+              activity: [
+                AdminOpsActivity(
+                  type: 'payment_received',
+                  title: 'Payment received',
+                  campaignId: 'campaign-one',
+                  occurredAt: null,
+                ),
+              ],
+              health: [],
+              partial: false,
+            ),
+            onOpenIssue: (_) {},
+            onOpenAdminAccounts: () {},
+            onOpenBeta: () {},
+            onOpenSubscriptions: () {},
+            onOpenConfiguration: () {},
+            onOpenCampaign: (campaignId) => openedCampaign = campaignId,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Payment received'));
+    expect(openedCampaign, 'campaign-one');
   });
 
   testWidgets('partial data has a truthful degraded state on narrow layout', (
