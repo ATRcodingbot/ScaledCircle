@@ -12,6 +12,7 @@ const packageDirectories = [
   "functions-campaign-funding", "functions-assignment", "functions-discovery",
   "functions-job-room",
   "functions-transactional-email",
+  "functions-admin-ops",
 ];
 
 function runNpmCi(cwd) {

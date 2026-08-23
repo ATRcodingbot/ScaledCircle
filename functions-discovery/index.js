@@ -58,6 +58,7 @@ const groupAssignment = require("./group_assignment");
 
 
 
+
 initializeApp();
 
 
@@ -72,6 +73,10 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
 
 
 
@@ -3585,6 +3590,59 @@ exports.analyzeCampaignZone = onCall(
 );
 
 /** Server-authoritative, industry-neutral property/housing-stock analysis. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

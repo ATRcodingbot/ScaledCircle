@@ -27,14 +27,16 @@ void main() {
     },
   );
 
-  test('Admin Dashboard exposes only Admin and QA release operations', () {
+  test('Admin Dashboard exposes the minimum operations command center', () {
     final dashboard = source('lib/screens/admin/admin_dashboard_screen.dart');
-    expect(dashboard, contains('Administrator Accounts'));
-    expect(dashboard, contains('Beta Entitlements'));
-    expect(dashboard, contains('Platform Issues / Action Required'));
-    expect(dashboard, contains("title: 'Sales Program'"));
-    expect(dashboard, contains("badge: 'PRIVATE DEVELOPMENT'"));
-    expect(dashboard, contains('disabled: true'));
+    expect(dashboard, contains('ScaledCircle Command Center'));
+    expect(dashboard, contains('Needs attention'));
+    expect(dashboard, contains('Operational overview'));
+    expect(dashboard, contains('Recent activity'));
+    expect(dashboard, contains('System health'));
+    expect(dashboard, contains('Administrator accounts'));
+    expect(dashboard, contains('Beta entitlements'));
+    expect(dashboard, isNot(contains("title: 'Sales Program'")));
     expect(dashboard, isNot(contains('AdminSalesScreen')));
     expect(dashboard, isNot(contains('Commission / payout ledger')));
   });
@@ -42,7 +44,9 @@ void main() {
   test('Admin Dashboard cards have explicit actions or disabled semantics', () {
     final dashboard = source('lib/screens/admin/admin_dashboard_screen.dart');
     final cards = source('lib/screens/admin/admin_dashboard_card.dart');
-    expect(dashboard, contains('Scrollable.ensureVisible'));
+    expect(dashboard, contains('AdminOperationsService'));
+    expect(dashboard, contains('AdminCampaignTimelineScreen'));
+    expect(dashboard, contains('updateSupportStatus'));
     expect(dashboard, contains('AdminRoleManagementScreen'));
     expect(dashboard, contains('InternalBetaEntitlementsScreen'));
     expect(dashboard, contains('AdminSubscriptionOverviewScreen'));

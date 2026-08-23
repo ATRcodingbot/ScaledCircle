@@ -56,6 +56,7 @@ const managedGrowthDelivery = require("./managed_growth_delivery");
 const socialWorkflow = require("./social_workflow");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
+const adminOpsReadModel = require("./admin_ops_read_model");
 const scalerProfile = require("./scaler_profile");
 
 initializeApp();
@@ -82,6 +83,10 @@ const internalBetaEntitlementService = internalBetaEntitlements
 const adminOperationsService = adminOperations.createAdminOperationsService({
   db,
   auth: getAuth(),
+  FieldValue,
+});
+const adminOpsReadService = adminOpsReadModel.createAdminOpsReadService({
+  db,
   FieldValue,
 });
 const scalerProfileService = scalerProfile.createScalerProfileService({
@@ -3806,6 +3811,59 @@ exports.createAdminIssue = onCall(
       return await adminOperationsService.createIssue(request.data, actor);
     } catch (error) {
       throw adminOperationsHttpsError(error);
+    }
+  },
+);
+
+function adminOpsReadHttpsError(error) {
+  const code = String(error?.message || "");
+  if (code === "trusted_admin_required") {
+    return new HttpsError("permission-denied", "Verified administrator authority is required.");
+  }
+  if (["campaign_id_required", "invalid_support_status_update"].includes(code)) {
+    return new HttpsError("invalid-argument", "A valid operational request is required.");
+  }
+  if (["campaign_not_found", "support_case_not_found"].includes(code)) {
+    return new HttpsError("not-found", "The requested operational record was not found.");
+  }
+  if (code === "invalid_support_status_transition") {
+    return new HttpsError("failed-precondition", "This support-case transition is not allowed.");
+  }
+  return new HttpsError("internal", "Unable to load operational status. Please try again.");
+}
+
+exports.getAdminOperationsOverview = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    await requireTrustedAdmin(request);
+    try {
+      return await adminOpsReadService.getOverview();
+    } catch (error) {
+      throw adminOpsReadHttpsError(error);
+    }
+  },
+);
+
+exports.getAdminCampaignTimeline = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    await requireTrustedAdmin(request);
+    try {
+      return await adminOpsReadService.getCampaignTimeline(request.data?.campaignId);
+    } catch (error) {
+      throw adminOpsReadHttpsError(error);
+    }
+  },
+);
+
+exports.updateAdminSupportCaseStatus = onCall(
+  {enforceAppCheck: false, maxInstances: 2},
+  async (request) => {
+    const actor = await requireTrustedAdmin(request);
+    try {
+      return await adminOpsReadService.updateSupportCaseStatus(request.data, actor);
+    } catch (error) {
+      throw adminOpsReadHttpsError(error);
     }
   },
 );

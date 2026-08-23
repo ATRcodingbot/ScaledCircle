@@ -14,6 +14,7 @@ const assignmentRoot = path.join(root, "functions-assignment");
 const discoveryRoot = path.join(root, "functions-discovery");
 const jobRoomRoot = path.join(root, "functions-job-room");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
+const adminOpsRoot = path.join(root, "functions-admin-ops");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -79,6 +80,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, assignmentRoot);
   resolveFrom(dependency, discoveryRoot);
   resolveFrom(dependency, jobRoomRoot);
+  resolveFrom(dependency, adminOpsRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
@@ -105,6 +107,7 @@ for (const [name, value] of Object.entries(priorPaymentEnvironment)) {
   else process.env[name] = value;
 }
 const transactionalEmail = require(path.join(transactionalEmailRoot, "index.js"));
+const adminOps = require(path.join(adminOpsRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
 assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);
@@ -123,6 +126,9 @@ assert.deepEqual(Object.keys(jobRoom), ["getJobRoom"]);
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
 ].sort());
+assert.deepEqual(Object.keys(adminOps).sort(), [
+  "getAdminCampaignTimeline", "getAdminOperationsOverview", "updateAdminSupportCaseStatus",
+].sort());
 assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendScalerJobAlertEmailJob"), false);
@@ -137,10 +143,11 @@ assert.equal(Object.hasOwn(legacy, "sendOutboundEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendTransactionalEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "finalizePublicAccountSignup"), false);
 assert.equal(Object.hasOwn(legacy, "resendEmailVerification"), false);
+for (const name of Object.keys(adminOps)) assert.equal(Object.hasOwn(legacy, name), false);
 
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
-  Object.keys(transactionalEmail)];
+  Object.keys(transactionalEmail), Object.keys(adminOps)];
 inventories.push(Object.keys(assignment));
 inventories.push(Object.keys(discovery));
 inventories.push(Object.keys(jobRoom));

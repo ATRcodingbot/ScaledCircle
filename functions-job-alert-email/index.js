@@ -58,6 +58,7 @@ const scalerJobAlertEmail = require("./scaler_job_alert_email");
 
 
 
+
 initializeApp();
 
 
@@ -72,6 +73,10 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
 
 
 
@@ -1038,6 +1043,59 @@ exports.sendScalerJobAlertEmailJob = onDocumentCreated(
  * module. Weather facts remain separate from Scaled Circle's experimental
  * lead-lift estimate.
  */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

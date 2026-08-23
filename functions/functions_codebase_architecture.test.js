@@ -75,6 +75,11 @@ const transactionalEmailPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-transactional-email", "package.json"), "utf8"));
 const transactionalEmailLock = fs.readFileSync(
   path.join(root, "functions-transactional-email", "package-lock.json"), "utf8");
+const adminOps = fs.readFileSync(path.join(root, "functions-admin-ops", "index.js"), "utf8");
+const adminOpsPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-admin-ops", "package.json"), "utf8"));
+const adminOpsLock = fs.readFileSync(
+  path.join(root, "functions-admin-ops", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -179,6 +184,26 @@ test("job-room-core exclusively owns the secret-free Job Room read authority", (
     entry.codebase === "job-room-core")?.source, "functions-job-room");
 });
 
+test("admin-ops-core exclusively owns the secret-free operational read boundary", () => {
+  const names = ["getAdminOperationsOverview", "getAdminCampaignTimeline",
+    "updateAdminSupportCaseStatus"];
+  assert.deepEqual(exportsIn(adminOps).sort(), [...names].sort());
+  for (const name of names) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.deepEqual(Object.keys(adminOpsPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
+    "CENSUS_API_KEY", "nodemailer"]) assert.doesNotMatch(adminOps, new RegExp(forbidden));
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(adminOpsLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "admin-ops-core")?.source, "functions-admin-ops");
+});
+
 test("assignment-core preserves ownership, Zone, duplicate, and rollout authority", () => {
   assert.match(assignment,
     /context\.role !== "business"[\s\S]*campaign\.businessId !== context\.uid/);
@@ -205,7 +230,7 @@ test("wallet-core owns exactly one secret-free callable with no duplicate assign
   }
   const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet),
     exportsIn(artifactEmail), exportsIn(transactionalEmail), exportsIn(assignment),
-    exportsIn(discovery), exportsIn(jobRoom)]
+    exportsIn(discovery), exportsIn(jobRoom), exportsIn(adminOps)]
     .map((exports) => [...new Set(exports)]);
   const all = inventories.flat();
   assert.equal(new Set(all).size, all.length);

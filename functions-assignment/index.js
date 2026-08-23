@@ -58,6 +58,7 @@ const multiScalerRollout = require("./multi_scaler_rollout");
 
 
 
+
 initializeApp();
 
 function assertProductionScalerCount(value) {
@@ -72,6 +73,10 @@ function assertProductionScalerCount(value) {
 }
 
 const db = getFirestore();
+
+
+
+
 
 
 
@@ -170,6 +175,59 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

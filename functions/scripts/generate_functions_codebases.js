@@ -18,6 +18,7 @@ const assignmentRoot = path.join(root, "functions-assignment");
 const discoveryRoot = path.join(root, "functions-discovery");
 const jobRoomRoot = path.join(root, "functions-job-room");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
+const adminOpsRoot = path.join(root, "functions-admin-ops");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -88,6 +89,11 @@ const discoveryExports = new Set([
 const jobRoomExports = new Set(["getJobRoom"]);
 const transactionalEmailExports = new Set([
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
+]);
+const adminOpsExports = new Set([
+  "getAdminOperationsOverview",
+  "getAdminCampaignTimeline",
+  "updateAdminSupportCaseStatus",
 ]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
@@ -169,6 +175,7 @@ function transformIndex(mode) {
   if (mode === "discovery") selectedProgram(ast, discoveryExports);
   if (mode === "job-room") selectedProgram(ast, jobRoomExports);
   if (mode === "transactional-email") selectedProgram(ast, transactionalEmailExports);
+  if (mode === "admin-ops") selectedProgram(ast, adminOpsExports);
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
     const excludedFromLegacy = new Set([
@@ -178,6 +185,7 @@ function transformIndex(mode) {
       ...discoveryExports,
       ...jobRoomExports,
       ...transactionalEmailExports,
+      ...adminOpsExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
     ]);
@@ -191,6 +199,7 @@ function transformIndex(mode) {
       (mode === "discovery" && !discoveryExports.has(name)) ||
       (mode === "job-room" && !jobRoomExports.has(name)) ||
       (mode === "transactional-email" && !transactionalEmailExports.has(name)) ||
+      (mode === "admin-ops" && !adminOpsExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -209,6 +218,7 @@ function transformIndex(mode) {
       if (mode === "discovery") return false;
       if (mode === "job-room") return false;
       if (mode === "transactional-email") return identifier === "SUPPORT_EMAIL_SMTP_PASSWORD";
+      if (mode === "admin-ops") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -257,6 +267,8 @@ function copyPackage(destination, mode) {
           "multi_scaler_rollout.js", "tracking_security.js"].includes(name)) continue;
     if (mode === "transactional-email" && name.endsWith(".js") &&
         name !== "transactional_email.js") continue;
+    if (mode === "admin-ops" && name.endsWith(".js") &&
+        !["admin_operations.js", "admin_ops_read_model.js"].includes(name)) continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -282,6 +294,8 @@ function writePackageManifest(mode, destination) {
         ? ["firebase-admin", "firebase-functions"]
       : mode === "transactional-email"
         ? ["firebase-admin", "firebase-functions", "nodemailer"]
+      : mode === "admin-ops"
+        ? ["firebase-admin", "firebase-functions"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
@@ -351,6 +365,7 @@ for (const [mode, destination] of [
   ["discovery", discoveryRoot],
   ["job-room", jobRoomRoot],
   ["transactional-email", transactionalEmailRoot],
+  ["admin-ops", adminOpsRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
   // payment boundary. Never regenerate it from the subscription/payout-heavy
@@ -365,4 +380,4 @@ for (const [mode, destination] of [
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, and transactional-email Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, and admin-ops-core Functions packages.");

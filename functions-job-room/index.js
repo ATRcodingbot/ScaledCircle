@@ -58,6 +58,7 @@ const groupAssignment = require("./group_assignment");
 
 
 
+
 initializeApp();
 
 
@@ -72,6 +73,10 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
 
 
 
@@ -170,6 +175,59 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
