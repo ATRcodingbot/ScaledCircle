@@ -92,6 +92,20 @@ void main() {
   });
 
   test(
+    'campaign timeline separates gross payment, worker allocation, and fee',
+    () {
+      final timeline = source(
+        'lib/screens/admin/admin_campaign_timeline_screen.dart',
+      );
+      expect(timeline, contains('Customer paid:'));
+      expect(timeline, contains('Worker allocation:'));
+      expect(timeline, contains('ScaledCircle fee:'));
+      expect(timeline, contains('Worker earning:'));
+      expect(timeline, isNot(contains('client_secret')));
+    },
+  );
+
+  test(
     'Internal QA UI keeps comped software separate from variable execution',
     () {
       final beta = source(

@@ -52,7 +52,13 @@ class AdminCampaignTimelineScreen extends StatelessWidget {
                     child: ListTile(
                       leading: const Icon(Icons.history),
                       title: Text(event.title),
-                      subtitle: Text(_formatTime(event.occurredAt)),
+                      subtitle: Text(
+                        [
+                          _formatTime(event.occurredAt),
+                          ..._financialDetail(event),
+                        ].join('\n'),
+                      ),
+                      isThreeLine: _financialDetail(event).isNotEmpty,
                     ),
                   ),
                 ),
@@ -67,3 +73,30 @@ class AdminCampaignTimelineScreen extends StatelessWidget {
 String _formatTime(DateTime? value) => value == null
     ? 'Time unavailable'
     : value.toLocal().toString().split('.').first;
+
+List<String> _financialDetail(AdminTimelineEvent event) {
+  final detail = event.detail;
+  if (event.type == 'payment_received') {
+    return [
+      'Customer paid: ${_money(detail['grossCents'])}${_reference(detail['reference'])}',
+      'Worker allocation: ${_money(detail['workerCents'])} • ScaledCircle fee: ${_money(detail['platformFeeCents'])}',
+    ];
+  }
+  if (event.type == 'refund_completed') {
+    return [
+      'Refund: ${_money(detail['refundCents'])}${_reference(detail['reference'])}',
+    ];
+  }
+  if (event.type == 'worker_earning_established') {
+    return ['Worker earning: ${_money(detail['totalEarnedCents'])}'];
+  }
+  return const [];
+}
+
+String _reference(Object? value) =>
+    value?.toString().isNotEmpty == true ? ' • Ref ${value.toString()}' : '';
+
+String _money(Object? cents) {
+  final value = cents is num ? cents.toInt() : 0;
+  return '\$${(value / 100).toStringAsFixed(2)}';
+}

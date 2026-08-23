@@ -162,13 +162,16 @@ class AdminTimelineEvent {
     required this.type,
     required this.title,
     required this.occurredAt,
+    required this.detail,
   });
   factory AdminTimelineEvent.fromMap(Map<String, dynamic> map) =>
       AdminTimelineEvent(
         type: map['type']?.toString() ?? 'event',
         title: map['title']?.toString() ?? 'Campaign event',
         occurredAt: _date(map['occurredAt']),
+        detail: _map(map['detail']),
       );
   final String type, title;
   final DateTime? occurredAt;
+  final Map<String, dynamic> detail;
 }
