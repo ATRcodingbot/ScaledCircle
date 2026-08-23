@@ -26,7 +26,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget build(BuildContext context) => AdminRoleGate(
     builder: (context) => Scaffold(
       appBar: AppBar(
-        title: const Text('ScaledCircle Command Center'),
+        title: Text(
+          MediaQuery.sizeOf(context).width < 520
+              ? 'Command Center'
+              : 'ScaledCircle Command Center',
+        ),
         actions: [
           IconButton(
             onPressed: _refresh,
