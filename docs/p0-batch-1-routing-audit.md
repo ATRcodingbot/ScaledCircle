@@ -1,6 +1,6 @@
 # P0 Batch 1 — Authentication, Navigation, and Authoritative UI State
 
-Audit/remediation date: 2026-08-23. Scope is Flutter routing/auth restoration and the Job Room material aggregate. Production is unchanged.
+Audit/remediation date: 2026-08-23. Scope is Flutter routing/auth restoration and the Job Room material aggregate. P0 Batch 1 is live and verified in production.
 
 ## Architecture before
 
@@ -73,4 +73,15 @@ No removal was made: compatibility and maintained callers remain. Canonical-rout
 
 ## Acceptance status
 
-RESOLVED in hosted staging. Business, Scaler, and Admin actor sessions, sign-out, protected-route denial, campaign/Job Room Back/Forward, verification, referral, payment return, unknown-route recovery, and the single-Scaler `1 / 1 received` aggregate passed. Production remains unchanged pending separate promotion approval.
+RESOLVED in production. The staging-proven candidate was curated onto actual production and deployed as Hosting plus only `job-room-core:getJobRoom`; no Rules or unrelated Functions were deployed.
+
+Manual Firefox production QA passed for all three authoritative role-specific accounts:
+
+- Business login to `/#/business`, reload, Campaign Details, browser Back/Forward, Sign Out, and protected-route denial after logout.
+- Scaler login to `/#/scaler`, reload, Business/Admin denial, unchanged Wallet, Sign Out, and protected-route denial after logout.
+- Admin login to `/#/admin`, reload, Admin dashboard authority, Sign Out, and `/admin` denial after logout.
+- The Business/Scaler role switch remained absent for Business and Scaler, and no customer role switch appeared for Admin.
+
+No payment, refund, earning, Wallet, Connect, transfer, payout, Rules, or production-data mutation occurred during actor QA. Campaign/Job Room history, verification, referral, payment return, unknown-route recovery, and the single-Scaler `1 / 1 received` aggregate retain the hosted staging proof and deployed production implementation evidence.
+
+The Codex automation browser retained stale service-worker state from a broken intermediate Hosting release even though direct custom-domain/origin HTTP checks and Firefox received the corrected assets. This is classified as a P1 deployment/cache-recovery concern, not a current production-bundle defect; see `docs/p1-flutter-web-cache-recovery.md`.

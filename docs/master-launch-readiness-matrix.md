@@ -2,15 +2,15 @@
 
 Audit date: 2026-08-23. Status vocabulary: `READY`, `PARTIAL`, `BROKEN`, `NOT IMPLEMENTED`, `LEGACY`. Decision vocabulary: `LAUNCH`, `FIX BEFORE LAUNCH`, `HIDE`, `COMING SOON`, `REMOVE`, `INTERNAL ONLY`.
 
-The matrix contains 98 normalized, user-visible or operator-visible capabilities. Backend-only legacy authorities are inventoried separately below.
+The matrix contains 99 normalized, user-visible or operator-visible capabilities. Backend-only legacy authorities are inventoried separately below.
 
 | Role | Feature | Screen / route | Backend authority | Status | Launch decision | Priority | Test coverage | Manual QA | Device | Financial | Security | Known issue | Recommended action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Shared | Firebase signup | `/create-account` | Auth + `finalizePublicAccountSignup` | READY | LAUNCH | P1 | Backend/Flutter | Required | Web/mobile | No | High | None material | Smoke each role |
 | Shared | Email verification | `/verify-email` | Auth action code + resend callable | PARTIAL | FIX BEFORE LAUNCH | P1 | Backend | Required | Browser/email | No | High | Deep-link matrix incomplete | Test expired/replayed links |
-| Shared | Login | `/login` | Firebase Auth + `users/{uid}` | READY | LAUNCH | P0 | Flutter/hosted QA | Passed staging | Browser/mobile | No | High | Production promotion pending | Promote reviewed Hosting candidate separately |
+| Shared | Login | `/login` | Firebase Auth + `users/{uid}` | READY | LAUNCH | P0 | Flutter/hosted QA | Passed production | Browser/mobile | No | High | None material | Retain authoritative role restoration |
 | Shared | Password reset | forgot-password screen | Firebase Auth | PARTIAL | LAUNCH | P1 | Limited | Required | Browser/email | No | High | End-to-end link QA absent | Run provider/browser matrix |
-| Shared | Logout | role dashboards | Firebase Auth | READY | LAUNCH | P1 | Flutter/hosted QA | Passed staging | Web/mobile | No | Medium | Production promotion pending | Retain shared Sign Out action |
+| Shared | Logout | role dashboards | Firebase Auth | READY | LAUNCH | P1 | Flutter/hosted QA | Passed production | Web/mobile | No | Medium | None material | Retain shared Sign Out action |
 | Shared | Notifications inbox | notifications screen | `notifications` | READY | LAUNCH | P1 | Rules/Flutter | Required | Web/mobile | Indirect | High | No push delivery | Keep in-app; label push separately |
 | Shared | Authoritative account role | role dashboards | Auth + profile `role` | READY | LAUNCH | P1 | Flutter | Required | Web/mobile | No | High | Customer role switch removed | Keep separate role-specific accounts |
 | Shared | Support entry | Job Room/support surfaces | `createSupportCase` staging only | PARTIAL | FIX BEFORE LAUNCH | P0 | Backend | Required | Web/mobile | Indirect | High | Production authority absent | Add to migration/ops queue |
@@ -44,8 +44,8 @@ The matrix contains 98 normalized, user-visible or operator-visible capabilities
 | Business | Publish funded campaign | funded draft CTA | `publishFundedCampaign` | READY | LAUNCH | P0 | Backend/Flutter | Passed LIVE/TEST | Web | Critical | None material | Retain |
 | Business | Applicants list | applicants screens | applications + assignment-core | READY | LAUNCH | P1 | Backend/Flutter | Passed staging | Web | Indirect | Duplicate screen families | Consolidate |
 | Business | Assign Scaler | applicants | `assignScalerToZone` | READY | LAUNCH | P0 | Backend/race tests | Passed staging | Web | Critical | None material | Retain transactional guard |
-| Business | Job Room | Job Room | staging job-room-core | PARTIAL | FIX BEFORE LAUNCH | P0 | Focused tests | Passed staging | Web/mobile | Indirect | Production ownership mismatch | Promote after physical gate |
-| Business | Material handoff | `/job-room/<zoneId>` | `transitionMaterialHandoff` + `getJobRoom` | PARTIAL | FIX BEFORE LAUNCH | P1 | Backend/Flutter | Passed staging | Web/mobile | Indirect | Production ownership migration remains | Hosted single-Scaler aggregate is 1/1; retain group semantics |
+| Business | Job Room | Job Room | production `job-room-core:getJobRoom`; remaining authorities staging/split | PARTIAL | FIX BEFORE LAUNCH | P0 | Focused tests | Routing/aggregate production verified | Web/mobile | Indirect | Remaining Job Room authority migration is part of worker-lifecycle P0 | Complete after physical gate |
+| Business | Material handoff | `/job-room/<zoneId>` | `transitionMaterialHandoff` + production `job-room-core:getJobRoom` | PARTIAL | FIX BEFORE LAUNCH | P1 | Backend/Flutter | Aggregate production verified | Web/mobile | Indirect | Transition ownership migration remains | Single-Scaler aggregate is 1/1; retain group semantics |
 | Business | Coordination/readiness | Job Room | configure/acknowledge callables | PARTIAL | FIX BEFORE LAUNCH | P1 | Focused tests | Passed staging | Web/mobile | Indirect | Production split ownership | Migrate coherently |
 | Business | Active campaign status | details/dashboard | campaign/Zone projections | PARTIAL | FIX BEFORE LAUNCH | P1 | Flutter | Required | Web/mobile | High | Summary/detail drift | Derive/reconcile projections |
 | Business | Completion evidence review | campaign Zones | `finalizeZoneReview` staging | PARTIAL | FIX BEFORE LAUNCH | P0 | 22 backend tests | Emulator pass | Web | Critical | Production newer authority absent | Physical gate then promote |
@@ -71,8 +71,8 @@ The matrix contains 98 normalized, user-visible or operator-visible capabilities
 | Scaler | Apply | campaign detail | maintained application authority | READY | LAUNCH | P0 | Backend | Passed staging | Web/mobile | Indirect | None material | Retain |
 | Scaler | Applied campaigns | applied screen | applications query | READY | LAUNCH | P1 | Flutter | Required | Web/mobile | No | Medium | None material | Retain |
 | Scaler | Assignment acceptance/group slot | job/application | assignment-core | READY | LAUNCH | P0 | Backend/race | Passed staging | Web/mobile | Critical | None material | Retain |
-| Scaler | Job Room | job-room screen | staging job-room-core | PARTIAL | FIX BEFORE LAUNCH | P0 | Focused | Passed staging | Mobile | Indirect | Production mismatch | Gate promotion |
-| Scaler | Material receipt | `/job-room/<zoneId>` | handoff callable + `getJobRoom` | PARTIAL | FIX BEFORE LAUNCH | P1 | Backend/Flutter | Passed staging | Mobile | Indirect | Production ownership migration remains | Hosted single-Scaler aggregate is 1/1; retain group semantics |
+| Scaler | Job Room | job-room screen | production `job-room-core:getJobRoom`; remaining authorities staging/split | PARTIAL | FIX BEFORE LAUNCH | P0 | Focused | Routing/aggregate production verified | Mobile | Indirect | Remaining authority migration awaits physical gate | Complete coherent migration later |
+| Scaler | Material receipt | `/job-room/<zoneId>` | handoff callable + production `job-room-core:getJobRoom` | PARTIAL | FIX BEFORE LAUNCH | P1 | Backend/Flutter | Aggregate production verified | Mobile | Indirect | Handoff callable migration remains | Single-Scaler aggregate is 1/1; retain group semantics |
 | Scaler | Readiness | Job Room | acknowledgment callable | READY | LAUNCH | P1 | Focused | Passed staging | Mobile | Indirect | None material | Retain prerequisites |
 | Scaler | Start/active tracking | native job screen | completion-core | PARTIAL | FIX BEFORE LAUNCH | P0 | 22 backend + emulator | Emulator pass | Physical Android | Critical | Physical proof missing | Execute P0-1 |
 | Scaler | Checkpoints/photos | native job screen | checkpoint + Storage | PARTIAL | FIX BEFORE LAUNCH | P0 | Rules/backend | Emulator partial | Physical Android | Critical | Real camera flow unproven | Physical test |
@@ -101,23 +101,24 @@ The matrix contains 98 normalized, user-visible or operator-visible capabilities
 | Operations | Provider outage handling | admin health/issues | provider errors/adminIssues | PARTIAL | FIX BEFORE LAUNCH | P1 | Backend | Required | Web | Indirect | Configuration ≠ runtime health | Structured health events |
 | Operations | Support case handling | no queue | support cases | NOT IMPLEMENTED | FIX BEFORE LAUNCH | P0 | Focused producer | Required | Web | Indirect | Producer without operator workflow | Support queue/SLA |
 | Operations | Release/rollback runbook | docs/release process | Firebase/Git | PARTIAL | FIX BEFORE LAUNCH | P1 | Manual | Required | N/A | Critical | Distributed historical notes | One release runbook |
+| Operations | Flutter web update/cache recovery | Hosting + Flutter service worker | Firebase Hosting/CDN + browser cache | PARTIAL | FIX BEFORE LAUNCH | P1 | Direct HTTP + Firefox production QA | Required | Browser | No | High | A browser exposed to a broken intermediate release retained stale HTML for an asset path | Audit service-worker updates, cache headers, atomic release/rollback, and automatic recovery |
 | Affiliate | Join program | affiliate screen | `joinScalerAffiliateProgram` | READY | LAUNCH | P2 | Backend | Required | Web/mobile | Future | High | Commission payout not implemented | Clearly label accrued/not payable |
 | Affiliate | Attribution/dashboard | affiliate screen | attribution/dashboard callables | READY | LAUNCH | P2 | Backend | Required | Web/mobile | Future | High | Subscription commission incomplete | Keep field-campaign scope explicit |
 | Affiliate | Commission settlement/payout | no complete surface | incomplete ledger/provider path | NOT IMPLEMENTED | COMING SOON | P2 | Negative tests | No | N/A | Critical | Liability/payout model incomplete | Do not promise payment date |
 
 ## Visible capability totals
 
-- Total: 98
+- Total: 99
 - Public: 14
 - Business: 33
 - Scaler: 25
 - Admin: 9
 - Sales: 1
-- Operations: 5
+- Operations: 6
 - Affiliate: 3
 - Shared: 8
 
-Status summary: READY 43; PARTIAL 45; BROKEN 2; NOT IMPLEMENTED 8; LEGACY 0. Launch decisions: LAUNCH 47; FIX BEFORE LAUNCH 40; HIDE 2; COMING SOON 6; REMOVE 0; INTERNAL ONLY 3. Priorities: P0 31; P1 54; P2 13; P3 0. A capability may be technically ready yet still require P1 manual launch QA.
+Status summary: READY 43; PARTIAL 46; BROKEN 2; NOT IMPLEMENTED 8; LEGACY 0. Launch decisions: LAUNCH 47; FIX BEFORE LAUNCH 41; HIDE 2; COMING SOON 6; REMOVE 0; INTERNAL ONLY 3. Priorities: P0 31; P1 55; P2 13; P3 0. A capability may be technically ready yet still require P1 manual launch QA.
 
 ## Backend-only legacy authority inventory
 

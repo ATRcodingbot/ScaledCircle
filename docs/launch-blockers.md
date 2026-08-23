@@ -1,6 +1,6 @@
 # ScaledCircle Launch Blockers
 
-Audit date: 2026-08-23. This file contains only P0 findings. Production was not changed.
+Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was promoted and verified in production without financial activity.
 
 ## P0-1 — Physical Android worker proof is incomplete
 
@@ -29,15 +29,16 @@ Audit date: 2026-08-23. This file contains only P0 findings. Production was not 
 - Likely scope: payout operations contract, payout-core review, Wallet copy/gating, admin visibility.
 - Staging proof: TEST connected account/onboarding/transfer only after separate approval; never use LIVE for QA.
 
-## P0-4 — Authenticated browser reload can reconstruct `/login`
+## P0-4 — Authenticated browser reload can reconstruct `/login` — RESOLVED
 
-- Candidate status: RESOLVED in hosted staging. The declarative browser-visible route boundary, separate Business/Scaler/Admin login sessions, consistent Sign Out, protected-route denial after logout, repeated campaign/Job Room Back/Forward, and role gates all passed. Production promotion remains separately gated and unauthorized.
+- Production status: RESOLVED and manually verified in Firefox. The declarative browser-visible route boundary, separate Business/Scaler/Admin login sessions, consistent Sign Out, protected-route denial after logout, repeated campaign/Job Room Back/Forward, and role gates passed. Customer role switching remains removed.
 - Previous problem: successful login pushed an unnamed `MaterialPageRoute`; the browser URL could stay `/login`, so refresh reconstructed login rather than the authenticated dashboard/workflow.
 - Role: Business, Scaler, Admin.
 - Risk: users lose workflow context during payment, Job Room, completion review, or recovery.
 - Acceptance: named/restorable role routes; refresh/back/forward tests for dashboards, campaign detail, Job Room, payment return, and completion review; authenticated users never see a false logged-out workflow.
 - Implemented scope: stable role, campaign, and Job Room URLs; Firebase Auth/profile gates; authoritative resource reload; payment-return continuation; branded unknown-route recovery. Financial authority is unchanged.
-- Staging proof: hosted Flutter web actor sessions and responsive Sign Out passed; broader cross-browser compatibility remains a P1 release matrix rather than this P0 authority blocker.
+- Production proof: Business, Scaler, and Admin normal-login sessions, role URLs, reload, Sign Out, and protected-route denial passed. Business campaign Back/Forward passed. No financial action or production-data mutation occurred during QA.
+- P1 follow-up: a Codex automation browser retained a broken intermediate Flutter service-worker response after the corrected release. Direct custom-domain/origin HTTP checks and Firefox served the valid current asset. Audit update strategy, cache invalidation, Hosting headers, rapid replacement/rollback, and automatic recovery in `docs/p1-flutter-web-cache-recovery.md`.
 
 ## P0-5 — Production has no minimum usable Sales funnel
 
@@ -68,4 +69,4 @@ Audit date: 2026-08-23. This file contains only P0 findings. Production was not 
 
 ## Launch rule
 
-Official launch remains blocked by unresolved P0-1, P0-2, P0-3, P0-5, P0-6, and P0-7; security-critical findings must be zero and rollback/runbooks reviewed. P0-4 is resolved in staging and still requires separately approved production promotion.
+Official launch remains blocked by unresolved P0-1, P0-2, P0-3, P0-5, P0-6, and P0-7; security-critical findings must be zero and rollback/runbooks reviewed. P0-4 and P0 Batch 1 are live and production-verified.
