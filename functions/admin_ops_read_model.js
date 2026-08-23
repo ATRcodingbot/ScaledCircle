@@ -193,12 +193,13 @@ function timelineEvents({campaign, paymentRecords, eventRecords, completionRecor
   for (const record of paymentRecords) {
     const data = record.data;
     add("payment_received", "Payment received", data.paidAt || data.fundedAt, record.id,
-      {grossCents: Number(data.amountCents || data.totalCents || 0),
+      {grossCents: Number(data.businessChargeCents || data.amountCents || data.totalCents || 0),
         workerCents: Number(data.workerAmountCents || data.workerCompensationCents || 0),
         platformFeeCents: Number(data.platformFeeCents || 0),
         reference: safeReference(data.paymentIntentId || data.checkoutSessionId || record.id)}, data.campaignId);
     add("refund_completed", "Refund completed", data.refundedAt, record.id,
-      {refundCents: Number(data.refundedAmountCents || data.refundAmountCents || 0),
+      {refundCents: Number(data.refundedTotalCents || data.refundedAmountCents ||
+          data.refundAmountCents || 0),
         reference: safeReference(data.refundId)}, data.campaignId);
   }
   for (const record of eventRecords) {
