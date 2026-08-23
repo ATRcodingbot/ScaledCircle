@@ -2,7 +2,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 class AdminOperationsService {
   AdminOperationsService({FirebaseFunctions? functions})
-    : _functions = functions ?? FirebaseFunctions.instance;
+    : _functions =
+          functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
   final FirebaseFunctions _functions;
 
   Future<AdminOperationsSnapshot> loadOverview() async {

@@ -29,6 +29,7 @@ void main() {
 
   test('Admin Dashboard exposes the minimum operations command center', () {
     final dashboard = source('lib/screens/admin/admin_dashboard_screen.dart');
+    final service = source('lib/services/admin_operations_service.dart');
     expect(dashboard, contains('ScaledCircle Command Center'));
     expect(dashboard, contains('Needs attention'));
     expect(dashboard, contains('Operational overview'));
@@ -39,6 +40,7 @@ void main() {
     expect(dashboard, isNot(contains("title: 'Sales Program'")));
     expect(dashboard, isNot(contains('AdminSalesScreen')));
     expect(dashboard, isNot(contains('Commission / payout ledger')));
+    expect(service, contains("instanceFor(region: 'us-east1')"));
   });
 
   test('Admin Dashboard cards have explicit actions or disabled semantics', () {
