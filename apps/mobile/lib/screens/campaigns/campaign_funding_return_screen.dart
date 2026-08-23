@@ -38,7 +38,15 @@ class _CampaignFundingReturnScreenState
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
+      builder: (context, authSnapshot) =>
+          _buildForUser(context, authSnapshot.data),
+    );
+  }
+
+  Widget _buildForUser(BuildContext context, User? user) {
     if (user == null || widget.campaignId.isEmpty) {
       return _message(
         context,

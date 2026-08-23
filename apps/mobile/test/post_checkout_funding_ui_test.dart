@@ -9,6 +9,7 @@ void main() {
       'lib/screens/campaigns/campaign_funding_return_screen.dart',
     ).readAsStringSync();
     expect(mainSource, contains('AppRoutes.campaignFundingReturn'));
+    expect(returnSource, contains('authStateChanges()'));
     expect(returnSource, contains("collection('campaigns')"));
     expect(returnSource, contains('.snapshots()'));
     expect(returnSource, contains("fundingStatus == 'funded'"));
