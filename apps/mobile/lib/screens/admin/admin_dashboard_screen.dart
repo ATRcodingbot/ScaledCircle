@@ -32,11 +32,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               : 'ScaledCircle Command Center',
         ),
         actions: [
-          IconButton(
-            onPressed: _refresh,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-          ),
+          if (MediaQuery.sizeOf(context).width >= 520)
+            IconButton(
+              onPressed: _refresh,
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+            ),
           const AuthenticatedSignOutButton(),
         ],
       ),
