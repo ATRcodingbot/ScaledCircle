@@ -4,7 +4,7 @@ Prepared: August 24, 2026. This packet describes staging candidate `a55efb723a3f
 
 ## Approval requested
 
-Approve the source-grounded public drafts and decide the launch-blocking questions below. Engineering is staging-proven. No production account is silently treated as having accepted a new agreement.
+Founder product policy was approved after this packet was prepared, including 18+/Business authority, neutral retention, payment/refund/earning boundaries, payout limitations, and legacy-user re-consent at meaningful new-action boundaries. No production account may be silently treated as having accepted a new agreement. Professional review remains open as documented.
 
 ## Public documents
 
@@ -121,9 +121,9 @@ Signup presents optional email updates separately from required Terms/Privacy ac
 
 | Item | Classification | Engineering ready | Policy ready | Professional review recommended | Exact decision |
 |---|---|---:|---:|---:|---|
-| Existing-user re-consent | **LAUNCH BLOCKER — FOUNDER DECISION** | Yes | No | Yes | Must existing Businesses accept Terms/Privacy before continued use, and must existing Scalers accept Terms/Privacy/Scaler Work before applying or tracking? |
+| Existing-user re-consent | **LAUNCH BLOCKER — ENGINEERING AUTHORITY** | No | Yes | Yes | Founder approved current consent before new campaign funding/contractual action, Scaler work application/acceptance, and active tracking. The owning server authorities do not yet enforce all of these boundaries, and the authorized legal-core-only deployment cannot make that guarantee. |
 | Worker classification | **LAUNCH BLOCKER — ATTORNEY REVIEW RECOMMENDED** | Yes | No | Yes | Approve the classification/work agreement for each launch jurisdiction; do not rely on product wording as a legal conclusion. |
-| Age eligibility | **LAUNCH BLOCKER — FOUNDER DECISION** | Yes | No | Yes | What minimum age/capacity is required for Business and Scaler accounts, and how is it enforced? |
+| Age eligibility | **LAUNCH BLOCKER — ATTORNEY REVIEW RECOMMENDED** | Partial | Yes | Yes | Founder approved 18+ for all account holders and Business authority to bind the represented Business. Public/signup wording is implemented; counsel review and an enforcement/verification decision remain. |
 | Data-retention periods | **SAFE TO LAUNCH WITH CURRENT NEUTRAL LANGUAGE** | Yes | No | Yes | Approve a later category-specific retention project; current copy promises no invented duration. |
 | Privacy request/export/deletion process | **LAUNCH BLOCKER — ATTORNEY REVIEW RECOMMENDED** | Partial | No | Yes | Define verification, timelines, statutory rights, exceptions, and Support workflow for launch jurisdictions. Current copy truthfully offers Support, not automation. |
 | Cookie/storage jurisdiction analysis | **SAFE TO LAUNCH WITH CURRENT NEUTRAL LANGUAGE** | Yes | No | Yes | Determine target jurisdictions and reassess before adding analytics, advertising pixels, or third-party marketing embeds. Current inventory does not justify a generic banner. |
@@ -159,12 +159,13 @@ Signup presents optional email updates separately from required Terms/Privacy ac
 
 ## Existing-account consent migration
 
-- **Immediate reacceptance:** No. Existing Business or Scaler accounts are not forced to reaccept on login.
+- **Immediate reacceptance:** No. Existing Business or Scaler accounts are not forced to reaccept on login, account/history viewing, or Support.
 - **Login:** Authentication and authoritative role restoration are unchanged. No consent record is fabricated.
 - **New signup:** The user must check one legal acceptance control. After authenticated profile finalization, the server records Terms + Privacy and, for Scalers, Scaler Work. A transient recording failure leaves the Auth identity for a safe idempotent retry rather than inventing acceptance.
 - **Before active tracking:** The existing Scaler sees the concise location/evidence disclosure. Continue records `location_notice-2026-08-v1` before native tracking starts. Same-version retries are idempotent.
 - **Missing account agreement record:** Existing users remain `legacy/no record`; they are neither locked out nor marked accepted.
-- **Safety:** Technically safe and non-disruptive. Founder/counsel must decide whether production launch requires explicit re-consent for legacy users and where that gate belongs. Do not infer consent from account age or continued login.
+- **Approved new-action policy:** Business Terms + Privacy are required before new campaign funding/equivalent contractual action. Scaler Terms + Scaler Work are required before applying for or accepting new work. The location notice is required before active tracking.
+- **Current blocker:** The consent recorder is authoritative, but the owning campaign-funding/application/assignment authorities do not yet query/enforce current acceptance. UI-only prompts would be bypassable. Production promotion therefore requires a separately reviewed authority expansion or a revised approved enforcement design.
 - **Material changes:** The deterministic version model can distinguish a new version, but forced re-consent UX is intentionally not implemented pending policy approval.
 
 ## Consent authority safety

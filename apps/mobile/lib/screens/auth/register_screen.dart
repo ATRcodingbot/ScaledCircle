@@ -352,7 +352,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     onChanged: _loading
                         ? null
                         : (value) => setState(() => _acceptedLegal = value ?? false),
-                    title: const Text('I agree to the Terms of Service and acknowledge the Privacy Policy.'),
+                    title: Text(
+                      _role == UserRole.business
+                          ? 'I confirm I am at least 18 and authorized to act for this Business. I agree to the Terms and acknowledge the Privacy Policy.'
+                          : 'I confirm I am at least 18. I agree to the Terms and Scaler Work Terms and acknowledge the Privacy Policy.',
+                    ),
                     subtitle: Wrap(
                       spacing: 4,
                       children: [

@@ -11,6 +11,7 @@ Status: engineering/product-truth draft for professional review. This document i
 - Scalers choose whether to apply; application does not guarantee assignment. Assignment locks compensation. Location/evidence can be required. Submission alone does not establish earning; approved server-authoritative verification is the reviewed future boundary. Provider payout is separate and not production-launch certified.
 - Android active-job tracking uses a foreground service and visible notification and does not request `ACCESS_BACKGROUND_LOCATION`. The maintained photo flow uses the system/external picker/capture integration and does not require a permanent CAMERA manifest permission.
 - Transactional messages are separate from optional marketing. Autonomous outbound is not implemented. Sales suppression is structured.
+- Founder policy requires every account holder to be at least 18. A Business account holder must also be authorized to act for and bind the represented Business. Exact wording and enforcement remain counsel-review items before official broad public launch.
 
 ## Professional legal review required
 
@@ -27,4 +28,4 @@ Status: engineering/product-truth draft for professional review. This document i
 
 ## Release rule
 
-Engineering may publish the staging product-truth draft for review and discoverability QA. Production promotion requires founder review and professional legal approval of binding legal language. Product facts must not be changed to make legal drafting easier.
+Founder product policy is approved for the engineering release. Production pages must remain labeled as product-grounded policy—not attorney-approved or legally certified. Professional review of the listed binding terms remains an explicit gate before official broad public launch. Product facts must not be changed to make legal drafting easier.

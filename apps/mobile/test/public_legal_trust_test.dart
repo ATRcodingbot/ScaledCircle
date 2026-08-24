@@ -44,6 +44,15 @@ void main() {
     expect(source, contains('Read Terms'));
     expect(source, contains('Read Privacy Policy'));
     expect(source, contains('Scaler Work & Earnings'));
+    expect(source, contains('at least 18'));
+    expect(source, contains('authorized to act for this Business'));
+  });
+
+  test('founder-approved age and Business capacity wording remains counsel flagged', () {
+    final source = File('lib/screens/public/legal_document_screen.dart').readAsStringSync();
+    expect(source, contains('Account holders must be at least 18 years old'));
+    expect(source, contains('authorized to act for and bind the Business'));
+    expect(source, contains('professional legal review before official broad public launch'));
   });
 
   testWidgets('footer links remain reachable at mobile width', (tester) async {
