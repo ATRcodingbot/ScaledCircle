@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/admin_operations_service.dart';
+import '../../navigation/app_router.dart';
+import '../../navigation/app_routes.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
 import '../business/internal_beta_entitlements_screen.dart';
 import 'admin_campaign_timeline_screen.dart';
@@ -293,6 +295,12 @@ class AdminOperationsContent extends StatelessWidget {
             spacing: 12,
             runSpacing: 12,
             children: [
+              AdminDashboardCard(
+                title: 'Sales',
+                subtitle: 'Prospects, follow-ups, and conversion status.',
+                width: width,
+                onTap: () => AppNavigation.push(context, AppRoutes.sales),
+              ),
               AdminDashboardCard(
                 title: 'Administrator accounts',
                 subtitle: 'Role authority and audited replacement.',

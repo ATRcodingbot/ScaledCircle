@@ -10305,3 +10305,63 @@ for (const legacyName of ["approveZonePayout", "requestZoneRedo", "dropZoneScale
     );
   });
 }
+
+// Sales is intentionally appended so generation of existing isolated codebases
+// remains byte-stable when the Sales boundary evolves.
+const salesFunnel = require("./sales_funnel");
+const salesService = salesFunnel.createSalesService({db, FieldValue});
+
+function salesHttpsError(error) {
+  const code = String(error?.message || "");
+  if (code === "trusted_sales_actor_required") {
+    return new HttpsError("permission-denied", "Trusted Sales access is required.");
+  }
+  if (["business_name_required", "invalid_sales_source", "invalid_sales_priority",
+    "lead_id_required", "invalid_sales_lead_action", "derived_sales_stage_forbidden",
+    "future_follow_up_required", "invalid_suppression_status", "business_identity_required",
+    "invalid_sales_activity", "invalid_contact_channel", "sales_activity_summary_required"
+  ].includes(code)) return new HttpsError("invalid-argument", "A valid Sales update is required.");
+  if (["sales_lead_not_found", "linked_business_not_found"].includes(code)) {
+    return new HttpsError("not-found", "The requested Sales record was not found.");
+  }
+  if (code === "sales_lead_suppressed") {
+    return new HttpsError("failed-precondition", "This lead may not be contacted.");
+  }
+  return new HttpsError("internal", "Unable to complete the Sales operation.");
+}
+
+async function requireTrustedSalesActor(request) {
+  const context = await authenticatedUserContext(request, "You must be logged in to use Sales.");
+  try {
+    return salesFunnel.assertTrustedSalesActor(context);
+  } catch (error) {
+    throw salesHttpsError(error);
+  }
+}
+
+/** Returns a bounded, redacted Sales pipeline. Paid stages are server-derived. */
+exports.getSalesPipeline = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    await requireTrustedSalesActor(request);
+    try { return await salesService.getPipeline(request.data); } catch (error) { throw salesHttpsError(error); }
+  },
+);
+
+/** Applies a purpose-built, auditable lead mutation; never accepts paid truth. */
+exports.mutateSalesLead = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const actor = await requireTrustedSalesActor(request);
+    try { return await salesService.mutateLead(request.data, actor); } catch (error) { throw salesHttpsError(error); }
+  },
+);
+
+/** Records a contact, note, or outcome without sending an outbound message. */
+exports.recordSalesActivity = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const actor = await requireTrustedSalesActor(request);
+    try { return await salesService.recordActivity(request.data, actor); } catch (error) { throw salesHttpsError(error); }
+  },
+);

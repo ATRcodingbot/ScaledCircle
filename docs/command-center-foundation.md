@@ -22,7 +22,7 @@ The launch surface is intentionally small: **Needs Attention**, **Operational Ov
 | Support-case producer and legacy support callables | PARTIAL / DUPLICATE | Reuse `supportCases`; expose only Open → In Progress → Resolved through the new narrow authority |
 | Affiliate administration | PARTIAL / INTERNAL | Leave unchanged and outside the landing workflow |
 | Configuration-only “health” page | LEGACY SEMANTICS | Keep for configuration detail; new runtime health is derived from operational exceptions |
-| Disabled Sales Program card | MISSING | Do not implement in Batch 2 |
+| Sales foundation | P0 Batch 3 staging candidate | Admin-only link to the separate, minimal Sales surface; no outbound or agent controls |
 
 ## Authoritative operations API
 
@@ -59,6 +59,8 @@ Summaries omit raw GPS history, private addresses, payment-method data, client s
 Future Growth, Marketplace Intelligence, Agent Fleet, approval queue, and Supervisor/Intelligence systems may consume the structured exception, metric, health, and timeline contracts. They must use ScaledCircle-authoritative APIs and purpose-built commands rather than scrape Flutter or mutate Firestore directly.
 
 Future autonomy levels are documented only: **Observe Only**, **Draft Only**, **Approval Required**, and **Autonomous Within Limits**. No agent controls, AI analysis, outreach, Sales workflow, opportunity feed, or autonomous action is implemented in this batch.
+
+Batch 3 adds a separate structured Sales summary contract (`counts`, overdue follow-ups, high-priority interested leads, and recent paid conversions) for future Command Center use. The current Admin Home links to Sales but does not add a large Growth dashboard. Agent and Supervisor consumption remains **NOT YET IMPLEMENTED**.
 
 ## Explicit exclusions
 

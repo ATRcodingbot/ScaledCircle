@@ -13,6 +13,7 @@ const packageDirectories = [
   "functions-job-room",
   "functions-transactional-email",
   "functions-admin-ops",
+  "functions-sales",
 ];
 
 function runNpmCi(cwd) {

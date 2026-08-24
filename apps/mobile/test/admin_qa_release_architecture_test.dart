@@ -5,14 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 String source(String relativePath) => File(relativePath).readAsStringSync();
 
 void main() {
-  test('dedicated Admin routes exist without Sales routes', () {
+  test('Sales is an Admin-authorized route without a separate client role', () {
     final routes = source('lib/navigation/app_routes.dart');
     final main = source('lib/main.dart');
     expect(routes, contains("adminLogin = '/admin/login'"));
     expect(routes, contains("adminDashboard = '/admin'"));
-    expect(routes, isNot(contains('/sales')));
+    expect(routes, contains("sales = '/sales'"));
     expect(main, contains('AdminLoginScreen'));
     expect(main, contains('AdminDashboardScreen'));
+    expect(main, contains('ProtectedRouteAudience.admin'));
+    expect(main, contains('SalesHomeScreen'));
     expect(main, isNot(contains('SalesLoginScreen')));
   });
 
@@ -37,7 +39,7 @@ void main() {
     expect(dashboard, contains('System health'));
     expect(dashboard, contains('Administrator accounts'));
     expect(dashboard, contains('Beta entitlements'));
-    expect(dashboard, isNot(contains("title: 'Sales Program'")));
+    expect(dashboard, contains("title: 'Sales'"));
     expect(dashboard, isNot(contains('AdminSalesScreen')));
     expect(dashboard, isNot(contains('Commission / payout ledger')));
     expect(service, contains("instanceFor(region: 'us-east1')"));

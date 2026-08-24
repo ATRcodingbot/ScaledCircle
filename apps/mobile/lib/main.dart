@@ -23,6 +23,7 @@ import 'screens/public/scaler_funnel_screen.dart';
 import 'screens/scaler/dashboard/scaler_dashboard_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_login_screen.dart';
+import 'screens/admin/sales_home_screen.dart';
 import 'screens/campaigns/campaign_details_screen.dart';
 import 'screens/jobs/job_room_screen.dart';
 import 'theme/app_theme.dart';
@@ -152,6 +153,16 @@ class ScaledCircleApp extends StatelessWidget {
           routeName: AppRoutes.adminDashboard,
           audience: ProtectedRouteAudience.admin,
           builder: (_, _) => const AdminDashboardScreen(),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.sales) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.sales,
+          audience: ProtectedRouteAudience.admin,
+          builder: (_, _) => SalesHomeScreen(),
         ),
       );
     }

@@ -43,8 +43,11 @@ void main() {
     expect(find.text('4'), findsOneWidget);
     expect(find.text('Businesses'), findsOneWidget);
     expect(find.text('Recent activity'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(0, -800));
-    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('System health'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('System health'), findsOneWidget);
     expect(find.text('Payments: HEALTHY'), findsOneWidget);
   });

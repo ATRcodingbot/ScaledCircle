@@ -80,6 +80,10 @@ const adminOpsPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-admin-ops", "package.json"), "utf8"));
 const adminOpsLock = fs.readFileSync(
   path.join(root, "functions-admin-ops", "package-lock.json"), "utf8");
+const sales = fs.readFileSync(path.join(root, "functions-sales", "index.js"), "utf8");
+const salesPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-sales", "package.json"), "utf8"));
+const salesLock = fs.readFileSync(path.join(root, "functions-sales", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -202,6 +206,25 @@ test("admin-ops-core exclusively owns the secret-free operational read boundary"
   }
   assert.equal(firebaseConfig.functions.find((entry) =>
     entry.codebase === "admin-ops-core")?.source, "functions-admin-ops");
+});
+
+test("sales-core exclusively owns the bounded zero-secret Sales authority", () => {
+  const names = ["getSalesPipeline", "mutateSalesLead", "recordSalesActivity"];
+  assert.deepEqual(exportsIn(sales).sort(), [...names].sort());
+  for (const name of names) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.deepEqual(Object.keys(salesPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
+    "CENSUS_API_KEY", "nodemailer"]) assert.doesNotMatch(sales, new RegExp(forbidden));
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(salesLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "sales-core")?.source, "functions-sales");
 });
 
 test("assignment-core preserves ownership, Zone, duplicate, and rollout authority", () => {
@@ -386,7 +409,7 @@ test("new notification triggers do not silently enable production retries", () =
 
 test("generated codebase preparation installs dependencies after regeneration", () => {
   for (const codebase of firebaseConfig.functions.filter((item) =>
-    ["default", "platform-core", "wallet-core", "artifact-email", "campaign-funding"]
+    ["default", "platform-core", "wallet-core", "artifact-email", "campaign-funding", "sales-core"]
       .includes(item.codebase))) {
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }
@@ -404,5 +427,8 @@ test("generated codebase preparation installs dependencies after regeneration", 
   ]);
   assert.deepEqual(Object.keys(campaignFundingPackage.dependencies).sort(), [
     "firebase-admin", "firebase-functions", "stripe",
+  ]);
+  assert.deepEqual(Object.keys(salesPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
   ]);
 });

@@ -8,6 +8,7 @@ abstract final class AppRoutes {
   static const scalerDashboard = '/scaler';
   static const adminLogin = '/admin/login';
   static const adminDashboard = '/admin';
+  static const sales = '/sales';
   static const verifyEmail = '/verify-email';
   static const campaignFundingReturn = '/campaign-funding-return';
   static const completeScalerProfile = '/complete-scaler-profile';

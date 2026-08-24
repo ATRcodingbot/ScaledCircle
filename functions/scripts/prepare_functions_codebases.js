@@ -42,11 +42,12 @@ for (const directory of [
   "functions-job-room",
   "functions-transactional-email",
   "functions-admin-ops",
+  "functions-sales",
 ]) {
   if (["functions-wallet", "functions-artifact-email", "functions-job-alert-email",
     "functions-campaign-funding", "functions-assignment", "functions-discovery",
     "functions-job-room",
-    "functions-transactional-email", "functions-admin-ops"].includes(directory)) {
+    "functions-transactional-email", "functions-admin-ops", "functions-sales"].includes(directory)) {
     prunePackageLock(path.join(root, directory));
   }
   runNpmCi(path.join(root, directory));

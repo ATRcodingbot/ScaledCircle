@@ -48,6 +48,7 @@ Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was prom
 - Acceptance: a minimal internal-only funnel supports Prospect → Qualified → Contacted → Follow-up → Interested → Signup → Activated → First Campaign → Paid, with owner, source, next action, notes, and auditable conversion attribution. No autonomous outreach.
 - Likely scope: small server-mediated Sales surface and backend authority.
 - Staging proof: role/access tests, one synthetic lead lifecycle, attribution read-back, no financial mutation.
+- Batch 3 candidate: implemented on staging-candidate source with an Admin-authorized `/sales` home/detail flow and zero-secret `sales-core`. Manual stages, follow-ups, contact ledger, structured suppression, attribution, Business linkage, and server-derived paid/retained milestones are implemented. P0 remains OPEN until hosted staging QA passes and a later production promotion is approved.
 
 ## P0-6 — Public trust/legal links and required disclosures are not discoverable
 
