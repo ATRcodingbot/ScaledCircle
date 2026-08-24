@@ -95,7 +95,7 @@ The matrix contains 99 normalized, user-visible or operator-visible capabilities
 | Admin | Payments/refunds operations | Admin Command Center/timeline | reconciled payment/refund records via `admin-ops-core` | READY | LAUNCH | P0 | Backend/Flutter | Passed production | Web | Critical | Read-only visibility; recovery remains purpose-built | Preserve financial authority separation |
 | Admin | Completion/earning operations | Admin Command Center/timeline | completion/earning/Wallet read model via `admin-ops-core` | READY | LAUNCH | P0 | Backend/Flutter | Passed production | Web | Critical | Production worker authority migration remains P0-2 | Keep read model compatible with current authority |
 | Admin | Affiliate rates/overview | no primary nav | affiliate callables | PARTIAL | INTERNAL ONLY | P2 | Backend | Required | Web | Future | High | Payout liability incomplete | Keep restricted |
-| Sales | Minimum lead funnel | `/sales` staging-verified | `sales-core` + server-owned Sales records | READY IN STAGING | FIX BEFORE LAUNCH | P0 | Backend/Flutter focused + full suites + hosted actor QA | Passed staging | Responsive web | Indirect | Admin is temporary launch Sales authority; production unchanged | Curated production review/promotion |
+| Sales | Minimum lead funnel | `/sales` | production `sales-core` + server-owned Sales records | READY | LAUNCH | P0 | Backend/Flutter focused + full suites + hosted actor QA | Passed production | Responsive web | Indirect | Admin is temporary launch Sales authority; no autonomous outreach | Retain authority and suppression contract |
 | Operations | Payment/refund monitoring | Admin Command Center/timeline | bounded reconciled payment/event read model | READY | LAUNCH | P0 | Backend/Flutter | Passed production | Web | Critical | Typed recovery commands intentionally separate | Retain read model |
 | Operations | Email failure queue | Admin Command Center | durable email job read model | READY | LAUNCH | P1 | Backend/Flutter | Production surface + focused tests | Web | Indirect | Provider retry execution remains existing authority | Retain failed/exhausted/long-pending classifications |
 | Operations | Provider outage handling | Admin Command Center health | provider errors/adminIssues + partial-load state | READY | LAUNCH | P1 | Backend/Flutter | Passed production | Web | Indirect | Categorical status, not synthetic uptime | Add measured telemetry later |
@@ -118,7 +118,7 @@ The matrix contains 99 normalized, user-visible or operator-visible capabilities
 - Affiliate: 3
 - Shared: 8
 
-Status summary: READY 43; PARTIAL 46; BROKEN 2; NOT IMPLEMENTED 8; LEGACY 0. Launch decisions: LAUNCH 47; FIX BEFORE LAUNCH 41; HIDE 2; COMING SOON 6; REMOVE 0; INTERNAL ONLY 3. Priorities: P0 31; P1 55; P2 13; P3 0. A capability may be technically ready yet still require P1 manual launch QA.
+Status summary: READY 53; PARTIAL 41; BROKEN 1; NOT IMPLEMENTED 4; LEGACY 0. Launch decisions: LAUNCH 57; FIX BEFORE LAUNCH 31; HIDE 2; COMING SOON 6; REMOVE 0; INTERNAL ONLY 3. Priorities: P0 31; P1 55; P2 13; P3 0. A capability may be technically ready yet still require P1 manual launch QA.
 
 ## Backend-only legacy authority inventory
 

@@ -1,10 +1,10 @@
 # ScaledCircle Master Pre-Launch Audit
 
-Audit date: 2026-08-23. Evidence: current local source, test suites, reviewed staging E2E, and read-only Firebase inventories. No push, deployment, production write, or financial action occurred.
+Audit date: 2026-08-24. Evidence: current source, test suites, reviewed staging E2E, production inventories, exact-bundle verification, and manual production actor QA. P0 Batch 3 was promoted without outbound or financial activity.
 
 ## Executive assessment
 
-The core Business Stripe lifecycle, reload-safe routing, and minimum Admin/Ops Command Center are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. ScaledCircle is not ready for official launch because five P0 gates remain: physical Android proof, production worker-authority parity, a supportable worker cash-out model, minimum Sales workflow, and discoverable legal/trust surfaces.
+The core Business Stripe lifecycle, reload-safe routing, minimum Admin/Ops Command Center, and minimum Sales workflow are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. ScaledCircle is not ready for official launch because four P0 gates remain: physical Android proof, production worker-authority parity, a supportable worker cash-out model, and discoverable legal/trust surfaces.
 
 The product should launch around one narrow promise: Businesses fund mapped field campaigns; approved Scalers complete verified work and earn transparent compensation. Intelligence, Managed Growth, social publishing, direct mail, automated outreach, and payout automation must remain gated until each is complete and supportable.
 
@@ -204,6 +204,6 @@ The proposed agent permissions and APIs are in `agent-automation-readiness.md`. 
 
 Do not combine these into one broad release.
 
-## P0 Batch 3 Sales staging verification
+## P0 Batch 3 Sales production verification
 
-The minimum Sales funnel is now deployed and hosted-verified in staging: one Admin-authorized Sales home, lead detail, follow-up schedule, contact/note ledger, suppression, source attribution, Business linkage, and server-derived activation/payment milestones. The Internal QA lifecycle and Business/Scaler denial passed. It does not send outreach, create a Sales role, label receipts as revenue, or allow manual Paid/Retained status. Production remains unchanged pending a separate curated promotion review. See `sales-funnel-foundation.md`.
+The minimum Sales funnel is live and production-verified: one Admin-authorized Sales home, lead detail, follow-up schedule, contact/note ledger, suppression, source attribution, Business linkage, and server-derived activation/payment milestones. The staging Internal QA lifecycle passed; production Admin access and Business/Scaler denial passed without copying QA lead data. It does not send outreach, create a Sales role, label receipts as revenue, or allow manual Paid/Retained status. See `sales-funnel-foundation.md`.

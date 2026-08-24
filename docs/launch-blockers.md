@@ -1,6 +1,6 @@
 # ScaledCircle Launch Blockers
 
-Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was promoted and verified in production without financial activity.
+Audit date: 2026-08-24. This file contains only P0 findings. P0 Batches 1–3 are production-verified; their QA caused no financial activity.
 
 ## P0-1 — Physical Android worker proof is incomplete
 
@@ -40,7 +40,7 @@ Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was prom
 - Production proof: Business, Scaler, and Admin normal-login sessions, role URLs, reload, Sign Out, and protected-route denial passed. Business campaign Back/Forward passed. No financial action or production-data mutation occurred during QA.
 - P1 follow-up: a Codex automation browser retained a broken intermediate Flutter service-worker response after the corrected release. Direct custom-domain/origin HTTP checks and Firefox served the valid current asset. Audit update strategy, cache invalidation, Hosting headers, rapid replacement/rollback, and automatic recovery in `docs/p1-flutter-web-cache-recovery.md`.
 
-## P0-5 — Production has no minimum usable Sales funnel — STAGING RESOLVED / PRODUCTION REVIEW REQUIRED
+## P0-5 — Production has no minimum usable Sales funnel — LIVE + VERIFIED
 
 - Problem: the Admin “Sales Program” card is deliberately disabled and referral administration is not a Sales workflow. There is no maintained lead owner, status, next follow-up, notes, or conversion path.
 - Role: Sales, Admin.
@@ -49,7 +49,7 @@ Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was prom
 - Likely scope: small server-mediated Sales surface and backend authority.
 - Staging proof: role/access tests, one synthetic lead lifecycle, attribution read-back, no financial mutation.
 - Batch 3 staging proof: the Admin-authorized `/sales` home/detail flow and zero-secret `sales-core` are deployed and hosted-verified. One clearly marked Internal QA lead passed Prospect → Qualified → Contacted ledger → scheduled follow-up → Interested, note recording, and Do Not Contact suppression. Pipeline counts updated; suppression removed the lead from actionable follow-ups; Business and Scaler were denied. No outbound message, payment, financial mutation, or production action occurred.
-- Release state: the missing-funnel implementation blocker is resolved in staging. Production remains unchanged and requires a separate curated promotion review before this item is production-closed.
+- Production proof: the curated `sales-core` deployment exposes exactly `getSalesPipeline`, `mutateSalesLead`, and `recordSalesActivity` as ACTIVE Gen 2, Node.js 24, `us-east1`, zero-secret Functions. Production Admin login, `/sales`, reload, canonical branding, and Sign Out passed. Business and Scaler access fail closed; the Scaler Wallet remained unchanged. The certified Hosting bundle matched live production. No prospect, outbound message, payment, refund, earning, Wallet mutation, Connect account, transfer, or payout was created during production QA.
 
 ## P0-6 — Public trust/legal links and required disclosures are not discoverable
 
@@ -71,4 +71,4 @@ Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was prom
 
 ## Launch rule
 
-Official launch remains blocked by unresolved production P0-1, P0-2, P0-3, P0-5 promotion, and P0-6; security-critical findings must be zero and rollback/runbooks reviewed. P0-4/P0 Batch 1 and P0-7/P0 Batch 2 are live and production-verified. P0 Batch 3 is staging-verified and ready for production review, leaving four implementation P0s open plus the Batch 3 promotion gate.
+Official launch remains blocked by unresolved production P0-1, P0-2, P0-3, and P0-6; security-critical findings must be zero and rollback/runbooks reviewed. P0-4/P0 Batch 1, P0-7/P0 Batch 2, and P0-5/P0 Batch 3 are live and production-verified. Four implementation P0s remain.

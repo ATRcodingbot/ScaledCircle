@@ -1,5 +1,7 @@
 # ScaledCircle Brand System
 
+Status: canonical identity adopted and production-verified on 2026-08-24.
+
 ## Canonical identity
 
 The primary product identity is the exact approved symbol plus the `ScaledCircle`

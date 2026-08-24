@@ -1,6 +1,6 @@
 # ScaledCircle Sales Funnel Foundation
 
-Status: P0 Batch 3 deployed and hosted-verified in staging on 2026-08-24. Production remains unchanged until a separate promotion review.
+Status: P0 Batch 3 is live and production-verified as of 2026-08-24.
 
 ## Product boundary
 
@@ -57,6 +57,12 @@ No prospect discovery, research agent, scoring agent, message generation, outbou
 The deployed `sales-core` Functions are ACTIVE, Gen 2, Node.js 24, `us-east1`, source hash `a45885d65a551250b1ffe01f6c118ad40ff04950`, and have zero secret bindings. The final hosted bundle SHA-256 is `4E657E7AE6D0527AA9BF8CBE89FF350F8397F7923CFA6F178D6BCC5CB9248EA1`, with an exact live match.
 
 An Admin created one clearly marked `ScaledCircle Batch 3 Internal QA` prospect with a non-deliverable `example.invalid` contact. Through the normal hosted UI it passed qualification, a non-outbound activity ledger entry, follow-up scheduling, an internal-only note, Interested stage, and Do Not Contact suppression. Counts updated authoritatively and the suppressed record was removed from the actionable Today queue. Recent activity and the lead-specific activity history render human summaries without backend IDs. Business and Scaler normal sessions were denied `/sales`; Scaler was also denied `/business`; all actors signed out cleanly. No outbound message, financial action, production write, or provider action occurred.
+
+## Production proof
+
+The curated production commit is `49006f4eeb070ec0323fbdc250e6031d351d370e`. Production contains exactly the three reviewed `sales-core` callables; each is ACTIVE, Gen 2, Node.js 24, `us-east1`, and has zero secret bindings. Signed-out calls fail with HTTP 401. The certified production `main.dart.js` SHA-256 is `99577FA460E72FFBE17622BB770EA32F984D69C4E70E5EAA6C37A8B51BA8C0ED`, and the live custom-domain bundle matched exactly.
+
+Manual production QA passed for Admin login, `/admin`, Sales, reload, canonical branding, and Sign Out. Business denial was verified in the production browser; Scaler login, reload, `/sales` denial, `/admin` denial, canonical branding, role-switch absence, unchanged Wallet, and Sign Out passed manually. Production intentionally retained its empty/real-data state: the staging Internal QA lead was not copied. No outbound or financial action occurred.
 
 ## Separate follow-up
 
