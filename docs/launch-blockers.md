@@ -58,15 +58,15 @@ Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was prom
 - Likely scope: legal content/links, consent versioning, professional legal review.
 - Staging proof: link, responsive, accessibility, and acceptance-record tests. This audit does not offer legal conclusions.
 
-## P0-7 — Minimum launch operations cannot be completed inside ScaledCircle
+## P0-7 — Minimum launch operations cannot be completed inside ScaledCircle — RESOLVED IN STAGING
 
-- Problem: Admin UI covers issues, roles, beta entitlements, subscriptions, and provider configuration, but not campaign/payment/refund/completion/earning/email/support exception queues. Operators still need Firebase, Stripe, and logs for routine recovery.
-- Role: Admin, Support, Operations.
-- Risk: paid campaigns and worker obligations can strand without a safe, auditable response path.
-- Acceptance: one internal operations queue exposes read-only correlated status and approved actions for payment/refund review, completion/earning exceptions, support cases, and failed email/provider jobs. Actions call maintained server authorities; no free-form Firestore mutation.
-- Likely scope: minimum exception API + admin queue, not an enterprise portal.
-- Staging proof: fixture-driven exception resolution, authorization, audit, retry/idempotency, and no direct financial writes.
+- Status: the P0 Batch 2 candidate is staging-hosted and ready for a separate production review. Admin Home now provides one Needs Attention queue, bounded operational metrics, recent authoritative activity, categorical system health, and a derived campaign timeline.
+- Authority: `admin-ops-core` exposes three Admin-only, server-authoritative interfaces for the overview, campaign timeline, and typed support-case status transitions. Business, Scaler, and signed-out access fail closed. The codebase has zero provider-secret bindings.
+- Financial safety: normal payments/refunds remain notifications and timeline events, not exceptions. Financial summaries distinguish customer gross, worker allocation, ScaledCircle fee, refunds, and worker earnings. The UI cannot create payment, refund, earning, Wallet, transfer, or payout authority.
+- Support: the hosted zero-state and existing staging data passed; the typed Open → In Progress → Resolved transaction path, authorization, audit, and replay behavior are covered by focused tests. No generic Firestore editor exists.
+- Hosted proof: staging Admin loaded the Command Center and the preserved campaign timeline; a normal $9.60 TEST payment displayed an $8.00 worker allocation and $1.60 platform fee. Business and Scaler normal Auth sessions were denied Admin Ops. Responsive Admin and Sign Out passed without financial mutation.
+- Remaining release action: curate and promote only the reviewed Admin Ops Functions and Hosting in a separately approved production release.
 
 ## Launch rule
 
-Official launch remains blocked by unresolved P0-1, P0-2, P0-3, P0-5, P0-6, and P0-7; security-critical findings must be zero and rollback/runbooks reviewed. P0-4 and P0 Batch 1 are live and production-verified.
+Official launch remains blocked by unresolved P0-1, P0-2, P0-3, P0-5, and P0-6; security-critical findings must be zero and rollback/runbooks reviewed. P0-4 and P0 Batch 1 are live and production-verified. P0-7 is resolved in the staging-proven P0 Batch 2 candidate and awaits separate production promotion approval.

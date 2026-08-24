@@ -56,7 +56,13 @@ These are not ready for unattended production automation until structured APIs, 
 - Material logistics change with worker or Business consequences.
 - Production push, deployment, rollback, or deletion.
 
-## Missing interfaces and observability
+## Available P0 operations interfaces
+
+The staging P0 Batch 2 candidate provides structured, Admin-authorized outputs through `getAdminOperationsOverview` and `getAdminCampaignTimeline`, plus the typed `updateAdminSupportCaseStatus` command. These interfaces expose bounded exceptions, severity, entity references, timestamps, current status, allowed navigation/action hints, categorical health, and a derived authoritative timeline. They are designed for future Operations/Supervisor consumption without Flutter scraping or free-form Firestore mutation. Production promotion is not yet approved.
+
+The current autonomy contract remains: observe-only and draft-only consumers may read redacted outputs; consequential recovery stays approval-required; no agent may create payment, refund, earning, Wallet, transfer, payout, role, or security authority.
+
+## Remaining interfaces and observability
 
 | Needed interface | Authority | Minimum behavior |
 |---|---|---|
@@ -67,11 +73,9 @@ These are not ready for unattended production automation until structured APIs, 
 | `markLeadConverted` | Funnel service | Link Auth Business without inventing revenue |
 | `getScalerSupplyGap` | Marketplace analytics | Open eligible demand versus eligible active supply |
 | `listScalerCandidates` | Recruiting service | Permission-aware candidates and activation state |
-| `getCampaignExceptions` | Operations service | Payment, assignment, handoff, tracking, completion exceptions |
-| `getPaymentsNeedingReview` | Financial operations | Correlated Stripe/event/payment state; read-only by default |
-| `getEmailDeliveryExceptions` | Messaging operations | Job status, retries, safe error classification |
-| `getProviderHealth` | Platform operations | Runtime success/latency/outage, not only configuration |
-| `getSupportCaseTimeline` | Support service | Participant-safe correlated operational timeline |
+| Specialized/paginated exception APIs | Operations service | Split the bounded P0 overview only when scale or a dedicated workflow proves the need |
+| Provider telemetry | Platform operations | Measured runtime success/latency/outage beyond current authoritative record health |
+| Participant-safe support conversation timeline | Support service | Extend the current campaign timeline only after message/privacy requirements are reviewed |
 | `requestApprovedRecovery` | Operations command | Typed command, authorization, idempotency, audit, approval |
 
 ## Business funnel

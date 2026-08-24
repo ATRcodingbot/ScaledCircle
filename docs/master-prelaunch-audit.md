@@ -4,7 +4,7 @@ Audit date: 2026-08-23. Evidence: current local source, test suites, reviewed st
 
 ## Executive assessment
 
-The core Business Stripe lifecycle is production-proven, and the new worker earning boundary is staging-proven through the Android emulator. ScaledCircle is not ready for official launch because seven P0 gates remain: physical Android proof, production worker-authority parity, a supportable worker cash-out model, reload-safe routing, minimum Sales workflow, discoverable legal/trust surfaces, and minimum internal operations capability.
+The core Business Stripe lifecycle and reload-safe routing are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. P0 Batch 2 now provides a staging-proven minimum Admin/Ops Command Center. ScaledCircle is not ready for official launch because five P0 gates remain: physical Android proof, production worker-authority parity, a supportable worker cash-out model, minimum Sales workflow, and discoverable legal/trust surfaces.
 
 The product should launch around one narrow promise: Businesses fund mapped field campaigns; approved Scalers complete verified work and earn transparent compensation. Intelligence, Managed Growth, social publishing, direct mail, automated outreach, and payout automation must remain gated until each is complete and supportable.
 
@@ -56,10 +56,10 @@ The product should launch around one narrow promise: Businesses fund mapped fiel
 
 ## Admin
 
-- READY: guarded Admin login, audited role management, beta entitlements, subscription overview, configuration visibility, and open `adminIssues` list.
-- P0: no minimum correlated queue for payments/refunds, support, completion/earning, email, provider, and dispute exceptions.
-- Admin “provider health” is configuration status, not runtime health; label it accurately.
-- Minimum launch surface: searchable participants/campaign, correlated read-only timeline, exception queues, and a small set of typed audited commands. Do not build a broad enterprise portal.
+- READY IN STAGING: guarded Admin login plus one responsive Command Center with Needs Attention, bounded operational metrics, concise recent activity, categorical health, and an authoritative derived campaign timeline.
+- P0 Batch 2 authority: Admin-only `admin-ops-core` read models correlate payment/refund, completion/earning, email/provider, support, and campaign/participant exceptions. A typed audited support status command is the only new mutation; no generic document editor exists.
+- Financial copy separates customer gross, worker allocation, platform fee, refund, and worker earning. Provider health is categorical operational evidence, never a fabricated percentage.
+- Hosted staging proved Admin access, Business/Scaler denial, empty/error states, responsive layout, and real preserved campaign/payment/earning timeline data. Production promotion remains separately gated.
 
 ## Sales
 
@@ -69,7 +69,7 @@ The product should launch around one narrow promise: Businesses fund mapped fiel
 
 ## Operations and support
 
-Critical workflows currently require Firebase Console, Stripe Dashboard, and logs. Payment/refund authority is robust, but routine exception handling is not productized.
+P0 Batch 2 productizes the minimum routine exception view in staging without replacing payment/refund authority. The Command Center correlates authoritative ScaledCircle records, while high-authority financial recovery remains behind existing purpose-built controls and human review rather than raw console editing.
 
 | Event | Launch operating class | Required behavior |
 |---|---|---|
@@ -142,7 +142,7 @@ Required follow-up: retention/deletion policy for precise routes/photos/support 
 - Worker earning must be described as worker liability/earning, not new platform revenue.
 - Push is not implemented; keep disabled/Coming Soon outside the core flow.
 - Audit every email’s sender/reply-to, mobile rendering, plain text, link environment, deterministic identity, retry state, and transactional versus marketing classification.
-- Missing operations queue for failed email jobs is P1/P0-operations scope.
+- Failed, retry-exhausted, and long-pending durable email jobs are visible in the staging Command Center without exposing provider secrets; execution/retry authority remains separate.
 
 ## Navigation and state consistency
 
@@ -196,7 +196,7 @@ The proposed agent permissions and APIs are in `agent-automation-readiness.md`. 
 2. Physical Android gate and defects found there.
 3. Production completion/job-room ownership migration and legacy sequencing.
 4. Worker cash-out policy/TEST gate and truthful Wallet presentation.
-5. Minimum Admin/Support operations queue.
+5. Promote the staging-proven minimum Admin/Support Command Center after curated production review.
 6. Public trust/legal surface with professional review.
 7. Minimum internal Sales funnel.
 8. Top P1 simplification/state-consistency work.
