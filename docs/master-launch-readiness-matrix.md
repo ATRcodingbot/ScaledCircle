@@ -25,8 +25,8 @@ The matrix contains 99 normalized, user-visible or operator-visible capabilities
 | Public | Affiliate entry | referral links | affiliate authority | PARTIAL | INTERNAL ONLY | P2 | Backend | Required | Browser | Future | Medium | Program not payout-ready | Keep invite-only |
 | Public | SEO/share metadata | web shell | Hosting metadata | PARTIAL | FIX BEFORE LAUNCH | P1 | None | Required | Search/social | No | Low | No complete SEO audit | Add canonical/meta/site-map review |
 | Public | Mobile responsive marketing | public screens | Flutter web | READY | LAUNCH | P1 | Widget tests | Required | Mobile browsers | No | Low | Safari unverified | Browser/device matrix |
-| Public | Footer/support links | public components | static | BROKEN | FIX BEFORE LAUNCH | P0 | None | Required | Web/mobile | No | High | Trust/legal links not discoverable | Add reviewed footer links |
-| Public | Legal/consent surface | signup/waitlist/footer | consent records | NOT IMPLEMENTED | FIX BEFORE LAUNCH | P0 | None | Required | Web/mobile | High | High | Required documents/versioning absent | Professional review + versioned links |
+| Public | Footer/support links | public components | static | READY | LAUNCH | P0 | Flutter + hosted route QA | Passed staging | Web/mobile | No | High | Production promotion pending | Promote exact reviewed Hosting bundle |
+| Public | Legal/consent surface | signup/footer/tracking disclosure | `legal-core:recordLegalConsent` + versioned public documents | PARTIAL | FIX BEFORE LAUNCH | P0 | Backend/Flutter/architecture/hosted QA | Passed staging | Web/mobile | High | High | Founder/counsel policy review and production promotion remain | Review binding policy, then curate legal-core + Hosting |
 | Public | Unknown-route recovery | Router | Auth/profile-aware recovery | READY | LAUNCH | P1 | Flutter/hosted QA | Passed staging | Browser | No | Medium | None material | Retain branded recovery |
 | Business | Business onboarding | signup → dashboard | Auth/profile | PARTIAL | FIX BEFORE LAUNCH | P1 | Flutter | Required | Web/mobile | No | Medium | Journey spread across screens | One progress checklist |
 | Business | Service Areas | preferences/map | `saveDiscoveryPreferences` | READY | LAUNCH | P1 | Backend/Flutter | Passed staging | Web | No | High | Manual refresh history | Keep authoritative listener |
@@ -118,7 +118,7 @@ The matrix contains 99 normalized, user-visible or operator-visible capabilities
 - Affiliate: 3
 - Shared: 8
 
-Status summary: READY 53; PARTIAL 41; BROKEN 1; NOT IMPLEMENTED 4; LEGACY 0. Launch decisions: LAUNCH 57; FIX BEFORE LAUNCH 31; HIDE 2; COMING SOON 6; REMOVE 0; INTERNAL ONLY 3. Priorities: P0 31; P1 55; P2 13; P3 0. A capability may be technically ready yet still require P1 manual launch QA.
+Status summary: READY 54; PARTIAL 42; BROKEN 0; NOT IMPLEMENTED 3; LEGACY 0. Launch decisions: LAUNCH 58; FIX BEFORE LAUNCH 30; HIDE 2; COMING SOON 6; REMOVE 0; INTERNAL ONLY 3. Priorities: P0 31; P1 55; P2 13; P3 0. A capability may be technically ready yet still require P1 manual launch QA.
 
 ## Backend-only legacy authority inventory
 

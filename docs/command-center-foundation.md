@@ -65,7 +65,7 @@ Batch 3 adds a separate structured Sales summary contract (`counts`, overdue fol
 ## Explicit exclusions
 
 - Sales funnel and outreach agents
-- legal-document implementation
+- legal policy approval and production consent-version visibility (the public/legal engineering surface is staging-proven; binding policy remains outside Command Center authority)
 - worker-lifecycle production migration
 - physical Android QA
 - Stripe Connect, onboarding, transfers, payouts, or withdrawal

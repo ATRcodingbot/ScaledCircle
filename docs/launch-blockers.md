@@ -53,7 +53,8 @@ Audit date: 2026-08-24. This file contains only P0 findings. P0 Batches 1–3 ar
 
 ## P0-6 — Public trust/legal links and required disclosures are not discoverable
 
-- Problem: maintained public UI search found no discoverable Terms, Privacy, refund-policy, location/evidence, independent-contractor, affiliate-terms, or payout-language links. Consent checkboxes exist but do not replace the complete documents.
+- Staging status (2026-08-24): engineering remediation is complete and ready for curated production review. Signed-out Terms, Privacy, Payments/Cancellations/Refunds, Scaler Work & Earnings, Legal hub, and Support routes are deployed and responsive. Public/login/signup links are discoverable, tracked-work disclosure is present, and `legal-core:recordLegalConsent` records immutable versioned acceptance without secrets or financial authority.
+- Remaining blocker: founder/counsel approval of binding legal policy. Precise retention, age eligibility, worker classification, jurisdiction/privacy rights, dispute/liability terms, affiliate settlement, and production payout language remain explicitly unresolved; staging copy does not invent them.
 - Role: Public, Business, Scaler.
 - Risk: users cannot review the rules governing payment, refunds, tracked work, evidence, earnings, or marketing consent before commitment.
 - Acceptance: professionally reviewed documents are linked from public footer and relevant commitment points; versions/acceptance timestamps are retained where required; language matches Stripe-first Business payments and separate Scaler earnings/payouts.
@@ -71,4 +72,4 @@ Audit date: 2026-08-24. This file contains only P0 findings. P0 Batches 1–3 ar
 
 ## Launch rule
 
-Official launch remains blocked by unresolved production P0-1, P0-2, P0-3, and P0-6; security-critical findings must be zero and rollback/runbooks reviewed. P0-4/P0 Batch 1, P0-7/P0 Batch 2, and P0-5/P0 Batch 3 are live and production-verified. Four implementation P0s remain.
+Official launch remains blocked by unresolved production P0-1, P0-2, P0-3, and P0-6; security-critical findings must be zero and rollback/runbooks reviewed. P0-6 engineering is staging-proven but still needs curated production promotion and founder/counsel policy approval. P0-4/P0 Batch 1, P0-7/P0 Batch 2, and P0-5/P0 Batch 3 are live and production-verified. Four production P0 gates remain; three still require product implementation.
