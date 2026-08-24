@@ -346,19 +346,6 @@ class CampaignService {
     ).orderBy('createdAt', descending: true).snapshots();
   }
 
-  Future<void> applyToCampaign({
-    required String campaignId,
-    required String scalerId,
-  }) async {
-    await _applications(campaignId).doc(scalerId).set({
-      'scalerId': scalerId,
-      'campaignId': campaignId,
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
   Future<void> acceptScalerApplication({
     required String campaignId,
     required String scalerId,
