@@ -78,7 +78,7 @@ The current autonomy contract remains: observe-only and draft-only consumers may
 | Participant-safe support conversation timeline | Support service | Extend the current campaign timeline only after message/privacy requirements are reviewed |
 | `requestApprovedRecovery` | Operations command | Typed command, authorization, idempotency, audit, approval |
 
-P0 Batch 3 replaces the conceptual Sales rows above with a first deterministic boundary: `getSalesPipeline`, `mutateSalesLead`, and `recordSalesActivity`. These are human-operated, Admin-authorized launch APIs. Future agents may consume their redacted output, suppression state, follow-up schedule, attribution, and activity history, but autonomous discovery/research/outreach remains **NOT YET IMPLEMENTED**.
+P0 Batch 3 replaces the conceptual Sales rows above with a first deterministic boundary: `getSalesPipeline`, `mutateSalesLead`, and `recordSalesActivity`. These human-operated, Admin-authorized launch APIs are deployed and hosted-verified in staging with zero secrets. The Internal QA flow proved structured suppression and activity/follow-up state without outbound delivery. Future agents may consume the redacted output, suppression state, follow-up schedule, attribution, and activity history, but autonomous discovery/research/outreach remains **NOT YET IMPLEMENTED**.
 
 ## Business funnel
 

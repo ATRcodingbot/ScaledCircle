@@ -1,6 +1,6 @@
 # ScaledCircle Sales Funnel Foundation
 
-Status: P0 Batch 3 staging candidate. Production remains unchanged until a separate promotion review.
+Status: P0 Batch 3 deployed and hosted-verified in staging on 2026-08-24. Production remains unchanged until a separate promotion review.
 
 ## Product boundary
 
@@ -51,6 +51,12 @@ Summaries omit payment-method data, provider references, secrets, tokens, tax/KY
 A future Business Growth or Outreach agent may read the purpose-built fields for stage, source, priority, research summary, opportunity context, suppression, allowed contact state, last contact, next follow-up, prior attempts, and authoritative conversion milestones. It must call reviewed authorities and may not mutate Firestore directly.
 
 No prospect discovery, research agent, scoring agent, message generation, outbound delivery, follow-up automation, Scaler recruiting, Growth Supervisor, or AI logic is included in Batch 3.
+
+## Hosted staging proof
+
+The deployed `sales-core` Functions are ACTIVE, Gen 2, Node.js 24, `us-east1`, source hash `a45885d65a551250b1ffe01f6c118ad40ff04950`, and have zero secret bindings. The hosted bundle SHA-256 is `63ABF03DB02C9AD15FD2B4D81E63180AB6D429803EEEDD74F7F6BA1773A4920B`, with an exact live match.
+
+An Admin created one clearly marked `ScaledCircle Batch 3 Internal QA` prospect with a non-deliverable `example.invalid` contact. Through the normal hosted UI it passed qualification, a non-outbound activity ledger entry, follow-up scheduling, an internal-only note, Interested stage, and Do Not Contact suppression. Counts updated authoritatively and the suppressed record was removed from the actionable Today queue. Business and Scaler normal sessions were denied `/sales`; Scaler was also denied `/business`; all actors signed out cleanly. No outbound message, financial action, production write, or provider action occurred.
 
 ## Separate follow-up
 

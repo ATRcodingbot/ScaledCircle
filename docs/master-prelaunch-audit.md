@@ -204,6 +204,6 @@ The proposed agent permissions and APIs are in `agent-automation-readiness.md`. 
 
 Do not combine these into one broad release.
 
-## P0 Batch 3 Sales candidate
+## P0 Batch 3 Sales staging verification
 
-The minimum Sales funnel now has a narrow staging candidate: one Admin-authorized Sales home, lead detail, follow-up schedule, contact/note ledger, suppression, source attribution, Business linkage, and server-derived activation/payment milestones. It does not send outreach, create a Sales role, label receipts as revenue, or allow manual Paid/Retained status. The launch blocker remains open pending hosted staging proof and separate production review. See `sales-funnel-foundation.md`.
+The minimum Sales funnel is now deployed and hosted-verified in staging: one Admin-authorized Sales home, lead detail, follow-up schedule, contact/note ledger, suppression, source attribution, Business linkage, and server-derived activation/payment milestones. The Internal QA lifecycle and Business/Scaler denial passed. It does not send outreach, create a Sales role, label receipts as revenue, or allow manual Paid/Retained status. Production remains unchanged pending a separate curated promotion review. See `sales-funnel-foundation.md`.
