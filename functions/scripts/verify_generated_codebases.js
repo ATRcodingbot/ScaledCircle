@@ -16,6 +16,7 @@ const jobRoomRoot = path.join(root, "functions-job-room");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const adminOpsRoot = path.join(root, "functions-admin-ops");
 const salesRoot = path.join(root, "functions-sales");
+const legalRoot = path.join(root, "functions-legal");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -83,6 +84,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, jobRoomRoot);
   resolveFrom(dependency, adminOpsRoot);
   resolveFrom(dependency, salesRoot);
+  resolveFrom(dependency, legalRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
@@ -111,6 +113,7 @@ for (const [name, value] of Object.entries(priorPaymentEnvironment)) {
 const transactionalEmail = require(path.join(transactionalEmailRoot, "index.js"));
 const adminOps = require(path.join(adminOpsRoot, "index.js"));
 const sales = require(path.join(salesRoot, "index.js"));
+const legal = require(path.join(legalRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
 assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);
@@ -135,6 +138,7 @@ assert.deepEqual(Object.keys(adminOps).sort(), [
 assert.deepEqual(Object.keys(sales).sort(), [
   "getSalesPipeline", "mutateSalesLead", "recordSalesActivity",
 ].sort());
+assert.deepEqual(Object.keys(legal), ["recordLegalConsent"]);
 assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendScalerJobAlertEmailJob"), false);
@@ -151,6 +155,7 @@ assert.equal(Object.hasOwn(legacy, "finalizePublicAccountSignup"), false);
 assert.equal(Object.hasOwn(legacy, "resendEmailVerification"), false);
 for (const name of Object.keys(adminOps)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(sales)) assert.equal(Object.hasOwn(legacy, name), false);
+for (const name of Object.keys(legal)) assert.equal(Object.hasOwn(legacy, name), false);
 
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
@@ -159,6 +164,7 @@ inventories.push(Object.keys(sales));
 inventories.push(Object.keys(assignment));
 inventories.push(Object.keys(discovery));
 inventories.push(Object.keys(jobRoom));
+inventories.push(Object.keys(legal));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 
@@ -255,4 +261,14 @@ for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer"
   assert.doesNotMatch(salesLock, new RegExp(forbiddenPackage));
 }
 
-console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, and sales-core exports.`);
+const legalSource = require("node:fs").readFileSync(path.join(legalRoot, "index.js"), "utf8");
+const legalLock = require("node:fs").readFileSync(path.join(legalRoot, "package-lock.json"), "utf8");
+for (const forbidden of ["STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY", "CENSUS_API_KEY",
+  "defineSecret", "wallets", "campaignPayments", "scalerEarnings"]) {
+  assert.doesNotMatch(legalSource, new RegExp(forbidden));
+}
+for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+  assert.doesNotMatch(legalLock, new RegExp(forbiddenPackage));
+}
+
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core exports.`);

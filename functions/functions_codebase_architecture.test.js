@@ -84,6 +84,10 @@ const sales = fs.readFileSync(path.join(root, "functions-sales", "index.js"), "u
 const salesPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-sales", "package.json"), "utf8"));
 const salesLock = fs.readFileSync(path.join(root, "functions-sales", "package-lock.json"), "utf8");
+const legal = fs.readFileSync(path.join(root, "functions-legal", "index.js"), "utf8");
+const legalPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-legal", "package.json"), "utf8"));
+const legalLock = fs.readFileSync(path.join(root, "functions-legal", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -227,6 +231,26 @@ test("sales-core exclusively owns the bounded zero-secret Sales authority", () =
     entry.codebase === "sales-core")?.source, "functions-sales");
 });
 
+test("legal-core exclusively owns immutable zero-secret consent authority", () => {
+  assert.deepEqual(exportsIn(legal), ["recordLegalConsent"]);
+  for (const name of ["recordLegalConsent"]) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.deepEqual(Object.keys(legalPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
+    "CENSUS_API_KEY", "nodemailer", "wallets", "campaignPayments", "scalerEarnings"]) {
+    assert.doesNotMatch(legal, new RegExp(forbidden));
+  }
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(legalLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "legal-core")?.source, "functions-legal");
+});
+
 test("assignment-core preserves ownership, Zone, duplicate, and rollout authority", () => {
   assert.match(assignment,
     /context\.role !== "business"[\s\S]*campaign\.businessId !== context\.uid/);
@@ -253,7 +277,8 @@ test("wallet-core owns exactly one secret-free callable with no duplicate assign
   }
   const inventories = [exportsIn(platform), exportsIn(legacy), exportsIn(wallet),
     exportsIn(artifactEmail), exportsIn(transactionalEmail), exportsIn(assignment),
-    exportsIn(discovery), exportsIn(jobRoom), exportsIn(adminOps)]
+    exportsIn(discovery), exportsIn(jobRoom), exportsIn(adminOps), exportsIn(sales),
+    exportsIn(legal)]
     .map((exports) => [...new Set(exports)]);
   const all = inventories.flat();
   assert.equal(new Set(all).size, all.length);

@@ -11,6 +11,12 @@ abstract final class AppRoutes {
   static const sales = '/sales';
   static const verifyEmail = '/verify-email';
   static const campaignFundingReturn = '/campaign-funding-return';
+  static const legal = '/legal';
+  static const terms = '/terms';
+  static const privacy = '/privacy';
+  static const refunds = '/payments-refunds';
+  static const scalerTerms = '/scaler-terms';
+  static const support = '/support';
   static const completeScalerProfile = '/complete-scaler-profile';
   static const campaignDetailPrefix = '/campaign';
   static const jobRoomPrefix = '/job-room';

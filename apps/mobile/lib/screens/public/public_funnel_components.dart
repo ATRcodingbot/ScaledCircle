@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'public_legal_footer.dart';
+
 import '../../models/user/user_profile.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
@@ -237,6 +239,7 @@ class FunnelPage extends StatelessWidget {
                 ),
               ),
             ),
+            const SliverToBoxAdapter(child: PublicLegalFooter()),
           ],
         ),
       ),

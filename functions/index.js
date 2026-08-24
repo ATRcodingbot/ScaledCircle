@@ -58,6 +58,7 @@ const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
 const adminOpsReadModel = require("./admin_ops_read_model");
 const scalerProfile = require("./scaler_profile");
+const legalConsent = require("./legal_consent");
 
 initializeApp();
 
@@ -93,6 +94,7 @@ const scalerProfileService = scalerProfile.createScalerProfileService({
   db,
   FieldValue,
 });
+const legalConsentService = legalConsent.createLegalConsentService({db, FieldValue});
 
 setGlobalOptions({
   maxInstances: 10,
@@ -837,6 +839,34 @@ exports.finalizePublicAccountSignup = onCall(
     } catch (error) {
       logger.error("Public signup finalization failed.", {uid: request.auth.uid, code: error?.message});
       throw signupEmailError(error);
+    }
+  },
+);
+
+/** Record immutable, versioned acceptance for the authenticated profile owner. */
+exports.recordLegalConsent = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    const context = await authenticatedUserContext(
+      request,
+      "Sign in to record legal consent.",
+    );
+    try {
+      return await legalConsentService.accept({
+        uid: context.uid,
+        role: context.role,
+        data: request.data,
+      });
+    } catch (error) {
+      const code = error?.message;
+      if (["invalid_consent_request", "unknown_agreement"].includes(code)) {
+        throw new HttpsError("invalid-argument", "Choose a current ScaledCircle agreement.");
+      }
+      if (["scaler_agreement_requires_scaler", "consent_actor_invalid"].includes(code)) {
+        throw new HttpsError("permission-denied", "This agreement does not apply to your account role.");
+      }
+      logger.error("Legal consent recording failed.", {uid: context.uid, code});
+      throw new HttpsError("internal", "We couldn't record acceptance. Please try again.");
     }
   },
 );

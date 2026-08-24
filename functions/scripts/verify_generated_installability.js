@@ -14,6 +14,7 @@ const packageDirectories = [
   "functions-transactional-email",
   "functions-admin-ops",
   "functions-sales",
+  "functions-legal",
 ];
 
 function runNpmCi(cwd) {

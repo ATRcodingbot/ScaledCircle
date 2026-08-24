@@ -6,6 +6,7 @@ import '../../services/subscription_plan_service.dart';
 import 'authentic_product_map.dart';
 import 'public_funnel_components.dart'
     show ScaledCircleBrand, openPublicRoleChooser;
+import 'public_legal_footer.dart';
 
 const _bg = Color(0xFF020914);
 const _navy = Color(0xFF071525);
@@ -98,6 +99,8 @@ class PublicLandingScreen extends StatelessWidget {
                           onLogin: () =>
                               AppNavigation.push(context, AppRoutes.login),
                         ),
+                        const SizedBox(height: 48),
+                        const PublicLegalFooter(),
                       ],
                     ),
                   ),

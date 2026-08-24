@@ -20,6 +20,7 @@ import 'screens/auth/complete_scaler_profile_screen.dart';
 import 'screens/public/public_landing_screen.dart';
 import 'screens/public/business_funnel_screen.dart';
 import 'screens/public/scaler_funnel_screen.dart';
+import 'screens/public/legal_document_screen.dart';
 import 'screens/scaler/dashboard/scaler_dashboard_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/admin/admin_login_screen.dart';
@@ -106,6 +107,12 @@ class ScaledCircleApp extends StatelessWidget {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => const ScalerFunnelScreen(),
+      );
+    }
+    if (LegalDocumentKind.fromPath(route?.path) case final legalKind?) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => LegalDocumentScreen(kind: legalKind),
       );
     }
     if (route?.path == AppRoutes.adminLogin) {

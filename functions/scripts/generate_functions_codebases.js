@@ -20,6 +20,7 @@ const jobRoomRoot = path.join(root, "functions-job-room");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const adminOpsRoot = path.join(root, "functions-admin-ops");
 const salesRoot = path.join(root, "functions-sales");
+const legalRoot = path.join(root, "functions-legal");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -97,6 +98,7 @@ const adminOpsExports = new Set([
   "updateAdminSupportCaseStatus",
 ]);
 const salesExports = new Set(["getSalesPipeline", "mutateSalesLead", "recordSalesActivity"]);
+const legalExports = new Set(["recordLegalConsent"]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.
@@ -179,6 +181,7 @@ function transformIndex(mode) {
   if (mode === "transactional-email") selectedProgram(ast, transactionalEmailExports);
   if (mode === "admin-ops") selectedProgram(ast, adminOpsExports);
   if (mode === "sales") selectedProgram(ast, salesExports);
+  if (mode === "legal") selectedProgram(ast, legalExports);
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
     const excludedFromLegacy = new Set([
@@ -190,6 +193,7 @@ function transformIndex(mode) {
       ...transactionalEmailExports,
       ...adminOpsExports,
       ...salesExports,
+      ...legalExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
     ]);
@@ -205,6 +209,7 @@ function transformIndex(mode) {
       (mode === "transactional-email" && !transactionalEmailExports.has(name)) ||
       (mode === "admin-ops" && !adminOpsExports.has(name)) ||
       (mode === "sales" && !salesExports.has(name)) ||
+      (mode === "legal" && !legalExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -225,6 +230,7 @@ function transformIndex(mode) {
       if (mode === "transactional-email") return identifier === "SUPPORT_EMAIL_SMTP_PASSWORD";
       if (mode === "admin-ops") return false;
       if (mode === "sales") return false;
+      if (mode === "legal") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -276,6 +282,7 @@ function copyPackage(destination, mode) {
     if (mode === "admin-ops" && name.endsWith(".js") &&
         !["admin_operations.js", "admin_ops_read_model.js"].includes(name)) continue;
     if (mode === "sales" && name.endsWith(".js") && name !== "sales_funnel.js") continue;
+    if (mode === "legal" && name.endsWith(".js") && name !== "legal_consent.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -304,6 +311,8 @@ function writePackageManifest(mode, destination) {
       : mode === "admin-ops"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "sales"
+        ? ["firebase-admin", "firebase-functions"]
+      : mode === "legal"
         ? ["firebase-admin", "firebase-functions"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
@@ -376,6 +385,7 @@ for (const [mode, destination] of [
   ["transactional-email", transactionalEmailRoot],
   ["admin-ops", adminOpsRoot],
   ["sales", salesRoot],
+  ["legal", legalRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
   // payment boundary. Never regenerate it from the subscription/payout-heavy
@@ -390,4 +400,4 @@ for (const [mode, destination] of [
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, and sales-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");

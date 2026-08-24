@@ -449,6 +449,25 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                 child: const Text('Get Email Alerts Without an Account'),
               ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 4,
+                children: [
+                  TextButton(
+                    onPressed: () => AppNavigation.push(context, AppRoutes.terms),
+                    child: const Text('Terms'),
+                  ),
+                  TextButton(
+                    onPressed: () => AppNavigation.push(context, AppRoutes.privacy),
+                    child: const Text('Privacy'),
+                  ),
+                  TextButton(
+                    onPressed: () => AppNavigation.push(context, AppRoutes.support),
+                    child: const Text('Support'),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

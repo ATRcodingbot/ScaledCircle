@@ -4,6 +4,7 @@ import '../user/user_service.dart';
 import '../../models/user/user_profile.dart';
 import '../affiliate_service.dart';
 import '../transactional_email_service.dart';
+import '../legal_consent_service.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth, UserService? userService})
@@ -117,6 +118,9 @@ class AuthService {
         companyName: companyName,
         discoverySource: discoverySource,
         referrerName: referrerName,
+      );
+      await LegalConsentService().acceptAccountAgreements(
+        scaler: role == UserRole.scaler,
       );
       if (role == UserRole.business &&
           affiliateReferralCode != null &&
