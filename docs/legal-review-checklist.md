@@ -29,3 +29,12 @@ Status: engineering/product-truth draft for professional review. This document i
 ## Release rule
 
 Founder product policy is approved for the engineering release. Production pages must remain labeled as product-grounded policy—not attorney-approved or legally certified. Professional review of the listed binding terms remains an explicit gate before official broad public launch. Product facts must not be changed to make legal drafting easier.
+
+## Consent enforcement boundary (engineering candidate)
+
+- Legacy users retain account, dashboard, history, Wallet where applicable, and support access; there is no global consent routing gate.
+- New Business funding requires `terms-2026-08-v1` and `privacy-2026-08-v1` before any Stripe Checkout/payment-record creation.
+- New Scaler application and new assignment obligation require `terms-2026-08-v1` and `scaler-work-2026-08-v1`.
+- New tracking-session creation requires `location-notice-2026-08-v1`; recovery of an existing active/paused session is not destroyed by a missing newer record.
+- Consent is explicit, own-user, server-timestamped, exact-version, deterministic, and idempotent. Admin cannot accept for a user.
+- The application collection must be server-create-only. That Rules tightening is tested but awaiting separate deployment authorization.

@@ -8,6 +8,7 @@ import '../../models/material_logistics.dart';
 import '../../services/completion_payout_service.dart';
 import '../../services/platform_billing_service.dart';
 import '../../services/secure_function_service.dart';
+import '../../widgets/legal_consent_prompt.dart';
 
 import '../../services/wallet_service.dart';
 import '../../navigation/app_routes.dart';
@@ -285,6 +286,13 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           throw Exception(
             'Campaign pricing changed. Review the updated total and approve again.',
           );
+        }
+        if (!context.mounted) return;
+        if (!await ensureLegalConsentForAction(
+          context,
+          LegalActionConsent.businessFunding,
+        )) {
+          return;
         }
         await _billingService.fundCampaignWithCard(
           businessId: businessId,

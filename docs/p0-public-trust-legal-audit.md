@@ -40,6 +40,10 @@ Audit date: 2026-08-24. Production baseline: `9e4867518593cb1440117740f924e8edac
 
 `legal-core:recordLegalConsent` is a Gen 2, Node.js 24, `us-east1`, zero-secret callable. It accepts only the authenticated profile owner, re-reads authoritative role, permits fixed agreement/version pairs, uses deterministic immutable document IDs, applies server `acceptedAt`, and is idempotent for the same version. It cannot write financial or campaign authority.
 
+The remediation candidate adds bounded own-user `legal-core:getLegalConsentStatus` and a shared read-only server contract. Enforcement is placed at the owning action boundaries: campaign funding, Scaler application, assignment obligation, and new tracking-session creation. Errors use `failed-precondition` with `reason: LEGAL_CONSENT_REQUIRED` and exact missing agreement/version pairs. The maintained application client no longer writes Firestore directly.
+
+Staging closure is blocked by one necessary security change: Firestore Rules must deny direct application creation so `application-core:applyToCampaign` is the exclusive authority. The candidate Rule and regression test pass locally; no Rules deployment was performed under the current authorization.
+
 Versions:
 
 - `terms-2026-08-v1`

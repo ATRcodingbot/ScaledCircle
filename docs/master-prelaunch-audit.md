@@ -4,7 +4,7 @@ Audit date: 2026-08-24. Evidence: current source, test suites, reviewed staging 
 
 ## Executive assessment
 
-The core Business Stripe lifecycle, reload-safe routing, minimum Admin/Ops Command Center, and minimum Sales workflow are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. The public trust/consent engineering surface is now staging-proven and awaiting curated production promotion plus founder/counsel review. ScaledCircle is not ready for official launch because four production P0 gates remain: physical Android proof, production worker-authority parity, a supportable worker cash-out model, and approved production legal/trust policy.
+The core Business Stripe lifecycle, reload-safe routing, minimum Admin/Ops Command Center, and minimum Sales workflow are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. Public legal discovery is staging-proven; action-level consent enforcement is implemented and locally recertified but awaits authorization to deploy its required server-only application Rule before hosted staging proof. ScaledCircle is not ready for official launch because physical Android proof, production worker-authority parity, worker cash-out, professional legal review, and consent deployment closure remain open.
 
 The product should launch around one narrow promise: Businesses fund mapped field campaigns; approved Scalers complete verified work and earn transparent compensation. Intelligence, Managed Growth, social publishing, direct mail, automated outreach, and payout automation must remain gated until each is complete and supportable.
 
@@ -40,6 +40,8 @@ The product should launch around one narrow promise: Businesses fund mapped fiel
 - `legal-core:recordLegalConsent` is a Node.js 24 Gen 2, zero-secret, idempotent authority for own-user versioned consent; signed-out calls return 401.
 - Hosted staging deep links, reload, Back/Forward, 390×844 layout, and exact bundle match passed. No production, financial, outreach, or payout action occurred.
 - Professional review remains required for the policy decisions recorded in `legal-policy-decisions-required.md` and `legal-review-checklist.md`.
+- The consent-action candidate uses one canonical exact-version helper and structured `LEGAL_CONSENT_REQUIRED` responses. It protects new funding, new Scaler application, new assignment obligations, and new tracking sessions without globally locking out legacy users. Existing active tracking sessions remain recoverable.
+- Security review found that deployed Rules still permit direct application creates. A server-only Rule is necessary for exclusive `application-core` authority; it is tested locally and intentionally undeployed pending explicit Rules approval.
 - P1: copy is lengthy and describes architecture rather than showing the product. Pricing, SEO/share metadata, password-reset links, referral persistence, Safari, and unknown-route recovery need launch QA.
 - Decision: launch homepage, role funnels, login/signup, and illustrative map after P0/P1 fixes; hide waitlist for launched roles; keep affiliate entry invite-only.
 

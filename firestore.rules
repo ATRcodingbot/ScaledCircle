@@ -174,9 +174,10 @@ service cloud.firestore {
       match /applications/{scalerId} {
 
 
+        // Applications are contractual work-entry records and are created only
+        // by the consent-gated applyToCampaign server authority.
         allow create:
-          if isApprovedAccount()
-          && request.auth.uid == scalerId;
+          if false;
 
 
         allow read:

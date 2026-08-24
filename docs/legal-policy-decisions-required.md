@@ -17,7 +17,7 @@ These decisions are intentionally unresolved. No precise policy was invented in 
 
 ## Engineering follow-ups, not policy inventions
 
-- Add server-authoritative current-consent checks to every reviewed new contractual action boundary before production promotion. The current legal-core-only deployment scope cannot enforce campaign funding, Scaler application, or assignment acceptance in their owning codebases.
+- Deploy the reviewed server-authoritative consent candidate: exact-version checks now exist for new campaign funding, Scaler application, new assignment obligations, and new tracking-session creation. The required server-only application Rules change passed 20/20 emulator tests but remains undeployed pending explicit Rules authorization.
 - Add material-change/re-consent UX after legal versions are professionally approved.
 - Add purpose-built privacy request tracking after the request policy is defined.
 - Reassess cookie notice needs when analytics, ad pixels, or third-party embeds are introduced.

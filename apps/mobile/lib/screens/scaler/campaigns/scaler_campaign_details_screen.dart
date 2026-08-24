@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../navigation/app_routes.dart';
 import '../../../navigation/app_router.dart';
+import '../../../widgets/legal_consent_prompt.dart';
 
 import '../../../models/campaign_model.dart';
 import '../../../services/campaign_service.dart';
@@ -156,6 +157,12 @@ class _ScalerCampaignDetailsScreenState
     });
 
     try {
+      if (!await ensureLegalConsentForAction(
+        context,
+        LegalActionConsent.scalerWork,
+      )) {
+        return;
+      }
       await _campaignService.applyToCampaign(
         campaignId: widget.campaign.id,
         scalerId: user.uid,

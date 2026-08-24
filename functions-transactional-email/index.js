@@ -59,6 +59,7 @@ const transactionalEmail = require("./transactional_email");
 
 
 
+
 initializeApp();
 
 
@@ -73,6 +74,32 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -840,6 +867,60 @@ exports.finalizePublicAccountSignup = onCall(
     }
   }
 );
+
+/** Record immutable, versioned acceptance for the authenticated profile owner. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /** Queue a verification-only message for the authenticated account owner. */
 exports.resendEmailVerification = onCall(

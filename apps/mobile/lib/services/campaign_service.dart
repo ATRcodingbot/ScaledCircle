@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/campaign_model.dart';
 
 class CampaignService {
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
+  final FirebaseFunctions _functions =
+      FirebaseFunctions.instanceFor(region: 'us-east1');
 
 
   // ==============================
@@ -261,81 +264,13 @@ class CampaignService {
   required String campaignId,
   required String scalerId,
 }) async {
-  final campaignRef =
-      _firestore.collection("campaigns").doc(campaignId);
-
-  final campaignSnapshot = await campaignRef.get();
-
-  if (!campaignSnapshot.exists) {
-    throw Exception("Campaign not found.");
+  final currentUid = FirebaseAuth.instance.currentUser?.uid;
+  if (currentUid == null || currentUid != scalerId) {
+    throw Exception('Sign in as the Scaler applying for this campaign.');
   }
-
-  final campaignData =
-      campaignSnapshot.data() as Map<String, dynamic>;
-
-  final businessId =
-      campaignData["businessId"]?.toString() ?? "";
-
-  if (businessId.isEmpty) {
-    throw Exception(
-      "This campaign does not have a business attached.",
-    );
-  }
-
-  final applicationRef = campaignRef
-      .collection("applications")
-      .doc(scalerId);
-
-  // Check whether this scaler has already applied.
-  final existingApplication =
-      await applicationRef.get();
-
-  if (existingApplication.exists) {
-    final data =
-        existingApplication.data() ?? {};
-
-    final status =
-        data["status"]?.toString() ?? "pending";
-
-    if (status == "pending") {
-      throw Exception(
-        "You already applied for this campaign. "
-        "Your application is waiting for business approval.",
-      );
-    }
-
-    if (status == "accepted") {
-      throw Exception(
-        "You have already been accepted for this campaign.",
-      );
-    }
-
-    if (status == "rejected") {
-      throw Exception(
-        "Your previous application for this campaign was declined.",
-      );
-    }
-
-    throw Exception(
-      "You already have an application for this campaign.",
-    );
-  }
-
-  final batch = _firestore.batch();
-
-  batch.set(
-    applicationRef,
-    {
-      "scalerId": scalerId,
-      "campaignId": campaignId,
-      "businessId": businessId,
-      "status": "pending",
-      "createdAt": FieldValue.serverTimestamp(),
-      "updatedAt": FieldValue.serverTimestamp(),
-    },
-  );
-
-  await batch.commit();
+  await _functions.httpsCallable('applyToCampaign').call({
+    'campaignId': campaignId,
+  });
 }
 
 

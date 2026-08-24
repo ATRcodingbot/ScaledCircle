@@ -51,6 +51,11 @@ async function seed() {
     db.doc("users/other").set({role: "scaler"}),
     db.doc("users/business").set({role: "business"}),
     db.doc("users/admin").set({role: "admin"}),
+    db.doc("legalConsents/scaler_location_notice_location-notice-2026-08-v1").set({
+      uid: "scaler", userRole: "scaler", agreementType: "location_notice",
+      agreementVersion: "location-notice-2026-08-v1", source: "scaler_tracking",
+      acceptedAt: Timestamp.now(),
+    }),
     db.doc("campaigns/campaign").set({
       businessId: "business",
       status: "active",
@@ -98,6 +103,29 @@ test("anonymous, business, and unassigned scaler cannot start", async () => {
   await assert.rejects(start(null), (error) => error.code === "unauthenticated");
   await assert.rejects(start("business"), (error) => error.code === "permission-denied");
   await assert.rejects(start("other"), (error) => error.code === "permission-denied");
+});
+
+test("current location notice is required only when creating a new session", async () => {
+  const consent = db.doc(
+    "legalConsents/scaler_location_notice_location-notice-2026-08-v1",
+  );
+  await consent.delete();
+  await assert.rejects(start(), (error) =>
+    error.code === "failed-precondition" &&
+    error.details?.reason === "LEGAL_CONSENT_REQUIRED" &&
+    error.details?.missing?.[0]?.version === "location-notice-2026-08-v1");
+  assert.equal((await db.collection("trackingSessions").get()).empty, true);
+
+  await consent.set({
+    uid: "scaler", userRole: "scaler", agreementType: "location_notice",
+    agreementVersion: "location-notice-2026-08-v1", source: "scaler_tracking",
+    acceptedAt: Timestamp.now(),
+  });
+  const active = await start();
+  await consent.delete();
+  const recovered = await start();
+  assert.equal(recovered.sessionId, active.sessionId);
+  assert.equal(recovered.recovered, true);
 });
 
 test("duplicate and simultaneous same start recover exactly one session", async () => {

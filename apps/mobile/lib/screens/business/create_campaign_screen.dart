@@ -6,6 +6,7 @@ import '../../config/app_environment.dart';
 import '../../models/material_logistics.dart';
 import '../../services/platform_billing_service.dart';
 import '../../widgets/material_fulfillment_form.dart';
+import '../../widgets/legal_consent_prompt.dart';
 import 'campaign_zones_screen.dart';
 import 'campaign/campaign_locations_screen.dart';
 
@@ -558,6 +559,13 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         if (fundingStatus != 'funded') {
           final approvedQuote = await _billingService
               .campaignCostQuoteForCampaign(campaignReference.id);
+          if (!mounted) return;
+          if (!await ensureLegalConsentForAction(
+            context,
+            LegalActionConsent.businessFunding,
+          )) {
+            return;
+          }
           await _billingService.fundCampaignWithCard(
             businessId: user.uid,
             campaignId: campaignReference.id,
@@ -690,6 +698,13 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
       if (fundingStatus != 'funded') {
         final approvedQuote = await _billingService
             .campaignCostQuoteForCampaign(campaignReference.id);
+        if (!mounted) return;
+        if (!await ensureLegalConsentForAction(
+          context,
+          LegalActionConsent.businessFunding,
+        )) {
+          return;
+        }
         await _billingService.fundCampaignWithCard(
           businessId: user.uid,
           campaignId: campaignReference.id,

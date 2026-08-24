@@ -17,6 +17,7 @@ const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const adminOpsRoot = path.join(root, "functions-admin-ops");
 const salesRoot = path.join(root, "functions-sales");
 const legalRoot = path.join(root, "functions-legal");
+const applicationRoot = path.join(root, "functions-application");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -85,6 +86,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, adminOpsRoot);
   resolveFrom(dependency, salesRoot);
   resolveFrom(dependency, legalRoot);
+  resolveFrom(dependency, applicationRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
@@ -114,6 +116,7 @@ const transactionalEmail = require(path.join(transactionalEmailRoot, "index.js")
 const adminOps = require(path.join(adminOpsRoot, "index.js"));
 const sales = require(path.join(salesRoot, "index.js"));
 const legal = require(path.join(legalRoot, "index.js"));
+const application = require(path.join(applicationRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
 assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);
@@ -138,7 +141,8 @@ assert.deepEqual(Object.keys(adminOps).sort(), [
 assert.deepEqual(Object.keys(sales).sort(), [
   "getSalesPipeline", "mutateSalesLead", "recordSalesActivity",
 ].sort());
-assert.deepEqual(Object.keys(legal), ["recordLegalConsent"]);
+assert.deepEqual(Object.keys(legal).sort(), ["getLegalConsentStatus", "recordLegalConsent"]);
+assert.deepEqual(Object.keys(application), ["applyToCampaign"]);
 assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendScalerJobAlertEmailJob"), false);
@@ -156,6 +160,7 @@ assert.equal(Object.hasOwn(legacy, "resendEmailVerification"), false);
 for (const name of Object.keys(adminOps)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(sales)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(legal)) assert.equal(Object.hasOwn(legacy, name), false);
+for (const name of Object.keys(application)) assert.equal(Object.hasOwn(legacy, name), false);
 
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
@@ -165,6 +170,7 @@ inventories.push(Object.keys(assignment));
 inventories.push(Object.keys(discovery));
 inventories.push(Object.keys(jobRoom));
 inventories.push(Object.keys(legal));
+inventories.push(Object.keys(application));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 

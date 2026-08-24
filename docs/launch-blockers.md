@@ -53,8 +53,9 @@ Audit date: 2026-08-24. This file contains only P0 findings. P0 Batches 1–3 ar
 
 ## P0-6 — Public trust/legal links and required disclosures are not discoverable
 
-- Staging status (2026-08-24): engineering remediation is complete and ready for curated production review. Signed-out Terms, Privacy, Payments/Cancellations/Refunds, Scaler Work & Earnings, Legal hub, and Support routes are deployed and responsive. Public/login/signup links are discoverable, tracked-work disclosure is present, and `legal-core:recordLegalConsent` records immutable versioned acceptance without secrets or financial authority.
-- Remaining blocker: founder/counsel approval of binding legal policy. Precise retention, age eligibility, worker classification, jurisdiction/privacy rights, dispute/liability terms, affiliate settlement, and production payout language remain explicitly unresolved; staging copy does not invent them.
+- Staging status (2026-08-24): public legal routes and immutable acceptance are deployed. The new action-authority candidate adds exact-version consent checks to campaign funding, Scaler application, assignment obligation, and new tracking-session creation, plus bounded own-user status and concise prompts.
+- Remaining engineering blocker: direct application creation is still allowed by the currently deployed Firestore Rules. The candidate server-only Rule passes 20/20 emulator tests, but Rules deployment was not authorized, so the new consent authority has not been deployed/claimed as hosted staging proof.
+- Remaining professional blocker: founder policy is approved, while worker classification, jurisdiction/privacy rights, dispute/liability terms, and other documented binding legal conclusions remain open for attorney review.
 - Role: Public, Business, Scaler.
 - Risk: users cannot review the rules governing payment, refunds, tracked work, evidence, earnings, or marketing consent before commitment.
 - Acceptance: professionally reviewed documents are linked from public footer and relevant commitment points; versions/acceptance timestamps are retained where required; language matches Stripe-first Business payments and separate Scaler earnings/payouts.

@@ -96,6 +96,31 @@ const scalerProfileService = scalerProfile.createScalerProfileService({
 });
 const legalConsentService = legalConsent.createLegalConsentService({db, FieldValue});
 
+function legalConsentError(error, message) {
+  if (error?.message !== "legal_consent_required") return null;
+  return new HttpsError(
+    "failed-precondition",
+    message || "Review and accept the current ScaledCircle agreements to continue.",
+    {
+      reason: "LEGAL_CONSENT_REQUIRED",
+      missing: Array.isArray(error.missing) ? error.missing : [],
+    },
+  );
+}
+
+async function requireCurrentLegalConsents(
+  uid,
+  agreementTypes,
+  transaction = null,
+  message = null,
+) {
+  try {
+    return await legalConsentService.requireCurrent({uid, agreementTypes, transaction});
+  } catch (error) {
+    throw legalConsentError(error, message) || error;
+  }
+}
+
 setGlobalOptions({
   maxInstances: 10,
   region: "us-east1",
@@ -868,6 +893,32 @@ exports.recordLegalConsent = onCall(
       logger.error("Legal consent recording failed.", {uid: context.uid, code});
       throw new HttpsError("internal", "We couldn't record acceptance. Please try again.");
     }
+  },
+);
+
+/** Return bounded current-agreement status for the authenticated profile owner. */
+exports.getLegalConsentStatus = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async (request) => {
+    const context = await authenticatedUserContext(
+      request,
+      "Sign in to review your agreement status.",
+    );
+    const requestedContext = readText(request.data?.context, 40);
+    const requirements = legalConsent.ROLE_REQUIREMENTS[requestedContext];
+    if (!requirements) {
+      throw new HttpsError("invalid-argument", "Choose a supported agreement context.");
+    }
+    if (requestedContext === "business_funding" && context.role !== "business") {
+      throw new HttpsError("permission-denied", "This agreement context requires a Business account.");
+    }
+    if (requestedContext.startsWith("scaler_") && context.role !== "scaler") {
+      throw new HttpsError("permission-denied", "This agreement context requires a Scaler account.");
+    }
+    return {
+      context: requestedContext,
+      ...await legalConsentService.status({uid: context.uid, agreementTypes: requirements}),
+    };
   },
 );
 
@@ -6333,6 +6384,12 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
     if (!scalerId || pointCount < 3 || !Number.isSafeInteger(assignedHomes) || assignedHomes <= 0) {
       throw new HttpsError("failed-precondition", "The mapped assignment is incomplete.");
     }
+    await requireCurrentLegalConsents(
+      scalerId,
+      legalConsent.ROLE_REQUIREMENTS.scaler_work,
+      transaction,
+      "The Scaler must accept the current Terms and Scaler Work Terms before assignment.",
+    );
     const zoneName = String(zone.zoneName || "Zone");
     const baseAmountCents = Number.isSafeInteger(zone.baseAmountCents) ?
       zone.baseAmountCents : Math.round(Number(campaign.basePay || 0) * 100);
@@ -6572,6 +6629,12 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
       throw new HttpsError("permission-denied", "This group slot is not available to you.");
     }
     if (existingParticipant.exists) { result = existingParticipant.data(); return; }
+    await requireCurrentLegalConsents(
+      scalerUid,
+      legalConsent.ROLE_REQUIREMENTS.scaler_work,
+      transaction,
+      "The Scaler must accept the current Terms and Scaler Work Terms before accepting work.",
+    );
     const participants = participantQuery.docs.map((doc) => doc.data()); let slot;
     try { slot = groupAssignment.assertSlotAvailable({requiredScalerCount: group.requiredScalerCount, participants, scalerUid}); }
     catch (error) { throw new HttpsError("failed-precondition", error.message === "group_slots_full" ? "All group slots are filled." : "You already hold a slot for this zone."); }
@@ -7033,9 +7096,15 @@ exports.listCampaignDiscovery = trackingCallable("listCampaignDiscovery", async 
 exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) => {
   assertTrackingPayload(request.data, new Set(["campaignId"]), 2048);
   const context = await requireVerifiedUser(request, "Verify your email before applying.");
-  if (context.role !== "scaler" && !context.isAdmin) {
+  if (context.role !== "scaler") {
     throw new HttpsError("permission-denied", "Only Scalers can apply to campaigns.");
   }
+  await requireCurrentLegalConsents(
+    context.uid,
+    legalConsent.ROLE_REQUIREMENTS.scaler_work,
+    null,
+    "Review and accept the current Terms and Scaler Work Terms before applying.",
+  );
   const campaignId = String(request.data?.campaignId || "").trim();
   const campaignRef = db.collection("campaigns").doc(campaignId);
   const applicationRef = campaignRef.collection("applications").doc(context.uid);
@@ -8326,10 +8395,18 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
   const sessionRef = db.collection("trackingSessions").doc();
   let result = {sessionId: sessionRef.id, status: "active", recovered: false};
   await db.runTransaction(async (transaction) => {
-    const campaignSnapshot = await transaction.get(campaignRef);
-    const zoneSnapshot = await transaction.get(zoneRef);
-    const pointerSnapshot = await transaction.get(pointerRef);
-    const participantSnapshot = await transaction.get(participantRef);
+    const [campaignSnapshot, zoneSnapshot, pointerSnapshot, participantSnapshot,
+      trackingConsentStatus] = await Promise.all([
+      transaction.get(campaignRef),
+      transaction.get(zoneRef),
+      transaction.get(pointerRef),
+      transaction.get(participantRef),
+      legalConsentService.status({
+        uid: context.uid,
+        agreementTypes: legalConsent.ROLE_REQUIREMENTS.scaler_tracking,
+        transaction,
+      }),
+    ]);
     if (!campaignSnapshot.exists || !zoneSnapshot.exists) {
       throw new HttpsError("not-found", "The assigned job was not found.");
     }
@@ -8482,6 +8559,17 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
         metadata: {resumed: true, segmentId},
       });
       return;
+    }
+    // Existing active or paused sessions above are recovered without rewriting
+    // their historical agreement state. Only creation of a new tracking
+    // session requires the current location notice.
+    if (trackingConsentStatus.missing.length) {
+      const error = new Error("legal_consent_required");
+      error.missing = trackingConsentStatus.missing;
+      throw legalConsentError(
+        error,
+        "Review and accept the current location notice before starting tracking.",
+      );
     }
     const firstSegmentId = trackingSegmentId(1);
     transaction.create(sessionRef, {
@@ -9430,6 +9518,13 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
   async (request) => {
     const context = await requireFinancialRole(
       request, "business", "Sign in as a Business to fund a campaign.",
+    );
+    // Consent is checked before customer/session/payment-record creation. A
+    // missing agreement therefore cannot create any Stripe object or funding
+    // authority as a side effect.
+    await requireCurrentLegalConsents(
+      context.uid,
+      legalConsent.ROLE_REQUIREMENTS.business_funding,
     );
     const campaignId = cleanId(request.data?.campaignId);
     if (!campaignId) throw new HttpsError("invalid-argument", "A campaign is required.");

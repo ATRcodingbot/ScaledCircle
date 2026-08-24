@@ -88,6 +88,11 @@ const legal = fs.readFileSync(path.join(root, "functions-legal", "index.js"), "u
 const legalPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-legal", "package.json"), "utf8"));
 const legalLock = fs.readFileSync(path.join(root, "functions-legal", "package-lock.json"), "utf8");
+const application = fs.readFileSync(path.join(root, "functions-application", "index.js"), "utf8");
+const applicationPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-application", "package.json"), "utf8"));
+const applicationLock = fs.readFileSync(
+  path.join(root, "functions-application", "package-lock.json"), "utf8");
 
 function exportsIn(source) {
   return [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
@@ -232,8 +237,8 @@ test("sales-core exclusively owns the bounded zero-secret Sales authority", () =
 });
 
 test("legal-core exclusively owns immutable zero-secret consent authority", () => {
-  assert.deepEqual(exportsIn(legal), ["recordLegalConsent"]);
-  for (const name of ["recordLegalConsent"]) {
+  assert.deepEqual(exportsIn(legal).sort(), ["getLegalConsentStatus", "recordLegalConsent"]);
+  for (const name of ["recordLegalConsent", "getLegalConsentStatus"]) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
     assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
   }
@@ -249,6 +254,24 @@ test("legal-core exclusively owns immutable zero-secret consent authority", () =
   }
   assert.equal(firebaseConfig.functions.find((entry) =>
     entry.codebase === "legal-core")?.source, "functions-legal");
+});
+
+test("application-core exclusively owns secret-free consent-gated applications", () => {
+  assert.deepEqual(exportsIn(application), ["applyToCampaign"]);
+  assert.doesNotMatch(legacy, /exports\.applyToCampaign\s*=/);
+  assert.match(application, /ROLE_REQUIREMENTS\.scaler_work/);
+  assert.deepEqual(Object.keys(applicationPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
+    "CENSUS_API_KEY", "nodemailer", "stripeClient"]) {
+    assert.doesNotMatch(application, new RegExp(forbidden));
+  }
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(applicationLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "application-core")?.source, "functions-application");
 });
 
 test("assignment-core preserves ownership, Zone, duplicate, and rollout authority", () => {
@@ -434,7 +457,8 @@ test("new notification triggers do not silently enable production retries", () =
 
 test("generated codebase preparation installs dependencies after regeneration", () => {
   for (const codebase of firebaseConfig.functions.filter((item) =>
-    ["default", "platform-core", "wallet-core", "artifact-email", "campaign-funding", "sales-core"]
+    ["default", "platform-core", "wallet-core", "artifact-email", "campaign-funding", "sales-core",
+      "application-core"]
       .includes(item.codebase))) {
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }

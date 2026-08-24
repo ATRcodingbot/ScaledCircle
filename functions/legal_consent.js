@@ -9,6 +9,12 @@ const AGREEMENTS = Object.freeze({
 
 const SOURCES = new Set(["account_creation", "scaler_tracking", "authenticated_legal"]);
 
+const ROLE_REQUIREMENTS = Object.freeze({
+  business_funding: Object.freeze(["terms", "privacy"]),
+  scaler_work: Object.freeze(["terms", "scaler_work"]),
+  scaler_tracking: Object.freeze(["location_notice"]),
+});
+
 function clean(value, max = 100) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
@@ -27,19 +33,40 @@ function validateRequest(data, role) {
 }
 
 function createLegalConsentService({db, FieldValue}) {
+  function references(uid, agreementTypes) {
+    return agreementTypes.map((type) => {
+      if (!AGREEMENTS[type]) throw new Error("unknown_agreement");
+      const version = AGREEMENTS[type];
+      return {type, version, ref: db.collection("legalConsents").doc(`${uid}_${type}_${version}`)};
+    });
+  }
+
+  async function status({uid, agreementTypes, transaction = null}) {
+    if (!uid) throw new Error("consent_actor_invalid");
+    const required = references(uid, agreementTypes);
+    const snapshots = await Promise.all(required.map(({ref}) =>
+      transaction ? transaction.get(ref) : ref.get()));
+    const accepted = [];
+    const missing = [];
+    for (let index = 0; index < required.length; index += 1) {
+      const item = required[index];
+      const value = snapshots[index].data() || {};
+      const valid = snapshots[index].exists && value.uid === uid &&
+        value.agreementType === item.type && value.agreementVersion === item.version;
+      (valid ? accepted : missing).push({type: item.type, version: item.version});
+    }
+    return {accepted, missing};
+  }
+
   return {
     async accept({uid, role, data}) {
       if (!uid || !["business", "scaler", "admin"].includes(role)) throw new Error("consent_actor_invalid");
       const input = validateRequest(data, role);
-      const references = input.types.map((type) => ({
-        type,
-        version: AGREEMENTS[type],
-        ref: db.collection("legalConsents").doc(`${uid}_${type}_${AGREEMENTS[type]}`),
-      }));
+      const consentReferences = references(uid, input.types);
       await db.runTransaction(async (transaction) => {
-        const snapshots = await Promise.all(references.map(({ref}) => transaction.get(ref)));
-        for (let index = 0; index < references.length; index += 1) {
-          const item = references[index];
+        const snapshots = await Promise.all(consentReferences.map(({ref}) => transaction.get(ref)));
+        for (let index = 0; index < consentReferences.length; index += 1) {
+          const item = consentReferences[index];
           const existing = snapshots[index];
           if (existing.exists) {
             const value = existing.data() || {};
@@ -58,9 +85,25 @@ function createLegalConsentService({db, FieldValue}) {
           });
         }
       });
-      return {accepted: references.map(({type, version}) => ({type, version}))};
+      return {accepted: consentReferences.map(({type, version}) => ({type, version}))};
+    },
+    status,
+    async requireCurrent({uid, agreementTypes, transaction = null}) {
+      const result = await status({uid, agreementTypes, transaction});
+      if (result.missing.length) {
+        const error = new Error("legal_consent_required");
+        error.missing = result.missing;
+        throw error;
+      }
+      return result;
     },
   };
 }
 
-module.exports = {AGREEMENTS, SOURCES, validateRequest, createLegalConsentService};
+module.exports = {
+  AGREEMENTS,
+  ROLE_REQUIREMENTS,
+  SOURCES,
+  validateRequest,
+  createLegalConsentService,
+};

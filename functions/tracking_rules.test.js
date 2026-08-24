@@ -122,6 +122,14 @@ beforeEach(async () => {
   });
 });
 
+test("campaign application creation is server-authority only", async () => {
+  const scaler = environment.authenticatedContext("scaler-one").firestore();
+  await assertFails(scaler.doc("campaigns/campaign-one/applications/scaler-one").set({
+    scalerId: "scaler-one", campaignId: "campaign-one", businessId: "business-one",
+    status: "pending", createdAt: new Date(), updatedAt: new Date(),
+  }));
+});
+
 test("Managed Growth profiles and artifacts are owner-readable and backend-write-only", async () => {
   const owner = store("business-one");
   const other = store("business-two");

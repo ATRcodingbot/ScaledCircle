@@ -2,7 +2,12 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const {AGREEMENTS, validateRequest, createLegalConsentService} = require("./legal_consent");
+const {
+  AGREEMENTS,
+  ROLE_REQUIREMENTS,
+  validateRequest,
+  createLegalConsentService,
+} = require("./legal_consent");
 
 test("legal consent validates role-specific current agreements", () => {
   assert.deepEqual(validateRequest({agreementTypes: ["terms", "privacy"], source: "account_creation"}, "business"), {
@@ -28,4 +33,32 @@ test("legal consent writes deterministic immutable records once", async () => {
   assert.equal(records.size, 3);
   assert.equal(records.get(`scaler-1_terms_${AGREEMENTS.terms}`).acceptedAt, "SERVER");
   assert.equal(records.get(`scaler-1_scaler_work_${AGREEMENTS.scaler_work}`).userRole, "scaler");
+});
+
+test("current consent status requires exact versions and reports structured missing agreements", async () => {
+  const records = new Map([
+    [`business-1_terms_terms-2026-08-v0`, {
+      uid: "business-1", agreementType: "terms", agreementVersion: "terms-2026-08-v0",
+    }],
+    [`business-1_privacy_${AGREEMENTS.privacy}`, {
+      uid: "business-1", agreementType: "privacy", agreementVersion: AGREEMENTS.privacy,
+    }],
+  ]);
+  const db = {collection: () => ({doc: (id) => ({
+    id,
+    get: async () => ({exists: records.has(id), data: () => records.get(id)}),
+  })})};
+  const service = createLegalConsentService({db, FieldValue: {}});
+  const result = await service.status({
+    uid: "business-1", agreementTypes: ROLE_REQUIREMENTS.business_funding,
+  });
+  assert.deepEqual(result.accepted, [{type: "privacy", version: AGREEMENTS.privacy}]);
+  assert.deepEqual(result.missing, [{type: "terms", version: AGREEMENTS.terms}]);
+  await assert.rejects(
+    service.requireCurrent({
+      uid: "business-1", agreementTypes: ROLE_REQUIREMENTS.business_funding,
+    }),
+    (error) => error.message === "legal_consent_required" &&
+      error.missing[0].version === AGREEMENTS.terms,
+  );
 });

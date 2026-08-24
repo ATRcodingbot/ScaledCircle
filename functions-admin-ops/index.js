@@ -59,6 +59,7 @@ const adminOperations = require("./admin_operations");
 const adminOpsReadModel = require("./admin_ops_read_model");
 
 
+
 initializeApp();
 
 
@@ -89,6 +90,32 @@ const adminOpsReadService = adminOpsReadModel.createAdminOpsReadService({
   db,
   FieldValue
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -164,6 +191,60 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

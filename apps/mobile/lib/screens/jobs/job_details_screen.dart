@@ -12,11 +12,9 @@ import '../../services/campaign_service.dart';
 import '../../services/campaign/campaign_proof_policy.dart';
 import '../../services/active_job_tracking_service.dart';
 import '../../services/tracking_runtime_policy.dart';
-import '../../services/legal_consent_service.dart';
 import '../../widgets/home_completion_counter.dart';
 import 'native_job_in_progress_screen.dart';
-import '../../navigation/app_router.dart';
-import '../../navigation/app_routes.dart';
+import '../../widgets/legal_consent_prompt.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final DocumentSnapshot campaign;
@@ -56,6 +54,12 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     }
 
     try {
+      if (!await ensureLegalConsentForAction(
+        context,
+        LegalActionConsent.scalerWork,
+      )) {
+        return;
+      }
       await _campaignService.applyToCampaign(
         campaignId: widget.campaign.id,
         scalerId: user.uid,
@@ -129,44 +133,12 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       if (_usesNativeTracking) {
         if (!mounted) return;
-        final consented = await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Start job and GPS tracking?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'ScaledCircle records your location only for this active job to verify the route and completed work. '
-                  'The foreground service may continue while the screen is locked or another app is open. '
-                  'Tracking stops when you complete, cancel, or explicitly stop the job.',
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext, false);
-                    AppNavigation.push(context, AppRoutes.privacy);
-                  },
-                  child: const Text('Learn about location and evidence'),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Not Now'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Consent & Start Job'),
-              ),
-            ],
-          ),
-        );
-        if (consented != true || !mounted) return;
-        await LegalConsentService().acceptLocationNotice();
+        if (!await ensureLegalConsentForAction(
+          context,
+          LegalActionConsent.locationTracking,
+        ) || !mounted) {
+          return;
+        }
         await _nativeTracking.start(
           campaignId: widget.campaign.id,
           zoneId: zone.id,

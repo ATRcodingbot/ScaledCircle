@@ -8,9 +8,11 @@ const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const lifecycle = require("./campaign_funding_lifecycle");
 const adminRevenueNotifications = require("./admin_revenue_notifications");
+const legalConsent = require("./legal_consent");
 initializeApp();
 const db = getFirestore();
 const auth = getAuth();
+const legalConsentService = legalConsent.createLegalConsentService({db, FieldValue});
 const PAYMENT_ENVIRONMENT = lifecycle.paymentEnvironment(process.env);
 const STRIPE_SECRET_KEY = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live" ?
   "STRIPE_LIVE_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
@@ -18,6 +20,24 @@ const STRIPE_WEBHOOK_SECRET = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "l
   "STRIPE_LIVE_WEBHOOK_SECRET" : "STRIPE_TEST_WEBHOOK_SECRET");
 const OPTIONS = {region: "us-east1", timeoutSeconds: 60, memory: "256MiB", maxInstances: 10};
 const cleanId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || "").trim()) ? String(value).trim() : "";
+
+async function requireBusinessFundingConsent(uid) {
+  try {
+    await legalConsentService.requireCurrent({
+      uid,
+      agreementTypes: legalConsent.ROLE_REQUIREMENTS.business_funding,
+    });
+  } catch (error) {
+    if (error?.message === "legal_consent_required") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Review and accept the current Terms and Privacy Policy before funding.",
+        {reason: "LEGAL_CONSENT_REQUIRED", missing: error.missing || []},
+      );
+    }
+    throw error;
+  }
+}
 
 function checkoutReturnBaseUrl() {
   return PAYMENT_ENVIRONMENT.returnBaseUrl;
@@ -69,6 +89,8 @@ exports.quoteCampaignFunding = onCall({...OPTIONS, timeoutSeconds: 30}, async (r
 
 exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STRIPE_SECRET_KEY]}, async (request) => {
   const input = await ownedCampaign(request);
+  // Fail before payment records, Stripe customers, or Checkout Sessions exist.
+  await requireBusinessFundingConsent(input.uid);
   await assertFundable(input);
   const quote = lifecycle.quoteForCampaign(input.campaign);
   if (request.data?.approvedQuoteDigest !== quote.quoteDigest) {

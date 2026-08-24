@@ -58,6 +58,7 @@ const multiScalerRollout = require("./multi_scaler_rollout");
 
 
 
+const legalConsent = require("./legal_consent");
 
 initializeApp();
 
@@ -93,6 +94,32 @@ const db = getFirestore();
 
 
 
+const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+function legalConsentError(error, message) {
+  if (error?.message !== "legal_consent_required") return null;
+  return new HttpsError(
+    "failed-precondition",
+    message || "Review and accept the current ScaledCircle agreements to continue.",
+    {
+      reason: "LEGAL_CONSENT_REQUIRED",
+      missing: Array.isArray(error.missing) ? error.missing : []
+    }
+  );
+}
+
+async function requireCurrentLegalConsents(
+uid,
+agreementTypes,
+transaction = null,
+message = null)
+{
+  try {
+    return await legalConsentService.requireCurrent({ uid, agreementTypes, transaction });
+  } catch (error) {
+    throw legalConsentError(error, message) || error;
+  }
+}
 
 setGlobalOptions({
   maxInstances: 10,
@@ -175,6 +202,60 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -6303,6 +6384,12 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
     if (!scalerId || pointCount < 3 || !Number.isSafeInteger(assignedHomes) || assignedHomes <= 0) {
       throw new HttpsError("failed-precondition", "The mapped assignment is incomplete.");
     }
+    await requireCurrentLegalConsents(
+      scalerId,
+      legalConsent.ROLE_REQUIREMENTS.scaler_work,
+      transaction,
+      "The Scaler must accept the current Terms and Scaler Work Terms before assignment."
+    );
     const zoneName = String(zone.zoneName || "Zone");
     const baseAmountCents = Number.isSafeInteger(zone.baseAmountCents) ?
     zone.baseAmountCents : Math.round(Number(campaign.basePay || 0) * 100);
@@ -6542,6 +6629,12 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
       throw new HttpsError("permission-denied", "This group slot is not available to you.");
     }
     if (existingParticipant.exists) {result = existingParticipant.data();return;}
+    await requireCurrentLegalConsents(
+      scalerUid,
+      legalConsent.ROLE_REQUIREMENTS.scaler_work,
+      transaction,
+      "The Scaler must accept the current Terms and Scaler Work Terms before accepting work."
+    );
     const participants = participantQuery.docs.map((doc) => doc.data());let slot;
     try {slot = groupAssignment.assertSlotAvailable({ requiredScalerCount: group.requiredScalerCount, participants, scalerUid });}
     catch (error) {throw new HttpsError("failed-precondition", error.message === "group_slots_full" ? "All group slots are filled." : "You already hold a slot for this zone.");}

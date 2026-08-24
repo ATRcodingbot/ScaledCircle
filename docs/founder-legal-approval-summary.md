@@ -121,7 +121,7 @@ Signup presents optional email updates separately from required Terms/Privacy ac
 
 | Item | Classification | Engineering ready | Policy ready | Professional review recommended | Exact decision |
 |---|---|---:|---:|---:|---|
-| Existing-user re-consent | **LAUNCH BLOCKER — ENGINEERING AUTHORITY** | No | Yes | Yes | Founder approved current consent before new campaign funding/contractual action, Scaler work application/acceptance, and active tracking. The owning server authorities do not yet enforce all of these boundaries, and the authorized legal-core-only deployment cannot make that guarantee. |
+| Existing-user re-consent | **STAGING DEPLOYMENT BLOCKER — RULES AUTHORIZATION** | No | Yes | Yes | The candidate now gates new funding, Scaler application, new assignment obligations, and new tracking-session creation with exact current versions. A required Rules tightening makes application creation server-only; it passed emulator tests but is intentionally not deployed without separate Rules authorization. |
 | Worker classification | **LAUNCH BLOCKER — ATTORNEY REVIEW RECOMMENDED** | Yes | No | Yes | Approve the classification/work agreement for each launch jurisdiction; do not rely on product wording as a legal conclusion. |
 | Age eligibility | **LAUNCH BLOCKER — ATTORNEY REVIEW RECOMMENDED** | Partial | Yes | Yes | Founder approved 18+ for all account holders and Business authority to bind the represented Business. Public/signup wording is implemented; counsel review and an enforcement/verification decision remain. |
 | Data-retention periods | **SAFE TO LAUNCH WITH CURRENT NEUTRAL LANGUAGE** | Yes | No | Yes | Approve a later category-specific retention project; current copy promises no invented duration. |
@@ -165,7 +165,8 @@ Signup presents optional email updates separately from required Terms/Privacy ac
 - **Before active tracking:** The existing Scaler sees the concise location/evidence disclosure. Continue records `location_notice-2026-08-v1` before native tracking starts. Same-version retries are idempotent.
 - **Missing account agreement record:** Existing users remain `legacy/no record`; they are neither locked out nor marked accepted.
 - **Approved new-action policy:** Business Terms + Privacy are required before new campaign funding/equivalent contractual action. Scaler Terms + Scaler Work are required before applying for or accepting new work. The location notice is required before active tracking.
-- **Current blocker:** The consent recorder is authoritative, but the owning campaign-funding/application/assignment authorities do not yet query/enforce current acceptance. UI-only prompts would be bypassable. Production promotion therefore requires a separately reviewed authority expansion or a revised approved enforcement design.
+- **Server enforcement candidate:** `createCampaignFundingCheckoutSession` requires current Terms + Privacy before any Stripe/payment record work; `applyToCampaign`, `assignScalerToZone`, and `acceptZoneGroupSlot` require current Terms + Scaler Work Terms; new `startTrackingSession` creation requires the current location notice. Existing active/paused sessions remain recoverable.
+- **Current blocker:** existing Firestore Rules allow a Scaler to create an application document directly. The candidate changes that create rule to server-only and routes the maintained client through `application-core:applyToCampaign`. The change is tested but cannot be deployed under the current no-Rules authorization, so hosted staging authority is not yet claimable.
 - **Material changes:** The deterministic version model can distinguish a new version, but forced re-consent UX is intentionally not implemented pending policy approval.
 
 ## Consent authority safety
