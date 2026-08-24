@@ -13,6 +13,7 @@ class SalesHomeScreen extends StatefulWidget {
 class _SalesHomeScreenState extends State<SalesHomeScreen> {
   late final SalesService _service = widget.service ?? SalesService();
   late Future<SalesPipeline> _pipeline = _service.loadPipeline();
+  SalesPipeline? _latestPipeline;
   void _refresh() => setState(() => _pipeline = _service.loadPipeline());
 
   @override
@@ -51,8 +52,9 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
               ),
             );
           }
+          _latestPipeline = snapshot.data!;
           return SalesPipelineContent(
-            pipeline: snapshot.data!,
+            pipeline: _latestPipeline!,
             onOpen: _openLead,
           );
         },
@@ -121,6 +123,9 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
     MaterialPageRoute(
       builder: (_) => SalesLeadDetailScreen(
         lead: lead,
+        activities: (_latestPipeline?.recentActivity ?? const [])
+            .where((activity) => activity['leadId'] == lead.id)
+            .toList(),
         service: _service,
         onChanged: _refresh,
       ),
@@ -218,6 +223,22 @@ class SalesPipelineContent extends StatelessWidget {
           ...pipeline.leads.map(
             (lead) => _LeadTile(lead: lead, onTap: () => onOpen(lead)),
           ),
+          const SizedBox(height: 24),
+          Text('Recent', style: Theme.of(context).textTheme.headlineSmall),
+          if (pipeline.recentActivity.isEmpty)
+            const Card(
+              child: ListTile(title: Text('No Sales activity recorded yet.')),
+            ),
+          ...pipeline.recentActivity.take(8).map((activity) {
+            final leadId = activity['leadId']?.toString();
+            final lead = pipeline.leads
+                .where((candidate) => candidate.id == leadId)
+                .firstOrNull;
+            return _ActivityTile(
+              activity: activity,
+              businessName: lead?.businessName ?? 'Business prospect',
+            );
+          }),
         ],
       ),
     );
@@ -256,10 +277,12 @@ class SalesLeadDetailScreen extends StatefulWidget {
   const SalesLeadDetailScreen({
     super.key,
     required this.lead,
+    this.activities = const [],
     required this.service,
     required this.onChanged,
   });
   final SalesLead lead;
+  final List<Map<String, dynamic>> activities;
   final SalesService service;
   final VoidCallback onChanged;
   @override
@@ -308,6 +331,21 @@ class _SalesLeadDetailScreenState extends State<SalesLeadDetailScreen> {
                 subtitle: Text(
                   _label(lead.suppressionStatus ?? 'do_not_contact'),
                 ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          Text('Activity', style: Theme.of(context).textTheme.headlineSmall),
+          if (widget.activities.isEmpty)
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('No activity recorded yet.'),
+            )
+          else
+            ...widget.activities.map(
+              (activity) => _ActivityTile(
+                activity: activity,
+                businessName: lead.businessName,
+                showBusinessName: false,
               ),
             ),
           const SizedBox(height: 16),
@@ -509,6 +547,47 @@ class _SalesLeadDetailScreenState extends State<SalesLeadDetailScreen> {
       ),
     );
   }
+}
+
+class _ActivityTile extends StatelessWidget {
+  const _ActivityTile({
+    required this.activity,
+    required this.businessName,
+    this.showBusinessName = true,
+  });
+
+  final Map<String, dynamic> activity;
+  final String businessName;
+  final bool showBusinessName;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = _label(activity['type']?.toString() ?? 'activity');
+    final channel = activity['channel']?.toString();
+    final summary = activity['summary']?.toString();
+    final occurredAt = activity['occurredAt'];
+    final timestamp = occurredAt is num
+        ? DateTime.fromMillisecondsSinceEpoch(occurredAt.toInt()).toLocal()
+        : null;
+    final detail = [
+      if (channel?.isNotEmpty == true) _label(channel!),
+      if (summary?.isNotEmpty == true) summary!,
+      if (timestamp != null) _compactTime(timestamp),
+    ].join(' • ');
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.history),
+        title: Text(showBusinessName ? '$businessName • $type' : type),
+        subtitle: detail.isEmpty ? null : Text(detail),
+      ),
+    );
+  }
+}
+
+String _compactTime(DateTime value) {
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${value.year}-${two(value.month)}-${two(value.day)} '
+      '${two(value.hour)}:${two(value.minute)}';
 }
 
 String _label(String value) => value

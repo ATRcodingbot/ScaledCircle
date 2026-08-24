@@ -21,8 +21,46 @@ void main() {
     );
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Pipeline'), findsOneWidget);
+    expect(find.text('Recent'), findsOneWidget);
+    expect(find.text('No Sales activity recorded yet.'), findsOneWidget);
     expect(find.text('No prospects yet.'), findsOneWidget);
     expect(find.textContaining('Firestore'), findsNothing);
+  });
+
+  testWidgets('Sales Home renders recent activity without backend IDs', (
+    tester,
+  ) async {
+    const lead = SalesLead(
+      id: 'private-lead-id',
+      businessName: 'QA Roofing',
+      stage: 'contacted',
+      priority: 'normal',
+      mayContact: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SalesPipelineContent(
+            pipeline: const SalesPipeline(
+              leads: [lead],
+              summary: {},
+              recentActivity: [
+                {
+                  'leadId': 'private-lead-id',
+                  'type': 'note',
+                  'summary': 'Internal QA only',
+                  'occurredAt': 1787530000000,
+                },
+              ],
+            ),
+            onOpen: (_) {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('QA Roofing • Note'), findsOneWidget);
+    expect(find.textContaining('Internal QA only'), findsOneWidget);
+    expect(find.text('private-lead-id'), findsNothing);
   });
 
   testWidgets(
