@@ -3,52 +3,24 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class ScaledCircleBrand extends StatelessWidget {
-  const ScaledCircleBrand({super.key, this.compact = false});
+  const ScaledCircleBrand({super.key, this.compact = false, this.lightSurface = false});
 
   final bool compact;
+  final bool lightSurface;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: compact ? 30 : 38,
-          height: compact ? 30 : 38,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.primary, width: 3),
-          ),
-          child: Center(
-            child: Container(
-              width: compact ? 12 : 16,
-              height: compact ? 12 : 16,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.blue, width: 3),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(text: 'Scaled'),
-              TextSpan(
-                text: 'Circle',
-                style: TextStyle(color: AppColors.blue),
-              ),
-            ],
-          ),
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: compact ? 19 : 24,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.7,
-          ),
-        ),
-      ],
+    return Semantics(
+      label: 'ScaledCircle',
+      image: true,
+      child: Image.asset(
+        lightSurface
+            ? 'assets/brand/scaledcircle-lockup-light-surface.png'
+            : 'assets/brand/scaledcircle-lockup-dark-surface.png',
+        height: compact ? 28 : 38,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      ),
     );
   }
 }

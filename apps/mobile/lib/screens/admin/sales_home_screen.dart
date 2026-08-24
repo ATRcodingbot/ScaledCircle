@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/sales_service.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
+import '../../widgets/scaled_circle_brand.dart';
 import 'admin_role_gate.dart';
 
 class SalesHomeScreen extends StatefulWidget {
@@ -20,7 +21,14 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
   Widget build(BuildContext context) => AdminRoleGate(
     builder: (context) => Scaffold(
       appBar: AppBar(
-        title: const Text('Sales'),
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(child: ScaledCircleBrand(compact: true)),
+            SizedBox(width: 10),
+            Text('Sales'),
+          ],
+        ),
         actions: [
           IconButton(
             onPressed: _refresh,

@@ -7,6 +7,7 @@ import '../../services/public_site_service.dart';
 import '../../services/affiliate_service.dart';
 import '../public/early_access_pending_screen.dart';
 import '../../widgets/referral_source_fields.dart';
+import '../../widgets/scaled_circle_brand.dart';
 
 class RegisterScreen extends StatefulWidget {
   final UserRole initialRole;
@@ -164,7 +165,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Account')),
+      appBar: AppBar(title: const ScaledCircleBrand(compact: true)),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -175,12 +176,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 padding: const EdgeInsets.all(24),
                 children: [
                   const Text(
-                    'Join Scaled Circle',
+                    'Join ScaledCircle',
                     style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Choose how you will use Scaled Circle. New Maryland accounts are placed in early-access review until launch access is approved.',
+                    'Choose how you will use ScaledCircle. New Maryland accounts are placed in early-access review until launch access is approved.',
                   ),
                   const SizedBox(height: 24),
                   SegmentedButton<UserRole>(

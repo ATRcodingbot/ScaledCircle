@@ -3,6 +3,7 @@ import '../../services/admin_operations_service.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
+import '../../widgets/scaled_circle_brand.dart';
 import '../business/internal_beta_entitlements_screen.dart';
 import 'admin_campaign_timeline_screen.dart';
 import 'admin_dashboard_card.dart';
@@ -30,10 +31,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       appBar: AppBar(
         title: MediaQuery.sizeOf(context).width < 300
             ? null
-            : Text(
-                MediaQuery.sizeOf(context).width < 520
-                    ? 'Admin'
-                    : 'ScaledCircle Command Center',
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Flexible(child: ScaledCircleBrand(compact: true)),
+                  if (MediaQuery.sizeOf(context).width >= 720) ...[
+                    const SizedBox(width: 12),
+                    const Text('ScaledCircle Command Center'),
+                  ],
+                ],
               ),
         actions: [
           if (MediaQuery.sizeOf(context).width >= 520)

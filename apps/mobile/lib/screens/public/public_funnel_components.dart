@@ -38,7 +38,7 @@ void openPublicRoleChooser(BuildContext context) {
       backgroundColor: publicPanel,
       title: const Text('How do you want to use ScaledCircle?'),
       content: const Text(
-        'Choose the path that fits you. You can switch perspectives anytime.',
+        'Choose the path that fits you.',
         style: TextStyle(color: publicMuted),
       ),
       actions: [
@@ -83,32 +83,14 @@ class ScaledCircleBrand extends StatelessWidget {
           onTap: () => AppNavigation.replace(context, '/'),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  'web/icons/Icon-192.png',
-                  width: compact ? 34 : 40,
-                  height: compact ? 34 : 40,
-                  semanticLabel: 'ScaledCircle logo',
-                  filterQuality: FilterQuality.high,
-                ),
-                if (showWordmark) ...[
-                  const SizedBox(width: 9),
-                  Flexible(
-                    child: Text(
-                      compact ? 'ScaledCircle' : 'SCALEDCIRCLE',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: compact ? 15 : 16,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: compact ? .1 : 1.1,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+            child: Image.asset(
+              showWordmark
+                  ? 'assets/brand/scaledcircle-lockup-dark-surface.png'
+                  : 'assets/brand/scaledcircle-symbol.png',
+              height: compact ? 34 : 42,
+              fit: BoxFit.contain,
+              semanticLabel: 'ScaledCircle logo',
+              filterQuality: FilterQuality.high,
             ),
           ),
         ),

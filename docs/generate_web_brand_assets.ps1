@@ -1,106 +1,133 @@
+param([string]$Source = (Join-Path $PSScriptRoot '..\apps\mobile\assets\brand\source\scaledcircle-approved-artwork.png'))
+
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-
-$web = Join-Path $PSScriptRoot '..\apps\mobile\web'
+$app = Join-Path $PSScriptRoot '..\apps\mobile'
+$brand = Join-Path $app 'assets\brand'
+$web = Join-Path $app 'web'
 $icons = Join-Path $web 'icons'
-$social = Join-Path $web 'social'
-New-Item -ItemType Directory -Force -Path $social | Out-Null
+New-Item -ItemType Directory -Force -Path $brand, $icons | Out-Null
 
-function New-Graphics([int]$width, [int]$height) {
-  $bitmap = New-Object System.Drawing.Bitmap($width, $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-  $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-  $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-  $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-  $graphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#020914'))
-  return @($bitmap, $graphics)
+function Remove-WhiteCanvas([System.Drawing.Bitmap]$source, [System.Drawing.Rectangle]$rect) {
+  $result = New-Object System.Drawing.Bitmap($rect.Width, $rect.Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  for ($y = 0; $y -lt $rect.Height; $y++) {
+    for ($x = 0; $x -lt $rect.Width; $x++) {
+      $pixel = $source.GetPixel($rect.X + $x, $rect.Y + $y)
+      $minimum = [Math]::Min($pixel.R, [Math]::Min($pixel.G, $pixel.B))
+      $maximum = [Math]::Max($pixel.R, [Math]::Max($pixel.G, $pixel.B))
+      $chroma = $maximum - $minimum
+      # The supplied raster has a lightly compressed off-white canvas. Remove
+      # neutral near-white pixels while retaining colored anti-aliased edges.
+      if ($minimum -ge 248 -or ($minimum -ge 220 -and $chroma -le 12)) {
+        $result.SetPixel($x, $y, [System.Drawing.Color]::Transparent); continue
+      }
+      $alpha = if ($minimum -le 235 -or $chroma -ge 18) { 255 } else { [int][Math]::Round((248 - $minimum) * (255 / 13)) }
+      $red = $pixel.R; $green = $pixel.G; $blue = $pixel.B
+      if ($alpha -lt 255 -and $alpha -gt 0) {
+        $red = [int][Math]::Max(0, [Math]::Min(255, 255 - ((255 - $pixel.R) * 255 / $alpha)))
+        $green = [int][Math]::Max(0, [Math]::Min(255, 255 - ((255 - $pixel.G) * 255 / $alpha)))
+        $blue = [int][Math]::Max(0, [Math]::Min(255, 255 - ((255 - $pixel.B) * 255 / $alpha)))
+      }
+      $result.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($alpha, $red, $green, $blue))
+    }
+  }
+  return $result
 }
 
-function Draw-Mark($graphics, [float]$x, [float]$y, [float]$size) {
-  $green = [System.Drawing.ColorTranslator]::FromHtml('#14E39A')
-  $blue = [System.Drawing.ColorTranslator]::FromHtml('#52A5FF')
-  $white = [System.Drawing.ColorTranslator]::FromHtml('#F4F8FC')
-  $outer = New-Object System.Drawing.Pen($green, [Math]::Max(4, $size * .105))
-  $inner = New-Object System.Drawing.Pen($blue, [Math]::Max(3, $size * .082))
-  $graphics.DrawEllipse($outer, $x, $y, $size, $size)
-  $inside = $size * .43
-  $offset = ($size - $inside) / 2
-  $graphics.DrawEllipse($inner, $x + $offset, $y + $offset, $inside, $inside)
-  $dot = $size * .1
-  $graphics.FillEllipse((New-Object System.Drawing.SolidBrush($white)), $x + ($size - $dot) / 2, $y + ($size - $dot) / 2, $dot, $dot)
-  $outer.Dispose(); $inner.Dispose()
+function Recolor-Opacity([System.Drawing.Bitmap]$source, [System.Drawing.Color]$color) {
+  $result = New-Object System.Drawing.Bitmap($source.Width, $source.Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  for ($y = 0; $y -lt $source.Height; $y++) {
+    for ($x = 0; $x -lt $source.Width; $x++) {
+      $result.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($source.GetPixel($x, $y).A, $color.R, $color.G, $color.B))
+    }
+  }
+  return $result
 }
 
-function Save-Icon([int]$size, [string]$path, [float]$scale) {
-  $canvas = New-Graphics $size $size
-  $bitmap = $canvas[0]; $graphics = $canvas[1]
-  $mark = $size * $scale
-  Draw-Mark $graphics (($size - $mark) / 2) (($size - $mark) / 2) $mark
-  $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-  $graphics.Dispose(); $bitmap.Dispose()
+function Resize-Bitmap([System.Drawing.Bitmap]$source, [int]$width, [int]$height) {
+  $result = New-Object System.Drawing.Bitmap($width, $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $graphics = [System.Drawing.Graphics]::FromImage($result)
+  try {
+    $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+    $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+    $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $graphics.DrawImage($source, 0, 0, $width, $height)
+  } finally { $graphics.Dispose() }
+  return $result
 }
 
-Save-Icon 64 (Join-Path $web 'favicon.png') .66
-Save-Icon 192 (Join-Path $icons 'Icon-192.png') .58
-Save-Icon 512 (Join-Path $icons 'Icon-512.png') .58
-Save-Icon 192 (Join-Path $icons 'Icon-maskable-192.png') .48
-Save-Icon 512 (Join-Path $icons 'Icon-maskable-512.png') .48
+function Save-Png([System.Drawing.Bitmap]$bitmap, [string]$path) { $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png) }
 
-$canvas = New-Graphics 1200 630
-$bitmap = $canvas[0]; $g = $canvas[1]
-$surface = [System.Drawing.ColorTranslator]::FromHtml('#071525')
-$raised = [System.Drawing.ColorTranslator]::FromHtml('#0B1D30')
-$border = [System.Drawing.ColorTranslator]::FromHtml('#173653')
-$green = [System.Drawing.ColorTranslator]::FromHtml('#14E39A')
-$blue = [System.Drawing.ColorTranslator]::FromHtml('#52A5FF')
-$white = [System.Drawing.ColorTranslator]::FromHtml('#F4F8FC')
-$muted = [System.Drawing.ColorTranslator]::FromHtml('#9EB2C4')
-
-$grid = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(70, 23, 54, 83), 1)
-for ($x = 0; $x -lt 1200; $x += 72) { $g.DrawLine($grid, $x, 0, $x, 630) }
-for ($y = 0; $y -lt 630; $y += 72) { $g.DrawLine($grid, 0, $y, 1200, $y) }
-
-Draw-Mark $g 58 44 68
-$brand = New-Object System.Drawing.Font('Segoe UI', 31, [System.Drawing.FontStyle]::Bold)
-$headline = New-Object System.Drawing.Font('Segoe UI', 35, [System.Drawing.FontStyle]::Bold)
-$body = New-Object System.Drawing.Font('Segoe UI', 16)
-$label = New-Object System.Drawing.Font('Segoe UI', 13, [System.Drawing.FontStyle]::Bold)
-$value = New-Object System.Drawing.Font('Segoe UI', 22, [System.Drawing.FontStyle]::Bold)
-$g.DrawString('Scaled', $brand, (New-Object System.Drawing.SolidBrush($white)), 143, 52)
-$g.DrawString('Circle', $brand, (New-Object System.Drawing.SolidBrush($blue)), 249, 52)
-$g.DrawString('Smarter local campaigns.', $headline, (New-Object System.Drawing.SolidBrush($white)), 58, 166)
-$g.DrawString('Verified in the field.', $headline, (New-Object System.Drawing.SolidBrush($green)), 58, 224)
-$g.DrawString('Map territories, estimate homes and pay.', $body, (New-Object System.Drawing.SolidBrush($muted)), 62, 306)
-$g.DrawString('Connect with Scalers and verify GPS coverage.', $body, (New-Object System.Drawing.SolidBrush($muted)), 62, 340)
-$g.DrawString('MARYLAND EARLY ACCESS', $label, (New-Object System.Drawing.SolidBrush($green)), 62, 428)
-$g.DrawString('scaledcircle.com', $label, (New-Object System.Drawing.SolidBrush($blue)), 62, 566)
-
-$g.FillRectangle((New-Object System.Drawing.SolidBrush($surface)), 662, 58, 480, 508)
-$g.DrawRectangle((New-Object System.Drawing.Pen($border, 3)), 662, 58, 480, 508)
-$g.DrawString('CAMPAIGN OPPORTUNITY MAP', $label, (New-Object System.Drawing.SolidBrush($white)), 704, 94)
-$route = [System.Drawing.PointF[]]@(
-  [System.Drawing.PointF]::new(714, 284), [System.Drawing.PointF]::new(790, 190),
-  [System.Drawing.PointF]::new(902, 154), [System.Drawing.PointF]::new(1050, 222),
-  [System.Drawing.PointF]::new(1006, 354), [System.Drawing.PointF]::new(866, 394),
-  [System.Drawing.PointF]::new(752, 342)
-)
-$g.FillPolygon((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(58, 40, 126, 255))), $route)
-$g.DrawPolygon((New-Object System.Drawing.Pen($blue, 7)), $route)
-foreach ($point in $route) {
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush($white)), $point.X - 9, $point.Y - 9, 18, 18)
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush($blue)), $point.X - 5, $point.Y - 5, 10, 10)
+function New-Lockup([System.Drawing.Bitmap]$symbol, [System.Drawing.Bitmap]$scaled, [System.Drawing.Bitmap]$circle, [System.Drawing.Color]$wordColor, [string]$path) {
+  $height = 145
+  $left = Recolor-Opacity $scaled $wordColor
+  $right = Recolor-Opacity $circle $wordColor
+  $symbolWidth = [int][Math]::Round($symbol.Width * $height / $symbol.Height)
+  $smallSymbol = Resize-Bitmap $symbol $symbolWidth $height
+  $brandGap = 28; $wordGap = 4
+  $result = New-Object System.Drawing.Bitmap(($symbolWidth + $brandGap + $scaled.Width + $wordGap + $circle.Width), $height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $graphics = [System.Drawing.Graphics]::FromImage($result)
+  try {
+    $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+    $graphics.Clear([System.Drawing.Color]::Transparent)
+    $graphics.DrawImageUnscaled($smallSymbol, 0, 0)
+    $graphics.DrawImageUnscaled($left, $symbolWidth + $brandGap, 0)
+    $graphics.DrawImageUnscaled($right, $symbolWidth + $brandGap + $scaled.Width + $wordGap, 0)
+    Save-Png $result $path
+  } finally { $graphics.Dispose(); $result.Dispose(); $smallSymbol.Dispose(); $left.Dispose(); $right.Dispose() }
 }
 
-$metricX = @(692, 842, 992)
-$values = @('548', '7.4 mi', '$120')
-$labels = @('Estimated homes', 'Walking distance', 'Estimated pay')
-for ($i = 0; $i -lt 3; $i++) {
-  $g.FillRectangle((New-Object System.Drawing.SolidBrush($raised)), $metricX[$i], 454, 134, 82)
-  $g.DrawRectangle((New-Object System.Drawing.Pen($border, 2)), $metricX[$i], 454, 134, 82)
-  $g.DrawString($values[$i], $value, (New-Object System.Drawing.SolidBrush($white)), $metricX[$i] + 12, 462)
-  $g.DrawString($labels[$i], (New-Object System.Drawing.Font('Segoe UI', 10)), (New-Object System.Drawing.SolidBrush($muted)), $metricX[$i] + 12, 506)
-}
+$sourceBitmap = [System.Drawing.Bitmap]::FromFile((Resolve-Path $Source))
+try {
+  $expectedHash = '7FE471F94A00BD5595B9C48EA5EDE2EBF52004FC94B6C31EF65A279735D874FB'
+  $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Resolve-Path $Source)).Hash
+  if ($actualHash -ne $expectedHash) { throw 'Approved canonical source hash changed.' }
+  if ($sourceBitmap.Width -ne 1254 -or $sourceBitmap.Height -ne 1254) { throw 'Approved source dimensions changed.' }
+  # Bounds measured from the approved pixels. No artwork is redrawn or vector-traced.
+  $symbol = Remove-WhiteCanvas $sourceBitmap ([System.Drawing.Rectangle]::new(342, 160, 550, 582))
+  $scaled = Remove-WhiteCanvas $sourceBitmap ([System.Drawing.Rectangle]::new(97, 773, 560, 145))
+  $circle = Remove-WhiteCanvas $sourceBitmap ([System.Drawing.Rectangle]::new(704, 773, 460, 145))
+  $secondary = Remove-WhiteCanvas $sourceBitmap ([System.Drawing.Rectangle]::new(97, 160, 1068, 837))
+  try {
+    Save-Png $symbol (Join-Path $brand 'scaledcircle-symbol.png')
+    Save-Png $secondary (Join-Path $brand 'scaledcircle-secondary-marketing-lockup.png')
+    New-Lockup $symbol $scaled $circle ([System.Drawing.ColorTranslator]::FromHtml('#FFFFFF')) (Join-Path $brand 'scaledcircle-lockup-dark-surface.png')
+    New-Lockup $symbol $scaled $circle ([System.Drawing.ColorTranslator]::FromHtml('#062650')) (Join-Path $brand 'scaledcircle-lockup-light-surface.png')
+    foreach ($icon in @(
+      @{Size=64; Path=(Join-Path $web 'favicon.png'); Scale=.92},
+      @{Size=192; Path=(Join-Path $icons 'Icon-192.png'); Scale=.92},
+      @{Size=512; Path=(Join-Path $icons 'Icon-512.png'); Scale=.92},
+      @{Size=192; Path=(Join-Path $icons 'Icon-maskable-192.png'); Scale=.78},
+      @{Size=512; Path=(Join-Path $icons 'Icon-maskable-512.png'); Scale=.78}
+    )) {
+      $height = [int][Math]::Round($icon.Size * $icon.Scale)
+      $width = [int][Math]::Round($symbol.Width * $height / $symbol.Height)
+      $resized = Resize-Bitmap $symbol $width $height
+      $canvas = New-Object System.Drawing.Bitmap($icon.Size, $icon.Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+      $graphics = [System.Drawing.Graphics]::FromImage($canvas)
+      try {
+        $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+        $graphics.Clear([System.Drawing.Color]::Transparent)
+        $graphics.DrawImageUnscaled($resized, [int](($icon.Size-$width)/2), [int](($icon.Size-$height)/2))
+        Save-Png $canvas $icon.Path
+      } finally { $graphics.Dispose(); $canvas.Dispose(); $resized.Dispose() }
+    }
 
-$bitmap.Save((Join-Path $social 'scaled-circle-social-preview.png'), [System.Drawing.Imaging.ImageFormat]::Png)
-$grid.Dispose(); $brand.Dispose(); $headline.Dispose(); $body.Dispose(); $label.Dispose(); $value.Dispose()
-$g.Dispose(); $bitmap.Dispose()
-Write-Host 'Generated Scaled Circle web brand assets.'
+    $socialPath = Join-Path $web 'social\scaled-circle-social-preview.png'
+    New-Item -ItemType Directory -Force -Path (Split-Path $socialPath) | Out-Null
+    $socialLockup = [System.Drawing.Bitmap]::FromFile((Join-Path $brand 'scaledcircle-lockup-dark-surface.png'))
+    $socialCanvas = New-Object System.Drawing.Bitmap(1200, 630, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $socialGraphics = [System.Drawing.Graphics]::FromImage($socialCanvas)
+    try {
+      $socialGraphics.Clear([System.Drawing.ColorTranslator]::FromHtml('#020914'))
+      $lockupWidth = 980
+      $lockupHeight = [int][Math]::Round($socialLockup.Height * $lockupWidth / $socialLockup.Width)
+      $lockup = Resize-Bitmap $socialLockup $lockupWidth $lockupHeight
+      try { $socialGraphics.DrawImageUnscaled($lockup, 110, [int]((630-$lockupHeight)/2)); Save-Png $socialCanvas $socialPath }
+      finally { $lockup.Dispose() }
+    } finally { $socialGraphics.Dispose(); $socialCanvas.Dispose(); $socialLockup.Dispose() }
+  } finally { $symbol.Dispose(); $scaled.Dispose(); $circle.Dispose(); $secondary.Dispose() }
+} finally { $sourceBitmap.Dispose() }
+
+Write-Output 'Generated transparent ScaledCircle assets from the approved canonical source.'

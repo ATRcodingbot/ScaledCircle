@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../config/app_environment.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
+import '../../widgets/scaled_circle_brand.dart';
 
 import '../notifications/notifications_screen.dart';
 import '../public/early_access_pending_screen.dart';
@@ -333,7 +334,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Scaled Circle'), centerTitle: true),
+      appBar: AppBar(title: const ScaledCircleBrand(), centerTitle: true),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -348,7 +349,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 8),
 
-              const Text('Log in to continue to Scaled Circle.'),
+              const Text('Log in to continue to ScaledCircle.'),
 
               const SizedBox(height: 30),
 

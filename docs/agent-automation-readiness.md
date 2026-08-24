@@ -80,6 +80,21 @@ The current autonomy contract remains: observe-only and draft-only consumers may
 
 P0 Batch 3 replaces the conceptual Sales rows above with a first deterministic boundary: `getSalesPipeline`, `mutateSalesLead`, and `recordSalesActivity`. These human-operated, Admin-authorized launch APIs are deployed and hosted-verified in staging with zero secrets. The Internal QA flow proved structured suppression and activity/follow-up state without outbound delivery. Future agents may consume the redacted output, suppression state, follow-up schedule, attribution, and activity history, but autonomous discovery/research/outreach remains **NOT YET IMPLEMENTED**.
 
+## Canonical brand and marketing truth
+
+Marketing, Content, Sales, Growth, and future Supervisor agents must use only the
+approved assets documented in `docs/brand-system.md`. They may select an approved
+variant, place it in a composition, and resize it proportionally. They must never
+draw, trace, approximate, or AI-generate the ScaledCircle symbol or wordmark. A
+missing format must be mechanically derived from the canonical source or sent for
+human brand review.
+
+Marketing claims must reflect real product behavior, screenshots, campaigns,
+metrics, Scaler activity, customer activity, and approved announcements. Agents
+must not invent features, statistics, campaigns, testimonials, partnerships,
+markets, or results. Prefer showing the real product over generic promotional
+copy.
+
 ## Business funnel
 
 Prospect → Qualified → Contacted → Follow-up → Interested → Signup → Activated → First Campaign → Paid → Retained.

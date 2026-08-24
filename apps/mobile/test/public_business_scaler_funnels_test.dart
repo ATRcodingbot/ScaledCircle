@@ -253,7 +253,10 @@ void main() {
     ).readAsStringSync();
     final html = File('web/index.html').readAsStringSync();
 
-    expect(components, contains("'web/icons/Icon-192.png'"));
+    expect(
+      components,
+      contains("'assets/brand/scaledcircle-lockup-dark-surface.png'"),
+    );
     expect(components, contains('How do you want to use ScaledCircle?'));
     expect(business, contains('Service Area'));
     expect(business, contains('Campaign Target'));
@@ -285,7 +288,8 @@ void main() {
     expect(html, contains('twitter:title'));
     expect(html, contains('twitter:description'));
     expect(html, contains('twitter:image'));
-    expect(html, contains('icons/scaled-circle-mark.svg'));
+    expect(html, contains('href="favicon.png"'));
+    expect(html, isNot(contains('scaled-circle-mark.svg')));
     expect(
       html,
       contains(

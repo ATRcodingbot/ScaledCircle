@@ -6,6 +6,7 @@ import '../../config/app_environment.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 import '../../services/secure_function_service.dart';
+import '../../widgets/scaled_circle_brand.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -87,7 +88,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('ScaledCircle Administration')),
+    appBar: AppBar(title: const ScaledCircleBrand(compact: true)),
     body: Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440),
