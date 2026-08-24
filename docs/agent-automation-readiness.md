@@ -58,7 +58,7 @@ These are not ready for unattended production automation until structured APIs, 
 
 ## Available P0 operations interfaces
 
-The staging P0 Batch 2 candidate provides structured, Admin-authorized outputs through `getAdminOperationsOverview` and `getAdminCampaignTimeline`, plus the typed `updateAdminSupportCaseStatus` command. These interfaces expose bounded exceptions, severity, entity references, timestamps, current status, allowed navigation/action hints, categorical health, and a derived authoritative timeline. They are designed for future Operations/Supervisor consumption without Flutter scraping or free-form Firestore mutation. Production promotion is not yet approved.
+Production P0 Batch 2 provides structured, Admin-authorized outputs through `getAdminOperationsOverview` and `getAdminCampaignTimeline`, plus the typed `updateAdminSupportCaseStatus` command. These interfaces expose bounded exceptions, severity, entity references, timestamps, current status, allowed navigation/action hints, categorical health, and a derived authoritative timeline. They are designed for future Operations/Supervisor consumption without Flutter scraping or free-form Firestore mutation. No autonomous agent control is implemented.
 
 The current autonomy contract remains: observe-only and draft-only consumers may read redacted outputs; consequential recovery stays approval-required; no agent may create payment, refund, earning, Wallet, transfer, payout, role, or security authority.
 

@@ -58,15 +58,15 @@ Audit date: 2026-08-23. This file contains only P0 findings. P0 Batch 1 was prom
 - Likely scope: legal content/links, consent versioning, professional legal review.
 - Staging proof: link, responsive, accessibility, and acceptance-record tests. This audit does not offer legal conclusions.
 
-## P0-7 — Minimum launch operations cannot be completed inside ScaledCircle — RESOLVED IN STAGING
+## P0-7 — Minimum launch operations cannot be completed inside ScaledCircle — LIVE + VERIFIED
 
-- Status: the P0 Batch 2 candidate is staging-hosted and ready for a separate production review. Admin Home now provides one Needs Attention queue, bounded operational metrics, recent authoritative activity, categorical system health, and a derived campaign timeline.
+- Production status: P0 Batch 2 is live and manually verified. Admin Home provides one Needs Attention queue, bounded operational metrics, recent authoritative activity, categorical system health, and a derived campaign timeline.
 - Authority: `admin-ops-core` exposes three Admin-only, server-authoritative interfaces for the overview, campaign timeline, and typed support-case status transitions. Business, Scaler, and signed-out access fail closed. The codebase has zero provider-secret bindings.
 - Financial safety: normal payments/refunds remain notifications and timeline events, not exceptions. Financial summaries distinguish customer gross, worker allocation, ScaledCircle fee, refunds, and worker earnings. The UI cannot create payment, refund, earning, Wallet, transfer, or payout authority.
 - Support: the hosted zero-state and existing staging data passed; the typed Open → In Progress → Resolved transaction path, authorization, audit, and replay behavior are covered by focused tests. No generic Firestore editor exists.
-- Hosted proof: staging Admin loaded the Command Center and the preserved campaign timeline; a normal $9.60 TEST payment displayed an $8.00 worker allocation and $1.60 platform fee. Business and Scaler normal Auth sessions were denied Admin Ops. Responsive Admin and Sign Out passed without financial mutation.
-- Remaining release action: curate and promote only the reviewed Admin Ops Functions and Hosting in a separately approved production release.
+- Production proof: Admin normal login, reload, Command Center, Needs Attention, metrics, activity, health, timeline, support surface, responsive layout, Sign Out, and post-logout denial passed. Business and Scaler normal Auth sessions were denied Admin Ops. The live bundle exactly matched the certified production build. No financial or historical-record mutation occurred.
+- Runtime scope: exactly three `admin-ops-core` Functions and Hosting; zero Rules or unrelated Function deployments.
 
 ## Launch rule
 
-Official launch remains blocked by unresolved P0-1, P0-2, P0-3, P0-5, and P0-6; security-critical findings must be zero and rollback/runbooks reviewed. P0-4 and P0 Batch 1 are live and production-verified. P0-7 is resolved in the staging-proven P0 Batch 2 candidate and awaits separate production promotion approval.
+Official launch remains blocked by unresolved P0-1, P0-2, P0-3, P0-5, and P0-6; security-critical findings must be zero and rollback/runbooks reviewed. P0-4/P0 Batch 1 and P0-7/P0 Batch 2 are live and production-verified.

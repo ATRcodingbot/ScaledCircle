@@ -4,7 +4,7 @@ Audit date: 2026-08-23. Evidence: current local source, test suites, reviewed st
 
 ## Executive assessment
 
-The core Business Stripe lifecycle and reload-safe routing are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. P0 Batch 2 now provides a staging-proven minimum Admin/Ops Command Center. ScaledCircle is not ready for official launch because five P0 gates remain: physical Android proof, production worker-authority parity, a supportable worker cash-out model, minimum Sales workflow, and discoverable legal/trust surfaces.
+The core Business Stripe lifecycle, reload-safe routing, and minimum Admin/Ops Command Center are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. ScaledCircle is not ready for official launch because five P0 gates remain: physical Android proof, production worker-authority parity, a supportable worker cash-out model, minimum Sales workflow, and discoverable legal/trust surfaces.
 
 The product should launch around one narrow promise: Businesses fund mapped field campaigns; approved Scalers complete verified work and earn transparent compensation. Intelligence, Managed Growth, social publishing, direct mail, automated outreach, and payout automation must remain gated until each is complete and supportable.
 
@@ -56,10 +56,10 @@ The product should launch around one narrow promise: Businesses fund mapped fiel
 
 ## Admin
 
-- READY IN STAGING: guarded Admin login plus one responsive Command Center with Needs Attention, bounded operational metrics, concise recent activity, categorical health, and an authoritative derived campaign timeline.
+- LIVE + VERIFIED: guarded Admin login plus one responsive Command Center with Needs Attention, bounded operational metrics, concise recent activity, categorical health, and an authoritative derived campaign timeline.
 - P0 Batch 2 authority: Admin-only `admin-ops-core` read models correlate payment/refund, completion/earning, email/provider, support, and campaign/participant exceptions. A typed audited support status command is the only new mutation; no generic document editor exists.
 - Financial copy separates customer gross, worker allocation, platform fee, refund, and worker earning. Provider health is categorical operational evidence, never a fabricated percentage.
-- Hosted staging proved Admin access, Business/Scaler denial, empty/error states, responsive layout, and real preserved campaign/payment/earning timeline data. Production promotion remains separately gated.
+- Production QA proved Admin access, Business/Scaler denial, session restoration, empty/error states, responsive layout, Sign Out, and existing campaign/payment/earning timeline data without financial mutation.
 
 ## Sales
 
@@ -69,7 +69,7 @@ The product should launch around one narrow promise: Businesses fund mapped fiel
 
 ## Operations and support
 
-P0 Batch 2 productizes the minimum routine exception view in staging without replacing payment/refund authority. The Command Center correlates authoritative ScaledCircle records, while high-authority financial recovery remains behind existing purpose-built controls and human review rather than raw console editing.
+P0 Batch 2 productizes the minimum routine exception view in production without replacing payment/refund authority. The Command Center correlates authoritative ScaledCircle records, while high-authority financial recovery remains behind existing purpose-built controls and human review rather than raw console editing.
 
 | Event | Launch operating class | Required behavior |
 |---|---|---|
@@ -196,7 +196,7 @@ The proposed agent permissions and APIs are in `agent-automation-readiness.md`. 
 2. Physical Android gate and defects found there.
 3. Production completion/job-room ownership migration and legacy sequencing.
 4. Worker cash-out policy/TEST gate and truthful Wallet presentation.
-5. Promote the staging-proven minimum Admin/Support Command Center after curated production review.
+5. Retain and monitor the production-verified minimum Admin/Support Command Center; expand only from measured operational need.
 6. Public trust/legal surface with professional review.
 7. Minimum internal Sales funnel.
 8. Top P1 simplification/state-consistency work.

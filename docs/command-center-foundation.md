@@ -1,6 +1,6 @@
 # ScaledCircle Command Center Foundation
 
-Status: P0 Batch 2 staging candidate. Production is unchanged.
+Status: P0 Batch 2 is live and production-verified as of 2026-08-23. The three `admin-ops-core` Functions and reviewed Command Center Hosting surface are deployed; no financial action occurred during release or QA.
 
 ## Product boundary
 
