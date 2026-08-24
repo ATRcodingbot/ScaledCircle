@@ -54,9 +54,9 @@ No prospect discovery, research agent, scoring agent, message generation, outbou
 
 ## Hosted staging proof
 
-The deployed `sales-core` Functions are ACTIVE, Gen 2, Node.js 24, `us-east1`, source hash `a45885d65a551250b1ffe01f6c118ad40ff04950`, and have zero secret bindings. The hosted bundle SHA-256 is `63ABF03DB02C9AD15FD2B4D81E63180AB6D429803EEEDD74F7F6BA1773A4920B`, with an exact live match.
+The deployed `sales-core` Functions are ACTIVE, Gen 2, Node.js 24, `us-east1`, source hash `a45885d65a551250b1ffe01f6c118ad40ff04950`, and have zero secret bindings. The final hosted bundle SHA-256 is `4E657E7AE6D0527AA9BF8CBE89FF350F8397F7923CFA6F178D6BCC5CB9248EA1`, with an exact live match.
 
-An Admin created one clearly marked `ScaledCircle Batch 3 Internal QA` prospect with a non-deliverable `example.invalid` contact. Through the normal hosted UI it passed qualification, a non-outbound activity ledger entry, follow-up scheduling, an internal-only note, Interested stage, and Do Not Contact suppression. Counts updated authoritatively and the suppressed record was removed from the actionable Today queue. Business and Scaler normal sessions were denied `/sales`; Scaler was also denied `/business`; all actors signed out cleanly. No outbound message, financial action, production write, or provider action occurred.
+An Admin created one clearly marked `ScaledCircle Batch 3 Internal QA` prospect with a non-deliverable `example.invalid` contact. Through the normal hosted UI it passed qualification, a non-outbound activity ledger entry, follow-up scheduling, an internal-only note, Interested stage, and Do Not Contact suppression. Counts updated authoritatively and the suppressed record was removed from the actionable Today queue. Recent activity and the lead-specific activity history render human summaries without backend IDs. Business and Scaler normal sessions were denied `/sales`; Scaler was also denied `/business`; all actors signed out cleanly. No outbound message, financial action, production write, or provider action occurred.
 
 ## Separate follow-up
 
