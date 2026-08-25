@@ -1,11 +1,31 @@
 # P0 Batch 4 Production Promotion Manifest
 
-Status: **PRODUCTION REVIEWED — NOT DEPLOYED**  
-Review date: 2026-08-24  
-Candidate: `8e0a65d8df6efe2967a036827746156e3eafcee8`  
+Status: **PRODUCTION DEPLOYED + VERIFIED**
+Review date: 2026-08-24; production deployment verified 2026-08-25
+Runtime candidate: `8e0a65d8df6efe2967a036827746156e3eafcee8`
+Final clean deployment candidate: `d8c457d7bc0b246f560a315920fe98213217a740`
 Production Git baseline: `9e4867518593cb1440117740f924e8edac86a711`
 
-This is the coordinated release manifest for versioned legal consent. It is not deployment approval. Production writes, deployments, Stripe calls, and financial actions during this review were zero.
+This is the completed coordinated release record for versioned legal consent. The exact six callable targets, Hosting bundle, and Firestore Rules change were deployed in the reviewed order. No payment, refund, earning, Wallet, Connect, transfer, payout, or outbound communication occurred.
+
+## Production deployment record
+
+| Callable | Owner | Generation / source hash | Runtime / region | Secret bindings |
+|---|---|---|---|---|
+| `recordLegalConsent` | `legal-core` | `1787623273894744` / `150e2caf5ae7818bcd3e8ef8eb7d5224b3e03dbb` | Node.js 24 Gen 2 / `us-east1` | none |
+| `getLegalConsentStatus` | `legal-core` | `1787623311681657` / `150e2caf5ae7818bcd3e8ef8eb7d5224b3e03dbb` | Node.js 24 Gen 2 / `us-east1` | none |
+| `applyToCampaign` | `application-core` | `1787623273991503` / `e817636b1471cc062bd7c33c84046b642ba83d3f` | Node.js 24 Gen 2 / `us-east1` | none |
+| `assignScalerToZone` | `assignment-core` | `1787623274321991` / `ffe593cbb20359891c51a21361254bbce1acb914` | Node.js 24 Gen 2 / `us-east1` | none |
+| `acceptZoneGroupSlot` | `assignment-core` | `1787623322431459` / `ffe593cbb20359891c51a21361254bbce1acb914` | Node.js 24 Gen 2 / `us-east1` | none |
+| `createCampaignFundingCheckoutSession` | `campaign-funding` | `1787623274460526` / `c2bdc89b113f1cae9bc78b62475d251c47fab8da` | Node.js 24 Gen 2 / `us-east1` | `STRIPE_LIVE_SECRET_KEY` |
+
+Each target is ACTIVE and has exactly one deployed callable owner. `configureZoneGroupAssignment` was not redeployed; `completion-core:startTrackingSession` remains absent from production.
+
+Hosting release `1787623420310000`, version `c8811a396e5683bb`, was released at `2026-08-25T02:03:40.310Z`. The custom domain and Firebase origin both matched certified `main.dart.js` SHA-256 `1D8A754B6390F86D8BE7C659685FCCB905D7663AEDDD871C5308482378CBBE9C`.
+
+Firestore release `projects/scaled-circle/releases/cloud.firestore` now selects ruleset `projects/scaled-circle/rulesets/08214668-9748-429f-b2c3-c8a319978634`, created `2026-08-25T02:04:12.612367Z`. Its content SHA-256 is `F3FC592EC48329CEC2E5E548467DCBC94949819CDF0814E883A09AC9FDCB905F`, exactly matching the reviewed candidate. Storage Rules were not deployed.
+
+Safe production probes returned HTTP 401 for all six signed-out callables and HTTP 403 for a unique signed-out direct application create. Public `/legal`, `/terms`, `/privacy`, `/payments-refunds`, `/scaler-terms`, and `/support` routes loaded from the exact live bundle. No production customer fixture or financial state was manufactured. Staging actor proof and the production authority inventory remain the evidence for authenticated application creation, own/cross-user direct-create denial, and authorized read compatibility.
 
 ## Current production inventory
 
@@ -196,4 +216,4 @@ No rollback step may fabricate consent, mutate customer agreements, or touch Wal
 - Physical Android and production worker-lifecycle migration: **OPEN**.
 - Cash-out/Connect/transfer/payout: unchanged and excluded.
 
-Final technical decision: the coordinated production promotion is technically ready, subject to explicit deployment approval and exact-scope execution of this manifest.
+Final technical decision: P0 Batch 4 consent authority is production-deployed and technically verified. Professional attorney review remains OPEN; location-consent server enforcement and the physical Android worker-lifecycle gate remain DEFERRED/OPEN.

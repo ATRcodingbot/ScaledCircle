@@ -44,6 +44,8 @@ The remediation candidate adds bounded own-user `legal-core:getLegalConsentStatu
 
 Staging consent authority is verified. Firestore Rules now deny direct application creation so `application-core:applyToCampaign` is the exclusive authority. Hosted QA proved a legacy Scaler retains dashboard/profile/Wallet access, a new application is blocked until the current Terms and Scaler Work Terms are accepted, the server creates exactly one application afterward, and a synthetic legacy applicant cannot receive a new assignment obligation until the same current agreements exist. The post-consent assignment created one immutable compensation contract with no earning or Wallet mutation. Firestore Rules passed 20/20 and Storage Rules passed 6/6.
 
+Production consent engineering was deployed and verified on 2026-08-25 from the reviewed runtime candidate plus a documentation-only release-record commit. Exactly six consent-owning callables are ACTIVE under `legal-core`, `application-core`, `assignment-core`, and `campaign-funding`; Hosting matches the certified bundle; and Firestore ruleset `08214668-9748-429f-b2c3-c8a319978634` closes direct client application creation. Safe signed-out probes returned 401 for every callable and 403 for direct Firestore create. Storage Rules and unrelated Functions were not deployed. Professional attorney review remains open.
+
 `completion-core:startTrackingSession` contains the reviewed `location-notice-2026-08-v1` gate for new sessions, while existing active/paused sessions remain recoverable. That location-consent enforcement is **not production-active** and remains deferred to the physical-device/worker-lifecycle promotion.
 
 Versions:

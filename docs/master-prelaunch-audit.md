@@ -4,7 +4,7 @@ Audit date: 2026-08-24. Evidence: current source, test suites, reviewed staging 
 
 ## Executive assessment
 
-The core Business Stripe lifecycle, reload-safe routing, minimum Admin/Ops Command Center, and minimum Sales workflow are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. Public legal discovery is staging-proven; action-level consent enforcement is implemented and locally recertified but awaits authorization to deploy its required server-only application Rule before hosted staging proof. ScaledCircle is not ready for official launch because physical Android proof, production worker-authority parity, worker cash-out, professional legal review, and consent deployment closure remain open.
+The core Business Stripe lifecycle, reload-safe routing, minimum Admin/Ops Command Center, minimum Sales workflow, public legal discovery, and action-level consent authority are production-proven, while the new worker earning boundary is staging-proven through the Android emulator. ScaledCircle is not ready for official launch because physical Android proof, production worker-authority parity, worker cash-out, and professional legal review remain open.
 
 The product should launch around one narrow promise: Businesses fund mapped field campaigns; approved Scalers complete verified work and earn transparent compensation. Intelligence, Managed Growth, social publishing, direct mail, automated outreach, and payout automation must remain gated until each is complete and supportable.
 
@@ -43,6 +43,7 @@ The product should launch around one narrow promise: Businesses fund mapped fiel
 - The consent-action candidate uses one canonical exact-version helper and structured `LEGAL_CONSENT_REQUIRED` responses. It protects new funding, new Scaler application, new assignment obligations, and new tracking sessions without globally locking out legacy users. Existing active tracking sessions remain recoverable.
 - The server-only application-create Rule is deployed to staging. Hosted actor QA proved direct application authority remains closed, `application-core` creates one post-consent application, and assignment defense-in-depth blocks a legacy applicant until current work consent before creating one immutable obligation. No payment, earning, or Wallet mutation occurred.
 - `location-notice-2026-08-v1` enforcement for new tracking sessions remains source/test-verified in the future worker candidate and is not production-active until the physical-device/worker-lifecycle gate.
+- Production deployment verified 2026-08-25: exactly six consent-owning callables are ACTIVE, the live Hosting bundle matches the certified SHA-256, and Firestore ruleset `08214668-9748-429f-b2c3-c8a319978634` denies direct client application creation. Storage Rules, unrelated Functions, financial state, and worker state were untouched.
 - P1: copy is lengthy and describes architecture rather than showing the product. Pricing, SEO/share metadata, password-reset links, referral persistence, Safari, and unknown-route recovery need launch QA.
 - Decision: launch homepage, role funnels, login/signup, and illustrative map after P0/P1 fixes; hide waitlist for launched roles; keep affiliate entry invite-only.
 
