@@ -375,7 +375,7 @@ class ScalerDashboardScreen extends StatelessWidget {
                 title: 'Local work. Verified progress. Clear earnings.',
                 description:
                     'Find nearby campaigns, complete mapped routes, and keep '
-                    'every approved payment in view.',
+                    'every verified earning in view.',
                 primaryActionLabel: 'Browse Available Work',
                 primaryActionIcon: Icons.explore_outlined,
                 onPrimaryAction: () {
@@ -471,7 +471,7 @@ class ScalerDashboardScreen extends StatelessWidget {
                       context: context,
                       icon: Icons.account_balance_wallet_outlined,
                       title: 'Wallet',
-                      subtitle: 'View approved earnings and payouts.',
+                      subtitle: 'View verified work earnings. Cash-out is not yet available.',
                       accent: AppColors.primary,
                       onTap: () {
                         Navigator.push(

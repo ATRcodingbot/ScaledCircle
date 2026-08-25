@@ -57,8 +57,8 @@ class _BusinessGoalGrid extends StatelessWidget {
       _GoalCard(
         key: const Key('business-goal-create-marketing'),
         icon: Icons.auto_awesome_outlined,
-        title: 'CREATE MARKETING',
-        description: 'Prepare social, SEO, email, ads, and direct mail.',
+        title: 'CREATE MARKETING — BETA',
+        description: 'Prepare reviewed drafts and plans in Managed Growth Beta.',
         onTap: onCreateMarketing,
       ),
       _GoalCard(
@@ -1388,16 +1388,15 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
     switch (plan) {
       case 'starter':
         return 'Core campaigns, zone mapping, GPS verification, '
-            'Scaler access, payouts, and basic analytics.';
+            'Scaler access, and campaign results.';
 
       case 'growth':
-        return 'Higher campaign limits plus lead tracking, landing pages, '
-            'AI marketing tools, and advanced analytics.';
+        return 'Higher campaign limits plus the current Growth feature set. '
+            'Provider-dependent tools are labeled Beta where applicable.';
 
       case 'scale':
-        return 'High-volume access with unlimited operations, teams, '
-            'priority matching, integrations, Weather Intelligence, and '
-            'advanced reporting.';
+        return 'High-volume campaign access plus Property and Weather '
+            'Intelligence Beta.';
 
       case 'managed_growth':
         return 'Everything in Scale plus coordinated AI marketing planning, content packages, and direct-mail management.';

@@ -79,7 +79,9 @@ class ScVerificationCard extends StatelessWidget {
 
               title: const Text("Business Approval Required"),
 
-              subtitle: const Text("Business approves before payout."),
+              subtitle: const Text(
+                "Business review is required before a worker earning is recorded.",
+              ),
 
               value: businessApprovalRequired,
 

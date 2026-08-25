@@ -513,7 +513,7 @@ class CampaignZonesScreen extends StatelessWidget {
                 basePayout + (releaseBonus ? availableBonus : 0.0);
 
             return AlertDialog(
-              title: const Text('Approve Zone Payment'),
+              title: const Text('Approve Work & Record Earning'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -552,7 +552,7 @@ class CampaignZonesScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     if (!isGroup)
                       _reviewMetricRow(
-                        label: 'Base payment',
+                        label: 'Base earning',
                         value: '\$${basePayout.toStringAsFixed(2)}',
                       ),
                     if (!isGroup && availableBonus > 0.0) ...[
@@ -593,7 +593,7 @@ class CampaignZonesScreen extends StatelessWidget {
                     if (!isGroup) ...[
                       const Divider(height: 24),
                       _reviewMetricRow(
-                        label: 'Total to release',
+                        label: 'Total earning to record',
                         value: '\$${approvalTotal.toStringAsFixed(2)}',
                       ),
                     ],
@@ -611,7 +611,7 @@ class CampaignZonesScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.pop(dialogContext, releaseBonus);
                   },
-                  child: const Text('Approve Payment'),
+                  child: const Text('Approve Work'),
                 ),
               ],
             );
@@ -650,7 +650,7 @@ class CampaignZonesScreen extends StatelessWidget {
             isGroup
                 ? '$zoneName group settlement was reserved from the funded worker pool.'
                 : '$zoneName approved. '
-                      '\$${releasedAmount.toStringAsFixed(2)} was released to the Scaler wallet'
+                      '\$${releasedAmount.toStringAsFixed(2)} was recorded as a verified Scaler earning'
                       '${releasedBonus > 0.0 ? ' including a \$${releasedBonus.toStringAsFixed(2)} bonus' : ''}.',
           ),
         ),
@@ -662,7 +662,13 @@ class CampaignZonesScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to approve payment: $e')));
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't approve this work. No earning was recorded. Review the job state and try again.",
+          ),
+        ),
+      );
     }
   }
 
@@ -740,7 +746,7 @@ class CampaignZonesScreen extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$zoneName was returned to the Scaler for additional work.',
+            '$zoneName was returned to the Scaler for additional work. No earning was recorded.',
           ),
         ),
       );
@@ -751,7 +757,13 @@ class CampaignZonesScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to request redo: $e')));
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't request a redo. No earning or job state was changed. Try again.",
+          ),
+        ),
+      );
     }
   }
 
@@ -977,7 +989,7 @@ class CampaignZonesScreen extends StatelessWidget {
                     _approveZonePayout(context, zone);
                   },
                   icon: const Icon(Icons.payments_outlined),
-                  label: const Text('Approve Payment'),
+                  label: const Text('Approve Work'),
                 ),
               ),
 

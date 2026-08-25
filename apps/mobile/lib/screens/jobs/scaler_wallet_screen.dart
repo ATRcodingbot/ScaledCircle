@@ -28,10 +28,25 @@ class ScalerWalletScreen extends StatelessWidget {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Text(
-                  'Unable to load wallet: '
-                  '${walletSnapshot.error}',
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, size: 42),
+                    const SizedBox(height: 12),
+                    const Text(
+                      "We couldn't load your earnings right now.",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Your balance has not been changed. Check your connection and try again.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             );
@@ -74,7 +89,7 @@ class ScalerWalletScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Available Balance',
+                        'Verified Earnings',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
@@ -94,7 +109,7 @@ class ScalerWalletScreen extends StatelessWidget {
                       const SizedBox(height: 8),
 
                       const Text(
-                        'Approved earnings available in your Scaled Circle wallet.',
+                        'Approved work earnings recorded in your ScaledCircle Wallet. Cash-out is not yet available.',
                       ),
                     ],
                   ),
@@ -118,7 +133,7 @@ class ScalerWalletScreen extends StatelessWidget {
                   Expanded(
                     child: _balanceCard(
                       icon: Icons.account_balance_wallet_outlined,
-                      title: 'Total',
+                      title: 'Total Recorded',
                       amount: totalBalance,
                     ),
                   ),
@@ -141,9 +156,9 @@ class ScalerWalletScreen extends StatelessWidget {
                     return Card(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
-                        child: Text(
-                          'Unable to load earnings activity: '
-                          '${transactionSnapshot.error}',
+                        child: const Text(
+                          "We couldn't load your earnings activity. Your balance has not been changed. Try again shortly.",
+                          textAlign: TextAlign.center,
                         ),
                       ),
                     );
@@ -203,7 +218,7 @@ class ScalerWalletScreen extends StatelessWidget {
                             ),
                             SizedBox(height: 6),
                             Text(
-                              'Approved campaign payments will appear here.',
+                              'Verified work earnings will appear here after Business review.',
                               textAlign: TextAlign.center,
                             ),
                           ],

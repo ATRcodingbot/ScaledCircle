@@ -63,6 +63,9 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
   bool _acknowledgingReadiness = false;
   bool _submittingMaterialReceipt = false;
   bool _reportingMaterialIssue = false;
+  bool _savingLogistics = false;
+  bool _respondingToProposal = false;
+  bool _sendingMessage = false;
   String? _activeBusinessDeliveryHandoffId;
 
   @override
@@ -161,16 +164,89 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
   }
 
   Future<void> _saveLogistics() async {
-    await _service.configure(
-      zoneId: widget.zoneId,
-      fulfillmentType: _fulfillmentType,
-      scheduledAt: _scheduledAt,
-      location: _location.text.trim(),
-      printingShopName: _printingShop.text.trim(),
-      orderReference: _orderReference.text.trim(),
-      instructions: _instructions.text.trim(),
-    );
-    await _load();
+    if (_savingLogistics) return;
+    setState(() => _savingLogistics = true);
+    try {
+      await _service.configure(
+        zoneId: widget.zoneId,
+        fulfillmentType: _fulfillmentType,
+        scheduledAt: _scheduledAt,
+        location: _location.text.trim(),
+        printingShopName: _printingShop.text.trim(),
+        orderReference: _orderReference.text.trim(),
+        instructions: _instructions.text.trim(),
+      );
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Material plan saved.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't save the material plan. No job state was changed. Try again.",
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingLogistics = false);
+    }
+  }
+
+  Future<void> _respondToProposal({
+    required String proposalId,
+    required bool accept,
+  }) async {
+    if (_respondingToProposal) return;
+    setState(() => _respondingToProposal = true);
+    try {
+      await _service.respondToMaterialLogisticsChange(
+        proposalId: proposalId,
+        accept: accept,
+      );
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'Material-plan change accepted.'
+                : 'Material-plan change declined.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't record your response. No material plan was changed. Try again.",
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _respondingToProposal = false);
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _message.text.trim();
+    if (text.isEmpty || _sendingMessage) return;
+    setState(() => _sendingMessage = true);
+    try {
+      await _service.sendMessage(widget.zoneId, text);
+      _message.clear();
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("We couldn't send this message. Try again.")),
+      );
+    } finally {
+      if (mounted) setState(() => _sendingMessage = false);
+    }
   }
 
   Future<void> _confirmMaterialReceipt({
@@ -293,6 +369,15 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Material issue sent to the Business and support.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't submit this support request. No job or earning state was changed. Try again.",
+          ),
         ),
       );
     } finally {
@@ -460,24 +545,24 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
               Row(
                 children: [
                   FilledButton(
-                    onPressed: () async {
-                      await _service.respondToMaterialLogisticsChange(
-                        proposalId: proposal['id'].toString(),
-                        accept: true,
-                      );
-                      await _load();
-                    },
-                    child: const Text('Accept Change'),
+                    onPressed: _respondingToProposal
+                        ? null
+                        : () => _respondToProposal(
+                            proposalId: proposal['id'].toString(),
+                            accept: true,
+                          ),
+                    child: Text(
+                      _respondingToProposal ? 'Recording...' : 'Accept Change',
+                    ),
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton(
-                    onPressed: () async {
-                      await _service.respondToMaterialLogisticsChange(
-                        proposalId: proposal['id'].toString(),
-                        accept: false,
-                      );
-                      await _load();
-                    },
+                    onPressed: _respondingToProposal
+                        ? null
+                        : () => _respondToProposal(
+                            proposalId: proposal['id'].toString(),
+                            accept: false,
+                          ),
                     child: const Text('Decline'),
                   ),
                 ],
@@ -621,8 +706,10 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
                 maxLines: 3,
               ),
               FilledButton(
-                onPressed: _saveLogistics,
-                child: const Text('Save Material Logistics'),
+                onPressed: _savingLogistics ? null : _saveLogistics,
+                child: Text(
+                  _savingLogistics ? 'Saving...' : 'Save Material Logistics',
+                ),
               ),
             ],
           ] else ...[
@@ -679,12 +766,6 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
               Text(
                 'Your confirmation: ${handoff['scalerConfirmedAt'] != null ? 'Confirmed' : 'Pending'}',
               ),
-              if (fulfillmentType != 'business_delivery')
-                OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.location_on_outlined),
-                  label: const Text('View Pickup Details'),
-                ),
               if (handoff['scalerConfirmedAt'] == null)
                 FilledButton.icon(
                   onPressed: _submittingMaterialReceipt
@@ -738,14 +819,8 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
             ),
           ),
           FilledButton(
-            onPressed: () async {
-              final text = _message.text.trim();
-              if (text.isEmpty) return;
-              await _service.sendMessage(widget.zoneId, text);
-              _message.clear();
-              await _load();
-            },
-            child: const Text('Open Group Chat / Send Message'),
+            onPressed: _sendingMessage ? null : _sendMessage,
+            child: Text(_sendingMessage ? 'Sending...' : 'Send Message'),
           ),
           const SizedBox(height: 8),
           const Text(

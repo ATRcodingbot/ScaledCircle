@@ -30,11 +30,13 @@ class ScaledCircleServiceCatalog {
       category: 'INTELLIGENCE',
       name: 'Property Intelligence',
       requiredPlan: 'scale',
+      beta: true,
     ),
     ScaledCircleServiceItem(
       category: 'INTELLIGENCE',
       name: 'Weather Intelligence',
       requiredPlan: 'scale',
+      beta: true,
     ),
     ScaledCircleServiceItem(
       category: 'INTELLIGENCE',

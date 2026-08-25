@@ -539,7 +539,6 @@ class _SocialApprovalScreenState extends State<SocialApprovalScreen> {
                 'approved' => 'Ready to Schedule',
                 _ => 'Needs Approval',
               }),
-              onTap: () {},
             ),
           ),
         ],

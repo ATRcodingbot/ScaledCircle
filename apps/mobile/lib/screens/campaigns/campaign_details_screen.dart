@@ -403,7 +403,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                 basePayout + (includeBonus ? availableBonus : 0.0);
 
             return AlertDialog(
-              title: const Text('Approve Zone & Release Payment'),
+              title: const Text('Approve Work & Record Earning'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -414,7 +414,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                       '${completionPercentage.toStringAsFixed(1)}% completion.',
                     ),
                     const SizedBox(height: 16),
-                    _approvalAmountRow('Base payment', basePayout),
+                    _approvalAmountRow('Base earning', basePayout),
                     if (availableBonus > 0.0) ...[
                       const SizedBox(height: 8),
                       if (bonusEarnedAutomatically)
@@ -451,7 +451,10 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                         ),
                     ],
                     const Divider(height: 24),
-                    _approvalAmountRow('Total to release', approvalTotal),
+                    _approvalAmountRow(
+                      'Total earning to record',
+                      approvalTotal,
+                    ),
                   ],
                 ),
               ),
@@ -466,8 +469,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                   onPressed: () {
                     Navigator.pop(dialogContext, includeBonus);
                   },
-                  icon: const Icon(Icons.payments_outlined),
-                  label: const Text('Approve & Pay'),
+                  icon: const Icon(Icons.verified_outlined),
+                  label: const Text('Approve Work'),
                 ),
               ],
             );
@@ -483,25 +486,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     try {
       final payoutService = CompletionPayoutService();
 
-      /*
-     * This is the important change.
-     *
-     * Approval now goes through the payout
-     * system instead of simply marking the
-     * zone completed.
-     *
-     * CompletionPayoutService will:
-     *
-     * business reservedCredits
-     *          ↓
-     * WalletTransactionService
-     *          ↓
-     * scaler availableBalance
-     *          ↓
-     * payout marked paid
-     *          ↓
-     * zone marked completed
-     */
+      // The maintained callable verifies the completion and records one worker
+      // earning. Provider transfer and bank payout are separate later actions.
       final approval = await payoutService.approvePayout(
         payoutId: payoutId,
         releaseBonus: releaseBonus,
@@ -523,7 +509,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           content: Text(
             '$zoneName approved. '
             '\$${releasedAmount.toStringAsFixed(2)} '
-            'was released to the Scaler'
+            'was recorded as a verified Scaler earning'
             '${releasedBonus > 0.0 ? ' including a \$${releasedBonus.toStringAsFixed(2)} bonus' : ''}.',
           ),
         ),
@@ -535,7 +521,13 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to approve payment: $e')));
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "We couldn't approve this work. No earning was recorded. Review the job state and try again.",
+          ),
+        ),
+      );
     }
   }
 

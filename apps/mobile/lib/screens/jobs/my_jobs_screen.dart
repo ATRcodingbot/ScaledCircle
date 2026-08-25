@@ -833,7 +833,7 @@ class MyJobsScreen extends StatelessWidget {
         return 'In Progress';
 
       case 'submitted':
-        return 'Submitted';
+        return 'Business Review Pending';
 
       case 'completed':
         return 'Completed';
@@ -857,7 +857,7 @@ class MyJobsScreen extends StatelessWidget {
         return 'Continue Zone';
 
       case 'submitted':
-        return 'View Submission';
+        return 'Review Pending';
 
       case 'completed':
         return 'View Completed Zone';
@@ -877,7 +877,7 @@ class MyJobsScreen extends StatelessWidget {
         return 'Continue Job';
 
       case 'submitted':
-        return 'View Submission';
+        return 'Review Pending';
 
       case 'completed':
         return 'View Completed Job';
