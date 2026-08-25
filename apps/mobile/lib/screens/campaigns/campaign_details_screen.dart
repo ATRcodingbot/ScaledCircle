@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../models/campaign_card_compensation.dart';
+import '../../models/business_result_summary.dart';
 import '../../models/material_logistics.dart';
 import '../../services/completion_payout_service.dart';
 import '../../services/platform_billing_service.dart';
@@ -1326,7 +1327,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
           final status = data['status']?.toString() ?? 'unassigned';
 
-          if (status == 'submitted') {
+          if (BusinessResultSummary.zoneState(data) ==
+              BusinessZoneResultState.awaitingReview) {
             submittedCount++;
           }
 
@@ -1522,13 +1524,15 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
               ),
             ],
 
-            if (status == 'submitted' || status == 'completed') ...[
+            if (BusinessResultSummary.zoneState(data) !=
+                BusinessZoneResultState.none) ...[
               const SizedBox(height: 18),
 
               _buildZoneProofOfWork(zone, serviceArea),
             ],
 
-            if (status == 'submitted') ...[
+            if (BusinessResultSummary.zoneState(data) ==
+                BusinessZoneResultState.awaitingReview) ...[
               const SizedBox(height: 18),
 
               SizedBox(
@@ -1946,7 +1950,12 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           return const SizedBox.shrink();
         }
 
-        final submittedZones = snapshot.data?.docs ?? [];
+        final submittedZones = (snapshot.data?.docs ?? [])
+            .where(
+              (zone) => BusinessResultSummary.zoneState(zone.data()) ==
+                  BusinessZoneResultState.awaitingReview,
+            )
+            .toList(growable: false);
 
         if (submittedZones.isEmpty) {
           return const SizedBox.shrink();

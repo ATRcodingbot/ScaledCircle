@@ -92,10 +92,9 @@ void main() {
     }
     expect(
       dashboard,
-      contains(
-        'if (activeCampaigns.isNotEmpty || submittedCampaigns.isNotEmpty)',
-      ),
+      contains('if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)'),
     );
+    expect(dashboard, contains('BusinessResultSummary.fromZones'));
   });
 
   test(

@@ -5,6 +5,7 @@ import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 
 import '../../models/campaign_card_compensation.dart';
+import '../../models/business_result_summary.dart';
 import '../../services/subscription_plan_service.dart';
 import '../../services/maryland_weather_service.dart';
 import '../../theme/app_theme.dart';
@@ -740,6 +741,32 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   data['hiddenFromBusinessHistory'] != true;
             }).toList();
 
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('campaignZones')
+                  .where('businessId', isEqualTo: user.uid)
+                  .snapshots(),
+              builder: (context, zoneSnapshot) {
+                if (zoneSnapshot.hasError) {
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(20),
+                    children: const [
+                      Center(
+                        child: Text(
+                          "We couldn't load your campaign results. Try again.",
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                if (!zoneSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final resultSummary = BusinessResultSummary.fromZones(
+                  zoneSnapshot.data!.docs.map((zone) => zone.data()),
+                );
+
             final activeCampaigns = campaigns.where((campaign) {
               final data = campaign.data() as Map<String, dynamic>;
 
@@ -751,20 +778,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   status != 'canceled';
             }).toList();
 
-            /*
-             * Campaign-level submitted status is
-             * supported for backwards compatibility.
-             *
-             * Zone-level review still appears inside
-             * CampaignDetailsScreen.
-             */
-            final submittedCampaigns = campaigns.where((campaign) {
-              final data = campaign.data() as Map<String, dynamic>;
-
-              final status = data['status']?.toString().toLowerCase() ?? '';
-
-              return status == 'submitted';
-            }).toList();
+            final reviewCampaigns = campaigns.where(
+              (campaign) => resultSummary
+                  .forCampaign(campaign.id)
+                  .needsReview,
+            ).toList();
+            final awaitingReviewCount = resultSummary.awaitingReviewCount;
 
             final horizontalPadding = MediaQuery.sizeOf(context).width > 1160
                 ? (MediaQuery.sizeOf(context).width - 1120) / 2
@@ -804,8 +823,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     ),
                     DashboardPill(
                       icon: Icons.fact_check_outlined,
-                      label: '${submittedCampaigns.length} awaiting review',
-                      accent: submittedCampaigns.isEmpty
+                      label: '$awaitingReviewCount Zone${awaitingReviewCount == 1 ? '' : 's'} awaiting review',
+                      accent: awaitingReviewCount == 0
                           ? AppColors.primary
                           : AppColors.warning,
                     ),
@@ -834,25 +853,25 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   onLaunchCampaign: () =>
                       _openCreateCampaign(context, user.uid),
                   onReviewResults: () {
-                    if (submittedCampaigns.length == 1) {
+                    if (reviewCampaigns.length == 1) {
                       AppNavigation.push(
                         context,
-                        AppRoutes.campaignDetail(submittedCampaigns.single.id),
+                        AppRoutes.campaignDetail(reviewCampaigns.single.id),
                       );
                       return;
                     }
                     _openCampaigns(context, user.uid, results: true);
                   },
-                  hasResults: campaigns.isNotEmpty,
+                  hasResults: resultSummary.hasResults,
                 ),
                 const SizedBox(height: 24),
 
-                if (activeCampaigns.isNotEmpty || submittedCampaigns.isNotEmpty)
+                if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)
                   _BusinessToday(
                     activeCampaigns: activeCampaigns.length,
-                    needsReview: submittedCampaigns.length,
+                    needsReview: awaitingReviewCount,
                   ),
-                if (activeCampaigns.isNotEmpty || submittedCampaigns.isNotEmpty)
+                if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)
                   const SizedBox(height: 24),
 
                 _buildBusinessPaymentsSection(),
@@ -950,7 +969,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                           child: Column(
                             children: [
                               Text(
-                                submittedCampaigns.length.toString(),
+                                awaitingReviewCount.toString(),
                                 style: const TextStyle(
                                   fontSize: 34,
                                   fontWeight: FontWeight.bold,
@@ -958,7 +977,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                               ),
                               const SizedBox(height: 8),
                               const Text(
-                                'Needs Review',
+                                'Zones Awaiting Review',
                                 textAlign: TextAlign.center,
                               ),
                             ],
@@ -969,14 +988,14 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ],
                 ),
 
-                if (submittedCampaigns.isNotEmpty) ...[
+                if (reviewCampaigns.isNotEmpty) ...[
                   const SizedBox(height: 25),
                   const Text(
                     'Needs Review',
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 15),
-                  ...submittedCampaigns.map((campaign) {
+                  ...reviewCampaigns.map((campaign) {
                     final data = campaign.data() as Map<String, dynamic>;
 
                     return Card(
@@ -988,8 +1007,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                               'Untitled Campaign',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        subtitle: const Text(
-                          'Scaler submitted work for review',
+                        subtitle: Text(
+                          resultSummary.forCampaign(campaign.id).conciseStatus,
                         ),
                         trailing: const Icon(Icons.arrow_forward_ios, size: 18),
                         onTap: () async {
@@ -1146,6 +1165,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   );
                 }),
               ],
+            );
+              },
             );
           },
         ),

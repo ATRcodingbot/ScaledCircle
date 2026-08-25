@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/campaign_card_compensation.dart';
+import '../../models/business_result_summary.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
 import '../../theme/app_theme.dart';
@@ -20,26 +21,12 @@ class BusinessCampaignsScreen extends StatelessWidget {
   final BusinessCampaignView view;
   final VoidCallback onCreateCampaign;
 
-  bool _hasResults(Map<String, dynamic> data) {
+  int _priority(
+    Map<String, dynamic> data,
+    BusinessCampaignResultSummary result,
+  ) {
+    if (result.needsReview) return 0;
     final status = data['status']?.toString().toLowerCase() ?? '';
-    return const {
-      'submitted',
-      'under_review',
-      'completed',
-      'approved',
-      'redo_requested',
-    }.contains(status);
-  }
-
-  int _priority(Map<String, dynamic> data) {
-    final status = data['status']?.toString().toLowerCase() ?? '';
-    if (const {
-      'submitted',
-      'under_review',
-      'redo_requested',
-    }.contains(status)) {
-      return 0;
-    }
     if (!const {'completed', 'cancelled', 'canceled'}.contains(status)) {
       return 1;
     }
@@ -77,6 +64,23 @@ class BusinessCampaignsScreen extends StatelessWidget {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('campaignZones')
+              .where('businessId', isEqualTo: businessId)
+              .snapshots(),
+          builder: (context, zoneSnapshot) {
+            if (zoneSnapshot.hasError) {
+              return const Center(
+                child: Text("We couldn't load your campaign results. Try again."),
+              );
+            }
+            if (!zoneSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final resultSummary = BusinessResultSummary.fromZones(
+              zoneSnapshot.data!.docs.map((zone) => zone.data()),
+            );
         final docs =
             snapshot.data!.docs.where((doc) {
               final data = doc.data();
@@ -85,9 +89,14 @@ class BusinessCampaignsScreen extends StatelessWidget {
                 return false;
               }
               return view == BusinessCampaignView.campaigns ||
-                  _hasResults(data);
+                  resultSummary.forCampaign(doc.id).hasResults;
             }).toList()..sort(
-              (a, b) => _priority(a.data()).compareTo(_priority(b.data())),
+              (a, b) => _priority(
+                a.data(),
+                resultSummary.forCampaign(a.id),
+              ).compareTo(
+                _priority(b.data(), resultSummary.forCampaign(b.id)),
+              ),
             );
 
         if (docs.isEmpty) {
@@ -139,6 +148,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
           itemBuilder: (context, index) {
             final doc = docs[index];
             final data = doc.data();
+            final result = resultSummary.forCampaign(doc.id);
             final status =
                 data['status']?.toString().toLowerCase() ?? 'unknown';
             final compensation = CampaignCardCompensation.fromCampaign(data);
@@ -150,7 +160,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
               child: ListTile(
                 key: Key('business-campaign-${doc.id}'),
                 leading: Icon(
-                  _hasResults(data)
+                  result.hasResults
                       ? Icons.insights_outlined
                       : Icons.campaign_outlined,
                 ),
@@ -167,10 +177,10 @@ class BusinessCampaignsScreen extends StatelessWidget {
                     if (location != null && location.isNotEmpty) Text(location),
                     Text(compensation.primaryText),
                     Text(
-                      _priority(data) == 0
+                      result.needsReview
                           ? 'Next: review the submitted work'
-                          : _hasResults(data)
-                          ? 'Open campaign results and history'
+                          : result.hasResults
+                          ? result.conciseStatus
                           : 'Open campaign status and next steps',
                       style: const TextStyle(color: AppColors.textSecondary),
                     ),
@@ -183,6 +193,8 @@ class BusinessCampaignsScreen extends StatelessWidget {
                 ),
               ),
             );
+          },
+        );
           },
         );
       },
