@@ -4,12 +4,14 @@ class ScaledCircleServiceItem {
     required this.name,
     required this.requiredPlan,
     this.beta = false,
+    this.comingSoon = false,
   });
 
   final String category;
   final String name;
   final String requiredPlan;
   final bool beta;
+  final bool comingSoon;
 
   bool entitledFor(String? plan) =>
       ScaledCircleServiceCatalog.rank(plan) >=
@@ -100,6 +102,30 @@ class ScaledCircleServiceCatalog {
       category: 'ANALYTICS',
       name: 'Campaign Results',
       requiredPlan: 'starter',
+    ),
+    ScaledCircleServiceItem(
+      category: 'ANALYTICS',
+      name: 'Lead Tracking',
+      requiredPlan: 'growth',
+      comingSoon: true,
+    ),
+    ScaledCircleServiceItem(
+      category: 'ANALYTICS',
+      name: 'Call Tracking',
+      requiredPlan: 'growth',
+      comingSoon: true,
+    ),
+    ScaledCircleServiceItem(
+      category: 'GROWTH',
+      name: 'Campaign Landing Pages',
+      requiredPlan: 'growth',
+      comingSoon: true,
+    ),
+    ScaledCircleServiceItem(
+      category: 'EXECUTION',
+      name: 'Scaler Cash-out',
+      requiredPlan: 'starter',
+      comingSoon: true,
     ),
   ];
 }

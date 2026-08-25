@@ -306,7 +306,7 @@ class _HowItWorks extends StatelessWidget {
             icon: Icons.rocket_launch_outlined,
             title: 'PUT IT INTO ACTION',
             body:
-                'Publish digital marketing or hire verified local Scalers for real-world campaigns.',
+                'Plan digital marketing drafts or hire verified local Scalers for real-world campaigns.',
           ),
         ],
       ),
@@ -323,7 +323,7 @@ class _BusinessExperience extends StatelessWidget {
         eyebrow: 'FOR BUSINESSES',
         title: 'See the opportunity before you spend.',
         subtitle:
-            'Property and Weather Intelligence turn trustworthy local facts into clear next steps.',
+            'Property and Weather Intelligence Beta turn trustworthy local facts into bounded, reviewable next steps.',
       ),
       SizedBox(height: 22),
       _Cards(
@@ -337,8 +337,8 @@ class _BusinessExperience extends StatelessWidget {
               'High older-home concentration',
               '98% coverage',
             ],
-            action: 'Explore Property Intelligence',
-            footnote: 'Included with Scale',
+            action: 'Explore Property Intelligence Beta',
+            footnote: 'BETA • Included with Scale',
           ),
           _Example(
             label: 'WEATHER OPPORTUNITY • ILLUSTRATION',
@@ -348,9 +348,9 @@ class _BusinessExperience extends StatelessWidget {
               'Anne Arundel County',
               'Exterior-service marketing may become more timely after the event.',
             ],
-            action: 'See Weather Intelligence',
+            action: 'See Weather Intelligence Beta',
             footnote:
-                'Official weather facts remain separate from AI interpretation.',
+                'BETA • Official weather facts remain separate from AI interpretation.',
           ),
         ],
       ),
@@ -666,9 +666,9 @@ class _Pricing extends StatelessWidget {
     'basic_ai_planning': 'Simple AI campaign planning',
     'advanced_analytics': 'Advanced campaign analytics',
     'ai_content_creation': 'AI-assisted content creation',
-    'lead_tracking': 'Lead and response tracking',
-    'property_intelligence': 'Property Intelligence',
-    'weather_intelligence': 'Weather Intelligence',
+    'lead_tracking': 'Lead and response tracking — Coming Soon',
+    'property_intelligence': 'Property Intelligence — Beta',
+    'weather_intelligence': 'Weather Intelligence — Beta',
     'priority_scaler_matching': 'Priority Scaler matching',
     'managed_growth_planning': '30-day Managed Growth planning',
     'social_content_package': 'Social content ready for approval',

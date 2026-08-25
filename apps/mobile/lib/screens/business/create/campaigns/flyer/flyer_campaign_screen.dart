@@ -82,7 +82,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
     fulfillmentType: MaterialLogisticsDraft.scalerPickupBusiness,
   );
 
-  bool _trackingEnabled = false;
+  final bool _trackingEnabled = false;
 
   bool publishing = false;
   Timer? _quoteDebounce;
@@ -1282,11 +1282,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                               SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Scaled Circle-created materials can eventually '
-                                  'include campaign QR codes, tracking phone '
-                                  'numbers, landing pages, and forwarding email '
-                                  'addresses so leads can be attributed to this '
-                                  'campaign.',
+                                  'Response attribution tools such as campaign QR '
+                                  'codes, tracked calls, landing pages, and '
+                                  'forwarding addresses are Coming Soon.',
                                 ),
                               ),
                             ],
@@ -1299,18 +1297,12 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Track responses from this campaign'),
+                      title: const Text('Response tracking — Coming Soon'),
                       subtitle: const Text(
-                        'Use QR codes, landing pages, calls and campaign links to see what generates responses.',
+                        'Campaign links, landing pages, calls, and lead attribution are not yet available.',
                       ),
                       value: _trackingEnabled,
-                      onChanged: publishing
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _trackingEnabled = value;
-                              });
-                            },
+                      onChanged: null,
                     ),
                   ],
 

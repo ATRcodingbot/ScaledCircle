@@ -895,8 +895,15 @@ class CampaignApplicantsScreen extends StatelessWidget {
               ...applications.map((application) {
                 final data = application.data();
 
-                final scalerEmail =
-                    data['scalerEmail']?.toString() ?? 'Unknown Scaler';
+                final scalerIdentity =
+                    data['scalerDisplayName']?.toString().trim().isNotEmpty ==
+                        true
+                    ? data['scalerDisplayName'].toString()
+                    : data['scalerName']?.toString().trim().isNotEmpty == true
+                    ? data['scalerName'].toString()
+                    : data['scalerEmail']?.toString().trim().isNotEmpty == true
+                    ? data['scalerEmail'].toString()
+                    : 'Scaler applicant';
 
                 final status = data['status']?.toString() ?? 'pending';
 
@@ -931,7 +938,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
 
                             Expanded(
                               child: Text(
-                                scalerEmail,
+                                scalerIdentity,
                                 style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,

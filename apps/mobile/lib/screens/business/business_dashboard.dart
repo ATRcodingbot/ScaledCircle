@@ -21,6 +21,7 @@ import 'profile/business_profile_screen.dart';
 import 'property_intelligence_center_screen.dart';
 import 'scaled_circle_services_screen.dart';
 import 'internal_beta_entitlements_screen.dart';
+import 'business_campaigns_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -58,7 +59,8 @@ class _BusinessGoalGrid extends StatelessWidget {
         key: const Key('business-goal-create-marketing'),
         icon: Icons.auto_awesome_outlined,
         title: 'CREATE MARKETING — BETA',
-        description: 'Prepare reviewed drafts and plans in Managed Growth Beta.',
+        description:
+            'Prepare reviewed drafts and plans in Managed Growth Beta.',
         onTap: onCreateMarketing,
       ),
       _GoalCard(
@@ -202,6 +204,25 @@ class _BusinessToday extends StatelessWidget {
 }
 
 class _BusinessDashboardState extends State<BusinessDashboard> {
+  void _openCampaigns(
+    BuildContext context,
+    String businessId, {
+    bool results = false,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BusinessCampaignsScreen(
+          businessId: businessId,
+          view: results
+              ? BusinessCampaignView.results
+              : BusinessCampaignView.campaigns,
+          onCreateCampaign: () => _openCreateCampaign(context, businessId),
+        ),
+      ),
+    );
+  }
+
   final SubscriptionPlanService _planService = SubscriptionPlanService();
 
   final MarylandWeatherService _weatherService = MarylandWeatherService();
@@ -608,6 +629,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
               PopupMenuItem(value: 'results', child: Text('Results')),
               PopupMenuItem(value: 'account', child: Text('Account')),
+              PopupMenuItem(value: 'support', child: Text('Support')),
             ],
             onSelected: (value) {
               if (value == 'grow') {
@@ -618,7 +640,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ),
                 );
               } else if (value == 'campaigns') {
-                _openCreateCampaign(context, user.uid);
+                _openCampaigns(context, user.uid);
+              } else if (value == 'results') {
+                _openCampaigns(context, user.uid, results: true);
               } else if (value == 'account') {
                 Navigator.push(
                   context,
@@ -626,6 +650,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     builder: (_) => const BusinessProfileScreen(),
                   ),
                 );
+              } else if (value == 'support') {
+                AppNavigation.push(context, AppRoutes.support);
               }
             },
           ),
@@ -774,6 +800,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       icon: Icons.campaign_outlined,
                       label:
                           '${activeCampaigns.length} active campaign${activeCampaigns.length == 1 ? '' : 's'}',
+                      onTap: () => _openCampaigns(context, user.uid),
                     ),
                     DashboardPill(
                       icon: Icons.fact_check_outlined,
@@ -807,11 +834,14 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   onLaunchCampaign: () =>
                       _openCreateCampaign(context, user.uid),
                   onReviewResults: () {
-                    if (campaigns.isEmpty) return;
-                    AppNavigation.push(
-                      context,
-                      AppRoutes.campaignDetail(campaigns.first.id),
-                    );
+                    if (submittedCampaigns.length == 1) {
+                      AppNavigation.push(
+                        context,
+                        AppRoutes.campaignDetail(submittedCampaigns.single.id),
+                      );
+                      return;
+                    }
+                    _openCampaigns(context, user.uid, results: true);
                   },
                   hasResults: campaigns.isNotEmpty,
                 ),
@@ -839,7 +869,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     title: const Text("My Business Profile"),
 
                     subtitle: const Text(
-                      "Manage your company profile and reputation.",
+                      "View your company profile and reputation.",
                     ),
 
                     trailing: const Icon(Icons.arrow_forward_ios),
@@ -887,23 +917,27 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   children: [
                     Expanded(
                       child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            children: [
-                              Text(
-                                activeCampaigns.length.toString(),
-                                style: const TextStyle(
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.bold,
+                        child: InkWell(
+                          key: const Key('active-campaign-summary'),
+                          onTap: () => _openCampaigns(context, user.uid),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              children: [
+                                Text(
+                                  activeCampaigns.length.toString(),
+                                  style: const TextStyle(
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Active Campaigns',
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Active Campaigns',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

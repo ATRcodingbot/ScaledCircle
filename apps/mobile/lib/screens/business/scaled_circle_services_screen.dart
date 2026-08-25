@@ -94,7 +94,7 @@ class ScaledCircleServicesScreen extends StatelessWidget {
       for (final item in ScaledCircleServiceCatalog.items.where(
         (item) => item.category == category,
       )) {
-        final entitled = item.entitledFor(plan);
+        final entitled = item.entitledFor(plan) && !item.comingSoon;
         widgets.add(
           Card(
             child: ListTile(
@@ -104,13 +104,19 @@ class ScaledCircleServicesScreen extends StatelessWidget {
               ),
               title: Text(item.name),
               subtitle: Text(
-                entitled
+                item.comingSoon
+                    ? 'COMING SOON • Not currently available'
+                    : entitled
                     ? item.beta
                           ? 'Included • BETA'
                           : 'Included'
                     : 'Requires ${_planName(item.requiredPlan)} • Upgrade / Learn More',
               ),
-              trailing: item.beta ? const Chip(label: Text('BETA')) : null,
+              trailing: item.comingSoon
+                  ? const Chip(label: Text('COMING SOON'))
+                  : item.beta
+                  ? const Chip(label: Text('BETA'))
+                  : null,
               onTap: () =>
                   entitled ? _open(context, item.name) : _upgrade(context),
             ),

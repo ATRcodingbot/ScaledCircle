@@ -413,6 +413,10 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                       'Approve $zoneName at '
                       '${completionPercentage.toStringAsFixed(1)}% completion.',
                     ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Approval records the Scaler's earning. Bank payout and cash-out are separate.",
+                    ),
                     const SizedBox(height: 16),
                     _approvalAmountRow('Base earning', basePayout),
                     if (availableBonus > 0.0) ...[
@@ -440,7 +444,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                             '(\$${availableBonus.toStringAsFixed(2)})',
                           ),
                           subtitle: const Text(
-                            'The route is below 95%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
+                            'The route is below 95%. You may still approve bonus eligibility after reviewing possible GPS lag or other evidence.',
                           ),
                           value: includeBonus,
                           onChanged: (value) {
@@ -519,9 +523,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             "We couldn't approve this work. No earning was recorded. Review the job state and try again.",

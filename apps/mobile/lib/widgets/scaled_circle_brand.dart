@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class ScaledCircleBrand extends StatelessWidget {
-  const ScaledCircleBrand({super.key, this.compact = false, this.lightSurface = false});
+  const ScaledCircleBrand({
+    super.key,
+    this.compact = false,
+    this.lightSurface = false,
+  });
 
   final bool compact;
   final bool lightSurface;
@@ -143,15 +147,17 @@ class DashboardPill extends StatelessWidget {
     required this.icon,
     required this.label,
     this.accent = AppColors.blue,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final Color accent;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: AppColors.surfaceAccent,
@@ -171,6 +177,15 @@ class DashboardPill extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return content;
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: content,
       ),
     );
   }

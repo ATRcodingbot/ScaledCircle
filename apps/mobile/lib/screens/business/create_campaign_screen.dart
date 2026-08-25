@@ -48,10 +48,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
   String _materialSource = 'business_provided';
 
-  MaterialLogisticsDraft _materialLogistics =
-      const MaterialLogisticsDraft();
+  MaterialLogisticsDraft _materialLogistics = const MaterialLogisticsDraft();
 
-  bool _trackingEnabled = false;
+  final bool _trackingEnabled = false;
 
   bool publishing = false;
 
@@ -459,12 +458,10 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                   MaterialLogisticsDraft.scalerPickupPrintShop
               ? _materialLogistics.printingShopName.trim()
               : null,
-          'materialHandoffOrderReference':
-              _materialLogistics.materialsRequired
+          'materialHandoffOrderReference': _materialLogistics.materialsRequired
               ? _materialLogistics.orderReference.trim()
               : null,
-          'materialHandoffInstructions':
-              _materialLogistics.materialsRequired
+          'materialHandoffInstructions': _materialLogistics.materialsRequired
               ? _materialLogistics.instructions.trim()
               : null,
         });
@@ -666,7 +663,6 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         final data = zone.data();
 
         totalEstimatedHomes += (data['estimatedHomes'] as num?)?.toInt() ?? 0;
-
       }
 
       await campaignReference.update({
@@ -984,11 +980,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Scaled Circle-created materials can eventually '
-                              'include campaign QR codes, tracking phone '
-                              'numbers, landing pages, and forwarding email '
-                              'addresses so leads can be attributed to this '
-                              'campaign.',
+                              'Response attribution tools such as campaign QR '
+                              'codes, tracked calls, landing pages, and '
+                              'forwarding addresses are Coming Soon.',
                             ),
                           ),
                         ],
@@ -1001,19 +995,12 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Enable Campaign Tracking'),
+                  title: const Text('Response tracking — Coming Soon'),
                   subtitle: const Text(
-                    'Prepare this campaign for QR, phone, website, '
-                    'landing-page, and email attribution.',
+                    'Campaign links, landing pages, calls, and lead attribution are not yet available.',
                   ),
                   value: _trackingEnabled,
-                  onChanged: publishing
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _trackingEnabled = value;
-                          });
-                        },
+                  onChanged: null,
                 ),
               ],
 

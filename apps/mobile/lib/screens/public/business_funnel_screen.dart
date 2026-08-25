@@ -125,7 +125,7 @@ class _BusinessHeroVisual extends StatelessWidget {
         SizedBox(height: 12),
         ProductLine('Main Service Area', 'Anne Arundel County'),
         ProductLine('Goal', 'Get more deck jobs', color: businessGreen),
-        ProductLine('Current opportunity', 'Property Intelligence ready'),
+        ProductLine('Current opportunity', 'Property Intelligence Beta'),
         SizedBox(height: 12),
         _PrimaryActionPreview(
           icon: Icons.analytics_outlined,
@@ -481,6 +481,8 @@ class _WeatherVisual extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        DemoBadge(label: 'BETA', color: businessGreen),
+        SizedBox(height: 12),
         Row(
           children: [
             Icon(Icons.cloud_outlined, color: businessGreen, size: 30),

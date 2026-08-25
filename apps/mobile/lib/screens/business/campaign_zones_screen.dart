@@ -523,6 +523,10 @@ class CampaignZonesScreen extends StatelessWidget {
                       'Approve $zoneName at '
                       '${completionPercentage.toStringAsFixed(1)}% completion.',
                     ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Approval records the Scaler's earning. Bank payout and cash-out are separate.",
+                    ),
                     if (isGroup) ...[
                       const SizedBox(height: 12),
                       _reviewMetricRow(
@@ -580,7 +584,7 @@ class CampaignZonesScreen extends StatelessWidget {
                             '(\$${availableBonus.toStringAsFixed(2)})',
                           ),
                           subtitle: const Text(
-                            'The route is below 95%. You may still release the bonus after reviewing possible GPS lag or other evidence.',
+                            'The route is below 95%. You may still approve bonus eligibility after reviewing possible GPS lag or other evidence.',
                           ),
                           value: releaseBonus,
                           onChanged: (value) {
@@ -660,9 +664,7 @@ class CampaignZonesScreen extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             "We couldn't approve this work. No earning was recorded. Review the job state and try again.",
@@ -755,9 +757,7 @@ class CampaignZonesScreen extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             "We couldn't request a redo. No earning or job state was changed. Try again.",
@@ -922,7 +922,7 @@ class CampaignZonesScreen extends StatelessWidget {
             const Divider(),
 
             _reviewMetricRow(
-              label: 'Base Payment',
+              label: 'Base Earning',
               value: '\$${basePayout.toStringAsFixed(2)}',
             ),
 
@@ -934,7 +934,7 @@ class CampaignZonesScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'You can release the campaign bonus after reviewing the GPS evidence, even when the automatic score is imperfect.',
+                'You can approve bonus eligibility after reviewing the GPS evidence, even when the automatic score is imperfect.',
               ),
             ],
 
