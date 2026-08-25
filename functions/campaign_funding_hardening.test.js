@@ -55,7 +55,26 @@ test("invalid compensation is rejected", () => {
 });
 
 test("mapped Zone must belong to campaign and owner", () => {
-  assert.equal(lifecycle.mappedZoneIsValid({campaignId: "c", businessId: "b", serviceAreaPointCount: 3}, "c", "b"), true);
+  const ready = {campaignId: "c", businessId: "b", serviceAreaPointCount: 4,
+    mapped: true, analysisStatus: "complete", estimatedHomes: 20,
+    serverEstimatedWalkingMinutes: 300, serverZoneMetricsVersion: "geometry_v1_server",
+    serverZoneGeometryDigest: "fixture-digest", serviceArea: [
+      {latitude: 39.29, longitude: -76.62},
+      {latitude: 39.30, longitude: -76.62},
+      {latitude: 39.30, longitude: -76.61},
+      {latitude: 39.29, longitude: -76.61},
+    ]};
+  assert.equal(lifecycle.mappedZoneIsValid(ready, "c", "b"), true);
+  assert.equal(lifecycle.mappedZoneIsValid({...ready, analysisStatus: "failed"}, "c", "b"), false);
+  assert.equal(lifecycle.mappedZoneIsValid({...ready, estimatedHomes: 0}, "c", "b"), false);
+  assert.equal(lifecycle.mappedZoneIsValid({...ready,
+    serverEstimatedWalkingMinutes: 361}, "c", "b"), false);
+  assert.equal(lifecycle.mappedZoneIsValid({...ready, serviceArea: [
+    {latitude: 39.29, longitude: -76.62},
+    {latitude: 39.29, longitude: -76.62},
+    {latitude: 39.29, longitude: -76.62},
+  ]}, "c", "b"), false);
+  assert.equal(lifecycle.mappedZoneIsValid({...ready, serverZoneGeometryDigest: ""}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({campaignId: "other", serviceAreaPointCount: 3}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({campaignId: "c", businessId: "other", mapped: true}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({campaignId: "c", serviceAreaPointCount: 2}, "c", "b"), false);

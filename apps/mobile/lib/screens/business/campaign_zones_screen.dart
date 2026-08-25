@@ -14,7 +14,7 @@ bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
   );
 }
 
-const int productionMaximumZonesPerCampaign = 1;
+const int productionMaximumZonesPerCampaign = 12;
 
 bool campaignCanAddZone(
   int persistedZoneCount, {
@@ -86,6 +86,122 @@ class CampaignZonesScreen extends StatelessWidget {
         SnackBar(
           content: Text(
             error.message ?? 'Zone analysis could not be updated right now.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _reviewSmartZonePlan(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final functions = FirebaseFunctions.instanceFor(region: 'us-east1');
+      final response = await functions.httpsCallable('getSmartZonePlan').call({
+        'campaignId': campaign.id,
+        'desiredHours': 5,
+      });
+      final plan = Map<String, dynamic>.from(response.data as Map);
+      final zones = (plan['zones'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      final compensation = Map<String, dynamic>.from(
+        plan['compensation'] as Map? ?? const {},
+      );
+      if (!context.mounted) return;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Recommended Zones'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '${plan['totalEstimatedProperties']} estimated properties • '
+                    '~${plan['totalEstimatedHours']} estimated total hours',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${plan['recommendedScalerCount']} Scaler${plan['recommendedScalerCount'] == 1 ? '' : 's'} recommended',
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'These are planning estimates, not guaranteed completion times. '
+                    'ScaledCircle will validate every Zone again before funding.',
+                  ),
+                  if (compensation['attractiveness'] ==
+                      'low_acceptance_likelihood') ...[
+                    const SizedBox(height: 12),
+                    const Card(
+                      child: ListTile(
+                        leading: Icon(Icons.info_outline),
+                        title: Text('Low acceptance likelihood'),
+                        subtitle: Text(
+                          'Consider increasing compensation, adding a completion '
+                          'bonus, or reducing the campaign area.',
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  ...zones.map((zone) {
+                    final workload = Map<String, dynamic>.from(
+                      zone['workload'] as Map? ?? const {},
+                    );
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.map_outlined),
+                        title: Text(zone['name']?.toString() ?? 'Zone'),
+                        subtitle: Text(
+                          '${workload['estimatedProperties']} properties • '
+                          '~${workload['estimatedHours']} hours',
+                        ),
+                        trailing: Text(switch (zone['workability']) {
+                          'excellent' => 'Excellent',
+                          'good' => 'Good',
+                          'needs_adjustment' => 'Needs adjustment',
+                          _ => 'Too large',
+                        }),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Advanced Edit'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Use Recommended Zones'),
+            ),
+          ],
+        ),
+      );
+      if (accepted != true || !context.mounted) return;
+      await functions.httpsCallable('applySmartZonePlan').call({
+        'campaignId': campaign.id,
+        'desiredHours': 5,
+        'planId': plan['planId'],
+      });
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Recommended Zones are ready to review.')),
+      );
+    } on FirebaseFunctionsException catch (error) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error.message ??
+                "We couldn't analyze this area yet. Try a smaller area or use Advanced Edit.",
           ),
         ),
       );
@@ -1402,7 +1518,7 @@ class CampaignZonesScreen extends StatelessWidget {
                           const Icon(Icons.add_location_alt_outlined, size: 54),
                           const SizedBox(height: 12),
                           const Text(
-                            'Choose a target inside your Service Area',
+                            'Let ScaledCircle plan workable Zones',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -1410,7 +1526,8 @@ class CampaignZonesScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'The saved Service Area is a visual boundary only. Draw a smaller area for this campaign.',
+                            'Start from your Service Area. We will recommend balanced '
+                            'worker-sized Zones, then you can review or adjust them.',
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 18),
@@ -1426,15 +1543,15 @@ class CampaignZonesScreen extends StatelessWidget {
                               label: const Text('Use Analyzed Area'),
                             ),
                           ElevatedButton.icon(
-                            onPressed: _campaignLocked
+                            onPressed:
+                                _campaignLocked ||
+                                    _serviceAreaBoundary.length < 3
                                 ? null
-                                : () => _createZone(
-                                    context,
-                                    skipNamePrompt: true,
-                                  ),
-                            icon: const Icon(Icons.add_location_alt),
-                            label: const Text('Choose Target Area'),
+                                : () => _reviewSmartZonePlan(context),
+                            icon: const Icon(Icons.auto_awesome),
+                            label: const Text('Recommend Workable Zones'),
                           ),
+                          const SizedBox(height: 4),
                           TextButton.icon(
                             onPressed: _campaignLocked
                                 ? null
@@ -1443,7 +1560,7 @@ class CampaignZonesScreen extends StatelessWidget {
                                     skipNamePrompt: true,
                                   ),
                             icon: const Icon(Icons.gesture),
-                            label: const Text('Draw Custom Target'),
+                            label: const Text('Advanced Edit'),
                           ),
                         ],
                       ),

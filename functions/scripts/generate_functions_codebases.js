@@ -88,6 +88,8 @@ const assignmentExports = new Set([
 const discoveryExports = new Set([
   "saveDiscoveryPreferences",
   "analyzeCampaignZone",
+  "getSmartZonePlan",
+  "applySmartZonePlan",
 ]);
 const jobRoomExports = new Set(["getJobRoom"]);
 const transactionalEmailExports = new Set([
@@ -278,7 +280,7 @@ function copyPackage(destination, mode) {
         !["discovery_preferences.js", "service_area_geometry_codec.js",
           "marketplace_work_types.js", "scaler_profile_notifications.js",
           "signup_notifications.js", "operational_layer.js",
-          "group_assignment.js"].includes(name)) continue;
+          "group_assignment.js", "smart_zone_planning.js"].includes(name)) continue;
     if (mode === "job-room" && name.endsWith(".js") &&
         !["marketplace_finance.js", "marketplace_operations.js", "operational_layer.js",
           "group_assignment.js", "campaign_funding_quote.js",

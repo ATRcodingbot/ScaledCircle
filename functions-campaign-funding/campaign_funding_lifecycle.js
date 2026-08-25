@@ -159,8 +159,28 @@ function assertStripeEvent(event, stripeMode) {
 function mappedZoneIsValid(zone, campaignId, businessId) {
   if (!zone || zone.campaignId !== campaignId) return false;
   if (zone.businessId && zone.businessId !== businessId) return false;
-  const points = Number(zone.serviceAreaPointCount || zone.pointCount || 0);
-  return zone.mapped === true || points >= 3;
+  const serviceArea = Array.isArray(zone.serviceArea) ? zone.serviceArea : [];
+  const coordinates = serviceArea
+    .map((point) => [Number(point?.latitude ?? point?.lat), Number(point?.longitude ?? point?.lng)])
+    .filter(([latitude, longitude]) => Number.isFinite(latitude) && Number.isFinite(longitude));
+  const uniqueCoordinates = new Set(coordinates.map(([latitude, longitude]) =>
+    `${latitude.toFixed(7)},${longitude.toFixed(7)}`));
+  const polygonArea = coordinates.length >= 3 ? Math.abs(coordinates.reduce((sum, point, index) => {
+    const next = coordinates[(index + 1) % coordinates.length];
+    return sum + (point[1] * next[0]) - (next[1] * point[0]);
+  }, 0) / 2) : 0;
+  const points = Number(zone.serviceAreaPointCount || zone.pointCount || coordinates.length || 0);
+  const estimatedHomes = Number(zone.estimatedHomes || 0);
+  const estimatedMinutes = Number(
+    zone.serverEstimatedWalkingMinutes || zone.estimatedWorkMinutes || 0,
+  );
+  return (zone.mapped === true || points >= 3) && points >= 3 &&
+    coordinates.length >= 3 && uniqueCoordinates.size >= 3 && polygonArea > 0 &&
+    zone.serverZoneMetricsVersion === "geometry_v1_server" &&
+    typeof zone.serverZoneGeometryDigest === "string" && zone.serverZoneGeometryDigest.length > 0 &&
+    zone.analysisStatus === "complete" &&
+    Number.isSafeInteger(estimatedHomes) && estimatedHomes > 0 &&
+    Number.isFinite(estimatedMinutes) && estimatedMinutes > 0 && estimatedMinutes <= 360;
 }
 
 function checkoutRecoveryDecision(payment, stripeSession, nowSeconds) {

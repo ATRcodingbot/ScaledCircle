@@ -22,27 +22,41 @@ void main() {
 
   test('Campaign Zones continues only from persisted valid geometry', () {
     expect(campaignZonesCanContinue(const []), isFalse);
-    expect(campaignZonesCanContinue(const [
-      {'serviceAreaPointCount': 0},
-      {'serviceAreaPointCount': 2},
-    ]), isFalse);
-    expect(campaignZonesCanContinue(const [
-      {'serviceAreaPointCount': 3},
-    ]), isTrue);
+    expect(
+      campaignZonesCanContinue(const [
+        {'serviceAreaPointCount': 0},
+        {'serviceAreaPointCount': 2},
+      ]),
+      isFalse,
+    );
+    expect(
+      campaignZonesCanContinue(const [
+        {'serviceAreaPointCount': 3},
+      ]),
+      isTrue,
+    );
   });
 
-  test('focused zone flow opens the maintained map before persistence', () {
-    expect(zonesSource, contains('Choose where this campaign will run'));
-    expect(zonesSource, contains('Choose Target Area'));
-    expect(zonesSource, contains('Draw Custom Target'));
-    expect(zonesSource, contains('pendingZoneData: pendingZoneData'));
-    expect(zonesSource, isNot(contains("'workerPoolCents':")));
-    expect(areaSource, contains("if (latestSnapshot?.exists == true)"));
-    expect(areaSource, contains("widget.pendingZoneData == null"));
-    expect(areaSource, contains("await widget.campaignReference.set(createData)"));
-    expect(areaSource, contains('widget.campaignReference.set'));
-    expect(areaSource, contains('Route not yet verified'));
-  });
+  test(
+    'focused zone flow recommends valid Zones and retains Advanced Edit',
+    () {
+      expect(zonesSource, contains('Choose where this campaign will run'));
+      expect(zonesSource, contains('Recommend Workable Zones'));
+      expect(zonesSource, contains('Advanced Edit'));
+      expect(zonesSource, contains('getSmartZonePlan'));
+      expect(zonesSource, contains('applySmartZonePlan'));
+      expect(zonesSource, contains('pendingZoneData: pendingZoneData'));
+      expect(zonesSource, isNot(contains("'workerPoolCents':")));
+      expect(areaSource, contains("if (latestSnapshot?.exists == true)"));
+      expect(areaSource, contains("widget.pendingZoneData == null"));
+      expect(
+        areaSource,
+        contains("await widget.campaignReference.set(createData)"),
+      );
+      expect(areaSource, contains('widget.campaignReference.set'));
+      expect(areaSource, contains('Route not yet verified'));
+    },
+  );
 
   test('authoritative plan configuration contains all four real plans', () {
     final plans = SubscriptionPlanService.plans;

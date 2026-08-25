@@ -129,8 +129,9 @@ assert.deepEqual(Object.keys(assignment).sort(), [
   "acceptZoneGroupSlot", "assignScalerToZone", "configureZoneGroupAssignment",
 ]);
 assert.deepEqual(Object.keys(discovery).sort(), [
-  "analyzeCampaignZone", "saveDiscoveryPreferences",
-]);
+  "analyzeCampaignZone", "applySmartZonePlan", "getSmartZonePlan",
+  "saveDiscoveryPreferences",
+].sort());
 assert.deepEqual(Object.keys(jobRoom), ["getJobRoom"]);
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",

@@ -11,10 +11,11 @@ void main() {
     'lib/screens/business/campaign_zones_screen.dart',
   ).readAsStringSync();
 
-  test('production campaign permits its first Zone but gates another', () {
+  test('production campaign permits bounded independent Scaler Zones', () {
     expect(campaignCanAddZone(0), isTrue);
-    expect(campaignCanAddZone(1), isFalse);
-    expect(productionMaximumZonesPerCampaign, 1);
+    expect(campaignCanAddZone(1), isTrue);
+    expect(campaignCanAddZone(12), isFalse);
+    expect(productionMaximumZonesPerCampaign, 12);
   });
 
   test(

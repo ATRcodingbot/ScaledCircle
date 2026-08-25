@@ -43,6 +43,7 @@ const serviceAreaGeometryCodec = require("./service_area_geometry_codec");
 
 
 const operations = require("./operational_layer");
+const smartZonePlanning = require("./smart_zone_planning");
 
 
 
@@ -3670,6 +3671,149 @@ exports.analyzeCampaignZone = onCall(
   }
 );
 
+function smartZoneAnchor(campaign = {}) {
+  const points = Array.isArray(campaign.serviceArea) ? campaign.serviceArea.filter((item) =>
+  Number.isFinite(item?.latitude) && Number.isFinite(item?.longitude)) : [];
+  if (points.length < 3) return null;
+  return {
+    latitude: points.reduce((sum, item) => sum + item.latitude, 0) / points.length,
+    longitude: points.reduce((sum, item) => sum + item.longitude, 0) / points.length
+  };
+}
+
+async function smartZoneCampaign(request) {
+  const context = await authenticatedUserContext(
+    request, "Sign in as a Business to plan campaign Zones.");
+  if (context.role !== "business" && !context.isAdmin) {
+    throw new HttpsError("permission-denied", "Business access is required.");
+  }
+  const campaignId = readText(request.data?.campaignId, 160);
+  if (!campaignId) throw new HttpsError("invalid-argument", "A campaign is required.");
+  const reference = db.collection("campaigns").doc(campaignId);
+  const snapshot = await reference.get();
+  if (!snapshot.exists) throw new HttpsError("not-found", "Campaign not found.");
+  const campaign = snapshot.data() || {};
+  if (!context.isAdmin && campaign.businessId !== context.uid) {
+    throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+  }
+  if (String(campaign.status || "draft") !== "draft") {
+    throw new HttpsError("failed-precondition", "Smart Zone planning is available before funding.");
+  }
+  const anchor = smartZoneAnchor(campaign);
+  if (!anchor) {
+    throw new HttpsError("failed-precondition",
+    "Choose a Service Area or address anchor before requesting recommended Zones.");
+  }
+  return { context, campaignId, reference, campaign, anchor };
+}
+
+exports.getSmartZonePlan = onCall(
+  { enforceAppCheck: false, maxInstances: 10 },
+  async (request) => {
+    const input = await smartZoneCampaign(request);
+    try {
+      return smartZonePlanning.generatePlan({
+        anchor: input.anchor,
+        desiredHours: request.data?.desiredHours ?? 5,
+        workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
+        "field_distribution",
+        totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
+        Number(input.campaign.bonus || 0)) * 100),
+        label: readText(input.campaign.serviceAreaTemplateName, 120) || "Recommended Area"
+      });
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
+    }
+  }
+);
+
+exports.applySmartZonePlan = onCall(
+  { enforceAppCheck: false, maxInstances: 5 },
+  async (request) => {
+    const input = await smartZoneCampaign(request);
+    let plan;
+    try {
+      plan = smartZonePlanning.generatePlan({
+        anchor: input.anchor,
+        desiredHours: request.data?.desiredHours ?? 5,
+        workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
+        "field_distribution",
+        totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
+        Number(input.campaign.bonus || 0)) * 100),
+        label: readText(input.campaign.serviceAreaTemplateName, 120) || "Recommended Area"
+      });
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
+    }
+    if (request.data?.planId !== plan.planId) {
+      throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
+    }
+    const existing = await db.collection("campaignZones").
+    where("campaignId", "==", input.campaignId).get();
+    if (existing.docs.length && existing.docs.every((doc) =>
+    doc.data()?.smartZonePlanId === plan.planId)) {
+      return { success: true, campaignId: input.campaignId, planId: plan.planId,
+        zoneCount: existing.docs.length, replay: true };
+    }
+    if (existing.docs.some((doc) => {
+      const zone = doc.data() || {};
+      return zone.assignedScalerId || !["", "unassigned"].includes(String(zone.status || ""));
+    })) {
+      throw new HttpsError("failed-precondition",
+      "Existing assigned or active Zones cannot be replaced by a recommendation.");
+    }
+    if (existing.docs.length) {
+      throw new HttpsError("failed-precondition",
+      "Remove existing draft Zones in Advanced Edit before applying this recommendation.");
+    }
+    const batch = db.batch();
+    for (const zone of plan.zones) {
+      const geometryEstimate = operations.calculateGeometryWalkingEstimate(zone.geometry);
+      operations.assertZoneDuration(geometryEstimate.estimatedWalkingMinutes);
+      const reference = db.collection("campaignZones").doc();
+      batch.set(reference, {
+        campaignId: input.campaignId,
+        businessId: input.campaign.businessId,
+        zoneName: zone.name,
+        status: "unassigned",
+        assignedScalerId: null,
+        mapped: true,
+        serviceArea: zone.geometry,
+        serviceAreaType: "rectangle",
+        serviceAreaPointCount: zone.geometry.length,
+        estimatedHomes: zone.workload.estimatedProperties,
+        homeCountStatus: "estimated",
+        homeCountMethod: "smart_zone_conservative_density_v1",
+        homeCountConfidence: zone.workload.confidence,
+        analysisStatus: "complete",
+        estimatedWorkMinutes: zone.workload.estimatedMinutes,
+        estimatedWorkHours: zone.workload.estimatedHours,
+        workloadConfidence: zone.workload.confidence,
+        workability: zone.workability,
+        smartZonePlanId: plan.planId,
+        smartZonePolicyVersion: plan.policyVersion,
+        serverEstimatedWalkingMinutes: geometryEstimate.estimatedWalkingMinutes,
+        estimatedMinutes: geometryEstimate.estimatedWalkingMinutes,
+        estimatedWalkingMeters: geometryEstimate.estimatedWalkingMeters,
+        serverZoneMetricsVersion: geometryEstimate.version,
+        serverZoneGeometryDigest: operations.zoneGeometryDigest(zone.geometry),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    }
+    batch.set(input.reference, {
+      estimatedHomes: plan.totalEstimatedProperties,
+      smartZonePlanId: plan.planId,
+      smartZonePolicyVersion: plan.policyVersion,
+      recommendedScalerCount: plan.recommendedScalerCount,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    await batch.commit();
+    return { success: true, campaignId: input.campaignId, planId: plan.planId,
+      zoneCount: plan.zones.length };
+  }
+);
+
 /** Server-authoritative, industry-neutral property/housing-stock analysis. */
 
 
@@ -5293,13 +5437,13 @@ function calculateDevelopmentHomeEstimate({
 
 
 
+function readText(value, maximumLength = 500) {
+  if (typeof value !== "string") {
+    return "";
+  }
 
-
-
-
-
-
-
+  return value.trim().slice(0, maximumLength);
+}
 
 
 
