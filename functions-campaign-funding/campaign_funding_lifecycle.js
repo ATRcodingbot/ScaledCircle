@@ -1,5 +1,4 @@
 "use strict";
-
 const crypto = require("node:crypto");
 
 const PLATFORM_FEE_BASIS_POINTS = 2000;
@@ -174,13 +173,21 @@ function mappedZoneIsValid(zone, campaignId, businessId) {
   const estimatedMinutes = Number(
     zone.serverEstimatedWalkingMinutes || zone.estimatedWorkMinutes || 0,
   );
+  const geometryDigest = coordinates.length >= 3 ? crypto.createHash("sha256")
+    .update(JSON.stringify(coordinates.map(([latitude, longitude]) =>
+      [latitude.toFixed(7), longitude.toFixed(7)]))).digest("hex") : null;
   return (zone.mapped === true || points >= 3) && points >= 3 &&
     coordinates.length >= 3 && uniqueCoordinates.size >= 3 && polygonArea > 0 &&
     zone.serverZoneMetricsVersion === "geometry_v1_server" &&
-    typeof zone.serverZoneGeometryDigest === "string" && zone.serverZoneGeometryDigest.length > 0 &&
+    zone.serverZoneGeometryDigest === geometryDigest &&
     zone.analysisStatus === "complete" &&
     Number.isSafeInteger(estimatedHomes) && estimatedHomes > 0 &&
     Number.isFinite(estimatedMinutes) && estimatedMinutes > 0 && estimatedMinutes <= 360;
+}
+
+function allMappedZonesValid(zones, campaignId, businessId) {
+  return Array.isArray(zones) && zones.length > 0 &&
+    zones.every((zone) => mappedZoneIsValid(zone, campaignId, businessId));
 }
 
 function checkoutRecoveryDecision(payment, stripeSession, nowSeconds) {
@@ -231,6 +238,7 @@ module.exports = {
   checkoutRecoveryDecision,
   cancelRefundEligibility,
   mappedZoneIsValid,
+  allMappedZonesValid,
   paymentEnvironment,
   paymentId,
   quoteDigest,

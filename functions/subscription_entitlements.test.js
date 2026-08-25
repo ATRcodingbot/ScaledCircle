@@ -25,6 +25,20 @@ test("expired, cancelled, and inactive Scale records are denied", () => {
   ]) assert.equal(entitlement.hasActiveScaleEntitlement(record, {nowMillis}), false);
 });
 
+test("Smart Zone access includes every active paid Business tier", () => {
+  for (const planId of ["starter", "growth", "scale", "managed_growth"]) {
+    assert.equal(entitlement.hasActivePaidBusinessEntitlement({
+      planId, status: "active", expiresAt: timestamp("2026-09-13T12:00:00Z"),
+    }, {nowMillis}), true, planId);
+  }
+  for (const record of [
+    null,
+    {planId: "free", status: "active", expiresAt: timestamp("2026-09-13T12:00:00Z")},
+    {planId: "starter", status: "cancelled", expiresAt: timestamp("2026-09-13T12:00:00Z")},
+    {planId: "starter", status: "active", expiresAt: timestamp("2026-08-13T11:59:59Z")},
+  ]) assert.equal(entitlement.hasActivePaidBusinessEntitlement(record, {nowMillis}), false);
+});
+
 test("client-looking fields cannot spoof the authoritative record", () => {
   assert.equal(entitlement.hasActiveScaleEntitlement({
     requestedPlan: "scale", clientEntitlement: true, status: "active",

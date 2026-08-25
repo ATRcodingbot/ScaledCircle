@@ -3684,7 +3684,7 @@ function smartZoneAnchor(campaign = {}) {
 async function smartZoneCampaign(request) {
   const context = await authenticatedUserContext(
     request, "Sign in as a Business to plan campaign Zones.");
-  if (context.role !== "business" && !context.isAdmin) {
+  if (context.role !== "business") {
     throw new HttpsError("permission-denied", "Business access is required.");
   }
   const campaignId = readText(request.data?.campaignId, 160);
@@ -3693,8 +3693,14 @@ async function smartZoneCampaign(request) {
   const snapshot = await reference.get();
   if (!snapshot.exists) throw new HttpsError("not-found", "Campaign not found.");
   const campaign = snapshot.data() || {};
-  if (!context.isAdmin && campaign.businessId !== context.uid) {
+  if (campaign.businessId !== context.uid) {
     throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+  }
+  const entitlement = (await db.collection("businessSubscriptions")
+    .doc(context.uid).get()).data();
+  if (!subscriptionEntitlements.hasActivePaidBusinessEntitlement(entitlement)) {
+    throw new HttpsError("permission-denied",
+      "Smart Zone planning requires an active paid Business plan.");
   }
   if (String(campaign.status || "draft") !== "draft") {
     throw new HttpsError("failed-precondition", "Smart Zone planning is available before funding.");
@@ -3704,7 +3710,21 @@ async function smartZoneCampaign(request) {
     throw new HttpsError("failed-precondition",
       "Choose a Service Area or address anchor before requesting recommended Zones.");
   }
-  return {context, campaignId, reference, campaign, anchor};
+  return {context, campaignId, reference, campaign, anchor,
+    sourceAreaDigest: operations.zoneGeometryDigest(campaign.serviceArea)};
+}
+
+function generateSmartZonePlan(input, desiredHours) {
+  return smartZonePlanning.generatePlan({
+    anchor: input.anchor,
+    desiredHours: desiredHours ?? 5,
+    workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
+      "field_distribution",
+    totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
+      Number(input.campaign.bonus || 0)) * 100),
+    label: readText(input.campaign.serviceAreaTemplateName, 120) || "Recommended Area",
+    sourceAreaDigest: input.sourceAreaDigest,
+  });
 }
 
 exports.getSmartZonePlan = onCall(
@@ -3712,15 +3732,7 @@ exports.getSmartZonePlan = onCall(
   async (request) => {
     const input = await smartZoneCampaign(request);
     try {
-      return smartZonePlanning.generatePlan({
-        anchor: input.anchor,
-        desiredHours: request.data?.desiredHours ?? 5,
-        workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
-          "field_distribution",
-        totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
-          Number(input.campaign.bonus || 0)) * 100),
-        label: readText(input.campaign.serviceAreaTemplateName, 120) || "Recommended Area",
-      });
+      return generateSmartZonePlan(input, request.data?.desiredHours);
     } catch (_) {
       throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
     }
@@ -3733,47 +3745,50 @@ exports.applySmartZonePlan = onCall(
     const input = await smartZoneCampaign(request);
     let plan;
     try {
-      plan = smartZonePlanning.generatePlan({
-        anchor: input.anchor,
-        desiredHours: request.data?.desiredHours ?? 5,
-        workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
-          "field_distribution",
-        totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
-          Number(input.campaign.bonus || 0)) * 100),
-        label: readText(input.campaign.serviceAreaTemplateName, 120) || "Recommended Area",
-      });
+      plan = generateSmartZonePlan(input, request.data?.desiredHours);
     } catch (_) {
       throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
     }
     if (request.data?.planId !== plan.planId) {
       throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
     }
-    const existing = await db.collection("campaignZones")
-      .where("campaignId", "==", input.campaignId).get();
-    if (existing.docs.length && existing.docs.every((doc) =>
-      doc.data()?.smartZonePlanId === plan.planId)) {
-      return {success: true, campaignId: input.campaignId, planId: plan.planId,
-        zoneCount: existing.docs.length, replay: true};
-    }
-    if (existing.docs.some((doc) => {
-      const zone = doc.data() || {};
-      return zone.assignedScalerId || !["", "unassigned"].includes(String(zone.status || ""));
-    })) {
-      throw new HttpsError("failed-precondition",
-        "Existing assigned or active Zones cannot be replaced by a recommendation.");
-    }
-    if (existing.docs.length) {
-      throw new HttpsError("failed-precondition",
-        "Remove existing draft Zones in Advanced Edit before applying this recommendation.");
-    }
-    const batch = db.batch();
-    for (const zone of plan.zones) {
+    const preparedZones = plan.zones.map((zone) => {
       const geometryEstimate = operations.calculateGeometryWalkingEstimate(zone.geometry);
       operations.assertZoneDuration(geometryEstimate.estimatedWalkingMinutes);
-      const reference = db.collection("campaignZones").doc();
-      batch.set(reference, {
+      return {zone, geometryEstimate, reference: db.collection("campaignZones").doc()};
+    });
+    const result = await db.runTransaction(async (transaction) => {
+      const currentCampaignSnapshot = await transaction.get(input.reference);
+      const currentCampaign = currentCampaignSnapshot.data() || {};
+      const currentAnchor = smartZoneAnchor(currentCampaign);
+      if (!currentCampaignSnapshot.exists || String(currentCampaign.status || "draft") !== "draft" ||
+          !currentAnchor) {
+        throw new HttpsError("failed-precondition", "The campaign changed. Review the plan again.");
+      }
+      const currentInput = {...input, campaign: currentCampaign, anchor: currentAnchor,
+        sourceAreaDigest: operations.zoneGeometryDigest(currentCampaign.serviceArea)};
+      const currentPlan = generateSmartZonePlan(currentInput, request.data?.desiredHours);
+      if (currentPlan.planId !== plan.planId) {
+        throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
+      }
+      const existing = await transaction.get(db.collection("campaignZones")
+        .where("campaignId", "==", input.campaignId));
+      if (existing.docs.length && existing.docs.every((doc) =>
+        doc.data()?.smartZonePlanId === plan.planId)) {
+        return {success: true, campaignId: input.campaignId, planId: plan.planId,
+          zoneCount: existing.docs.length, replay: true};
+      }
+      if (existing.docs.some((doc) => {
+        const zone = doc.data() || {};
+        return zone.assignedScalerId || !["", "unassigned"].includes(String(zone.status || ""));
+      })) {
+        throw new HttpsError("failed-precondition",
+          "Existing assigned or active Zones cannot be replaced by a recommendation.");
+      }
+      for (const document of existing.docs) transaction.delete(document.ref);
+      for (const {zone, geometryEstimate, reference} of preparedZones) transaction.set(reference, {
         campaignId: input.campaignId,
-        businessId: input.campaign.businessId,
+        businessId: currentCampaign.businessId,
         zoneName: zone.name,
         status: "unassigned",
         assignedScalerId: null,
@@ -3800,17 +3815,17 @@ exports.applySmartZonePlan = onCall(
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
-    }
-    batch.set(input.reference, {
+      transaction.set(input.reference, {
       estimatedHomes: plan.totalEstimatedProperties,
       smartZonePlanId: plan.planId,
       smartZonePolicyVersion: plan.policyVersion,
       recommendedScalerCount: plan.recommendedScalerCount,
       updatedAt: FieldValue.serverTimestamp(),
-    }, {merge: true});
-    await batch.commit();
-    return {success: true, campaignId: input.campaignId, planId: plan.planId,
-      zoneCount: plan.zones.length};
+      }, {merge: true});
+      return {success: true, campaignId: input.campaignId, planId: plan.planId,
+        zoneCount: plan.zones.length, replay: false};
+    });
+    return result;
   },
 );
 

@@ -2,15 +2,13 @@
 
 const crypto = require("node:crypto");
 
-const POLICY_VERSION = "SmartZonePlanningV1";
+const POLICY_VERSION = "SmartZonePlanningV2";
 const GEOMETRY_VERSION = "smart_zone_rectangle_v1";
 const IDEAL_MINUTES = 240;
 const IDEAL_TARGET_MINUTES = 300;
-const RECOMMENDED_MAX_MINUTES = 480;
-// Existing assignment authority already enforces a six-hour one-Scaler ceiling.
-// Smart planning keeps the product's eight-hour warning threshold visible while
-// applying the stricter current launch safety limit until separately reviewed.
-const ABSOLUTE_MAX_MINUTES = 360;
+// One product contract: every recommended or fundable single-Scaler Zone must
+// fit the same six-hour ceiling enforced by authoritative assignment.
+const SINGLE_SCALER_MAX_MINUTES = 360;
 const MIN_PROPERTIES = 1;
 const DEFAULT_PROPERTIES_PER_HOUR = 45;
 const METERS_PER_DEGREE_LATITUDE = 111320;
@@ -121,14 +119,13 @@ function estimateWorkload({estimatedProperties, estimatedWalkingMeters,
 
 function recommendedScalerCount(estimatedMinutes) {
   const minutes = Math.ceil(finite(estimatedMinutes, "estimated_minutes"));
-  if (minutes <= Math.min(RECOMMENDED_MAX_MINUTES, ABSOLUTE_MAX_MINUTES)) return 1;
-  return Math.max(2, Math.ceil(minutes / ABSOLUTE_MAX_MINUTES));
+  if (minutes <= SINGLE_SCALER_MAX_MINUTES) return 1;
+  return Math.max(2, Math.ceil(minutes / SINGLE_SCALER_MAX_MINUTES));
 }
 
 function workabilityForMinutes(minutes) {
   if (minutes <= IDEAL_TARGET_MINUTES + 60 && minutes >= IDEAL_MINUTES) return "excellent";
-  if (minutes <= RECOMMENDED_MAX_MINUTES) return "good";
-  if (minutes <= ABSOLUTE_MAX_MINUTES * 1.5) return "needs_adjustment";
+  if (minutes <= SINGLE_SCALER_MAX_MINUTES) return "good";
   return "too_large";
 }
 
@@ -163,7 +160,7 @@ function planId(input) {
 
 function generatePlan({anchor, desiredHours = 5, propertiesPerHour = DEFAULT_PROPERTIES_PER_HOUR,
   workType = "field_distribution", label = "Recommended Area",
-  totalWorkerPayCents = null} = {}) {
+  totalWorkerPayCents = null, sourceAreaDigest = null} = {}) {
   const normalizedAnchor = normalizeAnchor(anchor);
   const hours = clamp(finite(desiredHours, "desired_hours"), 0.5, 48);
   const totalProperties = Math.max(1, Math.round(hours * propertiesPerHour));
@@ -202,7 +199,8 @@ function generatePlan({anchor, desiredHours = 5, propertiesPerHour = DEFAULT_PRO
     });
   });
   const identity = {anchor: normalizedAnchor, desiredHours: hours, propertiesPerHour,
-    workType, totalWorkerPayCents: compensation.workerPayCents, policyVersion: POLICY_VERSION};
+    workType, totalWorkerPayCents: compensation.workerPayCents,
+    sourceAreaDigest: String(sourceAreaDigest || "anchor_only"), policyVersion: POLICY_VERSION};
   return Object.freeze({
     planId: planId(identity), label, anchor: normalizedAnchor, desiredHours: hours,
     totalEstimatedProperties: totalProperties,
@@ -226,16 +224,16 @@ function paymentReadiness(zone) {
   const minutes = Number(zone?.serverEstimatedWalkingMinutes || zone?.estimatedWorkMinutes || 0);
   const ready = geometry.valid && zone?.analysisStatus === "complete" &&
     Number.isSafeInteger(estimatedHomes) && estimatedHomes > 0 &&
-    Number.isFinite(minutes) && minutes > 0 && minutes <= ABSOLUTE_MAX_MINUTES;
+    Number.isFinite(minutes) && minutes > 0 && minutes <= SINGLE_SCALER_MAX_MINUTES;
   return {ready, geometry, estimatedHomes, estimatedMinutes: minutes,
     reason: !geometry.valid ? geometry.reason : zone?.analysisStatus !== "complete" ?
       "analysis_required" : estimatedHomes <= 0 ? "positive_home_estimate_required" :
-      minutes <= 0 ? "workload_estimate_required" : minutes > ABSOLUTE_MAX_MINUTES ?
+      minutes <= 0 ? "workload_estimate_required" : minutes > SINGLE_SCALER_MAX_MINUTES ?
         "automatic_split_required" : null};
 }
 
 module.exports = {POLICY_VERSION, GEOMETRY_VERSION, IDEAL_MINUTES,
-  IDEAL_TARGET_MINUTES, RECOMMENDED_MAX_MINUTES, ABSOLUTE_MAX_MINUTES,
+  IDEAL_TARGET_MINUTES, SINGLE_SCALER_MAX_MINUTES,
   rectangleAround, polygonAreaSquareMeters, validateGeometry, estimateWorkload,
   recommendedScalerCount, workabilityForMinutes, splitRectangle, generatePlan,
   paymentReadiness};

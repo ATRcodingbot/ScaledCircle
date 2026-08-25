@@ -33,8 +33,9 @@ map pixels, accessibility semantics, or LLM-authored polygons.
 - Product ideal: approximately 4–6 estimated hours.
 - Product warning threshold: 8 hours.
 - Current launch assignment safety ceiling: 6 hours per one-Scaler Zone.
-- Under the current stricter assignment authority, Smart Zone planning splits work above six
-  hours even though the broader product warning threshold remains eight hours.
+- Six hours is the single authoritative maximum for one Scaler Zone. Smart Zone planning
+  automatically splits any larger workload before funding, so the normal funded flow cannot
+  produce a Zone that assignment later rejects solely for estimated duration.
 - Estimates are planning guidance, not guarantees.
 
 The first version uses conservative configurable property pace and available route distance.
@@ -98,6 +99,24 @@ They must call these authorities and consume structured outputs. They must not:
 - create funding authority;
 - bypass publishability or assignment checks.
 
+The supported agent interface is `getSmartZonePlan` followed by `applySmartZonePlan`, exactly
+the same boundary used by the Business UI. Real neighborhood ranking from richer maintained
+intelligence signals is not implemented by this deterministic geometry planner.
+
+## Access and pricing handoff
+
+Smart Zone planning is available to active `starter`, `growth`, `scale`, and
+`managed_growth` Business subscriptions. Free, expired, and cancelled records fail closed.
+No recommendation quota is introduced in this candidate. The later pricing audit should
+evaluate one generated recommendation as the natural metering unit while retaining useful
+Smart Zone access on every paid tier.
+
+Current marginal cost is Firebase callable execution plus bounded Firestore reads and writes.
+The deterministic planner uses no AI model, paid map provider, weather provider, Census
+provider, or external geospatial API. Viewing stored plans/results has negligible provider
+cost. Future neighborhood ranking may add provider/model costs and requires a separate
+entitlement and unit-economics review.
+
 ## Proposed staging rollout
 
 No deployment has occurred. Minimum staging scope, pending Founder approval:
@@ -110,6 +129,23 @@ No deployment has occurred. Minimum staging scope, pending Founder approval:
 3. Deploy staging Hosting with the preferred recommendation UI.
 4. Deploy no Rules, indexes, Storage Rules, secrets, or external providers.
 5. Verify signed-out/Business/Scaler/Admin authorization and deterministic plan replay.
+
+Exact pre-deployment inventory captured read-only on 2026-08-25:
+
+| Callable | Current staging owner/hash/generation | Target | Secret names | Reason |
+| --- | --- | --- | --- | --- |
+| `getSmartZonePlan` | absent | `discovery-core`, source digest `b7460e03124045d37b2f62327fa62352f26c4d2285939ba15fec94de15df805a` | none | New paid-tier deterministic planning authority |
+| `applySmartZonePlan` | absent | `discovery-core`, same digest | none | New transactional plan application/repair authority |
+| `quoteCampaignFunding` | `campaign-funding`, hash `84ced31009fa2cfdaf4083650642274b6e7c5108`, generation `1787313567690515` | `campaign-funding`, source digest `6f85e2a6e196e2e9ec1fd57e5e1a1e6a6c3dfca5a0b1261176d48e05a5501caf` | none | Require every Zone to pass the reconciled geometry/workload gate before quote |
+| `createCampaignFundingCheckoutSession` | `campaign-funding`, hash `aaf4ab16b9415ba5c9769bdb1453b05c57d9fb52`, generation `1787603881045667` | `campaign-funding`, same digest | `STRIPE_TEST_SECRET_KEY` | Enforce the same gate before payment records or Stripe Checkout |
+
+Firebase deployment hashes are assigned by Firebase at deployment; the target digests above
+are reproducible SHA-256 digests of the reviewed generated codebase inputs. Rollback restores
+the two recorded campaign-funding generations/hashes, deletes the two newly introduced Smart
+Zone callable resources if rollback is required, and restores staging Hosting release
+`1787656151946000` / version `7f0d171ef683d541` (the read-only inventory captured on
+2026-08-25). No
+Rules, indexes, Storage Rules, provider configuration, or new secret binding is required.
 6. Create the two Internal QA campaigns through Smart Zones, verify positive analysis before
    each separately approved TEST Checkout, then continue the maintained lifecycle.
 

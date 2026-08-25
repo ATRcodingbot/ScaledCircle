@@ -132,8 +132,22 @@ class CampaignZonesScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   const Text(
                     'These are planning estimates, not guaranteed completion times. '
-                    'ScaledCircle will validate every Zone again before funding.',
+                    'Each recommended Zone is kept within the six-hour single-Scaler '
+                    'limit and validated again before funding.',
                   ),
+                  if (plan['requiresSplit'] == true) ...[
+                    const SizedBox(height: 12),
+                    const Card(
+                      child: ListTile(
+                        leading: Icon(Icons.call_split),
+                        title: Text('Automatically split into workable Zones'),
+                        subtitle: Text(
+                          'The selected workload was too large for one Scaler, so '
+                          'ScaledCircle divided it before funding.',
+                        ),
+                      ),
+                    ),
+                  ],
                   if (compensation['attractiveness'] ==
                       'low_acceptance_likelihood') ...[
                     const SizedBox(height: 12),
@@ -164,7 +178,6 @@ class CampaignZonesScreen extends StatelessWidget {
                         trailing: Text(switch (zone['workability']) {
                           'excellent' => 'Excellent',
                           'good' => 'Good',
-                          'needs_adjustment' => 'Needs adjustment',
                           _ => 'Too large',
                         }),
                       ),
@@ -1504,6 +1517,24 @@ class CampaignZonesScreen extends StatelessWidget {
                       subtitle: Text(
                         'Scaler Crew and additional worker Zones are currently '
                         'in limited rollout.',
+                      ),
+                    ),
+                  ),
+
+                if (zones.isNotEmpty && !_campaignLocked)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.auto_fix_high),
+                      title: const Text('Need a workable split?'),
+                      subtitle: const Text(
+                        'Re-plan from the selected Service Area. Applying the plan '
+                        'replaces only unassigned draft Zones and reruns server checks.',
+                      ),
+                      trailing: TextButton(
+                        onPressed: _serviceAreaBoundary.length < 3
+                            ? null
+                            : () => _reviewSmartZonePlan(context),
+                        child: const Text('Auto-Fix'),
                       ),
                     ),
                   ),

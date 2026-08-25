@@ -15,6 +15,11 @@ void main() {
       expect(source, contains('Advanced Edit'));
       expect(source, contains('estimated total hours'));
       expect(source, contains('not guaranteed completion times'));
+      expect(source, contains('six-hour single-Scaler'));
+      expect(source, contains('limit and validated again before funding'));
+      expect(source, contains('Automatically split into workable Zones'));
+      expect(source, contains('Auto-Fix'));
+      expect(source, isNot(contains('AI neighborhood')));
       expect(
         source,
         isNot(contains("label: const Text('Draw Custom Target')")),

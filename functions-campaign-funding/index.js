@@ -58,19 +58,19 @@ async function ownedCampaign(request) {
   return {uid: request.auth.uid, campaignId, ref, campaign};
 }
 
-async function validZones(campaignId, uid) {
-  const zones = await db.collection("campaignZones").where("campaignId", "==", campaignId).get();
-  return zones.docs.filter((doc) => lifecycle.mappedZoneIsValid(doc.data(), campaignId, uid));
-}
-
 async function assertFundable(input) {
   if (input.campaign.status !== "draft" || !["", "unfunded", "payment_failed", "checkout_expired", "payment_pending"]
     .includes(String(input.campaign.fundingStatus || ""))) {
     throw new HttpsError("failed-precondition", "This campaign is not fundable.");
   }
-  const zones = await validZones(input.campaignId, input.uid);
-  if (!zones.length) throw new HttpsError("failed-precondition", "Map at least one valid campaign Zone before funding.");
-  return zones;
+  const zoneSnapshots = await db.collection("campaignZones")
+    .where("campaignId", "==", input.campaignId).get();
+  const zones = zoneSnapshots.docs.map((doc) => doc.data() || {});
+  if (!lifecycle.allMappedZonesValid(zones, input.campaignId, input.uid)) {
+    throw new HttpsError("failed-precondition",
+      "Analyze and adjust every campaign Zone before funding.");
+  }
+  return zoneSnapshots.docs;
 }
 
 function stripeClient() {

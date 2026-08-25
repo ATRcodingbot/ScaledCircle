@@ -147,6 +147,12 @@ test("discovery-core exclusively owns the secret-free discovery and Zone analysi
   assert.match(discovery, /smart_zone_conservative_density_v1/);
   assert.match(discovery, /analysisStatus:\s*"complete"/);
   assert.match(discovery, /serverZoneMetricsVersion/);
+  assert.match(discovery, /hasActivePaidBusinessEntitlement/);
+  assert.match(discovery, /sourceAreaDigest/);
+  assert.match(discovery, /db\.runTransaction/);
+  assert.match(discovery, /transaction\.delete/);
+  assert.doesNotMatch(discovery,
+    /request\.data\?\.(serviceArea|geometry|estimatedHomes|compensation|fundingStatus|assignedScalerId)/);
   assert.match(discovery,
     /const areaSquareMeters\s*=\s*serverWalkingEstimate\.areaSquareMeters/);
   assert.doesNotMatch(discovery,

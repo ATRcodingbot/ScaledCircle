@@ -2,6 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const lifecycle = require("../functions-campaign-funding/campaign_funding_lifecycle");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const fundingSource = fs.readFileSync(path.join(__dirname, "..", "functions-campaign-funding", "index.js"), "utf8");
@@ -55,15 +56,18 @@ test("invalid compensation is rejected", () => {
 });
 
 test("mapped Zone must belong to campaign and owner", () => {
+  const serviceArea = [
+    {latitude: 39.29, longitude: -76.62},
+    {latitude: 39.30, longitude: -76.62},
+    {latitude: 39.30, longitude: -76.61},
+    {latitude: 39.29, longitude: -76.61},
+  ];
+  const digest = crypto.createHash("sha256").update(JSON.stringify(serviceArea.map((point) =>
+    [point.latitude.toFixed(7), point.longitude.toFixed(7)]))).digest("hex");
   const ready = {campaignId: "c", businessId: "b", serviceAreaPointCount: 4,
     mapped: true, analysisStatus: "complete", estimatedHomes: 20,
     serverEstimatedWalkingMinutes: 300, serverZoneMetricsVersion: "geometry_v1_server",
-    serverZoneGeometryDigest: "fixture-digest", serviceArea: [
-      {latitude: 39.29, longitude: -76.62},
-      {latitude: 39.30, longitude: -76.62},
-      {latitude: 39.30, longitude: -76.61},
-      {latitude: 39.29, longitude: -76.61},
-    ]};
+    serverZoneGeometryDigest: digest, serviceArea};
   assert.equal(lifecycle.mappedZoneIsValid(ready, "c", "b"), true);
   assert.equal(lifecycle.mappedZoneIsValid({...ready, analysisStatus: "failed"}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({...ready, estimatedHomes: 0}, "c", "b"), false);
@@ -75,9 +79,14 @@ test("mapped Zone must belong to campaign and owner", () => {
     {latitude: 39.29, longitude: -76.62},
   ]}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({...ready, serverZoneGeometryDigest: ""}, "c", "b"), false);
+  assert.equal(lifecycle.mappedZoneIsValid({...ready, serviceArea: serviceArea.map((point, index) =>
+    index === 0 ? {...point, latitude: point.latitude + 0.001} : point)}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({campaignId: "other", serviceAreaPointCount: 3}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({campaignId: "c", businessId: "other", mapped: true}, "c", "b"), false);
   assert.equal(lifecycle.mappedZoneIsValid({campaignId: "c", serviceAreaPointCount: 2}, "c", "b"), false);
+  assert.equal(lifecycle.allMappedZonesValid([ready], "c", "b"), true);
+  assert.equal(lifecycle.allMappedZonesValid([ready, {...ready, estimatedHomes: 0}], "c", "b"), false);
+  assert.equal(lifecycle.allMappedZonesValid([], "c", "b"), false);
 });
 
 test("Stripe secrets and events must match the authoritative environment mode", () => {
@@ -209,4 +218,15 @@ test("client totals, legacy credits, payouts, and fundCampaign are absent", () =
   assert.doesNotMatch(fundingSource, /request\.data\?\.(worker|platform|total|amount)/);
   assert.doesNotMatch(fundingSource, /fundCampaign|wallet|credits|scalerTransfers/);
   assert.match(fundingSource, /approvedQuoteDigest/);
+});
+
+test("every Zone is validated before any Stripe Checkout authority is reached", () => {
+  const start = fundingSource.indexOf("exports.createCampaignFundingCheckoutSession");
+  const end = fundingSource.indexOf("exports.cancelUnassignedFundedCampaign", start);
+  const checkout = fundingSource.slice(start, end);
+  const validation = checkout.indexOf("await assertFundable(input)");
+  assert.ok(validation >= 0);
+  assert.ok(validation < checkout.indexOf("const stripe = stripeClient()"));
+  assert.ok(validation < checkout.indexOf('collection("campaignPayments")'));
+  assert.match(fundingSource, /allMappedZonesValid\(zones, input\.campaignId, input\.uid\)/);
 });
