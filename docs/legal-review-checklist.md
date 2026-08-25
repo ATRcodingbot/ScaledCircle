@@ -37,4 +37,5 @@ Founder product policy is approved for the engineering release. Production pages
 - New Scaler application and new assignment obligation require `terms-2026-08-v1` and `scaler-work-2026-08-v1`.
 - New tracking-session creation requires `location-notice-2026-08-v1`; recovery of an existing active/paused session is not destroyed by a missing newer record.
 - Consent is explicit, own-user, server-timestamped, exact-version, deterministic, and idempotent. Admin cannot accept for a user.
-- The application collection must be server-create-only. That Rules tightening is tested but awaiting separate deployment authorization.
+- The application collection is server-create-only in staging. The Rule and hosted actor flow are verified; coordinated production promotion remains pending.
+- New-session location notice enforcement remains implemented/tested in the future worker candidate and is not production-active.

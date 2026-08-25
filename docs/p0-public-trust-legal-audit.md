@@ -42,7 +42,9 @@ Audit date: 2026-08-24. Production baseline: `9e4867518593cb1440117740f924e8edac
 
 The remediation candidate adds bounded own-user `legal-core:getLegalConsentStatus` and a shared read-only server contract. Enforcement is placed at the owning action boundaries: campaign funding, Scaler application, assignment obligation, and new tracking-session creation. Errors use `failed-precondition` with `reason: LEGAL_CONSENT_REQUIRED` and exact missing agreement/version pairs. The maintained application client no longer writes Firestore directly.
 
-Staging closure is blocked by one necessary security change: Firestore Rules must deny direct application creation so `application-core:applyToCampaign` is the exclusive authority. The candidate Rule and regression test pass locally; no Rules deployment was performed under the current authorization.
+Staging consent authority is verified. Firestore Rules now deny direct application creation so `application-core:applyToCampaign` is the exclusive authority. Hosted QA proved a legacy Scaler retains dashboard/profile/Wallet access, a new application is blocked until the current Terms and Scaler Work Terms are accepted, the server creates exactly one application afterward, and a synthetic legacy applicant cannot receive a new assignment obligation until the same current agreements exist. The post-consent assignment created one immutable compensation contract with no earning or Wallet mutation. Firestore Rules passed 20/20 and Storage Rules passed 6/6.
+
+`completion-core:startTrackingSession` contains the reviewed `location-notice-2026-08-v1` gate for new sessions, while existing active/paused sessions remain recoverable. That location-consent enforcement is **not production-active** and remains deferred to the physical-device/worker-lifecycle promotion.
 
 Versions:
 

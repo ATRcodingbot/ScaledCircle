@@ -1,6 +1,6 @@
 # P0 Batch 4 Founder / Legal Approval Summary
 
-Prepared: August 24, 2026. This packet describes staging candidate `a55efb723a3f39d4e67283302b04dfc904bda8db` against production `9e4867518593cb1440117740f924e8edac86a711`. It is a product-fact and approval packet, not legal advice. Nothing in this packet authorizes production deployment.
+Prepared: August 24, 2026; staging consent-authority verification updated August 25, 2026. The reviewed lineage is based on candidate `b2e55bfcf7bab7369bdc2a31553f60a8b9658325` against production `9e4867518593cb1440117740f924e8edac86a711`. Hosted staging actor QA now verifies exact-version Business funding, Scaler application, and assignment-obligation gates. It is a product-fact and approval packet, not legal advice. Nothing in this packet authorizes production deployment.
 
 ## Approval requested
 

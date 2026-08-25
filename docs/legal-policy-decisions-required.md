@@ -17,7 +17,7 @@ These decisions are intentionally unresolved. No precise policy was invented in 
 
 ## Engineering follow-ups, not policy inventions
 
-- Deploy the reviewed server-authoritative consent candidate: exact-version checks now exist for new campaign funding, Scaler application, new assignment obligations, and new tracking-session creation. The required server-only application Rules change passed 20/20 emulator tests but remains undeployed pending explicit Rules authorization.
+- Promote the staging-verified server-authoritative consent candidate through a coordinated production rollout. Exact-version checks are hosted-verified for new campaign funding, Scaler application, and new assignment obligations; the server-only application Rule passed 20/20 and is deployed in staging. New tracking-session location consent remains deferred to the worker-lifecycle production promotion.
 - Add material-change/re-consent UX after legal versions are professionally approved.
 - Add purpose-built privacy request tracking after the request policy is defined.
 - Reassess cookie notice needs when analytics, ad pixels, or third-party embeds are introduced.

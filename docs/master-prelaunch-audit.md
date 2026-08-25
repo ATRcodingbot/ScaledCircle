@@ -41,7 +41,8 @@ The product should launch around one narrow promise: Businesses fund mapped fiel
 - Hosted staging deep links, reload, Back/Forward, 390×844 layout, and exact bundle match passed. No production, financial, outreach, or payout action occurred.
 - Professional review remains required for the policy decisions recorded in `legal-policy-decisions-required.md` and `legal-review-checklist.md`.
 - The consent-action candidate uses one canonical exact-version helper and structured `LEGAL_CONSENT_REQUIRED` responses. It protects new funding, new Scaler application, new assignment obligations, and new tracking sessions without globally locking out legacy users. Existing active tracking sessions remain recoverable.
-- Security review found that deployed Rules still permit direct application creates. A server-only Rule is necessary for exclusive `application-core` authority; it is tested locally and intentionally undeployed pending explicit Rules approval.
+- The server-only application-create Rule is deployed to staging. Hosted actor QA proved direct application authority remains closed, `application-core` creates one post-consent application, and assignment defense-in-depth blocks a legacy applicant until current work consent before creating one immutable obligation. No payment, earning, or Wallet mutation occurred.
+- `location-notice-2026-08-v1` enforcement for new tracking sessions remains source/test-verified in the future worker candidate and is not production-active until the physical-device/worker-lifecycle gate.
 - P1: copy is lengthy and describes architecture rather than showing the product. Pricing, SEO/share metadata, password-reset links, referral persistence, Safari, and unknown-route recovery need launch QA.
 - Decision: launch homepage, role funnels, login/signup, and illustrative map after P0/P1 fixes; hide waitlist for launched roles; keep affiliate entry invite-only.
 
