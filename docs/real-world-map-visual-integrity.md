@@ -1,7 +1,7 @@
 # Real-World Map Visual Integrity Audit
 
-Status: local certification candidate; staging review required.  
-Reviewed: 2026-08-26.  
+Status: local certification candidate; staging review required.
+Reviewed: 2026-08-26.
 Scope: maintained customer-visible Flutter map surfaces and the public product preview.
 
 ## Product truth contract

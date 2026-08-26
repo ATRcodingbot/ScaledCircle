@@ -1,6 +1,6 @@
 # Smart Mapping production baseline reconciliation
 
-Status: **LOCAL PRODUCTION CANDIDATE — NOT DEPLOYED / NOT PUSHED**  
+Status: **LOCAL PRODUCTION CANDIDATE — NOT DEPLOYED / NOT PUSHED**
 Review date: 2026-08-26
 
 ## Source-of-truth baseline
