@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
+import '../../models/campaign/zone_display_identity.dart';
 
 import '../../services/completion_payout_service.dart';
 import '../../services/address_search_service.dart';
@@ -276,6 +277,7 @@ class CampaignZonesScreen extends StatelessWidget {
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
+      final zoneIdentities = resolveZoneDisplayIdentities(zones);
       final compensation = Map<String, dynamic>.from(
         plan['compensation'] as Map? ?? const {},
       );
@@ -362,6 +364,7 @@ class CampaignZonesScreen extends StatelessWidget {
                     ...zones.asMap().entries.map((entry) {
                       final index = entry.key;
                       final zone = entry.value;
+                      final identity = zoneIdentities[index];
                       final workload = Map<String, dynamic>.from(
                         zone['workload'] as Map? ?? const {},
                       );
@@ -373,11 +376,13 @@ class CampaignZonesScreen extends StatelessWidget {
                           onTap: () =>
                               setDialogState(() => selectedZoneIndex = index),
                           leading: CircleAvatar(
-                            backgroundColor: smartZoneColor(index),
+                            backgroundColor: smartZoneColor(
+                              identity.styleKey - 1,
+                            ),
                             foregroundColor: Colors.white,
-                            child: Text('${index + 1}'),
+                            child: Text('${identity.ordinal}'),
                           ),
-                          title: Text(zone['name']?.toString() ?? 'Zone'),
+                          title: Text(identity.label),
                           subtitle: Text(
                             '${workload['estimatedProperties']} properties • '
                             '~${workload['estimatedHours']} hours',
@@ -1566,23 +1571,24 @@ class CampaignZonesScreen extends StatelessWidget {
                   snapshot.data?.docs ?? [],
                 );
 
-            zones.sort((a, b) {
-              final aData = a.data();
-
-              final bData = b.data();
-
-              final aCreated = aData['createdAt'];
-
-              final bCreated = bData['createdAt'];
-
-              if (aCreated is Timestamp && bCreated is Timestamp) {
-                return aCreated.compareTo(bCreated);
-              }
-
-              return (aData['zoneName']?.toString() ?? '').compareTo(
-                bData['zoneName']?.toString() ?? '',
-              );
-            });
+            final zoneIdentityById = <String, ZoneDisplayIdentity>{};
+            final identityInputs = zones
+                .map((zone) {
+                  final data = Map<String, dynamic>.from(zone.data());
+                  data['zoneId'] = zone.id;
+                  return data;
+                })
+                .toList(growable: false);
+            for (final identity in resolveZoneDisplayIdentities(
+              identityInputs,
+            )) {
+              zoneIdentityById[identity.authoritativeId] = identity;
+            }
+            zones.sort(
+              (first, second) => zoneIdentityById[first.id]!.ordinal.compareTo(
+                zoneIdentityById[second.id]!.ordinal,
+              ),
+            );
 
             int totalEstimatedHomes = 0;
             int assignedZones = 0;
@@ -1786,11 +1792,11 @@ class CampaignZonesScreen extends StatelessWidget {
                         : null,
                   ),
 
-                ...zones.map((zone) {
+                ...zones.asMap().entries.map((entry) {
+                  final zone = entry.value;
                   final data = zone.data();
-
-                  final zoneName =
-                      data['zoneName']?.toString() ?? 'Unnamed Zone';
+                  final identity = zoneIdentityById[zone.id]!;
+                  final zoneName = identity.label;
 
                   final zoneStatus = data['status']?.toString() ?? 'unassigned';
 
@@ -1810,6 +1816,8 @@ class CampaignZonesScreen extends StatelessWidget {
 
                       ZoneIntelligenceCard(
                         zoneName: zoneName,
+                        displayOrdinal: identity.ordinal,
+                        identityColor: smartZoneColor(identity.styleKey - 1),
                         data: data,
                         onTap: _campaignLocked || data['mapLocked'] == true
                             ? null

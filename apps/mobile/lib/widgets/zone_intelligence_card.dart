@@ -4,8 +4,17 @@ class ZoneIntelligenceCard extends StatelessWidget {
   final String zoneName;
   final Map<String, dynamic> data;
   final VoidCallback? onTap;
+  final int? displayOrdinal;
+  final Color? identityColor;
 
-  const ZoneIntelligenceCard({super.key, required this.zoneName, required this.data, this.onTap});
+  const ZoneIntelligenceCard({
+    super.key,
+    required this.zoneName,
+    required this.data,
+    this.onTap,
+    this.displayOrdinal,
+    this.identityColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +22,8 @@ class ZoneIntelligenceCard extends StatelessWidget {
     final homeStatus = data['homeCountStatus']?.toString() ?? 'pending';
     final analysisStatus = data['analysisStatus']?.toString() ?? 'waiting';
     final assignedScaler = data['assignedScalerEmail']?.toString();
-    final gpsCoverage = (data['gpsCoveragePercent'] as num?)?.toDouble() ??
+    final gpsCoverage =
+        (data['gpsCoveragePercent'] as num?)?.toDouble() ??
         (data['completionPercentage'] as num?)?.toDouble();
 
     return Card(
@@ -26,14 +36,38 @@ class ZoneIntelligenceCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                const CircleAvatar(child: Icon(Icons.check)),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(zoneName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  const Text('Target saved ✓', style: TextStyle(fontWeight: FontWeight.w600)),
-                ])),
-              ]),
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: identityColor,
+                    foregroundColor: identityColor == null
+                        ? null
+                        : Colors.white,
+                    child: displayOrdinal == null
+                        ? const Icon(Icons.check)
+                        : Text('$displayOrdinal'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          zoneName,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Text(
+                          'Target saved ✓',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               _MetricRow(
                 icon: Icons.home_work_outlined,
@@ -42,7 +76,11 @@ class ZoneIntelligenceCard extends StatelessWidget {
                 supportingText: _homeSupport(homeStatus, analysisStatus),
               ),
               const Divider(),
-              const _MetricRow(icon: Icons.route_outlined, label: 'Route', value: 'Not yet verified'),
+              const _MetricRow(
+                icon: Icons.route_outlined,
+                label: 'Route',
+                value: 'Not yet verified',
+              ),
               const Divider(),
               _MetricRow(
                 icon: Icons.analytics_outlined,
@@ -53,7 +91,9 @@ class ZoneIntelligenceCard extends StatelessWidget {
               _MetricRow(
                 icon: Icons.person_outline,
                 label: 'Scaler',
-                value: assignedScaler == null || assignedScaler.isEmpty ? 'Not assigned' : assignedScaler,
+                value: assignedScaler == null || assignedScaler.isEmpty
+                    ? 'Not assigned'
+                    : assignedScaler,
               ),
               if (gpsCoverage != null) ...[
                 const Divider(),
@@ -98,7 +138,9 @@ class ZoneIntelligenceCard extends StatelessWidget {
   }
 
   static String _workloadLabel(String analysisStatus, String homeStatus) {
-    if (analysisStatus == 'waiting' || homeStatus == 'pending') return 'Pending target analysis';
+    if (analysisStatus == 'waiting' || homeStatus == 'pending') {
+      return 'Pending target analysis';
+    }
     if (homeStatus == 'unavailable') return 'Unavailable';
     return 'Analysis complete';
   }
@@ -110,23 +152,48 @@ class _MetricRow extends StatelessWidget {
   final String value;
   final String? supportingText;
 
-  const _MetricRow({required this.icon, required this.label, required this.value, this.supportingText});
+  const _MetricRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.supportingText,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, size: 21),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          if (supportingText != null)
-            Text(supportingText!, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
-        ])),
-        const SizedBox(width: 12),
-        Flexible(child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 21),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if (supportingText != null)
+                  Text(
+                    supportingText!,
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

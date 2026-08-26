@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_app/models/campaign/zone_display_identity.dart';
 import 'package:flutter_app/widgets/smart_zone_geometry_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -76,6 +77,74 @@ void main() {
     );
     expect(smartZoneColor(0), smartZoneColor(6));
     expect(smartZoneColor(0), isNot(smartZoneColor(1)));
+  });
+
+  test('canonical identity follows authoritative names, not list position', () {
+    final identities = resolveZoneDisplayIdentities(const [
+      {'zoneId': 'zone-b', 'zoneName': 'Zone 2'},
+      {'zoneId': 'zone-a', 'zoneName': 'Zone 1'},
+    ]);
+    expect(identities[0].ordinal, 2);
+    expect(identities[0].label, 'Zone 2');
+    expect(identities[0].styleKey, 2);
+    expect(identities[1].ordinal, 1);
+    expect(identities[1].label, 'Zone 1');
+    expect(identities[1].styleKey, 1);
+  });
+
+  test('explicit plan order overrides a contradictory legacy numeric name', () {
+    final identity = resolveZoneDisplayIdentities(const [
+      {'zoneId': 'zone-a', 'zoneNumber': 1, 'zoneName': 'Zone 2'},
+    ]).single;
+    expect(identity.ordinal, 1);
+    expect(identity.label, 'Zone 1');
+  });
+
+  test('legacy fallback is deterministic across query order changes', () {
+    const firstLoad = <Map<String, dynamic>>[
+      {'zoneId': 'zone-b'},
+      {'zoneId': 'zone-a'},
+    ];
+    const secondLoad = <Map<String, dynamic>>[
+      {'zoneId': 'zone-a'},
+      {'zoneId': 'zone-b'},
+    ];
+    Map<String, int> byId(
+      List<Map<String, dynamic>> zones,
+      List<ZoneDisplayIdentity> identities,
+    ) => {
+      for (var index = 0; index < zones.length; index++)
+        zones[index]['zoneId']! as String: identities[index].ordinal,
+    };
+    expect(
+      byId(firstLoad, resolveZoneDisplayIdentities(firstLoad)),
+      byId(secondLoad, resolveZoneDisplayIdentities(secondLoad)),
+    );
+  });
+
+  test('Scaler keeps an assigned persisted Zone ordinal', () {
+    final identity = resolveSingleZoneDisplayIdentity(const {
+      'zoneId': 'assigned-zone',
+      'zoneName': 'Zone 7',
+    });
+    expect(identity.ordinal, 7);
+    expect(identity.label, 'Zone 7');
+  });
+
+  test('legacy custom names remain visible with a deterministic ordinal', () {
+    final identities = resolveZoneDisplayIdentities(const [
+      {'zoneId': 'south', 'zoneName': 'South Waterfront'},
+      {'zoneId': 'north'},
+    ]);
+    final byId = {
+      for (final identity in identities) identity.authoritativeId: identity,
+    };
+    expect(byId['south']!.label, 'South Waterfront');
+    expect(byId['north']!.label, startsWith('Zone '));
+    expect(
+      identities.map((identity) => identity.ordinal).toSet(),
+      hasLength(2),
+    );
   });
 
   test('colliding Zone centroids receive distinct visual offsets', () {
@@ -169,6 +238,9 @@ void main() {
       final zones = List<Map<String, dynamic>>.generate(zoneCount, (index) {
         final longitude = -76.52 + (index * 0.004);
         return {
+          'zoneId': 'zone-${index + 1}',
+          'zoneNumber': index + 1,
+          'zoneName': 'Zone ${index + 1}',
           'geometry': [
             {'lat': 38.970, 'lng': longitude},
             {'lat': 38.974, 'lng': longitude + 0.003},
@@ -191,9 +263,65 @@ void main() {
       for (var index = 0; index < zoneCount; index++) {
         expect(find.byKey(Key('smart-zone-marker-$index')), findsOneWidget);
       }
+      final identities = resolveZoneDisplayIdentities(zones);
+      expect(
+        identities.map((identity) => identity.ordinal).toSet(),
+        hasLength(zoneCount),
+      );
+      expect(identities.map((identity) => identity.label), [
+        for (var ordinal = 1; ordinal <= zoneCount; ordinal++) 'Zone $ordinal',
+      ]);
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('reordered two-Zone fixture never renders crossed identities', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SmartZoneGeometryMap(
+            zones: const [
+              {
+                'zoneId': 'zone-b',
+                'zoneName': 'Zone 2',
+                'serviceArea': [
+                  {'lat': 38.975, 'lng': -76.500},
+                  {'lat': 38.980, 'lng': -76.490},
+                  {'lat': 38.970, 'lng': -76.490},
+                ],
+              },
+              {
+                'zoneId': 'zone-a',
+                'zoneName': 'Zone 1',
+                'serviceArea': [
+                  {'lat': 38.970, 'lng': -76.510},
+                  {'lat': 38.975, 'lng': -76.500},
+                  {'lat': 38.965, 'lng': -76.500},
+                ],
+              },
+            ],
+            showZoneSelector: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final zoneTwoChip = tester.widget<ChoiceChip>(
+      find.byKey(const Key('smart-zone-card-0')),
+    );
+    final zoneOneChip = tester.widget<ChoiceChip>(
+      find.byKey(const Key('smart-zone-card-1')),
+    );
+    expect(((zoneTwoChip.avatar! as CircleAvatar).child! as Text).data, '2');
+    expect((zoneTwoChip.label as Text).data, 'Zone 2');
+    expect(((zoneOneChip.avatar! as CircleAvatar).child! as Text).data, '1');
+    expect((zoneOneChip.label as Text).data, 'Zone 1');
+    expect(find.text('1'), findsNWidgets(2));
+    expect(find.text('2'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('map Zone selection reports the authoritative Zone index', (
     tester,

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_app/models/campaign/zone_display_identity.dart';
 import 'package:latlong2/latlong.dart';
 
 const _zoneColors = <Color>[
@@ -146,11 +147,20 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
     final zonePoints = widget.zones
         .map((zone) => smartZonePoints(zone['geometry'] ?? zone['serviceArea']))
         .toList(growable: false);
-    final validZones = <({int index, List<LatLng> points})>[
-      for (var index = 0; index < zonePoints.length; index++)
-        if (zonePoints[index].length >= 3)
-          (index: index, points: zonePoints[index]),
-    ];
+    final identities = resolveZoneDisplayIdentities(widget.zones);
+    final validZones =
+        <({int index, List<LatLng> points, ZoneDisplayIdentity identity})>[
+          for (var index = 0; index < zonePoints.length; index++)
+            if (zonePoints[index].length >= 3)
+              (
+                index: index,
+                points: zonePoints[index],
+                identity: identities[index],
+              ),
+        ]..sort(
+          (first, second) =>
+              first.identity.ordinal.compareTo(second.identity.ordinal),
+        );
     final operationalPoints = <LatLng>[
       for (final zone in validZones) ...zone.points,
     ];
@@ -233,7 +243,9 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                           PolygonLayer(
                             polygons: validZones
                                 .map((zone) {
-                                  final color = smartZoneColor(zone.index);
+                                  final color = smartZoneColor(
+                                    zone.identity.styleKey - 1,
+                                  );
                                   final active = selected == zone.index;
                                   return Polygon(
                                     points: zone.points,
@@ -254,7 +266,9 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                                   final markerPosition = entry.key;
                                   final zone = entry.value;
                                   final point = _smartZoneCentroid(zone.points);
-                                  final color = smartZoneColor(zone.index);
+                                  final color = smartZoneColor(
+                                    zone.identity.styleKey - 1,
+                                  );
                                   final offset = markerOffsets[markerPosition];
                                   final active = selected == zone.index;
                                   return Marker(
@@ -263,7 +277,7 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                                     height: 112,
                                     child: Semantics(
                                       button: true,
-                                      label: 'Select Zone ${zone.index + 1}',
+                                      label: 'Select ${zone.identity.label}',
                                       child: Stack(
                                         alignment: Alignment.center,
                                         children: [
@@ -304,7 +318,7 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                                                   ],
                                                 ),
                                                 child: Text(
-                                                  '${zone.index + 1}',
+                                                  '${zone.identity.ordinal}',
                                                   style: const TextStyle(
                                                     color: Colors.white,
                                                     fontWeight: FontWeight.w800,
@@ -377,15 +391,13 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                               selected: active,
                               onSelected: (_) => _select(zone.index),
                               avatar: CircleAvatar(
-                                backgroundColor: smartZoneColor(zone.index),
+                                backgroundColor: smartZoneColor(
+                                  zone.identity.styleKey - 1,
+                                ),
                                 foregroundColor: Colors.white,
-                                child: Text('${zone.index + 1}'),
+                                child: Text('${zone.identity.ordinal}'),
                               ),
-                              label: Text(
-                                widget.zones[zone.index]['zoneName']
-                                        ?.toString() ??
-                                    'Zone ${zone.index + 1}',
-                              ),
+                              label: Text(zone.identity.label),
                             );
                           })
                           .toList(growable: false),

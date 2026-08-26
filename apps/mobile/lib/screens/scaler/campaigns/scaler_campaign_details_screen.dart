@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../navigation/app_routes.dart';
 import '../../../navigation/app_router.dart';
 import '../../../widgets/legal_consent_prompt.dart';
+import '../../../models/campaign/zone_display_identity.dart';
 
 import '../../../models/campaign_model.dart';
 import '../../../services/campaign_service.dart';
@@ -529,14 +530,10 @@ class _ScalerCampaignDetailsScreenState
   }
 
   String _getZoneName(Map<String, dynamic> zone, int index) {
-    final value =
-        zone["zoneName"] ?? zone["name"] ?? zone["label"] ?? zone["title"];
-
-    if (value != null && value.toString().trim().isNotEmpty) {
-      return value.toString();
-    }
-
-    return "Zone ${index + 1}";
+    return resolveSingleZoneDisplayIdentity(
+      zone,
+      fallbackOrdinal: index + 1,
+    ).label;
   }
 
   int _totalHomes(List<Map<String, dynamic>> zones) {
