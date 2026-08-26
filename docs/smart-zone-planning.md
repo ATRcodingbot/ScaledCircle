@@ -43,21 +43,32 @@ When route distance is unavailable, confidence is low and the reason is returned
 No historical completion pace, live worker availability, live weather, or conversion
 performance is claimed unless that authority is actually supplied later.
 
-## Geometry and splitting
+## Territory, geographic shaping, and splitting
+
+SmartZonePlanningV3 deliberately separates three responsibilities:
+
+1. the Business-selected overall territory;
+2. serviceable geography derived from bounded mapped property and connected
+   local-road signals, with mapped water removed and major road/rail features
+   treated as subdivision signals;
+3. workload-balanced, single-Scaler Zones.
 
 The deterministic engine:
 
 - validates finite coordinates, distinct points, and non-zero area;
-- constructs a bounded rectangular planning area around the maintained Service Area centroid;
+- retains the maintained Service Area as the overall campaign territory;
+- shapes operational geometry from serviceable property/local-road points when
+  sufficient bounded data is available;
+- uses an explicit `Basic Area Estimate` fallback when it is not;
 - estimates total workload;
 - chooses the minimum worker count compatible with the current safety ceiling;
-- subdivides along the longer axis into contiguous rectangles;
+- produces up to 32 worker-sized Zones (192 estimated campaign hours at the
+  current six-hour ceiling) without using current worker supply to shrink demand;
 - distributes estimated properties deterministically and evenly;
 - produces stable plan IDs for idempotent review/apply behavior.
 
-This initial split uses conservative estimated workload. A later version may incorporate
-authoritative parcel clusters and route-network continuity without changing the callable
-contract.
+The serviceability model is not pedestrian routing and does not claim verified
+route distance. Advanced Edit remains subject to full reanalysis.
 
 ## Funding and assignment safety
 

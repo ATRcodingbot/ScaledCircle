@@ -27,8 +27,7 @@ test("public Baltimore demo is an exact maintained planner output", () => {
     label: "Baltimore neighborhood demo",
     totalWorkerPayCents: 0,
   });
-  assert.equal(plan.planId, "smart-zone_542b54c1fb1388f0f13740d7");
-  assert.equal(plan.policyVersion, "SmartZonePlanningV2");
+  assert.equal(plan.policyVersion, "SmartZonePlanningV3");
   assert.equal(plan.totalEstimatedProperties, 225);
   assert.equal(plan.totalEstimatedMinutes, 300);
   assert.equal(plan.recommendedScalerCount, 1);
@@ -39,6 +38,84 @@ test("public Baltimore demo is an exact maintained planner output", () => {
     {latitude: 39.2968277, longitude: -76.6855295},
     {latitude: 39.2968277, longitude: -76.6904542},
   ]);
+});
+
+function gridSnapshot({water = false, components = 1} = {}) {
+  const serviceablePoints = [];
+  for (let row = 0; row < 8; row += 1) {
+    for (let column = 0; column < 8; column += 1) {
+      serviceablePoints.push({
+        latitude: 39.287 + row * 0.0008,
+        longitude: -76.616 + column * 0.001,
+        componentId: `road-${Math.min(components - 1, Math.floor(column / (8 / components)))}`,
+        kind: column % 2 ? "property" : "local_road",
+      });
+    }
+  }
+  return {
+    source: "openstreetmap_bounded_snapshot_v1",
+    serviceablePoints,
+    exclusionPolygons: water ? [[
+      {latitude: 39.286, longitude: -76.6125},
+      {latitude: 39.286, longitude: -76.6105},
+      {latitude: 39.295, longitude: -76.6105},
+      {latitude: 39.295, longitude: -76.6125},
+    ]] : [],
+    waterFeatureCount: water ? 1 : 0,
+    barrierFeatureCount: components - 1,
+  };
+}
+
+test("serviceable geography follows mapped points and excludes water", () => {
+  const selectedBoundary = smart.rectangleAround(anchor, 1400, 1400);
+  const snapshot = gridSnapshot({water: true, components: 2});
+  const plan = smart.generatePlan({anchor, desiredHours: 12, selectedBoundary,
+    geographicSnapshot: snapshot});
+  assert.equal(plan.serviceabilityMode, "serviceable_geography");
+  assert.equal(plan.geometryVersion, "serviceable_territory_v1");
+  assert.equal(plan.zones.length, 2);
+  assert.equal(plan.excludedWaterFeatureCount, 1);
+  assert.ok(plan.zones.every((zone) => zone.geometryValidation.valid));
+  assert.ok(plan.zones.every((zone) => zone.workload.estimatedMinutes <= 360));
+  assert.ok(plan.zones.every((zone) => zone.geometry.some((point, index, geometry) =>
+    index > 0 && point.latitude !== geometry[0].latitude &&
+      point.longitude !== geometry[0].longitude)));
+});
+
+test("sparse geography fails honestly to Basic Area Estimate", () => {
+  const plan = smart.generatePlan({anchor, desiredHours: 5,
+    geographicSnapshot: {source: "openstreetmap_bounded_snapshot_v1",
+      serviceablePoints: [anchor]}});
+  assert.equal(plan.serviceabilityMode, "basic_area_estimate");
+  assert.equal(plan.geometryVersion, "basic_area_estimate_v1");
+  assert.match(plan.explanation, /Basic Area Estimate/);
+});
+
+test("mapped place boundary and park gap constrain serviceable shaping", () => {
+  const snapshot = gridSnapshot();
+  snapshot.serviceableBoundary = smart.rectangleAround(anchor, 900, 900);
+  snapshot.serviceableBoundaryType = "mapped_place_boundary";
+  snapshot.exclusionPolygons = [smart.rectangleAround(
+    {latitude: 39.2898, longitude: -76.613}, 180, 180)];
+  snapshot.parkFeatureCount = 1;
+  const plan = smart.generatePlan({anchor, desiredHours: 5,
+    selectedBoundary: smart.rectangleAround(anchor, 1400, 1400),
+    geographicSnapshot: snapshot});
+  assert.equal(plan.mappedBoundaryUsed, true);
+  assert.equal(plan.mappedBoundaryType, "mapped_place_boundary");
+  assert.equal(plan.excludedParkFeatureCount, 1);
+  assert.equal(plan.serviceabilityMode, "serviceable_geography");
+});
+
+test("large territories scale to worker-sized Zones instead of one-worker rejection", () => {
+  const expected = [[5, 1], [12, 2], [30, 5], [60, 10], [102, 17]];
+  for (const [hours, zoneCount] of expected) {
+    const plan = smart.generatePlan({anchor, desiredHours: hours});
+    assert.equal(plan.zones.length, zoneCount, `${hours} hours`);
+    assert.ok(plan.zones.every((zone) => zone.workload.estimatedMinutes <= 360));
+    assert.equal(plan.fulfillment.campaignDesignLimitedBySupply, false);
+  }
+  assert.throws(() => smart.recommendedScalerCount(193 * 60), /campaign_capacity_exceeded/);
 });
 
 test("the six-hour assignment ceiling is the one planner and funding contract", () => {

@@ -21,7 +21,7 @@ location authority merely because they are visible.
 
 | Surface | Maintained implementation | Geometry/data authority | Classification | Result |
 | --- | --- | --- | --- | --- |
-| Public homepage and Business funnel | `authentic_product_map.dart` | Non-customer deterministic `SmartZonePlanningV2` demo | Demo | Replaced large arbitrary hand-authored polygons with exact validated planner output; route remains explicitly unverified. |
+| Public homepage and Business funnel | `authentic_product_map.dart` | Non-customer deterministic `SmartZonePlanningV3` demo | Demo | Uses a fixed bounded OSM snapshot and the maintained serviceability planner; route remains explicitly unverified. |
 | Public Scaler funnel | `authentic_product_map.dart` | Same validated demo Zone plus an in-Zone example position | Demo | Explicit active-work example; no fabricated route polyline. |
 | Campaign area / Smart Zone workspace | `campaign_area_screen.dart`, `campaign_zones_screen.dart` | Saved Business area, `getSmartZonePlan`, `applySmartZonePlan`, authoritative analysis | Operational | Valid. Preferred server recommendation; Advanced Edit remains available and requires reanalysis. |
 | Campaign location selection | `campaign_locations_screen.dart` | Business-selected maintained location records | Operational | Valid. Map renders actual selected locations rather than decorative geometry. |
@@ -41,9 +41,9 @@ The public preview now reproduces one exact deterministic planner result rather 
 fictional operational area:
 
 - Place context: Baltimore, Maryland.
-- Planner: `SmartZonePlanningV2` / `smart_zone_rectangle_v1`.
-- Plan ID: `smart-zone_542b54c1fb1388f0f13740d7`.
-- Geometry: four distinct points; validated non-zero area of approximately 179,999 m².
+- Planner: `SmartZonePlanningV3` / `serviceable_territory_v1`.
+- Plan ID: `smart-zone_d6c32ad2cde31cdf49808f31`.
+- Geometry: thirteen distinct points; validated non-zero area of approximately 408,585 m².
 - Estimate: 225 homes, 300 minutes (5 hours), one Scaler Zone.
 - Confidence: conservative/low until route distance and authoritative geography are available.
 - Route: not yet verified.

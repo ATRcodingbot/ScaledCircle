@@ -14,8 +14,9 @@ void main() {
   test('production campaign permits bounded independent Scaler Zones', () {
     expect(campaignCanAddZone(0), isTrue);
     expect(campaignCanAddZone(1), isTrue);
-    expect(campaignCanAddZone(12), isFalse);
-    expect(productionMaximumZonesPerCampaign, 12);
+    expect(campaignCanAddZone(12), isTrue);
+    expect(campaignCanAddZone(32), isFalse);
+    expect(productionMaximumZonesPerCampaign, 32);
   });
 
   test(

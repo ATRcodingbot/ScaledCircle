@@ -6,24 +6,33 @@ import 'public_funnel_components.dart';
 
 enum PublicProductMapMode { campaign, activeWork }
 
-/// Public, non-customer demo output reproduced from SmartZonePlanningV2.
+/// Public, non-customer demo output reproduced from SmartZonePlanningV3 using
+/// a bounded OpenStreetMap snapshot of public Baltimore geography.
 ///
 /// Input anchor: 39.2949221, -76.68799185; desired workload: 5 hours;
 /// properties/hour: 45. The maintained planner produced plan
-/// `smart-zone_542b54c1fb1388f0f13740d7`, validated 179,999.25 m² of
+/// `smart-zone_d6c32ad2cde31cdf49808f31`, validated 408,585 m² of
 /// non-zero geometry, 225 estimated homes, and 300 estimated minutes.
 /// It is deliberately presented as a conservative planning estimate—not a
 /// verified walking route, parcel boundary, or AI neighborhood ranking.
 const validatedSmartZoneDemo = <LatLng>[
-  LatLng(39.2930165, -76.6904542),
-  LatLng(39.2930165, -76.6855295),
-  LatLng(39.2968277, -76.6855295),
-  LatLng(39.2968277, -76.6904542),
+  LatLng(39.2961425, -76.6916942),
+  LatLng(39.2942146, -76.6915832),
+  LatLng(39.2918749, -76.6908269),
+  LatLng(39.2918495, -76.6887173),
+  LatLng(39.2919294, -76.6851922),
+  LatLng(39.2922384, -76.6843815),
+  LatLng(39.2940830, -76.6843223),
+  LatLng(39.2955629, -76.6843762),
+  LatLng(39.2978817, -76.6846141),
+  LatLng(39.2981572, -76.6874031),
+  LatLng(39.2981161, -76.6902772),
+  LatLng(39.2978199, -76.6906111),
+  LatLng(39.2975293, -76.6909355),
 ];
 
-const validatedSmartZoneDemoPosition = LatLng(39.2949221, -76.6879919);
-const validatedSmartZoneDemoPlanId =
-    'smart-zone_542b54c1fb1388f0f13740d7';
+const validatedSmartZoneDemoPosition = LatLng(39.295, -76.688);
+const validatedSmartZoneDemoPlanId = 'smart-zone_d6c32ad2cde31cdf49808f31';
 const validatedSmartZoneDemoEstimatedHomes = 225;
 const validatedSmartZoneDemoEstimatedMinutes = 300;
 

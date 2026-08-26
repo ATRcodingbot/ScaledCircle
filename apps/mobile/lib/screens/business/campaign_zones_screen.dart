@@ -14,7 +14,10 @@ bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
   );
 }
 
-const int productionMaximumZonesPerCampaign = 12;
+// One campaign may legitimately span many worker-sized territories. The
+// server remains authoritative for the 6-hour per-Zone and 32-Zone practical
+// launch ceilings; worker supply never shrinks the Business-selected area.
+const int productionMaximumZonesPerCampaign = 32;
 
 bool campaignCanAddZone(
   int persistedZoneCount, {
@@ -130,6 +133,15 @@ class CampaignZonesScreen extends StatelessWidget {
                     '${plan['recommendedScalerCount']} Scaler${plan['recommendedScalerCount'] == 1 ? '' : 's'} recommended',
                   ),
                   const SizedBox(height: 8),
+                  Text(
+                    plan['serviceabilityMode'] == 'serviceable_geography'
+                        ? 'Serviceable geography • mapped roads and property context'
+                        : 'Basic Area Estimate • review with Advanced Edit',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   const Text(
                     'These are planning estimates, not guaranteed completion times. '
                     'Each recommended Zone is kept within the six-hour single-Scaler '
@@ -143,7 +155,9 @@ class CampaignZonesScreen extends StatelessWidget {
                         title: Text('Automatically split into workable Zones'),
                         subtitle: Text(
                           'The selected workload was too large for one Scaler, so '
-                          'ScaledCircle divided it before funding.',
+                          'ScaledCircle divided the full territory into worker-sized '
+                          'Zones before funding. Current worker availability does not '
+                          'shrink the campaign.',
                         ),
                       ),
                     ),

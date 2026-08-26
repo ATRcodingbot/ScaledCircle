@@ -44,6 +44,7 @@ const serviceAreaGeometryCodec = require("./service_area_geometry_codec");
 
 const operations = require("./operational_layer");
 const smartZonePlanning = require("./smart_zone_planning");
+const smartZoneGeography = require("./smart_zone_geography");
 
 
 
@@ -3714,9 +3715,11 @@ async function smartZoneCampaign(request) {
     sourceAreaDigest: operations.zoneGeometryDigest(campaign.serviceArea) };
 }
 
-function generateSmartZonePlan(input, desiredHours) {
-  return smartZonePlanning.generatePlan({
+function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
+  return {
     anchor: input.anchor,
+    selectedBoundary: input.campaign.serviceArea,
+    geographicSnapshot,
     desiredHours: desiredHours ?? 5,
     workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
     "field_distribution",
@@ -3724,7 +3727,14 @@ function generateSmartZonePlan(input, desiredHours) {
     Number(input.campaign.bonus || 0)) * 100),
     label: readText(input.campaign.serviceAreaTemplateName, 120) || "Recommended Area",
     sourceAreaDigest: input.sourceAreaDigest
-  });
+  };
+}
+
+async function generateSmartZonePlan(input, desiredHours) {
+  const geographicSnapshot = await smartZoneGeography.fetchSnapshot({
+    selectedBoundary: input.campaign.serviceArea, endpoint: OVERPASS_URL });
+  return { plan: smartZonePlanning.generatePlan(
+      smartZonePlanArguments(input, desiredHours, geographicSnapshot)), geographicSnapshot };
 }
 
 exports.getSmartZonePlan = onCall(
@@ -3732,7 +3742,7 @@ exports.getSmartZonePlan = onCall(
   async (request) => {
     const input = await smartZoneCampaign(request);
     try {
-      return generateSmartZonePlan(input, request.data?.desiredHours);
+      return (await generateSmartZonePlan(input, request.data?.desiredHours)).plan;
     } catch (_) {
       throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
     }
@@ -3744,8 +3754,9 @@ exports.applySmartZonePlan = onCall(
   async (request) => {
     const input = await smartZoneCampaign(request);
     let plan;
+    let geographicSnapshot;
     try {
-      plan = generateSmartZonePlan(input, request.data?.desiredHours);
+      ({ plan, geographicSnapshot } = await generateSmartZonePlan(input, request.data?.desiredHours));
     } catch (_) {
       throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
     }
@@ -3767,7 +3778,8 @@ exports.applySmartZonePlan = onCall(
       }
       const currentInput = { ...input, campaign: currentCampaign, anchor: currentAnchor,
         sourceAreaDigest: operations.zoneGeometryDigest(currentCampaign.serviceArea) };
-      const currentPlan = generateSmartZonePlan(currentInput, request.data?.desiredHours);
+      const currentPlan = smartZonePlanning.generatePlan(
+        smartZonePlanArguments(currentInput, request.data?.desiredHours, geographicSnapshot));
       if (currentPlan.planId !== plan.planId) {
         throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
       }
@@ -3794,7 +3806,8 @@ exports.applySmartZonePlan = onCall(
         assignedScalerId: null,
         mapped: true,
         serviceArea: zone.geometry,
-        serviceAreaType: "rectangle",
+        serviceAreaType: zone.serviceability === "serviceable_geography" ?
+        "serviceable_territory" : "basic_area_estimate",
         serviceAreaPointCount: zone.geometry.length,
         estimatedHomes: zone.workload.estimatedProperties,
         homeCountStatus: "estimated",
@@ -3807,6 +3820,8 @@ exports.applySmartZonePlan = onCall(
         workability: zone.workability,
         smartZonePlanId: plan.planId,
         smartZonePolicyVersion: plan.policyVersion,
+        smartZoneGeometryVersion: plan.geometryVersion,
+        smartZoneServiceabilityMode: plan.serviceabilityMode,
         serverEstimatedWalkingMinutes: geometryEstimate.estimatedWalkingMinutes,
         estimatedMinutes: geometryEstimate.estimatedWalkingMinutes,
         estimatedWalkingMeters: geometryEstimate.estimatedWalkingMeters,

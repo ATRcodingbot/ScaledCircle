@@ -439,7 +439,7 @@ class _CampaignMapVisual extends StatelessWidget {
         ProductLine('Selected Area', 'Baltimore, Maryland • Demo'),
         ProductLine('Estimated Homes', '225 • Conservative estimate'),
         ProductLine('Walking Route', 'Not yet verified'),
-        ProductLine('Workload', '5 hours • SmartZonePlanningV2'),
+        ProductLine('Workload', '5 hours • serviceable geography'),
         SizedBox(height: 8),
         StatusPill(
           'Review Campaign',

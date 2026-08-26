@@ -88,7 +88,7 @@ void main() {
     expect(find.text('0 Assigned'), findsOneWidget);
     expect(find.text('VALIDATED SMART ZONE DEMO'), findsOneWidget);
     expect(find.text('Walking Route'), findsOneWidget);
-    expect(find.text('5 hours • SmartZonePlanningV2'), findsOneWidget);
+    expect(find.text('5 hours • serviceable geography'), findsOneWidget);
     expect(find.text('Review Campaign'), findsOneWidget);
   });
 
@@ -129,35 +129,34 @@ void main() {
     expect(find.text('Active'), findsWidgets);
   });
 
-  test('validated public Smart Zone keeps its demo position inside geometry', () {
-    expect(validatedSmartZoneDemo, hasLength(4));
-    expect(validatedSmartZoneDemoPlanId, startsWith('smart-zone_'));
-    expect(validatedSmartZoneDemoEstimatedHomes, 225);
-    expect(validatedSmartZoneDemoEstimatedMinutes, 300);
-    expect(
-      publicPointInsidePolygon(
-        validatedSmartZoneDemoPosition,
-        validatedSmartZoneDemo,
-      ),
-      isTrue,
-    );
-    final latitudes = validatedSmartZoneDemo.map(
-      (point) => point.latitude,
-    );
-    final longitudes = validatedSmartZoneDemo.map(
-      (point) => point.longitude,
-    );
-    expect(
-      latitudes.reduce((a, b) => a > b ? a : b) -
-          latitudes.reduce((a, b) => a < b ? a : b),
-      lessThan(.02),
-    );
-    expect(
-      longitudes.reduce((a, b) => a > b ? a : b) -
-          longitudes.reduce((a, b) => a < b ? a : b),
-      lessThan(.02),
-    );
-  });
+  test(
+    'validated public Smart Zone keeps its demo position inside geometry',
+    () {
+      expect(validatedSmartZoneDemo, hasLength(13));
+      expect(validatedSmartZoneDemoPlanId, startsWith('smart-zone_'));
+      expect(validatedSmartZoneDemoEstimatedHomes, 225);
+      expect(validatedSmartZoneDemoEstimatedMinutes, 300);
+      expect(
+        publicPointInsidePolygon(
+          validatedSmartZoneDemoPosition,
+          validatedSmartZoneDemo,
+        ),
+        isTrue,
+      );
+      final latitudes = validatedSmartZoneDemo.map((point) => point.latitude);
+      final longitudes = validatedSmartZoneDemo.map((point) => point.longitude);
+      expect(
+        latitudes.reduce((a, b) => a > b ? a : b) -
+            latitudes.reduce((a, b) => a < b ? a : b),
+        lessThan(.02),
+      );
+      expect(
+        longitudes.reduce((a, b) => a > b ? a : b) -
+            longitudes.reduce((a, b) => a < b ? a : b),
+        lessThan(.02),
+      );
+    },
+  );
 
   testWidgets('both funnels remain single-column and overflow-free at 390px', (
     tester,
@@ -282,8 +281,8 @@ void main() {
     expect(maps, contains('© OpenStreetMap contributors'));
     expect(maps, isNot(contains('PolylineLayer(')));
     expect(maps, contains('InteractiveFlag.none'));
-    expect(maps, contains('SmartZonePlanningV2'));
-    expect(maps, contains('smart-zone_542b54c1fb1388f0f13740d7'));
+    expect(maps, contains('SmartZonePlanningV3'));
+    expect(maps, contains('smart-zone_d6c32ad2cde31cdf49808f31'));
     expect(maps, contains('conservative estimate'));
     expect(maps, isNot(contains('Geolocator')));
     expect(maps, isNot(contains('requestPermission')));
