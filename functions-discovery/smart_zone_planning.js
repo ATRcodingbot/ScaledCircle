@@ -152,6 +152,24 @@ function splitRectangle(points, count) {
       [point(south + (north - south) * a, west), point(south + (north - south) * a, east),
         point(south + (north - south) * b, east), point(south + (north - south) * b, west)]; });
 }
+function workloadBoundary({anchor, selectedBoundary = null, desiredHours = 5,
+  propertiesPerHour = DEFAULT_PROPERTIES_PER_HOUR} = {}) {
+  const normalizedAnchor = normalizeAnchor(anchor);
+  const hours = clamp(finite(desiredHours, "desired_hours"), 0.5, MAX_CAMPAIGN_MINUTES / 60);
+  const totalProperties = Math.max(1, Math.round(hours * propertiesPerHour));
+  const targetSideMeters = Math.sqrt(totalProperties * 800);
+  const target = rectangleAround(normalizedAnchor, targetSideMeters, targetSideMeters);
+  if (!Array.isArray(selectedBoundary) || !validateGeometry(selectedBoundary).valid) return target;
+  const source = selectedBoundary.map(normalizeAnchor);
+  if (polygonAreaSquareMeters(source) <= polygonAreaSquareMeters(target)) return source;
+  if (target.every((candidate) => pointInsidePolygon(candidate, source))) return target;
+  for (let scale = 0.85; scale >= 0.2; scale -= 0.05) {
+    const candidate = rectangleAround(normalizedAnchor,
+      targetSideMeters * scale, targetSideMeters * scale);
+    if (candidate.every((item) => pointInsidePolygon(item, source))) return candidate;
+  }
+  throw new Error("selected_area_cannot_fit_workload_boundary");
+}
 function filteredServiceablePoints(snapshot, boundary) {
   const exclusions = Array.isArray(snapshot?.exclusionPolygons) ? snapshot.exclusionPolygons : [];
   const mappedBoundary = Array.isArray(snapshot?.serviceableBoundary) &&
@@ -193,9 +211,10 @@ function generatePlan({anchor, selectedBoundary = null, geographicSnapshot = nul
   const totalProperties = Math.max(1, Math.round(hours * propertiesPerHour));
   const total = estimateWorkload({estimatedProperties: totalProperties, propertiesPerHour, workType});
   const count = recommendedScalerCount(total.estimatedMinutes);
-  const side = Math.sqrt(totalProperties * 800);
-  const boundary = Array.isArray(selectedBoundary) && validateGeometry(selectedBoundary).valid ?
-    selectedBoundary.map(normalizeAnchor) : rectangleAround(normalizedAnchor, side, side);
+  const sourceBoundary = Array.isArray(selectedBoundary) && validateGeometry(selectedBoundary).valid ?
+    selectedBoundary.map(normalizeAnchor) : null;
+  const boundary = workloadBoundary({anchor: normalizedAnchor, selectedBoundary: sourceBoundary,
+    desiredHours: hours, propertiesPerHour});
   const usable = filteredServiceablePoints(geographicSnapshot, boundary);
   const geographic = usable.length >= Math.max(6, count * 3);
   const groups = geographic ? splitServiceablePoints(usable, count) : [];
@@ -226,7 +245,8 @@ function generatePlan({anchor, selectedBoundary = null, geographicSnapshot = nul
     sourceAreaDigest: String(sourceAreaDigest || "anchor_only"), snapshotDigest,
     policyVersion: POLICY_VERSION};
   return Object.freeze({planId: planId(identity), label, anchor: normalizedAnchor,
-    selectedTerritory: boundary, desiredHours: hours, totalEstimatedProperties: totalProperties,
+    selectedTerritory: sourceBoundary || boundary, plannedTerritory: boundary,
+    desiredHours: hours, totalEstimatedProperties: totalProperties,
     totalEstimatedMinutes: total.estimatedMinutes, totalEstimatedHours: total.estimatedHours,
     recommendedScalerCount: count, requiresSplit: count > 1,
     serviceabilityMode: geographic ? "serviceable_geography" : "basic_area_estimate",
@@ -267,4 +287,5 @@ module.exports = {POLICY_VERSION, GEOMETRY_VERSION, FALLBACK_GEOMETRY_VERSION,
   MAX_ZONES_PER_CAMPAIGN, MAX_CAMPAIGN_MINUTES, rectangleAround,
   polygonAreaSquareMeters, validateGeometry, pointInsidePolygon, convexHull,
   estimateWorkload, recommendedScalerCount, workabilityForMinutes, splitRectangle,
+  workloadBoundary,
   splitServiceablePoints, generatePlan, paymentReadiness};

@@ -3774,8 +3774,10 @@ function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
 }
 
 async function generateSmartZonePlan(input, desiredHours) {
+  const planningBoundary = smartZonePlanning.workloadBoundary({anchor: input.anchor,
+    selectedBoundary: input.selectedBoundary, desiredHours: desiredHours ?? 5});
   const geographicSnapshot = await smartZoneGeography.fetchSnapshot({
-    selectedBoundary: input.selectedBoundary, endpoint: OVERPASS_URL});
+    selectedBoundary: planningBoundary, endpoint: OVERPASS_URL});
   return {plan: smartZonePlanning.generatePlan(
     smartZonePlanArguments(input, desiredHours, geographicSnapshot)), geographicSnapshot};
 }
@@ -3806,11 +3808,22 @@ exports.applySmartZonePlan = onCall(
     if (request.data?.planId !== plan.planId) {
       throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
     }
-    const preparedZones = plan.zones.map((zone) => {
-      const geometryEstimate = operations.calculateGeometryWalkingEstimate(zone.geometry);
-      operations.assertZoneDuration(geometryEstimate.estimatedWalkingMinutes);
-      return {zone, geometryEstimate, reference: db.collection("campaignZones").doc()};
-    });
+    let preparedZones;
+    try {
+      preparedZones = plan.zones.map((zone) => {
+        const geometryEstimate = operations.calculateGeometryWalkingEstimate(zone.geometry);
+        operations.assertZoneDuration(geometryEstimate.estimatedWalkingMinutes);
+        return {zone, geometryEstimate, reference: db.collection("campaignZones").doc()};
+      });
+    } catch (error) {
+      logger.error("Smart Zone plan failed authoritative geometry validation.", {
+        campaignId: input.campaignId,
+        planId: plan.planId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new HttpsError("failed-precondition",
+        "We couldn't apply this Smart Zone plan. Refresh the recommendation and try again.");
+    }
     const result = await db.runTransaction(async (transaction) => {
       const currentCampaignSnapshot = await transaction.get(input.reference);
       const currentCampaign = currentCampaignSnapshot.data() || {};

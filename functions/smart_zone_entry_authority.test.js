@@ -34,3 +34,13 @@ test("apply stores only the server-selected boundary and its provenance", () => 
   assert.match(contract, /serviceAreaResolutionSource/);
   assert.doesNotMatch(contract, /serviceArea: request\.data/);
 });
+
+test("apply converts authoritative geometry rejection into a product-safe error", () => {
+  const start = source.indexOf("exports.applySmartZonePlan");
+  const end = source.indexOf("analyzePropertyIntelligence", start);
+  const contract = source.slice(start, end);
+  assert.match(contract, /assertZoneDuration/);
+  assert.match(contract, /Smart Zone plan failed authoritative geometry validation/);
+  assert.match(contract, /We couldn't apply this Smart Zone plan/);
+  assert.doesNotMatch(contract, /throw new HttpsError\("internal",\s*"INTERNAL"/);
+});

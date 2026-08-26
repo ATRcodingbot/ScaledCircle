@@ -118,6 +118,24 @@ test("large territories scale to worker-sized Zones instead of one-worker reject
   assert.throws(() => smart.recommendedScalerCount(193 * 60), /campaign_capacity_exceeded/);
 });
 
+test("mapped place boundaries are workload-bounded before one-Scaler validation", () => {
+  const cityBoundary = smart.rectangleAround(anchor, 4800, 4800);
+  for (const [hours, zoneCount] of [[5, 1], [12, 2], [30, 5], [60, 10]]) {
+    const plan = smart.generatePlan({anchor, selectedBoundary: cityBoundary,
+      desiredHours: hours, sourceAreaDigest: "mapped-city"});
+    assert.equal(plan.zones.length, zoneCount, `${hours} hours`);
+    assert.ok(smart.polygonAreaSquareMeters(plan.selectedTerritory) >
+      smart.polygonAreaSquareMeters(plan.plannedTerritory));
+    for (const zone of plan.zones) {
+      assert.equal(zone.geometryValidation.valid, true);
+      assert.ok(zone.workload.estimatedMinutes <= smart.SINGLE_SCALER_MAX_MINUTES);
+      const authoritative = operations.calculateGeometryWalkingEstimate(zone.geometry);
+      assert.doesNotThrow(() => operations.assertZoneDuration(
+        authoritative.estimatedWalkingMinutes));
+    }
+  }
+});
+
 test("the six-hour assignment ceiling is the one planner and funding contract", () => {
   const cases = [
     [4, 1], [5.5, 1], [6, 1], [6.1, 2], [7, 2], [8, 2], [8.1, 2], [12, 2],
