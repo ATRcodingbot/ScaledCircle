@@ -1648,6 +1648,7 @@ class CampaignZonesScreen extends StatelessWidget {
                         .toList(growable: false),
                     selectedTerritory: smartZonePoints(_serviceAreaBoundary),
                     mapKey: const Key('applied-smart-zone-map'),
+                    showZoneSelector: true,
                   ),
                   const SizedBox(height: 18),
                   const Text(

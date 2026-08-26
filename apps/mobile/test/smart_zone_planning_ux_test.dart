@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/widgets/smart_zone_geometry_map.dart';
+import 'package:latlong2/latlong.dart';
 
 void main() {
   test(
@@ -77,6 +78,34 @@ void main() {
     expect(smartZoneColor(0), isNot(smartZoneColor(1)));
   });
 
+  test('colliding Zone centroids receive distinct visual offsets', () {
+    final geometry = <LatLng>[
+      const LatLng(38.970, -76.510),
+      const LatLng(38.975, -76.500),
+      const LatLng(38.965, -76.500),
+    ];
+    final offsets = smartZoneMarkerOffsets([geometry, geometry]);
+    expect(offsets, hasLength(2));
+    expect(offsets.first, isNot(Offset.zero));
+    expect(offsets.last, isNot(offsets.first));
+  });
+
+  test('well-separated Zone centroids remain centered', () {
+    final offsets = smartZoneMarkerOffsets([
+      const [
+        LatLng(38.970, -76.540),
+        LatLng(38.975, -76.530),
+        LatLng(38.965, -76.530),
+      ],
+      const [
+        LatLng(38.970, -76.480),
+        LatLng(38.975, -76.470),
+        LatLng(38.965, -76.470),
+      ],
+    ]);
+    expect(offsets, everyElement(Offset.zero));
+  });
+
   for (final viewport in <({String name, Size size})>[
     (name: 'desktop', size: Size(1200, 900)),
     (name: 'mobile', size: Size(390, 844)),
@@ -88,6 +117,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final zones = <Map<String, dynamic>>[
         {
+          'zoneName': 'Zone 1',
           'geometry': const [
             {'lat': 38.970, 'lng': -76.510},
             {'lat': 38.975, 'lng': -76.500},
@@ -95,6 +125,7 @@ void main() {
           ],
         },
         {
+          'zoneName': 'Zone 2',
           'geometry': const [
             {'lat': 38.975, 'lng': -76.500},
             {'lat': 38.980, 'lng': -76.490},
@@ -114,14 +145,17 @@ void main() {
                 {'lat': 38.960, 'lng': -76.485},
               ]),
               mapKey: const Key('responsive-zone-map'),
+              showZoneSelector: true,
             ),
           ),
         ),
       );
       await tester.pump();
       expect(find.byKey(const Key('responsive-zone-map')), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
+      expect(find.text('1'), findsNWidgets(2));
+      expect(find.text('2'), findsNWidgets(2));
+      expect(find.byKey(const Key('smart-zone-card-0')), findsOneWidget);
+      expect(find.byKey(const Key('smart-zone-card-1')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -196,6 +230,48 @@ void main() {
     expect(selected, 1);
   });
 
+  testWidgets('Zone selector card reports and highlights its Zone', (
+    tester,
+  ) async {
+    int? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SmartZoneGeometryMap(
+            zones: const [
+              {
+                'zoneName': 'Zone 1',
+                'geometry': [
+                  {'lat': 38.970, 'lng': -76.510},
+                  {'lat': 38.975, 'lng': -76.500},
+                  {'lat': 38.965, 'lng': -76.500},
+                ],
+              },
+              {
+                'zoneName': 'Zone 2',
+                'geometry': [
+                  {'lat': 38.975, 'lng': -76.500},
+                  {'lat': 38.980, 'lng': -76.490},
+                  {'lat': 38.970, 'lng': -76.490},
+                ],
+              },
+            ],
+            showZoneSelector: true,
+            onZoneSelected: (index) => selected = index,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('smart-zone-card-1')));
+    await tester.pump();
+    expect(selected, 1);
+    final chip = tester.widget<ChoiceChip>(
+      find.byKey(const Key('smart-zone-card-1')),
+    );
+    expect(chip.selected, isTrue);
+  });
+
   test('recommendation and persisted screens use the same canonical map', () {
     final source = File(
       'lib/screens/business/campaign_zones_screen.dart',
@@ -210,6 +286,11 @@ void main() {
     expect(source, contains('selectedZoneIndex'));
     expect(source, contains('Dashed outline: selected campaign territory'));
     expect(mapSource, contains('CameraFit.bounds'));
+    expect(mapSource, contains('LatLngBounds.fromPoints(operationalPoints)'));
+    expect(mapSource, isNot(contains('LatLngBounds.fromPoints(allPoints)')));
+    expect(mapSource, contains('cameraPadding'));
+    expect(mapSource, contains('smartZoneMarkerOffsets'));
+    expect(source, contains('showZoneSelector: true'));
     expect(mapSource, contains('© OpenStreetMap contributors'));
     expect(mapSource, contains('Dashed: selected territory'));
     expect(mapSource, contains('constraints.maxWidth < 520 ? 300.0 : 360.0'));
