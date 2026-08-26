@@ -4649,38 +4649,38 @@ exports.saveDiscoveryPreferences = onCall(
 
 
 
+/** Resolves user-submitted places through a cached, globally throttled provider boundary. */
+exports.resolveServiceAreaPlace = onCall(
+  { enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 15 },
+  async (request) => {
+    await requireVerifiedUser(request, "Sign in to find a service area.");
+    try {
+      return await serviceAreaResolution.resolvePlace({
+        query: request.data?.query,
+        db,
+        baseUrl: process.env.NOMINATIM_BASE_URL,
+        tigerBase: process.env.TIGERWEB_BASE_URL,
+        onCacheWriteError: (error) => logger.info("Service area cache write skipped.", {
+          errorCode: String(error?.message || error).slice(0, 80),
+          cacheVersion: serviceAreaResolution.CACHE_VERSION
+        })
+      });
+    } catch (error) {
+      if (error?.message === "invalid_query") {
+        throw new HttpsError("invalid-argument", "Enter a city, county, or ZIP.");
+      }
+      if (error?.message === "rate_limited") {
+        throw new HttpsError("resource-exhausted", "Map search is busy. Try again in a moment.");
+      }
+      logger.info("Service area resolution unavailable.", {
+        errorCode: String(error?.message || error).slice(0, 80)
+      });
+      throw new HttpsError("unavailable", "We couldn't map that area automatically.");
+    }
+  }
+);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/** Returns deterministic, explainable relevance; manual search always remains open. */
 
 
 

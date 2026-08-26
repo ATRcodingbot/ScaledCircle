@@ -56,7 +56,6 @@ const platformExports = new Set([
   "getMarketplaceWorkTypes",
   "getPendingScalerPreferences",
   "savePendingScalerPreferences",
-  "resolveServiceAreaPlace",
   "evaluateOpportunityMatch",
   "joinScalerAffiliateProgram",
   "getScalerAffiliateDashboard",
@@ -87,6 +86,7 @@ const assignmentExports = new Set([
 ]);
 const discoveryExports = new Set([
   "saveDiscoveryPreferences",
+  "resolveServiceAreaPlace",
   "analyzeCampaignZone",
   "getSmartZonePlan",
   "applySmartZonePlan",
