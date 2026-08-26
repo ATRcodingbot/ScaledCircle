@@ -326,9 +326,14 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to publish campaign: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to publish campaign: '
+            '${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1952,7 +1957,8 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         final submittedZones = (snapshot.data?.docs ?? [])
             .where(
-              (zone) => BusinessResultSummary.zoneState(zone.data()) ==
+              (zone) =>
+                  BusinessResultSummary.zoneState(zone.data()) ==
                   BusinessZoneResultState.awaitingReview,
             )
             .toList(growable: false);

@@ -5,6 +5,8 @@ import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 
 import '../../services/completion_payout_service.dart';
+import '../../services/address_search_service.dart';
+import '../../widgets/mapped_address_field.dart';
 import '../../widgets/zone_intelligence_card.dart';
 import 'campaign_area_screen.dart';
 
@@ -18,6 +20,159 @@ bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
 // server remains authoritative for the 6-hour per-Zone and 32-Zone practical
 // launch ceilings; worker supply never shrinks the Business-selected area.
 const int productionMaximumZonesPerCampaign = 32;
+
+class _SmartZoneEntry extends StatefulWidget {
+  const _SmartZoneEntry({
+    required this.locked,
+    required this.hasSavedArea,
+    required this.savedAreaName,
+    required this.onPlan,
+    required this.onAdvancedEdit,
+    this.onUseAnalyzedArea,
+  });
+
+  final bool locked;
+  final bool hasSavedArea;
+  final String savedAreaName;
+  final Future<void> Function(AddressSuggestion? area, double desiredHours)
+  onPlan;
+  final VoidCallback onAdvancedEdit;
+  final VoidCallback? onUseAnalyzedArea;
+
+  @override
+  State<_SmartZoneEntry> createState() => _SmartZoneEntryState();
+}
+
+class _SmartZoneEntryState extends State<_SmartZoneEntry> {
+  final _areaController = TextEditingController();
+  final _hoursController = TextEditingController(text: '5');
+  AddressSuggestion? _selectedArea;
+  bool _planning = false;
+
+  @override
+  void dispose() {
+    _areaController.dispose();
+    _hoursController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _plan({required bool useSavedArea}) async {
+    final hours = double.tryParse(_hoursController.text.trim());
+    if (hours == null || hours <= 0 || hours > 192) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter total work between 1 and 192 hours.'),
+        ),
+      );
+      return;
+    }
+    if (!useSavedArea && _selectedArea == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Search for and select a campaign area first.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _planning = true);
+    try {
+      await widget.onPlan(useSavedArea ? null : _selectedArea, hours);
+    } finally {
+      if (mounted) setState(() => _planning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Icon(Icons.add_location_alt_outlined, size: 54),
+          const SizedBox(height: 12),
+          const Text(
+            'Where do you want to run this campaign?',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Search a neighborhood, address, ZIP, or city. ScaledCircle will '
+            'resolve the area and recommend balanced worker-sized Zones.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 18),
+          MappedAddressField(
+            controller: _areaController,
+            enabled: !widget.locked && !_planning,
+            labelText: 'Search neighborhood, address or ZIP',
+            hintText: 'Example: Federal Hill, Baltimore',
+            onChanged: (_) => setState(() => _selectedArea = null),
+            onSelected: (area) => setState(() => _selectedArea = area),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _hoursController,
+            enabled: !widget.locked && !_planning,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Estimated total campaign work (hours)',
+              helperText:
+                  'Large campaigns are split into Zones of six hours or less.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (widget.onUseAnalyzedArea != null) ...[
+            OutlinedButton.icon(
+              onPressed: widget.locked || _planning
+                  ? null
+                  : widget.onUseAnalyzedArea,
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('Use Analyzed Area'),
+            ),
+            const SizedBox(height: 8),
+          ],
+          ElevatedButton.icon(
+            onPressed: widget.locked || _planning || _selectedArea == null
+                ? null
+                : () => _plan(useSavedArea: false),
+            icon: _planning
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_awesome),
+            label: const Text('Recommend Workable Zones'),
+          ),
+          if (widget.hasSavedArea) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: widget.locked || _planning
+                  ? null
+                  : () => _plan(useSavedArea: true),
+              icon: const Icon(Icons.business_outlined),
+              label: Text('Use ${widget.savedAreaName}'),
+            ),
+          ],
+          const SizedBox(height: 4),
+          TextButton.icon(
+            onPressed: widget.locked || _planning
+                ? null
+                : widget.onAdvancedEdit,
+            icon: const Icon(Icons.gesture),
+            label: const Text('Advanced Edit'),
+          ),
+          const Text(
+            'Finding future opportunities is separate from mapping an area you already know.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 bool campaignCanAddZone(
   int persistedZoneCount, {
@@ -95,14 +250,26 @@ class CampaignZonesScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _reviewSmartZonePlan(BuildContext context) async {
+  Future<void> _reviewSmartZonePlan(
+    BuildContext context, {
+    AddressSuggestion? selectedArea,
+    double desiredHours = 5,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final functions = FirebaseFunctions.instanceFor(region: 'us-east1');
-      final response = await functions.httpsCallable('getSmartZonePlan').call({
+      final request = <String, dynamic>{
         'campaignId': campaign.id,
-        'desiredHours': 5,
-      });
+        'desiredHours': desiredHours,
+        if (selectedArea != null)
+          'areaSelection': {
+            'query': selectedArea.fullAddress,
+            'resultId': selectedArea.id,
+          },
+      };
+      final response = await functions
+          .httpsCallable('getSmartZonePlan')
+          .call(request);
       final plan = Map<String, dynamic>.from(response.data as Map);
       final zones = (plan['zones'] as List? ?? const [])
           .whereType<Map>()
@@ -215,8 +382,7 @@ class CampaignZonesScreen extends StatelessWidget {
       );
       if (accepted != true || !context.mounted) return;
       await functions.httpsCallable('applySmartZonePlan').call({
-        'campaignId': campaign.id,
-        'desiredHours': 5,
+        ...request,
         'planId': plan['planId'],
       });
       messenger.showSnackBar(
@@ -1436,7 +1602,9 @@ class CampaignZonesScreen extends StatelessWidget {
 
                 Text(
                   zones.isEmpty
-                      ? 'Starting inside: $_serviceAreaName'
+                      ? (_serviceAreaBoundary.length >= 3
+                            ? 'Saved option: $_serviceAreaName'
+                            : 'No saved Service Area is required.')
                       : 'One Zone is one practical Scaler assignment area.',
                 ),
 
@@ -1554,62 +1722,20 @@ class CampaignZonesScreen extends StatelessWidget {
                   ),
 
                 if (zones.isEmpty)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Icon(Icons.add_location_alt_outlined, size: 54),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Let ScaledCircle plan workable Zones',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Start from your Service Area. We will recommend balanced '
-                            'worker-sized Zones, then you can review or adjust them.',
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 18),
-                          if (_hasTransferredAnalysisArea)
-                            OutlinedButton.icon(
-                              onPressed: _campaignLocked
-                                  ? null
-                                  : () => _createZone(
-                                      context,
-                                      skipNamePrompt: true,
-                                    ),
-                              icon: const Icon(Icons.insights_outlined),
-                              label: const Text('Use Analyzed Area'),
-                            ),
-                          ElevatedButton.icon(
-                            onPressed:
-                                _campaignLocked ||
-                                    _serviceAreaBoundary.length < 3
-                                ? null
-                                : () => _reviewSmartZonePlan(context),
-                            icon: const Icon(Icons.auto_awesome),
-                            label: const Text('Recommend Workable Zones'),
-                          ),
-                          const SizedBox(height: 4),
-                          TextButton.icon(
-                            onPressed: _campaignLocked
-                                ? null
-                                : () => _createZone(
-                                    context,
-                                    skipNamePrompt: true,
-                                  ),
-                            icon: const Icon(Icons.gesture),
-                            label: const Text('Advanced Edit'),
-                          ),
-                        ],
-                      ),
+                  _SmartZoneEntry(
+                    locked: _campaignLocked,
+                    hasSavedArea: _serviceAreaBoundary.length >= 3,
+                    savedAreaName: _serviceAreaName,
+                    onPlan: (area, hours) => _reviewSmartZonePlan(
+                      context,
+                      selectedArea: area,
+                      desiredHours: hours,
                     ),
+                    onAdvancedEdit: () =>
+                        _createZone(context, skipNamePrompt: true),
+                    onUseAnalyzedArea: _hasTransferredAnalysisArea
+                        ? () => _createZone(context, skipNamePrompt: true)
+                        : null,
                   ),
 
                 ...zones.map((zone) {

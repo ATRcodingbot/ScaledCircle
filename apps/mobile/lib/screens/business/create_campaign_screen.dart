@@ -756,9 +756,14 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to publish campaign: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to publish campaign: '
+            '${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {

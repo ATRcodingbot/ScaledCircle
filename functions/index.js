@@ -33,6 +33,7 @@ const discoveryPreferences = require("./discovery_preferences");
 const marketplaceWorkTypes = require("./marketplace_work_types");
 const serviceAreaGeometryCodec = require("./service_area_geometry_codec");
 const serviceAreaResolution = require("./service_area_resolution");
+const smartZoneEntryContract = require("./smart_zone_entry_contract");
 const {scalerOpportunityDecision} = require("./opportunity_notification_policy");
 const scalerCapacity = require("./scaler_notification_capacity");
 const {evaluateFundingCheckout, nextFundingVersion} = require("./marketplace_checkout");
@@ -3682,6 +3683,50 @@ function smartZoneAnchor(campaign = {}) {
   };
 }
 
+async function smartZoneSelectedArea(request, campaign) {
+  let selection;
+  try { selection = smartZoneEntryContract.normalizeAreaSelection(request.data?.areaSelection); }
+  catch (_) { throw new HttpsError("invalid-argument", "Choose a valid campaign area."); }
+  if (!selection) {
+    const geometry = Array.isArray(campaign.serviceArea) ? campaign.serviceArea.filter((item) =>
+      Number.isFinite(item?.latitude) && Number.isFinite(item?.longitude)) : [];
+    if (geometry.length < 3) {
+      throw new HttpsError("failed-precondition",
+        "Search for a neighborhood, address, ZIP, or choose a saved Service Area.");
+    }
+    return {geometry,
+      name: readText(campaign.serviceAreaTemplateName, 240) || "Selected campaign area",
+      source: "saved_campaign_area", resultId: "", resolutionVersion: ""};
+  }
+  let resolution;
+  try {
+    resolution = await serviceAreaResolution.resolvePlace({query: selection.query, db,
+      baseUrl: process.env.NOMINATIM_BASE_URL, tigerBase: process.env.TIGERWEB_BASE_URL,
+      onCacheWriteError: (error) => logger.info("Campaign area cache write skipped.", {
+        errorCode: String(error?.message || error).slice(0, 80),
+    })});
+    const selected = smartZoneEntryContract.selectResolvedArea(selection, resolution);
+    if (selected.geometry.length >= 3) {
+      return {...selected, source: "explicit_server_resolved_area",
+        boundaryKind: "mapped_place_boundary"};
+    }
+    const desiredHours = Math.max(1, Math.min(192, Number(request.data?.desiredHours || 5)));
+    const spanMeters = Math.max(450, Math.min(5000, 600 * Math.sqrt(desiredHours / 5)));
+    return {...selected,
+      geometry: smartZonePlanning.rectangleAround(selected.center, spanMeters, spanMeters),
+      source: "explicit_server_resolved_address", boundaryKind: "around_address"};
+  } catch (error) {
+    if (["invalid_area_selection", "area_boundary_unavailable"].includes(error?.message)) {
+      throw new HttpsError("failed-precondition",
+        "That place does not have a usable mapped boundary. Choose another area or use Advanced Edit.");
+    }
+    if (error?.message === "rate_limited") {
+      throw new HttpsError("resource-exhausted", "Map search is busy. Try again in a moment.");
+    }
+    throw new HttpsError("unavailable", "We couldn't map that area automatically.");
+  }
+}
+
 async function smartZoneCampaign(request) {
   const context = await authenticatedUserContext(
     request, "Sign in as a Business to plan campaign Zones.");
@@ -3706,33 +3751,31 @@ async function smartZoneCampaign(request) {
   if (String(campaign.status || "draft") !== "draft") {
     throw new HttpsError("failed-precondition", "Smart Zone planning is available before funding.");
   }
-  const anchor = smartZoneAnchor(campaign);
-  if (!anchor) {
-    throw new HttpsError("failed-precondition",
-      "Choose a Service Area or address anchor before requesting recommended Zones.");
-  }
-  return {context, campaignId, reference, campaign, anchor,
-    sourceAreaDigest: operations.zoneGeometryDigest(campaign.serviceArea)};
+  const selectedArea = await smartZoneSelectedArea(request, campaign);
+  const anchor = smartZoneAnchor({serviceArea: selectedArea.geometry});
+  return {context, campaignId, reference, campaign, anchor, selectedArea,
+    selectedBoundary: selectedArea.geometry,
+    sourceAreaDigest: operations.zoneGeometryDigest(selectedArea.geometry)};
 }
 
 function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
   return {
     anchor: input.anchor,
-    selectedBoundary: input.campaign.serviceArea,
+    selectedBoundary: input.selectedBoundary,
     geographicSnapshot,
     desiredHours: desiredHours ?? 5,
     workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
       "field_distribution",
     totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
       Number(input.campaign.bonus || 0)) * 100),
-    label: readText(input.campaign.serviceAreaTemplateName, 120) || "Recommended Area",
+    label: readText(input.selectedArea?.name, 120) || "Recommended Area",
     sourceAreaDigest: input.sourceAreaDigest,
   };
 }
 
 async function generateSmartZonePlan(input, desiredHours) {
   const geographicSnapshot = await smartZoneGeography.fetchSnapshot({
-    selectedBoundary: input.campaign.serviceArea, endpoint: OVERPASS_URL});
+    selectedBoundary: input.selectedBoundary, endpoint: OVERPASS_URL});
   return {plan: smartZonePlanning.generatePlan(
     smartZonePlanArguments(input, desiredHours, geographicSnapshot)), geographicSnapshot};
 }
@@ -3771,13 +3814,11 @@ exports.applySmartZonePlan = onCall(
     const result = await db.runTransaction(async (transaction) => {
       const currentCampaignSnapshot = await transaction.get(input.reference);
       const currentCampaign = currentCampaignSnapshot.data() || {};
-      const currentAnchor = smartZoneAnchor(currentCampaign);
       if (!currentCampaignSnapshot.exists || String(currentCampaign.status || "draft") !== "draft" ||
-          !currentAnchor) {
+          currentCampaign.businessId !== input.context.uid) {
         throw new HttpsError("failed-precondition", "The campaign changed. Review the plan again.");
       }
-      const currentInput = {...input, campaign: currentCampaign, anchor: currentAnchor,
-        sourceAreaDigest: operations.zoneGeometryDigest(currentCampaign.serviceArea)};
+      const currentInput = {...input, campaign: currentCampaign};
       const currentPlan = smartZonePlanning.generatePlan(
         smartZonePlanArguments(currentInput, request.data?.desiredHours, geographicSnapshot));
       if (currentPlan.planId !== plan.planId) {
@@ -3831,6 +3872,14 @@ exports.applySmartZonePlan = onCall(
         updatedAt: FieldValue.serverTimestamp(),
       });
       transaction.set(input.reference, {
+      serviceArea: input.selectedBoundary,
+      serviceAreaPointCount: input.selectedBoundary.length,
+      serviceAreaType: input.selectedArea.boundaryKind === "around_address" ?
+        "server_resolved_address_area" : "server_resolved_campaign_area",
+      serviceAreaTemplateName: input.selectedArea.name,
+      serviceAreaResolutionSource: input.selectedArea.resolutionSource || input.selectedArea.source,
+      serviceAreaResolutionVersion: input.selectedArea.resolutionVersion || null,
+      serviceAreaResultId: input.selectedArea.resultId || null,
       estimatedHomes: plan.totalEstimatedProperties,
       smartZonePlanId: plan.planId,
       smartZonePolicyVersion: plan.policyVersion,
