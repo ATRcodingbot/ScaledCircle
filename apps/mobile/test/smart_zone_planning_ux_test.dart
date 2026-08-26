@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_app/widgets/smart_zone_geometry_map.dart';
 
 void main() {
   test(
@@ -40,6 +42,187 @@ void main() {
     ).readAsStringSync();
     expect(source, contains("We couldn't analyze this area yet."));
     expect(source, contains('Try a smaller area or use Advanced Edit'));
+  });
+
+  test(
+    'authoritative Zone geometry is parsed without frontend approximation',
+    () {
+      final points = smartZonePoints(const [
+        {'latitude': 38.97, 'longitude': -76.50},
+        {'lat': 38.98, 'lng': -76.49},
+        {'latitude': 38.96, 'longitude': -76.48},
+      ]);
+      expect(points, hasLength(3));
+      expect(points.first.latitude, 38.97);
+      expect(points.first.longitude, -76.50);
+      expect(
+        smartZonePoints(const [
+          {'lat': 'invalid'},
+        ]),
+        isEmpty,
+      );
+    },
+  );
+
+  test('Zone visual identity scales from one to large multi-Zone plans', () {
+    expect(smartZoneLabelStrategy(1), 'numbered_polygon_labels');
+    expect(smartZoneLabelStrategy(2), 'numbered_polygon_labels');
+    expect(smartZoneLabelStrategy(5), 'numbered_polygon_labels');
+    expect(smartZoneLabelStrategy(10), 'numbered_polygon_labels');
+    expect(
+      smartZoneLabelStrategy(17),
+      'numbered_centroid_markers_and_selectable_list',
+    );
+    expect(smartZoneColor(0), smartZoneColor(6));
+    expect(smartZoneColor(0), isNot(smartZoneColor(1)));
+  });
+
+  for (final viewport in <({String name, Size size})>[
+    (name: 'desktop', size: Size(1200, 900)),
+    (name: 'mobile', size: Size(390, 844)),
+  ]) {
+    testWidgets('two authoritative Zones render at ${viewport.name} size', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(viewport.size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final zones = <Map<String, dynamic>>[
+        {
+          'geometry': const [
+            {'lat': 38.970, 'lng': -76.510},
+            {'lat': 38.975, 'lng': -76.500},
+            {'lat': 38.965, 'lng': -76.500},
+          ],
+        },
+        {
+          'geometry': const [
+            {'lat': 38.975, 'lng': -76.500},
+            {'lat': 38.980, 'lng': -76.490},
+            {'lat': 38.970, 'lng': -76.490},
+          ],
+        },
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SmartZoneGeometryMap(
+              zones: zones,
+              selectedTerritory: smartZonePoints(const [
+                {'lat': 38.960, 'lng': -76.515},
+                {'lat': 38.985, 'lng': -76.515},
+                {'lat': 38.985, 'lng': -76.485},
+                {'lat': 38.960, 'lng': -76.485},
+              ]),
+              mapKey: const Key('responsive-zone-map'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.byKey(const Key('responsive-zone-map')), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final zoneCount in [1, 2, 5, 10, 17]) {
+    testWidgets('$zoneCount authoritative Zones render and fit together', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final zones = List<Map<String, dynamic>>.generate(zoneCount, (index) {
+        final longitude = -76.52 + (index * 0.004);
+        return {
+          'geometry': [
+            {'lat': 38.970, 'lng': longitude},
+            {'lat': 38.974, 'lng': longitude + 0.003},
+            {'lat': 38.966, 'lng': longitude + 0.003},
+          ],
+        };
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SmartZoneGeometryMap(
+              zones: zones,
+              mapKey: Key('zone-count-map-$zoneCount'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.byKey(Key('zone-count-map-$zoneCount')), findsOneWidget);
+      for (var index = 0; index < zoneCount; index++) {
+        expect(find.byKey(Key('smart-zone-marker-$index')), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('map Zone selection reports the authoritative Zone index', (
+    tester,
+  ) async {
+    int? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SmartZoneGeometryMap(
+            zones: const [
+              {
+                'geometry': [
+                  {'lat': 38.970, 'lng': -76.510},
+                  {'lat': 38.975, 'lng': -76.500},
+                  {'lat': 38.965, 'lng': -76.500},
+                ],
+              },
+              {
+                'geometry': [
+                  {'lat': 38.975, 'lng': -76.500},
+                  {'lat': 38.980, 'lng': -76.490},
+                  {'lat': 38.970, 'lng': -76.490},
+                ],
+              },
+            ],
+            onZoneSelected: (index) => selected = index,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('smart-zone-marker-1')));
+    await tester.pump();
+    expect(selected, 1);
+  });
+
+  test('recommendation and persisted screens use the same canonical map', () {
+    final source = File(
+      'lib/screens/business/campaign_zones_screen.dart',
+    ).readAsStringSync();
+    final mapSource = File(
+      'lib/widgets/smart_zone_geometry_map.dart',
+    ).readAsStringSync();
+    expect(source, contains("Key('recommended-smart-zone-map')"));
+    expect(source, contains("Key('applied-smart-zone-map')"));
+    expect(mapSource, contains("zone['geometry'] ?? zone['serviceArea']"));
+    expect(source, contains('onZoneSelected'));
+    expect(source, contains('selectedZoneIndex'));
+    expect(source, contains('Dashed outline: selected campaign territory'));
+    expect(mapSource, contains('CameraFit.bounds'));
+    expect(mapSource, contains('© OpenStreetMap contributors'));
+    expect(mapSource, contains('Dashed: selected territory'));
+    expect(mapSource, contains('constraints.maxWidth < 520 ? 300.0 : 360.0'));
+    expect(mapSource, contains('InteractiveFlag.all'));
+  });
+
+  test('Scaler map remains scoped to the assigned Zone', () {
+    final source = File(
+      'lib/screens/scaler/campaigns/scaler_campaign_details_screen.dart',
+    ).readAsStringSync();
+    expect(source, contains('_buildCampaignMap'));
+    expect(source, contains('zone["serviceArea"]'));
+    expect(source, isNot(contains('selectedTerritory')));
   });
 
   test('campaign publishing removes raw Exception prefixes', () {

@@ -7,6 +7,7 @@ import '../../navigation/app_router.dart';
 import '../../services/completion_payout_service.dart';
 import '../../services/address_search_service.dart';
 import '../../widgets/mapped_address_field.dart';
+import '../../widgets/smart_zone_geometry_map.dart';
 import '../../widgets/zone_intelligence_card.dart';
 import 'campaign_area_screen.dart';
 
@@ -279,105 +280,131 @@ class CampaignZonesScreen extends StatelessWidget {
         plan['compensation'] as Map? ?? const {},
       );
       if (!context.mounted) return;
+      var selectedZoneIndex = 0;
+      final selectedTerritory = smartZonePoints(plan['selectedTerritory']);
       final accepted = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Recommended Zones'),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '${plan['totalEstimatedProperties']} estimated properties • '
-                    '~${plan['totalEstimatedHours']} estimated total hours',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${plan['recommendedScalerCount']} Scaler${plan['recommendedScalerCount'] == 1 ? '' : 's'} recommended',
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    plan['serviceabilityMode'] == 'serviceable_geography'
-                        ? 'Serviceable geography • mapped roads and property context'
-                        : 'Basic Area Estimate • review with Advanced Edit',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('Recommended Zones'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SmartZoneGeometryMap(
+                      zones: zones,
+                      selectedTerritory: selectedTerritory,
+                      selectedZoneIndex: selectedZoneIndex,
+                      onZoneSelected: (index) =>
+                          setDialogState(() => selectedZoneIndex = index),
+                      mapKey: const Key('recommended-smart-zone-map'),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'These are planning estimates, not guaranteed completion times. '
-                    'Each recommended Zone is kept within the six-hour single-Scaler '
-                    'limit and validated again before funding.',
-                  ),
-                  if (plan['requiresSplit'] == true) ...[
-                    const SizedBox(height: 12),
-                    const Card(
-                      child: ListTile(
-                        leading: Icon(Icons.call_split),
-                        title: Text('Automatically split into workable Zones'),
-                        subtitle: Text(
-                          'The selected workload was too large for one Scaler, so '
-                          'ScaledCircle divided the full territory into worker-sized '
-                          'Zones before funding. Current worker availability does not '
-                          'shrink the campaign.',
-                        ),
+                    const SizedBox(height: 16),
+                    Text(
+                      '${plan['totalEstimatedProperties']} estimated properties • '
+                      '~${plan['totalEstimatedHours']} estimated total hours',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${plan['recommendedScalerCount']} Scaler${plan['recommendedScalerCount'] == 1 ? '' : 's'} recommended',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      plan['serviceabilityMode'] == 'serviceable_geography'
+                          ? 'Serviceable geography • mapped roads and property context'
+                          : 'Basic Area Estimate • review with Advanced Edit',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'These are planning estimates, not guaranteed completion times. '
+                      'Each recommended Zone is kept within the six-hour single-Scaler '
+                      'limit and validated again before funding.',
+                    ),
+                    if (plan['requiresSplit'] == true) ...[
+                      const SizedBox(height: 12),
+                      const Card(
+                        child: ListTile(
+                          leading: Icon(Icons.call_split),
+                          title: Text(
+                            'Automatically split into workable Zones',
+                          ),
+                          subtitle: Text(
+                            'The selected workload was too large for one Scaler, so '
+                            'ScaledCircle divided the full territory into worker-sized '
+                            'Zones before funding. Current worker availability does not '
+                            'shrink the campaign.',
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (compensation['attractiveness'] ==
+                        'low_acceptance_likelihood') ...[
+                      const SizedBox(height: 12),
+                      const Card(
+                        child: ListTile(
+                          leading: Icon(Icons.info_outline),
+                          title: Text('Low acceptance likelihood'),
+                          subtitle: Text(
+                            'Consider increasing compensation, adding a completion '
+                            'bonus, or reducing the campaign area.',
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    ...zones.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final zone = entry.value;
+                      final workload = Map<String, dynamic>.from(
+                        zone['workload'] as Map? ?? const {},
+                      );
+                      return Card(
+                        color: index == selectedZoneIndex
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : null,
+                        child: ListTile(
+                          onTap: () =>
+                              setDialogState(() => selectedZoneIndex = index),
+                          leading: CircleAvatar(
+                            backgroundColor: smartZoneColor(index),
+                            foregroundColor: Colors.white,
+                            child: Text('${index + 1}'),
+                          ),
+                          title: Text(zone['name']?.toString() ?? 'Zone'),
+                          subtitle: Text(
+                            '${workload['estimatedProperties']} properties • '
+                            '~${workload['estimatedHours']} hours',
+                          ),
+                          trailing: Text(switch (zone['workability']) {
+                            'excellent' => 'Excellent',
+                            'good' => 'Good',
+                            _ => 'Too large',
+                          }),
+                        ),
+                      );
+                    }),
                   ],
-                  if (compensation['attractiveness'] ==
-                      'low_acceptance_likelihood') ...[
-                    const SizedBox(height: 12),
-                    const Card(
-                      child: ListTile(
-                        leading: Icon(Icons.info_outline),
-                        title: Text('Low acceptance likelihood'),
-                        subtitle: Text(
-                          'Consider increasing compensation, adding a completion '
-                          'bonus, or reducing the campaign area.',
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  ...zones.map((zone) {
-                    final workload = Map<String, dynamic>.from(
-                      zone['workload'] as Map? ?? const {},
-                    );
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.map_outlined),
-                        title: Text(zone['name']?.toString() ?? 'Zone'),
-                        subtitle: Text(
-                          '${workload['estimatedProperties']} properties • '
-                          '~${workload['estimatedHours']} hours',
-                        ),
-                        trailing: Text(switch (zone['workability']) {
-                          'excellent' => 'Excellent',
-                          'good' => 'Good',
-                          _ => 'Too large',
-                        }),
-                      ),
-                    );
-                  }),
-                ],
+                ),
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Advanced Edit'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Use Recommended Zones'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Advanced Edit'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Use Recommended Zones'),
-            ),
-          ],
         ),
       );
       if (accepted != true || !context.mounted) return;
@@ -1609,6 +1636,26 @@ class CampaignZonesScreen extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 22),
+
+                if (zones.isNotEmpty) ...[
+                  SmartZoneGeometryMap(
+                    zones: zones
+                        .map((zone) {
+                          final data = Map<String, dynamic>.from(zone.data());
+                          data['zoneId'] = zone.id;
+                          return data;
+                        })
+                        .toList(growable: false),
+                    selectedTerritory: smartZonePoints(_serviceAreaBoundary),
+                    mapKey: const Key('applied-smart-zone-map'),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Dashed outline: selected campaign territory. Colored areas: individual Scaler Zones.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 22),
+                ],
 
                 if (zones.isNotEmpty)
                   Row(
