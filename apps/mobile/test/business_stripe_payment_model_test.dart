@@ -54,7 +54,8 @@ void main() {
       'lib/screens/scaler/dashboard/scaler_dashboard_screen.dart',
     );
     expect(wallet, contains('Scaler Wallet'));
-    expect(wallet, contains('Approved earnings available'));
+    expect(wallet, contains('Verified Earnings'));
+    expect(wallet, contains('Cash-out is not yet available'));
     expect(dashboard, contains('Wallet'));
     expect(dashboard, contains('View wallet'));
   });
