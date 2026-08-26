@@ -208,12 +208,12 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'ScaledCircle helps plan the campaign. You choose the map. Real people deliver results.',
+            'Choose a real service area. ScaledCircle recommends workable Smart Zones. Real people deliver results.',
             style: TextStyle(color: _muted, fontSize: 19, height: 1.55),
           ),
           const SizedBox(height: 12),
           const Text(
-            'AI-powered local intelligence. Digital marketing. Verified field campaigns. One platform.',
+            'Structured local planning. Digital marketing drafts. Verified field campaigns. One platform.',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 28),

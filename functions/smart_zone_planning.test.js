@@ -18,6 +18,29 @@ test("generated geometry is deterministic, distinct, and non-zero", () => {
   assert.ok(first.zones[0].geometryValidation.areaSquareMeters > 0);
 });
 
+test("public Baltimore demo is an exact maintained planner output", () => {
+  const plan = smart.generatePlan({
+    anchor: {latitude: 39.2949221, longitude: -76.68799185},
+    desiredHours: 5,
+    propertiesPerHour: 45,
+    workType: "field_distribution",
+    label: "Baltimore neighborhood demo",
+    totalWorkerPayCents: 0,
+  });
+  assert.equal(plan.planId, "smart-zone_542b54c1fb1388f0f13740d7");
+  assert.equal(plan.policyVersion, "SmartZonePlanningV2");
+  assert.equal(plan.totalEstimatedProperties, 225);
+  assert.equal(plan.totalEstimatedMinutes, 300);
+  assert.equal(plan.recommendedScalerCount, 1);
+  assert.equal(plan.zones[0].geometryValidation.valid, true);
+  assert.deepEqual(plan.zones[0].geometry, [
+    {latitude: 39.2930165, longitude: -76.6904542},
+    {latitude: 39.2930165, longitude: -76.6855295},
+    {latitude: 39.2968277, longitude: -76.6855295},
+    {latitude: 39.2968277, longitude: -76.6904542},
+  ]);
+});
+
 test("the six-hour assignment ceiling is the one planner and funding contract", () => {
   const cases = [
     [4, 1], [5.5, 1], [6, 1], [6.1, 2], [7, 2], [8, 2], [8.1, 2], [12, 2],

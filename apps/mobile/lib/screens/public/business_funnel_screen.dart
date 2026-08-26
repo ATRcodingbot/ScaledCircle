@@ -428,7 +428,7 @@ class _CampaignMapVisual extends StatelessWidget {
         ),
         SizedBox(height: 14),
         Text(
-          'PRELIMINARY ZONE INTELLIGENCE',
+          'VALIDATED SMART ZONE DEMO',
           style: TextStyle(
             color: businessGreen,
             fontSize: 11,
@@ -436,10 +436,10 @@ class _CampaignMapVisual extends StatelessWidget {
           ),
         ),
         SizedBox(height: 6),
-        ProductLine('Geographic Area', '312 acres • Example'),
-        ProductLine('Estimated Homes', '140 • Example'),
+        ProductLine('Selected Area', 'Baltimore, Maryland • Demo'),
+        ProductLine('Estimated Homes', '225 • Conservative estimate'),
         ProductLine('Walking Route', 'Not yet verified'),
-        ProductLine('Workload', 'Pending target analysis'),
+        ProductLine('Workload', '5 hours • SmartZonePlanningV2'),
         SizedBox(height: 8),
         StatusPill(
           'Review Campaign',
@@ -451,9 +451,9 @@ class _CampaignMapVisual extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            StatusPill('Service Area', color: publicMuted),
-            StatusPill('Campaign Target', color: businessGreen),
-            StatusPill('Scaler Zone', color: scalerBlue),
+            StatusPill('Selected Area', color: publicMuted),
+            StatusPill('Smart Zone A', color: businessGreen),
+            StatusPill('Route not verified', color: scalerBlue),
           ],
         ),
       ],

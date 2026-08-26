@@ -32,8 +32,13 @@ void main() {
   ) async {
     await tester.pumpWidget(app());
     expect(find.text('PLAN LOCAL GROWTH. PUT IT INTO ACTION.'), findsOneWidget);
-    expect(find.text('CAMPAIGN OPPORTUNITY • EXAMPLE'), findsOneWidget);
-    expect(find.textContaining('Zone 1 mapped'), findsOneWidget);
+    expect(
+      find.textContaining('ScaledCircle recommends workable Smart Zones'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Digital marketing drafts'), findsOneWidget);
+    expect(find.text('VALIDATED SMART ZONE • DEMO'), findsOneWidget);
+    expect(find.textContaining('Route not yet verified'), findsWidgets);
     expect(find.text('Grow My Business'), findsWidgets);
     expect(find.text('Earn as a Scaler'), findsWidgets);
   });
@@ -81,9 +86,9 @@ void main() {
     expect(find.text('1 Zone'), findsOneWidget);
     expect(find.text('1 Mapped'), findsOneWidget);
     expect(find.text('0 Assigned'), findsOneWidget);
-    expect(find.text('PRELIMINARY ZONE INTELLIGENCE'), findsOneWidget);
+    expect(find.text('VALIDATED SMART ZONE DEMO'), findsOneWidget);
     expect(find.text('Walking Route'), findsOneWidget);
-    expect(find.text('Pending target analysis'), findsOneWidget);
+    expect(find.text('5 hours • SmartZonePlanningV2'), findsOneWidget);
     expect(find.text('Review Campaign'), findsOneWidget);
   });
 
@@ -124,19 +129,22 @@ void main() {
     expect(find.text('Active'), findsWidgets);
   });
 
-  test('Scaler residential fixture keeps position inside a bounded Zone', () {
-    expect(scalerResidentialZoneFixture, hasLength(greaterThanOrEqualTo(3)));
+  test('validated public Smart Zone keeps its demo position inside geometry', () {
+    expect(validatedSmartZoneDemo, hasLength(4));
+    expect(validatedSmartZoneDemoPlanId, startsWith('smart-zone_'));
+    expect(validatedSmartZoneDemoEstimatedHomes, 225);
+    expect(validatedSmartZoneDemoEstimatedMinutes, 300);
     expect(
       publicPointInsidePolygon(
-        scalerResidentialPositionFixture,
-        scalerResidentialZoneFixture,
+        validatedSmartZoneDemoPosition,
+        validatedSmartZoneDemo,
       ),
       isTrue,
     );
-    final latitudes = scalerResidentialZoneFixture.map(
+    final latitudes = validatedSmartZoneDemo.map(
       (point) => point.latitude,
     );
-    final longitudes = scalerResidentialZoneFixture.map(
+    final longitudes = validatedSmartZoneDemo.map(
       (point) => point.longitude,
     );
     expect(
@@ -258,9 +266,9 @@ void main() {
       contains("'assets/brand/scaledcircle-lockup-dark-surface.png'"),
     );
     expect(components, contains('How do you want to use ScaledCircle?'));
-    expect(business, contains('Service Area'));
-    expect(business, contains('Campaign Target'));
-    expect(business, contains('Scaler Zone'));
+    expect(business, contains('Selected Area'));
+    expect(business, contains('Smart Zone A'));
+    expect(business, contains('Route not verified'));
     expect(business, contains("ProductLine('Route', 'Not yet verified')"));
     expect(scaler, contains('EXAMPLE ACTIVE-WORK GPS EVIDENCE'));
     expect(scaler, contains('Recording during active work'));
@@ -274,6 +282,9 @@ void main() {
     expect(maps, contains('© OpenStreetMap contributors'));
     expect(maps, isNot(contains('PolylineLayer(')));
     expect(maps, contains('InteractiveFlag.none'));
+    expect(maps, contains('SmartZonePlanningV2'));
+    expect(maps, contains('smart-zone_542b54c1fb1388f0f13740d7'));
+    expect(maps, contains('conservative estimate'));
     expect(maps, isNot(contains('Geolocator')));
     expect(maps, isNot(contains('requestPermission')));
     expect(maps, isNot(contains('startTracking')));

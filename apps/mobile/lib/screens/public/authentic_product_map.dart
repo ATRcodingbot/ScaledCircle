@@ -6,15 +6,26 @@ import 'public_funnel_components.dart';
 
 enum PublicProductMapMode { campaign, activeWork }
 
-const scalerResidentialZoneFixture = <LatLng>[
-  LatLng(39.3810, -76.5460),
-  LatLng(39.3810, -76.5350),
-  LatLng(39.3740, -76.5320),
-  LatLng(39.3700, -76.5390),
-  LatLng(39.3740, -76.5480),
+/// Public, non-customer demo output reproduced from SmartZonePlanningV2.
+///
+/// Input anchor: 39.2949221, -76.68799185; desired workload: 5 hours;
+/// properties/hour: 45. The maintained planner produced plan
+/// `smart-zone_542b54c1fb1388f0f13740d7`, validated 179,999.25 m² of
+/// non-zero geometry, 225 estimated homes, and 300 estimated minutes.
+/// It is deliberately presented as a conservative planning estimate—not a
+/// verified walking route, parcel boundary, or AI neighborhood ranking.
+const validatedSmartZoneDemo = <LatLng>[
+  LatLng(39.2930165, -76.6904542),
+  LatLng(39.2930165, -76.6855295),
+  LatLng(39.2968277, -76.6855295),
+  LatLng(39.2968277, -76.6904542),
 ];
 
-const scalerResidentialPositionFixture = LatLng(39.3760, -76.5400);
+const validatedSmartZoneDemoPosition = LatLng(39.2949221, -76.6879919);
+const validatedSmartZoneDemoPlanId =
+    'smart-zone_542b54c1fb1388f0f13740d7';
+const validatedSmartZoneDemoEstimatedHomes = 225;
+const validatedSmartZoneDemoEstimatedMinutes = 300;
 
 bool publicPointInsidePolygon(LatLng point, List<LatLng> polygon) {
   var inside = false;
@@ -35,8 +46,8 @@ bool publicPointInsidePolygon(LatLng point, List<LatLng> polygon) {
 }
 
 /// A read-only public preview built from the same FlutterMap layers used by
-/// campaign creation and active-job tracking. Coordinates are deterministic
-/// demo fixtures; no production customer data is rendered.
+/// campaign creation and active-job tracking. Campaign geometry is a validated
+/// deterministic Smart Zone demo; no production customer data is rendered.
 class AuthenticProductMap extends StatelessWidget {
   const AuthenticProductMap({
     super.key,
@@ -49,35 +60,14 @@ class AuthenticProductMap extends StatelessWidget {
   final double height;
   final bool showOpportunityCard;
 
-  static const _serviceArea = <LatLng>[
-    LatLng(39.115, -76.615),
-    LatLng(39.115, -76.505),
-    LatLng(39.020, -76.490),
-    LatLng(38.985, -76.565),
-    LatLng(39.035, -76.640),
-  ];
-  static const _campaignTarget = <LatLng>[
-    LatLng(39.085, -76.585),
-    LatLng(39.086, -76.535),
-    LatLng(39.047, -76.525),
-    LatLng(39.035, -76.565),
-    LatLng(39.058, -76.598),
-  ];
-  static const _zone = <LatLng>[
-    LatLng(39.077, -76.578),
-    LatLng(39.078, -76.548),
-    LatLng(39.055, -76.540),
-    LatLng(39.046, -76.562),
-    LatLng(39.059, -76.582),
-  ];
   @override
   Widget build(BuildContext context) {
     final activeWork = mode == PublicProductMapMode.activeWork;
     assert(
       !activeWork ||
           publicPointInsidePolygon(
-            scalerResidentialPositionFixture,
-            scalerResidentialZoneFixture,
+            validatedSmartZoneDemoPosition,
+            validatedSmartZoneDemo,
           ),
       'The public Scaler position fixture must remain inside its assigned Zone.',
     );
@@ -87,7 +77,7 @@ class AuthenticProductMap extends StatelessWidget {
         image: true,
         label: activeWork
             ? 'Read-only product preview of an assigned Zone with GPS verification active and a current-position marker. No route is shown.'
-            : 'Read-only product preview using the campaign map with Service Area, Campaign Target, and mapped Zone overlays.',
+            : 'Read-only Baltimore demo showing a selected area and the validated Smart Zone produced by the maintained planner. Route not yet verified.',
         child: SizedBox(
           height: height,
           width: double.infinity,
@@ -97,19 +87,13 @@ class AuthenticProductMap extends StatelessWidget {
                 child: IgnorePointer(
                   child: FlutterMap(
                     options: MapOptions(
-                      initialCenter: activeWork
-                          ? scalerResidentialPositionFixture
-                          : const LatLng(39.055, -76.560),
-                      initialZoom: activeWork ? 15.4 : 12.3,
-                      initialCameraFit: activeWork
-                          ? CameraFit.bounds(
-                              bounds: LatLngBounds.fromPoints(
-                                scalerResidentialZoneFixture,
-                              ),
-                              padding: const EdgeInsets.all(28),
-                              maxZoom: 16,
-                            )
-                          : null,
+                      initialCenter: validatedSmartZoneDemoPosition,
+                      initialZoom: 15.4,
+                      initialCameraFit: CameraFit.bounds(
+                        bounds: LatLngBounds.fromPoints(validatedSmartZoneDemo),
+                        padding: const EdgeInsets.all(28),
+                        maxZoom: 16,
+                      ),
                       interactionOptions: const InteractionOptions(
                         flags: InteractiveFlag.none,
                       ),
@@ -124,22 +108,16 @@ class AuthenticProductMap extends StatelessWidget {
                         PolygonLayer(
                           polygons: [
                             Polygon(
-                              points: _serviceArea,
-                              color: publicMuted.withValues(alpha: .05),
+                              points: validatedSmartZoneDemo,
+                              color: publicMuted.withValues(alpha: .04),
                               borderColor: const Color(0xFF526C81),
-                              borderStrokeWidth: 2,
+                              borderStrokeWidth: 6,
                             ),
                             Polygon(
-                              points: _campaignTarget,
-                              color: businessGreen.withValues(alpha: .18),
+                              points: validatedSmartZoneDemo,
+                              color: businessGreen.withValues(alpha: .08),
                               borderColor: businessGreen,
-                              borderStrokeWidth: 3,
-                            ),
-                            Polygon(
-                              points: _zone,
-                              color: scalerBlue.withValues(alpha: .25),
-                              borderColor: scalerBlue,
-                              borderStrokeWidth: 3,
+                              borderStrokeWidth: 3.5,
                             ),
                           ],
                         ),
@@ -147,7 +125,7 @@ class AuthenticProductMap extends StatelessWidget {
                         PolygonLayer(
                           polygons: [
                             Polygon(
-                              points: scalerResidentialZoneFixture,
+                              points: validatedSmartZoneDemo,
                               color: scalerBlue.withValues(alpha: .18),
                               borderColor: scalerBlue,
                               borderStrokeWidth: 4,
@@ -158,7 +136,7 @@ class AuthenticProductMap extends StatelessWidget {
                         const MarkerLayer(
                           markers: [
                             Marker(
-                              point: scalerResidentialPositionFixture,
+                              point: validatedSmartZoneDemoPosition,
                               width: 46,
                               height: 46,
                               child: _CurrentPositionMarker(),
@@ -180,7 +158,7 @@ class AuthenticProductMap extends StatelessWidget {
                 child: _MapStateBadge(
                   text: activeWork
                       ? 'GPS verification • Active'
-                      : 'Zone 1 • Mapped',
+                      : 'Smart Zone A • Validated demo',
                   color: activeWork ? businessGreen : scalerBlue,
                 ),
               ),
@@ -280,7 +258,7 @@ class _OpportunityCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'CAMPAIGN OPPORTUNITY • EXAMPLE',
+          'VALIDATED SMART ZONE • DEMO',
           style: TextStyle(
             color: businessGreen,
             fontSize: 10,
@@ -289,12 +267,12 @@ class _OpportunityCard extends StatelessWidget {
         ),
         SizedBox(height: 6),
         Text(
-          'Main Service Area • 500 flyers',
+          'Baltimore, Maryland • 225 estimated homes',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
         ),
         SizedBox(height: 5),
         Text(
-          'Campaign Target selected  •  Zone 1 mapped  •  Route not yet verified',
+          '5-hour conservative estimate  •  Route not yet verified  •  Advanced Edit available',
           style: TextStyle(color: publicMuted, fontSize: 11, height: 1.35),
         ),
       ],
