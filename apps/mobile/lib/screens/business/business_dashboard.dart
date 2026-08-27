@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../config/app_environment.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 
@@ -625,14 +626,22 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
           PopupMenuButton<String>(
             tooltip: 'Business navigation',
             icon: const Icon(Icons.menu),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'home', child: Text('Home')),
-              PopupMenuItem(value: 'grow', child: Text('Grow')),
-              PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
-              PopupMenuItem(value: 'results', child: Text('Results')),
-              PopupMenuItem(value: 'responses', child: Text('Response tracking — Beta')),
-              PopupMenuItem(value: 'account', child: Text('Account')),
-              PopupMenuItem(value: 'support', child: Text('Support')),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'home', child: Text('Home')),
+              const PopupMenuItem(value: 'grow', child: Text('Grow')),
+              const PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
+              const PopupMenuItem(value: 'results', child: Text('Results')),
+              PopupMenuItem(
+                value: 'responses',
+                enabled: AppEnvironmentConfig.isStaging,
+                child: Text(
+                  AppEnvironmentConfig.isStaging
+                      ? 'Response tracking — Beta'
+                      : 'Response tracking — Coming Soon',
+                ),
+              ),
+              const PopupMenuItem(value: 'account', child: Text('Account')),
+              const PopupMenuItem(value: 'support', child: Text('Support')),
             ],
             onSelected: (value) {
               if (value == 'grow') {
@@ -647,9 +656,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               } else if (value == 'results') {
                 _openCampaigns(context, user.uid, results: true);
               } else if (value == 'responses') {
-                Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => const BusinessAttributionScreen(),
-                ));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BusinessAttributionScreen(),
+                  ),
+                );
               } else if (value == 'account') {
                 Navigator.push(
                   context,
@@ -773,405 +785,427 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   zoneSnapshot.data!.docs.map((zone) => zone.data()),
                 );
 
-            final activeCampaigns = campaigns.where((campaign) {
-              final data = campaign.data() as Map<String, dynamic>;
-
-              final status = data['status']?.toString().toLowerCase() ?? '';
-
-              return status != 'completed' &&
-                  status != 'draft' &&
-                  status != 'cancelled' &&
-                  status != 'canceled';
-            }).toList();
-
-            final reviewCampaigns = campaigns.where(
-              (campaign) => resultSummary
-                  .forCampaign(campaign.id)
-                  .needsReview,
-            ).toList();
-            final awaitingReviewCount = resultSummary.awaitingReviewCount;
-
-            final horizontalPadding = MediaQuery.sizeOf(context).width > 1160
-                ? (MediaQuery.sizeOf(context).width - 1120) / 2
-                : 20.0;
-
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                20,
-                horizontalPadding,
-                50,
-              ),
-              children: [
-                DashboardHero(
-                  eyebrow: 'BUSINESS HOME',
-                  title: 'Good morning. What do you want to accomplish?',
-                  description:
-                      'Choose a goal. ScaledCircle will take you to the right tools without making you sort through every feature.',
-                  primaryActionLabel: 'Find an Opportunity',
-                  primaryActionIcon: Icons.travel_explore_outlined,
-                  onPrimaryAction: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const PropertyIntelligenceCenterScreen(),
-                      ),
-                    );
-                  },
-                  metrics: [
-                    DashboardPill(
-                      icon: Icons.campaign_outlined,
-                      label:
-                          '${activeCampaigns.length} active campaign${activeCampaigns.length == 1 ? '' : 's'}',
-                      onTap: () => _openCampaigns(context, user.uid),
-                    ),
-                    DashboardPill(
-                      icon: Icons.fact_check_outlined,
-                      label: '$awaitingReviewCount Zone${awaitingReviewCount == 1 ? '' : 's'} awaiting review',
-                      accent: awaitingReviewCount == 0
-                          ? AppColors.primary
-                          : AppColors.warning,
-                    ),
-                    const DashboardPill(
-                      icon: Icons.gps_fixed,
-                      label: 'GPS verification ready',
-                      accent: AppColors.primary,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 22),
-
-                _BusinessGoalGrid(
-                  onFindOpportunity: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const PropertyIntelligenceCenterScreen(),
-                    ),
-                  ),
-                  onCreateMarketing: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ManagedGrowthScreen(),
-                    ),
-                  ),
-                  onLaunchCampaign: () =>
-                      _openCreateCampaign(context, user.uid),
-                  onReviewResults: () {
-                    if (reviewCampaigns.length == 1) {
-                      AppNavigation.push(
-                        context,
-                        AppRoutes.campaignDetail(reviewCampaigns.single.id),
-                      );
-                      return;
-                    }
-                    _openCampaigns(context, user.uid, results: true);
-                  },
-                  hasResults: resultSummary.hasResults,
-                ),
-                const SizedBox(height: 24),
-
-                if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)
-                  _BusinessToday(
-                    activeCampaigns: activeCampaigns.length,
-                    needsReview: awaitingReviewCount,
-                  ),
-                if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)
-                  const SizedBox(height: 24),
-
-                _buildBusinessPaymentsSection(),
-                const SizedBox(height: 16),
-                _buildPropertyIntelligenceCard(user.uid),
-                _buildManagedGrowthCard(user.uid),
-                const SizedBox(height: 16),
-                _buildWeatherSection(),
-                const SizedBox(height: 16),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.business),
-
-                    title: const Text("My Business Profile"),
-
-                    subtitle: const Text(
-                      "View your company profile and reputation.",
-                    ),
-
-                    trailing: const Icon(Icons.arrow_forward_ios),
-
-                    onTap: () {
-                      Navigator.push(
-                        context,
-
-                        MaterialPageRoute(
-                          builder: (_) => const BusinessProfileScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-
-                ReputationCard(
-                  userId: user.uid,
-                  userType: "business",
-                  title: "Business Reputation",
-                ),
-
-                const SizedBox(height: 18),
-
-                _buildSubscriptionSection(user.uid),
-
-                const SizedBox(height: 22),
-
-                SizedBox(
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.add_location_alt_outlined),
-                    label: const Text('Create Another Campaign'),
-                    onPressed: () async {
-                      await _openCreateCampaign(context, user.uid);
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Card(
-                        child: InkWell(
-                          key: const Key('active-campaign-summary'),
-                          onTap: () => _openCampaigns(context, user.uid),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              children: [
-                                Text(
-                                  activeCampaigns.length.toString(),
-                                  style: const TextStyle(
-                                    fontSize: 34,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Active Campaigns',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            children: [
-                              Text(
-                                awaitingReviewCount.toString(),
-                                style: const TextStyle(
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Zones Awaiting Review',
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                if (reviewCampaigns.isNotEmpty) ...[
-                  const SizedBox(height: 25),
-                  const Text(
-                    'Needs Review',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 15),
-                  ...reviewCampaigns.map((campaign) {
-                    final data = campaign.data() as Map<String, dynamic>;
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: const Icon(Icons.fact_check_outlined),
-                        title: Text(
-                          data['campaignName']?.toString() ??
-                              'Untitled Campaign',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          resultSummary.forCampaign(campaign.id).conciseStatus,
-                        ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 18),
-                        onTap: () async {
-                          AppNavigation.push(
-                            context,
-                            AppRoutes.campaignDetail(campaign.id),
-                          );
-                        },
-                      ),
-                    );
-                  }),
-                ],
-
-                const SizedBox(height: 25),
-
-                const Text(
-                  'My Campaigns',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 15),
-
-                if (campaigns.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('No campaigns yet.'),
-                    ),
-                  ),
-
-                ...campaigns.map((campaign) {
+                final activeCampaigns = campaigns.where((campaign) {
                   final data = campaign.data() as Map<String, dynamic>;
 
                   final status = data['status']?.toString().toLowerCase() ?? '';
 
-                  final compensation = CampaignCardCompensation.fromCampaign(
-                    data,
-                  );
+                  return status != 'completed' &&
+                      status != 'draft' &&
+                      status != 'cancelled' &&
+                      status != 'canceled';
+                }).toList();
 
-                  final platformFee = (data['platformFee'] as num?)?.toDouble();
+                final reviewCampaigns = campaigns
+                    .where(
+                      (campaign) =>
+                          resultSummary.forCampaign(campaign.id).needsReview,
+                    )
+                    .toList();
+                final awaitingReviewCount = resultSummary.awaitingReviewCount;
 
-                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('campaigns')
-                        .doc(campaign.id)
-                        .collection('applications')
-                        .snapshots(),
-                    builder: (context, applicationSnapshot) {
-                      final applications =
-                          applicationSnapshot.data?.docs.length ?? 0;
+                final horizontalPadding =
+                    MediaQuery.sizeOf(context).width > 1160
+                    ? (MediaQuery.sizeOf(context).width - 1120) / 2
+                    : 20.0;
 
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 15),
-                        child: ListTile(
-                          leading: Icon(
-                            status == 'draft'
-                                ? Icons.edit_note_outlined
-                                : Icons.campaign,
-                            color: status == 'draft'
-                                ? Colors.orange
-                                : Colors.blue,
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    20,
+                    horizontalPadding,
+                    50,
+                  ),
+                  children: [
+                    DashboardHero(
+                      eyebrow: 'BUSINESS HOME',
+                      title: 'Good morning. What do you want to accomplish?',
+                      description:
+                          'Choose a goal. ScaledCircle will take you to the right tools without making you sort through every feature.',
+                      primaryActionLabel: 'Find an Opportunity',
+                      primaryActionIcon: Icons.travel_explore_outlined,
+                      onPrimaryAction: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const PropertyIntelligenceCenterScreen(),
                           ),
-                          title: Text(
-                            data['campaignName']?.toString() ?? '',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 5),
-                              Text(
-                                data['description']?.toString() ?? '',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                compensation.primaryText,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              if (compensation.secondaryText != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  compensation.secondaryText!,
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                              if (platformFee != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Platform fee: '
-                                  '\$${platformFee.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 4),
-                              Text(
-                                'Status: ${_statusLabel(status)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              if (status == 'open' && applications > 0) ...[
-                                const SizedBox(height: 5),
-                                Text(
-                                  '$applications Scaler${applications == 1 ? '' : 's'} applied',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (applications > 0)
-                                IconButton(
-                                  icon: const Icon(Icons.people_alt_outlined),
-                                  tooltip: "View Applicants",
-                                  onPressed: () async {
-                                    await Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            ScCampaignApplicantsScreen(
-                                              campaignId: campaign.id,
-                                            ),
-                                      ),
-                                    );
-                                  },
-                                ),
-
-                              const Icon(Icons.arrow_forward_ios, size: 18),
-                            ],
-                          ),
-                          onTap: () async {
-                            AppNavigation.push(
-                              context,
-                              AppRoutes.campaignDetail(campaign.id),
-                            );
-                          },
+                        );
+                      },
+                      metrics: [
+                        DashboardPill(
+                          icon: Icons.campaign_outlined,
+                          label:
+                              '${activeCampaigns.length} active campaign${activeCampaigns.length == 1 ? '' : 's'}',
+                          onTap: () => _openCampaigns(context, user.uid),
                         ),
+                        DashboardPill(
+                          icon: Icons.fact_check_outlined,
+                          label:
+                              '$awaitingReviewCount Zone${awaitingReviewCount == 1 ? '' : 's'} awaiting review',
+                          accent: awaitingReviewCount == 0
+                              ? AppColors.primary
+                              : AppColors.warning,
+                        ),
+                        const DashboardPill(
+                          icon: Icons.gps_fixed,
+                          label: 'GPS verification ready',
+                          accent: AppColors.primary,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+
+                    _BusinessGoalGrid(
+                      onFindOpportunity: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const PropertyIntelligenceCenterScreen(),
+                        ),
+                      ),
+                      onCreateMarketing: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ManagedGrowthScreen(),
+                        ),
+                      ),
+                      onLaunchCampaign: () =>
+                          _openCreateCampaign(context, user.uid),
+                      onReviewResults: () {
+                        if (reviewCampaigns.length == 1) {
+                          AppNavigation.push(
+                            context,
+                            AppRoutes.campaignDetail(reviewCampaigns.single.id),
+                          );
+                          return;
+                        }
+                        _openCampaigns(context, user.uid, results: true);
+                      },
+                      hasResults: resultSummary.hasResults,
+                    ),
+                    const SizedBox(height: 24),
+
+                    if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)
+                      _BusinessToday(
+                        activeCampaigns: activeCampaigns.length,
+                        needsReview: awaitingReviewCount,
+                      ),
+                    if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)
+                      const SizedBox(height: 24),
+
+                    _buildBusinessPaymentsSection(),
+                    const SizedBox(height: 16),
+                    _buildPropertyIntelligenceCard(user.uid),
+                    _buildManagedGrowthCard(user.uid),
+                    const SizedBox(height: 16),
+                    _buildWeatherSection(),
+                    const SizedBox(height: 16),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.business),
+
+                        title: const Text("My Business Profile"),
+
+                        subtitle: const Text(
+                          "View your company profile and reputation.",
+                        ),
+
+                        trailing: const Icon(Icons.arrow_forward_ios),
+
+                        onTap: () {
+                          Navigator.push(
+                            context,
+
+                            MaterialPageRoute(
+                              builder: (_) => const BusinessProfileScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    ReputationCard(
+                      userId: user.uid,
+                      userType: "business",
+                      title: "Business Reputation",
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    _buildSubscriptionSection(user.uid),
+
+                    const SizedBox(height: 22),
+
+                    SizedBox(
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.add_location_alt_outlined),
+                        label: const Text('Create Another Campaign'),
+                        onPressed: () async {
+                          await _openCreateCampaign(context, user.uid);
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Card(
+                            child: InkWell(
+                              key: const Key('active-campaign-summary'),
+                              onTap: () => _openCampaigns(context, user.uid),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      activeCampaigns.length.toString(),
+                                      style: const TextStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Active Campaigns',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    awaitingReviewCount.toString(),
+                                    style: const TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Zones Awaiting Review',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (reviewCampaigns.isNotEmpty) ...[
+                      const SizedBox(height: 25),
+                      const Text(
+                        'Needs Review',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      ...reviewCampaigns.map((campaign) {
+                        final data = campaign.data() as Map<String, dynamic>;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ListTile(
+                            leading: const Icon(Icons.fact_check_outlined),
+                            title: Text(
+                              data['campaignName']?.toString() ??
+                                  'Untitled Campaign',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              resultSummary
+                                  .forCampaign(campaign.id)
+                                  .conciseStatus,
+                            ),
+                            trailing: const Icon(
+                              Icons.arrow_forward_ios,
+                              size: 18,
+                            ),
+                            onTap: () async {
+                              AppNavigation.push(
+                                context,
+                                AppRoutes.campaignDetail(campaign.id),
+                              );
+                            },
+                          ),
+                        );
+                      }),
+                    ],
+
+                    const SizedBox(height: 25),
+
+                    const Text(
+                      'My Campaigns',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    if (campaigns.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('No campaigns yet.'),
+                        ),
+                      ),
+
+                    ...campaigns.map((campaign) {
+                      final data = campaign.data() as Map<String, dynamic>;
+
+                      final status =
+                          data['status']?.toString().toLowerCase() ?? '';
+
+                      final compensation =
+                          CampaignCardCompensation.fromCampaign(data);
+
+                      final platformFee = (data['platformFee'] as num?)
+                          ?.toDouble();
+
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('campaigns')
+                            .doc(campaign.id)
+                            .collection('applications')
+                            .snapshots(),
+                        builder: (context, applicationSnapshot) {
+                          final applications =
+                              applicationSnapshot.data?.docs.length ?? 0;
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 15),
+                            child: ListTile(
+                              leading: Icon(
+                                status == 'draft'
+                                    ? Icons.edit_note_outlined
+                                    : Icons.campaign,
+                                color: status == 'draft'
+                                    ? Colors.orange
+                                    : Colors.blue,
+                              ),
+                              title: Text(
+                                data['campaignName']?.toString() ?? '',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    data['description']?.toString() ?? '',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    compensation.primaryText,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (compensation.secondaryText != null) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      compensation.secondaryText!,
+                                      style: const TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                  if (platformFee != null) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Platform fee: '
+                                      '\$${platformFee.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Status: ${_statusLabel(status)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (status == 'open' && applications > 0) ...[
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      '$applications Scaler${applications == 1 ? '' : 's'} applied',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (applications > 0)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.people_alt_outlined,
+                                      ),
+                                      tooltip: "View Applicants",
+                                      onPressed: () async {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                ScCampaignApplicantsScreen(
+                                                  campaignId: campaign.id,
+                                                ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+
+                                  const Icon(Icons.arrow_forward_ios, size: 18),
+                                ],
+                              ),
+                              onTap: () async {
+                                AppNavigation.push(
+                                  context,
+                                  AppRoutes.campaignDetail(campaign.id),
+                                );
+                              },
+                            ),
+                          );
+                        },
                       );
-                    },
-                  );
-                }),
-              ],
-            );
+                    }),
+                  ],
+                );
               },
             );
           },

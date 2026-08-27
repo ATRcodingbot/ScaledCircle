@@ -18,6 +18,8 @@ import '../../../campaign/campaign_locations_screen.dart';
 import '../../../../../models/material_logistics.dart';
 import '../../../../../widgets/material_fulfillment_form.dart';
 import '../../../../../widgets/legal_consent_prompt.dart';
+import '../../../../../widgets/response_tracking_feature_card.dart';
+import '../../../business_attribution_screen.dart';
 
 class FlyerCampaignScreen extends StatefulWidget {
   final String campaignType;
@@ -1295,14 +1297,14 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
                     const SizedBox(height: 16),
 
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Response tracking — Coming Soon'),
-                      subtitle: const Text(
-                        'Campaign links, landing pages, calls, and lead attribution are not yet available.',
+                    ResponseTrackingFeatureCard(
+                      available: AppEnvironmentConfig.isStaging,
+                      onOpen: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const BusinessAttributionScreen(),
+                        ),
                       ),
-                      value: _trackingEnabled,
-                      onChanged: null,
                     ),
                   ],
 

@@ -7,6 +7,8 @@ import '../../models/material_logistics.dart';
 import '../../services/platform_billing_service.dart';
 import '../../widgets/material_fulfillment_form.dart';
 import '../../widgets/legal_consent_prompt.dart';
+import '../../widgets/response_tracking_feature_card.dart';
+import 'business_attribution_screen.dart';
 import 'campaign_zones_screen.dart';
 import 'campaign/campaign_locations_screen.dart';
 
@@ -998,14 +1000,14 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
                 const SizedBox(height: 16),
 
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Response tracking — Coming Soon'),
-                  subtitle: const Text(
-                    'Campaign links, landing pages, calls, and lead attribution are not yet available.',
+                ResponseTrackingFeatureCard(
+                  available: AppEnvironmentConfig.isStaging,
+                  onOpen: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BusinessAttributionScreen(),
+                    ),
                   ),
-                  value: _trackingEnabled,
-                  onChanged: null,
                 ),
               ],
 

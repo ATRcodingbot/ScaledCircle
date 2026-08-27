@@ -33,6 +33,9 @@ void main() {
     final flyer = source(
       'lib/screens/business/create/campaigns/flyer/flyer_campaign_screen.dart',
     );
+    final responseCard = source(
+      'lib/widgets/response_tracking_feature_card.dart',
+    );
 
     for (final capability in [
       'Lead tracking — Coming Soon',
@@ -44,10 +47,15 @@ void main() {
     expect(subscription, contains('cash-out coming soon'));
     expect(services, contains("name: 'Scaler Cash-out'"));
     expect(services, contains('comingSoon: true'));
-    expect(builder, contains('Response tracking — Coming Soon'));
-    expect(builder, contains('onChanged: null'));
-    expect(flyer, contains('Response tracking — Coming Soon'));
-    expect(flyer, contains('onChanged: null'));
+    expect(builder, contains('ResponseTrackingFeatureCard'));
+    expect(builder, contains('AppEnvironmentConfig.isStaging'));
+    expect(flyer, contains('ResponseTrackingFeatureCard'));
+    expect(flyer, contains('AppEnvironmentConfig.isStaging'));
+    expect(responseCard, contains('Tracked link'));
+    expect(responseCard, contains('QR code'));
+    expect(responseCard, contains('Landing pages'));
+    expect(responseCard, contains('Tracked calls'));
+    expect(responseCard, contains('Lead capture/forms'));
   });
 
   test(
