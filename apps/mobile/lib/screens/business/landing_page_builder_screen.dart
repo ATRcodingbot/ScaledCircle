@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../config/app_environment.dart';
 import '../../services/landing_page_service.dart';
 
 class LandingPageBuilderScreen extends StatefulWidget {
@@ -32,6 +35,27 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   String? _message;
   int _inquiryCount = 0;
   List<Map<String, dynamic>> _recentInquiries = const [];
+  Uri? get _publicPageUrl => _slug == null
+      ? null
+      : AppEnvironmentConfig.publicBaseUrl.replace(
+          path: '/p/$_slug',
+          query: null,
+          fragment: null,
+        );
+
+  Future<void> _copyPublicPageUrl() async {
+    final url = _publicPageUrl;
+    if (url == null) return;
+    await Clipboard.setData(ClipboardData(text: url.toString()));
+    if (mounted) setState(() => _message = 'Public page link copied.');
+  }
+
+  Future<void> _openPublicPage() async {
+    final url = _publicPageUrl;
+    if (url == null || !await launchUrl(url, webOnlyWindowName: '_blank')) {
+      if (mounted) setState(() => _message = "We couldn't open the public page. Copy the link and try again.");
+    }
+  }
   @override
   void initState() {
     super.initState();
@@ -287,7 +311,37 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Semantics(liveRegion: true, child: Text(_message!)),
                   ),
-                if (_slug != null) SelectableText('Public page: /p/$_slug'),
+                if (_publicPageUrl != null)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Public page', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 6),
+                          SelectableText(_publicPageUrl.toString()),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: _copyPublicPageUrl,
+                                icon: const Icon(Icons.copy),
+                                label: const Text('Copy exact link'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _openPublicPage,
+                                icon: const Icon(Icons.open_in_new),
+                                label: const Text('Open public page'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 12,

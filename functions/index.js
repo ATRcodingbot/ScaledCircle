@@ -10925,14 +10925,24 @@ exports.transitionLandingPage = onCall({region: "us-east1", enforceAppCheck: fal
 });
 
 exports.renderLandingPage = onRequest({region: "us-east1", cors: false, maxInstances: 20}, async (request, response) => {
+  const slug = request.path.split("/").filter(Boolean).at(-1);
   try {
-    const slug = request.path.split("/").filter(Boolean).at(-1);
     const resolved = await landingPageService.resolve(slug);
     response.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
     response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
     await recordLandingPageHealth("render", true);
     response.status(200).type("html").send(landingPage.renderPage(resolved));
-  } catch (_) { await recordLandingPageHealth("render", false); response.status(404).type("html").send("<!doctype html><title>Page unavailable</title><main><h1>This page is unavailable.</h1></main>"); }
+  } catch (error) {
+    console.warn("landing_page_resolution_failed", {
+      category: String(error?.message || "landing_page_internal").replace(/[^a-z0-9_]/gi, "_").slice(0, 80),
+      slugFingerprint: landingPage.digest(String(slug || "")).slice(0, 16),
+      slugPresent: Boolean(slug),
+    });
+    await recordLandingPageHealth("render", false);
+    response.set("Cache-Control", "no-store");
+    response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
+    response.status(404).type("html").send(landingPage.renderUnavailablePage());
+  }
 });
 
 exports.submitLandingPageForm = onRequest({region: "us-east1", cors: false, maxInstances: 20}, async (request, response) => {

@@ -11,7 +11,19 @@ const PUBLIC_ORIGINS = Object.freeze({"scaled-circle":"https://scaledcircle.com"
 
 function text(value, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
 function escapeHtml(value) { return text(value, 5000).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function slug(randomBytes = crypto.randomBytes) { return randomBytes(18).toString("base64url"); }
+// 144 bits of entropy encoded with a human-safe alphabet. Ambiguous glyphs
+// (0/O and 1/I/L) are intentionally absent because Businesses copy these URLs
+// into print and social material.
+const PUBLIC_SLUG_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ_";
+function slug(randomBytes = crypto.randomBytes) {
+  const bytes = randomBytes(18); let bits = 0; let value = 0; let result = "";
+  for (const byte of bytes) {
+    value = (value << 8) | byte; bits += 8;
+    while (bits >= 5) { result += PUBLIC_SLUG_ALPHABET[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) result += PUBLIC_SLUG_ALPHABET[(value << (5 - bits)) & 31];
+  return result;
+}
 function digest(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 function publicOrigin(projectId) { const value=PUBLIC_ORIGINS[text(projectId,160)];if(!value)throw new Error("landing_page_environment_unknown");return value; }
 
@@ -71,6 +83,10 @@ body.premium{--ink:#211d31;--muted:#665e77;--accent:#7858b5;--accent-dark:#52398
 </style></head><body class="${style}"><header class="hero"><div class="shell hero-grid"><div><p class="eyebrow">Local service, clear next step</p><h1>${title}</h1><p class="hero-copy">${description}</p><a class="cta" href="#contact">${escapeHtml(c.ctaLabel)}</a><p class="hero-note">Share a few details. No obligation is created by sending a request.</p></div><aside class="hero-panel" aria-label="What to expect"><strong>A straightforward way to get started</strong><span>Describe the service you’re looking for</span><span>Choose email or phone for a reply</span><span>Continue directly with the Business</span></aside></div></header><main>${points ? `<section class="section value-section" aria-labelledby="value-title"><div class="shell"><div class="section-heading"><p class="eyebrow">How we can help</p><h2 id="value-title">Start with what matters to your project</h2><p>Every request is different. These are the service priorities this Business is ready to discuss.</p></div><div class="value-grid">${points}</div><a class="cta mid-cta" href="#contact">${escapeHtml(c.ctaLabel)}</a></div></section>` : ""}<div class="shell">${process}${faq}</div><section class="section conversion" id="contact" aria-labelledby="contact-title"><div class="shell conversion-grid"><div class="conversion-copy"><p class="eyebrow">Ready when you are</p><h2 id="contact-title">Let’s talk about your project</h2><p>Tell the Business what you need and how you prefer to be contacted. They’ll receive your request with the page context attached.</p><ul class="reassurance"><li>Your details go to this Business</li><li>Include only what is useful for the first conversation</li><li>Submitting does not create a purchase</li></ul></div><div class="form-card"><form method="post" action="${formAction}"><input type="hidden" name="slug" value="${escapeHtml(page.publicSlug)}"><input type="hidden" name="version" value="${escapeHtml(version.id)}"><input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">${fields}<p class="fine">${escapeHtml(c.privacyDisclosure)} <a href="/privacy">Privacy Policy</a></p><button type="submit">${escapeHtml(c.ctaLabel)}</button></form></div></div></section></main><footer>Powered by ScaledCircle · A direct request to this Business</footer></body></html>`;
 }
 
+function renderUnavailablePage() {
+  return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Page unavailable | ScaledCircle</title><meta name=\"robots\" content=\"noindex,nofollow\"><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#07111f;color:#eef6ff;font:16px/1.6 system-ui,sans-serif}.card{width:min(560px,calc(100% - 40px));padding:36px;border:1px solid #24415f;border-radius:22px;background:#0d1c2e}h1{margin:0 0 12px;font-size:clamp(2rem,7vw,3.2rem);line-height:1.05}p{margin:0;color:#b8c9da}a{display:inline-block;margin-top:24px;color:#54e3b1;font-weight:800}</style></head><body><main class=\"card\"><p>ScaledCircle</p><h1>This page is unavailable.</h1><p>The link may be incorrect, or the Business may have paused or archived this page.</p><a href=\"/\">Visit ScaledCircle</a></main></body></html>";
+}
+
 function createLandingPageService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes, publicBaseUrl = "https://scaledcircle.com"}) {
   const pages = db.collection("landingPages");
   async function createDraft(input, actor) {
@@ -96,4 +112,4 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
   return {createDraft,saveDraft,transition,resolve,submit};
 }
 
-module.exports={SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,text,escapeHtml,slug,digest,publicOrigin,sanitizeDraft,defaultDraft,validateSubmission,renderPage,createLandingPageService};
+module.exports={SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,PUBLIC_SLUG_ALPHABET,text,escapeHtml,slug,digest,publicOrigin,sanitizeDraft,defaultDraft,validateSubmission,renderPage,renderUnavailablePage,createLandingPageService};

@@ -45,7 +45,9 @@ Form V1 has a fixed identity/contact core and a small field catalogue. Name plus
 
 Mobile is the primary response experience: compact hero, legible type, stable responsive image crop, 44px-or-larger targets, appropriate input modes/autocomplete, visible focus and field errors, keyboard-safe form controls, no horizontal overflow, and no intrusive sticky CTA. Desktop uses the same content/version and responsive renderer. Preview switches between accurate desktop and 390×844 presentations of the same render contract.
 
-The no-asset template derives quality from type, spacing, iconography, factual services, and CTA hierarchy. It never invents a logo, project image, review, certification, award, tenure, license, guarantee, statistic, or result.
+The no-asset template derives quality from type, spacing, iconography, factual services, and CTA hierarchy. Here, “no assets” means **no Business-supplied assets**; it does not permanently require a text-only page. Future visual assistance must offer four explicit Business-controlled paths: **Use my photos**, **Create visuals for me**, **Use both**, and **No photos**. It never invents a logo, project image, review, certification, award, tenure, license, guarantee, statistic, or result.
+
+Generated imagery is a future provider-neutral capability, not implemented in V1. A Business must be able to accept, replace, regenerate, request another variation, upload its own image, remove, and reorder/select images without regenerating the whole page. Nothing generated may publish without Business review. Authoritative media metadata must distinguish uploaded real imagery from generated representative/concept/service imagery. Generated visuals must not imply an actual completed project, real crew/equipment/customer, before/after result, testimonial, license, certification, or guarantee. Generation may use legitimate service and geography context, and approved outputs should be reusable through the future Brand Snapshot/media library. Provider selection, purchase, secrets, and generation are separately reviewed work.
 
 ## Canonical data model
 
@@ -79,7 +81,7 @@ Minimum coherent interfaces:
 
 Do not create one callable per field. Agents later use the same draft command API with explicit actor identity, proposal status, and approval requirements; they do not mutate Firestore or scrape Flutter UI.
 
-Firebase Hosting adds `/p/**` and the narrow form endpoint before the Flutter SPA fallback. Landing pages must not load the Flutter application bundle. The renderer uses a reviewed component/template catalogue, escaped text, no arbitrary HTML or script, a restrictive CSP, responsive images, minimal form JavaScript, and a stable canonical page URL. Preview uses an owner-authorized, short-lived preview token or authenticated preview endpoint, is `noindex`, and renders the same version contract.
+Firebase Hosting adds `/p/**` and the narrow form endpoint before the Flutter SPA fallback. Landing pages must not load the Flutter application bundle. A valid published slug always resolves the same authoritative published version; draft, paused, archived, unknown, and malformed slugs return a branded non-cacheable unavailable response and never the Flutter homepage. Share controls expose, open, and copy the complete environment-correct URL rather than asking a Business to transcribe an opaque path. Newly generated slugs avoid visually ambiguous characters while existing slugs remain stable. The renderer uses a reviewed component/template catalogue, escaped text, no arbitrary HTML or script, a restrictive CSP, responsive images, minimal form JavaScript, and a stable canonical page URL. Preview uses an owner-authorized, short-lived preview token or authenticated preview endpoint, is `noindex`, and renders the same version contract.
 
 V1 SEO is bounded: title, description, canonical URL, Open Graph/Twitter metadata, and an explicit indexing policy. Campaign pages default to `noindex` until the Business intentionally enables discoverability under a reviewed policy. Social previews use an approved image or neutral brand treatment; they do not generate unsupported claims.
 
@@ -201,4 +203,3 @@ No real outbound communication, payment, provider connection, or financial mutat
 - Provider actions/secrets: **ZERO**
 - Financial or outbound actions: **ZERO**
 - Git push: **NO**
-
