@@ -18,6 +18,7 @@ const adminOpsRoot = path.join(root, "functions-admin-ops");
 const salesRoot = path.join(root, "functions-sales");
 const legalRoot = path.join(root, "functions-legal");
 const applicationRoot = path.join(root, "functions-application");
+const attributionRoot = path.join(root, "functions-attribution");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -86,6 +87,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, salesRoot);
   resolveFrom(dependency, legalRoot);
   resolveFrom(dependency, applicationRoot);
+  resolveFrom(dependency, attributionRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
@@ -116,7 +118,11 @@ const adminOps = require(path.join(adminOpsRoot, "index.js"));
 const sales = require(path.join(salesRoot, "index.js"));
 const legal = require(path.join(legalRoot, "index.js"));
 const application = require(path.join(applicationRoot, "index.js"));
+const attribution = require(path.join(attributionRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
+assert.deepEqual(Object.keys(attribution).sort(), [
+  "bridgeResponseLead", "createResponseAsset", "getAttributionOverview", "resolveTrackedResponse",
+]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
 assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);
 assert.deepEqual(Object.keys(campaignFunding).filter((name) => !name.startsWith("_")).sort(), [

@@ -23,6 +23,7 @@ import 'property_intelligence_center_screen.dart';
 import 'scaled_circle_services_screen.dart';
 import 'internal_beta_entitlements_screen.dart';
 import 'business_campaigns_screen.dart';
+import 'business_attribution_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -629,6 +630,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               PopupMenuItem(value: 'grow', child: Text('Grow')),
               PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
               PopupMenuItem(value: 'results', child: Text('Results')),
+              PopupMenuItem(value: 'responses', child: Text('Response tracking — Beta')),
               PopupMenuItem(value: 'account', child: Text('Account')),
               PopupMenuItem(value: 'support', child: Text('Support')),
             ],
@@ -644,6 +646,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 _openCampaigns(context, user.uid);
               } else if (value == 'results') {
                 _openCampaigns(context, user.uid, results: true);
+              } else if (value == 'responses') {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const BusinessAttributionScreen(),
+                ));
               } else if (value == 'account') {
                 Navigator.push(
                   context,

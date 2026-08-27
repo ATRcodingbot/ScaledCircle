@@ -959,6 +959,25 @@ service cloud.firestore {
     // Stripe/payment truth is written only by trusted Cloud Functions. These
     // lists intentionally protect legacy campaigns too, without preventing a
     // Business from editing ordinary draft content and geometry.
+    // Attribution Foundation V1 is server-authoritative. Public response
+    // traffic enters only through resolveTrackedResponse; authenticated actors
+    // use purpose-built callables and cannot forge attribution or conversions.
+    match /responseAssets/{assetId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /responseInteractions/{interactionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /attributionConversions/{conversionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /featureHealth/{featureId} {
+      allow read, create, update, delete: if false;
+    }
+
     function financialCampaignFields() {
       return [
         'fundingStatus', 'fundingPaymentId', 'fundingVersion', 'fundedAt',

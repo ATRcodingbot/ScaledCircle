@@ -10738,3 +10738,84 @@ exports.recordSalesActivity = onCall(
     try { return await salesService.recordActivity(request.data, actor); } catch (error) { throw salesHttpsError(error); }
   },
 );
+
+// Attribution Foundation V1 extends the maintained Sales lead boundary. Public
+// response traffic can record immutable, privacy-minimized interactions but can
+// never select tenant attribution or create conversions.
+const attributionFoundation = require("./attribution_foundation");
+const attributionService = attributionFoundation.createAttributionService({db, FieldValue});
+
+function attributionHttpsError(error) {
+  const code = String(error?.message || "");
+  if (["attribution_actor_required", "cross_business_attribution_forbidden",
+    "attribution_reference_forbidden"].includes(code)) {
+    return new HttpsError("permission-denied", "Attribution access is not available.");
+  }
+  if (["invalid_response_destination", "invalid_attribution_source",
+    "unsupported_response_asset_type", "business_identity_required",
+    "interaction_id_required"].includes(code)) {
+    return new HttpsError("invalid-argument", "A valid attribution request is required.");
+  }
+  if (["response_asset_not_found", "interaction_not_found"].includes(code)) {
+    return new HttpsError("not-found", "The requested response record was not found.");
+  }
+  if (code === "response_asset_inactive") {
+    return new HttpsError("failed-precondition", "This response link is no longer active.");
+  }
+  return new HttpsError("internal", "Unable to complete the attribution operation.");
+}
+
+async function requireAttributionActor(request) {
+  const context = await authenticatedUserContext(request, "Sign in to use attribution tools.");
+  try { return attributionFoundation.assertAttributionActor(context); } catch (error) {
+    throw attributionHttpsError(error);
+  }
+}
+
+exports.createResponseAsset = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const actor = await requireAttributionActor(request);
+    try { return await attributionService.createResponseAsset(request.data, actor); } catch (error) {
+      throw attributionHttpsError(error);
+    }
+  },
+);
+
+exports.getAttributionOverview = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const actor = await requireAttributionActor(request);
+    try { return await attributionService.getOverview(request.data, actor); } catch (error) {
+      throw attributionHttpsError(error);
+    }
+  },
+);
+
+exports.bridgeResponseLead = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const actor = await requireAttributionActor(request);
+    try { return await attributionService.bridgeLead(request.data, actor); } catch (error) {
+      throw attributionHttpsError(error);
+    }
+  },
+);
+
+exports.resolveTrackedResponse = onRequest(
+  {cors: false, maxInstances: 20, timeoutSeconds: 15},
+  async (request, response) => {
+    try {
+      const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0];
+      const result = await attributionService.resolveAndRecord({code: request.query.code,
+        ip: forwarded || request.ip, userAgent: request.headers["user-agent"]});
+      response.set("Cache-Control", "no-store");
+      response.redirect(302, result.destination);
+    } catch (error) {
+      const code = String(error?.message || "");
+      response.status(code === "response_asset_inactive" ? 410 : 404)
+        .set("Cache-Control", "no-store")
+        .send("This ScaledCircle response link is unavailable.");
+    }
+  },
+);

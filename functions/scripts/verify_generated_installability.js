@@ -16,6 +16,7 @@ const packageDirectories = [
   "functions-sales",
   "functions-legal",
   "functions-application",
+  "functions-attribution",
 ];
 
 function runNpmCi(cwd) {

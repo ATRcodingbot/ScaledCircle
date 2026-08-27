@@ -88,6 +88,11 @@ const legalPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-legal", "package.json"), "utf8"));
 const legalLock = fs.readFileSync(path.join(root, "functions-legal", "package-lock.json"), "utf8");
 const application = fs.readFileSync(path.join(root, "functions-application", "index.js"), "utf8");
+const attributionCore = fs.readFileSync(path.join(root, "functions-attribution", "index.js"), "utf8");
+const attributionPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-attribution", "package.json"), "utf8"));
+const attributionLock = fs.readFileSync(
+  path.join(root, "functions-attribution", "package-lock.json"), "utf8");
 const applicationPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-application", "package.json"), "utf8"));
 const applicationLock = fs.readFileSync(
@@ -248,6 +253,30 @@ test("sales-core exclusively owns the bounded zero-secret Sales authority", () =
   }
   assert.equal(firebaseConfig.functions.find((entry) =>
     entry.codebase === "sales-core")?.source, "functions-sales");
+});
+
+test("attribution-core exclusively owns the zero-secret response and analytics boundary", () => {
+  const names = ["createResponseAsset", "getAttributionOverview", "bridgeResponseLead",
+    "resolveTrackedResponse"];
+  assert.deepEqual(exportsIn(attributionCore).sort(), [...names].sort());
+  for (const name of names) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(sales, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.deepEqual(Object.keys(attributionPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
+    "CENSUS_API_KEY", "nodemailer"]) assert.doesNotMatch(attributionCore, new RegExp(forbidden));
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(attributionLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "attribution-core")?.source, "functions-attribution");
+  assert.deepEqual(firebaseConfig.hosting.rewrites[0], {
+    source: "/r", function: {functionId: "resolveTrackedResponse", region: "us-east1"},
+  });
 });
 
 test("legal-core exclusively owns immutable zero-secret consent authority", () => {

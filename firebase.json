@@ -192,6 +192,19 @@
         "firebase-debug.*.log",
         "*.local"
       ]
+    },
+    {
+      "source": "functions-attribution",
+      "codebase": "attribution-core",
+      "predeploy": ["npm --prefix functions run prepare:function-codebases"],
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     }
   ],
   "emulators": {
@@ -271,6 +284,13 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/r",
+        "function": {
+          "functionId": "resolveTrackedResponse",
+          "region": "us-east1"
+        }
+      },
       {
         "source": "**",
         "destination": "/index.html"

@@ -22,6 +22,7 @@ const adminOpsRoot = path.join(root, "functions-admin-ops");
 const salesRoot = path.join(root, "functions-sales");
 const legalRoot = path.join(root, "functions-legal");
 const applicationRoot = path.join(root, "functions-application");
+const attributionRoot = path.join(root, "functions-attribution");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -103,6 +104,9 @@ const adminOpsExports = new Set([
 const salesExports = new Set(["getSalesPipeline", "mutateSalesLead", "recordSalesActivity"]);
 const legalExports = new Set(["recordLegalConsent", "getLegalConsentStatus"]);
 const applicationExports = new Set(["applyToCampaign"]);
+const attributionExports = new Set([
+  "createResponseAsset", "getAttributionOverview", "bridgeResponseLead", "resolveTrackedResponse",
+]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.
@@ -187,6 +191,19 @@ function transformIndex(mode) {
   if (mode === "sales") selectedProgram(ast, salesExports);
   if (mode === "legal") selectedProgram(ast, legalExports);
   if (mode === "application") selectedProgram(ast, applicationExports);
+  if (mode === "attribution") selectedProgram(ast, attributionExports);
+  if (mode !== "attribution") {
+    const attributionHelpers = new Set([
+      "attributionFoundation", "attributionService", "attributionHttpsError", "requireAttributionActor",
+    ]);
+    ast.program.body = ast.program.body.flatMap((statement) => {
+      if (statement.type === "FunctionDeclaration" && attributionHelpers.has(statement.id?.name)) return [];
+      if (statement.type !== "VariableDeclaration") return [statement];
+      const declarations = statement.declarations.filter((declaration) =>
+        !attributionHelpers.has(declaration.id?.name));
+      return declarations.length ? [{...statement, declarations}] : [];
+    });
+  }
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
     const excludedFromLegacy = new Set([
@@ -200,6 +217,7 @@ function transformIndex(mode) {
       ...salesExports,
       ...legalExports,
       ...applicationExports,
+      ...attributionExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
     ]);
@@ -217,6 +235,7 @@ function transformIndex(mode) {
       (mode === "sales" && !salesExports.has(name)) ||
       (mode === "legal" && !legalExports.has(name)) ||
       (mode === "application" && !applicationExports.has(name)) ||
+      (mode === "attribution" && !attributionExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -239,6 +258,7 @@ function transformIndex(mode) {
       if (mode === "sales") return false;
       if (mode === "legal") return false;
       if (mode === "application") return false;
+      if (mode === "attribution") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -295,6 +315,9 @@ function copyPackage(destination, mode) {
     if (mode === "legal" && name.endsWith(".js") && name !== "legal_consent.js") continue;
     if (mode === "application" && name.endsWith(".js") &&
         !["legal_consent.js", "tracking_security.js", "operational_layer.js"].includes(name)) continue;
+    if (mode !== "attribution" && name === "attribution_foundation.js") continue;
+    if (mode === "attribution" && name.endsWith(".js") &&
+        name !== "attribution_foundation.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -327,6 +350,8 @@ function writePackageManifest(mode, destination) {
       : mode === "legal"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "application"
+        ? ["firebase-admin", "firebase-functions"]
+      : mode === "attribution"
         ? ["firebase-admin", "firebase-functions"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
@@ -401,6 +426,7 @@ for (const [mode, destination] of [
   ["sales", salesRoot],
   ["legal", legalRoot],
   ["application", applicationRoot],
+  ["attribution", attributionRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
   // payment boundary. Never regenerate it from the subscription/payout-heavy
@@ -420,4 +446,4 @@ for (const [mode, destination] of [
 fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
   path.join(campaignFundingRoot, "legal_consent.js"));
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");

@@ -6,6 +6,7 @@ import '../../widgets/authenticated_sign_out_button.dart';
 import '../../widgets/scaled_circle_brand.dart';
 import '../business/internal_beta_entitlements_screen.dart';
 import 'admin_campaign_timeline_screen.dart';
+import 'admin_attribution_screen.dart';
 import 'admin_dashboard_card.dart';
 import 'admin_platform_health_screen.dart';
 import 'admin_role_gate.dart';
@@ -68,6 +69,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             onOpenBeta: () => _push(const InternalBetaEntitlementsScreen()),
             onOpenSubscriptions: () =>
                 _push(const AdminSubscriptionOverviewScreen()),
+            onOpenAttribution: () => _push(const AdminAttributionScreen()),
             onOpenConfiguration: () => _push(const AdminPlatformHealthScreen()),
             onOpenCampaign: (campaignId) => _push(
               AdminCampaignTimelineScreen(
@@ -176,6 +178,7 @@ class AdminOperationsContent extends StatelessWidget {
     required this.onOpenAdminAccounts,
     required this.onOpenBeta,
     required this.onOpenSubscriptions,
+    required this.onOpenAttribution,
     required this.onOpenConfiguration,
     required this.onOpenCampaign,
     super.key,
@@ -185,6 +188,7 @@ class AdminOperationsContent extends StatelessWidget {
   final VoidCallback onOpenAdminAccounts,
       onOpenBeta,
       onOpenSubscriptions,
+      onOpenAttribution,
       onOpenConfiguration;
   final ValueChanged<String> onOpenCampaign;
 
@@ -306,6 +310,12 @@ class AdminOperationsContent extends StatelessWidget {
                 subtitle: 'Prospects, follow-ups, and conversion status.',
                 width: width,
                 onTap: () => AppNavigation.push(context, AppRoutes.sales),
+              ),
+              AdminDashboardCard(
+                title: 'Growth attribution',
+                subtitle: 'Tracked responses, leads, and verified conversions.',
+                width: width,
+                onTap: onOpenAttribution,
               ),
               AdminDashboardCard(
                 title: 'Administrator accounts',
