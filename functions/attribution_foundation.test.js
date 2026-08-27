@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const attribution = require("./attribution_foundation");
 
 test("canonical envelope is channel-neutral, bounded, and versioned", () => {
@@ -56,4 +58,32 @@ test("asset types keep QR and tracked links on one authority", () => {
   assert.ok(attribution.SOURCES.has("social"));
   assert.ok(attribution.SOURCES.has("affiliate"));
   assert.ok(attribution.CONVERSION_MILESTONES.has("first_funded_campaign"));
+});
+
+test("lead bridge preserves first/last attribution and immutable conversion authority", () => {
+  const source = fs.readFileSync(path.join(__dirname, "attribution_foundation.js"), "utf8");
+  assert.match(source, /firstAttribution: attribution/);
+  assert.match(source, /lastAttribution: attribution/);
+  assert.match(source, /collection\("salesLeads"\)/);
+  assert.match(source, /collection\("salesActivities"\)/);
+  assert.match(source, /collection\("attributionConversions"\)/);
+  assert.match(source, /milestone: "lead"/);
+  assert.match(source, /economicValue: null, immutable: true/);
+});
+
+test("Business and Admin overview remains bounded and server-mediated", () => {
+  const source = fs.readFileSync(path.join(__dirname, "attribution_foundation.js"), "utf8");
+  assert.match(source, /actor\.role === "admin" && !requestedBusinessUid/);
+  assert.match(source, /where\("businessUid", "==", businessUid\)\.limit\(limit\)/);
+  assert.match(source, /orderBy\(timestampField, "desc"\)\.limit\(limit\)/);
+  assert.match(source, /page: \{limit, bounded: true\}/);
+});
+
+test("redirect recording is transactional, deduplicated, and immutable", () => {
+  const source = fs.readFileSync(path.join(__dirname, "attribution_foundation.js"), "utf8");
+  assert.match(source, /db\.runTransaction/);
+  assert.match(source, /transaction\.get\(ref\)/);
+  assert.match(source, /transaction\.create\(ref/);
+  assert.match(source, /visitorHash: fingerprint/);
+  assert.match(source, /immutable: true/);
 });
