@@ -82,6 +82,10 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
               const Text(
                 'Each Create action makes a new response asset. Reopening this page reuses the assets already listed.',
               ),
+              const SizedBox(height: 6),
+              const Text(
+                'Testing and pre-launch visits are kept separate from live campaign results.',
+              ),
               const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
@@ -89,12 +93,17 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
                 children: [
                   Chip(
                     label: Text(
-                      '${overview.metric('trackedInteractions')} interactions',
+                      '${overview.metric('trackedInteractions')} live interactions',
                     ),
                   ),
                   Chip(
                     label: Text(
-                      '${overview.metric('uniqueResponses')} unique responses',
+                      '${overview.metric('uniqueResponses')} unique live responses',
+                    ),
+                  ),
+                  Chip(
+                    label: Text(
+                      '${overview.metric('testInteractions')} test / pre-launch visits',
                     ),
                   ),
                   Chip(label: Text('${overview.metric('leads')} leads')),
@@ -125,7 +134,9 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
                     title: Text(
                       asset['label']?.toString() ?? 'Tracked response',
                     ),
-                    subtitle: Text(asset['trackedUrl']?.toString() ?? ''),
+                    subtitle: Text(
+                      '${_activityLabel(asset['analyticsClass'])}\n${asset['trackedUrl']?.toString() ?? ''}',
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showAsset(asset),
                   ),
@@ -199,6 +210,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
         ...created,
         'label': label.text.trim(),
         'type': 'tracked_link',
+        'analyticsClass': 'prelaunch',
       });
       _refresh();
     } catch (_) {
@@ -236,10 +248,16 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
                 const SizedBox(height: 12),
                 SelectableText(trackedUrl),
                 const SizedBox(height: 8),
-                const Chip(label: Text('Active · Beta')),
+                Chip(
+                  label: Text(
+                    '${_activityLabel(asset['analyticsClass'])} · Beta',
+                  ),
+                ),
                 const SizedBox(height: 8),
-                const Text(
-                  'A visit is a response interaction. A lead is counted only after an explicit contact request.',
+                Text(
+                  asset['analyticsClass'] == 'live'
+                      ? 'Live visits count as campaign responses. A lead is counted only after an explicit contact request.'
+                      : 'Test visits verify the permanent link but are not included in live campaign results.',
                 ),
               ],
             ),
@@ -267,4 +285,13 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
       ),
     );
   }
+
+  String _activityLabel(Object? value) => switch (value?.toString()) {
+    'live' => 'Live',
+    'paused' => 'Paused campaign',
+    'post_campaign' => 'Campaign complete',
+    'cancelled' => 'Campaign cancelled',
+    'retired' => 'Retired',
+    _ => 'Testing / Pre-launch',
+  };
 }

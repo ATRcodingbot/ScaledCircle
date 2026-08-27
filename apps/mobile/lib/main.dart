@@ -12,6 +12,7 @@ import 'navigation/app_routes.dart';
 import 'navigation/app_router.dart';
 import 'navigation/protected_route_gate.dart';
 import 'screens/business/business_dashboard.dart';
+import 'screens/business/business_attribution_screen.dart';
 import 'screens/campaigns/campaign_funding_return_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -137,6 +138,16 @@ class ScaledCircleApp extends StatelessWidget {
             notification: settings.arguments as LoginNotificationData?,
             child: const BusinessDashboard(),
           ),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.businessAttribution) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.businessAttribution,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => const BusinessAttributionScreen(),
         ),
       );
     }

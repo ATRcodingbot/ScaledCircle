@@ -24,7 +24,6 @@ import 'property_intelligence_center_screen.dart';
 import 'scaled_circle_services_screen.dart';
 import 'internal_beta_entitlements_screen.dart';
 import 'business_campaigns_screen.dart';
-import 'business_attribution_screen.dart';
 
 class BusinessDashboard extends StatefulWidget {
   const BusinessDashboard({super.key});
@@ -656,12 +655,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               } else if (value == 'results') {
                 _openCampaigns(context, user.uid, results: true);
               } else if (value == 'responses') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const BusinessAttributionScreen(),
-                  ),
-                );
+                AppNavigation.push(context, AppRoutes.businessAttribution);
               } else if (value == 'account') {
                 Navigator.push(
                   context,

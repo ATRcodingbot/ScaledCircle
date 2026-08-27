@@ -3,12 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../config/app_environment.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
 import '../../models/material_logistics.dart';
 import '../../services/platform_billing_service.dart';
 import '../../widgets/material_fulfillment_form.dart';
 import '../../widgets/legal_consent_prompt.dart';
 import '../../widgets/response_tracking_feature_card.dart';
-import 'business_attribution_screen.dart';
 import 'campaign_zones_screen.dart';
 import 'campaign/campaign_locations_screen.dart';
 
@@ -1002,11 +1003,9 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
                 ResponseTrackingFeatureCard(
                   available: AppEnvironmentConfig.isStaging,
-                  onOpen: () => Navigator.push(
+                  onOpen: () => AppNavigation.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const BusinessAttributionScreen(),
-                    ),
+                    AppRoutes.businessAttribution,
                   ),
                 ),
               ],

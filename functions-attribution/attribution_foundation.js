@@ -15,6 +15,14 @@ const CONVERSION_MILESTONES = new Set([
   "first_funded_campaign", "repeat_funded_campaign", "customer_conversion",
 ]);
 const PAGE_LIMIT = 100;
+const LIVE_CAMPAIGN_STATUSES = new Set([
+  "open", "published", "active", "assigned", "in_progress", "submitted", "awaiting_review",
+]);
+const PAUSED_CAMPAIGN_STATUSES = new Set(["paused", "paused_work_window"]);
+const COMPLETED_CAMPAIGN_STATUSES = new Set(["approved", "completed"]);
+const CANCELLED_CAMPAIGN_STATUSES = new Set([
+  "cancelled", "canceled", "canceling", "refunded", "archived",
+]);
 const PUBLIC_RESPONSE_ORIGINS = Object.freeze({
   "scaled-circle": "https://scaledcircle.com",
   "scaledcircle-staging": "https://scaledcircle-staging.web.app",
@@ -113,6 +121,23 @@ function privacyFingerprint({ip, userAgent, assetId, now = Date.now()}) {
     .digest("hex");
 }
 
+function responseActivityClass(asset, campaign) {
+  if (text(asset?.status, 30).toLowerCase() !== "active") return "retired";
+  if (!text(asset?.attribution?.campaignId, 160)) return "prelaunch";
+  const status = text(campaign?.status, 40).toLowerCase() || "draft";
+  if (LIVE_CAMPAIGN_STATUSES.has(status)) return "live";
+  if (PAUSED_CAMPAIGN_STATUSES.has(status)) return "paused";
+  if (COMPLETED_CAMPAIGN_STATUSES.has(status)) return "post_campaign";
+  if (CANCELLED_CAMPAIGN_STATUSES.has(status)) return "cancelled";
+  return "prelaunch";
+}
+
+function interactionEventId(assetId, requestIdentity) {
+  const requestKey = text(requestIdentity, 500);
+  if (!requestKey) throw new Error("response_request_identity_required");
+  return crypto.createHash("sha256").update(`${assetId}|${requestKey}`).digest("hex");
+}
+
 function safeAsset(id, data, publicBaseUrl) {
   const origin = assertPublicResponseOrigin(publicBaseUrl);
   const code = text(data.publicCode, 80);
@@ -179,7 +204,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`};
   }
 
-  async function resolveAndRecord({code, ip, userAgent}) {
+  async function resolveAndRecord({code, ip, userAgent, requestIdentity}) {
     const publicCode = text(code, 80);
     if (!/^[A-Za-z0-9_-]{24}$/.test(publicCode)) throw new Error("response_code_malformed");
     const matches = await db.collection("responseAssets").where("publicCode", "==", publicCode).limit(2).get();
@@ -192,7 +217,10 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     if (expiresAt !== null && expiresAt <= now()) throw new Error("response_asset_expired");
     const destination = assertHttpsDestination(asset.destination);
     const fingerprint = privacyFingerprint({ip, userAgent, assetId: assetDoc.id, now: now()});
-    const interactionId = crypto.createHash("sha256").update(`${assetDoc.id}|${fingerprint}`).digest("hex");
+    const interactionId = interactionEventId(assetDoc.id, requestIdentity);
+    const campaignId = text(asset.attribution?.campaignId, 160);
+    const campaign = campaignId ? await db.collection("campaigns").doc(campaignId).get() : null;
+    const analyticsClass = responseActivityClass(asset, campaign?.exists ? campaign.data() : null);
     const ref = db.collection("responseInteractions").doc(interactionId);
     let created = false;
     await db.runTransaction(async (transaction) => {
@@ -202,7 +230,8 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
         interactionId});
       transaction.create(ref, {schemaVersion: SCHEMA_VERSION, businessUid: asset.businessUid,
         responseAssetId: assetDoc.id, publicCode, attribution: envelope,
-        visitorHash: fingerprint, occurredAt: FieldValue.serverTimestamp(), immutable: true});
+        visitorHash: fingerprint, analyticsClass, liveAttribution: analyticsClass === "live",
+        occurredAt: FieldValue.serverTimestamp(), immutable: true});
       transaction.set(db.collection("featureHealth").doc("attribution"), {
         schemaVersion: SCHEMA_VERSION, feature: "attribution", status: "enabled",
         successfulEvents: FieldValue.increment(1), lastSuccessfulEventAt: FieldValue.serverTimestamp(),
@@ -210,7 +239,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       }, {merge: true});
       created = true;
     });
-    return {destination, interactionId, created};
+    return {destination, interactionId, analyticsClass, created};
   }
 
   async function bridgeLead(input, actor) {
@@ -219,6 +248,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     const interaction = await db.collection("responseInteractions").doc(interactionId).get();
     if (!interaction.exists) throw new Error("interaction_not_found");
     const interactionData = interaction.data() || {};
+    if (interactionData.analyticsClass !== "live") throw new Error("interaction_not_live");
     const businessUid = await resolveBusinessUid(actor, interactionData.businessUid);
     if (businessUid !== interactionData.businessUid) throw new Error("cross_business_attribution_forbidden");
     const businessName = text(input?.businessName, 160) || "Campaign response";
@@ -239,7 +269,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
         type: "lead_created", actorUid: actor.uid, attribution, occurredAt: at});
       transaction.create(conversionRef, {schemaVersion: SCHEMA_VERSION, milestone: "lead",
         businessUid, leadId: leadRef.id, interactionId, responseAssetId: interactionData.responseAssetId,
-        attribution, occurredAt: at, economicValue: null, immutable: true});
+        attribution, analyticsClass: "live", occurredAt: at, economicValue: null, immutable: true});
     });
     return {leadId: leadRef.id, conversionId: conversionRef.id};
   }
@@ -258,15 +288,47 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       bounded("responseInteractions", "occurredAt").get(),
       bounded("attributionConversions", "occurredAt").get(),
     ]);
-    const assets = assetSnap.docs.map((doc) => safeAsset(doc.id, doc.data() || {}, publicBaseUrl));
-    const interactions = interactionSnap.docs.map((doc) => ({id: doc.id, ...(doc.data() || {})}));
+    const assetRecords = assetSnap.docs.map((doc) => ({id: doc.id, data: doc.data() || {}}));
+    const campaignIds = [...new Set(assetRecords.map((item) =>
+      text(item.data.attribution?.campaignId, 160)).filter(Boolean))];
+    const campaignEntries = await Promise.all(campaignIds.map(async (campaignId) => {
+      const snapshot = await db.collection("campaigns").doc(campaignId).get();
+      return [campaignId, snapshot.exists ? snapshot.data() : null];
+    }));
+    const campaigns = new Map(campaignEntries);
+    const assets = assetRecords.map((item) => ({
+      ...safeAsset(item.id, item.data, publicBaseUrl),
+      analyticsClass: responseActivityClass(
+        item.data,
+        campaigns.get(text(item.data.attribution?.campaignId, 160)),
+      ),
+    }));
+    const assetDataById = new Map(assetRecords.map((item) => [item.id, item.data]));
+    const interactions = interactionSnap.docs.map((doc) => {
+      const data = doc.data() || {};
+      if (text(data.analyticsClass, 40)) return {id: doc.id, ...data};
+      const asset = assetDataById.get(text(data.responseAssetId, 160));
+      const campaignId = text(asset?.attribution?.campaignId, 160);
+      return {id: doc.id, ...data,
+        analyticsClass: responseActivityClass(asset, campaigns.get(campaignId))};
+    });
     const conversions = conversionSnap.docs.map((doc) => ({id: doc.id, ...(doc.data() || {})}));
-    const leadIds = new Set(conversions.map((item) => text(item.leadId, 160)).filter(Boolean));
+    const liveInteractions = interactions.filter((item) => item.analyticsClass === "live");
+    const testInteractions = interactions.filter((item) => item.analyticsClass === "prelaunch");
+    const nonLiveInteractions = interactions.filter((item) =>
+      !["live", "prelaunch"].includes(item.analyticsClass));
+    const liveConversions = conversions.filter((item) => item.analyticsClass !== "prelaunch" &&
+      item.analyticsClass !== "paused" && item.analyticsClass !== "cancelled");
+    const leadIds = new Set(liveConversions.map((item) => text(item.leadId, 160)).filter(Boolean));
     return {schemaVersion: SCHEMA_VERSION, generatedAt: now(), scope: businessUid || "admin_bounded",
-      metrics: {responseAssets: assets.length, trackedInteractions: interactions.length,
-        uniqueResponses: new Set(interactions.map((item) => text(item.visitorHash, 80))).size,
+      metrics: {responseAssets: assets.length, trackedInteractions: liveInteractions.length,
+        uniqueResponses: new Set(liveInteractions.map((item) => text(item.visitorHash, 80))).size,
+        testInteractions: testInteractions.length,
+        uniqueTestResponses: new Set(testInteractions.map((item) => text(item.visitorHash, 80))).size,
+        nonLiveInteractions: nonLiveInteractions.length,
+        totalInteractions: interactions.length,
         leads: leadIds.size,
-        conversions: conversions.filter((item) => item.milestone !== "lead").length},
+        conversions: liveConversions.filter((item) => item.milestone !== "lead").length},
       assets, dataStatus: assets.length || interactions.length ? "available" : "insufficient_data",
       page: {limit, bounded: true}};
   }
@@ -278,5 +340,5 @@ module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   CONVERSION_MILESTONES, PAGE_LIMIT, text, millis, assertHttpsDestination,
   PUBLIC_RESPONSE_ORIGINS, publicResponseOrigin, assertPublicResponseOrigin,
   responseCodeFingerprint, resolverFailureCategory, assertAttributionActor,
-  opaqueCode, canonicalEnvelope, privacyFingerprint,
+  opaqueCode, canonicalEnvelope, privacyFingerprint, responseActivityClass, interactionEventId,
   safeAsset, createAttributionService};

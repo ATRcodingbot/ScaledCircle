@@ -19,7 +19,6 @@ import '../../../../../models/material_logistics.dart';
 import '../../../../../widgets/material_fulfillment_form.dart';
 import '../../../../../widgets/legal_consent_prompt.dart';
 import '../../../../../widgets/response_tracking_feature_card.dart';
-import '../../../business_attribution_screen.dart';
 
 class FlyerCampaignScreen extends StatefulWidget {
   final String campaignType;
@@ -1299,11 +1298,9 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
                     ResponseTrackingFeatureCard(
                       available: AppEnvironmentConfig.isStaging,
-                      onOpen: () => Navigator.push(
+                      onOpen: () => AppNavigation.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const BusinessAttributionScreen(),
-                        ),
+                        AppRoutes.businessAttribution,
                       ),
                     ),
                   ],

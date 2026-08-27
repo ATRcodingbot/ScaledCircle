@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/business_attribution_screen.dart';
@@ -5,6 +7,27 @@ import 'package:flutter_app/services/attribution_service.dart';
 import 'package:flutter_app/widgets/response_tracking_feature_card.dart';
 
 void main() {
+  test('Response Tracking uses the canonical authenticated browser route', () {
+    final routes = File('lib/navigation/app_routes.dart').readAsStringSync();
+    final main = File('lib/main.dart').readAsStringSync();
+    final dashboard = File(
+      'lib/screens/business/business_dashboard.dart',
+    ).readAsStringSync();
+    final builder = File(
+      'lib/screens/business/create_campaign_screen.dart',
+    ).readAsStringSync();
+    expect(routes, contains("businessAttribution = '/business/attribution'"));
+    expect(main, contains('route?.path == AppRoutes.businessAttribution'));
+    expect(main, contains('routeName: AppRoutes.businessAttribution'));
+    expect(main, contains('audience: ProtectedRouteAudience.business'));
+    expect(
+      dashboard,
+      contains('AppNavigation.push(context, AppRoutes.businessAttribution)'),
+    );
+    expect(builder, contains('AppRoutes.businessAttribution'));
+    expect(dashboard, isNot(contains('BusinessAttributionScreen()')));
+  });
+
   testWidgets('production presentation remains unavailable and truthful', (
     tester,
   ) async {
@@ -93,6 +116,46 @@ void main() {
     expect(find.text('Copy link'), findsOneWidget);
   });
 
+  testWidgets('pre-launch activity is visibly separate from live results', (
+    tester,
+  ) async {
+    final client = _FakeAttributionClient(
+      overview: const AttributionOverview(
+        metrics: {
+          'trackedInteractions': 2,
+          'uniqueResponses': 1,
+          'testInteractions': 3,
+          'leads': 0,
+          'conversions': 0,
+        },
+        assets: [
+          {
+            'type': 'tracked_link',
+            'label': 'Proof link',
+            'trackedUrl': 'https://scaledcircle-staging.web.app/r?code=proof',
+            'analyticsClass': 'prelaunch',
+          },
+        ],
+        dataStatus: 'available',
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BusinessAttributionScreen(service: client, enabled: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 live interactions'), findsOneWidget);
+    expect(find.text('1 unique live responses'), findsOneWidget);
+    expect(find.text('3 test / pre-launch visits'), findsOneWidget);
+    expect(find.textContaining('Testing / Pre-launch'), findsOneWidget);
+    expect(
+      find.textContaining('Testing and pre-launch visits are kept separate'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('asset creation failure is customer safe', (tester) async {
     final client = _FakeAttributionClient(throwOnCreate: true);
     await tester.pumpWidget(
@@ -127,19 +190,22 @@ void main() {
 }
 
 class _FakeAttributionClient implements AttributionClient {
-  _FakeAttributionClient({this.throwOnCreate = false});
+  _FakeAttributionClient({this.throwOnCreate = false, this.overview});
 
   final bool throwOnCreate;
+  final AttributionOverview? overview;
   int createCalls = 0;
   String? lastType;
   String? lastSource;
 
   @override
   Future<AttributionOverview> loadOverview({String? businessUid}) async =>
+      overview ??
       const AttributionOverview(
         metrics: {
           'trackedInteractions': 0,
           'uniqueResponses': 0,
+          'testInteractions': 0,
           'leads': 0,
           'conversions': 0,
         },

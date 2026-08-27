@@ -110,11 +110,11 @@ test("staging asset resolves end to end and production rendering stays isolated"
   assert.match(created.publicCode, /^[A-Za-z0-9_-]{24}$/);
 
   const first = await staging.resolveAndRecord({code: created.publicCode, ip: "192.0.2.10",
-    userAgent: "QA browser"});
+    userAgent: "QA browser", requestIdentity: "trace-one"});
   assert.equal(first.destination, "https://scaledcircle-staging.web.app/#/business");
   assert.equal(first.created, true);
   const replay = await staging.resolveAndRecord({code: created.publicCode, ip: "192.0.2.99",
-    userAgent: "QA browser"});
+    userAgent: "QA browser", requestIdentity: "trace-one"});
   assert.equal(replay.created, false);
   assert.equal([...db.records.keys()].filter((key) => key.startsWith("responseInteractions/")).length, 1);
 
@@ -125,6 +125,82 @@ test("staging asset resolves end to end and production rendering stays isolated"
     destination: "https://scaledcircle.com", attribution: {}},
   attribution.publicResponseOrigin("scaled-circle"));
   assert.equal(production.trackedUrl, `https://scaledcircle.com/r?code=${"a".repeat(24)}`);
+});
+
+test("interaction events are request-idempotent while unique responders stay deduplicated", async () => {
+  const code = "abcdefghijklmnopqrstuvwx";
+  const db = fakeFirestore({
+    "users/business-1": {role: "business"},
+    "campaigns/campaign-1": {businessId: "business-1", status: "open"},
+    "responseAssets/asset-1": {businessUid: "business-1", publicCode: code, status: "active",
+      destination: "https://scaledcircle-staging.web.app/#/business", type: "tracked_link",
+      attribution: {source: "tracked_link", campaignId: "campaign-1"}},
+  });
+  const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
+  const service = attribution.createAttributionService({db, FieldValue, now: () => 2000,
+    publicBaseUrl: attribution.publicResponseOrigin("scaledcircle-staging")});
+
+  const first = await service.resolveAndRecord({code, ip: "192.0.2.10", userAgent: "Browser A",
+    requestIdentity: "request-one"});
+  const retry = await service.resolveAndRecord({code, ip: "192.0.2.10", userAgent: "Browser A",
+    requestIdentity: "request-one"});
+  const secondVisit = await service.resolveAndRecord({code, ip: "192.0.2.10", userAgent: "Browser A",
+    requestIdentity: "request-two"});
+  const otherVisitor = await service.resolveAndRecord({code, ip: "198.51.100.10", userAgent: "Browser B",
+    requestIdentity: "request-three"});
+
+  assert.equal(first.created, true);
+  assert.equal(retry.created, false);
+  assert.equal(secondVisit.created, true);
+  assert.equal(otherVisitor.created, true);
+  const events = [...db.records.entries()].filter(([key]) => key.startsWith("responseInteractions/"));
+  assert.equal(events.length, 3);
+  assert.equal(new Set(events.map(([, value]) => value.visitorHash)).size, 2);
+  const actor = {uid: "business-1", role: "business", emailVerified: true, user: {active: true}};
+  const overview = await service.getOverview({}, actor);
+  assert.equal(overview.metrics.trackedInteractions, 3);
+  assert.equal(overview.metrics.uniqueResponses, 2);
+  assert.equal(overview.metrics.testInteractions, 0);
+});
+
+test("campaign state classifies permanent-link activity without polluting live KPIs", async () => {
+  assert.equal(attribution.responseActivityClass({status: "active", attribution: {}}, null),
+    "prelaunch");
+  assert.equal(attribution.responseActivityClass({status: "active",
+    attribution: {campaignId: "c"}}, {status: "draft"}), "prelaunch");
+  assert.equal(attribution.responseActivityClass({status: "active",
+    attribution: {campaignId: "c"}}, {status: "open"}), "live");
+  assert.equal(attribution.responseActivityClass({status: "active",
+    attribution: {campaignId: "c"}}, {status: "paused"}), "paused");
+  assert.equal(attribution.responseActivityClass({status: "active",
+    attribution: {campaignId: "c"}}, {status: "completed"}), "post_campaign");
+  assert.equal(attribution.responseActivityClass({status: "active",
+    attribution: {campaignId: "c"}}, {status: "cancelled"}), "cancelled");
+  assert.equal(attribution.responseActivityClass({status: "retired",
+    attribution: {campaignId: "c"}}, {status: "open"}), "retired");
+
+  const code = "zyxwvutsrqponmlkjihgfedc";
+  const db = fakeFirestore({
+    "users/business-1": {role: "business"},
+    "campaigns/campaign-1": {businessId: "business-1", status: "draft"},
+    "responseAssets/asset-1": {businessUid: "business-1", publicCode: code, status: "active",
+      destination: "https://scaledcircle-staging.web.app/#/business", type: "tracked_link",
+      attribution: {source: "tracked_link", campaignId: "campaign-1"}},
+  });
+  const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
+  const service = attribution.createAttributionService({db, FieldValue, now: () => 2000,
+    publicBaseUrl: attribution.publicResponseOrigin("scaledcircle-staging")});
+  const result = await service.resolveAndRecord({code, ip: "192.0.2.10", userAgent: "Browser",
+    requestIdentity: "prelaunch-request"});
+  assert.equal(result.analyticsClass, "prelaunch");
+  const actor = {uid: "business-1", role: "business", emailVerified: true, user: {active: true}};
+  const overview = await service.getOverview({}, actor);
+  assert.equal(overview.metrics.trackedInteractions, 0);
+  assert.equal(overview.metrics.uniqueResponses, 0);
+  assert.equal(overview.metrics.testInteractions, 1);
+  assert.equal(overview.metrics.uniqueTestResponses, 1);
+  assert.equal(overview.metrics.totalInteractions, 1);
+  assert.equal(overview.assets[0].analyticsClass, "prelaunch");
 });
 
 test("privacy fingerprint dedupes same daily response without retaining raw signals", () => {
@@ -183,5 +259,7 @@ test("redirect recording is transactional, deduplicated, and immutable", () => {
   assert.match(source, /transaction\.get\(ref\)/);
   assert.match(source, /transaction\.create\(ref/);
   assert.match(source, /visitorHash: fingerprint/);
+  assert.match(source, /interactionEventId\(assetDoc\.id, requestIdentity\)/);
+  assert.match(source, /analyticsClass/);
   assert.match(source, /immutable: true/);
 });

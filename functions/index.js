@@ -10765,6 +10765,10 @@ function attributionHttpsError(error) {
   if (code === "response_asset_inactive") {
     return new HttpsError("failed-precondition", "This response link is no longer active.");
   }
+  if (code === "interaction_not_live") {
+    return new HttpsError("failed-precondition",
+      "Test and pre-launch responses cannot create live leads.");
+  }
   return new HttpsError("internal", "Unable to complete the attribution operation.");
 }
 
@@ -10810,8 +10814,11 @@ exports.resolveTrackedResponse = onRequest(
   async (request, response) => {
     try {
       const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0];
+      const trace = String(request.headers["x-cloud-trace-context"] || "")
+        .split("/")[0].split(";")[0].trim();
+      const requestIdentity = trace || crypto.randomUUID();
       const result = await attributionService.resolveAndRecord({code: request.query.code,
-        ip: forwarded || request.ip, userAgent: request.headers["user-agent"]});
+        ip: forwarded || request.ip, userAgent: request.headers["user-agent"], requestIdentity});
       response.set("Cache-Control", "no-store");
       response.redirect(302, result.destination);
     } catch (error) {
