@@ -10775,6 +10775,14 @@ function attributionHttpsError(error) {
 async function requireAttributionActor(request) {
   const context = await authenticatedUserContext(request, "Sign in to use attribution tools.");
   try { return attributionFoundation.assertAttributionActor(context); } catch (error) {
+    console.warn("attribution_actor_denied", {
+      category: "authority_contract_mismatch",
+      actorRole: context.role || "unknown",
+      canonicalAdmin: context.isAdmin === true,
+      emailVerified: context.emailVerified === true,
+      businessLifecycleActive: context.role === "business" ?
+        context.user?.active !== false && context.user?.disabled !== true : null,
+    });
     throw attributionHttpsError(error);
   }
 }
@@ -10794,6 +10802,11 @@ exports.getAttributionOverview = onCall(
   async (request) => {
     const actor = await requireAttributionActor(request);
     try { return await attributionService.getOverview(request.data, actor); } catch (error) {
+      console.error("attribution_overview_failed", {
+        category: "read_model_failure",
+        actorRole: actor.role,
+        scope: actor.role === "admin" && !request.data?.businessUid ? "admin_bounded" : "business",
+      });
       throw attributionHttpsError(error);
     }
   },

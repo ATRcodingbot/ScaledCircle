@@ -82,8 +82,11 @@ function resolverFailureCategory(error) {
 }
 
 function assertAttributionActor(actor) {
-  if (!actor?.uid || actor.emailVerified !== true || actor.user?.active === false ||
-      actor.user?.disabled === true || !["admin", "business"].includes(actor.role)) {
+  const role = text(actor?.role, 40).toLowerCase();
+  const trustedAdmin = role === "admin" && actor?.isAdmin === true;
+  const activeBusiness = role === "business" && actor?.user?.active !== false &&
+    actor?.user?.disabled !== true;
+  if (!actor?.uid || actor.emailVerified !== true || (!trustedAdmin && !activeBusiness)) {
     throw new Error("attribution_actor_required");
   }
   return actor;

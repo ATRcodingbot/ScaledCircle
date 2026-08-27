@@ -25,14 +25,18 @@ function fakeFirestore(seed = {}) {
   return {
     records,
     collection(collectionName) {
+      const queryDocs = (field, expected, limit) => [...records.entries()]
+        .filter(([pathName, value]) => pathName.startsWith(`${collectionName}/`) &&
+          (field === null || value[field] === expected)).slice(0, limit)
+        .map(([pathName]) => snapshot(pathName));
       return {
         doc: (id) => refFor(collectionName, id),
         where(field, operator, expected) {
           assert.equal(operator, "==");
-          return {limit: (limit) => ({get: async () => ({docs: [...records.entries()]
-            .filter(([pathName, value]) => pathName.startsWith(`${collectionName}/`) &&
-              value[field] === expected).slice(0, limit)
-            .map(([pathName]) => snapshot(pathName))})})};
+          return {limit: (limit) => ({get: async () => ({docs: queryDocs(field, expected, limit)})})};
+        },
+        orderBy() {
+          return {limit: (limit) => ({get: async () => ({docs: queryDocs(null, null, limit)})})};
         },
       };
     },
@@ -226,7 +230,95 @@ test("authority fails closed for signed-out, Business cross-tenant, and inactive
   assert.throws(() => attribution.assertAttributionActor({uid: "u", role: "business",
     emailVerified: true, user: {active: false}}), /attribution_actor_required/);
   assert.equal(attribution.assertAttributionActor({uid: "u", role: "admin", emailVerified: true,
-    user: {active: true}}).uid, "u");
+    isAdmin: true, user: {active: false}}).uid, "u");
+  assert.throws(() => attribution.assertAttributionActor({uid: "u", role: "admin",
+    emailVerified: true, isAdmin: false, user: {active: true}}), /attribution_actor_required/);
+});
+
+test("production-shaped prelaunch data is valid for Business and trusted Admin overview", async () => {
+  const seed = {
+    "users/business-founder": {role: "business", active: true},
+    "responseAssets/general-testing": {businessUid: "business-founder", type: "tracked_link",
+      publicCode: "abcdefghijklmnopqrstuvwx", status: "active", label: "Internal QA",
+      destination: "https://scaledcircle.com/#/business",
+      attribution: {source: "tracked_link", campaignId: null}, createdAt: 1000, updatedAt: 1000},
+    "responseInteractions/visit-one": {businessUid: "business-founder",
+      responseAssetId: "general-testing", visitorHash: "visitor-one", analyticsClass: "prelaunch",
+      attribution: {source: "tracked_link", campaignId: null}, occurredAt: 1100, immutable: true},
+    "responseInteractions/visit-two": {businessUid: "business-founder",
+      responseAssetId: "general-testing", visitorHash: "visitor-two", analyticsClass: "prelaunch",
+      attribution: {source: "tracked_link", campaignId: null}, occurredAt: 1200, immutable: true},
+    "featureHealth/attribution": {status: "enabled", successfulEvents: 2, updatedAt: 1200},
+  };
+  const service = attribution.createAttributionService({db: fakeFirestore(seed), FieldValue: {},
+    now: () => 1300, publicBaseUrl: attribution.publicResponseOrigin("scaled-circle")});
+  const business = await service.getOverview({}, {uid: "business-founder", role: "business",
+    emailVerified: true, user: {active: true}});
+  const admin = await service.getOverview({}, {uid: "production-admin", role: "admin",
+    isAdmin: true, emailVerified: true, user: {active: false}});
+  for (const overview of [business, admin]) {
+    assert.deepEqual(overview.metrics, {responseAssets: 1, trackedInteractions: 0,
+      uniqueResponses: 0, testInteractions: 2, uniqueTestResponses: 2,
+      nonLiveInteractions: 0, totalInteractions: 2, leads: 0, conversions: 0});
+    assert.equal(overview.assets[0].analyticsClass, "prelaunch");
+    assert.equal(overview.dataStatus, "available");
+    assert.equal(overview.page.bounded, true);
+  }
+  assert.equal(business.scope, "business-founder");
+  assert.equal(admin.scope, "admin_bounded");
+});
+
+test("Admin aggregation is bounded across tracking and non-tracking Businesses", async () => {
+  const seed = {
+    "users/business-a": {role: "business", active: true},
+    "users/business-b": {role: "business", active: true},
+    "users/business-c": {role: "business", active: true},
+    "users/business-d": {role: "business", active: true},
+    "responseAssets/a-test": {businessUid: "business-a", type: "tracked_link",
+      publicCode: "aaaaaaaaaaaaaaaaaaaaaaaa", status: "active", destination: "https://a.example",
+      attribution: {source: "tracked_link"}, createdAt: 1},
+    "responseAssets/b-live": {businessUid: "business-b", type: "qr",
+      publicCode: "bbbbbbbbbbbbbbbbbbbbbbbb", status: "active", destination: "https://b.example",
+      attribution: {source: "qr", campaignId: "campaign-b"}, createdAt: 2},
+    "responseAssets/d-mixed": {businessUid: "business-d", type: "tracked_link",
+      publicCode: "dddddddddddddddddddddddd", status: "active", destination: "https://d.example",
+      attribution: {source: "tracked_link", campaignId: "campaign-d"}, createdAt: 3},
+    "campaigns/campaign-b": {businessId: "business-b", status: "open"},
+    "campaigns/campaign-d": {businessId: "business-d", status: "open"},
+    "responseInteractions/a-visit": {businessUid: "business-a", responseAssetId: "a-test",
+      visitorHash: "a", analyticsClass: "prelaunch", occurredAt: 10},
+    "responseInteractions/b-visit": {businessUid: "business-b", responseAssetId: "b-live",
+      visitorHash: "b", analyticsClass: "live", occurredAt: 11},
+    "responseInteractions/d-test": {businessUid: "business-d", responseAssetId: "d-mixed",
+      visitorHash: "d-test", analyticsClass: "prelaunch", occurredAt: 12},
+    "responseInteractions/d-live": {businessUid: "business-d", responseAssetId: "d-mixed",
+      visitorHash: "d-live", analyticsClass: "live", occurredAt: 13},
+    "attributionConversions/b-lead": {businessUid: "business-b", leadId: "lead-b",
+      milestone: "lead", analyticsClass: "live", occurredAt: 14},
+    "attributionConversions/d-conversion": {businessUid: "business-d", leadId: "lead-d",
+      milestone: "customer_conversion", analyticsClass: "live", occurredAt: 15},
+  };
+  const service = attribution.createAttributionService({db: fakeFirestore(seed), FieldValue: {},
+    now: () => 20, publicBaseUrl: attribution.publicResponseOrigin("scaled-circle")});
+  const admin = await service.getOverview({limit: 25}, {uid: "admin", role: "admin", isAdmin: true,
+    emailVerified: true, user: {active: false}});
+  assert.equal(admin.metrics.testInteractions, 2);
+  assert.equal(admin.metrics.trackedInteractions, 2);
+  assert.equal(admin.metrics.uniqueResponses, 2);
+  assert.equal(admin.metrics.leads, 2);
+  assert.equal(admin.metrics.conversions, 1);
+  assert.equal(admin.assets.length, 3);
+  assert.deepEqual(admin.campaigns, []);
+  assert.deepEqual(admin.page, {limit: 25, bounded: true});
+
+  const tenant = await service.getOverview({}, {uid: "business-a", role: "business",
+    emailVerified: true, user: {active: true}});
+  assert.equal(tenant.metrics.testInteractions, 1);
+  assert.equal(tenant.metrics.trackedInteractions, 0);
+  assert.equal(tenant.assets.length, 1);
+  await assert.rejects(service.getOverview({businessUid: "business-b"}, {uid: "business-a",
+    role: "business", emailVerified: true, user: {active: true}}),
+  /cross_business_attribution_forbidden/);
 });
 
 test("asset types keep QR and tracked links on one authority", () => {
