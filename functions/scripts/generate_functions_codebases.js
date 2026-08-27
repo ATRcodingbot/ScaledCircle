@@ -327,7 +327,11 @@ function copyPackage(destination, mode) {
     if (mode !== "attribution" && name === "attribution_foundation.js") continue;
     if (mode === "attribution" && name.endsWith(".js") &&
         name !== "attribution_foundation.js") continue;
-    if (mode !== "landing-page" && name === "landing_page.js") continue;
+    // The transformed legacy index still initializes the shared landing-page
+    // service even though its public exports are removed. Keep the canonical
+    // module loadable there while preserving landing-page-core as the sole
+    // deployable owner of the five Landing Page authorities.
+    if (!["landing-page", "legacy"].includes(mode) && name === "landing_page.js") continue;
     if (mode === "landing-page" && name.endsWith(".js") && name !== "landing_page.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
