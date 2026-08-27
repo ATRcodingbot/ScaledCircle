@@ -23,6 +23,7 @@ const salesRoot = path.join(root, "functions-sales");
 const legalRoot = path.join(root, "functions-legal");
 const applicationRoot = path.join(root, "functions-application");
 const attributionRoot = path.join(root, "functions-attribution");
+const landingPageRoot = path.join(root, "functions-landing-page");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -106,6 +107,10 @@ const legalExports = new Set(["recordLegalConsent", "getLegalConsentStatus"]);
 const applicationExports = new Set(["applyToCampaign"]);
 const attributionExports = new Set([
   "createResponseAsset", "getAttributionOverview", "bridgeResponseLead", "resolveTrackedResponse",
+]);
+const landingPageExports = new Set([
+  "getLandingPageWorkspace", "mutateLandingPageDraft", "transitionLandingPage",
+  "renderLandingPage", "submitLandingPageForm",
 ]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
@@ -192,6 +197,7 @@ function transformIndex(mode) {
   if (mode === "legal") selectedProgram(ast, legalExports);
   if (mode === "application") selectedProgram(ast, applicationExports);
   if (mode === "attribution") selectedProgram(ast, attributionExports);
+  if (mode === "landing-page") selectedProgram(ast, landingPageExports);
   if (mode !== "attribution") {
     const attributionHelpers = new Set([
       "attributionFoundation", "attributionService", "attributionHttpsError", "requireAttributionActor",
@@ -218,6 +224,7 @@ function transformIndex(mode) {
       ...legalExports,
       ...applicationExports,
       ...attributionExports,
+      ...landingPageExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
     ]);
@@ -236,6 +243,7 @@ function transformIndex(mode) {
       (mode === "legal" && !legalExports.has(name)) ||
       (mode === "application" && !applicationExports.has(name)) ||
       (mode === "attribution" && !attributionExports.has(name)) ||
+      (mode === "landing-page" && !landingPageExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -259,6 +267,7 @@ function transformIndex(mode) {
       if (mode === "legal") return false;
       if (mode === "application") return false;
       if (mode === "attribution") return false;
+      if (mode === "landing-page") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -318,6 +327,8 @@ function copyPackage(destination, mode) {
     if (mode !== "attribution" && name === "attribution_foundation.js") continue;
     if (mode === "attribution" && name.endsWith(".js") &&
         name !== "attribution_foundation.js") continue;
+    if (mode !== "landing-page" && name === "landing_page.js") continue;
+    if (mode === "landing-page" && name.endsWith(".js") && name !== "landing_page.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -352,6 +363,8 @@ function writePackageManifest(mode, destination) {
       : mode === "application"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "attribution"
+        ? ["firebase-admin", "firebase-functions"]
+      : mode === "landing-page"
         ? ["firebase-admin", "firebase-functions"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
@@ -427,6 +440,7 @@ for (const [mode, destination] of [
   ["legal", legalRoot],
   ["application", applicationRoot],
   ["attribution", attributionRoot],
+  ["landing-page", landingPageRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
   // payment boundary. Never regenerate it from the subscription/payout-heavy
@@ -446,4 +460,4 @@ for (const [mode, destination] of [
 fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
   path.join(campaignFundingRoot, "legal_consent.js"));
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");

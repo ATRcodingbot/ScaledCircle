@@ -93,6 +93,11 @@ const attributionPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-attribution", "package.json"), "utf8"));
 const attributionLock = fs.readFileSync(
   path.join(root, "functions-attribution", "package-lock.json"), "utf8");
+const landingPageCore = fs.readFileSync(path.join(root, "functions-landing-page", "index.js"), "utf8");
+const landingPagePackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-landing-page", "package.json"), "utf8"));
+const landingPageLock = fs.readFileSync(
+  path.join(root, "functions-landing-page", "package-lock.json"), "utf8");
 const applicationPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-application", "package.json"), "utf8"));
 const applicationLock = fs.readFileSync(
@@ -274,9 +279,36 @@ test("attribution-core exclusively owns the zero-secret response and analytics b
   }
   assert.equal(firebaseConfig.functions.find((entry) =>
     entry.codebase === "attribution-core")?.source, "functions-attribution");
-  assert.deepEqual(firebaseConfig.hosting.rewrites[0], {
+  assert.deepEqual(firebaseConfig.hosting.rewrites.find((rewrite) => rewrite.source === "/r"), {
     source: "/r", function: {functionId: "resolveTrackedResponse", region: "us-east1"},
   });
+});
+
+test("landing-page-core exclusively owns the zero-secret public funnel authority", () => {
+  const names = ["getLandingPageWorkspace", "mutateLandingPageDraft", "transitionLandingPage",
+    "renderLandingPage", "submitLandingPageForm"];
+  assert.deepEqual(exportsIn(landingPageCore).sort(), [...names].sort());
+  for (const name of names) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(attributionCore, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.deepEqual(Object.keys(landingPagePackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
+    "CENSUS_API_KEY", "nodemailer", "db.collection(\\\"campaignTrackingCodes\\\")"]) {
+    assert.doesNotMatch(landingPageCore, new RegExp(forbidden));
+  }
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(landingPageLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "landing-page-core")?.source, "functions-landing-page");
+  assert.equal(firebaseConfig.hosting.rewrites.find((rewrite) => rewrite.source === "/p/**")
+    ?.function.functionId, "renderLandingPage");
+  assert.equal(firebaseConfig.hosting.rewrites.find((rewrite) =>
+    rewrite.source === "/landing-page-submit")?.function.functionId, "submitLandingPageForm");
 });
 
 test("legal-core exclusively owns immutable zero-secret consent authority", () => {

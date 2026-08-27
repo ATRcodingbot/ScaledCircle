@@ -1,0 +1,87 @@
+"use strict";
+
+const crypto = require("node:crypto");
+
+const SCHEMA_VERSION = "LandingPageV1";
+const STATUSES = new Set(["draft", "published", "paused", "archived"]);
+const STYLES = new Set(["clean", "bold", "friendly", "premium"]);
+const CTA_TYPES = new Set(["request_estimate", "get_quote", "call", "text", "book", "visit_website", "custom"]);
+const MAX_POINTS = 6;
+const PUBLIC_ORIGINS = Object.freeze({"scaled-circle":"https://scaledcircle.com","scaledcircle-staging":"https://scaledcircle-staging.web.app","demo-scaledcircle":"http://127.0.0.1:5000"});
+
+function text(value, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
+function escapeHtml(value) { return text(value, 5000).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function slug(randomBytes = crypto.randomBytes) { return randomBytes(18).toString("base64url"); }
+function digest(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
+function publicOrigin(projectId) { const value=PUBLIC_ORIGINS[text(projectId,160)];if(!value)throw new Error("landing_page_environment_unknown");return value; }
+
+function sanitizeDraft(input = {}) {
+  const ctaType = text(input.ctaType, 40).toLowerCase() || "request_estimate";
+  const style = text(input.style, 30).toLowerCase() || "clean";
+  if (!CTA_TYPES.has(ctaType)) throw new Error("invalid_landing_page_cta");
+  if (!STYLES.has(style)) throw new Error("invalid_landing_page_style");
+  const headline = text(input.headline, 100);
+  const supportingText = text(input.supportingText, 320);
+  if (!headline || !supportingText) throw new Error("landing_page_content_required");
+  const points = Array.isArray(input.valuePoints) ? input.valuePoints.map((v) => text(v, 120)).filter(Boolean).slice(0, MAX_POINTS) : [];
+  const contactFields = Array.isArray(input.contactFields) ? input.contactFields.filter((v) => ["name","email","phone","message"].includes(v)) : ["name","email","phone","message"];
+  if (!contactFields.includes("name") || (!contactFields.includes("email") && !contactFields.includes("phone"))) throw new Error("landing_page_contact_method_required");
+  return {headline, supportingText, valuePoints: points, ctaType,
+    ctaLabel: text(input.ctaLabel, 60) || "Request an estimate", ctaDestination: text(input.ctaDestination, 500) || null,
+    style, showProcess: input.showProcess !== false, showFaq: input.showFaq !== false,
+    contactFields: [...new Set(contactFields)], privacyDisclosure: "By submitting, you agree that this Business may contact you about your request."};
+}
+
+function defaultDraft({businessName, offering, serviceArea}) {
+  const business = text(businessName, 100) || "Your local service team";
+  const service = text(offering, 100) || "local service";
+  const area = text(serviceArea, 100);
+  return sanitizeDraft({headline: `${service} from ${business}`, supportingText: `Tell us what you need${area ? ` in ${area}` : ""}. We’ll follow up with a clear next step.`,
+    valuePoints: [`A straightforward conversation about your ${service} needs`, "A clear next step based on your request"],
+    ctaType: "request_estimate", ctaLabel: "Request an estimate", style: "clean"});
+}
+
+function validateSubmission(input = {}, version) {
+  const allowed = new Set(version.content.contactFields || []);
+  const result = {};
+  for (const field of ["name","email","phone","message"]) if (allowed.has(field)) result[field] = text(input[field], field === "message" ? 1000 : 160);
+  if (!result.name || (!result.email && !result.phone)) throw new Error("landing_page_contact_required");
+  if (result.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result.email)) throw new Error("landing_page_email_invalid");
+  if (text(input.website, 200)) throw new Error("landing_page_submission_rejected"); // honeypot
+  return result;
+}
+
+function renderPage({page, version, formAction = "/landing-page-submit"}) {
+  const c = version.content; const title = escapeHtml(c.headline); const description = escapeHtml(c.supportingText);
+  const points = c.valuePoints.map((p) => `<li>${escapeHtml(p)}</li>`).join("");
+  const fields = c.contactFields.map((field) => field === "message" ? `<label>How can we help?<textarea name="message" maxlength="1000"></textarea></label>` :
+    `<label>${escapeHtml(field[0].toUpperCase() + field.slice(1))}<input name="${field}" type="${field === "email" ? "email" : field === "phone" ? "tel" : "text"}" ${field === "name" ? "required" : ""} maxlength="160"></label>`).join("");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><meta name="description" content="${description}"><meta name="robots" content="noindex,follow"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><style>:root{color-scheme:light;--ink:#08244b;--accent:#087df1;--soft:#eef7ff}*{box-sizing:border-box}body{margin:0;font:16px/1.55 system-ui,sans-serif;color:var(--ink);background:#fff}main{max-width:760px;margin:auto;padding:clamp(24px,6vw,72px) 20px}header{padding:clamp(36px,8vw,88px) 0}h1{font-size:clamp(2.2rem,7vw,4.6rem);line-height:1.02;margin:0 0 20px}p{max-width:62ch}.cta,button{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:12px;padding:14px 20px;font-weight:700;text-decoration:none}section{margin:44px 0;padding:28px;border-radius:20px;background:var(--soft)}li{margin:10px 0}form{display:grid;gap:16px}label{display:grid;gap:6px;font-weight:650}input,textarea{font:inherit;border:1px solid #9aacc1;border-radius:10px;padding:12px;min-height:48px}textarea{min-height:120px}.fine{font-size:.85rem} @media(max-width:480px){section{padding:20px;margin:28px 0}}</style></head><body><main><header><h1>${title}</h1><p>${description}</p><a class="cta" href="#contact">${escapeHtml(c.ctaLabel)}</a></header>${points ? `<section><h2>How we can help</h2><ul>${points}</ul></section>` : ""}<section id="contact"><h2>Let’s talk about your project</h2><form method="post" action="${formAction}"><input type="hidden" name="slug" value="${escapeHtml(page.publicSlug)}"><input type="hidden" name="version" value="${escapeHtml(version.id)}"><input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">${fields}<p class="fine">${escapeHtml(c.privacyDisclosure)} <a href="/privacy">Privacy Policy</a></p><button type="submit">${escapeHtml(c.ctaLabel)}</button></form></section></main></body></html>`;
+}
+
+function createLandingPageService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes, publicBaseUrl = "https://scaledcircle.com"}) {
+  const pages = db.collection("landingPages");
+  async function createDraft(input, actor) {
+    if (!actor?.uid || actor.role !== "business") throw new Error("landing_page_business_required");
+    const ref = pages.doc(); const publicSlug = slug(randomBytes); const content = input.content ? sanitizeDraft(input.content) : defaultDraft(input);
+    const versionRef = ref.collection("versions").doc(); const at = FieldValue.serverTimestamp();
+    await db.runTransaction(async (tx) => { tx.create(ref, {schemaVersion:SCHEMA_VERSION,businessUid:actor.uid,campaignId:text(input.campaignId,160)||null,publicSlug,status:"draft",trackingMode:input.trackingMode === "first_party" ? "first_party":"off",draftVersionId:versionRef.id,publishedVersionId:null,createdAt:at,updatedAt:at}); tx.create(versionRef,{schemaVersion:SCHEMA_VERSION,businessUid:actor.uid,pageId:ref.id,content,contentDigest:digest(content),createdBy:actor.uid,createdAt:at,immutable:true}); });
+    return {pageId:ref.id, publicSlug, versionId:versionRef.id};
+  }
+  async function saveDraft(input, actor) {
+    const pageRef=pages.doc(text(input.pageId,160)); const current=await pageRef.get(); if(!current.exists||current.data().businessUid!==actor?.uid) throw new Error("landing_page_forbidden");
+    const content=sanitizeDraft(input.content); const versionRef=pageRef.collection("versions").doc(); const at=FieldValue.serverTimestamp();
+    const trackingMode=input.trackingMode==="first_party"?"first_party":input.trackingMode==="off"?"off":current.data().trackingMode;
+    await db.runTransaction(async(tx)=>{tx.create(versionRef,{schemaVersion:SCHEMA_VERSION,businessUid:actor.uid,pageId:pageRef.id,content,contentDigest:digest(content),createdBy:actor.uid,createdAt:at,immutable:true});tx.update(pageRef,{draftVersionId:versionRef.id,trackingMode,updatedAt:at});}); return {pageId:pageRef.id,versionId:versionRef.id};
+  }
+  async function transition(input, actor) {
+    const pageRef=pages.doc(text(input.pageId,160)); const action=text(input.action,30); let result;
+    await db.runTransaction(async(tx)=>{const snap=await tx.get(pageRef);if(!snap.exists||snap.data().businessUid!==actor?.uid)throw new Error("landing_page_forbidden");const p=snap.data();if(action==="publish"){const v=await tx.get(pageRef.collection("versions").doc(p.draftVersionId));if(!v.exists)throw new Error("landing_page_version_missing");const patch={status:"published",publishedVersionId:p.draftVersionId,publishedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};let responseAssetId=p.responseAssetId||null;let trackedUrl=null;const attribution={source:"landing_page",sourceDetail:p.publicSlug,campaignId:p.campaignId||null,landingPageId:pageRef.id,landingPageVersionId:p.draftVersionId,responseAssetId};if(p.trackingMode==="first_party"&&!responseAssetId){const assetRef=db.collection("responseAssets").doc();responseAssetId=assetRef.id;attribution.responseAssetId=responseAssetId;const publicCode=randomBytes(18).toString("base64url");tx.create(assetRef,{schemaVersion:"AttributionFoundationV1",businessUid:p.businessUid,type:"landing_page",publicCode,status:"active",label:v.data().content.headline,destination:`${publicBaseUrl}/p/${p.publicSlug}`,attribution,createdBy:actor.uid,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});patch.responseAssetId=responseAssetId;trackedUrl=`${publicBaseUrl}/r?code=${publicCode}`;}else if(p.trackingMode==="first_party"&&responseAssetId){attribution.responseAssetId=responseAssetId;tx.update(db.collection("responseAssets").doc(responseAssetId),{attribution,label:v.data().content.headline,updatedAt:FieldValue.serverTimestamp()});}tx.update(pageRef,patch);result={status:"published",publicSlug:p.publicSlug,versionId:p.draftVersionId,responseAssetId,trackedUrl};}else if(["pause","archive"].includes(action)){tx.update(pageRef,{status:action==="pause"?"paused":"archived",updatedAt:FieldValue.serverTimestamp()});result={status:action==="pause"?"paused":"archived"};}else throw new Error("invalid_landing_page_transition");});return result;
+  }
+  async function resolve(publicSlug) { const snap=await pages.where("publicSlug","==",text(publicSlug,80)).limit(2).get();if(snap.docs.length!==1||snap.docs[0].data().status!=="published")throw new Error("landing_page_unavailable");const page={id:snap.docs[0].id,...snap.docs[0].data()};const v=await snap.docs[0].ref.collection("versions").doc(page.publishedVersionId).get();if(!v.exists)throw new Error("landing_page_unavailable");return {page,version:{id:v.id,...v.data()}}; }
+  async function submit(input, requestMeta={}) { const {page,version}=await resolve(input.slug);if(text(input.version,160)!==version.id)throw new Error("landing_page_version_stale");const contact=validateSubmission(input,version);const day=Math.floor(now()/86400000);const key=text(input.idempotencyKey,160)||digest({p:page.id,v:version.id,c:contact,day,nonce:text(requestMeta.requestIdentity,160)});const receiptRef=db.collection("landingPageSubmissionReceipts").doc(digest(`${page.id}:${key}`));const networkHash=digest(`${page.id}:${day}:${text(requestMeta.ip,120) || "unknown"}`);const rateRef=db.collection("landingPageSubmissionRates").doc(networkHash);const leadRef=db.collection("salesLeads").doc();const activityRef=db.collection("salesActivities").doc();const conversionRef=db.collection("attributionConversions").doc(`lead_${leadRef.id}`);let created=false;let leadId;
+    await db.runTransaction(async(tx)=>{const existing=await tx.get(receiptRef);if(existing.exists){leadId=existing.data().leadId;return;}const rate=await tx.get(rateRef);const count=Number(rate.data()?.count||0);if(count>=20)throw new Error("landing_page_rate_limited");const at=FieldValue.serverTimestamp();const attribution={source:"landing_page",sourceDetail:page.publicSlug,landingPageId:page.id,landingPageVersionId:version.id,campaignId:page.campaignId||null,responseAssetId:page.responseAssetId||null};tx.set(rateRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,day,count:count+1,updatedAt:at},{merge:true});tx.create(leadRef,{schemaVersion:"SalesFunnelV1",leadType:"landing_page_inquiry",businessName:"Landing page inquiry",contactName:contact.name,contactEmail:contact.email?.toLowerCase()||null,contactPhone:contact.phone||null,requestSummary:contact.message||null,source:"landing_page",sourceDetail:page.publicSlug,attribution,firstAttribution:attribution,lastAttribution:attribution,stage:"prospect",priority:"normal",ownerUid:page.businessUid,suppressionStatus:null,createdBy:"public_landing_page",createdAt:at,updatedAt:at});tx.create(activityRef,{schemaVersion:"SalesFunnelV1",leadId:leadRef.id,type:"lead_created",actorUid:"public_landing_page",attribution,occurredAt:at});if(page.trackingMode==="first_party"){tx.create(conversionRef,{schemaVersion:"AttributionFoundationV1",milestone:"lead",businessUid:page.businessUid,leadId:leadRef.id,responseAssetId:page.responseAssetId||null,attribution,analyticsClass:"live",occurredAt:at,immutable:true});}tx.create(receiptRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,versionId:version.id,leadId:leadRef.id,createdAt:at});leadId=leadRef.id;created=true;});return {leadId,created}; }
+  return {createDraft,saveDraft,transition,resolve,submit};
+}
+
+module.exports={SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,text,escapeHtml,slug,digest,publicOrigin,sanitizeDraft,defaultDraft,validateSubmission,renderPage,createLandingPageService};

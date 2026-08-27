@@ -966,6 +966,28 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // Landing Page + Form V1 is server-authoritative. Public pages are rendered
+    // by landing-page-core and public forms enter only through its bounded HTTP
+    // authority; clients cannot enumerate drafts or forge lead ownership.
+    match /landingPages/{pageId} {
+      allow read, create, update, delete: if false;
+      match /versions/{versionId} {
+        allow read, create, update, delete: if false;
+      }
+    }
+
+    match /landingPageSubmissionReceipts/{receiptId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /landingPageSubmissionRates/{rateId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /businessBrandProfiles/{businessId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /responseInteractions/{interactionId} {
       allow read, create, update, delete: if false;
     }

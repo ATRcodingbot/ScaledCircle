@@ -10848,3 +10848,99 @@ exports.resolveTrackedResponse = onRequest(
     }
   },
 );
+
+// Landing Page + Form V1 is isolated from the retired campaignTrackingCodes
+// authority. Public page and form identities are always derived server-side.
+const landingPage = require("./landing_page");
+const landingPageService = landingPage.createLandingPageService({db, FieldValue,
+  publicBaseUrl: landingPage.publicOrigin(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
+    process.env.GOOGLE_CLOUD_PROJECT || "demo-scaledcircle")});
+
+async function requireLandingPageActor(request) {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to manage landing pages.");
+  const profile = await db.collection("users").doc(request.auth.uid).get();
+  const role = String(profile.data()?.role || "").toLowerCase();
+  if (!profile.exists || !["business", "admin"].includes(role)) {
+    throw new HttpsError("permission-denied", "Landing page access is not available.");
+  }
+  return {uid: request.auth.uid, role};
+}
+
+function landingPageError(error) {
+  const code = String(error?.message || "");
+  if (code.includes("forbidden") || code.includes("required")) return new HttpsError("permission-denied", "Landing page access is not available.");
+  if (code.includes("unavailable") || code.includes("missing")) return new HttpsError("not-found", "Landing page unavailable.");
+  return new HttpsError("failed-precondition", "We couldn't complete that landing page action.");
+}
+
+async function recordLandingPageHealth(event, success) {
+  await db.collection("featureHealth").doc("landing_page").set({
+    schemaVersion: landingPage.SCHEMA_VERSION, feature: "landing_page",
+    status: success ? "enabled" : "attention", lastEvent: event,
+    ...(success ? {successfulEvents: FieldValue.increment(1), lastSuccessfulEventAt: FieldValue.serverTimestamp()} :
+      {failedEvents: FieldValue.increment(1), lastFailedEventAt: FieldValue.serverTimestamp()}),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, {merge: true});
+}
+
+exports.getLandingPageWorkspace = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, async (request) => {
+  const actor = await requireLandingPageActor(request);
+  if (request.data?.action === "create") {
+    try { return await landingPageService.createDraft(request.data || {}, actor); } catch (error) { throw landingPageError(error); }
+  }
+  const pageId = String(request.data?.pageId || "");
+  if (!pageId) {
+    const query = actor.role === "business" ? db.collection("landingPages")
+      .where("businessUid", "==", actor.uid).limit(20) : db.collection("landingPages")
+      .orderBy("updatedAt", "desc").limit(20);
+    const pages = await query.get();
+    const records = pages.docs.map((doc) => ({pageId: doc.id, ...doc.data()}));
+    records.sort((a, b) => Number(b.updatedAt?.toMillis?.() || 0) - Number(a.updatedAt?.toMillis?.() || 0));
+    return {schemaVersion: landingPage.SCHEMA_VERSION, pages: records};
+  }
+  const page = await db.collection("landingPages").doc(pageId).get();
+  if (!page.exists || (actor.role !== "admin" && page.data()?.businessUid !== actor.uid)) throw new HttpsError("permission-denied", "Landing page access is not available.");
+  const versions = await page.ref.collection("versions").orderBy("createdAt", "desc").limit(20).get();
+  const inquiries = await db.collection("salesLeads").where("ownerUid", "==", page.data().businessUid)
+    .limit(50).get();
+  const pageInquiries = inquiries.docs.filter((doc) => doc.data()?.attribution?.landingPageId === page.id);
+  return {schemaVersion: landingPage.SCHEMA_VERSION, page: {pageId: page.id, ...page.data()},
+    versions: versions.docs.map((doc) => ({versionId: doc.id, ...doc.data()})),
+    inquirySummary: {count: pageInquiries.length, recent: pageInquiries.slice(0, 10).map((doc) => ({
+      leadId: doc.id, contactName: String(doc.data()?.contactName || "New inquiry"),
+      requestSummary: String(doc.data()?.requestSummary || ""),
+    }))}};
+});
+
+exports.mutateLandingPageDraft = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, async (request) => {
+  const actor = await requireLandingPageActor(request);
+  try { return await landingPageService.saveDraft(request.data || {}, actor); } catch (error) { throw landingPageError(error); }
+});
+
+exports.transitionLandingPage = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, async (request) => {
+  const actor = await requireLandingPageActor(request);
+  try { const result = await landingPageService.transition(request.data || {}, actor);
+    await recordLandingPageHealth("publish", true); return result;
+  } catch (error) { await recordLandingPageHealth("publish", false); throw landingPageError(error); }
+});
+
+exports.renderLandingPage = onRequest({region: "us-east1", cors: false, maxInstances: 20}, async (request, response) => {
+  try {
+    const slug = request.path.split("/").filter(Boolean).at(-1);
+    const resolved = await landingPageService.resolve(slug);
+    response.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+    response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+    await recordLandingPageHealth("render", true);
+    response.status(200).type("html").send(landingPage.renderPage(resolved));
+  } catch (_) { await recordLandingPageHealth("render", false); response.status(404).type("html").send("<!doctype html><title>Page unavailable</title><main><h1>This page is unavailable.</h1></main>"); }
+});
+
+exports.submitLandingPageForm = onRequest({region: "us-east1", cors: false, maxInstances: 20}, async (request, response) => {
+  if (request.method !== "POST") return response.status(405).send("Method not allowed");
+  try {
+    const input = request.body || {};
+    await landingPageService.submit({...input, idempotencyKey: request.get("Idempotency-Key") || input.idempotencyKey}, {requestIdentity: request.get("X-Request-ID"), ip: request.ip});
+    await recordLandingPageHealth("lead_bridge", true);
+    response.status(200).type("html").send("<!doctype html><title>Request sent</title><main><h1>Thanks — your request was sent.</h1><p>The Business can now follow up with you.</p></main>");
+  } catch (_) { await recordLandingPageHealth("lead_bridge", false); response.status(400).type("html").send("<!doctype html><title>Try again</title><main><h1>We couldn't send your request.</h1><p>Check your details and try again.</p></main>"); }
+});

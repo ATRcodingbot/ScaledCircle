@@ -630,6 +630,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               const PopupMenuItem(value: 'grow', child: Text('Grow')),
               const PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
               const PopupMenuItem(value: 'results', child: Text('Results')),
+              const PopupMenuItem(
+                value: 'landing_pages',
+                child: Text('Landing Pages — Beta'),
+              ),
               PopupMenuItem(
                 value: 'responses',
                 enabled: AppEnvironmentConfig.responseTrackingEnabled,
@@ -656,6 +660,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 _openCampaigns(context, user.uid, results: true);
               } else if (value == 'responses') {
                 AppNavigation.push(context, AppRoutes.businessAttribution);
+              } else if (value == 'landing_pages') {
+                AppNavigation.push(context, AppRoutes.businessLandingPages);
               } else if (value == 'account') {
                 Navigator.push(
                   context,

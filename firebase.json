@@ -205,6 +205,13 @@
         "firebase-debug.*.log",
         "*.local"
       ]
+    },
+    {
+      "source": "functions-landing-page",
+      "codebase": "landing-page-core",
+      "predeploy": ["npm --prefix functions run prepare:function-codebases"],
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
     }
   ],
   "emulators": {
@@ -284,6 +291,14 @@
       }
     ],
     "rewrites": [
+      {
+        "source": "/p/**",
+        "function": {"functionId": "renderLandingPage", "region": "us-east1"}
+      },
+      {
+        "source": "/landing-page-submit",
+        "function": {"functionId": "submitLandingPageForm", "region": "us-east1"}
+      },
       {
         "source": "/r",
         "function": {

@@ -1,0 +1,7 @@
+"use strict";
+const test=require("node:test");const assert=require("node:assert/strict");const lp=require("./landing_page");
+test("no-asset draft is factual and complete",()=>{const d=lp.defaultDraft({businessName:"Harbor Landscaping",offering:"yard cleanup",serviceArea:"Annapolis"});assert.match(d.headline,/yard cleanup/);assert.equal(d.contactFields.includes("email"),true);assert.doesNotMatch(JSON.stringify(d),/award|review|licensed/i);});
+test("sanitization rejects unsupported controls",()=>{assert.throws(()=>lp.sanitizeDraft({headline:"Hi",supportingText:"There",style:"raw_css"}),/invalid_landing_page_style/);});
+test("public renderer escapes content and omits Flutter",()=>{const content=lp.sanitizeDraft({headline:"<script>x</script>",supportingText:"Safe",valuePoints:["Good"],contactFields:["name","email"]});const html=lp.renderPage({page:{publicSlug:"opaque"},version:{id:"v1",content}});assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/main\.dart\.js|flutter_bootstrap/);assert.match(html,/name="email"/);});
+test("form requires identity and contact method",()=>{const version={content:{contactFields:["name","email","phone","message"]}};assert.throws(()=>lp.validateSubmission({name:"A"},version),/contact_required/);assert.equal(lp.validateSubmission({name:"A",email:"a@example.invalid"},version).name,"A");});
+test("opaque slugs are non-enumerable",()=>{const s=lp.slug(()=>Buffer.alloc(18,7));assert.equal(s.length,24);assert.match(s,/^[A-Za-z0-9_-]+$/);});

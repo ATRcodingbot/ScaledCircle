@@ -13,6 +13,7 @@ import 'navigation/app_router.dart';
 import 'navigation/protected_route_gate.dart';
 import 'screens/business/business_dashboard.dart';
 import 'screens/business/business_attribution_screen.dart';
+import 'screens/business/landing_page_builder_screen.dart';
 import 'screens/campaigns/campaign_funding_return_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -148,6 +149,18 @@ class ScaledCircleApp extends StatelessWidget {
           routeName: AppRoutes.businessAttribution,
           audience: ProtectedRouteAudience.business,
           builder: (_, _) => const BusinessAttributionScreen(),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.businessLandingPages) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.businessLandingPages,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => LandingPageBuilderScreen(
+            pageId: route?.queryParameters['pageId'],
+          ),
         ),
       );
     }

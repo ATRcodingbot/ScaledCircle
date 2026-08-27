@@ -6,6 +6,7 @@ abstract final class AppRoutes {
   static const scalers = '/scalers';
   static const businessDashboard = '/business';
   static const businessAttribution = '/business/attribution';
+  static const businessLandingPages = '/business/landing-pages';
   static const scalerDashboard = '/scaler';
   static const adminLogin = '/admin/login';
   static const adminDashboard = '/admin';
