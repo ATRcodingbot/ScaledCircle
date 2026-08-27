@@ -11,7 +11,7 @@ const {
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
-
+const logger = require("firebase-functions/logger");
 
 
 
@@ -10853,6 +10853,7 @@ setGlobalOptions({
 // authority. Public page and form identities are always derived server-side.
 const landingPage = require("./landing_page");
 const landingPageService = landingPage.createLandingPageService({ db, FieldValue,
+  getAuthUser: (uid) => admin.auth().getUser(uid),
   publicBaseUrl: landingPage.publicOrigin(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
   process.env.GOOGLE_CLOUD_PROJECT || "demo-scaledcircle") });
 
@@ -10883,6 +10884,17 @@ async function recordLandingPageHealth(event, success) {
   }, { merge: true });
 }
 
+async function recordLandingPageHealthSafe(event, success) {
+  try {
+    await recordLandingPageHealth(event, success);
+  } catch (error) {
+    logger.warn("landing_page_health_record_failed", {
+      event,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
 exports.getLandingPageWorkspace = onCall({ region: "us-east1", enforceAppCheck: false, maxInstances: 10 }, async (request) => {
   const actor = await requireLandingPageActor(request);
   if (request.data?.action === "create") {
@@ -10908,7 +10920,12 @@ exports.getLandingPageWorkspace = onCall({ region: "us-east1", enforceAppCheck: 
     versions: versions.docs.map((doc) => ({ versionId: doc.id, ...doc.data() })),
     inquirySummary: { count: pageInquiries.length, recent: pageInquiries.slice(0, 10).map((doc) => ({
         leadId: doc.id, contactName: String(doc.data()?.contactName || "New inquiry"),
-        requestSummary: String(doc.data()?.requestSummary || "")
+        contactEmail: doc.data()?.contactEmail || null,
+        contactPhone: doc.data()?.contactPhone || null,
+        requestSummary: String(doc.data()?.requestSummary || ""),
+        status: String(doc.data()?.stage || "prospect"),
+        source: "Landing page",
+        createdAt: doc.data()?.createdAt || null
       })) } };
 });
 
@@ -10928,9 +10945,14 @@ exports.renderLandingPage = onRequest({ region: "us-east1", cors: false, maxInst
   const slug = request.path.split("/").filter(Boolean).at(-1);
   try {
     const resolved = await landingPageService.resolve(slug);
+    if (request.query?.submitted === "1") {
+      response.set("Cache-Control", "no-store");
+      response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
+      return response.status(200).type("html").send(landingPage.renderSuccessPage({ style: resolved.version.content.style }));
+    }
     response.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
     response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
-    await recordLandingPageHealth("render", true);
+    await recordLandingPageHealthSafe("render", true);
     response.status(200).type("html").send(landingPage.renderPage(resolved));
   } catch (error) {
     console.warn("landing_page_resolution_failed", {
@@ -10938,7 +10960,7 @@ exports.renderLandingPage = onRequest({ region: "us-east1", cors: false, maxInst
       slugFingerprint: landingPage.digest(String(slug || "")).slice(0, 16),
       slugPresent: Boolean(slug)
     });
-    await recordLandingPageHealth("render", false);
+    await recordLandingPageHealthSafe("render", false);
     response.set("Cache-Control", "no-store");
     response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
     response.status(404).type("html").send(landingPage.renderUnavailablePage());
@@ -10949,8 +10971,13 @@ exports.submitLandingPageForm = onRequest({ region: "us-east1", cors: false, max
   if (request.method !== "POST") return response.status(405).send("Method not allowed");
   try {
     const input = request.body || {};
-    await landingPageService.submit({ ...input, idempotencyKey: request.get("Idempotency-Key") || input.idempotencyKey }, { requestIdentity: request.get("X-Request-ID"), ip: request.ip });
-    await recordLandingPageHealth("lead_bridge", true);
-    response.status(200).type("html").send("<!doctype html><title>Request sent</title><main><h1>Thanks — your request was sent.</h1><p>The Business can now follow up with you.</p></main>");
-  } catch (_) {await recordLandingPageHealth("lead_bridge", false);response.status(400).type("html").send("<!doctype html><title>Try again</title><main><h1>We couldn't send your request.</h1><p>Check your details and try again.</p></main>");}
+    const result = await landingPageService.submit({ ...input, idempotencyKey: request.get("Idempotency-Key") || input.idempotencyKey }, { requestIdentity: request.get("X-Request-ID"), ip: request.ip });
+    await Promise.all([
+    recordLandingPageHealthSafe("lead_transaction", true),
+    recordLandingPageHealthSafe("notification_delivery_queued", true),
+    recordLandingPageHealthSafe("success_response", true)]
+    );
+    response.set("Cache-Control", "no-store");
+    response.redirect(303, `/p/${encodeURIComponent(result.slug)}?submitted=1`);
+  } catch (_) {await recordLandingPageHealthSafe("lead_transaction", false);response.status(400).type("html").send("<!doctype html><title>Try again</title><main><h1>We couldn't send your request.</h1><p>Check your details and try again.</p></main>");}
 });

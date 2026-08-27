@@ -68,6 +68,14 @@ class NotificationsScreen extends StatelessWidget {
       }
 
       final destination = deepLink['destination']?.toString();
+      if (destination == 'landing_page') {
+        final pageId = deepLink['pageId']?.toString();
+        AppNavigation.push(
+          context,
+          '${AppRoutes.businessLandingPages}${pageId != null && pageId.isNotEmpty ? '?pageId=${Uri.encodeQueryComponent(pageId)}' : ''}',
+        );
+        return;
+      }
       final linkedZoneId = deepLink['zoneId']?.toString() ?? zoneId;
       if ({'job_room', 'material_change_review'}.contains(destination) &&
           linkedZoneId != null &&
@@ -163,12 +171,12 @@ class NotificationsScreen extends StatelessWidget {
             'This notification does not have a destination yet.',
           );
       }
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) {
         return;
       }
 
-      _showMessage(context, 'Unable to open notification: $e');
+      _showMessage(context, "We couldn't open this notification. Try again.");
     }
   }
 

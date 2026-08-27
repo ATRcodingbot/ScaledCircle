@@ -27,6 +27,13 @@ void main() {
     expect(source, contains("'material_change_proposed' => 'Review Change'"));
   });
 
+  test('landing-page inquiry notifications open the owned inquiry surface', () {
+    expect(source, contains("destination == 'landing_page'"));
+    expect(source, contains('AppRoutes.businessLandingPages'));
+    expect(source, contains("deepLink['pageId']"));
+    expect(source, isNot(contains(r'Unable to open notification: $e')));
+  });
+
   test('notification interaction acknowledges only the selected item', () {
     expect(source, contains('await _markAsRead(notification.reference)'));
     expect(source, contains("'read': true"));

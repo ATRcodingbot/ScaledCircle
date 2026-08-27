@@ -34,7 +34,16 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   String? _slug;
   String? _message;
   int _inquiryCount = 0;
+  bool _hasUnpublishedChanges = false;
   List<Map<String, dynamic>> _recentInquiries = const [];
+  String _receivedAt(dynamic value) {
+    try {
+      final date = value.toDate() as DateTime;
+      return '${date.month}/${date.day}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return 'Recently received';
+    }
+  }
   Uri? get _publicPageUrl => _slug == null
       ? null
       : AppEnvironmentConfig.publicBaseUrl.replace(
@@ -114,6 +123,8 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _cta = c['ctaType'] ?? 'request_estimate';
       _tracking = p['trackingMode'] == 'first_party';
       _slug = p['publicSlug']?.toString();
+      _hasUnpublishedChanges = p['status'] == 'published' &&
+          p['draftVersionId'] != p['publishedVersionId'];
       final inquiry = Map<String, dynamic>.from(
         r['inquirySummary'] as Map? ?? const {},
       );
@@ -138,6 +149,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       } else {
         await _service.save(_pageId!, _content, tracking: _tracking);
       }
+      _hasUnpublishedChanges = _slug != null;
       setState(() => _message = 'Draft saved. You can return to it later.');
     } catch (_) {
       setState(
@@ -156,6 +168,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     try {
       final r = await _service.transition(_pageId!, 'publish');
       _slug = r['publicSlug'];
+      _hasUnpublishedChanges = false;
       setState(() => _message = 'Published. Your page is ready to share.');
     } catch (_) {
       setState(
@@ -192,6 +205,16 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                 const Text('No design experience, logo, or photos required.'),
                 if (_pageId != null) ...[
                   const SizedBox(height: 12),
+                  if (_hasUnpublishedChanges)
+                    const Card(
+                      child: ListTile(
+                        leading: Icon(Icons.info_outline),
+                        title: Text('Unpublished changes'),
+                        subtitle: Text(
+                          'Your public page still shows the previous published version until you publish again.',
+                        ),
+                      ),
+                    ),
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -202,12 +225,30 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                             '$_inquiryCount customer ${_inquiryCount == 1 ? 'inquiry' : 'inquiries'}',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
+                          if (!_tracking && _inquiryCount > 0)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4, bottom: 8),
+                              child: Text(
+                                'Response analytics are off, so visit and source attribution are unavailable.',
+                              ),
+                            ),
                           if (_recentInquiries.isEmpty)
                             const Text('New form responses will appear here.')
                           else
                             ..._recentInquiries.map(
-                              (item) => Text(
-                                '• ${item['contactName']}: ${item['requestSummary']}',
+                              (item) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.person_outline),
+                                title: Text(item['contactName']?.toString() ?? 'New inquiry'),
+                                subtitle: Text([
+                                  if ((item['requestSummary']?.toString() ?? '').isNotEmpty)
+                                    item['requestSummary'].toString(),
+                                  [item['contactEmail'], item['contactPhone']]
+                                      .where((value) => (value?.toString() ?? '').isNotEmpty)
+                                      .join(' • '),
+                                  '${item['source'] ?? 'Landing page'} • ${item['status'] ?? 'prospect'}',
+                                  _receivedAt(item['createdAt']),
+                                ].where((value) => value.isNotEmpty).join('\n')),
                               ),
                             ),
                         ],

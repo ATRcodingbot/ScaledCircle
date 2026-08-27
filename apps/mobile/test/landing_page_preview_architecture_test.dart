@@ -56,4 +56,13 @@ void main() {
     expect(source, contains("ClipboardData(text: url.toString())"));
     expect(source, contains("webOnlyWindowName: '_blank'"));
   });
+
+  test('inquiry follow-up and unpublished-version state are explicit', () {
+    expect(source, contains("'Unpublished changes'"));
+    expect(source, contains('previous published version'));
+    expect(source, contains("item['contactEmail']"));
+    expect(source, contains("item['contactPhone']"));
+    expect(source, contains("item['status']"));
+    expect(source, contains("item['source']"));
+  });
 }
