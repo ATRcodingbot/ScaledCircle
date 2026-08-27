@@ -1,6 +1,6 @@
 # Smart Mapping production baseline reconciliation
 
-Status: **LOCAL PRODUCTION CANDIDATE — NOT DEPLOYED / NOT PUSHED**
+Status: **PRODUCTION DEPLOYED + VERIFIED**
 Review date: 2026-08-26
 
 ## Source-of-truth baseline
@@ -77,3 +77,23 @@ Rollback order is Hosting first, then both funding callables as one unit, then r
 ## Production branch repair
 
 After production promotion is separately approved and verified, push the single reconciled candidate non-force to `real-completion-proof` and record the deployment result in a child release-record commit. That makes the runtime source lineage—Batch 4 plus the approved Smart Mapping release—the canonical production baseline. Future deployment policy should require: remote production HEAD match, clean exact candidate, immutable manifest with function generations/hashes and Hosting SHA, non-force push before deployment, and a post-deploy release-record commit. A deployment must stop if live runtime cannot be traced to the candidate.
+
+## Production release record — 2026-08-27 UTC
+
+Candidate `05111dfedd586d90066e7f3789cac49a9c32deaa` was pushed non-force to `origin/real-completion-proof` and the fetched remote HEAD matched exactly before deployment.
+
+The coordinated production deployment changed only the approved five callable targets and Hosting:
+
+| Callable | Owner | Generation | Deployed hash | Runtime / region | Secrets |
+|---|---|---:|---|---|---|
+| `getSmartZonePlan` | `discovery-core` | `1787787889011706` | `a8a8e804a2f918e502647b5fd5b7d1e0e04091bd` | Gen 2 Node.js 24 / `us-east1` | none |
+| `applySmartZonePlan` | `discovery-core` | `1787787936838909` | `a8a8e804a2f918e502647b5fd5b7d1e0e04091bd` | Gen 2 Node.js 24 / `us-east1` | none |
+| `resolveServiceAreaPlace` | `discovery-core` | `1787788011835949` | `a8a8e804a2f918e502647b5fd5b7d1e0e04091bd` | Gen 2 Node.js 24 / `us-east1` | none |
+| `quoteCampaignFunding` | `campaign-funding` | `1787788301064277` | `f005797834fa9c83b23a6bc0d0a423c37be81ea4` | Gen 2 Node.js 24 / `us-east1` | none |
+| `createCampaignFundingCheckoutSession` | `campaign-funding` | `1787788349018163` | `3661e90d67981206d19935ff4f802af4aa82b2ae` | Gen 2 Node.js 24 / `us-east1` | `STRIPE_LIVE_SECRET_KEY` only |
+
+`resolveServiceAreaPlace` was updated in place on its existing Function and Cloud Run service. It now has exactly one owner, `discovery-core`; no delete/recreate or duplicate callable was used. All five signed-out callable probes returned HTTP 401.
+
+Production Hosting release `1787788901230000`, version `f8ea6059a8f53b33`, was released at `2026-08-27T00:01:41.230Z`. Both `scaledcircle.com/main.dart.js` and `scaled-circle.web.app/main.dart.js` matched certified SHA-256 `EE95E0F9F5EED7194C169FC5D38964E84D3E0CB7E66305905FDC735B93C83686`. Public startup and legal-route checks loaded without browser console errors; signed-out protected-route probes did not expose authenticated content.
+
+No Firestore Rules, Storage Rules, indexes, provider configuration, unrelated Functions, Stripe transaction, payment, refund, earning, Wallet, Connect, transfer, or payout mutation occurred.
