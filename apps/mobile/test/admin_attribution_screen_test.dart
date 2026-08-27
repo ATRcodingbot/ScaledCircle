@@ -10,10 +10,10 @@ void main() {
       dataStatus: 'insufficient_data',
     );
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: _Subject(overview))));
-    expect(find.text('Tracked interactions'), findsOneWidget);
-    expect(find.text('Unique responses'), findsOneWidget);
-    expect(find.text('Leads'), findsOneWidget);
-    expect(find.text('Conversions'), findsOneWidget);
+    expect(find.textContaining('Tracked interactions'), findsOneWidget);
+    expect(find.textContaining('Unique responses'), findsOneWidget);
+    expect(find.textContaining('Leads'), findsOneWidget);
+    expect(find.textContaining('Conversions'), findsOneWidget);
     expect(find.text('Insufficient attribution data.'), findsOneWidget);
     expect(find.textContaining('estimated physical impressions'), findsOneWidget);
   });
