@@ -1297,7 +1297,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                     const SizedBox(height: 16),
 
                     ResponseTrackingFeatureCard(
-                      available: AppEnvironmentConfig.isStaging,
+                      available: AppEnvironmentConfig.responseTrackingEnabled,
                       onOpen: () => AppNavigation.push(
                         context,
                         AppRoutes.businessAttribution,

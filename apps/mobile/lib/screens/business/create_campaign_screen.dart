@@ -1002,7 +1002,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
                 const SizedBox(height: 16),
 
                 ResponseTrackingFeatureCard(
-                  available: AppEnvironmentConfig.isStaging,
+                  available: AppEnvironmentConfig.responseTrackingEnabled,
                   onOpen: () => AppNavigation.push(
                     context,
                     AppRoutes.businessAttribution,

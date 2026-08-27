@@ -20,6 +20,7 @@ abstract final class AppEnvironmentConfig {
   static const bool isLocal = _rawEnvironment == 'local';
   static const bool isStaging = _rawEnvironment == 'staging';
   static const bool isProduction = _rawEnvironment == 'production';
+  static const bool responseTrackingEnabled = isStaging || isProduction;
 
   static AppEnvironment get environment => switch (_rawEnvironment) {
     'local' => AppEnvironment.local,

@@ -632,9 +632,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               const PopupMenuItem(value: 'results', child: Text('Results')),
               PopupMenuItem(
                 value: 'responses',
-                enabled: AppEnvironmentConfig.isStaging,
+                enabled: AppEnvironmentConfig.responseTrackingEnabled,
                 child: Text(
-                  AppEnvironmentConfig.isStaging
+                  AppEnvironmentConfig.responseTrackingEnabled
                       ? 'Response tracking — Beta'
                       : 'Response tracking — Coming Soon',
                 ),

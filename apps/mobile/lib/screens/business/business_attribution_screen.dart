@@ -8,7 +8,7 @@ class BusinessAttributionScreen extends StatefulWidget {
   const BusinessAttributionScreen({
     super.key,
     this.service,
-    this.enabled = AppEnvironmentConfig.isStaging,
+    this.enabled = AppEnvironmentConfig.responseTrackingEnabled,
   });
   final AttributionClient? service;
   final bool enabled;

@@ -48,9 +48,9 @@ void main() {
     expect(services, contains("name: 'Scaler Cash-out'"));
     expect(services, contains('comingSoon: true'));
     expect(builder, contains('ResponseTrackingFeatureCard'));
-    expect(builder, contains('AppEnvironmentConfig.isStaging'));
+    expect(builder, contains('AppEnvironmentConfig.responseTrackingEnabled'));
     expect(flyer, contains('ResponseTrackingFeatureCard'));
-    expect(flyer, contains('AppEnvironmentConfig.isStaging'));
+    expect(flyer, contains('AppEnvironmentConfig.responseTrackingEnabled'));
     expect(responseCard, contains('Tracked link'));
     expect(responseCard, contains('QR code'));
     expect(responseCard, contains('Landing pages'));

@@ -16,6 +16,12 @@ void main() {
     final builder = File(
       'lib/screens/business/create_campaign_screen.dart',
     ).readAsStringSync();
+    final attribution = File(
+      'lib/screens/business/business_attribution_screen.dart',
+    ).readAsStringSync();
+    final flyer = File(
+      'lib/screens/business/create/campaigns/flyer/flyer_campaign_screen.dart',
+    ).readAsStringSync();
     expect(routes, contains("businessAttribution = '/business/attribution'"));
     expect(main, contains('route?.path == AppRoutes.businessAttribution'));
     expect(main, contains('routeName: AppRoutes.businessAttribution'));
@@ -26,11 +32,19 @@ void main() {
     );
     expect(builder, contains('AppRoutes.businessAttribution'));
     expect(dashboard, isNot(contains('BusinessAttributionScreen()')));
+    for (final source in [dashboard, attribution, builder, flyer]) {
+      expect(source, contains('AppEnvironmentConfig.responseTrackingEnabled'));
+    }
+    final environment = File(
+      'lib/config/app_environment.dart',
+    ).readAsStringSync();
+    expect(
+      environment,
+      contains('responseTrackingEnabled = isStaging || isProduction'),
+    );
   });
 
-  testWidgets('production presentation remains unavailable and truthful', (
-    tester,
-  ) async {
+  testWidgets('unavailable presentation remains truthful', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(body: ResponseTrackingFeatureCard(available: false)),
@@ -46,7 +60,7 @@ void main() {
     expect(find.text('Open tracked link + QR'), findsNothing);
   });
 
-  testWidgets('staging presentation enables only tracked link and QR Beta', (
+  testWidgets('enabled presentation exposes only tracked link and QR Beta', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
