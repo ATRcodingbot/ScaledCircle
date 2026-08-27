@@ -8,6 +8,7 @@ abstract interface class AttributionClient {
     required String type,
     required String destination,
     String source,
+    String? campaignId,
   });
 }
 
@@ -34,6 +35,7 @@ class AttributionService implements AttributionClient {
     required String type,
     required String destination,
     String source = 'tracked_link',
+    String? campaignId,
   }) async {
     final result = await _functions
         .httpsCallable('createResponseAsset')
@@ -41,7 +43,7 @@ class AttributionService implements AttributionClient {
           'label': label,
           'type': type,
           'destination': destination,
-          'attribution': {'source': source},
+          'attribution': {'source': source, 'campaignId': ?campaignId},
         });
     return Map<String, dynamic>.from(result.data);
   }
@@ -52,6 +54,7 @@ class AttributionOverview {
     required this.metrics,
     required this.assets,
     required this.dataStatus,
+    this.campaigns = const [],
   });
   factory AttributionOverview.fromMap(Map<String, dynamic> value) {
     final rawMetrics = value['metrics'];
@@ -67,10 +70,17 @@ class AttributionOverview {
                 .toList()
           : const [],
       dataStatus: value['dataStatus']?.toString() ?? 'insufficient_data',
+      campaigns: value['campaigns'] is List
+          ? (value['campaigns'] as List)
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+          : const [],
     );
   }
   final Map<String, dynamic> metrics;
   final List<Map<String, dynamic>> assets;
   final String dataStatus;
+  final List<Map<String, dynamic>> campaigns;
   int metric(String key) => (metrics[key] as num?)?.toInt() ?? 0;
 }

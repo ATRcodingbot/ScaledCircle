@@ -283,10 +283,12 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     const bounded = (collection, timestampField) => businessUid ?
       db.collection(collection).where("businessUid", "==", businessUid).limit(limit) :
       db.collection(collection).orderBy(timestampField, "desc").limit(limit);
-    const [assetSnap, interactionSnap, conversionSnap] = await Promise.all([
+    const [assetSnap, interactionSnap, conversionSnap, businessCampaignSnap] = await Promise.all([
       bounded("responseAssets", "createdAt").get(),
       bounded("responseInteractions", "occurredAt").get(),
       bounded("attributionConversions", "occurredAt").get(),
+      businessUid ? db.collection("campaigns").where("businessId", "==", businessUid)
+        .limit(PAGE_LIMIT).get() : Promise.resolve({docs: []}),
     ]);
     const assetRecords = assetSnap.docs.map((doc) => ({id: doc.id, data: doc.data() || {}}));
     const campaignIds = [...new Set(assetRecords.map((item) =>
@@ -329,7 +331,13 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
         totalInteractions: interactions.length,
         leads: leadIds.size,
         conversions: liveConversions.filter((item) => item.milestone !== "lead").length},
-      assets, dataStatus: assets.length || interactions.length ? "available" : "insufficient_data",
+      assets,
+      campaigns: businessCampaignSnap.docs.map((doc) => {
+        const data = doc.data() || {};
+        return {campaignId: doc.id, name: text(data.campaignName || data.name, 120) || "Campaign",
+          status: text(data.status, 40) || "draft"};
+      }),
+      dataStatus: assets.length || interactions.length ? "available" : "insufficient_data",
       page: {limit, bounded: true}};
   }
 

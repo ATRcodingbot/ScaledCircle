@@ -77,7 +77,20 @@ void main() {
   testWidgets('one create action returns one staging link used by the QR', (
     tester,
   ) async {
-    final client = _FakeAttributionClient();
+    final client = _FakeAttributionClient(
+      overview: const AttributionOverview(
+        metrics: {},
+        assets: [],
+        dataStatus: 'available',
+        campaigns: [
+          {
+            'campaignId': 'campaign-1',
+            'name': 'Annapolis launch',
+            'status': 'open',
+          },
+        ],
+      ),
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: BusinessAttributionScreen(service: client, enabled: true),
@@ -92,6 +105,10 @@ void main() {
       find.widgetWithText(TextField, 'Label'),
       'Internal QA',
     );
+    await tester.tap(find.text('General testing — never live campaign data'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Annapolis launch · open').last);
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Secure destination URL'),
       'https://scaledcircle-staging.web.app/#/business',
@@ -102,6 +119,7 @@ void main() {
     expect(client.createCalls, 1);
     expect(client.lastType, 'tracked_link');
     expect(client.lastSource, 'tracked_link');
+    expect(client.lastCampaignId, 'campaign-1');
     expect(
       find.text(
         'https://scaledcircle-staging.web.app/r?code=abcdefghijklmnopqrstuvwx',
@@ -197,6 +215,7 @@ class _FakeAttributionClient implements AttributionClient {
   int createCalls = 0;
   String? lastType;
   String? lastSource;
+  String? lastCampaignId;
 
   @override
   Future<AttributionOverview> loadOverview({String? businessUid}) async =>
@@ -219,10 +238,12 @@ class _FakeAttributionClient implements AttributionClient {
     required String type,
     required String destination,
     String source = 'tracked_link',
+    String? campaignId,
   }) async {
     createCalls += 1;
     lastType = type;
     lastSource = source;
+    lastCampaignId = campaignId;
     if (throwOnCreate) throw StateError('permission-denied internal detail');
     return {
       'trackedUrl':

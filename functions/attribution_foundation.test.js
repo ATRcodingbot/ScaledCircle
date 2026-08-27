@@ -131,7 +131,8 @@ test("interaction events are request-idempotent while unique responders stay ded
   const code = "abcdefghijklmnopqrstuvwx";
   const db = fakeFirestore({
     "users/business-1": {role: "business"},
-    "campaigns/campaign-1": {businessId: "business-1", status: "open"},
+    "campaigns/campaign-1": {businessId: "business-1", campaignName: "Launch campaign",
+      status: "open"},
     "responseAssets/asset-1": {businessUid: "business-1", publicCode: code, status: "active",
       destination: "https://scaledcircle-staging.web.app/#/business", type: "tracked_link",
       attribution: {source: "tracked_link", campaignId: "campaign-1"}},
@@ -161,6 +162,8 @@ test("interaction events are request-idempotent while unique responders stay ded
   assert.equal(overview.metrics.trackedInteractions, 3);
   assert.equal(overview.metrics.uniqueResponses, 2);
   assert.equal(overview.metrics.testInteractions, 0);
+  assert.deepEqual(overview.campaigns,
+    [{campaignId: "campaign-1", name: "Launch campaign", status: "open"}]);
 });
 
 test("campaign state classifies permanent-link activity without polluting live KPIs", async () => {

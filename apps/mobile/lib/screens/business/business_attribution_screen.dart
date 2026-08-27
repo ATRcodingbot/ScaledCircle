@@ -30,6 +30,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
           ),
         );
   bool _creating = false;
+  List<Map<String, dynamic>> _campaigns = const [];
   void _refresh() => setState(() => _overview = _service.loadOverview());
 
   @override
@@ -67,6 +68,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
             );
           }
           final overview = snapshot.data!;
+          _campaigns = overview.campaigns;
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
             children: [
@@ -153,6 +155,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
     if (_creating) return;
     final label = TextEditingController();
     final destination = TextEditingController();
+    String campaignSelection = '';
     final submit = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -165,6 +168,29 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
               TextField(
                 controller: label,
                 decoration: const InputDecoration(labelText: 'Label'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: '',
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Campaign or testing mode',
+                ),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: '',
+                    child: Text('General testing — never live campaign data'),
+                  ),
+                  ..._campaigns.map(
+                    (campaign) => DropdownMenuItem<String>(
+                      value: campaign['campaignId']?.toString(),
+                      child: Text(
+                        '${campaign['name'] ?? 'Campaign'} · ${campaign['status'] ?? 'Draft'}',
+                      ),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => campaignSelection = value ?? '',
               ),
               TextField(
                 controller: destination,
@@ -204,6 +230,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
         type: 'tracked_link',
         destination: destination.text.trim(),
         source: 'tracked_link',
+        campaignId: campaignSelection.isEmpty ? null : campaignSelection,
       );
       if (!mounted) return;
       _showAsset({
