@@ -10743,7 +10743,10 @@ async function authenticatedUserContext(request, message) {
 // response traffic can record immutable, privacy-minimized interactions but can
 // never select tenant attribution or create conversions.
 const attributionFoundation = require("./attribution_foundation");
-const attributionService = attributionFoundation.createAttributionService({ db, FieldValue });
+const attributionProjectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
+process.env.GOOGLE_CLOUD_PROJECT || "";
+const attributionService = attributionFoundation.createAttributionService({ db, FieldValue,
+  publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId) });
 
 function attributionHttpsError(error) {
   const code = String(error?.message || "");
@@ -10813,6 +10816,12 @@ exports.resolveTrackedResponse = onRequest(
       response.redirect(302, result.destination);
     } catch (error) {
       const code = String(error?.message || "");
+      console.warn("attribution_response_resolution_failed", {
+        category: attributionFoundation.resolverFailureCategory(error),
+        codeFingerprint: attributionFoundation.responseCodeFingerprint(request.query.code),
+        codePresent: Boolean(String(request.query.code || "").trim()),
+        stage: "resolve_or_record"
+      });
       response.status(code === "response_asset_inactive" ? 410 : 404).
       set("Cache-Control", "no-store").
       send("This ScaledCircle response link is unavailable.");

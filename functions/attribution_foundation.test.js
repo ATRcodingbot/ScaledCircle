@@ -6,6 +6,50 @@ const fs = require("node:fs");
 const path = require("node:path");
 const attribution = require("./attribution_foundation");
 
+function fakeFirestore(seed = {}) {
+  const records = new Map();
+  let nextId = 1;
+  for (const [pathName, value] of Object.entries(seed)) records.set(pathName, value);
+  const snapshot = (pathName) => ({exists: records.has(pathName), id: pathName.split("/").at(-1),
+    data: () => records.get(pathName)});
+  const refFor = (collectionName, id = `id-${nextId++}`) => ({
+    id,
+    path: `${collectionName}/${id}`,
+    get: async () => snapshot(`${collectionName}/${id}`),
+    create: async (value) => {
+      const pathName = `${collectionName}/${id}`;
+      if (records.has(pathName)) throw new Error("already_exists");
+      records.set(pathName, value);
+    },
+  });
+  return {
+    records,
+    collection(collectionName) {
+      return {
+        doc: (id) => refFor(collectionName, id),
+        where(field, operator, expected) {
+          assert.equal(operator, "==");
+          return {limit: (limit) => ({get: async () => ({docs: [...records.entries()]
+            .filter(([pathName, value]) => pathName.startsWith(`${collectionName}/`) &&
+              value[field] === expected).slice(0, limit)
+            .map(([pathName]) => snapshot(pathName))})})};
+        },
+      };
+    },
+    async runTransaction(callback) {
+      return callback({
+        get: async (ref) => snapshot(ref.path),
+        create: (ref, value) => {
+          if (records.has(ref.path)) throw new Error("already_exists");
+          records.set(ref.path, value);
+        },
+        set: (ref, value, options = {}) => records.set(ref.path,
+          options.merge ? {...(records.get(ref.path) || {}), ...value} : value),
+      });
+    },
+  };
+}
+
 test("canonical envelope is channel-neutral, bounded, and versioned", () => {
   const value = attribution.canonicalEnvelope({source: "postcard", campaignId: "campaign",
     zoneId: "zone", materialId: "material", creativeVersion: "v3"});
@@ -27,6 +71,60 @@ test("public codes are opaque and destination is HTTPS-only", () => {
     "https://user:pass@example.com"]) {
     assert.throws(() => attribution.assertHttpsDestination(invalid), /invalid_response_destination/);
   }
+});
+
+test("public response origin is project-derived and fails closed", () => {
+  assert.equal(attribution.publicResponseOrigin("scaledcircle-staging"),
+    "https://scaledcircle-staging.web.app");
+  assert.equal(attribution.publicResponseOrigin("scaled-circle"), "https://scaledcircle.com");
+  assert.equal(attribution.publicResponseOrigin("demo-scaledcircle"), "http://127.0.0.1:5000");
+  assert.equal(attribution.publicResponseOrigin("unknown-project"), null);
+  assert.throws(() => attribution.assertPublicResponseOrigin(null), /response_origin_unavailable/);
+  assert.throws(() => attribution.assertPublicResponseOrigin("https://evil.example/path"),
+    /response_origin_unavailable/);
+});
+
+test("resolver diagnostics are privacy-safe and internally specific", () => {
+  assert.equal(attribution.responseCodeFingerprint("abcdefghijklmnopqrstuvwx").length, 16);
+  assert.equal(attribution.resolverFailureCategory(new Error("response_code_malformed")),
+    "malformed_code");
+  assert.equal(attribution.resolverFailureCategory(new Error("response_asset_not_found")),
+    "unknown_code");
+  assert.equal(attribution.resolverFailureCategory(new Error("response_asset_inactive")),
+    "inactive_asset");
+  assert.equal(attribution.resolverFailureCategory(new Error("invalid_response_destination")),
+    "invalid_destination");
+});
+
+test("staging asset resolves end to end and production rendering stays isolated", async () => {
+  const db = fakeFirestore({"users/business-1": {role: "business"}});
+  const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
+  const actor = {uid: "business-1", role: "business", emailVerified: true, user: {active: true}};
+  const staging = attribution.createAttributionService({db, FieldValue, now: () => 2000,
+    randomBytes: (size) => Buffer.alloc(size, 7),
+    publicBaseUrl: attribution.publicResponseOrigin("scaledcircle-staging")});
+  const created = await staging.createResponseAsset({type: "tracked_link", label: "Internal QA",
+    destination: "https://scaledcircle-staging.web.app/#/business"}, actor);
+  assert.equal(created.trackedUrl,
+    `https://scaledcircle-staging.web.app/r?code=${created.publicCode}`);
+  assert.match(created.publicCode, /^[A-Za-z0-9_-]{24}$/);
+
+  const first = await staging.resolveAndRecord({code: created.publicCode, ip: "192.0.2.10",
+    userAgent: "QA browser"});
+  assert.equal(first.destination, "https://scaledcircle-staging.web.app/#/business");
+  assert.equal(first.created, true);
+  const replay = await staging.resolveAndRecord({code: created.publicCode, ip: "192.0.2.99",
+    userAgent: "QA browser"});
+  assert.equal(replay.created, false);
+  assert.equal([...db.records.keys()].filter((key) => key.startsWith("responseInteractions/")).length, 1);
+
+  const qr = await staging.createResponseAsset({type: "qr", label: "Internal QA QR",
+    destination: "https://scaledcircle-staging.web.app/#/business"}, actor);
+  assert.match(qr.trackedUrl, /^https:\/\/scaledcircle-staging\.web\.app\/r\?code=/);
+  const production = attribution.safeAsset("asset", {type: "tracked_link", publicCode: "a".repeat(24),
+    destination: "https://scaledcircle.com", attribution: {}},
+  attribution.publicResponseOrigin("scaled-circle"));
+  assert.equal(production.trackedUrl, `https://scaledcircle.com/r?code=${"a".repeat(24)}`);
 });
 
 test("privacy fingerprint dedupes same daily response without retaining raw signals", () => {

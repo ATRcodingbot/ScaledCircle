@@ -15,6 +15,11 @@ const CONVERSION_MILESTONES = new Set([
   "first_funded_campaign", "repeat_funded_campaign", "customer_conversion",
 ]);
 const PAGE_LIMIT = 100;
+const PUBLIC_RESPONSE_ORIGINS = Object.freeze({
+  "scaled-circle": "https://scaledcircle.com",
+  "scaledcircle-staging": "https://scaledcircle-staging.web.app",
+  "demo-scaledcircle": "http://127.0.0.1:5000",
+});
 
 function text(value, max = 240) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -34,6 +39,38 @@ function assertHttpsDestination(value) {
     throw new Error("invalid_response_destination");
   }
   return parsed.toString();
+}
+
+function publicResponseOrigin(projectId) {
+  return PUBLIC_RESPONSE_ORIGINS[text(projectId, 160)] || null;
+}
+
+function assertPublicResponseOrigin(value) {
+  const raw = text(value, 1000);
+  let parsed;
+  try { parsed = new URL(raw); } catch (_) { throw new Error("response_origin_unavailable"); }
+  const local = ["127.0.0.1", "localhost"].includes(parsed.hostname);
+  if ((parsed.protocol !== "https:" && !(local && parsed.protocol === "http:")) ||
+      parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("response_origin_unavailable");
+  }
+  return parsed.origin;
+}
+
+function responseCodeFingerprint(value) {
+  const code = text(value, 80);
+  return code ? crypto.createHash("sha256").update(code).digest("hex").slice(0, 16) : null;
+}
+
+function resolverFailureCategory(error) {
+  const code = String(error?.message || "");
+  if (code === "response_code_malformed") return "malformed_code";
+  if (code === "response_asset_not_found") return "unknown_code";
+  if (code === "response_asset_ambiguous") return "ambiguous_code";
+  if (code === "response_asset_inactive") return "inactive_asset";
+  if (code === "response_asset_expired") return "expired_asset";
+  if (code === "invalid_response_destination") return "invalid_destination";
+  return "datastore_or_internal_failure";
 }
 
 function assertAttributionActor(actor) {
@@ -77,6 +114,7 @@ function privacyFingerprint({ip, userAgent, assetId, now = Date.now()}) {
 }
 
 function safeAsset(id, data, publicBaseUrl) {
+  const origin = assertPublicResponseOrigin(publicBaseUrl);
   const code = text(data.publicCode, 80);
   return {
     responseAssetId: id,
@@ -84,7 +122,7 @@ function safeAsset(id, data, publicBaseUrl) {
     status: text(data.status, 30) || "active",
     label: text(data.label, 160) || null,
     destination: text(data.destination, 1000),
-    trackedUrl: `${publicBaseUrl.replace(/\/$/, "")}/r?code=${encodeURIComponent(code)}`,
+    trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`,
     attribution: canonicalEnvelope(data.attribution || {}),
     createdAt: millis(data.createdAt),
     updatedAt: millis(data.updatedAt),
@@ -92,7 +130,7 @@ function safeAsset(id, data, publicBaseUrl) {
 }
 
 function createAttributionService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes,
-  publicBaseUrl = "https://scaledcircle.com"}) {
+  publicBaseUrl}) {
   async function resolveBusinessUid(actor, requested) {
     assertAttributionActor(actor);
     const businessUid = actor.role === "business" ? actor.uid : text(requested, 160);
@@ -124,6 +162,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
   }
 
   async function createResponseAsset(input, actor) {
+    const origin = assertPublicResponseOrigin(publicBaseUrl);
     const businessUid = await resolveBusinessUid(actor, input?.businessUid);
     const type = text(input?.type, 40).toLowerCase();
     if (!ASSET_TYPES.has(type)) throw new Error("unsupported_response_asset_type");
@@ -137,17 +176,20 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       attribution: {...attribution, responseAssetId: ref.id}, createdBy: actor.uid,
       createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     return {responseAssetId: ref.id, publicCode: code,
-      trackedUrl: `${publicBaseUrl.replace(/\/$/, "")}/r?code=${encodeURIComponent(code)}`};
+      trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`};
   }
 
   async function resolveAndRecord({code, ip, userAgent}) {
     const publicCode = text(code, 80);
-    if (!publicCode) throw new Error("response_asset_not_found");
+    if (!/^[A-Za-z0-9_-]{24}$/.test(publicCode)) throw new Error("response_code_malformed");
     const matches = await db.collection("responseAssets").where("publicCode", "==", publicCode).limit(2).get();
-    if (matches.docs.length !== 1) throw new Error("response_asset_not_found");
+    if (matches.docs.length === 0) throw new Error("response_asset_not_found");
+    if (matches.docs.length !== 1) throw new Error("response_asset_ambiguous");
     const assetDoc = matches.docs[0];
     const asset = assetDoc.data() || {};
     if (asset.status !== "active") throw new Error("response_asset_inactive");
+    const expiresAt = millis(asset.expiresAt);
+    if (expiresAt !== null && expiresAt <= now()) throw new Error("response_asset_expired");
     const destination = assertHttpsDestination(asset.destination);
     const fingerprint = privacyFingerprint({ip, userAgent, assetId: assetDoc.id, now: now()});
     const interactionId = crypto.createHash("sha256").update(`${assetDoc.id}|${fingerprint}`).digest("hex");
@@ -234,5 +276,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
 
 module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   CONVERSION_MILESTONES, PAGE_LIMIT, text, millis, assertHttpsDestination,
-  assertAttributionActor, opaqueCode, canonicalEnvelope, privacyFingerprint,
+  PUBLIC_RESPONSE_ORIGINS, publicResponseOrigin, assertPublicResponseOrigin,
+  responseCodeFingerprint, resolverFailureCategory, assertAttributionActor,
+  opaqueCode, canonicalEnvelope, privacyFingerprint,
   safeAsset, createAttributionService};
