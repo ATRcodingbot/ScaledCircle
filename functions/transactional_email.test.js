@@ -123,7 +123,7 @@ test("delivery accepts existing plain jobs and trusted HTML only", () => {
 });
 
 function landingJob(template = "landing_page_business_inquiry") {
-  return {to:"person@example.test",fromAddress:email.SUPPORT_EMAIL,template,eventType:"landing_page.inquiry",
+  return {schemaVersion:email.LANDING_PAGE_EMAIL_SCHEMA_VERSION,to:"person@example.test",fromAddress:email.SUPPORT_EMAIL,template,eventType:"landing_page.inquiry",
     status:"queued",attempts:0,payload:{businessName:"Harbor Services",customerName:"Pat <script>x</script>",
       landingPageTitle:"Published A",inquirySummary:"Need an estimate <b>soon</b>",
       customerEmail:"pat@example.test",customerPhone:"555-0100",
@@ -137,6 +137,7 @@ test("Landing Page templates are narrowly accepted and rendered from structured 
   assert.equal(email.validateDeliveryJob({...landingJob(),bcc:"attacker@example.test"}),false);
   assert.equal(email.validateDeliveryJob({...landingJob(),html:"<p>override</p>",trustedHtml:true}),false);
   assert.equal(email.validateDeliveryJob({...landingJob(),to:"victim@example.test\r\nBcc: attacker@example.test"}),false);
+  assert.equal(email.validateDeliveryJob({...landingJob(),schemaVersion:"legacy_unversioned"}),false);
 });
 
 test("delivery health distinguishes unavailable worker, pending, sent, and failures",()=>{
@@ -144,6 +145,8 @@ test("delivery health distinguishes unavailable worker, pending, sent, and failu
   assert.equal(email.deliveryHealth({workerAvailable:true,status:"queued"}).health,"pending");
   assert.equal(email.deliveryHealth({workerAvailable:true,status:"sent"}).health,"healthy");
   assert.equal(email.deliveryHealth({workerAvailable:true,status:"failed_terminal"}).health,"degraded");
+  assert.deepEqual(email.deliveryHealth({workerAvailable:true,status:"failed_terminal",attempts:0,
+    errorCode:"invalid_server_email_job",providerResult:null}),{state:"schema_invalid_never_attempted",health:"degraded"});
   assert.equal(email.deliveryHealth({workerAvailable:true,recipientAvailable:false,status:"queued"}).state,"recipient_unavailable");
 });
 
@@ -152,6 +155,14 @@ test("mock SMTP worker claims once, records acceptance, and never resends sent j
   const args={db,reference:ref,jobId:"landing-business_lead",FieldValue,createTransport:()=>({sendMail:async()=>{sends++;return{messageId:"provider-accepted"};}}),smtpPassword:"mock-only"};
   assert.equal((await email.processDeliveryJob(args)).status,"sent");assert.equal((await email.processDeliveryJob(args)).reason,"ineligible_state");assert.equal(sends,1);
   assert.equal(db.documents.get(ref.path).providerResult,"accepted");
+});
+
+test("mock SMTP worker accepts a reconciled retry_requested Landing Page job",async()=>{
+  const db=fakeDatabase();const ref=db.collection("outboundEmailJobs").doc("landing-customer_reconciled");
+  db.documents.set(ref.path,{...landingJob("landing_page_customer_confirmation"),status:"retry_requested"});let sends=0;
+  const result=await email.processDeliveryJob({db,reference:ref,jobId:"landing-customer_reconciled",FieldValue,
+    createTransport:()=>({sendMail:async()=>{sends++;return{messageId:"provider-accepted"};}}),smtpPassword:"mock-only"});
+  assert.equal(result.status,"sent");assert.equal(sends,1);assert.equal(db.documents.get(ref.path).providerResult,"accepted");
 });
 
 test("mock SMTP failures are bounded and classified",async()=>{

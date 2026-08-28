@@ -17,6 +17,7 @@ const LANDING_PAGE_TEMPLATES = new Set([
   "landing_page_business_inquiry",
   "landing_page_customer_confirmation",
 ]);
+const LANDING_PAGE_EMAIL_SCHEMA_VERSION = "LandingPageEmailJobV2";
 const MAX_DELIVERY_ATTEMPTS = 3;
 
 function cleanText(value, maximumLength = 320) {
@@ -345,6 +346,7 @@ function validateDeliveryJob(job) {
   const htmlAllowed = !html || job.trustedHtml === true;
   if (!validEmail(destination) || sender !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed || !htmlAllowed) return false;
   if (landingPageTemplate) {
+    if (job?.schemaVersion !== LANDING_PAGE_EMAIL_SCHEMA_VERSION) return false;
     if (job?.html || job?.trustedHtml || job?.cc || job?.bcc || job?.smtp || job?.headers) return false;
     try { landingPagePayload(job); } catch (_) { return false; }
     return true;
@@ -374,7 +376,8 @@ function classifyDeliveryError(error) {
     "failed_terminal" : "failed_retryable";
 }
 
-function deliveryHealth({workerAvailable, recipientAvailable = true, applicable = true, status}) {
+function deliveryHealth({workerAvailable, recipientAvailable = true, applicable = true, status,
+  attempts = 0, errorCode = null, providerResult = null}) {
   if (!applicable) return {state: "not_applicable", health: "healthy"};
   if (!recipientAvailable) return {state: "recipient_unavailable", health: "degraded"};
   if (!workerAvailable && ["queued", "retry_requested"].includes(status)) {
@@ -382,6 +385,9 @@ function deliveryHealth({workerAvailable, recipientAvailable = true, applicable 
   }
   if (["queued", "retry_requested", "sending"].includes(status)) return {state: status, health: "pending"};
   if (status === "sent") return {state: "sent", health: "healthy"};
+  if (status === "failed_terminal" && Number(attempts) === 0 && errorCode === "invalid_server_email_job" && !providerResult) {
+    return {state:"schema_invalid_never_attempted",health:"degraded"};
+  }
   return {state: status || "job_missing", health: "degraded"};
 }
 
@@ -416,7 +422,7 @@ async function processDeliveryJob({db, reference, jobId, FieldValue, createTrans
 }
 
 module.exports = {SUPPORT_EMAIL, SUPPORT_NAME, LOGO_URL, PROFILE_ROUTE, RESEND_COOLDOWN_MS,
-  LANDING_PAGE_TEMPLATES, MAX_DELIVERY_ATTEMPTS,
+  LANDING_PAGE_TEMPLATES, LANDING_PAGE_EMAIL_SCHEMA_VERSION, MAX_DELIVERY_ATTEMPTS,
   cleanText, escapeHtml, brandedVerificationUrl, welcomeTemplate, adminTemplate,
   verificationOnlyTemplate, historicalPendingScalerTemplate, validateSignupInput, createService, validateDeliveryJob,
   landingPagePayload, landingPageContent, deliveryContent, validEmail, claimQueuedJob, classifyDeliveryError,

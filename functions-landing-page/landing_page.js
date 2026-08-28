@@ -7,6 +7,7 @@ const STATUSES = new Set(["draft", "published", "paused", "archived"]);
 const STYLES = new Set(["clean", "bold", "friendly", "premium"]);
 const CTA_TYPES = new Set(["request_estimate", "get_quote", "call", "text", "book", "visit_website", "custom"]);
 const MAX_POINTS = 6;
+const EMAIL_JOB_SCHEMA_VERSION = "LandingPageEmailJobV2";
 const PUBLIC_ORIGINS = Object.freeze({"scaled-circle":"https://scaledcircle.com","scaledcircle-staging":"https://scaledcircle-staging.web.app","demo-scaledcircle":"http://127.0.0.1:5000"});
 
 function text(value, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
@@ -28,6 +29,33 @@ function slug(randomBytes = crypto.randomBytes) {
 }
 function digest(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 function publicOrigin(projectId) { const value=PUBLIC_ORIGINS[text(projectId,160)];if(!value)throw new Error("landing_page_environment_unknown");return value; }
+
+function normalizedFirebaseErrorCode(error) {
+  return text(error?.code || error?.errorInfo?.code || "auth/unknown", 80)
+    .toLowerCase().replace(/[^a-z0-9/_-]/g, "_");
+}
+
+function firebaseAuthFailureCategory(error) {
+  const code = normalizedFirebaseErrorCode(error);
+  if (code.includes("user-not-found")) return "user_not_found";
+  if (code.includes("permission") || code.includes("forbidden") || code.includes("unauthorized")) return "auth_permission_denied";
+  if (code.includes("unavailable") || code.includes("timeout") || code.includes("network") || code.includes("internal")) return "auth_unavailable";
+  return "auth_other_failure";
+}
+
+async function resolveBusinessRecipient(businessUid, getAuthUser) {
+  try {
+    const user = await getAuthUser(businessUid);
+    if (!user) return {status:"unresolved",category:"user_not_found",firebaseErrorCode:null,email:null};
+    const email = validEmail(user.email);
+    if (!email) return {status:"unresolved",category:"email_missing",firebaseErrorCode:null,email:null};
+    if (user.emailVerified !== true) return {status:"unresolved",category:"email_unverified",firebaseErrorCode:null,email:null};
+    return {status:"resolved",category:"resolved",firebaseErrorCode:null,email};
+  } catch (error) {
+    return {status:"unresolved",category:firebaseAuthFailureCategory(error),
+      firebaseErrorCode:normalizedFirebaseErrorCode(error),email:null};
+  }
+}
 
 function sanitizeDraft(input = {}) {
   const ctaType = text(input.ctaType, 40).toLowerCase() || "request_estimate";
@@ -66,7 +94,7 @@ function validateSubmission(input = {}, version) {
 }
 
 function outboundEmailJob({to, subject, textBody, template, eventType, metadata}) {
-  return {to: validEmail(to), fromAddress:"support@scaledcircle.com",
+  return {schemaVersion:EMAIL_JOB_SCHEMA_VERSION,to: validEmail(to), fromAddress:"support@scaledcircle.com",
     fromName:"Scaled Circle Support", replyTo:"support@scaledcircle.com",
     subject:headerText(subject,180), text:String(textBody||"").slice(0,12000),
     template:headerText(template,80), eventType:headerText(eventType,80), metadata,
@@ -131,8 +159,15 @@ function renderUnavailablePage() {
   return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Page unavailable | ScaledCircle</title><meta name=\"robots\" content=\"noindex,nofollow\"><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#07111f;color:#eef6ff;font:16px/1.6 system-ui,sans-serif}.card{width:min(560px,calc(100% - 40px));padding:36px;border:1px solid #24415f;border-radius:22px;background:#0d1c2e}h1{margin:0 0 12px;font-size:clamp(2rem,7vw,3.2rem);line-height:1.05}p{margin:0;color:#b8c9da}a{display:inline-block;margin-top:24px;color:#54e3b1;font-weight:800}</style></head><body><main class=\"card\"><p>ScaledCircle</p><h1>This page is unavailable.</h1><p>The link may be incorrect, or the Business may have paused or archived this page.</p><a href=\"/\">Visit ScaledCircle</a></main></body></html>";
 }
 
-function createLandingPageService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes, publicBaseUrl = "https://scaledcircle.com", getAuthUser = async () => null}) {
+function createLandingPageService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes,
+  publicBaseUrl = "https://scaledcircle.com", getAuthUser = async () => null,
+  reportRecipientResolution = async () => {}}) {
   const pages = db.collection("landingPages");
+  async function recipientFor(businessUid, context = {}) {
+    const outcome = await resolveBusinessRecipient(businessUid, getAuthUser);
+    try { await reportRecipientResolution(outcome, {...context,businessUid}); } catch (_) { /* health reporting must not break inquiry authority */ }
+    return outcome;
+  }
   async function createDraft(input, actor) {
     if (!actor?.uid || actor.role !== "business") throw new Error("landing_page_business_required");
     const ref = pages.doc(); const publicSlug = slug(randomBytes); const content = input.content ? sanitizeDraft(input.content) : defaultDraft(input);
@@ -154,8 +189,8 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
   async function submit(input, requestMeta={}) {
     const {page,version}=await resolve(input.slug);
     if(text(input.version,160)!==version.id)throw new Error("landing_page_version_stale");
-    const contact=validateSubmission(input,version);let authUser=null;
-    try{authUser=await getAuthUser(page.businessUid);}catch(_){authUser=null;}
+    const contact=validateSubmission(input,version);
+    const recipientOutcome=await recipientFor(page.businessUid,{operation:"submission",landingPageId:page.id});
     const day=Math.floor(now()/86400000);const key=text(input.idempotencyKey,160)||digest({p:page.id,v:version.id,c:contact,day});
     const receiptId=digest(`${page.id}:${key}`);const receiptRef=db.collection("landingPageSubmissionReceipts").doc(receiptId);
     const networkHash=digest(`${page.id}:${day}:${text(requestMeta.ip,120)||"unknown"}`);const rateRef=db.collection("landingPageSubmissionRates").doc(networkHash);
@@ -168,7 +203,7 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
       const [rate,businessSnap]=await Promise.all([tx.get(rateRef),tx.get(db.collection("users").doc(page.businessUid))]);
       const count=Number(rate.data()?.count||0);if(count>=20)throw new Error("landing_page_rate_limited");
       if(!businessSnap.exists||String(businessSnap.data()?.role||"").toLowerCase()!=="business")throw new Error("landing_page_business_missing");
-      const profile=businessSnap.data();const businessEmail=authUser?.emailVerified===true?validEmail(authUser.email):"";
+      const profile=businessSnap.data();const businessEmail=recipientOutcome.email||"";
       const businessName=text(profile.businessName||profile.companyName||profile.displayName,120)||"the Business";
       const pageName=text(version.content?.headline,160)||"Landing Page";const at=FieldValue.serverTimestamp();
       const attribution={source:"landing_page",sourceDetail:page.publicSlug,landingPageId:page.id,landingPageVersionId:version.id,campaignId:page.campaignId||null,responseAssetId:page.responseAssetId||null};
@@ -196,8 +231,8 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
     const pageId=text(lead.attribution?.landingPageId,160);const versionId=text(lead.attribution?.landingPageVersionId,160);
     const pageRef=pages.doc(pageId);const [pageSnap,versionSnap]=await Promise.all([pageRef.get(),pageRef.collection("versions").doc(versionId).get()]);
     if(!pageSnap.exists||!versionSnap.exists||pageSnap.data()?.businessUid!==lead.ownerUid)throw new Error("landing_page_inquiry_authority_invalid");
-    let authUser=null;try{authUser=await getAuthUser(lead.ownerUid);}catch(_){authUser=null;}
-    const recipient=authUser?.emailVerified===true?validEmail(authUser.email):"";
+    const recipientOutcome=await recipientFor(lead.ownerUid,{operation:"reconciliation",leadId});
+    const recipient=recipientOutcome.email||"";
     const businessProfile=await db.collection("users").doc(lead.ownerUid).get();
     if(!businessProfile.exists||String(businessProfile.data()?.role||"").toLowerCase()!=="business")throw new Error("landing_page_business_missing");
     const businessName=text(businessProfile.data()?.businessName||businessProfile.data()?.companyName||businessProfile.data()?.displayName,120)||"the Business";
@@ -207,17 +242,40 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
     const payload=landingPageEmailPayload({businessName,contact,pageName,inquiryUrl:`${publicBaseUrl}/#/business/landing-pages`});
     const businessRef=db.collection("outboundEmailJobs").doc(`landing-business_${leadId}`);
     const customerRef=db.collection("outboundEmailJobs").doc(`landing-customer_${leadId}`);
-    const result={businessEmail:recipient?"unchanged":"recipient_unavailable",customerEmail:contact.email?"unchanged":"not_applicable"};
+    const result={lead:"existing",businessRecipient:recipientOutcome.category,
+      businessEmailJob:recipient?"unchanged":"recipient_unavailable",
+      customerEmailJob:contact.email?"unchanged":"not_applicable"};
     await db.runTransaction(async(tx)=>{
       const [businessJob,customerJob]=await Promise.all([tx.get(businessRef),tx.get(customerRef)]);const at=FieldValue.serverTimestamp();
-      if(recipient&&!businessJob.exists){const job=businessInquiryEmail({businessName,contact,pageName,metadata:{...metadata,recipient}});tx.create(businessRef,{...job,payload,createdAt:at,updatedAt:at});result.businessEmail="created";}
-      else if(recipient&&["queued","failed_retryable"].includes(businessJob.data()?.status)){tx.set(businessRef,{status:"retry_requested",retryRequestedAt:at,updatedAt:at},{merge:true});result.businessEmail="retry_requested";}
-      if(contact.email&&!customerJob.exists){const job=customerConfirmationEmail({businessName,contact,metadata});tx.create(customerRef,{...job,payload,createdAt:at,updatedAt:at});result.customerEmail="created";}
-      else if(contact.email&&["queued","failed_retryable"].includes(customerJob.data()?.status)){tx.set(customerRef,{status:"retry_requested",retryRequestedAt:at,updatedAt:at},{merge:true});result.customerEmail="retry_requested";}
+      if(recipient&&!businessJob.exists){const job=businessInquiryEmail({businessName,contact,pageName,metadata:{...metadata,recipient}});tx.create(businessRef,{...job,payload,createdAt:at,updatedAt:at});result.businessEmailJob="created";}
+      else if(recipient&&businessJob.exists&&businessJob.data()?.status==="failed_retryable"){
+        tx.set(businessRef,{status:"retry_requested",retryRequestedAt:at,updatedAt:at},{merge:true});result.businessEmailJob="retry_requested";
+      }
+      if(contact.email&&!customerJob.exists){const job=customerConfirmationEmail({businessName,contact,metadata});tx.create(customerRef,{...job,payload,createdAt:at,updatedAt:at});result.customerEmailJob="created";}
+      else if(contact.email&&customerJob.exists){
+        const existing=customerJob.data()||{};
+        const legacyPreSendFailure=existing.template==="landing_page_customer_confirmation"&&
+          existing.status==="failed_terminal"&&Number(existing.attempts||0)===0&&
+          existing.errorCode==="invalid_server_email_job"&&!existing.sentAt&&!existing.providerResult&&!existing.messageId&&
+          existing.schemaVersion!==EMAIL_JOB_SCHEMA_VERSION;
+        if(legacyPreSendFailure){
+          const job=customerConfirmationEmail({businessName,contact,metadata});
+          tx.set(customerRef,{...job,payload,status:"retry_requested",createdAt:existing.createdAt||at,
+            reconciledAt:at,retryRequestedAt:at,updatedAt:at,
+            reconciliation:{kind:"legacy_landing_page_schema_upgrade",previousErrorCode:existing.errorCode,
+              previousSchemaVersion:text(existing.schemaVersion,80)||"legacy_unversioned"}});
+          result.customerEmailJob="reconciled_retry_requested";
+        } else if(existing.status==="failed_retryable"){
+          tx.set(customerRef,{status:"retry_requested",retryRequestedAt:at,updatedAt:at},{merge:true});result.customerEmailJob="retry_requested";
+        }
+      }
     });
-    return {leadId,...result};
+    return result;
   }
   return {createDraft,saveDraft,transition,resolve,submit,reconcileInquiry};
 }
 
-module.exports={SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,PUBLIC_SLUG_ALPHABET,text,headerText,validEmail,escapeHtml,slug,digest,publicOrigin,sanitizeDraft,defaultDraft,validateSubmission,outboundEmailJob,businessInquiryEmail,customerConfirmationEmail,landingPageEmailPayload,renderPage,renderSuccessPage,renderUnavailablePage,createLandingPageService};
+module.exports={SCHEMA_VERSION,EMAIL_JOB_SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,PUBLIC_SLUG_ALPHABET,
+  text,headerText,validEmail,escapeHtml,slug,digest,publicOrigin,normalizedFirebaseErrorCode,firebaseAuthFailureCategory,
+  resolveBusinessRecipient,sanitizeDraft,defaultDraft,validateSubmission,outboundEmailJob,businessInquiryEmail,
+  customerConfirmationEmail,landingPageEmailPayload,renderPage,renderSuccessPage,renderUnavailablePage,createLandingPageService};

@@ -10819,6 +10819,7 @@ setGlobalOptions({
 const landingPage = require("./landing_page");
 const landingPageService = landingPage.createLandingPageService({ db, FieldValue,
   getAuthUser: (uid) => admin.auth().getUser(uid),
+  reportRecipientResolution: recordLandingPageRecipientResolutionSafe,
   publicBaseUrl: landingPage.publicOrigin(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
   process.env.GOOGLE_CLOUD_PROJECT || "demo-scaledcircle") });
 
@@ -10856,6 +10857,36 @@ async function recordLandingPageHealthSafe(event, success) {
     logger.warn("landing_page_health_record_failed", {
       event,
       error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+async function recordLandingPageRecipientResolutionSafe(outcome, context = {}) {
+  const category = String(outcome?.category || "auth_other_failure").slice(0, 80);
+  if (category !== "resolved") {
+    logger.warn("landing_page_business_recipient_resolution_failed", {
+      category,
+      firebaseErrorCode: outcome?.firebaseErrorCode || null,
+      businessUidFingerprint: landingPage.digest(String(context.businessUid || "unavailable")).slice(0, 16),
+      leadIdFingerprint: context.leadId ? landingPage.digest(String(context.leadId)).slice(0, 16) : null,
+      operation: String(context.operation || "unknown").slice(0, 40)
+    });
+  }
+  try {
+    await db.collection("featureHealth").doc("landing_page_email_delivery").set({
+      schemaVersion: landingPage.EMAIL_JOB_SCHEMA_VERSION,
+      feature: "landing_page_email_delivery",
+      component: "business_recipient",
+      status: category === "resolved" ? "enabled" : "attention",
+      recipientAuthority: category === "resolved" ? "healthy" : "degraded",
+      lastRecipientResolutionCategory: category,
+      lastFirebaseErrorCode: outcome?.firebaseErrorCode || null,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    logger.warn("landing_page_recipient_health_record_failed", {
+      category,
+      errorCategory: String(error?.code || "health_write_failed").slice(0, 80)
     });
   }
 }
@@ -10912,7 +10943,7 @@ exports.reconcileLandingPageInquiryDelivery = onCall(
     const actor = await requireLandingPageActor(request);
     if (actor.role !== "admin") throw new HttpsError("permission-denied", "Admin authority is required.");
     try {return await landingPageService.reconcileInquiry(request.data || {}, actor);}
-    catch (error) {logger.warn("landing_page_delivery_reconciliation_failed", { actorUid: actor.uid,
+    catch (error) {logger.warn("landing_page_delivery_reconciliation_failed", { actorUidFingerprint: landingPage.digest(actor.uid).slice(0, 16),
         code: String(error?.message || "reconciliation_failed").slice(0, 80) });throw landingPageError(error);}
   }
 );
