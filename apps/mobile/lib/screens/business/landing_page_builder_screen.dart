@@ -34,6 +34,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   String? _slug;
   String? _message;
   int _inquiryCount = 0;
+  bool _isPublished = false;
   bool _hasUnpublishedChanges = false;
   List<Map<String, dynamic>> _recentInquiries = const [];
   String _receivedAt(dynamic value) {
@@ -123,7 +124,8 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _cta = c['ctaType'] ?? 'request_estimate';
       _tracking = p['trackingMode'] == 'first_party';
       _slug = p['publicSlug']?.toString();
-      _hasUnpublishedChanges = p['status'] == 'published' &&
+      _isPublished = p['status'] == 'published';
+      _hasUnpublishedChanges = _isPublished &&
           p['draftVersionId'] != p['publishedVersionId'];
       final inquiry = Map<String, dynamic>.from(
         r['inquirySummary'] as Map? ?? const {},
@@ -149,7 +151,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       } else {
         await _service.save(_pageId!, _content, tracking: _tracking);
       }
-      _hasUnpublishedChanges = _slug != null;
+      _hasUnpublishedChanges = _isPublished;
       setState(() => _message = 'Draft saved. You can return to it later.');
     } catch (_) {
       setState(
@@ -168,6 +170,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     try {
       final r = await _service.transition(_pageId!, 'publish');
       _slug = r['publicSlug'];
+      _isPublished = true;
       _hasUnpublishedChanges = false;
       setState(() => _message = 'Published. Your page is ready to share.');
     } catch (_) {
@@ -205,6 +208,18 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                 const Text('No design experience, logo, or photos required.'),
                 if (_pageId != null) ...[
                   const SizedBox(height: 12),
+                  if (_isPublished)
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.public),
+                        title: const Text('Published'),
+                        subtitle: Text(
+                          _hasUnpublishedChanges
+                              ? 'Your current public page remains live while you prepare changes.'
+                              : 'Your current page is live at the public link below.',
+                        ),
+                      ),
+                    ),
                   if (_hasUnpublishedChanges)
                     const Card(
                       child: ListTile(

@@ -58,8 +58,10 @@ void main() {
   });
 
   test('inquiry follow-up and unpublished-version state are explicit', () {
+    expect(source, contains("title: const Text('Published')"));
     expect(source, contains("'Unpublished changes'"));
     expect(source, contains('previous published version'));
+    expect(source, contains('current public page remains live'));
     expect(source, contains("item['contactEmail']"));
     expect(source, contains("item['contactPhone']"));
     expect(source, contains("item['status']"));
