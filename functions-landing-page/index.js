@@ -10814,41 +10814,6 @@ setGlobalOptions({
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // Landing Page + Form V1 is isolated from the retired campaignTrackingCodes
 // authority. Public page and form identities are always derived server-side.
 const landingPage = require("./landing_page");
@@ -10940,6 +10905,17 @@ exports.transitionLandingPage = onCall({ region: "us-east1", enforceAppCheck: fa
     await recordLandingPageHealth("publish", true);return result;
   } catch (error) {await recordLandingPageHealth("publish", false);throw landingPageError(error);}
 });
+
+exports.reconcileLandingPageInquiryDelivery = onCall(
+  { region: "us-east1", enforceAppCheck: false, maxInstances: 2 },
+  async (request) => {
+    const actor = await requireLandingPageActor(request);
+    if (actor.role !== "admin") throw new HttpsError("permission-denied", "Admin authority is required.");
+    try {return await landingPageService.reconcileInquiry(request.data || {}, actor);}
+    catch (error) {logger.warn("landing_page_delivery_reconciliation_failed", { actorUid: actor.uid,
+        code: String(error?.message || "reconciliation_failed").slice(0, 80) });throw landingPageError(error);}
+  }
+);
 
 exports.renderLandingPage = onRequest({ region: "us-east1", cors: false, maxInstances: 20 }, async (request, response) => {
   const slug = request.path.split("/").filter(Boolean).at(-1);

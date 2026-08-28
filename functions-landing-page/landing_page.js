@@ -10,6 +10,8 @@ const MAX_POINTS = 6;
 const PUBLIC_ORIGINS = Object.freeze({"scaled-circle":"https://scaledcircle.com","scaledcircle-staging":"https://scaledcircle-staging.web.app","demo-scaledcircle":"http://127.0.0.1:5000"});
 
 function text(value, max = 500) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
+function headerText(value, max = 500) { return text(value, max).replace(/[\r\n]+/g, " "); }
+function validEmail(value) { const email=headerText(value,254).toLowerCase();return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email:""; }
 function escapeHtml(value) { return text(value, 5000).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 // 144 bits of entropy encoded with a human-safe alphabet. Ambiguous glyphs
 // (0/O and 1/I/L) are intentionally absent because Businesses copy these URLs
@@ -64,11 +66,40 @@ function validateSubmission(input = {}, version) {
 }
 
 function outboundEmailJob({to, subject, textBody, template, eventType, metadata}) {
-  return {to: text(to, 254).toLowerCase(), fromAddress:"support@scaledcircle.com",
+  return {to: validEmail(to), fromAddress:"support@scaledcircle.com",
     fromName:"Scaled Circle Support", replyTo:"support@scaledcircle.com",
-    subject:text(subject,180), text:String(textBody||"").slice(0,12000),
-    template:text(template,80), eventType:text(eventType,80), metadata,
-    status:"queued", attempts:0};
+    subject:headerText(subject,180), text:String(textBody||"").slice(0,12000),
+    template:headerText(template,80), eventType:headerText(eventType,80), metadata,
+    idempotencyKey:headerText(metadata?.idempotencyKey,180),
+    status:"queued", attempts:0, lastErrorClass:null, providerResult:null};
+}
+
+function businessInquiryEmail({businessName,contact,pageName,metadata}) {
+  const safeName=headerText(contact.name,160)||"A customer";
+  return outboundEmailJob({to:metadata.recipient,subject:`New landing page inquiry from ${safeName}`,
+    template:"landing_page_business_inquiry",eventType:"landing_page.inquiry.business",metadata,
+    textBody:[`A new inquiry was submitted to ${headerText(businessName,120)||"your Business"}.`,
+      `Landing Page: ${headerText(pageName,120)||"Landing Page"}`,`Name: ${text(contact.name,160)||"Not provided"}`,
+      `Email: ${validEmail(contact.email)||"Not provided"}`,`Phone: ${text(contact.phone,160)||"Not provided"}`,
+      `Request: ${text(contact.message,1000)||"No message provided"}`,"",
+      "Open Landing Pages in ScaledCircle to review and follow up:",
+      "https://scaledcircle.com/#/business/landing-pages"].join("\n")});
+}
+
+function customerConfirmationEmail({businessName,contact,metadata}) {
+  return outboundEmailJob({to:contact.email,subject:`We sent your request to ${headerText(businessName,120)||"the Business"}`,
+    template:"landing_page_customer_confirmation",eventType:"landing_page.inquiry.confirmation",metadata,
+    textBody:[`Hi ${text(contact.name,160)},`,"",`Your request was sent to ${text(businessName,120)||"the Business"}.`,
+      text(contact.message,1000)?`Request: ${text(contact.message,1000)}`:"",
+      "They can follow up using the contact details you provided.","",
+      "This confirmation is about your request and is not a marketing subscription.","","Powered by ScaledCircle"].filter(Boolean).join("\n")});
+}
+
+function landingPageEmailPayload({businessName,contact,pageName,inquiryUrl}) {
+  return {businessName:headerText(businessName,120),customerName:headerText(contact.name,160),
+    customerEmail:validEmail(contact.email)||null,customerPhone:text(contact.phone,80)||null,
+    inquirySummary:text(contact.message,1000)||null,landingPageTitle:headerText(pageName,160),
+    ...(inquiryUrl?{inquiryUrl}: {})};
 }
 
 function renderSuccessPage({style="clean"}={}) {
@@ -120,9 +151,73 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
     await db.runTransaction(async(tx)=>{const snap=await tx.get(pageRef);if(!snap.exists||snap.data().businessUid!==actor?.uid)throw new Error("landing_page_forbidden");const p=snap.data();if(action==="publish"){const v=await tx.get(pageRef.collection("versions").doc(p.draftVersionId));if(!v.exists)throw new Error("landing_page_version_missing");const patch={status:"published",publishedVersionId:p.draftVersionId,publishedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};let responseAssetId=p.responseAssetId||null;let trackedUrl=null;const attribution={source:"landing_page",sourceDetail:p.publicSlug,campaignId:p.campaignId||null,landingPageId:pageRef.id,landingPageVersionId:p.draftVersionId,responseAssetId};if(p.trackingMode==="first_party"&&!responseAssetId){const assetRef=db.collection("responseAssets").doc();responseAssetId=assetRef.id;attribution.responseAssetId=responseAssetId;const publicCode=randomBytes(18).toString("base64url");tx.create(assetRef,{schemaVersion:"AttributionFoundationV1",businessUid:p.businessUid,type:"landing_page",publicCode,status:"active",label:v.data().content.headline,destination:`${publicBaseUrl}/p/${p.publicSlug}`,attribution,createdBy:actor.uid,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});patch.responseAssetId=responseAssetId;trackedUrl=`${publicBaseUrl}/r?code=${publicCode}`;}else if(p.trackingMode==="first_party"&&responseAssetId){attribution.responseAssetId=responseAssetId;tx.update(db.collection("responseAssets").doc(responseAssetId),{attribution,label:v.data().content.headline,updatedAt:FieldValue.serverTimestamp()});}tx.update(pageRef,patch);result={status:"published",publicSlug:p.publicSlug,versionId:p.draftVersionId,responseAssetId,trackedUrl};}else if(["pause","archive"].includes(action)){tx.update(pageRef,{status:action==="pause"?"paused":"archived",updatedAt:FieldValue.serverTimestamp()});result={status:action==="pause"?"paused":"archived"};}else throw new Error("invalid_landing_page_transition");});return result;
   }
   async function resolve(publicSlug) { const snap=await pages.where("publicSlug","==",text(publicSlug,80)).limit(2).get();if(snap.docs.length!==1||snap.docs[0].data().status!=="published")throw new Error("landing_page_unavailable");const page={id:snap.docs[0].id,...snap.docs[0].data()};const v=await snap.docs[0].ref.collection("versions").doc(page.publishedVersionId).get();if(!v.exists)throw new Error("landing_page_unavailable");return {page,version:{id:v.id,...v.data()}}; }
-  async function submit(input, requestMeta={}) { const {page,version}=await resolve(input.slug);if(text(input.version,160)!==version.id)throw new Error("landing_page_version_stale");const contact=validateSubmission(input,version);let authUser=null;try{authUser=await getAuthUser(page.businessUid);}catch(_){authUser=null;}const day=Math.floor(now()/86400000);const key=text(input.idempotencyKey,160)||digest({p:page.id,v:version.id,c:contact,day});const receiptId=digest(`${page.id}:${key}`);const receiptRef=db.collection("landingPageSubmissionReceipts").doc(receiptId);const networkHash=digest(`${page.id}:${day}:${text(requestMeta.ip,120)||"unknown"}`);const rateRef=db.collection("landingPageSubmissionRates").doc(networkHash);const leadRef=db.collection("salesLeads").doc(`landing_${receiptId.slice(0,40)}`);const activityRef=db.collection("salesActivities").doc(`landing_created_${receiptId.slice(0,40)}`);const conversionRef=db.collection("attributionConversions").doc(`lead_${leadRef.id}`);const notificationRef=db.collection("notifications").doc(`landing-inquiry_${leadRef.id}`);const businessEmailRef=db.collection("outboundEmailJobs").doc(`landing-business_${leadRef.id}`);const customerEmailRef=db.collection("outboundEmailJobs").doc(`landing-customer_${leadRef.id}`);let created=false;let leadId;
-    await db.runTransaction(async(tx)=>{const existing=await tx.get(receiptRef);if(existing.exists){leadId=existing.data().leadId;return;}const [rate,businessSnap]=await Promise.all([tx.get(rateRef),tx.get(db.collection("users").doc(page.businessUid))]);const count=Number(rate.data()?.count||0);if(count>=20)throw new Error("landing_page_rate_limited");if(!businessSnap.exists||String(businessSnap.data()?.role||"").toLowerCase()!=="business")throw new Error("landing_page_business_missing");const profile=businessSnap.data();const businessEmail=authUser?.emailVerified===true?text(authUser.email,254).toLowerCase():"";const businessName=text(profile.businessName||profile.companyName||profile.displayName,120)||"the Business";const at=FieldValue.serverTimestamp();const attribution={source:"landing_page",sourceDetail:page.publicSlug,landingPageId:page.id,landingPageVersionId:version.id,campaignId:page.campaignId||null,responseAssetId:page.responseAssetId||null};const metadata={leadId:leadRef.id,landingPageId:page.id,landingPageVersionId:version.id};tx.set(rateRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,day,count:count+1,updatedAt:at},{merge:true});tx.create(leadRef,{schemaVersion:"SalesFunnelV1",leadType:"landing_page_inquiry",businessName:"Landing page inquiry",contactName:contact.name,contactEmail:contact.email?.toLowerCase()||null,contactPhone:contact.phone||null,requestSummary:contact.message||null,source:"landing_page",sourceDetail:page.publicSlug,attribution,firstAttribution:attribution,lastAttribution:attribution,stage:"prospect",priority:"normal",ownerUid:page.businessUid,suppressionStatus:null,createdBy:"public_landing_page",createdAt:at,updatedAt:at});tx.create(activityRef,{schemaVersion:"SalesFunnelV1",leadId:leadRef.id,type:"lead_created",actorUid:"public_landing_page",attribution,occurredAt:at});if(page.trackingMode==="first_party")tx.create(conversionRef,{schemaVersion:"AttributionFoundationV1",milestone:"lead",businessUid:page.businessUid,leadId:leadRef.id,responseAssetId:page.responseAssetId||null,attribution,analyticsClass:"live",occurredAt:at,immutable:true});tx.create(notificationRef,{schemaVersion:2,id:notificationRef.id,userId:page.businessUid,type:"landing_page_inquiry",title:"New landing page inquiry",message:`${contact.name} sent a request from your landing page.`,entityId:leadRef.id,deepLink:{destination:"landing_page",pageId:page.id},priority:"high",metadata:{landingPageId:page.id},read:false,channel:"in_app",emailRequested:true,pushRequested:false,createdAt:at,updatedAt:at});if(businessEmail){tx.create(businessEmailRef,{...outboundEmailJob({to:businessEmail,subject:`New landing page inquiry from ${contact.name}`,template:"landing_page_business_inquiry",eventType:"landing_page.inquiry.business",metadata,textBody:[`A new inquiry was submitted to ${businessName}.`,`Name: ${contact.name}`,`Email: ${contact.email||"Not provided"}`,`Phone: ${contact.phone||"Not provided"}`,`Request: ${contact.message||"No message provided"}`,"","Open Landing Pages in ScaledCircle to review and follow up."].join("\n")}),createdAt:at,updatedAt:at});}if(contact.email){tx.create(customerEmailRef,{...outboundEmailJob({to:contact.email,subject:`We sent your request to ${businessName}`,template:"landing_page_customer_confirmation",eventType:"landing_page.inquiry.confirmation",metadata:{landingPageId:page.id},textBody:[`Hi ${contact.name},`,"",`Your request was sent to ${businessName}.`,"They can follow up using the contact details you provided.","", "This confirmation is about your request and is not a marketing subscription.","","Powered by ScaledCircle"].join("\n")}),createdAt:at,updatedAt:at});}tx.create(receiptRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,versionId:version.id,leadId:leadRef.id,delivery:{businessNotification:"queued",businessEmail:businessEmail?"queued":"unavailable",customerEmail:contact.email?"queued":"not_requested"},createdAt:at});leadId=leadRef.id;created=true;});return {leadId,created,slug:page.publicSlug,style:version.content.style}; }
-  return {createDraft,saveDraft,transition,resolve,submit};
+  async function submit(input, requestMeta={}) {
+    const {page,version}=await resolve(input.slug);
+    if(text(input.version,160)!==version.id)throw new Error("landing_page_version_stale");
+    const contact=validateSubmission(input,version);let authUser=null;
+    try{authUser=await getAuthUser(page.businessUid);}catch(_){authUser=null;}
+    const day=Math.floor(now()/86400000);const key=text(input.idempotencyKey,160)||digest({p:page.id,v:version.id,c:contact,day});
+    const receiptId=digest(`${page.id}:${key}`);const receiptRef=db.collection("landingPageSubmissionReceipts").doc(receiptId);
+    const networkHash=digest(`${page.id}:${day}:${text(requestMeta.ip,120)||"unknown"}`);const rateRef=db.collection("landingPageSubmissionRates").doc(networkHash);
+    const leadRef=db.collection("salesLeads").doc(`landing_${receiptId.slice(0,40)}`);const activityRef=db.collection("salesActivities").doc(`landing_created_${receiptId.slice(0,40)}`);
+    const conversionRef=db.collection("attributionConversions").doc(`lead_${leadRef.id}`);const notificationRef=db.collection("notifications").doc(`landing-inquiry_${leadRef.id}`);
+    const businessEmailRef=db.collection("outboundEmailJobs").doc(`landing-business_${leadRef.id}`);const customerEmailRef=db.collection("outboundEmailJobs").doc(`landing-customer_${leadRef.id}`);
+    let created=false;let leadId;
+    await db.runTransaction(async(tx)=>{
+      const existing=await tx.get(receiptRef);if(existing.exists){leadId=existing.data().leadId;return;}
+      const [rate,businessSnap]=await Promise.all([tx.get(rateRef),tx.get(db.collection("users").doc(page.businessUid))]);
+      const count=Number(rate.data()?.count||0);if(count>=20)throw new Error("landing_page_rate_limited");
+      if(!businessSnap.exists||String(businessSnap.data()?.role||"").toLowerCase()!=="business")throw new Error("landing_page_business_missing");
+      const profile=businessSnap.data();const businessEmail=authUser?.emailVerified===true?validEmail(authUser.email):"";
+      const businessName=text(profile.businessName||profile.companyName||profile.displayName,120)||"the Business";
+      const pageName=text(version.content?.headline,160)||"Landing Page";const at=FieldValue.serverTimestamp();
+      const attribution={source:"landing_page",sourceDetail:page.publicSlug,landingPageId:page.id,landingPageVersionId:version.id,campaignId:page.campaignId||null,responseAssetId:page.responseAssetId||null};
+      const metadata={leadId:leadRef.id,landingPageId:page.id,landingPageVersionId:version.id,idempotencyKey:receiptId};
+      const payload=landingPageEmailPayload({businessName,contact,pageName,inquiryUrl:`${publicBaseUrl}/#/business/landing-pages`});
+      tx.set(rateRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,day,count:count+1,updatedAt:at},{merge:true});
+      tx.create(leadRef,{schemaVersion:"SalesFunnelV1",leadType:"landing_page_inquiry",businessName:"Landing page inquiry",contactName:contact.name,contactEmail:contact.email?.toLowerCase()||null,contactPhone:contact.phone||null,requestSummary:contact.message||null,source:"landing_page",sourceDetail:page.publicSlug,attribution,firstAttribution:attribution,lastAttribution:attribution,stage:"prospect",priority:"normal",ownerUid:page.businessUid,suppressionStatus:null,createdBy:"public_landing_page",createdAt:at,updatedAt:at});
+      tx.create(activityRef,{schemaVersion:"SalesFunnelV1",leadId:leadRef.id,type:"lead_created",actorUid:"public_landing_page",attribution,occurredAt:at});
+      if(page.trackingMode==="first_party")tx.create(conversionRef,{schemaVersion:"AttributionFoundationV1",milestone:"lead",businessUid:page.businessUid,leadId:leadRef.id,responseAssetId:page.responseAssetId||null,attribution,analyticsClass:"live",occurredAt:at,immutable:true});
+      tx.create(notificationRef,{schemaVersion:2,id:notificationRef.id,userId:page.businessUid,type:"landing_page_inquiry",title:"New landing page inquiry",message:`${contact.name} sent a request from your landing page.`,entityId:leadRef.id,deepLink:{destination:"landing_page",pageId:page.id},priority:"high",metadata:{landingPageId:page.id},read:false,channel:"in_app",emailRequested:true,pushRequested:false,createdAt:at,updatedAt:at});
+      if(businessEmail){const job=businessInquiryEmail({businessName,contact,pageName,metadata:{...metadata,recipient:businessEmail}});tx.create(businessEmailRef,{...job,payload,createdAt:at,updatedAt:at});}
+      if(contact.email){const job=customerConfirmationEmail({businessName,contact,metadata});tx.create(customerEmailRef,{...job,payload,createdAt:at,updatedAt:at});}
+      tx.create(receiptRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,versionId:version.id,leadId:leadRef.id,delivery:{businessNotification:"queued",businessEmail:businessEmail?"queued":"recipient_unavailable",customerEmail:contact.email?"queued":"not_applicable"},createdAt:at,updatedAt:at});
+      leadId=leadRef.id;created=true;
+    });
+    return {leadId,created,slug:page.publicSlug,style:version.content.style};
+  }
+  async function reconcileInquiry(input, actor) {
+    if (!actor?.uid || actor.role !== "admin") throw new Error("landing_page_admin_required");
+    const leadId=text(input.leadId,160);
+    if (!/^landing_[a-f0-9]{40}$/.test(leadId)) throw new Error("landing_page_inquiry_invalid");
+    const leadRef=db.collection("salesLeads").doc(leadId);const leadSnap=await leadRef.get();
+    const lead=leadSnap.data()||{};
+    if(!leadSnap.exists||lead.leadType!=="landing_page_inquiry"||lead.createdBy!=="public_landing_page")throw new Error("landing_page_inquiry_missing");
+    const pageId=text(lead.attribution?.landingPageId,160);const versionId=text(lead.attribution?.landingPageVersionId,160);
+    const pageRef=pages.doc(pageId);const [pageSnap,versionSnap]=await Promise.all([pageRef.get(),pageRef.collection("versions").doc(versionId).get()]);
+    if(!pageSnap.exists||!versionSnap.exists||pageSnap.data()?.businessUid!==lead.ownerUid)throw new Error("landing_page_inquiry_authority_invalid");
+    let authUser=null;try{authUser=await getAuthUser(lead.ownerUid);}catch(_){authUser=null;}
+    const recipient=authUser?.emailVerified===true?validEmail(authUser.email):"";
+    const businessProfile=await db.collection("users").doc(lead.ownerUid).get();
+    if(!businessProfile.exists||String(businessProfile.data()?.role||"").toLowerCase()!=="business")throw new Error("landing_page_business_missing");
+    const businessName=text(businessProfile.data()?.businessName||businessProfile.data()?.companyName||businessProfile.data()?.displayName,120)||"the Business";
+    const contact={name:text(lead.contactName,160),email:validEmail(lead.contactEmail),phone:text(lead.contactPhone,80),message:text(lead.requestSummary,1000)};
+    const pageName=text(versionSnap.data()?.content?.headline,160)||"Landing Page";
+    const metadata={leadId,pageId,landingPageVersionId:versionId,idempotencyKey:`reconcile:${leadId}`};
+    const payload=landingPageEmailPayload({businessName,contact,pageName,inquiryUrl:`${publicBaseUrl}/#/business/landing-pages`});
+    const businessRef=db.collection("outboundEmailJobs").doc(`landing-business_${leadId}`);
+    const customerRef=db.collection("outboundEmailJobs").doc(`landing-customer_${leadId}`);
+    const result={businessEmail:recipient?"unchanged":"recipient_unavailable",customerEmail:contact.email?"unchanged":"not_applicable"};
+    await db.runTransaction(async(tx)=>{
+      const [businessJob,customerJob]=await Promise.all([tx.get(businessRef),tx.get(customerRef)]);const at=FieldValue.serverTimestamp();
+      if(recipient&&!businessJob.exists){const job=businessInquiryEmail({businessName,contact,pageName,metadata:{...metadata,recipient}});tx.create(businessRef,{...job,payload,createdAt:at,updatedAt:at});result.businessEmail="created";}
+      else if(recipient&&["queued","failed_retryable"].includes(businessJob.data()?.status)){tx.set(businessRef,{status:"retry_requested",retryRequestedAt:at,updatedAt:at},{merge:true});result.businessEmail="retry_requested";}
+      if(contact.email&&!customerJob.exists){const job=customerConfirmationEmail({businessName,contact,metadata});tx.create(customerRef,{...job,payload,createdAt:at,updatedAt:at});result.customerEmail="created";}
+      else if(contact.email&&["queued","failed_retryable"].includes(customerJob.data()?.status)){tx.set(customerRef,{status:"retry_requested",retryRequestedAt:at,updatedAt:at},{merge:true});result.customerEmail="retry_requested";}
+    });
+    return {leadId,...result};
+  }
+  return {createDraft,saveDraft,transition,resolve,submit,reconcileInquiry};
 }
 
-module.exports={SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,PUBLIC_SLUG_ALPHABET,text,escapeHtml,slug,digest,publicOrigin,sanitizeDraft,defaultDraft,validateSubmission,outboundEmailJob,renderPage,renderSuccessPage,renderUnavailablePage,createLandingPageService};
+module.exports={SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,PUBLIC_SLUG_ALPHABET,text,headerText,validEmail,escapeHtml,slug,digest,publicOrigin,sanitizeDraft,defaultDraft,validateSubmission,outboundEmailJob,businessInquiryEmail,customerConfirmationEmail,landingPageEmailPayload,renderPage,renderSuccessPage,renderUnavailablePage,createLandingPageService};

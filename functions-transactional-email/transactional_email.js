@@ -13,6 +13,11 @@ const DISCOVERY_SOURCES = new Set([
   "personal_referral", "search_engine", "social_media", "online_ad",
   "event_or_group", "other",
 ]);
+const LANDING_PAGE_TEMPLATES = new Set([
+  "landing_page_business_inquiry",
+  "landing_page_customer_confirmation",
+]);
+const MAX_DELIVERY_ATTEMPTS = 3;
 
 function cleanText(value, maximumLength = 320) {
   if (typeof value !== "string") return "";
@@ -58,7 +63,7 @@ function button(label, url, color = "#1769e0") {
     `font:700 15px Arial,sans-serif">${safeLabel}</a></td></tr></table>`;
 }
 
-function shell({preheader, heading, greeting, bodyHtml}) {
+function shell({preheader, heading, greeting, bodyHtml, reason = "You received this email because a ScaledCircle account was created using this email address."}) {
   return `<!doctype html><html><body style="margin:0;background:#eef3f8">` +
     `<div style="display:none;max-height:0;overflow:hidden;color:transparent">${escapeHtml(preheader)}</div>` +
     `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8">` +
@@ -73,9 +78,8 @@ function shell({preheader, heading, greeting, bodyHtml}) {
     `<p style="font-size:13px;line-height:1.6;color:#60758a">Questions? ` +
     `<a href="mailto:${SUPPORT_EMAIL}" style="color:#1769e0">${SUPPORT_EMAIL}</a><br>` +
     `<a href="https://scaledcircle.com" style="color:#1769e0">scaledcircle.com</a></p>` +
-    `<p style="font-size:12px;line-height:1.5;color:#7a8c9e">You received this email because a ` +
-    `ScaledCircle account was created using this email address. If you did not create this account, ` +
-    `contact ${SUPPORT_EMAIL}.</p></td></tr></table></td></tr></table></body></html>`;
+    `<p style="font-size:12px;line-height:1.5;color:#7a8c9e">${escapeHtml(reason)} ` +
+    `Questions or concerns can be sent to ${SUPPORT_EMAIL}.</p></td></tr></table></td></tr></table></body></html>`;
 }
 
 function welcomeTemplate({role, displayName, verificationUrl}) {
@@ -178,6 +182,75 @@ function emailJob({to, template, eventType, content, metadata}) {
   };
 }
 
+function validEmail(value) {
+  const email = cleanText(value, 254).toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function landingPagePayload(job) {
+  const payload = job?.payload || {};
+  const common = {
+    businessName: cleanText(payload.businessName, 120),
+    customerName: cleanText(payload.customerName, 160),
+    landingPageTitle: cleanText(payload.landingPageTitle, 160),
+    inquirySummary: cleanText(payload.inquirySummary, 1000),
+  };
+  if (!common.businessName || !common.customerName || !common.landingPageTitle) {
+    throw new Error("landing_page_email_payload_invalid");
+  }
+  if (job.template === "landing_page_business_inquiry") {
+    const inquiryUrl = safeUrl(payload.inquiryUrl);
+    if (!inquiryUrl.startsWith("https://scaledcircle.com/") &&
+        !inquiryUrl.startsWith("https://scaledcircle-staging.web.app/")) {
+      throw new Error("landing_page_email_url_invalid");
+    }
+    return {...common, customerEmail: validEmail(payload.customerEmail) || "Not provided",
+      customerPhone: cleanText(payload.customerPhone, 80) || "Not provided", inquiryUrl};
+  }
+  return common;
+}
+
+function landingPageContent(job) {
+  const payload = landingPagePayload(job);
+  if (job.template === "landing_page_business_inquiry") {
+    const subject = `New estimate request from ${payload.customerName}`;
+    const text = [`New customer inquiry from ScaledCircle`, "", `Landing Page: ${payload.landingPageTitle}`,
+      `Customer: ${payload.customerName}`, `Email: ${payload.customerEmail}`,
+      `Phone: ${payload.customerPhone}`, `Request: ${payload.inquirySummary || "No additional details provided"}`,
+      "", "Open the inquiry in ScaledCircle:", payload.inquiryUrl].join("\n");
+    const bodyHtml = `<p style="font-size:15px;line-height:1.6">A customer sent a request through ` +
+      `<strong>${escapeHtml(payload.landingPageTitle)}</strong>.</p><table role="presentation">` +
+      [["Customer", payload.customerName], ["Email", payload.customerEmail], ["Phone", payload.customerPhone],
+        ["Request", payload.inquirySummary || "No additional details provided"]]
+        .map(([label, value]) => `<tr><td style="padding:6px 10px;color:#60758a">${escapeHtml(label)}</td>` +
+          `<td style="padding:6px 10px;color:#10243e">${escapeHtml(value)}</td></tr>`).join("") +
+      `</table><div style="margin-top:24px">${button("OPEN INQUIRY", payload.inquiryUrl, "#0c9f73")}</div>`;
+    return {subject, text, html: shell({preheader: subject, heading: "NEW CUSTOMER INQUIRY",
+      greeting: payload.businessName, bodyHtml, reason:"You received this transactional email because your published ScaledCircle Landing Page received an inquiry."})};
+  }
+  const subject = `Your request was sent to ${payload.businessName}`;
+  const detail = payload.inquirySummary ? `\n\nYour request:\n${payload.inquirySummary}` : "";
+  const text = `Hi ${firstName(payload.customerName)},\n\nYour request was sent to ${payload.businessName}.` +
+    `${detail}\n\nThey can follow up using the contact details you provided. This message does not promise ` +
+    `a response time, appointment, quote, or acceptance.\n\nThis is a transactional confirmation, not a marketing subscription.`;
+  const bodyHtml = `<p style="font-size:15px;line-height:1.6">Your request was sent to ` +
+    `<strong>${escapeHtml(payload.businessName)}</strong>.</p>` +
+    (payload.inquirySummary ? `<p style="font-size:15px;line-height:1.6"><strong>Your request</strong><br>` +
+      `${escapeHtml(payload.inquirySummary)}</p>` : "") +
+    `<p style="font-size:14px;line-height:1.6;color:#60758a">They can follow up using the contact details ` +
+    `you provided. This confirmation does not promise a response time, appointment, quote, or acceptance. ` +
+    `It is not a marketing subscription.</p>`;
+  return {subject, text, html: shell({preheader: subject, heading: "REQUEST RECEIVED",
+    greeting: firstName(payload.customerName), bodyHtml,
+    reason:"You received this transactional confirmation because you submitted a request through a ScaledCircle Landing Page."})};
+}
+
+function deliveryContent(job) {
+  if (LANDING_PAGE_TEMPLATES.has(cleanText(job?.template, 80))) return landingPageContent(job);
+  return {subject: cleanText(job?.subject, 180), text: String(job?.text || "").slice(0, 16000),
+    html: job?.html && job.trustedHtml === true ? String(job.html).slice(0, 60000) : undefined};
+}
+
 function validateSignupInput(data) {
   const role = cleanText(data?.role, 24).toLowerCase();
   const displayName = cleanText(data?.displayName, 120);
@@ -263,17 +336,27 @@ function validateDeliveryJob(job) {
   const template = cleanText(job?.template, 80);
   const destination = cleanText(job?.to, 254).toLowerCase();
   const sender = cleanText(job?.fromAddress, 254).toLowerCase();
-  const allowedTemplate = template.startsWith("welcome_") || template.startsWith("support_") || template.startsWith("verification_");
-  const recipientAllowed = destination === SUPPORT_EMAIL || template.startsWith("welcome_") || template.startsWith("verification_");
+  const landingPageTemplate = LANDING_PAGE_TEMPLATES.has(template);
+  const allowedTemplate = template.startsWith("welcome_") || template.startsWith("support_") ||
+    template.startsWith("verification_") || landingPageTemplate;
+  const recipientAllowed = destination === SUPPORT_EMAIL || template.startsWith("welcome_") ||
+    template.startsWith("verification_") || landingPageTemplate;
   const html = job?.html == null ? undefined : String(job.html).slice(0, 60000);
   const htmlAllowed = !html || job.trustedHtml === true;
-  return Boolean(destination && sender === SUPPORT_EMAIL && allowedTemplate && recipientAllowed && htmlAllowed && cleanText(job?.text, 16000));
+  if (!validEmail(destination) || sender !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed || !htmlAllowed) return false;
+  if (landingPageTemplate) {
+    if (job?.html || job?.trustedHtml || job?.cc || job?.bcc || job?.smtp || job?.headers) return false;
+    try { landingPagePayload(job); } catch (_) { return false; }
+    return true;
+  }
+  return Boolean(cleanText(job?.text, 16000));
 }
 
 async function claimQueuedJob({db, reference, FieldValue, leaseId}) {
   return db.runTransaction(async (transaction) => {
     const current = await transaction.get(reference);
-    if (current.data()?.status !== "queued") return false;
+    if (!["queued", "retry_requested"].includes(current.data()?.status) ||
+        Number(current.data()?.attempts || 0) >= MAX_DELIVERY_ATTEMPTS) return false;
     transaction.update(reference, {
       status: "sending",
       leaseId,
@@ -284,7 +367,57 @@ async function claimQueuedJob({db, reference, FieldValue, leaseId}) {
   });
 }
 
+function classifyDeliveryError(error) {
+  const code = String(error?.code || "").toUpperCase();
+  const responseCode = Number(error?.responseCode || 0);
+  return code.includes("AUTH") || code === "EAUTH" || (responseCode >= 500 && responseCode < 600) ?
+    "failed_terminal" : "failed_retryable";
+}
+
+function deliveryHealth({workerAvailable, recipientAvailable = true, applicable = true, status}) {
+  if (!applicable) return {state: "not_applicable", health: "healthy"};
+  if (!recipientAvailable) return {state: "recipient_unavailable", health: "degraded"};
+  if (!workerAvailable && ["queued", "retry_requested"].includes(status)) {
+    return {state: "worker_unavailable", health: "degraded"};
+  }
+  if (["queued", "retry_requested", "sending"].includes(status)) return {state: status, health: "pending"};
+  if (status === "sent") return {state: "sent", health: "healthy"};
+  return {state: status || "job_missing", health: "degraded"};
+}
+
+async function processDeliveryJob({db, reference, jobId, FieldValue, createTransport, logger = console,
+  smtpPassword, leaseId = crypto.randomUUID()}) {
+  const snapshot = await reference.get();
+  const job = snapshot.data() || {};
+  if (!["queued", "retry_requested"].includes(job.status)) return {processed:false, reason:"ineligible_state"};
+  if (!validateDeliveryJob(job)) {
+    await reference.set({status:"failed_terminal",errorCode:"invalid_server_email_job",
+      updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    return {processed:false, reason:"invalid_job"};
+  }
+  const claimed = await claimQueuedJob({db,reference,FieldValue,leaseId});
+  if (!claimed) return {processed:false, reason:"not_claimed"};
+  const content = deliveryContent(job);
+  const transport = createTransport({service:"gmail",auth:{user:SUPPORT_EMAIL,pass:smtpPassword}});
+  try {
+    const result = await transport.sendMail({from:`${SUPPORT_NAME} <${SUPPORT_EMAIL}>`,to:validEmail(job.to),
+      replyTo:SUPPORT_EMAIL,subject:content.subject,text:content.text,...(content.html?{html:content.html}:{}),
+      headers:{"X-Scaled-Circle-Notification":jobId}});
+    await reference.set({status:"sent",messageId:cleanText(result?.messageId,500),providerResult:"accepted",
+      sentAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    return {processed:true,status:"sent"};
+  } catch (error) {
+    const status = classifyDeliveryError(error);
+    logger.error?.("Outbound email delivery failed.",{jobId,template:job.template,status});
+    await reference.set({status,errorCode:"email_delivery_failed",lastErrorClass:status,
+      updatedAt:FieldValue.serverTimestamp()},{merge:true});
+    return {processed:true,status};
+  }
+}
+
 module.exports = {SUPPORT_EMAIL, SUPPORT_NAME, LOGO_URL, PROFILE_ROUTE, RESEND_COOLDOWN_MS,
+  LANDING_PAGE_TEMPLATES, MAX_DELIVERY_ATTEMPTS,
   cleanText, escapeHtml, brandedVerificationUrl, welcomeTemplate, adminTemplate,
   verificationOnlyTemplate, historicalPendingScalerTemplate, validateSignupInput, createService, validateDeliveryJob,
-  claimQueuedJob};
+  landingPagePayload, landingPageContent, deliveryContent, validEmail, claimQueuedJob, classifyDeliveryError,
+  deliveryHealth, processDeliveryJob};

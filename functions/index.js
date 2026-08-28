@@ -956,66 +956,11 @@ exports.sendTransactionalEmailJob = onDocumentCreated(
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
-    const queued = snapshot.data() || {};
-    const jobId = event.params.jobId;
-    if (queued.status !== "queued") return;
-
-    // The queue schema is fixed by backend templates, then validated again at
-    // delivery so even an accidental server write cannot relay arbitrary mail.
-    const destination = readText(queued.to, 254).toLowerCase();
-    const fromAddress = readText(queued.fromAddress, 254).toLowerCase();
-    const template = readText(queued.template, 80);
-    if (!transactionalEmail.validateDeliveryJob(queued)) {
-      await snapshot.ref.set({
-        status: "rejected",
-        errorCode: "invalid_server_email_job",
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-      return;
-    }
-
-    const leaseId = crypto.randomUUID();
-    const claimed = await transactionalEmail.claimQueuedJob({
-      db, reference: snapshot.ref, FieldValue, leaseId,
+    return transactionalEmail.processDeliveryJob({
+      db, reference: snapshot.ref, jobId: event.params.jobId, FieldValue,
+      createTransport: (options) => nodemailer.createTransport(options), logger,
+      smtpPassword: SUPPORT_EMAIL_SMTP_PASSWORD.value(),
     });
-    if (!claimed) return;
-
-    const transport = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: transactionalEmail.SUPPORT_EMAIL,
-        pass: SUPPORT_EMAIL_SMTP_PASSWORD.value(),
-      },
-    });
-    try {
-      const result = await transport.sendMail({
-        from: `${transactionalEmail.SUPPORT_NAME} <${transactionalEmail.SUPPORT_EMAIL}>`,
-        to: destination,
-        replyTo: transactionalEmail.SUPPORT_EMAIL,
-        subject: readText(queued.subject, 180),
-        text: String(queued.text || "").slice(0, 12000),
-        ...(queued.html && queued.trustedHtml === true ?
-          {html: String(queued.html).slice(0, 60000)} : {}),
-        headers: {"X-Scaled-Circle-Notification": jobId},
-      });
-      await snapshot.ref.set({
-        status: "sent",
-        messageId: readText(result.messageId, 500),
-        sentAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-    } catch (error) {
-      logger.error("Outbound email delivery failed.", {
-        jobId,
-        template,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      await snapshot.ref.set({
-        status: "failed",
-        errorCode: "email_delivery_failed",
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-    }
   },
 );
 
@@ -10797,6 +10742,26 @@ exports.createResponseAsset = onCall(
   },
 );
 
+/** Process an explicitly reconciled job without replaying arbitrary updates. */
+exports.retryTransactionalEmailJob = onDocumentUpdated(
+  {
+    document: "outboundEmailJobs/{jobId}",
+    secrets: [SUPPORT_EMAIL_SMTP_PASSWORD],
+    retry: false,
+    maxInstances: 5,
+  },
+  async (event) => {
+    const before = event.data?.before.data() || {};
+    const after = event.data?.after;
+    if (!after || before.status === "retry_requested" || after.data()?.status !== "retry_requested") return;
+    return transactionalEmail.processDeliveryJob({
+      db, reference: after.ref, jobId: event.params.jobId, FieldValue,
+      createTransport: (options) => nodemailer.createTransport(options), logger,
+      smtpPassword: SUPPORT_EMAIL_SMTP_PASSWORD.value(),
+    });
+  },
+);
+
 exports.getAttributionOverview = onCall(
   {enforceAppCheck: false, maxInstances: 4},
   async (request) => {
@@ -10940,6 +10905,17 @@ exports.transitionLandingPage = onCall({region: "us-east1", enforceAppCheck: fal
     await recordLandingPageHealth("publish", true); return result;
   } catch (error) { await recordLandingPageHealth("publish", false); throw landingPageError(error); }
 });
+
+exports.reconcileLandingPageInquiryDelivery = onCall(
+  {region:"us-east1",enforceAppCheck:false,maxInstances:2},
+  async(request)=>{
+    const actor=await requireLandingPageActor(request);
+    if(actor.role!=="admin")throw new HttpsError("permission-denied","Admin authority is required.");
+    try{return await landingPageService.reconcileInquiry(request.data||{},actor);}
+    catch(error){logger.warn("landing_page_delivery_reconciliation_failed",{actorUid:actor.uid,
+      code:String(error?.message||"reconciliation_failed").slice(0,80)});throw landingPageError(error);}
+  },
+);
 
 exports.renderLandingPage = onRequest({region: "us-east1", cors: false, maxInstances: 20}, async (request, response) => {
   const slug = request.path.split("/").filter(Boolean).at(-1);

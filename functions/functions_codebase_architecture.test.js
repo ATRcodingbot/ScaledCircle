@@ -286,7 +286,7 @@ test("attribution-core exclusively owns the zero-secret response and analytics b
 
 test("landing-page-core exclusively owns the zero-secret public funnel authority", () => {
   const names = ["getLandingPageWorkspace", "mutateLandingPageDraft", "transitionLandingPage",
-    "renderLandingPage", "submitLandingPageForm"];
+    "renderLandingPage", "submitLandingPageForm", "reconcileLandingPageInquiryDelivery"];
   assert.deepEqual(exportsIn(landingPageCore).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
@@ -435,9 +435,10 @@ test("legacy wallet campaign funding cannot be regenerated", () => {
 test("transactional-email exclusively owns signup callables and durable queue worker", () => {
   assert.deepEqual([...new Set(exportsIn(transactionalEmail))].sort(), [
     "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
+    "retryTransactionalEmailJob",
   ].sort());
   for (const name of ["finalizePublicAccountSignup", "resendEmailVerification",
-    "sendTransactionalEmailJob", "sendOutboundEmailJob"]) {
+    "sendTransactionalEmailJob", "retryTransactionalEmailJob", "sendOutboundEmailJob"]) {
     assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
   }
   assert.match(transactionalEmail, /outboundEmailJobs\/\{jobId\}/);

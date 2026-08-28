@@ -5,7 +5,9 @@ const legacy = require("./signup_notifications");
 
 function fakeDatabase() {
   const documents = new Map();
-  const reference = (path) => ({path, async get() { return snapshot(path); }});
+  const reference = (path) => ({path, async get() { return snapshot(path); }, async set(data,{merge}={}) {
+    documents.set(path,merge?{...(documents.get(path)||{}),...data}:data);
+  }});
   const snapshot = (path) => ({exists: documents.has(path), data: () => documents.get(path)});
   return {
     documents,
@@ -118,6 +120,43 @@ test("delivery accepts existing plain jobs and trusted HTML only", () => {
   assert.equal(email.validateDeliveryJob({...base, html: "<p>Trusted</p>", trustedHtml: true}), true);
   assert.equal(email.validateDeliveryJob({...base, html: "<script>x</script>"}), false);
   assert.equal(email.validateDeliveryJob({...base, fromAddress: "attacker@example.test"}), false);
+});
+
+function landingJob(template = "landing_page_business_inquiry") {
+  return {to:"person@example.test",fromAddress:email.SUPPORT_EMAIL,template,eventType:"landing_page.inquiry",
+    status:"queued",attempts:0,payload:{businessName:"Harbor Services",customerName:"Pat <script>x</script>",
+      landingPageTitle:"Published A",inquirySummary:"Need an estimate <b>soon</b>",
+      customerEmail:"pat@example.test",customerPhone:"555-0100",
+      ...(template === "landing_page_business_inquiry" ? {inquiryUrl:"https://scaledcircle-staging.web.app/#/business/landing-pages"}: {})}};
+}
+
+test("Landing Page templates are narrowly accepted and rendered from structured data",()=>{
+  for(const template of email.LANDING_PAGE_TEMPLATES){const job=landingJob(template);assert.equal(email.validateDeliveryJob(job),true);
+    const content=email.deliveryContent(job);assert.ok(content.subject);assert.doesNotMatch(content.html,/<script>|<b>soon<\/b>/);assert.match(content.html,/&lt;b&gt;soon&lt;\/b&gt;/);}
+  assert.equal(email.validateDeliveryJob({...landingJob(),template:"landing_page_arbitrary"}),false);
+  assert.equal(email.validateDeliveryJob({...landingJob(),bcc:"attacker@example.test"}),false);
+  assert.equal(email.validateDeliveryJob({...landingJob(),html:"<p>override</p>",trustedHtml:true}),false);
+  assert.equal(email.validateDeliveryJob({...landingJob(),to:"victim@example.test\r\nBcc: attacker@example.test"}),false);
+});
+
+test("delivery health distinguishes unavailable worker, pending, sent, and failures",()=>{
+  assert.deepEqual(email.deliveryHealth({workerAvailable:false,status:"queued"}),{state:"worker_unavailable",health:"degraded"});
+  assert.equal(email.deliveryHealth({workerAvailable:true,status:"queued"}).health,"pending");
+  assert.equal(email.deliveryHealth({workerAvailable:true,status:"sent"}).health,"healthy");
+  assert.equal(email.deliveryHealth({workerAvailable:true,status:"failed_terminal"}).health,"degraded");
+  assert.equal(email.deliveryHealth({workerAvailable:true,recipientAvailable:false,status:"queued"}).state,"recipient_unavailable");
+});
+
+test("mock SMTP worker claims once, records acceptance, and never resends sent jobs",async()=>{
+  const db=fakeDatabase();const ref=db.collection("outboundEmailJobs").doc("landing-business_lead");db.documents.set(ref.path,landingJob());let sends=0;
+  const args={db,reference:ref,jobId:"landing-business_lead",FieldValue,createTransport:()=>({sendMail:async()=>{sends++;return{messageId:"provider-accepted"};}}),smtpPassword:"mock-only"};
+  assert.equal((await email.processDeliveryJob(args)).status,"sent");assert.equal((await email.processDeliveryJob(args)).reason,"ineligible_state");assert.equal(sends,1);
+  assert.equal(db.documents.get(ref.path).providerResult,"accepted");
+});
+
+test("mock SMTP failures are bounded and classified",async()=>{
+  for(const [code,status] of [["ETIMEDOUT","failed_retryable"],["EAUTH","failed_terminal"]]){const db=fakeDatabase();const ref=db.collection("outboundEmailJobs").doc(code);db.documents.set(ref.path,landingJob());
+    const result=await email.processDeliveryJob({db,reference:ref,jobId:code,FieldValue,createTransport:()=>({sendMail:async()=>{const error=new Error("mock");error.code=code;throw error;}}),smtpPassword:"mock-only",logger:{error(){}}});assert.equal(result.status,status);}
 });
 
 test("overlapping workers can claim a queued job only once", async () => {

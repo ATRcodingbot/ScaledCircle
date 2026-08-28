@@ -143,6 +143,7 @@ assert.deepEqual(Object.keys(discovery).sort(), [
 assert.deepEqual(Object.keys(jobRoom), ["getJobRoom"]);
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
+  "retryTransactionalEmailJob",
 ].sort());
 assert.deepEqual(Object.keys(adminOps).sort(), [
   "getAdminCampaignTimeline", "getAdminOperationsOverview", "updateAdminSupportCaseStatus",
@@ -154,7 +155,7 @@ assert.deepEqual(Object.keys(legal).sort(), ["getLegalConsentStatus", "recordLeg
 assert.deepEqual(Object.keys(application), ["applyToCampaign"]);
 assert.deepEqual(Object.keys(landingPage).sort(), [
   "getLandingPageWorkspace", "mutateLandingPageDraft", "renderLandingPage",
-  "submitLandingPageForm", "transitionLandingPage",
+  "submitLandingPageForm", "transitionLandingPage", "reconcileLandingPageInquiryDelivery",
 ].sort());
 assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);

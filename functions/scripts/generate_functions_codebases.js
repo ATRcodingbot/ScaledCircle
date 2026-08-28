@@ -96,6 +96,7 @@ const discoveryExports = new Set([
 const jobRoomExports = new Set(["getJobRoom"]);
 const transactionalEmailExports = new Set([
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
+  "retryTransactionalEmailJob",
 ]);
 const adminOpsExports = new Set([
   "getAdminOperationsOverview",
@@ -110,7 +111,7 @@ const attributionExports = new Set([
 ]);
 const landingPageExports = new Set([
   "getLandingPageWorkspace", "mutateLandingPageDraft", "transitionLandingPage",
-  "renderLandingPage", "submitLandingPageForm",
+  "renderLandingPage", "submitLandingPageForm", "reconcileLandingPageInquiryDelivery",
 ]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
