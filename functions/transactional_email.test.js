@@ -140,6 +140,13 @@ test("Landing Page templates are narrowly accepted and rendered from structured 
   assert.equal(email.validateDeliveryJob({...landingJob(),schemaVersion:"legacy_unversioned"}),false);
 });
 
+test("Landing Page Business inquiry uses a neutral greeting when no display name is available",()=>{
+  const job=landingJob();job.payload.businessName="the Business";
+  const content=email.deliveryContent(job);
+  assert.match(content.html,/>Hello,<\/p>/);
+  assert.doesNotMatch(content.html,/Hi the Business/);
+});
+
 test("delivery health distinguishes unavailable worker, pending, sent, and failures",()=>{
   assert.deepEqual(email.deliveryHealth({workerAvailable:false,status:"queued"}),{state:"worker_unavailable",health:"degraded"});
   assert.equal(email.deliveryHealth({workerAvailable:true,status:"queued"}).health,"pending");

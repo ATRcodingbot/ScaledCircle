@@ -65,6 +65,7 @@ function button(label, url, color = "#1769e0") {
 }
 
 function shell({preheader, heading, greeting, bodyHtml, reason = "You received this email because a ScaledCircle account was created using this email address."}) {
+  const salutation = cleanText(greeting, 120);
   return `<!doctype html><html><body style="margin:0;background:#eef3f8">` +
     `<div style="display:none;max-height:0;overflow:hidden;color:transparent">${escapeHtml(preheader)}</div>` +
     `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8">` +
@@ -74,7 +75,7 @@ function shell({preheader, heading, greeting, bodyHtml, reason = "You received t
     `<div style="text-align:center"><img src="${LOGO_URL}" width="72" height="72" alt="ScaledCircle" ` +
     `style="display:inline-block;border:0"><div style="font-size:22px;font-weight:800;color:#10243e">ScaledCircle</div></div>` +
     `<h1 style="margin:28px 0 14px;font-size:26px;line-height:1.2;color:#10243e">${escapeHtml(heading)}</h1>` +
-    `<p style="font-size:16px;line-height:1.6">Hi ${escapeHtml(greeting)},</p>${bodyHtml}` +
+    `<p style="font-size:16px;line-height:1.6">${salutation ? `Hi ${escapeHtml(salutation)},` : "Hello,"}</p>${bodyHtml}` +
     `<hr style="border:0;border-top:1px solid #dbe5ef;margin:28px 0">` +
     `<p style="font-size:13px;line-height:1.6;color:#60758a">Questions? ` +
     `<a href="mailto:${SUPPORT_EMAIL}" style="color:#1769e0">${SUPPORT_EMAIL}</a><br>` +
@@ -227,7 +228,8 @@ function landingPageContent(job) {
           `<td style="padding:6px 10px;color:#10243e">${escapeHtml(value)}</td></tr>`).join("") +
       `</table><div style="margin-top:24px">${button("OPEN INQUIRY", payload.inquiryUrl, "#0c9f73")}</div>`;
     return {subject, text, html: shell({preheader: subject, heading: "NEW CUSTOMER INQUIRY",
-      greeting: payload.businessName, bodyHtml, reason:"You received this transactional email because your published ScaledCircle Landing Page received an inquiry."})};
+      greeting: payload.businessName === "the Business" ? "" : payload.businessName, bodyHtml,
+      reason:"You received this transactional email because your published ScaledCircle Landing Page received an inquiry."})};
   }
   const subject = `Your request was sent to ${payload.businessName}`;
   const detail = payload.inquirySummary ? `\n\nYour request:\n${payload.inquirySummary}` : "";
