@@ -35,25 +35,71 @@ function normalizedFirebaseErrorCode(error) {
     .toLowerCase().replace(/[^a-z0-9/_-]/g, "_");
 }
 
+function safeDiagnosticText(value, max = 240) {
+  return headerText(value, max)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+    .replace(/(?:Bearer\s+)?[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, "[redacted-token]");
+}
+
+function firebaseUidDiagnostics(value) {
+  const raw=typeof value==="string"?value:"";const trimmed=raw.trim();
+  return {length:raw.length,trimmed:raw===trimmed,
+    formatValid:raw.length>0&&raw.length<=128&&raw===trimmed&&/^[A-Za-z0-9:_-]+$/.test(raw),
+    fingerprint:digest(raw).slice(0,16)};
+}
+
+function safeFirebaseErrorDiagnostics(error) {
+  const firebaseCode=normalizedFirebaseErrorCode(error);
+  const httpStatus=Number(error?.httpResponse?.status||error?.response?.status||error?.status||0)||null;
+  const backendCode=text(error?.httpResponse?.data?.error?.status||error?.response?.data?.error?.status||
+    error?.cause?.status||error?.cause?.code,80)||null;
+  const safeMessage=safeDiagnosticText(error?.errorInfo?.message||error?.message,240)||null;
+  const combined=`${firebaseCode} ${backendCode||""} ${safeMessage||""}`.toLowerCase();
+  let backendCategory="unknown_backend_failure";
+  if(combined.includes("identity toolkit")&&(combined.includes("disabled")||combined.includes("not enabled")||combined.includes("not been used")))backendCategory="identity_toolkit_disabled";
+  else if(httpStatus===403||combined.includes("permission")||combined.includes("forbidden"))backendCategory="backend_permission_denied";
+  else if(httpStatus===503||combined.includes("service unavailable")||combined.includes("temporarily unavailable"))backendCategory="service_unavailable";
+  else if(httpStatus===408||httpStatus===504||combined.includes("timeout")||combined.includes("timed out"))backendCategory="timeout";
+  else if(combined.includes("network")||["econnreset","enotfound","eai_again"].some((code)=>combined.includes(code)))backendCategory="network_failure";
+  else if(combined.includes("json")||combined.includes("parse"))backendCategory="response_parse_failure";
+  else if(combined.includes("credential")||combined.includes("authentication")||combined.includes("unauthenticated"))backendCategory="credential_failure";
+  return {firebaseCode,errorInfoCode:text(error?.errorInfo?.code,80)||null,safeMessage,httpStatus,
+    httpStatusText:safeDiagnosticText(error?.httpResponse?.statusText||error?.response?.statusText,80)||null,
+    backendCode,backendCategory,causeType:text(error?.cause?.constructor?.name,80)||null,
+    causeCode:text(error?.cause?.code,80)||null,errorType:text(error?.constructor?.name,80)||null};
+}
+
 function firebaseAuthFailureCategory(error) {
-  const code = normalizedFirebaseErrorCode(error);
+  const diagnostic=safeFirebaseErrorDiagnostics(error);const code=diagnostic.firebaseCode;
   if (code.includes("user-not-found")) return "user_not_found";
-  if (code.includes("permission") || code.includes("forbidden") || code.includes("unauthorized")) return "auth_permission_denied";
-  if (code.includes("unavailable") || code.includes("timeout") || code.includes("network") || code.includes("internal")) return "auth_unavailable";
+  if (diagnostic.backendCategory==="backend_permission_denied") return "auth_permission_denied";
+  if (["service_unavailable","timeout","network_failure"].includes(diagnostic.backendCategory)||
+      code.includes("unavailable")||code.includes("internal")) return "auth_unavailable";
   return "auth_other_failure";
 }
 
-async function resolveBusinessRecipient(businessUid, getAuthUser) {
+async function resolveBusinessRecipient(businessUid, getAuthUser, {projectIdentity=null}={}) {
+  const uid=firebaseUidDiagnostics(businessUid);
+  if(!uid.formatValid)return{status:"unresolved",category:"invalid_business_uid",firebaseErrorCode:null,email:null,uid,
+    diagnostic:{backendCategory:"invalid_business_uid"}};
+  if(projectIdentity?.match===false)return{status:"unresolved",category:"project_mismatch",firebaseErrorCode:null,email:null,uid,
+    diagnostic:{backendCategory:"project_mismatch"}};
   try {
     const user = await getAuthUser(businessUid);
-    if (!user) return {status:"unresolved",category:"user_not_found",firebaseErrorCode:null,email:null};
+    if (!user) return {status:"unresolved",category:"user_not_found",firebaseErrorCode:null,email:null,uid,
+      diagnostic:{backendCategory:"user_not_found"}};
     const email = validEmail(user.email);
-    if (!email) return {status:"unresolved",category:"email_missing",firebaseErrorCode:null,email:null};
-    if (user.emailVerified !== true) return {status:"unresolved",category:"email_unverified",firebaseErrorCode:null,email:null};
-    return {status:"resolved",category:"resolved",firebaseErrorCode:null,email};
+    if (!email) return {status:"unresolved",category:"email_missing",firebaseErrorCode:null,email:null,uid,
+      diagnostic:{backendCategory:"email_missing"}};
+    if (user.emailVerified !== true) return {status:"unresolved",category:"email_unverified",firebaseErrorCode:null,email:null,uid,
+      diagnostic:{backendCategory:"email_unverified"}};
+    return {status:"resolved",category:"resolved",firebaseErrorCode:null,email,uid,
+      diagnostic:{firebaseCode:null,httpStatus:null,backendCode:null,backendCategory:null,causeType:null,causeCode:null,errorType:null}};
   } catch (error) {
+    const diagnostic=safeFirebaseErrorDiagnostics(error);
+    if(diagnostic.safeMessage&&businessUid)diagnostic.safeMessage=diagnostic.safeMessage.split(businessUid).join("[redacted-uid]");
     return {status:"unresolved",category:firebaseAuthFailureCategory(error),
-      firebaseErrorCode:normalizedFirebaseErrorCode(error),email:null};
+      firebaseErrorCode:diagnostic.firebaseCode,email:null,uid,diagnostic};
   }
 }
 
@@ -161,10 +207,10 @@ function renderUnavailablePage() {
 
 function createLandingPageService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes,
   publicBaseUrl = "https://scaledcircle.com", getAuthUser = async () => null,
-  reportRecipientResolution = async () => {}}) {
+  reportRecipientResolution = async () => {},runtimeProjectIdentity=()=>({effectiveProjectId:null,match:true})}) {
   const pages = db.collection("landingPages");
   async function recipientFor(businessUid, context = {}) {
-    const outcome = await resolveBusinessRecipient(businessUid, getAuthUser);
+    const outcome = await resolveBusinessRecipient(businessUid, getAuthUser,{projectIdentity:runtimeProjectIdentity()});
     try { await reportRecipientResolution(outcome, {...context,businessUid}); } catch (_) { /* health reporting must not break inquiry authority */ }
     return outcome;
   }
@@ -231,10 +277,20 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
     const pageId=text(lead.attribution?.landingPageId,160);const versionId=text(lead.attribution?.landingPageVersionId,160);
     const pageRef=pages.doc(pageId);const [pageSnap,versionSnap]=await Promise.all([pageRef.get(),pageRef.collection("versions").doc(versionId).get()]);
     if(!pageSnap.exists||!versionSnap.exists||pageSnap.data()?.businessUid!==lead.ownerUid)throw new Error("landing_page_inquiry_authority_invalid");
-    const recipientOutcome=await recipientFor(lead.ownerUid,{operation:"reconciliation",leadId});
+    const dryRun=input.dryRun===true||input.diagnoseRecipient===true;const projectIdentity=runtimeProjectIdentity();
+    const recipientOutcome=dryRun?await resolveBusinessRecipient(lead.ownerUid,getAuthUser,{projectIdentity}):
+      await recipientFor(lead.ownerUid,{operation:"reconciliation",leadId});
     const recipient=recipientOutcome.email||"";
     const businessProfile=await db.collection("users").doc(lead.ownerUid).get();
     if(!businessProfile.exists||String(businessProfile.data()?.role||"").toLowerCase()!=="business")throw new Error("landing_page_business_missing");
+    if(dryRun)return{authenticated:true,dryRun:true,project:projectIdentity.effectiveProjectId||null,
+      projectIdentityMatch:projectIdentity.match!==false,projectSources:{gcloudProject:projectIdentity.gcloudProject||null,
+        googleCloudProject:projectIdentity.googleCloudProject||null,firebaseConfigProject:projectIdentity.firebaseConfigProject||null,
+        adminAppProject:projectIdentity.adminAppProject||null,authAppProject:projectIdentity.authAppProject||null},uid:recipientOutcome.uid,
+      recipientResolution:recipientOutcome.category,firebaseCode:recipientOutcome.firebaseErrorCode||null,
+      httpStatus:recipientOutcome.diagnostic?.httpStatus||null,backendCode:recipientOutcome.diagnostic?.backendCode||null,
+      backendCategory:recipientOutcome.diagnostic?.backendCategory||null,causeType:recipientOutcome.diagnostic?.causeType||null,
+      causeCode:recipientOutcome.diagnostic?.causeCode||null,errorType:recipientOutcome.diagnostic?.errorType||null};
     const businessName=text(businessProfile.data()?.businessName||businessProfile.data()?.companyName||businessProfile.data()?.displayName,120)||"the Business";
     const contact={name:text(lead.contactName,160),email:validEmail(lead.contactEmail),phone:text(lead.contactPhone,80),message:text(lead.requestSummary,1000)};
     const pageName=text(versionSnap.data()?.content?.headline,160)||"Landing Page";
@@ -276,6 +332,7 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
 }
 
 module.exports={SCHEMA_VERSION,EMAIL_JOB_SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,PUBLIC_SLUG_ALPHABET,
-  text,headerText,validEmail,escapeHtml,slug,digest,publicOrigin,normalizedFirebaseErrorCode,firebaseAuthFailureCategory,
+  text,headerText,validEmail,escapeHtml,slug,digest,publicOrigin,normalizedFirebaseErrorCode,safeDiagnosticText,
+  firebaseUidDiagnostics,safeFirebaseErrorDiagnostics,firebaseAuthFailureCategory,
   resolveBusinessRecipient,sanitizeDraft,defaultDraft,validateSubmission,outboundEmailJob,businessInquiryEmail,
   customerConfirmationEmail,landingPageEmailPayload,renderPage,renderSuccessPage,renderUnavailablePage,createLandingPageService};

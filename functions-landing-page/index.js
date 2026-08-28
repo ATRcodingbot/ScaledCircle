@@ -3,8 +3,8 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 
-const { initializeApp } = require("firebase-admin/app");
-
+const { initializeApp, getApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
@@ -10817,8 +10817,21 @@ setGlobalOptions({
 // Landing Page + Form V1 is isolated from the retired campaignTrackingCodes
 // authority. Public page and form identities are always derived server-side.
 const landingPage = require("./landing_page");
+function effectiveLandingPageProjectIdentity() {
+  let firebaseConfigProjectId = null;
+  try {firebaseConfigProjectId = JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId || null;} catch (_) {firebaseConfigProjectId = null;}
+  const identity = { gcloudProject: landingPage.text(process.env.GCLOUD_PROJECT, 160) || null,
+    googleCloudProject: landingPage.text(process.env.GOOGLE_CLOUD_PROJECT, 160) || null,
+    firebaseConfigProject: landingPage.text(firebaseConfigProjectId, 160) || null,
+    adminAppProject: landingPage.text(getApp().options.projectId, 160) || null,
+    authAppProject: landingPage.text(getAuth().app.options.projectId, 160) || null };
+  const projects = Object.values(identity).filter(Boolean);const unique = [...new Set(projects)];
+  return { ...identity, effectiveProjectId: identity.gcloudProject || identity.googleCloudProject || identity.firebaseConfigProject ||
+    identity.adminAppProject || identity.authAppProject || null, match: unique.length <= 1 };
+}
 const landingPageService = landingPage.createLandingPageService({ db, FieldValue,
-  getAuthUser: (uid) => admin.auth().getUser(uid),
+  getAuthUser: (uid) => getAuth().getUser(uid),
+  runtimeProjectIdentity: effectiveLandingPageProjectIdentity,
   reportRecipientResolution: recordLandingPageRecipientResolutionSafe,
   publicBaseUrl: landingPage.publicOrigin(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
   process.env.GOOGLE_CLOUD_PROJECT || "demo-scaledcircle") });
@@ -10867,6 +10880,13 @@ async function recordLandingPageRecipientResolutionSafe(outcome, context = {}) {
     logger.warn("landing_page_business_recipient_resolution_failed", {
       category,
       firebaseErrorCode: outcome?.firebaseErrorCode || null,
+      backendCategory: outcome?.diagnostic?.backendCategory || null,
+      httpStatus: outcome?.diagnostic?.httpStatus || null,
+      backendCode: outcome?.diagnostic?.backendCode || null,
+      causeType: outcome?.diagnostic?.causeType || null,
+      causeCode: outcome?.diagnostic?.causeCode || null,
+      errorType: outcome?.diagnostic?.errorType || null,
+      safeMessage: outcome?.diagnostic?.safeMessage || null,
       businessUidFingerprint: landingPage.digest(String(context.businessUid || "unavailable")).slice(0, 16),
       leadIdFingerprint: context.leadId ? landingPage.digest(String(context.leadId)).slice(0, 16) : null,
       operation: String(context.operation || "unknown").slice(0, 40)
@@ -10881,6 +10901,7 @@ async function recordLandingPageRecipientResolutionSafe(outcome, context = {}) {
       recipientAuthority: category === "resolved" ? "healthy" : "degraded",
       lastRecipientResolutionCategory: category,
       lastFirebaseErrorCode: outcome?.firebaseErrorCode || null,
+      lastBackendCategory: outcome?.diagnostic?.backendCategory || null,
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
   } catch (error) {

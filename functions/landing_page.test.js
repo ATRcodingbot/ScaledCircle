@@ -13,8 +13,9 @@ test("success renderer is branded, responsive, and does not leak implementation 
 test("landing inquiry email jobs use the current shared outbound contract",()=>{const job=lp.outboundEmailJob({to:"  PERSON@Example.Invalid ",subject:"Request received",textBody:"Transactional confirmation",template:"landing_page_customer_confirmation",eventType:"landing_page.inquiry.confirmation",metadata:{landingPageId:"page"}});assert.equal(job.schemaVersion,lp.EMAIL_JOB_SCHEMA_VERSION);assert.equal(job.to,"person@example.invalid");assert.equal(job.status,"queued");assert.equal(job.attempts,0);assert.equal(job.fromAddress,"support@scaledcircle.com");assert.equal(job.replyTo,"support@scaledcircle.com");assert.equal(job.template,"landing_page_customer_confirmation");});
 
 test("Business recipient resolution normalizes safe outcomes without exposing records",async()=>{
-  assert.deepEqual(await lp.resolveBusinessRecipient("business",async()=>({email:"owner@example.invalid",emailVerified:true})),
-    {status:"resolved",category:"resolved",firebaseErrorCode:null,email:"owner@example.invalid"});
+  const resolved=await lp.resolveBusinessRecipient("business",async()=>({email:"owner@example.invalid",emailVerified:true}));
+  assert.equal(resolved.status,"resolved");assert.equal(resolved.category,"resolved");assert.equal(resolved.email,"owner@example.invalid");
+  assert.equal(resolved.uid.formatValid,true);assert.equal(resolved.diagnostic.firebaseCode,null);
   assert.equal((await lp.resolveBusinessRecipient("business",async()=>null)).category,"user_not_found");
   assert.equal((await lp.resolveBusinessRecipient("business",async()=>({email:"",emailVerified:true}))).category,"email_missing");
   assert.equal((await lp.resolveBusinessRecipient("business",async()=>({email:"owner@example.invalid",emailVerified:false}))).category,"email_unverified");
@@ -22,6 +23,24 @@ test("Business recipient resolution normalizes safe outcomes without exposing re
     ["auth/network-request-failed","auth_unavailable"],["auth/unexpected-condition","auth_other_failure"]]){
     const outcome=await lp.resolveBusinessRecipient("business",async()=>{const error=new Error("sensitive details");error.code=code;throw error;});
     assert.equal(outcome.category,category);assert.equal(outcome.firebaseErrorCode,code);assert.equal("message" in outcome,false);
+  }
+});
+
+test("recipient diagnostics distinguish project, UID, permission, backend, and local SDK failures safely",async()=>{
+  let calls=0;
+  const mismatch=await lp.resolveBusinessRecipient("business-a",async()=>{calls++;return null;},{projectIdentity:{effectiveProjectId:"wrong-project",match:false}});
+  assert.equal(mismatch.category,"project_mismatch");assert.equal(calls,0);
+  const invalid=await lp.resolveBusinessRecipient(" business-a ",async()=>{calls++;return null;});
+  assert.equal(invalid.category,"invalid_business_uid");assert.equal(calls,0);
+  for(const [error,category,backend] of [
+    [Object.assign(new Error("permission denied for owner@example.invalid"),{code:"auth/insufficient-permission",errorInfo:{code:"auth/insufficient-permission"},httpStatus:403}),"auth_permission_denied","backend_permission_denied"],
+    [Object.assign(new Error("Identity Toolkit API has not been used"),{code:"auth/internal-error",httpStatus:403}),"auth_unavailable","identity_toolkit_disabled"],
+    [Object.assign(new Error("request timed out"),{code:"auth/internal-error"}),"auth_unavailable","timeout"],
+    [new ReferenceError("admin is not defined"),"auth_other_failure","unknown_backend_failure"],
+  ]){
+    const outcome=await lp.resolveBusinessRecipient("business-a",async()=>{throw error;});
+    assert.equal(outcome.category,category);assert.equal(outcome.diagnostic.backendCategory,backend);
+    assert.doesNotMatch(JSON.stringify(outcome),/owner@example\.invalid|eyJ[A-Za-z0-9_-]+\./);
   }
 });
 
@@ -48,3 +67,39 @@ test("historical Auth failure recovers later without duplicating canonical inqui
 test("reconciliation refuses unsafe legacy and provider-terminal jobs",async()=>{for(const patch of [{template:"unrelated_template"},{status:"sent",sentAt:"TIME"},{attempts:1},{providerResult:"rejected"},{errorCode:"email_delivery_failed"},{schemaVersion:lp.EMAIL_JOB_SCHEMA_VERSION}]){const db=memoryDb(landingSeed());const service=lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"},getAuthUser:async()=>({email:"owner@example.invalid",emailVerified:true})});const submitted=await service.submit({slug:"PUBLIC_A",version:"version-a",name:"Pat",email:"pat@example.invalid",idempotencyKey:`unsafe-${JSON.stringify(patch)}`});const path=`outboundEmailJobs/landing-customer_${submitted.leadId}`;const current=db.docs.get(path);db.docs.set(path,{...current,schemaVersion:"legacy",status:"failed_terminal",attempts:0,errorCode:"invalid_server_email_job",payload:undefined,...patch});const result=await service.reconcileInquiry({leadId:submitted.leadId},{uid:"admin",role:"admin"});assert.equal(result.customerEmailJob,"unchanged");assert.notEqual(db.docs.get(path).reconciliation?.kind,"legacy_landing_page_schema_upgrade");}});
 
 test("reconciliation denies non-Admin and arbitrary identities",async()=>{const db=memoryDb(landingSeed());const service=lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"}});await assert.rejects(()=>service.reconcileInquiry({leadId:"landing_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{uid:"business-a",role:"business"}),/admin_required/);await assert.rejects(()=>service.reconcileInquiry({leadId:"arbitrary"},{uid:"admin",role:"admin"}),/inquiry_invalid/);});
+
+test("Admin dry-run diagnoses the canonical inquiry without mutating jobs, health, or sent customer delivery",async()=>{
+  for(const [authBehavior,expected] of [
+    [async()=>({email:"owner@example.invalid",emailVerified:true}),{recipientResolution:"resolved",backendCategory:null}],
+    [async()=>{const e=new Error("forbidden");e.code="auth/insufficient-permission";e.httpStatus=403;throw e;},{recipientResolution:"auth_permission_denied",backendCategory:"backend_permission_denied"}],
+    [async()=>{throw new ReferenceError("admin is not defined");},{recipientResolution:"auth_other_failure",backendCategory:"unknown_backend_failure"}],
+  ]){
+    const db=memoryDb(landingSeed());let healthReports=0;
+    const service=lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"},getAuthUser:authBehavior,
+      runtimeProjectIdentity:()=>({effectiveProjectId:"scaledcircle-staging",match:true,gcloudProject:"scaledcircle-staging",
+        googleCloudProject:"scaledcircle-staging",firebaseConfigProject:"scaledcircle-staging",adminAppProject:"scaledcircle-staging",authAppProject:"scaledcircle-staging"}),reportRecipientResolution:async()=>{healthReports++;}});
+    const submitted=await service.submit({slug:"PUBLIC_A",version:"version-a",name:"Pat",email:"pat@example.invalid",idempotencyKey:`dry-${expected.recipientResolution}`});
+    const customerPath=`outboundEmailJobs/landing-customer_${submitted.leadId}`;
+    db.docs.set(customerPath,{...db.docs.get(customerPath),status:"sent",sentAt:"SENT_TIME",providerResult:"accepted"});
+    const before=JSON.stringify([...db.docs.entries()].sort(([a],[b])=>a.localeCompare(b)));const reportsBefore=healthReports;
+    const result=await service.reconcileInquiry({leadId:submitted.leadId,dryRun:true},{uid:"admin",role:"admin"});
+    assert.equal(result.authenticated,true);assert.equal(result.dryRun,true);assert.equal(result.project,"scaledcircle-staging");
+    assert.equal(result.projectIdentityMatch,true);assert.equal(result.uid.formatValid,true);
+    assert.deepEqual(new Set(Object.values(result.projectSources)),new Set(["scaledcircle-staging"]));
+    assert.equal(result.recipientResolution,expected.recipientResolution);assert.equal(result.backendCategory,expected.backendCategory);
+    assert.equal(JSON.stringify([...db.docs.entries()].sort(([a],[b])=>a.localeCompare(b))),before);
+    assert.equal(healthReports,reportsBefore);assert.equal(db.docs.get(customerPath).status,"sent");
+    assert.doesNotMatch(JSON.stringify(result),/owner@example\.invalid|admin is not defined|pat@example\.invalid/);
+  }
+});
+
+test("dry-run fails closed for signed-out, Business, invalid lead, and project mismatch",async()=>{
+  const db=memoryDb(landingSeed());let lookups=0;
+  const service=lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"},getAuthUser:async()=>{lookups++;return{email:"owner@example.invalid",emailVerified:true};},runtimeProjectIdentity:()=>({effectiveProjectId:"other-project",match:false})});
+  const submitted=await service.submit({slug:"PUBLIC_A",version:"version-a",name:"Pat",phone:"555-0100",idempotencyKey:"dry-auth"});
+  await assert.rejects(()=>service.reconcileInquiry({leadId:submitted.leadId,dryRun:true},null),/admin_required/);
+  await assert.rejects(()=>service.reconcileInquiry({leadId:submitted.leadId,dryRun:true},{uid:"business-a",role:"business"}),/admin_required/);
+  await assert.rejects(()=>service.reconcileInquiry({leadId:"landing_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",dryRun:true},{uid:"admin",role:"admin"}),/inquiry_missing/);
+  const result=await service.reconcileInquiry({leadId:submitted.leadId,dryRun:true},{uid:"admin",role:"admin"});
+  assert.equal(result.recipientResolution,"project_mismatch");assert.equal(result.projectIdentityMatch,false);assert.equal(lookups,0);
+});
