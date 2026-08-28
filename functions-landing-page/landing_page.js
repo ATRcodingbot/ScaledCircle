@@ -27,6 +27,8 @@ function slug(randomBytes = crypto.randomBytes) {
   if (bits > 0) result += PUBLIC_SLUG_ALPHABET[(value << (5 - bits)) & 31];
   return result;
 }
+function opaqueContext(randomBytes = crypto.randomBytes) { return randomBytes(18).toString("base64url"); }
+function validOpaqueContext(value) { const v=text(value,80);return /^[A-Za-z0-9_-]{24}$/.test(v)?v:""; }
 function digest(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 function publicOrigin(projectId) { const value=PUBLIC_ORIGINS[text(projectId,160)];if(!value)throw new Error("landing_page_environment_unknown");return value; }
 
@@ -229,12 +231,80 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
   }
   async function transition(input, actor) {
     const pageRef=pages.doc(text(input.pageId,160)); const action=text(input.action,30); let result;
-    await db.runTransaction(async(tx)=>{const snap=await tx.get(pageRef);if(!snap.exists||snap.data().businessUid!==actor?.uid)throw new Error("landing_page_forbidden");const p=snap.data();if(action==="publish"){const v=await tx.get(pageRef.collection("versions").doc(p.draftVersionId));if(!v.exists)throw new Error("landing_page_version_missing");const patch={status:"published",publishedVersionId:p.draftVersionId,publishedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};let responseAssetId=p.responseAssetId||null;let trackedUrl=null;const attribution={source:"landing_page",sourceDetail:p.publicSlug,campaignId:p.campaignId||null,landingPageId:pageRef.id,landingPageVersionId:p.draftVersionId,responseAssetId};if(p.trackingMode==="first_party"&&!responseAssetId){const assetRef=db.collection("responseAssets").doc();responseAssetId=assetRef.id;attribution.responseAssetId=responseAssetId;const publicCode=randomBytes(18).toString("base64url");tx.create(assetRef,{schemaVersion:"AttributionFoundationV1",businessUid:p.businessUid,type:"landing_page",publicCode,status:"active",label:v.data().content.headline,destination:`${publicBaseUrl}/p/${p.publicSlug}`,attribution,createdBy:actor.uid,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});patch.responseAssetId=responseAssetId;trackedUrl=`${publicBaseUrl}/r?code=${publicCode}`;}else if(p.trackingMode==="first_party"&&responseAssetId){attribution.responseAssetId=responseAssetId;tx.update(db.collection("responseAssets").doc(responseAssetId),{attribution,label:v.data().content.headline,updatedAt:FieldValue.serverTimestamp()});}tx.update(pageRef,patch);result={status:"published",publicSlug:p.publicSlug,versionId:p.draftVersionId,responseAssetId,trackedUrl};}else if(["pause","archive"].includes(action)){tx.update(pageRef,{status:action==="pause"?"paused":"archived",updatedAt:FieldValue.serverTimestamp()});result={status:action==="pause"?"paused":"archived"};}else throw new Error("invalid_landing_page_transition");});return result;
+    await db.runTransaction(async(tx)=>{
+      const snap=await tx.get(pageRef);
+      if(!snap.exists||snap.data().businessUid!==actor?.uid)throw new Error("landing_page_forbidden");
+      const p=snap.data();
+      if(action==="publish"){
+        const versionRef=pageRef.collection("versions").doc(p.draftVersionId);
+        const v=await tx.get(versionRef);
+        if(!v.exists)throw new Error("landing_page_version_missing");
+        const submissionContext=validOpaqueContext(v.data()?.submissionContext)||opaqueContext(randomBytes);
+        const publishedAt=v.data()?.publishedAt||FieldValue.serverTimestamp();
+        tx.set(versionRef,{submissionContext,publishedAt,published:true},{merge:true});
+        const patch={status:"published",publishedVersionId:p.draftVersionId,
+          publishedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};
+        let responseAssetId=p.responseAssetId||null;let trackedUrl=null;
+        const attribution={source:"landing_page",sourceDetail:p.publicSlug,campaignId:p.campaignId||null,
+          landingPageId:pageRef.id,landingPageVersionId:p.draftVersionId,responseAssetId};
+        if(p.trackingMode==="first_party"&&!responseAssetId){
+          const assetRef=db.collection("responseAssets").doc();responseAssetId=assetRef.id;
+          attribution.responseAssetId=responseAssetId;const publicCode=opaqueContext(randomBytes);
+          tx.create(assetRef,{schemaVersion:"AttributionFoundationV1",businessUid:p.businessUid,
+            type:"landing_page",publicCode,status:"active",label:v.data().content.headline,
+            destination:`${publicBaseUrl}/p/${p.publicSlug}`,attribution,createdBy:actor.uid,
+            createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+          patch.responseAssetId=responseAssetId;trackedUrl=`${publicBaseUrl}/r?code=${publicCode}`;
+        }else if(p.trackingMode==="first_party"&&responseAssetId){
+          attribution.responseAssetId=responseAssetId;
+          tx.update(db.collection("responseAssets").doc(responseAssetId),{attribution,
+            label:v.data().content.headline,updatedAt:FieldValue.serverTimestamp()});
+        }
+        tx.update(pageRef,patch);result={status:"published",publicSlug:p.publicSlug,
+          versionId:p.draftVersionId,responseAssetId,trackedUrl};
+      }else if(["pause","archive"].includes(action)){
+        tx.update(pageRef,{status:action==="pause"?"paused":"archived",
+          updatedAt:FieldValue.serverTimestamp()});result={status:action==="pause"?"paused":"archived"};
+      }else throw new Error("invalid_landing_page_transition");
+    });return result;
   }
-  async function resolve(publicSlug) { const snap=await pages.where("publicSlug","==",text(publicSlug,80)).limit(2).get();if(snap.docs.length!==1||snap.docs[0].data().status!=="published")throw new Error("landing_page_unavailable");const page={id:snap.docs[0].id,...snap.docs[0].data()};const v=await snap.docs[0].ref.collection("versions").doc(page.publishedVersionId).get();if(!v.exists)throw new Error("landing_page_unavailable");return {page,version:{id:v.id,...v.data()}}; }
+  async function resolvePage(publicSlug) {
+    const snap=await pages.where("publicSlug","==",text(publicSlug,80)).limit(2).get();
+    if(snap.docs.length!==1||snap.docs[0].data().status!=="published")throw new Error("landing_page_unavailable");
+    return {ref:snap.docs[0].ref,page:{id:snap.docs[0].id,...snap.docs[0].data()}};
+  }
+  async function resolve(publicSlug) {
+    const {ref,page}=await resolvePage(publicSlug);
+    const v=await ref.collection("versions").doc(page.publishedVersionId).get();
+    if(!v.exists)throw new Error("landing_page_unavailable");
+    return {page,version:{id:v.id,...v.data()}};
+  }
+  async function resolveSubmissionVersion(page, context) {
+    const token=text(context,80);if(!token)throw new Error("landing_page_context_invalid");
+    const matches=await pages.doc(page.id).collection("versions")
+      .where("submissionContext","==",token).limit(2).get();
+    if(matches.docs.length!==1)throw new Error("landing_page_context_invalid");
+    const version={id:matches.docs[0].id,...matches.docs[0].data()};
+    if(version.pageId!==page.id||version.businessUid!==page.businessUid||version.immutable!==true||
+        !version.publishedAt)throw new Error("landing_page_context_invalid");
+    return version;
+  }
+  async function resolveResponseInteraction(page, version, context) {
+    if(!text(context,80))return null;
+    const token=validOpaqueContext(context);if(!token)throw new Error("landing_page_response_context_invalid");
+    const matches=await db.collection("responseInteractions").where("submissionContext","==",token).limit(2).get();
+    if(matches.docs.length!==1)throw new Error("landing_page_response_context_invalid");
+    const interaction={id:matches.docs[0].id,...matches.docs[0].data()};
+    if(interaction.immutable!==true||interaction.businessUid!==page.businessUid||
+        interaction.responseAssetId!==page.responseAssetId||interaction.landingPageId!==page.id||
+        interaction.landingPageVersionId!==version.id||interaction.attributionComplete!==true)
+      throw new Error("landing_page_response_context_invalid");
+    return interaction;
+  }
   async function submit(input, requestMeta={}) {
-    const {page,version}=await resolve(input.slug);
-    if(text(input.version,160)!==version.id)throw new Error("landing_page_version_stale");
+    const {page}=await resolvePage(input.slug);
+    const version=await resolveSubmissionVersion(page,input.version||input.context);
+    const interaction=await resolveResponseInteraction(page,version,input.response);
     const contact=validateSubmission(input,version);
     const recipientOutcome=await recipientFor(page.businessUid,{operation:"submission",landingPageId:page.id});
     const day=Math.floor(now()/86400000);const key=text(input.idempotencyKey,160)||digest({p:page.id,v:version.id,c:contact,day});
@@ -252,13 +322,18 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
       const profile=businessSnap.data();const businessEmail=recipientOutcome.email||"";
       const businessName=text(profile.businessName||profile.companyName||profile.displayName,120)||"the Business";
       const pageName=text(version.content?.headline,160)||"Landing Page";const at=FieldValue.serverTimestamp();
-      const attribution={source:"landing_page",sourceDetail:page.publicSlug,landingPageId:page.id,landingPageVersionId:version.id,campaignId:page.campaignId||null,responseAssetId:page.responseAssetId||null};
+      const attribution={source:"landing_page",sourceDetail:page.publicSlug,landingPageId:page.id,
+        landingPageVersionId:version.id,campaignId:page.campaignId||null,
+        responseAssetId:interaction?.responseAssetId||null,interactionId:interaction?.id||null};
       const metadata={leadId:leadRef.id,landingPageId:page.id,landingPageVersionId:version.id,idempotencyKey:receiptId};
       const payload=landingPageEmailPayload({businessName,contact,pageName,inquiryUrl:`${publicBaseUrl}/#/business/landing-pages`});
       tx.set(rateRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,day,count:count+1,updatedAt:at},{merge:true});
       tx.create(leadRef,{schemaVersion:"SalesFunnelV1",leadType:"landing_page_inquiry",businessName:"Landing page inquiry",contactName:contact.name,contactEmail:contact.email?.toLowerCase()||null,contactPhone:contact.phone||null,requestSummary:contact.message||null,source:"landing_page",sourceDetail:page.publicSlug,attribution,firstAttribution:attribution,lastAttribution:attribution,stage:"prospect",priority:"normal",ownerUid:page.businessUid,suppressionStatus:null,createdBy:"public_landing_page",createdAt:at,updatedAt:at});
       tx.create(activityRef,{schemaVersion:"SalesFunnelV1",leadId:leadRef.id,type:"lead_created",actorUid:"public_landing_page",attribution,occurredAt:at});
-      if(page.trackingMode==="first_party")tx.create(conversionRef,{schemaVersion:"AttributionFoundationV1",milestone:"lead",businessUid:page.businessUid,leadId:leadRef.id,responseAssetId:page.responseAssetId||null,attribution,analyticsClass:"live",occurredAt:at,immutable:true});
+      if(interaction)tx.create(conversionRef,{schemaVersion:"AttributionFoundationV1",milestone:"lead",
+        businessUid:page.businessUid,leadId:leadRef.id,responseAssetId:interaction.responseAssetId,
+        interactionId:interaction.id,attribution,analyticsClass:interaction.analyticsClass,
+        occurredAt:at,immutable:true});
       tx.create(notificationRef,{schemaVersion:2,id:notificationRef.id,userId:page.businessUid,type:"landing_page_inquiry",title:"New landing page inquiry",message:`${contact.name} sent a request from your landing page.`,entityId:leadRef.id,deepLink:{destination:"landing_page",pageId:page.id},priority:"high",metadata:{landingPageId:page.id},read:false,channel:"in_app",emailRequested:true,pushRequested:false,createdAt:at,updatedAt:at});
       if(businessEmail){const job=businessInquiryEmail({businessName,contact,pageName,metadata:{...metadata,recipient:businessEmail}});tx.create(businessEmailRef,{...job,payload,createdAt:at,updatedAt:at});}
       if(contact.email){const job=customerConfirmationEmail({businessName,contact,metadata});tx.create(customerEmailRef,{...job,payload,createdAt:at,updatedAt:at});}
@@ -332,7 +407,8 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
 }
 
 module.exports={SCHEMA_VERSION,EMAIL_JOB_SCHEMA_VERSION,STATUSES,STYLES,CTA_TYPES,PUBLIC_ORIGINS,PUBLIC_SLUG_ALPHABET,
-  text,headerText,validEmail,escapeHtml,slug,digest,publicOrigin,normalizedFirebaseErrorCode,safeDiagnosticText,
+  text,headerText,validEmail,escapeHtml,slug,opaqueContext,validOpaqueContext,digest,publicOrigin,
+  normalizedFirebaseErrorCode,safeDiagnosticText,
   firebaseUidDiagnostics,safeFirebaseErrorDiagnostics,firebaseAuthFailureCategory,
   resolveBusinessRecipient,sanitizeDraft,defaultDraft,validateSubmission,outboundEmailJob,businessInquiryEmail,
   customerConfirmationEmail,landingPageEmailPayload,renderPage,renderSuccessPage,renderUnavailablePage,createLandingPageService};

@@ -108,10 +108,18 @@ function canonicalEnvelope(input = {}) {
     materialId: text(input.materialId, 160) || null,
     materialType: text(input.materialType, 60).toLowerCase() || null,
     creativeVersion: text(input.creativeVersion, 80) || null,
+    landingPageId: text(input.landingPageId, 160) || null,
+    landingPageVersionId: text(input.landingPageVersionId, 160) || null,
     responseAssetId: text(input.responseAssetId, 160) || null,
     interactionId: text(input.interactionId, 160) || null,
     leadId: text(input.leadId, 160) || null,
   };
+}
+
+function destinationWithResponseContext(destination, responseContext) {
+  const parsed = new URL(assertHttpsDestination(destination));
+  if (responseContext) parsed.searchParams.set("sc_response", text(responseContext, 80));
+  return parsed.toString();
 }
 
 function privacyFingerprint({ip, userAgent, assetId, now = Date.now()}) {
@@ -225,24 +233,38 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     const campaign = campaignId ? await db.collection("campaigns").doc(campaignId).get() : null;
     const analyticsClass = responseActivityClass(asset, campaign?.exists ? campaign.data() : null);
     const ref = db.collection("responseInteractions").doc(interactionId);
+    const landingPageId = text(asset.attribution?.landingPageId, 160);
+    const landingPageVersionId = text(asset.attribution?.landingPageVersionId, 160);
+    const isLandingPage = text(asset.type, 40) === "landing_page";
+    const attributionComplete = !isLandingPage || Boolean(landingPageId && landingPageVersionId);
     let created = false;
+    let responseContext = null;
     await db.runTransaction(async (transaction) => {
       const existing = await transaction.get(ref);
-      if (existing.exists) return;
+      if (existing.exists) {
+        responseContext = text(existing.data()?.submissionContext, 80) || null;
+        return;
+      }
       const envelope = canonicalEnvelope({...asset.attribution, responseAssetId: assetDoc.id,
         interactionId});
+      responseContext = isLandingPage && attributionComplete ? opaqueCode(randomBytes) : null;
       transaction.create(ref, {schemaVersion: SCHEMA_VERSION, businessUid: asset.businessUid,
         responseAssetId: assetDoc.id, publicCode, attribution: envelope,
+        landingPageId: envelope.landingPageId, landingPageVersionId: envelope.landingPageVersionId,
+        submissionContext: responseContext, attributionComplete,
         visitorHash: fingerprint, analyticsClass, liveAttribution: analyticsClass === "live",
         occurredAt: FieldValue.serverTimestamp(), immutable: true});
       transaction.set(db.collection("featureHealth").doc("attribution"), {
-        schemaVersion: SCHEMA_VERSION, feature: "attribution", status: "enabled",
+        schemaVersion: SCHEMA_VERSION, feature: "attribution",
+        status: attributionComplete ? "enabled" : "attention",
+        lastAttributionCompleteness: attributionComplete ? "complete" : "incomplete_page_version",
         successfulEvents: FieldValue.increment(1), lastSuccessfulEventAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
       created = true;
     });
-    return {destination, interactionId, analyticsClass, created};
+    return {destination: destinationWithResponseContext(destination, responseContext), interactionId,
+      analyticsClass, created, attributionComplete};
   }
 
   async function bridgeLead(input, actor) {
@@ -352,4 +374,5 @@ module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   PUBLIC_RESPONSE_ORIGINS, publicResponseOrigin, assertPublicResponseOrigin,
   responseCodeFingerprint, resolverFailureCategory, assertAttributionActor,
   opaqueCode, canonicalEnvelope, privacyFingerprint, responseActivityClass, interactionEventId,
+  destinationWithResponseContext,
   safeAsset, createAttributionService};

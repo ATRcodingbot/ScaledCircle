@@ -63,7 +63,36 @@ test("canonical envelope is channel-neutral, bounded, and versioned", () => {
   assert.equal(value.zoneId, "zone");
   assert.equal(value.materialId, "material");
   assert.equal(value.creativeVersion, "v3");
+  assert.equal(value.landingPageId, null);
+  assert.equal(value.landingPageVersionId, null);
   assert.throws(() => attribution.canonicalEnvelope({source: "made_up"}), /invalid_attribution_source/);
+});
+
+test("landing response snapshots immutable page and version context across republish", async () => {
+  const code="abcdefghijklmnopqrstuvwx";
+  const db=fakeFirestore({"responseAssets/asset-page":{businessUid:"business-1",publicCode:code,
+    status:"active",destination:"https://scaledcircle-staging.web.app/p/PAGE",type:"landing_page",
+    attribution:{source:"landing_page",landingPageId:"page-a",landingPageVersionId:"version-a"}}});
+  const FieldValue={serverTimestamp:()=>1234,increment:(value)=>value};
+  const contexts=[Buffer.alloc(18,7),Buffer.alloc(18,8)];
+  const service=attribution.createAttributionService({db,FieldValue,now:()=>2000,
+    randomBytes:()=>contexts.shift(),publicBaseUrl:"https://scaledcircle-staging.web.app"});
+  const first=await service.resolveAndRecord({code,ip:"192.0.2.1",userAgent:"Browser",
+    requestIdentity:"visit-a"});
+  assert.equal(first.attributionComplete,true);
+  assert.match(first.destination,/\/p\/PAGE\?sc_response=/);
+  const firstInteraction=[...db.records.entries()].find(([path])=>path.startsWith("responseInteractions/"))[1];
+  assert.equal(firstInteraction.landingPageId,"page-a");
+  assert.equal(firstInteraction.landingPageVersionId,"version-a");
+  assert.equal(firstInteraction.attribution.landingPageVersionId,"version-a");
+  db.records.get("responseAssets/asset-page").attribution.landingPageVersionId="version-b";
+  await service.resolveAndRecord({code,ip:"192.0.2.2",userAgent:"Browser",requestIdentity:"visit-b"});
+  const interactions=[...db.records.values()].filter((value)=>value.interactionId===undefined&&
+    value.responseAssetId==="asset-page"&&value.immutable===true);
+  assert.equal(interactions.length,2);
+  assert.deepEqual(new Set(interactions.map((value)=>value.landingPageVersionId)),
+    new Set(["version-a","version-b"]));
+  assert.equal(firstInteraction.landingPageVersionId,"version-a");
 });
 
 test("public codes are opaque and destination is HTTPS-only", () => {

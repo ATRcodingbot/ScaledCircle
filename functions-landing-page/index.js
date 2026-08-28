@@ -10981,7 +10981,11 @@ exports.renderLandingPage = onRequest({ region: "us-east1", cors: false, maxInst
     response.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
     response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
     await recordLandingPageHealthSafe("render", true);
-    response.status(200).type("html").send(landingPage.renderPage(resolved));
+    const responseContext = landingPage.validOpaqueContext(request.query?.sc_response);
+    const formAction = responseContext ? `/landing-page-submit?response=${encodeURIComponent(responseContext)}` :
+    "/landing-page-submit";
+    response.status(200).type("html").send(landingPage.renderPage({ ...resolved,
+      version: { ...resolved.version, id: resolved.version.submissionContext }, formAction }));
   } catch (error) {
     console.warn("landing_page_resolution_failed", {
       category: String(error?.message || "landing_page_internal").replace(/[^a-z0-9_]/gi, "_").slice(0, 80),
@@ -10998,7 +11002,9 @@ exports.renderLandingPage = onRequest({ region: "us-east1", cors: false, maxInst
 exports.submitLandingPageForm = onRequest({ region: "us-east1", cors: false, maxInstances: 20 }, async (request, response) => {
   if (request.method !== "POST") return response.status(405).send("Method not allowed");
   try {
-    const input = request.body || {};
+    const body = request.body || {};
+    const input = { ...body, version: landingPage.validOpaqueContext(body.version || body.context),
+      response: request.query?.response };
     const result = await landingPageService.submit({ ...input, idempotencyKey: request.get("Idempotency-Key") || input.idempotencyKey }, { requestIdentity: request.get("X-Request-ID"), ip: request.ip });
     await Promise.all([
     recordLandingPageHealthSafe("lead_transaction", true),
