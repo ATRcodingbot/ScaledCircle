@@ -9,11 +9,13 @@ import '../../navigation/business_back_button.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/landing_page_service.dart';
+import '../../services/business_media_service.dart';
 
 class LandingPageBuilderScreen extends StatefulWidget {
-  const LandingPageBuilderScreen({super.key, this.pageId, this.service});
+  const LandingPageBuilderScreen({super.key, this.pageId, this.service, this.mediaService});
   final String? pageId;
   final LandingPageGateway? service;
+  final BusinessMediaGateway? mediaService;
   @override
   State<LandingPageBuilderScreen> createState() =>
       _LandingPageBuilderScreenState();
@@ -22,6 +24,8 @@ class LandingPageBuilderScreen extends StatefulWidget {
 class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   late final LandingPageGateway _service =
       widget.service ?? LandingPageService();
+  late final BusinessMediaGateway _mediaService =
+      widget.mediaService ?? BusinessMediaService();
   final _headline = TextEditingController(
     text: 'A clear solution for your next project',
   );
@@ -56,6 +60,13 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   bool _loadingMore = false;
   bool _editing = false;
   String? _creationRequestId;
+  Map<String, dynamic>? _logo;
+  List<Map<String, dynamic>> _visuals = [];
+  bool _useBrandColors = false;
+  String _savedMedia = '{"useBrandColors":false,"logo":null,"visuals":[]}';
+  final Map<String, Future<Uint8List?>> _previewFutures = {};
+
+  String get _mediaFingerprint => jsonEncode(_mediaSelection);
 
   bool get _hasUnsavedEdits =>
       _headline.text != _savedHeadline ||
@@ -63,7 +74,8 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _points.text != _savedPoints ||
       _style != _savedStyle ||
       _cta != _savedCta ||
-      _tracking != _savedTracking;
+      _tracking != _savedTracking ||
+      _mediaFingerprint != _savedMedia;
 
   void _rememberSavedState() {
     _savedHeadline = _headline.text;
@@ -72,6 +84,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     _savedStyle = _style;
     _savedCta = _cta;
     _savedTracking = _tracking;
+    _savedMedia = _mediaFingerprint;
   }
 
   Future<bool> _confirmLeaveWithUnsavedChanges() async {
@@ -199,6 +212,9 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     _style = 'clean';
     _cta = 'request_estimate';
     _tracking = false;
+    _logo = null;
+    _visuals = [];
+    _useBrandColors = false;
     _pageId = null;
     _slug = null;
     _message = null;
@@ -259,7 +275,92 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     'ctaType': _cta,
     'ctaLabel': _cta == 'get_quote' ? 'Get a quote' : 'Request an estimate',
     'contactFields': ['name', 'email', 'phone', 'message'],
+    'media': _mediaSelection,
   };
+  Map<String, dynamic> get _mediaSelection => {
+    'useBrandColors': _useBrandColors,
+    'logo': _logo,
+    'visuals': _visuals,
+  };
+
+  Map<String, dynamic>? _approvedRef(Map<String, dynamic> asset) {
+    if (asset['removed'] == true) return null;
+    final revision = asset['approvedRevision'] is Map
+        ? Map<String, dynamic>.from(asset['approvedRevision'] as Map)
+        : asset['revision'] is Map
+        ? Map<String, dynamic>.from(asset['revision'] as Map)
+        : null;
+    final revisionId = asset['approvedRevisionId']?.toString();
+    if (revision == null || revisionId == null ||
+        revision['status'] != 'ready' || revision['approvalStatus'] != 'approved') {
+      return null;
+    }
+    return {'assetId': asset['assetId'].toString(), 'revisionId': revisionId,
+      'altText': revision['altText']?.toString() ?? '', 'title': asset['title']?.toString() ?? 'Approved image',
+      'purpose': asset['purpose']?.toString() ?? 'service_visual', 'asset': asset};
+  }
+
+  Widget _approvedAssetPreview(Map<String, dynamic> asset) => SizedBox(
+    width: 72,
+    height: 54,
+    child: FutureBuilder<Uint8List?>(
+      future: _previewFutures.putIfAbsent(
+        asset['assetId'].toString(),
+        () => _mediaService.previewBytes(asset),
+      ),
+      builder: (context, snapshot) => snapshot.data == null
+          ? const DecoratedBox(
+              decoration: BoxDecoration(color: Color(0xFFEAF0F5)),
+              child: Icon(Icons.image_outlined),
+            )
+          : Image.memory(snapshot.data!, fit: BoxFit.cover),
+    ),
+  );
+
+  Future<void> _pickApprovedMedia({required bool logo, int? replaceIndex}) async {
+    setState(() => _busy = true);
+    try {
+      final workspace = await _mediaService.workspace();
+      final options = (workspace['assets'] as List? ?? []).map((value) =>
+        _approvedRef(Map<String, dynamic>.from(value as Map))).whereType<Map<String, dynamic>>()
+        .where((value) => logo
+            ? value['purpose'] == 'logo'
+            : value['purpose'] != 'logo')
+        .toList();
+      if (!mounted) return;
+      final picked = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: Text(logo ? 'Choose approved logo' : 'Choose approved visual'),
+          children: [
+            if (options.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('No approved images are ready. Upload and approve one in Brand Assets first.')),
+            ...options.map((item) => SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, item),
+              child: ListTile(leading: _approvedAssetPreview(Map<String, dynamic>.from(item['asset'] as Map)), title: Text(item['title'].toString()),
+                subtitle: Text(item['altText'].toString().isEmpty ? 'Approved image' : item['altText'].toString())),
+            )),
+          ],
+        ),
+      );
+      if (picked != null && mounted) {
+        setState(() {
+        final selection = {'assetId': picked['assetId'], 'revisionId': picked['revisionId'],
+          'altText': picked['altText']};
+        if (logo) { _logo = selection; }
+        else if (replaceIndex != null) { _visuals[replaceIndex] = {...selection, 'role': _visuals[replaceIndex]['role'], 'slotId': _visuals[replaceIndex]['slotId']}; }
+        else if (_visuals.length < 6) { _visuals.add({...selection, 'role': _visuals.any((v) => v['role'] == 'hero') ? 'service' : 'hero', 'slotId': 'visual-${_visuals.length + 1}'}); }
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _message = "We couldn't load approved Brand Assets. Try again.");
+    } finally { if (mounted) setState(() => _busy = false); }
+  }
+
+  void _moveVisual(int index, int delta) {
+    final target = index + delta;
+    if (target < 0 || target >= _visuals.length) return;
+    setState(() { final item = _visuals.removeAt(index); _visuals.insert(target, item); });
+  }
   Future<void> _load() async {
     setState(() => _busy = true);
     try {
@@ -277,6 +378,10 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _style = c['style'] ?? 'clean';
       _cta = c['ctaType'] ?? 'request_estimate';
       _tracking = p['trackingMode'] == 'first_party';
+      final media = c['media'] is Map ? Map<String, dynamic>.from(c['media'] as Map) : const <String, dynamic>{};
+      _logo = media['logo'] is Map ? Map<String, dynamic>.from(media['logo'] as Map) : null;
+      _visuals = (media['visuals'] as List? ?? []).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      _useBrandColors = media['useBrandColors'] == true;
       _rememberSavedState();
       _slug = p['publicSlug']?.toString();
       _isPublished = p['status'] == 'published';
@@ -327,6 +432,10 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   }
 
   Future<void> _publish() async {
+    if ((_logo != null || _visuals.isNotEmpty) &&
+        !(await _confirmApprovedMediaPublish())) {
+      return;
+    }
     if (!await _save() || _pageId == null) return;
     setState(() => _busy = true);
     try {
@@ -344,6 +453,28 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<bool> _confirmApprovedMediaPublish() async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Publish approved media?'),
+          content: Text(
+            'This version will publish ${_logo == null ? 'no logo' : '1 approved logo'} and ${_visuals.length} approved service ${_visuals.length == 1 ? 'visual' : 'visuals'}. Later Brand Asset changes will not alter this published version.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Review page'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Publish approved media'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
   @override
   void dispose() {
@@ -628,6 +759,60 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                       ),
                       value: _tracking,
                       onChanged: (v) => setState(() => _tracking = v),
+                    ),
+                    const Divider(height: 32),
+                    Text('Brand & service visuals', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 6),
+                    const Text('Only images you approved in Brand Assets can be published. Your current public page stays unchanged until publishing completes.'),
+                    const SizedBox(height: 12),
+                    Wrap(spacing: 10, runSpacing: 8, children: [
+                      OutlinedButton.icon(
+                        key: const Key('choose-approved-logo'),
+                        onPressed: _busy ? null : () => _pickApprovedMedia(logo: true),
+                        icon: const Icon(Icons.business), label: Text(_logo == null ? 'Choose approved logo' : 'Replace logo'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('add-approved-visual'),
+                        onPressed: _busy || _visuals.length >= 6 ? null : () => _pickApprovedMedia(logo: false),
+                        icon: const Icon(Icons.add_photo_alternate_outlined), label: const Text('Add approved visual'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _busy ? null : () => AppNavigation.push(context, AppRoutes.businessBrandAssets),
+                        icon: const Icon(Icons.upload_outlined), label: const Text('Upload in Brand Assets'),
+                      ),
+                    ]),
+                    if (_logo != null)
+                      ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.verified_outlined),
+                        title: const Text('Approved logo selected'), subtitle: Text(_logo!['altText']?.toString() ?? ''),
+                        trailing: IconButton(tooltip: 'Remove logo', onPressed: () => setState(() => _logo = null), icon: const Icon(Icons.close))),
+                    ..._visuals.asMap().entries.map((entry) => Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.image_outlined),
+                        title: Text(entry.value['role'] == 'hero' ? 'Hero visual' : 'Service visual ${entry.key + 1}'),
+                        subtitle: Text(entry.value['altText']?.toString() ?? ''),
+                        trailing: PopupMenuButton<String>(
+                          tooltip: 'Visual actions',
+                          onSelected: (action) {
+                            if (action == 'earlier') _moveVisual(entry.key, -1);
+                            if (action == 'later') _moveVisual(entry.key, 1);
+                            if (action == 'replace') _pickApprovedMedia(logo: false, replaceIndex: entry.key);
+                            if (action == 'remove') setState(() => _visuals.removeAt(entry.key));
+                          },
+                          itemBuilder: (_) => [
+                            if (entry.key > 0) const PopupMenuItem(value: 'earlier', child: Text('Move earlier')),
+                            if (entry.key < _visuals.length - 1) const PopupMenuItem(value: 'later', child: Text('Move later')),
+                            const PopupMenuItem(value: 'replace', child: Text('Replace visual')),
+                            const PopupMenuItem(value: 'remove', child: Text('Remove visual')),
+                          ],
+                        ),
+                      ),
+                    )),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Use approved Brand Kit colors'),
+                      subtitle: const Text('Publishing snapshots the current approved colors for this version.'),
+                      value: _useBrandColors,
+                      onChanged: (value) => setState(() => _useBrandColors = value),
                     ),
                     const Divider(height: 32),
                     SegmentedButton<bool>(

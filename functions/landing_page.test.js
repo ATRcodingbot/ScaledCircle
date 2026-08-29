@@ -61,6 +61,31 @@ test("saving a draft keeps the published version live and immutable",async()=>{c
 
 test("republish advances only the published pointer and preserves the stable slug and history",async()=>{const db=memoryDb(landingSeed());const service=lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"},publicBaseUrl:"https://scaledcircle-staging.web.app"});const saved=await service.saveDraft({pageId:"page-a",content:{headline:"Published B",supportingText:"New public copy",contactFields:["name","email"]}}, {uid:"business-a",role:"business"});const result=await service.transition({pageId:"page-a",action:"publish"},{uid:"business-a",role:"business"});const page=db.docs.get("landingPages/page-a");assert.equal(result.publicSlug,"PUBLIC_A");assert.equal(page.publicSlug,"PUBLIC_A");assert.equal(page.status,"published");assert.equal(page.publishedVersionId,saved.versionId);assert.equal(db.docs.has("landingPages/page-a/versions/version-a"),true);const resolved=await service.resolve("PUBLIC_A");assert.equal(resolved.version.content.headline,"Published B");});
 
+test("media publish failure preserves the previous public version and creates no partial pointer",async()=>{
+  const db=memoryDb(landingSeed());
+  const saved=await lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"}}).saveDraft(
+    {pageId:"page-a",content:{headline:"Media draft",supportingText:"Not public until complete",
+      contactFields:["name","email"],media:{visuals:[{assetId:"asset-a",revisionId:"revision-a",
+        role:"hero",slotId:"hero-main"}]}}},
+    {uid:"business-a",role:"business"});
+  db.docs.set("businessMediaLibraries/business-a/mediaAssets/asset-a",{businessUid:"business-a",approvedRevisionId:"revision-a",removed:false});
+  db.docs.set("businessMediaLibraries/business-a/mediaAssets/asset-a/revisions/revision-a",{businessUid:"business-a",status:"ready",approvalStatus:"approved",rightsAttestation:true,renditions:{hero:{storagePath:"private/missing.webp",mimeType:"image/webp",width:1600,height:900}}});
+  const bucket={name:"demo.appspot.com",file:()=>({download:async()=>{throw new Error("missing");}})};
+  const service=lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"},bucket});
+  await assert.rejects(()=>service.transition({pageId:"page-a",action:"publish"},{uid:"business-a",role:"business"}),/missing/);
+  assert.equal(db.docs.get("landingPages/page-a").publishedVersionId,"version-a");
+  assert.equal(db.docs.get(`landingPages/page-a/versions/${saved.versionId}`).published,undefined);
+});
+
+test("completed publication retry returns the same immutable version without repeating preparation",async()=>{
+  const db=memoryDb(landingSeed());const service=lp.createLandingPageService({db,FieldValue:{serverTimestamp:()=>"SERVER_TIME"}});
+  const saved=await service.saveDraft({pageId:"page-a",content:{headline:"Replay-safe",supportingText:"One version",contactFields:["name","email"]}},{uid:"business-a",role:"business"});
+  await service.transition({pageId:"page-a",action:"publish"},{uid:"business-a",role:"business"});
+  const replay=await service.transition({pageId:"page-a",action:"publish"},{uid:"business-a",role:"business"});
+  assert.equal(replay.idempotentReplay,true);assert.equal(replay.versionId,saved.versionId);
+  assert.equal(db.docs.get("landingPages/page-a").publishedVersionId,saved.versionId);
+});
+
 test("visitor opened on A submits A after republish B and public identity overrides fail closed",async()=>{
   const responseContext="rrrrrrrrrrrrrrrrrrrrrrrr";const db=memoryDb(landingSeed({trackingMode:"first_party"}));
   db.docs.get("landingPages/page-a").responseAssetId="asset-a";

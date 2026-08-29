@@ -356,8 +356,9 @@ function copyPackage(destination, mode) {
     // module loadable there while preserving landing-page-core as the sole
     // deployable owner of the five Landing Page authorities.
     if (!["landing-page", "legacy"].includes(mode) && name === "landing_page.js") continue;
+    if (!["landing-page", "legacy"].includes(mode) && name === "landing_page_media.js") continue;
     if (mode === "landing-page" && name.endsWith(".js") &&
-        !["landing_page.js", "landing_page_workspace.js"].includes(name)) continue;
+        !["landing_page.js", "landing_page_workspace.js", "landing_page_media.js"].includes(name)) continue;
     if (mode === "creative-media" && name.endsWith(".js") && name !== "creative_media.js") continue;
     if (mode !== "creative-media" && name === "creative_media.js") continue;
     fs.copyFileSync(source, path.join(destination, name));

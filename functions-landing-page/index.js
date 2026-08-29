@@ -5,7 +5,7 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 const { initializeApp, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-
+const { getStorage } = require("firebase-admin/storage");
 const {
   getFirestore,
   FieldPath,
@@ -10912,6 +10912,7 @@ function effectiveLandingPageProjectIdentity() {
     identity.adminAppProject || identity.authAppProject || null, match: unique.length <= 1 };
 }
 const landingPageService = landingPage.createLandingPageService({ db, FieldValue,
+  bucket: () => getStorage().bucket(),
   getAuthUser: (uid) => getAuth().getUser(uid),
   runtimeProjectIdentity: effectiveLandingPageProjectIdentity,
   reportRecipientResolution: recordLandingPageRecipientResolutionSafe,
@@ -11105,7 +11106,7 @@ exports.renderLandingPage = onRequest({ region: "us-east1", cors: false, maxInst
       return response.status(200).type("html").send(landingPage.renderSuccessPage({ style: resolved.version.content.style }));
     }
     response.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
-    response.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+    response.set("Content-Security-Policy", "default-src 'none'; img-src https://firebasestorage.googleapis.com; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
     await recordLandingPageHealthSafe("render", true);
     const responseContext = landingPage.validOpaqueContext(request.query?.sc_response);
     const formAction = responseContext ? `/landing-page-submit?response=${encodeURIComponent(responseContext)}` :

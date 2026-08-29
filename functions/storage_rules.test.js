@@ -183,3 +183,15 @@ test("Business media rejects unsupported and oversized inputs", async () => {
   await assertFails(original.put(new Uint8Array([1]), {contentType: "image/svg+xml"}));
   await assertFails(original.put(new Uint8Array(10 * 1024 * 1024 + 1), {contentType: "image/png"}));
 });
+
+test("Landing Page publication derivatives are public-read and backend-write only", async () => {
+  const path = "landing_page_public/business-one/page-one/version-one/hero-main/hash.webp";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.storage().ref(path).put(new Uint8Array([1, 2, 3]), {contentType: "image/webp"});
+  });
+  await assertSucceeds(environment.unauthenticatedContext().storage().ref(path).getDownloadURL());
+  await assertFails(ref("business-one", path).put(new Uint8Array([4]), {contentType: "image/webp"}));
+  await assertFails(ref("admin-one", path).delete());
+  await assertFails(ref("business-one", "landing_page_public/business-one/page-one/version-one/hero-main/other.webp")
+    .put(new Uint8Array([5]), {contentType: "image/webp"}));
+});

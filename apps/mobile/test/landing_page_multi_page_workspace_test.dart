@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/landing_page_builder_screen.dart';
 import 'package:flutter_app/services/landing_page_service.dart';
+import 'package:flutter_app/services/business_media_service.dart';
+import 'dart:typed_data';
 
 class _FakeLandingPageGateway implements LandingPageGateway {
   _FakeLandingPageGateway({this.pages = const [], this.morePages = const []});
@@ -11,6 +13,7 @@ class _FakeLandingPageGateway implements LandingPageGateway {
   int createCalls = 0;
   int listCalls = 0;
   String? creationRequestId;
+  Map<String, dynamic>? createdContent;
 
   @override
   Future<Map<String, dynamic>> list({String? cursor}) async {
@@ -32,6 +35,7 @@ class _FakeLandingPageGateway implements LandingPageGateway {
     required String creationRequestId,
   }) async {
     createCalls++;
+    createdContent = content;
     this.creationRequestId = creationRequestId;
     return {'pageId': 'page-new', 'publicSlug': 'PUBLIC_NEW'};
   }
@@ -52,7 +56,56 @@ class _FakeLandingPageGateway implements LandingPageGateway {
       {};
 }
 
+class _FakeBusinessMediaGateway implements BusinessMediaGateway {
+  @override
+  Future<Map<String, dynamic>> workspace({String? cursor}) async => {
+    'assets': [
+      {'assetId': 'asset-approved', 'title': 'Approved hero', 'purpose': 'hero',
+        'approvedRevisionId': 'revision-approved', 'removed': false,
+        'approvedRevision': {'revisionId': 'revision-approved', 'status': 'ready',
+          'approvalStatus': 'approved', 'altText': 'Conceptual service image'}},
+      {'assetId': 'asset-pending', 'title': 'Pending image', 'purpose': 'hero',
+        'approvedRevisionId': null, 'removed': false,
+        'revision': {'revisionId': 'revision-pending', 'status': 'ready',
+          'approvalStatus': 'pending', 'altText': 'Pending'}},
+    ],
+  };
+  @override Future<void> approve(String a,String r) async {}
+  @override Future<void> reject(String a,String r) async {}
+  @override Future<void> remove(String a) async {}
+  @override Future<void> selectLogo(String a,String r) async {}
+  @override Future<Uint8List?> previewBytes(Map<String,dynamic> a) async => null;
+  @override Future<void> saveReviewMetadata({required String assetId,required String revisionId,required String altText,required String serviceLabel,required bool rightsAttestation}) async {}
+  @override Future<void> updateBrand({required String primaryColor,required String secondaryColor,required String stylePreset}) async {}
+  @override Future<void> upload({required Uint8List bytes,required String filename,required String purpose,String? assetId}) async {}
+}
+
 void main() {
+  testWidgets('builder selects only approved exact media revisions', (tester) async {
+    final service = _FakeLandingPageGateway();
+    await tester.pumpWidget(MaterialApp(home: LandingPageBuilderScreen(
+      service: service, mediaService: _FakeBusinessMediaGateway())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('new-landing-page-button')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('add-approved-visual')), 500,
+      scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const Key('add-approved-visual')));
+    await tester.pumpAndSettle();
+    expect(find.text('Approved hero'), findsOneWidget);
+    expect(find.text('Pending image'), findsNothing);
+    await tester.tap(find.text('Approved hero'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Save draft'), 500,
+      scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Save draft'));
+    await tester.pumpAndSettle();
+    final media = Map<String,dynamic>.from(service.createdContent!['media'] as Map);
+    final visual = Map<String,dynamic>.from((media['visuals'] as List).single as Map);
+    expect(visual['assetId'], 'asset-approved');
+    expect(visual['revisionId'], 'revision-approved');
+    expect(visual['role'], 'hero');
+  });
   testWidgets('zero-page workspace starts a local draft without server junk', (
     tester,
   ) async {

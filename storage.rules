@@ -150,6 +150,15 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // Immutable publication derivatives created only by the Landing Page
+    // backend. Public pages may read exact objects; clients cannot create,
+    // replace, delete, or list through a broader rule.
+    match /landing_page_public/{uid}/{pageId}/{versionId}/{slotId}/{fileName} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
