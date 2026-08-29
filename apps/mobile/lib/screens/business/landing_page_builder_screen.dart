@@ -39,7 +39,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   String? _pageId;
   String? _slug;
   String? _message;
-  int _inquiryCount = 0;
+  int? _inquiryCount;
   bool _isPublished = false;
   bool _hasUnpublishedChanges = false;
   String _savedHeadline = 'A clear solution for your next project';
@@ -51,6 +51,9 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   bool _savedTracking = false;
   List<Map<String, dynamic>> _recentInquiries = const [];
   List<Map<String, dynamic>> _pages = const [];
+  String? _nextCursor;
+  bool _hasMorePages = false;
+  bool _loadingMore = false;
   bool _editing = false;
   String? _creationRequestId;
 
@@ -143,18 +146,43 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     }
   }
 
-  Future<void> _loadWorkspace() async {
-    setState(() => _busy = true);
+  Future<void> _loadWorkspace({bool append = false}) async {
+    if (append && (!_hasMorePages || _loadingMore)) return;
+    setState(() {
+      if (append) {
+        _loadingMore = true;
+      } else {
+        _busy = true;
+      }
+    });
     try {
-      final result = await _service.list();
-      _pages = (result['pages'] as List? ?? [])
+      final result = await _service.list(cursor: append ? _nextCursor : null);
+      final incoming = (result['pages'] as List? ?? [])
           .map((page) => Map<String, dynamic>.from(page as Map))
           .toList();
+      if (append) {
+        final byId = <String, Map<String, dynamic>>{
+          for (final page in _pages) page['pageId'].toString(): page,
+        };
+        for (final page in incoming) {
+          byId[page['pageId'].toString()] = page;
+        }
+        _pages = byId.values.toList();
+      } else {
+        _pages = incoming;
+      }
+      _hasMorePages = result['hasMore'] == true;
+      _nextCursor = result['nextCursor']?.toString();
     } catch (_) {
       _message =
           "We couldn't check for saved drafts. You can still start a page.";
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _loadingMore = false;
+        });
+      }
     }
   }
 
@@ -174,7 +202,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     _pageId = null;
     _slug = null;
     _message = null;
-    _inquiryCount = 0;
+    _inquiryCount = null;
     _recentInquiries = const [];
     _isPublished = false;
     _hasUnpublishedChanges = false;
@@ -257,7 +285,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       final inquiry = Map<String, dynamic>.from(
         r['inquirySummary'] as Map? ?? const {},
       );
-      _inquiryCount = (inquiry['count'] as num?)?.toInt() ?? 0;
+      _inquiryCount = (inquiry['count'] as num?)?.toInt();
       _recentInquiries = (inquiry['recent'] as List? ?? [])
           .map((item) => Map<String, dynamic>.from(item as Map))
           .toList();
@@ -408,6 +436,16 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                           onOpen: () => _openPage(page['pageId'].toString()),
                         ),
                       ),
+                    if (_hasMorePages)
+                      Center(
+                        child: OutlinedButton(
+                          key: const Key('load-more-landing-pages-button'),
+                          onPressed: _loadingMore
+                              ? null
+                              : () => _loadWorkspace(append: true),
+                          child: Text(_loadingMore ? 'Loading…' : 'Load More'),
+                        ),
+                      ),
                   ] else ...[
                     Wrap(
                       spacing: 10,
@@ -466,10 +504,12 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '$_inquiryCount customer ${_inquiryCount == 1 ? 'inquiry' : 'inquiries'}',
+                                _inquiryCount == null
+                                    ? 'Inquiry count unavailable'
+                                    : '$_inquiryCount customer ${_inquiryCount == 1 ? 'inquiry' : 'inquiries'}',
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
-                              if (!_tracking && _inquiryCount > 0)
+                              if (!_tracking && (_inquiryCount ?? 0) > 0)
                                 const Padding(
                                   padding: EdgeInsets.only(top: 4, bottom: 8),
                                   child: Text(
@@ -690,7 +730,7 @@ class _LandingPageSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = page['status']?.toString() ?? 'draft';
-    final inquiryCount = (page['inquiryCount'] as num?)?.toInt() ?? 0;
+    final inquiryCount = (page['inquiryCount'] as num?)?.toInt();
     final tracking = page['trackingMode'] == 'first_party';
     final unpublished = page['hasUnpublishedChanges'] == true;
     final statusLabel = switch (status) {
@@ -719,7 +759,7 @@ class _LandingPageSummaryCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '$statusLabel • Tracking ${tracking ? 'On' : 'Off'} • '
-                    '$inquiryCount ${inquiryCount == 1 ? 'inquiry' : 'inquiries'}',
+                    '${inquiryCount == null ? 'Inquiry count unavailable' : '$inquiryCount ${inquiryCount == 1 ? 'inquiry' : 'inquiries'}'}',
                   ),
                 ],
               ),

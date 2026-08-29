@@ -10817,6 +10817,7 @@ setGlobalOptions({
 // Landing Page + Form V1 is isolated from the retired campaignTrackingCodes
 // authority. Public page and form identities are always derived server-side.
 const landingPage = require("./landing_page");
+const landingPageWorkspace = require("./landing_page_workspace");
 function effectiveLandingPageProjectIdentity() {
   let firebaseConfigProjectId = null;
   try {firebaseConfigProjectId = JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId || null;} catch (_) {firebaseConfigProjectId = null;}
@@ -10919,38 +10920,67 @@ exports.getLandingPageWorkspace = onCall({ region: "us-east1", enforceAppCheck: 
   }
   const pageId = String(request.data?.pageId || "");
   if (!pageId) {
-    const query = actor.role === "business" ? db.collection("landingPages").
-    where("businessUid", "==", actor.uid).limit(20) : db.collection("landingPages").
-    orderBy("updatedAt", "desc").limit(20);
-    const pages = await query.get();
-    const records = pages.docs.map((doc) => ({ pageId: doc.id, ...doc.data() }));
-    records.sort((a, b) => Number(b.updatedAt?.toMillis?.() || 0) - Number(a.updatedAt?.toMillis?.() || 0));
-    const inquiries = actor.role === "business" ? await db.collection("salesLeads").
-    where("ownerUid", "==", actor.uid).limit(50).get() : { docs: [] };
-    const inquiryCounts = new Map();
-    for (const inquiry of inquiries.docs) {
-      const id = String(inquiry.data()?.attribution?.landingPageId || "");
-      if (id) inquiryCounts.set(id, (inquiryCounts.get(id) || 0) + 1);
+    const pageSize = landingPageWorkspace.PAGE_SIZE;
+    let cursor = null;
+    if (request.data?.cursor != null) {
+      try {
+        cursor = landingPageWorkspace.decodeCursor(request.data.cursor);
+      } catch (_) {
+        throw new HttpsError("invalid-argument", "That Landing Page list position is no longer available.");
+      }
     }
+    let query = db.collection("landingPages");
+    if (actor.role === "business") query = query.where("businessUid", "==", actor.uid);
+    query = query.orderBy("createdAt", "desc").
+    orderBy(require("firebase-admin/firestore").FieldPath.documentId(), "desc");
+    if (cursor) query = query.startAfter(Timestamp.fromMillis(cursor.createdAtMillis), cursor.pageId);
+    const pages = await query.limit(pageSize + 1).get();
+    const visibleDocs = pages.docs.slice(0, pageSize);
+    const records = visibleDocs.map((doc) => ({ pageId: doc.id, ...doc.data() }));
+    const hasMore = pages.docs.length > pageSize;
+    const last = visibleDocs.at(-1);
+    const nextCursor = hasMore && last ? landingPageWorkspace.encodeCursor({
+      createdAtMillis: last.data().createdAt.toMillis(), pageId: last.id
+    }) : null;
     const summaries = await Promise.all(records.map(async (record) => {
       const version = record.draftVersionId ? await db.collection("landingPages").doc(record.pageId).
       collection("versions").doc(record.draftVersionId).get() : null;
+      let inquiryCount = null;
+      const countOwnerUid = actor.role === "business" ? actor.uid : String(record.businessUid || "");
+      if (countOwnerUid) {
+        try {
+          inquiryCount = await landingPageWorkspace.exactInquiryCount(db, countOwnerUid, record.pageId);
+        } catch (error) {
+          logger.warn("landing_page_inquiry_count_unavailable", {
+            pageIdFingerprint: landingPage.digest(record.pageId).slice(0, 16),
+            errorCategory: String(error?.code || "count_failed").slice(0, 80)
+          });
+        }
+      }
       return { pageId: record.pageId, title: String(version?.data()?.content?.headline || "Untitled Landing Page"),
         status: record.status, trackingMode: record.trackingMode, publicSlug: record.publicSlug,
-        updatedAt: record.updatedAt || null, inquiryCount: inquiryCounts.get(record.pageId) || 0,
+        createdAt: record.createdAt || null, updatedAt: record.updatedAt || null, inquiryCount,
         hasUnpublishedChanges: record.status === "published" && record.draftVersionId !== record.publishedVersionId };
     }));
-    return { schemaVersion: landingPage.SCHEMA_VERSION, pages: summaries };
+    return { schemaVersion: landingPage.SCHEMA_VERSION, pages: summaries, hasMore, nextCursor };
   }
   const page = await db.collection("landingPages").doc(pageId).get();
   if (!page.exists || actor.role !== "admin" && page.data()?.businessUid !== actor.uid) throw new HttpsError("permission-denied", "Landing page access is not available.");
   const versions = await page.ref.collection("versions").orderBy("createdAt", "desc").limit(20).get();
-  const inquiries = await db.collection("salesLeads").where("ownerUid", "==", page.data().businessUid).
-  limit(50).get();
+  const inquiryQuery = db.collection("salesLeads").where("ownerUid", "==", page.data().businessUid).
+  where("attribution.landingPageId", "==", page.id);
+  let inquiryCount = null;
+  try {inquiryCount = await landingPageWorkspace.exactInquiryCount(db, page.data().businessUid, page.id);} catch (error) {
+    logger.warn("landing_page_inquiry_count_unavailable", {
+      pageIdFingerprint: landingPage.digest(page.id).slice(0, 16),
+      errorCategory: String(error?.code || "count_failed").slice(0, 80)
+    });
+  }
+  const inquiries = await inquiryQuery.limit(10).get();
   const pageInquiries = inquiries.docs.filter((doc) => doc.data()?.attribution?.landingPageId === page.id);
   return { schemaVersion: landingPage.SCHEMA_VERSION, page: { pageId: page.id, ...page.data() },
     versions: versions.docs.map((doc) => ({ versionId: doc.id, ...doc.data() })),
-    inquirySummary: { count: pageInquiries.length, recent: pageInquiries.slice(0, 10).map((doc) => ({
+    inquirySummary: { count: inquiryCount, recent: pageInquiries.map((doc) => ({
         leadId: doc.id, contactName: String(doc.data()?.contactName || "New inquiry"),
         contactEmail: doc.data()?.contactEmail || null,
         contactPhone: doc.data()?.contactPhone || null,

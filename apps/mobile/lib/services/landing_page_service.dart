@@ -7,7 +7,7 @@ abstract interface class LandingPageGateway {
     required String creationRequestId,
   });
   Future<Map<String, dynamic>> load(String pageId);
-  Future<Map<String, dynamic>> list();
+  Future<Map<String, dynamic>> list({String? cursor});
   Future<Map<String, dynamic>> save(
     String pageId,
     Map<String, dynamic> content, {
@@ -48,10 +48,10 @@ class LandingPageService implements LandingPageGateway {
   }
 
   @override
-  Future<Map<String, dynamic>> list() async {
+  Future<Map<String, dynamic>> list({String? cursor}) async {
     final result = await _functions
         .httpsCallable('getLandingPageWorkspace')
-        .call();
+        .call(<String, dynamic>{'cursor': ?cursor});
     return Map<String, dynamic>.from(result.data as Map);
   }
 

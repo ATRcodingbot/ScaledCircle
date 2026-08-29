@@ -4,14 +4,26 @@ import 'package:flutter_app/screens/business/landing_page_builder_screen.dart';
 import 'package:flutter_app/services/landing_page_service.dart';
 
 class _FakeLandingPageGateway implements LandingPageGateway {
-  _FakeLandingPageGateway({this.pages = const []});
+  _FakeLandingPageGateway({this.pages = const [], this.morePages = const []});
 
   final List<Map<String, dynamic>> pages;
+  final List<Map<String, dynamic>> morePages;
   int createCalls = 0;
+  int listCalls = 0;
   String? creationRequestId;
 
   @override
-  Future<Map<String, dynamic>> list() async => {'pages': pages};
+  Future<Map<String, dynamic>> list({String? cursor}) async {
+    listCalls++;
+    if (cursor == null) {
+      return {
+        'pages': pages,
+        'hasMore': morePages.isNotEmpty,
+        'nextCursor': morePages.isEmpty ? null : 'cursor-2',
+      };
+    }
+    return {'pages': morePages, 'hasMore': false, 'nextCursor': null};
+  }
 
   @override
   Future<Map<String, dynamic>> create({
@@ -142,5 +154,81 @@ void main() {
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Load More appends and deduplicates canonical page identities', (
+    tester,
+  ) async {
+    final first = List.generate(
+      20,
+      (index) => {
+        'pageId': 'page-${index + 1}',
+        'title': 'Page ${index + 1}',
+        'status': 'draft',
+        'trackingMode': 'off',
+        'inquiryCount': index,
+      },
+    );
+    final service = _FakeLandingPageGateway(
+      pages: first,
+      morePages: [
+        first.last,
+        {
+          'pageId': 'page-21',
+          'title': 'Page 21',
+          'status': 'draft',
+          'trackingMode': 'off',
+          'inquiryCount': 61,
+        },
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: LandingPageBuilderScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('load-more-landing-pages-button')),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      find.byKey(const Key('load-more-landing-pages-button')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('load-more-landing-pages-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Page 20'), findsOneWidget);
+    expect(find.text('Page 21'), findsOneWidget);
+    expect(find.text('Draft • Tracking Off • 61 inquiries'), findsOneWidget);
+    expect(
+      find.byKey(const Key('load-more-landing-pages-button')),
+      findsNothing,
+    );
+    expect(service.listCalls, 2);
+  });
+
+  testWidgets('unavailable inquiry count is never rendered as zero', (
+    tester,
+  ) async {
+    final service = _FakeLandingPageGateway(
+      pages: const [
+        {
+          'pageId': 'page-a',
+          'title': 'Count unavailable fixture',
+          'status': 'published',
+          'trackingMode': 'off',
+          'inquiryCount': null,
+        },
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: LandingPageBuilderScreen(service: service)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Inquiry count unavailable'), findsOneWidget);
+    expect(find.textContaining('0 inquiries'), findsNothing);
   });
 }
