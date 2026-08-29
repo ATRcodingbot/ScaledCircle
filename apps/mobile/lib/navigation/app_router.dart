@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'browser_history.dart';
+
 typedef AppRouteFactory = Route<dynamic> Function(RouteSettings settings);
 
 class AppRouteInformationParser extends RouteInformationParser<Uri> {
@@ -28,6 +30,7 @@ class AppRouterDelegate extends RouterDelegate<Uri>
   Uri _location = Uri(path: '/');
   Object? _arguments;
   final List<Uri> _appHistory = <Uri>[];
+  bool _browserBackPending = false;
 
   @override
   Uri get currentConfiguration => _location;
@@ -48,20 +51,30 @@ class AppRouterDelegate extends RouterDelegate<Uri>
       notifyListeners();
     }
 
-    if (!replace && context != null) {
+    if (replace && context != null) {
+      Router.neglect(context, update);
+    } else if (!replace && context != null) {
       Router.navigate(context, update);
     } else {
       update();
     }
   }
 
-  bool popPreviousBusinessRoute() {
+  bool popPreviousBusinessRoute(BuildContext context) {
+    if (_browserBackPending) return true;
     while (_appHistory.isNotEmpty) {
       final previous = _appHistory.removeLast();
       if (!_isBusinessRoute(previous)) continue;
-      _location = previous;
-      _arguments = null;
-      notifyListeners();
+      if (canUseBrowserHistoryBack) {
+        _browserBackPending = true;
+        browserHistoryBack();
+      } else {
+        Router.neglect(context, () {
+          _location = previous;
+          _arguments = null;
+          notifyListeners();
+        });
+      }
       return true;
     }
     return false;
@@ -72,6 +85,7 @@ class AppRouterDelegate extends RouterDelegate<Uri>
 
   @override
   Future<void> setNewRoutePath(Uri configuration) async {
+    _browserBackPending = false;
     _appHistory.clear();
     _location = configuration;
     _arguments = null;

@@ -192,13 +192,26 @@ void main() {
     expect(source, isNot(contains('AppRoutes.businessDashboard')));
   });
 
-  test(
-    'router replacement publishes route information without Router.neglect',
-    () {
-      final source = File('lib/navigation/app_router.dart').readAsStringSync();
-      expect(source, isNot(contains('Router.neglect')));
-      expect(source, contains('Router.navigate(context, update)'));
-      expect(source, contains('popPreviousBusinessRoute'));
-    },
-  );
+  test('router uses explicit browser push and replace intentions', () {
+    final source = File('lib/navigation/app_router.dart').readAsStringSync();
+    expect(source, contains('Router.neglect(context, update)'));
+    expect(source, contains('Router.navigate(context, update)'));
+    expect(source, contains('popPreviousBusinessRoute'));
+  });
+
+  test('web stacked Back delegates to the actual browser history cursor', () {
+    final source = File(
+      'lib/navigation/browser_history_web.dart',
+    ).readAsStringSync();
+    expect(source, contains('web.window.history.back()'));
+    final router = File('lib/navigation/app_router.dart').readAsStringSync();
+    expect(router, contains('_browserBackPending'));
+  });
+
+  test('async draft discovery cannot load after route disposal', () {
+    final source = File(
+      'lib/screens/business/landing_page_builder_screen.dart',
+    ).readAsStringSync();
+    expect(source, contains('if (_pageId != null && mounted) return _load();'));
+  });
 }

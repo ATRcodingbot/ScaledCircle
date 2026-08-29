@@ -133,7 +133,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       final pages = (result['pages'] as List? ?? []).cast<Map>();
       if (pages.isNotEmpty) {
         _pageId = pages.first['pageId']?.toString();
-        if (_pageId != null) return _load();
+        if (_pageId != null && mounted) return _load();
       }
     } catch (_) {
       _message =
