@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_environment.dart';
+import '../../navigation/business_back_button.dart';
 import '../../services/landing_page_service.dart';
 
 class LandingPageBuilderScreen extends StatefulWidget {
@@ -36,7 +37,55 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   int _inquiryCount = 0;
   bool _isPublished = false;
   bool _hasUnpublishedChanges = false;
+  String _savedHeadline = 'A clear solution for your next project';
+  String _savedSupport =
+      'Tell us what you need. We’ll follow up with a clear next step.';
+  String _savedPoints = 'Straightforward service\nA clear next step';
+  String _savedStyle = 'clean';
+  String _savedCta = 'request_estimate';
+  bool _savedTracking = false;
   List<Map<String, dynamic>> _recentInquiries = const [];
+
+  bool get _hasUnsavedEdits =>
+      _headline.text != _savedHeadline ||
+      _support.text != _savedSupport ||
+      _points.text != _savedPoints ||
+      _style != _savedStyle ||
+      _cta != _savedCta ||
+      _tracking != _savedTracking;
+
+  void _rememberSavedState() {
+    _savedHeadline = _headline.text;
+    _savedSupport = _support.text;
+    _savedPoints = _points.text;
+    _savedStyle = _style;
+    _savedCta = _cta;
+    _savedTracking = _tracking;
+  }
+
+  Future<bool> _confirmLeaveWithUnsavedChanges() async {
+    if (!_hasUnsavedEdits) return true;
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Leave without saving?'),
+            content: const Text(
+              'Your latest Landing Page edits have not been saved. Your published page and saved draft will stay unchanged.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Keep editing'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Leave without saving'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
   String _receivedAt(dynamic value) {
     try {
       final date = value.toDate() as DateTime;
@@ -123,6 +172,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _style = c['style'] ?? 'clean';
       _cta = c['ctaType'] ?? 'request_estimate';
       _tracking = p['trackingMode'] == 'first_party';
+      _rememberSavedState();
       _slug = p['publicSlug']?.toString();
       _isPublished = p['status'] == 'published';
       _hasUnpublishedChanges = _isPublished &&
@@ -151,6 +201,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       } else {
         await _service.save(_pageId!, _content, tracking: _tracking);
       }
+      _rememberSavedState();
       _hasUnpublishedChanges = _isPublished;
       setState(() => _message = 'Draft saved. You can return to it later.');
     } catch (_) {
@@ -192,8 +243,23 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Landing Page — Beta')),
+  Widget build(BuildContext context) => PopScope(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) {
+        BusinessBackButton.navigate(
+          context,
+          beforeNavigate: _confirmLeaveWithUnsavedChanges,
+        );
+      }
+    },
+    child: Scaffold(
+    appBar: AppBar(
+      leading: BusinessBackButton(
+        beforeNavigate: _confirmLeaveWithUnsavedChanges,
+      ),
+      title: const Text('Landing Page — Beta'),
+    ),
     body: _busy && _pageId != null
         ? const Center(child: CircularProgressIndicator())
         : SafeArea(
@@ -416,6 +482,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
               ],
             ),
           ),
+    ),
   );
 }
 

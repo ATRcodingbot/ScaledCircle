@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../models/campaign/campaign.dart';
-import '../../../../navigation/app_routes.dart';
-import '../../../../navigation/app_router.dart';
+import '../../../../navigation/business_back_button.dart';
 
 import 'campaigns/distribution/material_distribution_campaign_screen.dart';
 import 'campaigns/cleanup/cleanup_campaign_screen.dart';
@@ -20,20 +19,7 @@ class CreateCampaignScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back to Business dashboard',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            final navigator = Navigator.of(context);
-
-            if (navigator.canPop()) {
-              navigator.pop();
-              return;
-            }
-
-            AppNavigation.replace(context, AppRoutes.businessDashboard);
-          },
-        ),
+        leading: const BusinessBackButton(),
         title: const Text("Create Campaign"),
         centerTitle: true,
       ),
