@@ -86,9 +86,14 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Testing and pre-launch visits are kept separate from live campaign results.',
+                'Test and pre-launch activity is kept separate from live performance.',
               ),
               const SizedBox(height: 16),
+              Text(
+                'Live performance',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -103,15 +108,37 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
                       '${overview.metric('uniqueResponses')} unique live responses',
                     ),
                   ),
-                  Chip(
-                    label: Text(
-                      '${overview.metric('testInteractions')} test / pre-launch visits',
-                    ),
-                  ),
-                  Chip(label: Text('${overview.metric('leads')} leads')),
+                  Chip(label: Text('${overview.metric('leads')} attributable leads')),
                   Chip(
                     label: Text(
                       '${overview.metric('conversions')} conversions',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Test / pre-launch activity',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    label: Text(
+                      '${overview.metric('testInteractions')} visits',
+                    ),
+                  ),
+                  Chip(
+                    label: Text(
+                      '${overview.metric('testLeads')} attributable leads',
+                    ),
+                  ),
+                  Chip(
+                    label: Text(
+                      '${overview.metric('testConversions')} conversions',
                     ),
                   ),
                 ],
@@ -137,7 +164,8 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
                       asset['label']?.toString() ?? 'Tracked response',
                     ),
                     subtitle: Text(
-                      '${_activityLabel(asset['analyticsClass'])}\n${asset['trackedUrl']?.toString() ?? ''}',
+                      '${_activityLabel(asset['analyticsClass'])} · ${_assetOutcomeLabel(asset)}\n'
+                      '${asset['trackedUrl']?.toString() ?? ''}',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _showAsset(asset),
@@ -321,4 +349,15 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
     'retired' => 'Retired',
     _ => 'Testing / Pre-launch',
   };
+
+  String _assetOutcomeLabel(Map<String, dynamic> asset) {
+    final metrics = asset['metrics'] is Map
+        ? Map<String, dynamic>.from(asset['metrics'] as Map)
+        : const <String, dynamic>{};
+    int value(String key) => (metrics[key] as num?)?.toInt() ?? 0;
+    final isLive = asset['analyticsClass'] == 'live';
+    return isLive
+        ? '${value('trackedInteractions')} visits · ${value('leads')} leads · ${value('conversions')} conversions'
+        : '${value('testInteractions')} visits · ${value('testLeads')} leads · ${value('testConversions')} conversions';
+  }
 }

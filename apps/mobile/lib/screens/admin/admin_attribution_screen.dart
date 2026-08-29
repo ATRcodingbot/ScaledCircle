@@ -61,9 +61,11 @@ class _AttributionContent extends StatelessWidget {
       ),
       const SizedBox(height: 6),
       const Text(
-        'Live campaign responses are separated from test and pre-launch feature-health activity.',
+        'Live campaign responses are separated from test and pre-launch activity.',
       ),
       const SizedBox(height: 16),
+      Text('Live performance', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 8),
       Wrap(
         spacing: 12,
         runSpacing: 12,
@@ -77,11 +79,38 @@ class _AttributionContent extends StatelessWidget {
             value: overview.metric('uniqueResponses'),
           ),
           _Metric(
-            label: 'Test / pre-launch visits',
+            label: 'Attributable leads',
+            value: overview.metric('leads'),
+          ),
+          _Metric(label: 'Conversions', value: overview.metric('conversions')),
+        ],
+      ),
+      const SizedBox(height: 20),
+      Text(
+        'Test / pre-launch activity',
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        'Test outcomes verify the funnel and are not included in live performance.',
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          _Metric(
+            label: 'Visits',
             value: overview.metric('testInteractions'),
           ),
-          _Metric(label: 'Leads', value: overview.metric('leads')),
-          _Metric(label: 'Conversions', value: overview.metric('conversions')),
+          _Metric(
+            label: 'Attributable leads',
+            value: overview.metric('testLeads'),
+          ),
+          _Metric(
+            label: 'Conversions',
+            value: overview.metric('testConversions'),
+          ),
         ],
       ),
       const SizedBox(height: 24),
@@ -108,7 +137,8 @@ class _AttributionContent extends StatelessWidget {
                   title: Text(asset['label']?.toString() ?? 'Tracked response'),
                   subtitle: Text(
                     '${_label(asset['type']?.toString() ?? 'tracked_link')} • '
-                    '${_label(asset['analyticsClass']?.toString() ?? 'prelaunch')}',
+                    '${_label(asset['analyticsClass']?.toString() ?? 'prelaunch')}\n'
+                    '${_assetOutcomeLabel(asset)}',
                   ),
                 ),
               ),
@@ -147,3 +177,14 @@ String _label(String value) => value
           word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}',
     )
     .join(' ');
+
+String _assetOutcomeLabel(Map<String, dynamic> asset) {
+  final metrics = asset['metrics'] is Map
+      ? Map<String, dynamic>.from(asset['metrics'] as Map)
+      : const <String, dynamic>{};
+  int value(String key) => (metrics[key] as num?)?.toInt() ?? 0;
+  final isLive = asset['analyticsClass'] == 'live';
+  return isLive
+      ? '${value('trackedInteractions')} visits • ${value('leads')} leads • ${value('conversions')} conversions'
+      : '${value('testInteractions')} visits • ${value('testLeads')} leads • ${value('testConversions')} conversions';
+}

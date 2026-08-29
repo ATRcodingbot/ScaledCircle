@@ -157,6 +157,8 @@ void main() {
           'trackedInteractions': 2,
           'uniqueResponses': 1,
           'testInteractions': 3,
+          'testLeads': 1,
+          'testConversions': 1,
           'leads': 0,
           'conversions': 0,
         },
@@ -166,6 +168,11 @@ void main() {
             'label': 'Proof link',
             'trackedUrl': 'https://scaledcircle-staging.web.app/r?code=proof',
             'analyticsClass': 'prelaunch',
+            'metrics': {
+              'testInteractions': 1,
+              'testLeads': 1,
+              'testConversions': 1,
+            },
           },
         ],
         dataStatus: 'available',
@@ -180,10 +187,15 @@ void main() {
 
     expect(find.text('2 live interactions'), findsOneWidget);
     expect(find.text('1 unique live responses'), findsOneWidget);
-    expect(find.text('3 test / pre-launch visits'), findsOneWidget);
+    expect(find.text('Live performance'), findsOneWidget);
+    expect(find.text('Test / pre-launch activity'), findsOneWidget);
+    expect(find.text('3 visits'), findsOneWidget);
+    expect(find.text('1 attributable leads'), findsOneWidget);
+    expect(find.text('1 conversions'), findsOneWidget);
+    expect(find.textContaining('1 visits · 1 leads · 1 conversions'), findsOneWidget);
     expect(find.textContaining('Testing / Pre-launch'), findsOneWidget);
     expect(
-      find.textContaining('Testing and pre-launch visits are kept separate'),
+      find.textContaining('Test and pre-launch activity is kept separate'),
       findsOneWidget,
     );
   });

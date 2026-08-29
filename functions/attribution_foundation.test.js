@@ -288,6 +288,7 @@ test("production-shaped prelaunch data is valid for Business and trusted Admin o
   for (const overview of [business, admin]) {
     assert.deepEqual(overview.metrics, {responseAssets: 1, trackedInteractions: 0,
       uniqueResponses: 0, testInteractions: 2, uniqueTestResponses: 2,
+      testLeads: 0, testConversions: 0,
       nonLiveInteractions: 0, totalInteractions: 2, leads: 0, conversions: 0});
     assert.equal(overview.assets[0].analyticsClass, "prelaunch");
     assert.equal(overview.dataStatus, "available");
@@ -295,6 +296,63 @@ test("production-shaped prelaunch data is valid for Business and trusted Admin o
   }
   assert.equal(business.scope, "business-founder");
   assert.equal(admin.scope, "admin_bounded");
+});
+
+test("classified outcomes expose complete prelaunch funnel without changing live metrics", async () => {
+  const seed = {
+    "users/business-a": {role: "business", active: true},
+    "responseAssets/test-a": {businessUid: "business-a", type: "landing_page",
+      publicCode: "aaaaaaaaaaaaaaaaaaaaaaaa", status: "active", destination: "https://a.example",
+      attribution: {source: "landing_page", landingPageId: "page-a",
+        landingPageVersionId: "version-a"}, createdAt: 1},
+    "responseAssets/test-b": {businessUid: "business-a", type: "tracked_link",
+      publicCode: "bbbbbbbbbbbbbbbbbbbbbbbb", status: "active", destination: "https://b.example",
+      attribution: {source: "tracked_link"}, createdAt: 2},
+    "responseAssets/live-c": {businessUid: "business-a", type: "tracked_link",
+      publicCode: "cccccccccccccccccccccccc", status: "active", destination: "https://c.example",
+      attribution: {source: "tracked_link", campaignId: "campaign-live"}, createdAt: 3},
+    "campaigns/campaign-live": {businessId: "business-a", status: "open"},
+    "responseInteractions/test-a-1": {businessUid: "business-a", responseAssetId: "test-a",
+      visitorHash: "test-visitor-a", analyticsClass: "prelaunch", occurredAt: 10},
+    "responseInteractions/test-a-2": {businessUid: "business-a", responseAssetId: "test-a",
+      visitorHash: "test-visitor-a", analyticsClass: "prelaunch", occurredAt: 11},
+    "responseInteractions/test-b-1": {businessUid: "business-a", responseAssetId: "test-b",
+      visitorHash: "test-visitor-b", analyticsClass: "prelaunch", occurredAt: 12},
+    "responseInteractions/live-c-1": {businessUid: "business-a", responseAssetId: "live-c",
+      visitorHash: "live-visitor", analyticsClass: "live", occurredAt: 13},
+    "attributionConversions/test-lead": {businessUid: "business-a", leadId: "lead-test",
+      responseAssetId: "test-b", milestone: "lead", analyticsClass: "prelaunch",
+      attribution: {landingPageId: "page-a", landingPageVersionId: "version-a"}, occurredAt: 14},
+    "attributionConversions/live-lead": {businessUid: "business-a", leadId: "lead-live",
+      responseAssetId: "live-c", milestone: "lead", analyticsClass: "live", occurredAt: 15},
+    "attributionConversions/live-conversion": {businessUid: "business-a", leadId: "lead-live",
+      responseAssetId: "live-c", milestone: "customer_conversion", analyticsClass: "live",
+      occurredAt: 16},
+  };
+  const service = attribution.createAttributionService({db: fakeFirestore(seed), FieldValue: {},
+    now: () => 20, publicBaseUrl: attribution.publicResponseOrigin("scaled-circle")});
+  const actor = {uid: "business-a", role: "business", emailVerified: true, user: {active: true}};
+  const business = await service.getOverview({}, actor);
+  const admin = await service.getOverview({businessUid: "business-a"}, {uid: "admin", role: "admin",
+    isAdmin: true, emailVerified: true, user: {active: false}});
+  for (const overview of [business, admin]) {
+    assert.equal(overview.metrics.trackedInteractions, 1);
+    assert.equal(overview.metrics.uniqueResponses, 1);
+    assert.equal(overview.metrics.leads, 1);
+    assert.equal(overview.metrics.conversions, 1);
+    assert.equal(overview.metrics.testInteractions, 3);
+    assert.equal(overview.metrics.uniqueTestResponses, 2);
+    assert.equal(overview.metrics.testLeads, 1);
+    assert.equal(overview.metrics.testConversions, 1);
+    const testA = overview.assets.find((asset) => asset.responseAssetId === "test-a");
+    const testB = overview.assets.find((asset) => asset.responseAssetId === "test-b");
+    assert.deepEqual(testA.metrics, {trackedInteractions: 0, uniqueResponses: 0, leads: 0,
+      conversions: 0, testInteractions: 2, uniqueTestResponses: 1, testLeads: 0,
+      testConversions: 0});
+    assert.equal(testB.metrics.testInteractions, 1);
+    assert.equal(testB.metrics.testLeads, 1);
+    assert.equal(testB.metrics.testConversions, 1);
+  }
 });
 
 test("Admin aggregation is bounded across tracking and non-tracking Businesses", async () => {

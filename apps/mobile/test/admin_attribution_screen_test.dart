@@ -5,7 +5,8 @@ import 'package:flutter_app/services/attribution_service.dart';
 void main() {
   testWidgets('attribution preview shows real metric definitions and intentional empty state', (tester) async {
     const overview = AttributionOverview(
-      metrics: {'trackedInteractions': 0, 'uniqueResponses': 0, 'leads': 0, 'conversions': 0},
+      metrics: {'trackedInteractions': 0, 'uniqueResponses': 0, 'leads': 0,
+        'conversions': 0, 'testInteractions': 0, 'testLeads': 0, 'testConversions': 0},
       assets: [],
       dataStatus: 'insufficient_data',
     );
@@ -24,8 +25,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     const overview = AttributionOverview(
-      metrics: {'trackedInteractions': 3, 'uniqueResponses': 2, 'leads': 1, 'conversions': 0},
-      assets: [{'type': 'qr', 'status': 'active', 'label': 'QA flyer'}],
+      metrics: {'trackedInteractions': 3, 'uniqueResponses': 2, 'leads': 1,
+        'conversions': 0, 'testInteractions': 3, 'testLeads': 1, 'testConversions': 1},
+      assets: [{'type': 'qr', 'status': 'active', 'label': 'QA flyer',
+        'analyticsClass': 'prelaunch', 'metrics': {'testInteractions': 3,
+          'testLeads': 1, 'testConversions': 1}}],
       dataStatus: 'available',
     );
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: _Subject(overview))));

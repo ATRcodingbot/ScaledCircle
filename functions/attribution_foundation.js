@@ -346,17 +346,47 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       !["live", "prelaunch"].includes(item.analyticsClass));
     const liveConversions = conversions.filter((item) => item.analyticsClass !== "prelaunch" &&
       item.analyticsClass !== "paused" && item.analyticsClass !== "cancelled");
+    const testConversions = conversions.filter((item) => item.analyticsClass === "prelaunch");
     const leadIds = new Set(liveConversions.map((item) => text(item.leadId, 160)).filter(Boolean));
+    const testLeadIds = new Set(testConversions.map((item) => text(item.leadId, 160)).filter(Boolean));
+    const classifiedAssets = assets.map((asset) => {
+      const assetId = asset.responseAssetId;
+      const assetInteractions = interactions.filter((item) => item.responseAssetId === assetId);
+      const assetConversions = conversions.filter((item) => item.responseAssetId === assetId);
+      const liveAssetInteractions = assetInteractions.filter((item) => item.analyticsClass === "live");
+      const testAssetInteractions = assetInteractions.filter((item) =>
+        item.analyticsClass === "prelaunch");
+      const liveAssetConversions = assetConversions.filter((item) =>
+        !["prelaunch", "paused", "cancelled"].includes(item.analyticsClass));
+      const testAssetConversions = assetConversions.filter((item) =>
+        item.analyticsClass === "prelaunch");
+      return {...asset, metrics: {
+        trackedInteractions: liveAssetInteractions.length,
+        uniqueResponses: new Set(liveAssetInteractions.map((item) =>
+          text(item.visitorHash, 80))).size,
+        leads: new Set(liveAssetConversions.map((item) =>
+          text(item.leadId, 160)).filter(Boolean)).size,
+        conversions: liveAssetConversions.filter((item) => item.milestone !== "lead").length,
+        testInteractions: testAssetInteractions.length,
+        uniqueTestResponses: new Set(testAssetInteractions.map((item) =>
+          text(item.visitorHash, 80))).size,
+        testLeads: new Set(testAssetConversions.map((item) =>
+          text(item.leadId, 160)).filter(Boolean)).size,
+        testConversions: testAssetConversions.length,
+      }};
+    });
     return {schemaVersion: SCHEMA_VERSION, generatedAt: now(), scope: businessUid || "admin_bounded",
       metrics: {responseAssets: assets.length, trackedInteractions: liveInteractions.length,
         uniqueResponses: new Set(liveInteractions.map((item) => text(item.visitorHash, 80))).size,
         testInteractions: testInteractions.length,
         uniqueTestResponses: new Set(testInteractions.map((item) => text(item.visitorHash, 80))).size,
+        testLeads: testLeadIds.size,
+        testConversions: testConversions.length,
         nonLiveInteractions: nonLiveInteractions.length,
         totalInteractions: interactions.length,
         leads: leadIds.size,
         conversions: liveConversions.filter((item) => item.milestone !== "lead").length},
-      assets,
+      assets: classifiedAssets,
       campaigns: businessCampaignSnap.docs.map((doc) => {
         const data = doc.data() || {};
         return {campaignId: doc.id, name: text(data.campaignName || data.name, 120) || "Campaign",
