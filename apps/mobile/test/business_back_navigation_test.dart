@@ -208,10 +208,11 @@ void main() {
     expect(router, contains('_browserBackPending'));
   });
 
-  test('async draft discovery cannot load after route disposal', () {
+  test('async workspace discovery cannot update after route disposal', () {
     final source = File(
       'lib/screens/business/landing_page_builder_screen.dart',
     ).readAsStringSync();
-    expect(source, contains('if (_pageId != null && mounted) return _load();'));
+    expect(source, isNot(contains('_loadLatest()')));
+    expect(source, contains('if (mounted) setState(() => _busy = false);'));
   });
 }

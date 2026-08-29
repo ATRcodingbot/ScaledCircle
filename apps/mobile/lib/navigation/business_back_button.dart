@@ -9,10 +9,12 @@ class BusinessBackButton extends StatelessWidget {
   const BusinessBackButton({
     super.key,
     this.beforeNavigate,
+    this.onPressed,
     this.tooltip = 'Back to Business dashboard',
   });
 
   final BusinessBackGuard? beforeNavigate;
+  final VoidCallback? onPressed;
   final String tooltip;
 
   static Future<void> navigate(
@@ -39,6 +41,7 @@ class BusinessBackButton extends StatelessWidget {
     key: const Key('business-page-back-button'),
     tooltip: tooltip,
     icon: const Icon(Icons.arrow_back),
-    onPressed: () => navigate(context, beforeNavigate: beforeNavigate),
+    onPressed:
+        onPressed ?? () => navigate(context, beforeNavigate: beforeNavigate),
   );
 }

@@ -1,21 +1,26 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_environment.dart';
 import '../../navigation/business_back_button.dart';
+import '../../navigation/app_router.dart';
+import '../../navigation/app_routes.dart';
 import '../../services/landing_page_service.dart';
 
 class LandingPageBuilderScreen extends StatefulWidget {
   const LandingPageBuilderScreen({super.key, this.pageId, this.service});
   final String? pageId;
-  final LandingPageService? service;
+  final LandingPageGateway? service;
   @override
   State<LandingPageBuilderScreen> createState() =>
       _LandingPageBuilderScreenState();
 }
 
 class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
-  late final LandingPageService _service =
+  late final LandingPageGateway _service =
       widget.service ?? LandingPageService();
   final _headline = TextEditingController(
     text: 'A clear solution for your next project',
@@ -45,6 +50,9 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   String _savedCta = 'request_estimate';
   bool _savedTracking = false;
   List<Map<String, dynamic>> _recentInquiries = const [];
+  List<Map<String, dynamic>> _pages = const [];
+  bool _editing = false;
+  String? _creationRequestId;
 
   bool get _hasUnsavedEdits =>
       _headline.text != _savedHeadline ||
@@ -86,6 +94,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
         ) ??
         false;
   }
+
   String _receivedAt(dynamic value) {
     try {
       final date = value.toDate() as DateTime;
@@ -94,6 +103,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       return 'Recently received';
     }
   }
+
   Uri? get _publicPageUrl => _slug == null
       ? null
       : AppEnvironmentConfig.publicBaseUrl.replace(
@@ -112,35 +122,102 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   Future<void> _openPublicPage() async {
     final url = _publicPageUrl;
     if (url == null || !await launchUrl(url, webOnlyWindowName: '_blank')) {
-      if (mounted) setState(() => _message = "We couldn't open the public page. Copy the link and try again.");
+      if (mounted) {
+        setState(
+          () => _message =
+              "We couldn't open the public page. Copy the link and try again.",
+        );
+      }
     }
   }
+
   @override
   void initState() {
     super.initState();
     _pageId = widget.pageId;
     if (_pageId != null) {
+      _editing = true;
       _load();
     } else {
-      _loadLatest();
+      _loadWorkspace();
     }
   }
 
-  Future<void> _loadLatest() async {
+  Future<void> _loadWorkspace() async {
     setState(() => _busy = true);
     try {
       final result = await _service.list();
-      final pages = (result['pages'] as List? ?? []).cast<Map>();
-      if (pages.isNotEmpty) {
-        _pageId = pages.first['pageId']?.toString();
-        if (_pageId != null && mounted) return _load();
-      }
+      _pages = (result['pages'] as List? ?? [])
+          .map((page) => Map<String, dynamic>.from(page as Map))
+          .toList();
     } catch (_) {
       _message =
           "We couldn't check for saved drafts. You can still start a page.";
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  String _newCreationRequestId() {
+    final bytes = List<int>.generate(24, (_) => Random.secure().nextInt(256));
+    return base64Url.encode(bytes).replaceAll('=', '');
+  }
+
+  void _resetNewDraft() {
+    _headline.text = 'A clear solution for your next project';
+    _support.text =
+        'Tell us what you need. We’ll follow up with a clear next step.';
+    _points.text = 'Straightforward service\nA clear next step';
+    _style = 'clean';
+    _cta = 'request_estimate';
+    _tracking = false;
+    _pageId = null;
+    _slug = null;
+    _message = null;
+    _inquiryCount = 0;
+    _recentInquiries = const [];
+    _isPublished = false;
+    _hasUnpublishedChanges = false;
+    _creationRequestId = _newCreationRequestId();
+    _rememberSavedState();
+    _editing = true;
+  }
+
+  Future<void> _startNew() async {
+    if (!await _confirmLeaveWithUnsavedChanges() || !mounted) return;
+    setState(_resetNewDraft);
+  }
+
+  Future<void> _openPage(String pageId) async {
+    if (!await _confirmLeaveWithUnsavedChanges() || !mounted) return;
+    AppNavigation.replace(
+      context,
+      '${AppRoutes.businessLandingPages}?pageId=${Uri.encodeQueryComponent(pageId)}',
+    );
+  }
+
+  Future<void> _showWorkspace() async {
+    if (!await _confirmLeaveWithUnsavedChanges() || !mounted) return;
+    if (widget.pageId != null) {
+      AppNavigation.replace(context, AppRoutes.businessLandingPages);
+      return;
+    }
+    setState(() {
+      _editing = false;
+      _pageId = null;
+      _creationRequestId = null;
+      _message = null;
+    });
+    await _loadWorkspace();
+  }
+
+  Future<void> _handleBack() async {
+    if (_editing) {
+      await _showWorkspace();
+      return;
+    }
+    if (!mounted) return;
+    await BusinessBackButton.navigate(context);
   }
 
   Map<String, dynamic> get _content => {
@@ -175,8 +252,8 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _rememberSavedState();
       _slug = p['publicSlug']?.toString();
       _isPublished = p['status'] == 'published';
-      _hasUnpublishedChanges = _isPublished &&
-          p['draftVersionId'] != p['publishedVersionId'];
+      _hasUnpublishedChanges =
+          _isPublished && p['draftVersionId'] != p['publishedVersionId'];
       final inquiry = Map<String, dynamic>.from(
         r['inquirySummary'] as Map? ?? const {},
       );
@@ -191,11 +268,16 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     }
   }
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
     setState(() => _busy = true);
     try {
       if (_pageId == null) {
-        final r = await _service.create(content: _content, tracking: _tracking);
+        _creationRequestId ??= _newCreationRequestId();
+        final r = await _service.create(
+          content: _content,
+          tracking: _tracking,
+          creationRequestId: _creationRequestId!,
+        );
         _pageId = r['pageId'];
         _slug = r['publicSlug'];
       } else {
@@ -204,19 +286,20 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _rememberSavedState();
       _hasUnpublishedChanges = _isPublished;
       setState(() => _message = 'Draft saved. You can return to it later.');
+      return true;
     } catch (_) {
       setState(
         () =>
             _message = "We couldn't save your draft. Your text is still here.",
       );
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _publish() async {
-    await _save();
-    if (_pageId == null) return;
+    if (!await _save() || _pageId == null) return;
     setState(() => _busy = true);
     try {
       final r = await _service.transition(_pageId!, 'publish');
@@ -247,243 +330,407 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     canPop: false,
     onPopInvokedWithResult: (didPop, _) {
       if (!didPop) {
-        BusinessBackButton.navigate(
-          context,
-          beforeNavigate: _confirmLeaveWithUnsavedChanges,
-        );
+        _handleBack();
       }
     },
     child: Scaffold(
-    appBar: AppBar(
-      leading: BusinessBackButton(
-        beforeNavigate: _confirmLeaveWithUnsavedChanges,
+      appBar: AppBar(
+        leading: BusinessBackButton(onPressed: _handleBack),
+        title: const Text('Landing Page — Beta'),
       ),
-      title: const Text('Landing Page — Beta'),
-    ),
-    body: _busy && _pageId != null
-        ? const Center(child: CircularProgressIndicator())
-        : SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                Text(
-                  'Create a page that turns interest into an inquiry',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                const Text('No design experience, logo, or photos required.'),
-                if (_pageId != null) ...[
-                  const SizedBox(height: 12),
-                  if (_isPublished)
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.public),
-                        title: const Text('Published'),
-                        subtitle: Text(
-                          _hasUnpublishedChanges
-                              ? 'Your current public page remains live while you prepare changes.'
-                              : 'Your current page is live at the public link below.',
+      body: _busy && _pageId != null
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (!_editing) ...[
+                    Text(
+                      'Your Landing Pages',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Open an existing page or start a separate customer funnel.',
+                    ),
+                    const SizedBox(height: 14),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.icon(
+                        key: const Key('new-landing-page-button'),
+                        onPressed: _busy ? null : _startNew,
+                        icon: const Icon(Icons.add),
+                        label: const Text('New Landing Page'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    if (_message != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Text(_message!),
                         ),
                       ),
-                    ),
-                  if (_hasUnpublishedChanges)
-                    const Card(
-                      child: ListTile(
-                        leading: Icon(Icons.info_outline),
-                        title: Text('Unpublished changes'),
-                        subtitle: Text(
-                          'Your public page still shows the previous published version until you publish again.',
-                        ),
-                      ),
-                    ),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '$_inquiryCount customer ${_inquiryCount == 1 ? 'inquiry' : 'inquiries'}',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          if (!_tracking && _inquiryCount > 0)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 4, bottom: 8),
-                              child: Text(
-                                'Response analytics are off, so visit and source attribution are unavailable.',
-                              ),
-                            ),
-                          if (_recentInquiries.isEmpty)
-                            const Text('New form responses will appear here.')
-                          else
-                            ..._recentInquiries.map(
-                              (item) => ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.person_outline),
-                                title: Text(item['contactName']?.toString() ?? 'New inquiry'),
-                                subtitle: Text([
-                                  if ((item['requestSummary']?.toString() ?? '').isNotEmpty)
-                                    item['requestSummary'].toString(),
-                                  [item['contactEmail'], item['contactPhone']]
-                                      .where((value) => (value?.toString() ?? '').isNotEmpty)
-                                      .join(' • '),
-                                  '${item['source'] ?? 'Landing page'} • ${item['status'] ?? 'prospect'}',
-                                  _receivedAt(item['createdAt']),
-                                ].where((value) => value.isNotEmpty).join('\n')),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _headline,
-                  maxLength: 100,
-                  decoration: const InputDecoration(labelText: 'Headline'),
-                ),
-                TextField(
-                  controller: _support,
-                  maxLength: 320,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Supporting text',
-                  ),
-                ),
-                TextField(
-                  controller: _points,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Services / value points',
-                    helperText: 'One per line',
-                  ),
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: _cta,
-                  decoration: const InputDecoration(
-                    labelText: 'Primary action',
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'request_estimate',
-                      child: Text('Request an estimate'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'get_quote',
-                      child: Text('Get a quote'),
-                    ),
-                  ],
-                  onChanged: (v) => setState(() => _cta = v!),
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: _style,
-                  decoration: const InputDecoration(labelText: 'Style'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'clean',
-                      child: Text('Clean & Professional'),
-                    ),
-                    DropdownMenuItem(value: 'bold', child: Text('Bold')),
-                    DropdownMenuItem(
-                      value: 'friendly',
-                      child: Text('Friendly'),
-                    ),
-                    DropdownMenuItem(value: 'premium', child: Text('Premium')),
-                  ],
-                  onChanged: (v) => setState(() => _style = v!),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Response analytics'),
-                  subtitle: Text(
-                    _tracking
-                        ? 'On — visits and inquiries can be measured.'
-                        : 'Off — no visit analytics will be shown.',
-                  ),
-                  value: _tracking,
-                  onChanged: (v) => setState(() => _tracking = v),
-                ),
-                const Divider(height: 32),
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(
-                      value: true,
-                      label: Text('Mobile'),
-                      icon: Icon(Icons.phone_iphone),
-                    ),
-                    ButtonSegment(
-                      value: false,
-                      label: Text('Desktop'),
-                      icon: Icon(Icons.desktop_windows),
-                    ),
-                  ],
-                  selected: {_mobile},
-                  onSelectionChanged: (v) => setState(() => _mobile = v.first),
-                ),
-                const SizedBox(height: 12),
-                Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: _mobile ? 390 : 1120),
-                    child: _LandingPreview(content: _content),
-                  ),
-                ),
-                if (_message != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Semantics(liveRegion: true, child: Text(_message!)),
-                  ),
-                if (_publicPageUrl != null)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Public page', style: Theme.of(context).textTheme.titleMedium),
-                          const SizedBox(height: 6),
-                          SelectableText(_publicPageUrl.toString()),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 8,
+                    if (_busy)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_pages.isEmpty)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
                             children: [
-                              OutlinedButton.icon(
-                                onPressed: _copyPublicPageUrl,
-                                icon: const Icon(Icons.copy),
-                                label: const Text('Copy exact link'),
+                              const Icon(Icons.web_outlined, size: 44),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Create your first Landing Page',
+                                style: Theme.of(context).textTheme.titleLarge,
                               ),
-                              OutlinedButton.icon(
-                                onPressed: _openPublicPage,
-                                icon: const Icon(Icons.open_in_new),
-                                label: const Text('Open public page'),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Build a simple page that gives prospective customers a clear next step.',
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: _startNew,
+                                child: const Text(
+                                  'Create your first Landing Page',
+                                ),
                               ),
                             ],
                           ),
-                        ],
+                        ),
+                      )
+                    else
+                      ..._pages.map(
+                        (page) => _LandingPageSummaryCard(
+                          page: page,
+                          onOpen: () => _openPage(page['pageId'].toString()),
+                        ),
+                      ),
+                  ] else ...[
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : _showWorkspace,
+                          icon: const Icon(Icons.list_alt),
+                          label: const Text('All Landing Pages'),
+                        ),
+                        FilledButton.icon(
+                          key: const Key('new-landing-page-from-editor-button'),
+                          onPressed: _busy ? null : _startNew,
+                          icon: const Icon(Icons.add),
+                          label: const Text('New Landing Page'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Create a page that turns interest into an inquiry',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'No design experience, logo, or photos required.',
+                    ),
+                    if (_pageId != null) ...[
+                      const SizedBox(height: 12),
+                      if (_isPublished)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.public),
+                            title: const Text('Published'),
+                            subtitle: Text(
+                              _hasUnpublishedChanges
+                                  ? 'Your current public page remains live while you prepare changes.'
+                                  : 'Your current page is live at the public link below.',
+                            ),
+                          ),
+                        ),
+                      if (_hasUnpublishedChanges)
+                        const Card(
+                          child: ListTile(
+                            leading: Icon(Icons.info_outline),
+                            title: Text('Unpublished changes'),
+                            subtitle: Text(
+                              'Your public page still shows the previous published version until you publish again.',
+                            ),
+                          ),
+                        ),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$_inquiryCount customer ${_inquiryCount == 1 ? 'inquiry' : 'inquiries'}',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              if (!_tracking && _inquiryCount > 0)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 4, bottom: 8),
+                                  child: Text(
+                                    'Response analytics are off, so visit and source attribution are unavailable.',
+                                  ),
+                                ),
+                              if (_recentInquiries.isEmpty)
+                                const Text(
+                                  'New form responses will appear here.',
+                                )
+                              else
+                                ..._recentInquiries.map(
+                                  (item) => ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: const Icon(Icons.person_outline),
+                                    title: Text(
+                                      item['contactName']?.toString() ??
+                                          'New inquiry',
+                                    ),
+                                    subtitle: Text(
+                                      [
+                                            if ((item['requestSummary']
+                                                        ?.toString() ??
+                                                    '')
+                                                .isNotEmpty)
+                                              item['requestSummary'].toString(),
+                                            [
+                                                  item['contactEmail'],
+                                                  item['contactPhone'],
+                                                ]
+                                                .where(
+                                                  (value) =>
+                                                      (value?.toString() ?? '')
+                                                          .isNotEmpty,
+                                                )
+                                                .join(' • '),
+                                            '${item['source'] ?? 'Landing page'} • ${item['status'] ?? 'prospect'}',
+                                            _receivedAt(item['createdAt']),
+                                          ]
+                                          .where((value) => value.isNotEmpty)
+                                          .join('\n'),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: _headline,
+                      maxLength: 100,
+                      decoration: const InputDecoration(labelText: 'Headline'),
+                    ),
+                    TextField(
+                      controller: _support,
+                      maxLength: 320,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Supporting text',
                       ),
                     ),
-                  ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton(
-                      onPressed: _busy ? null : _save,
-                      child: const Text('Save draft'),
+                    TextField(
+                      controller: _points,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Services / value points',
+                        helperText: 'One per line',
+                      ),
                     ),
-                    FilledButton(
-                      onPressed: _busy ? null : _publish,
-                      child: const Text('Publish page'),
+                    DropdownButtonFormField<String>(
+                      initialValue: _cta,
+                      decoration: const InputDecoration(
+                        labelText: 'Primary action',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'request_estimate',
+                          child: Text('Request an estimate'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'get_quote',
+                          child: Text('Get a quote'),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() => _cta = v!),
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _style,
+                      decoration: const InputDecoration(labelText: 'Style'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'clean',
+                          child: Text('Clean & Professional'),
+                        ),
+                        DropdownMenuItem(value: 'bold', child: Text('Bold')),
+                        DropdownMenuItem(
+                          value: 'friendly',
+                          child: Text('Friendly'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'premium',
+                          child: Text('Premium'),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() => _style = v!),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Response analytics'),
+                      subtitle: Text(
+                        _tracking
+                            ? 'On — visits and inquiries can be measured.'
+                            : 'Off — no visit analytics will be shown.',
+                      ),
+                      value: _tracking,
+                      onChanged: (v) => setState(() => _tracking = v),
+                    ),
+                    const Divider(height: 32),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: true,
+                          label: Text('Mobile'),
+                          icon: Icon(Icons.phone_iphone),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          label: Text('Desktop'),
+                          icon: Icon(Icons.desktop_windows),
+                        ),
+                      ],
+                      selected: {_mobile},
+                      onSelectionChanged: (v) =>
+                          setState(() => _mobile = v.first),
+                    ),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: _mobile ? 390 : 1120,
+                        ),
+                        child: _LandingPreview(content: _content),
+                      ),
+                    ),
+                    if (_message != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Text(_message!),
+                        ),
+                      ),
+                    if (_publicPageUrl != null)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Public page',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 6),
+                              SelectableText(_publicPageUrl.toString()),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: _copyPublicPageUrl,
+                                    icon: const Icon(Icons.copy),
+                                    label: const Text('Copy exact link'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: _openPublicPage,
+                                    icon: const Icon(Icons.open_in_new),
+                                    label: const Text('Open public page'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton(
+                          onPressed: _busy ? null : _save,
+                          child: const Text('Save draft'),
+                        ),
+                        FilledButton(
+                          onPressed: _busy ? null : _publish,
+                          child: const Text('Publish page'),
+                        ),
+                      ],
                     ),
                   ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
     ),
   );
+}
+
+class _LandingPageSummaryCard extends StatelessWidget {
+  const _LandingPageSummaryCard({required this.page, required this.onOpen});
+
+  final Map<String, dynamic> page;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = page['status']?.toString() ?? 'draft';
+    final inquiryCount = (page['inquiryCount'] as num?)?.toInt() ?? 0;
+    final tracking = page['trackingMode'] == 'first_party';
+    final unpublished = page['hasUnpublishedChanges'] == true;
+    final statusLabel = switch (status) {
+      'published' when unpublished => 'Published + unpublished changes',
+      'published' => 'Published',
+      'paused' => 'Paused',
+      'archived' => 'Archived',
+      _ => 'Draft',
+    };
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.web_outlined, size: 32),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    page['title']?.toString() ?? 'Untitled Landing Page',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$statusLabel • Tracking ${tracking ? 'On' : 'Off'} • '
+                    '$inquiryCount ${inquiryCount == 1 ? 'inquiry' : 'inquiries'}',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton(onPressed: onOpen, child: const Text('Open')),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _LandingPreview extends StatelessWidget {

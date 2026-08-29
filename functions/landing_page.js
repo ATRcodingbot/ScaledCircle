@@ -218,10 +218,19 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
   }
   async function createDraft(input, actor) {
     if (!actor?.uid || actor.role !== "business") throw new Error("landing_page_business_required");
-    const ref = pages.doc(); const publicSlug = slug(randomBytes); const content = input.content ? sanitizeDraft(input.content) : defaultDraft(input);
+    const creationRequestId=text(input.creationRequestId,160);
+    const ref = creationRequestId ? pages.doc(`page_${digest(`${actor.uid}:${creationRequestId}`).slice(0,40)}`) : pages.doc();
+    const publicSlug = slug(randomBytes); const content = input.content ? sanitizeDraft(input.content) : defaultDraft(input);
     const versionRef = ref.collection("versions").doc(); const at = FieldValue.serverTimestamp();
-    await db.runTransaction(async (tx) => { tx.create(ref, {schemaVersion:SCHEMA_VERSION,businessUid:actor.uid,campaignId:text(input.campaignId,160)||null,publicSlug,status:"draft",trackingMode:input.trackingMode === "first_party" ? "first_party":"off",draftVersionId:versionRef.id,publishedVersionId:null,createdAt:at,updatedAt:at}); tx.create(versionRef,{schemaVersion:SCHEMA_VERSION,businessUid:actor.uid,pageId:ref.id,content,contentDigest:digest(content),createdBy:actor.uid,createdAt:at,immutable:true}); });
-    return {pageId:ref.id, publicSlug, versionId:versionRef.id};
+    let result;
+    await db.runTransaction(async (tx) => {
+      const existing=creationRequestId?await tx.get(ref):null;
+      if(existing?.exists){const data=existing.data();if(data.businessUid!==actor.uid||data.creationRequestId!==creationRequestId)throw new Error("landing_page_creation_conflict");result={pageId:ref.id,publicSlug:data.publicSlug,versionId:data.draftVersionId,idempotentReplay:true};return;}
+      tx.create(ref, {schemaVersion:SCHEMA_VERSION,businessUid:actor.uid,campaignId:text(input.campaignId,160)||null,publicSlug,status:"draft",trackingMode:input.trackingMode === "first_party" ? "first_party":"off",draftVersionId:versionRef.id,publishedVersionId:null,creationRequestId:creationRequestId||null,createdAt:at,updatedAt:at});
+      tx.create(versionRef,{schemaVersion:SCHEMA_VERSION,businessUid:actor.uid,pageId:ref.id,content,contentDigest:digest(content),createdBy:actor.uid,createdAt:at,immutable:true});
+      result={pageId:ref.id,publicSlug,versionId:versionRef.id,idempotentReplay:false};
+    });
+    return result;
   }
   async function saveDraft(input, actor) {
     const pageRef=pages.doc(text(input.pageId,160)); const current=await pageRef.get(); if(!current.exists||current.data().businessUid!==actor?.uid) throw new Error("landing_page_forbidden");
@@ -326,7 +335,7 @@ function createLandingPageService({db, FieldValue, now = () => Date.now(), rando
         landingPageVersionId:version.id,campaignId:page.campaignId||null,
         responseAssetId:interaction?.responseAssetId||null,interactionId:interaction?.id||null};
       const metadata={leadId:leadRef.id,landingPageId:page.id,landingPageVersionId:version.id,idempotencyKey:receiptId};
-      const payload=landingPageEmailPayload({businessName,contact,pageName,inquiryUrl:`${publicBaseUrl}/#/business/landing-pages`});
+      const payload=landingPageEmailPayload({businessName,contact,pageName,inquiryUrl:`${publicBaseUrl}/#/business/landing-pages?pageId=${encodeURIComponent(page.id)}`});
       tx.set(rateRef,{schemaVersion:SCHEMA_VERSION,pageId:page.id,day,count:count+1,updatedAt:at},{merge:true});
       tx.create(leadRef,{schemaVersion:"SalesFunnelV1",leadType:"landing_page_inquiry",businessName:"Landing page inquiry",contactName:contact.name,contactEmail:contact.email?.toLowerCase()||null,contactPhone:contact.phone||null,requestSummary:contact.message||null,source:"landing_page",sourceDetail:page.publicSlug,attribution,firstAttribution:attribution,lastAttribution:attribution,stage:"prospect",priority:"normal",ownerUid:page.businessUid,suppressionStatus:null,createdBy:"public_landing_page",createdAt:at,updatedAt:at});
       tx.create(activityRef,{schemaVersion:"SalesFunnelV1",leadId:leadRef.id,type:"lead_created",actorUid:"public_landing_page",attribution,occurredAt:at});

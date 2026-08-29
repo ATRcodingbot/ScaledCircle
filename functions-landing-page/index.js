@@ -10925,7 +10925,22 @@ exports.getLandingPageWorkspace = onCall({ region: "us-east1", enforceAppCheck: 
     const pages = await query.get();
     const records = pages.docs.map((doc) => ({ pageId: doc.id, ...doc.data() }));
     records.sort((a, b) => Number(b.updatedAt?.toMillis?.() || 0) - Number(a.updatedAt?.toMillis?.() || 0));
-    return { schemaVersion: landingPage.SCHEMA_VERSION, pages: records };
+    const inquiries = actor.role === "business" ? await db.collection("salesLeads").
+    where("ownerUid", "==", actor.uid).limit(50).get() : { docs: [] };
+    const inquiryCounts = new Map();
+    for (const inquiry of inquiries.docs) {
+      const id = String(inquiry.data()?.attribution?.landingPageId || "");
+      if (id) inquiryCounts.set(id, (inquiryCounts.get(id) || 0) + 1);
+    }
+    const summaries = await Promise.all(records.map(async (record) => {
+      const version = record.draftVersionId ? await db.collection("landingPages").doc(record.pageId).
+      collection("versions").doc(record.draftVersionId).get() : null;
+      return { pageId: record.pageId, title: String(version?.data()?.content?.headline || "Untitled Landing Page"),
+        status: record.status, trackingMode: record.trackingMode, publicSlug: record.publicSlug,
+        updatedAt: record.updatedAt || null, inquiryCount: inquiryCounts.get(record.pageId) || 0,
+        hasUnpublishedChanges: record.status === "published" && record.draftVersionId !== record.publishedVersionId };
+    }));
+    return { schemaVersion: landingPage.SCHEMA_VERSION, pages: summaries };
   }
   const page = await db.collection("landingPages").doc(pageId).get();
   if (!page.exists || actor.role !== "admin" && page.data()?.businessUid !== actor.uid) throw new HttpsError("permission-denied", "Landing page access is not available.");
