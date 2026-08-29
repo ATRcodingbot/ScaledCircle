@@ -3,11 +3,12 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 
 const { defineSecret } = require("firebase-functions/params");
-const { initializeApp } = require("firebase-admin/app");
+const { initializeApp, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
@@ -63,6 +64,7 @@ const transactionalEmail = require("./transactional_email");
 
 
 
+
 initializeApp();
 
 
@@ -77,6 +79,13 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
 
 
 
@@ -965,6 +974,78 @@ exports.sendTransactionalEmailJob = onDocumentCreated(
 );
 
 /** Deliver only user-requested Managed Growth artifacts from an isolated queue. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

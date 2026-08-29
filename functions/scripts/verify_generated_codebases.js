@@ -20,6 +20,7 @@ const legalRoot = path.join(root, "functions-legal");
 const applicationRoot = path.join(root, "functions-application");
 const attributionRoot = path.join(root, "functions-attribution");
 const landingPageRoot = path.join(root, "functions-landing-page");
+const creativeMediaRoot = path.join(root, "functions-creative-media");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -91,6 +92,9 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, attributionRoot);
   resolveFrom(dependency, landingPageRoot);
 }
+for (const dependency of ["firebase-functions", "firebase-admin", "sharp"]) {
+  resolveFrom(dependency, creativeMediaRoot);
+}
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
 }
@@ -122,6 +126,7 @@ const legal = require(path.join(legalRoot, "index.js"));
 const application = require(path.join(applicationRoot, "index.js"));
 const attribution = require(path.join(attributionRoot, "index.js"));
 const landingPage = require(path.join(landingPageRoot, "index.js"));
+const creativeMedia = require(path.join(creativeMediaRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(attribution).sort(), [
   "bridgeResponseLead", "createResponseAsset", "getAttributionOverview", "resolveTrackedResponse",
@@ -157,6 +162,11 @@ assert.deepEqual(Object.keys(landingPage).sort(), [
   "getLandingPageWorkspace", "mutateLandingPageDraft", "renderLandingPage",
   "submitLandingPageForm", "transitionLandingPage", "reconcileLandingPageInquiryDelivery",
 ].sort());
+assert.deepEqual(Object.keys(creativeMedia).sort(), [
+  "approveBusinessMediaRevision", "createBusinessMediaUploadIntent",
+  "finalizeBusinessMediaUpload", "getBusinessMediaWorkspace", "rejectBusinessMediaRevision",
+  "removeBusinessMediaAsset", "updateBusinessBrandProfile", "updateBusinessMediaRevisionMetadata",
+].sort());
 assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendScalerJobAlertEmailJob"), false);
@@ -176,6 +186,7 @@ for (const name of Object.keys(sales)) assert.equal(Object.hasOwn(legacy, name),
 for (const name of Object.keys(legal)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(application)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(landingPage)) assert.equal(Object.hasOwn(legacy, name), false);
+for (const name of Object.keys(creativeMedia)) assert.equal(Object.hasOwn(legacy, name), false);
 
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
@@ -188,6 +199,7 @@ inventories.push(Object.keys(legal));
 inventories.push(Object.keys(application));
 inventories.push(Object.keys(attribution));
 inventories.push(Object.keys(landingPage));
+inventories.push(Object.keys(creativeMedia));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 

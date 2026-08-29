@@ -8,6 +8,7 @@ const {getAuth} = require("firebase-admin/auth");
 const {getStorage} = require("firebase-admin/storage");
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp,
 } = require("firebase-admin/firestore");
@@ -57,6 +58,7 @@ const managedGrowth = require("./managed_growth");
 const managedGrowthProfile = require("./managed_growth_profile");
 const managedGrowthDelivery = require("./managed_growth_delivery");
 const socialWorkflow = require("./social_workflow");
+const creativeMedia = require("./creative_media");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
 const adminOpsReadModel = require("./admin_ops_read_model");
@@ -98,6 +100,13 @@ const scalerProfileService = scalerProfile.createScalerProfileService({
   FieldValue,
 });
 const legalConsentService = legalConsent.createLegalConsentService({db, FieldValue});
+const creativeMediaService = creativeMedia.createCreativeMediaService({
+  db,
+  bucket: () => getStorage().bucket(),
+  FieldValue,
+  FieldPath,
+  Timestamp,
+});
 
 function legalConsentError(error, message) {
   if (error?.message !== "legal_consent_required") return null;
@@ -10682,6 +10691,78 @@ exports.recordSalesActivity = onCall(
     const actor = await requireTrustedSalesActor(request);
     try { return await salesService.recordActivity(request.data, actor); } catch (error) { throw salesHttpsError(error); }
   },
+);
+
+async function requireCreativeMediaBusiness(request) {
+  const context = await requireVerifiedUser(request, "Log in to manage Brand Assets.");
+  if (context.role !== "business" || context.user.active !== true) {
+    throw new HttpsError("permission-denied", "Brand Assets are available to active Business accounts.");
+  }
+  return context;
+}
+
+function creativeMediaError(error) {
+  const code = String(error?.message || error);
+  if (code === "media_access_denied") return new HttpsError("permission-denied", "That Brand Asset is not available.");
+  if (["media_upload_limit_reached", "media_asset_limit_reached"].includes(code)) {
+    return new HttpsError("resource-exhausted", code === "media_asset_limit_reached" ?
+      "This Brand Assets library has reached its current limit." : "Finish an active upload before starting another.");
+  }
+  if (["media_not_ready", "media_approval_requirements_missing", "brand_logo_not_approved",
+    "media_upload_incomplete"].includes(code)) return new HttpsError("failed-precondition", {
+    media_not_ready: "This image is still processing.",
+    media_approval_requirements_missing: "Add factual alt text and confirm your right to use this image before approving it.",
+    brand_logo_not_approved: "Approve this logo revision before selecting it.",
+    media_upload_incomplete: "The upload has not finished yet.",
+  }[code]);
+  if (["invalid_request_id", "invalid_media_purpose", "invalid_media_cursor",
+    "invalid_brand_color", "invalid_brand_style"].includes(code)) {
+    return new HttpsError("invalid-argument", "Check the Brand Asset details and try again.");
+  }
+  if (["media_file_unsuitable", "media_processing_failed"].includes(code)) {
+    return new HttpsError("failed-precondition", code === "media_file_unsuitable" ?
+      "This file is not a supported JPEG, PNG, or WebP image." : "We couldn't prepare this image. Try another file.");
+  }
+  return new HttpsError("internal", "Brand Assets are temporarily unavailable.");
+}
+
+async function creativeMediaCall(request, operation) {
+  const actor = await requireCreativeMediaBusiness(request);
+  try { return await operation({actor, input: request.data || {}}); }
+  catch (error) { throw creativeMediaError(error); }
+}
+
+exports.getBusinessMediaWorkspace = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
+  (request) => creativeMediaCall(request, creativeMediaService.workspace),
+);
+exports.createBusinessMediaUploadIntent = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
+  (request) => creativeMediaCall(request, creativeMediaService.createUploadIntent),
+);
+exports.finalizeBusinessMediaUpload = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 120, memory: "1GiB"},
+  (request) => creativeMediaCall(request, creativeMediaService.finalizeUpload),
+);
+exports.updateBusinessMediaRevisionMetadata = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
+  (request) => creativeMediaCall(request, creativeMediaService.updateMetadata),
+);
+exports.approveBusinessMediaRevision = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
+  (request) => creativeMediaCall(request, creativeMediaService.approve),
+);
+exports.rejectBusinessMediaRevision = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
+  (request) => creativeMediaCall(request, creativeMediaService.reject),
+);
+exports.removeBusinessMediaAsset = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
+  (request) => creativeMediaCall(request, creativeMediaService.remove),
+);
+exports.updateBusinessBrandProfile = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
+  (request) => creativeMediaCall(request, creativeMediaService.updateBrand),
 );
 
 // Attribution Foundation V1 extends the maintained Sales lead boundary. Public

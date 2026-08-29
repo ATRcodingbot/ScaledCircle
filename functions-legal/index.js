@@ -3,15 +3,20 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 
-const { initializeApp } = require("firebase-admin/app");
+const { initializeApp, getApp } = require("firebase-admin/app");
 
 
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
+
+
+
+
 
 
 
@@ -95,6 +100,13 @@ const db = getFirestore();
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
 
 
 
@@ -923,6 +935,184 @@ exports.getLegalConsentStatus = onCall(
 );
 
 /** Queue a verification-only message for the authenticated account owner. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -634,6 +634,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 value: 'landing_pages',
                 child: Text('Landing Pages — Beta'),
               ),
+              const PopupMenuItem(
+                value: 'brand_assets',
+                child: Text('Brand Assets — Beta'),
+              ),
               PopupMenuItem(
                 value: 'responses',
                 enabled: AppEnvironmentConfig.responseTrackingEnabled,
@@ -662,6 +666,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 AppNavigation.push(context, AppRoutes.businessAttribution);
               } else if (value == 'landing_pages') {
                 AppNavigation.push(context, AppRoutes.businessLandingPages);
+              } else if (value == 'brand_assets') {
+                AppNavigation.push(context, AppRoutes.businessBrandAssets);
               } else if (value == 'account') {
                 Navigator.push(
                   context,

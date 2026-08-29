@@ -29,6 +29,11 @@ beforeEach(async () => {
     await db.doc("users/scaler-two").set({role: "scaler", active: true});
     await db.doc("users/business-one").set({role: "business", active: true});
     await db.doc("users/admin-one").set({role: "admin", active: true});
+    await db.doc("businessMediaUploadIntents/revision-one").set({
+      businessUid: "business-one", assetId: "asset-one", revisionId: "revision-one",
+      storagePath: "business_media_private/business-one/asset-one/revision-one/original",
+      status: "open", expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
     await db.doc("trackingSessions/session-active").set({
       scalerId: "scaler-one", businessId: "business-one", status: "active",
     });
@@ -150,4 +155,31 @@ test("Business social media is private, bounded, and owner controlled", async ()
   await assertFails(ref("business-one", "social_media/business-one/media-three/file.txt")
     .put(new Uint8Array([1]), {contentType: "text/plain"}));
   await assertSucceeds(photo.delete());
+});
+
+test("Business media original requires the exact server-issued owner path", async () => {
+  const original = ref("business-one",
+    "business_media_private/business-one/asset-one/revision-one/original");
+  await assertSucceeds(original.put(new Uint8Array([1, 2, 3]), {contentType: "image/jpeg"}));
+  await assertSucceeds(original.getDownloadURL());
+  await assertFails(ref("scaler-one", original.fullPath).getDownloadURL());
+  await assertFails(ref("business-one",
+    "business_media_private/business-one/asset-wrong/revision-one/original")
+    .put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await assertFails(ref("business-one",
+    "business_media_private/business-two/asset-one/revision-one/original")
+    .put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await assertFails(ref("business-one",
+    "business_media_private/business-one/asset-one/no-intent/original")
+    .put(new Uint8Array([1]), {contentType: "image/jpeg"}));
+  await assertFails(original.put(new Uint8Array([4]), {contentType: "image/jpeg"}));
+  await assertFails(original.delete());
+});
+
+test("Business media rejects unsupported and oversized inputs", async () => {
+  const original = ref("business-one",
+    "business_media_private/business-one/asset-one/revision-one/original");
+  await assertFails(original.put(new Uint8Array([1]), {contentType: "image/gif"}));
+  await assertFails(original.put(new Uint8Array([1]), {contentType: "image/svg+xml"}));
+  await assertFails(original.put(new Uint8Array(10 * 1024 * 1024 + 1), {contentType: "image/png"}));
 });

@@ -8,10 +8,12 @@ const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
+
 
 
 
@@ -124,10 +126,89 @@ const db = getFirestore();
 
 
 
+
+
+
+
+
+
+
 setGlobalOptions({
   maxInstances: 10,
   region: "us-east1"
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

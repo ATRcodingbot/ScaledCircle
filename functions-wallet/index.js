@@ -3,14 +3,19 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 
-const { initializeApp } = require("firebase-admin/app");
+const { initializeApp, getApp } = require("firebase-admin/app");
 
 
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
+
+
+
+
 
 
 
@@ -74,6 +79,13 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
 
 
 
@@ -191,61 +203,6 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

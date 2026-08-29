@@ -988,6 +988,14 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    match /businessMediaLibraries/{businessId}/{document=**} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /businessMediaUploadIntents/{intentId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /responseInteractions/{interactionId} {
       allow read, create, update, delete: if false;
     }

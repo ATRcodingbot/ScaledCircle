@@ -18,13 +18,14 @@ const packageDirectories = [
   "functions-application",
   "functions-attribution",
   "functions-landing-page",
+  "functions-creative-media",
 ];
 
-function runNpmCi(cwd) {
+function runNpmCi(cwd, nativeInstall = false) {
   const command = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "npm";
   const args = process.platform === "win32" ?
-    ["/d", "/s", "/c", "npm.cmd ci --ignore-scripts"] :
-    ["ci", "--ignore-scripts"];
+    ["/d", "/s", "/c", nativeInstall ? "npm.cmd ci" : "npm.cmd ci --ignore-scripts"] :
+    nativeInstall ? ["ci"] : ["ci", "--ignore-scripts"];
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
@@ -45,7 +46,7 @@ try {
     for (const file of ["package.json", "package-lock.json"]) {
       fs.copyFileSync(path.join(source, file), path.join(destination, file));
     }
-    runNpmCi(destination);
+    runNpmCi(destination, directory === "functions-creative-media");
     console.log(`PASS ${directory}`);
   }
 } finally {

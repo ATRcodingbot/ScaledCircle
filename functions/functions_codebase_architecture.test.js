@@ -98,6 +98,11 @@ const landingPagePackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-landing-page", "package.json"), "utf8"));
 const landingPageLock = fs.readFileSync(
   path.join(root, "functions-landing-page", "package-lock.json"), "utf8");
+const creativeMediaCore = fs.readFileSync(path.join(root, "functions-creative-media", "index.js"), "utf8");
+const creativeMediaPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-creative-media", "package.json"), "utf8"));
+const creativeMediaLock = fs.readFileSync(
+  path.join(root, "functions-creative-media", "package-lock.json"), "utf8");
 const applicationPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-application", "package.json"), "utf8"));
 const applicationLock = fs.readFileSync(
@@ -309,6 +314,31 @@ test("landing-page-core exclusively owns the zero-secret public funnel authority
     ?.function.functionId, "renderLandingPage");
   assert.equal(firebaseConfig.hosting.rewrites.find((rewrite) =>
     rewrite.source === "/landing-page-submit")?.function.functionId, "submitLandingPageForm");
+});
+
+test("creative-media-core exclusively owns private Business media processing", () => {
+  const names = ["getBusinessMediaWorkspace", "createBusinessMediaUploadIntent",
+    "finalizeBusinessMediaUpload", "updateBusinessMediaRevisionMetadata",
+    "approveBusinessMediaRevision", "rejectBusinessMediaRevision",
+    "removeBusinessMediaAsset", "updateBusinessBrandProfile"];
+  assert.deepEqual(exportsIn(creativeMediaCore).sort(), [...names].sort());
+  for (const name of names) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(landingPageCore, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.deepEqual(Object.keys(creativeMediaPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions", "sharp",
+  ]);
+  for (const forbidden of ["defineSecret", "OPENAI_API_KEY", "SMTP_PASSWORD", "STRIPE_",
+    "landingPages", "responseAssets", "visualGenerationJobs"]) {
+    assert.doesNotMatch(creativeMediaCore, new RegExp(forbidden));
+  }
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(creativeMediaLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "creative-media-core")?.source, "functions-creative-media");
 });
 
 test("legal-core exclusively owns immutable zero-secret consent authority", () => {

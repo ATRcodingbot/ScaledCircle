@@ -3,16 +3,18 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 
-const { initializeApp } = require("firebase-admin/app");
+const { initializeApp, getApp } = require("firebase-admin/app");
 
 
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
 
 const crypto = require("node:crypto");
+
 
 
 
@@ -77,6 +79,13 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
 
 
 
@@ -10739,6 +10748,23 @@ async function authenticatedUserContext(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Attribution Foundation V1 extends the maintained Sales lead boundary. Public
 // response traffic can record immutable, privacy-minimized interactions but can
 // never select tenant attribution or create conversions.
@@ -10797,6 +10823,26 @@ exports.createResponseAsset = onCall(
   }
 );
 
+/** Process an explicitly reconciled job without replaying arbitrary updates. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 exports.getAttributionOverview = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
   async (request) => {
@@ -10848,3 +10894,6 @@ exports.resolveTrackedResponse = onRequest(
     }
   }
 );
+
+// Landing Page + Form V1 is isolated from the retired campaignTrackingCodes
+// authority. Public page and form identities are always derived server-side.

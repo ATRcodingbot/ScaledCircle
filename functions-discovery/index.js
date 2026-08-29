@@ -3,11 +3,12 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 
-const { initializeApp } = require("firebase-admin/app");
+const { initializeApp, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
@@ -63,6 +64,7 @@ const subscriptionEntitlements = require("./subscription_entitlements");
 
 
 
+
 initializeApp();
 
 
@@ -77,6 +79,13 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
 
 
 
@@ -205,61 +214,6 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -24,6 +24,7 @@ const legalRoot = path.join(root, "functions-legal");
 const applicationRoot = path.join(root, "functions-application");
 const attributionRoot = path.join(root, "functions-attribution");
 const landingPageRoot = path.join(root, "functions-landing-page");
+const creativeMediaRoot = path.join(root, "functions-creative-media");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -113,6 +114,11 @@ const landingPageExports = new Set([
   "getLandingPageWorkspace", "mutateLandingPageDraft", "transitionLandingPage",
   "renderLandingPage", "submitLandingPageForm", "reconcileLandingPageInquiryDelivery",
 ]);
+const creativeMediaExports = new Set([
+  "getBusinessMediaWorkspace", "createBusinessMediaUploadIntent", "finalizeBusinessMediaUpload",
+  "updateBusinessMediaRevisionMetadata", "approveBusinessMediaRevision",
+  "rejectBusinessMediaRevision", "removeBusinessMediaAsset", "updateBusinessBrandProfile",
+]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.
@@ -199,6 +205,7 @@ function transformIndex(mode) {
   if (mode === "application") selectedProgram(ast, applicationExports);
   if (mode === "attribution") selectedProgram(ast, attributionExports);
   if (mode === "landing-page") selectedProgram(ast, landingPageExports);
+  if (mode === "creative-media") selectedProgram(ast, creativeMediaExports);
   if (mode !== "attribution") {
     const attributionHelpers = new Set([
       "attributionFoundation", "attributionService", "attributionHttpsError", "requireAttributionActor",
@@ -208,6 +215,19 @@ function transformIndex(mode) {
       if (statement.type !== "VariableDeclaration") return [statement];
       const declarations = statement.declarations.filter((declaration) =>
         !attributionHelpers.has(declaration.id?.name));
+      return declarations.length ? [{...statement, declarations}] : [];
+    });
+  }
+  if (mode !== "creative-media") {
+    const creativeMediaHelpers = new Set([
+      "creativeMedia", "creativeMediaService", "requireCreativeMediaBusiness",
+      "creativeMediaError", "creativeMediaCall",
+    ]);
+    ast.program.body = ast.program.body.flatMap((statement) => {
+      if (statement.type === "FunctionDeclaration" && creativeMediaHelpers.has(statement.id?.name)) return [];
+      if (statement.type !== "VariableDeclaration") return [statement];
+      const declarations = statement.declarations.filter((declaration) =>
+        !creativeMediaHelpers.has(declaration.id?.name));
       return declarations.length ? [{...statement, declarations}] : [];
     });
   }
@@ -226,6 +246,7 @@ function transformIndex(mode) {
       ...applicationExports,
       ...attributionExports,
       ...landingPageExports,
+      ...creativeMediaExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
     ]);
@@ -245,6 +266,7 @@ function transformIndex(mode) {
       (mode === "application" && !applicationExports.has(name)) ||
       (mode === "attribution" && !attributionExports.has(name)) ||
       (mode === "landing-page" && !landingPageExports.has(name)) ||
+      (mode === "creative-media" && !creativeMediaExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -269,6 +291,7 @@ function transformIndex(mode) {
       if (mode === "application") return false;
       if (mode === "attribution") return false;
       if (mode === "landing-page") return false;
+      if (mode === "creative-media") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -335,6 +358,8 @@ function copyPackage(destination, mode) {
     if (!["landing-page", "legacy"].includes(mode) && name === "landing_page.js") continue;
     if (mode === "landing-page" && name.endsWith(".js") &&
         !["landing_page.js", "landing_page_workspace.js"].includes(name)) continue;
+    if (mode === "creative-media" && name.endsWith(".js") && name !== "creative_media.js") continue;
+    if (mode !== "creative-media" && name === "creative_media.js") continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -372,6 +397,8 @@ function writePackageManifest(mode, destination) {
         ? ["firebase-admin", "firebase-functions"]
       : mode === "landing-page"
         ? ["firebase-admin", "firebase-functions"]
+      : mode === "creative-media"
+        ? ["firebase-admin", "firebase-functions", "sharp"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
@@ -447,6 +474,7 @@ for (const [mode, destination] of [
   ["application", applicationRoot],
   ["attribution", attributionRoot],
   ["landing-page", landingPageRoot],
+  ["creative-media", creativeMediaRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
   // payment boundary. Never regenerate it from the subscription/payout-heavy
@@ -466,4 +494,4 @@ for (const [mode, destination] of [
 fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
   path.join(campaignFundingRoot, "legal_consent.js"));
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");

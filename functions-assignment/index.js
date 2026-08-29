@@ -3,11 +3,12 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 
-const { initializeApp } = require("firebase-admin/app");
+const { initializeApp, getApp } = require("firebase-admin/app");
 
 
 const {
   getFirestore,
+  FieldPath,
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
@@ -42,13 +43,17 @@ const marketplace = require("./marketplace_finance");
 
 
 
+
 const operations = require("./operational_layer");
+
+
 
 
 
 
 const groupAssignment = require("./group_assignment");
 const multiScalerRollout = require("./multi_scaler_rollout");
+
 
 
 
@@ -95,6 +100,13 @@ const db = getFirestore();
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
 
 function legalConsentError(error, message) {
   if (error?.message !== "legal_consent_required") return null;
@@ -202,6 +214,184 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

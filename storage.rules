@@ -20,6 +20,13 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
     }
 
+    function validBusinessMediaInput() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
     match /tracking_checkpoints/{uid}/{sessionId}/{objectId} {
       allow create: if resource == null
         && signedIn()
@@ -117,6 +124,30 @@ service firebase.storage {
       allow create: if signedIn() && request.auth.uid == uid && validImage();
       allow read, delete: if signedIn() && request.auth.uid == uid;
       allow update: if false;
+    }
+
+    // Server-issued, create-once Business media originals. Canonical processing,
+    // approval, and normalized rendition writes use creative-media-core only.
+    match /business_media_private/{uid}/{assetId}/{revisionId}/original {
+      allow create: if resource == null
+        && signedIn()
+        && request.auth.uid == uid
+        && validBusinessMediaInput()
+        && firestore.exists(/databases/(default)/documents/businessMediaUploadIntents/$(revisionId))
+        && firestore.get(/databases/(default)/documents/businessMediaUploadIntents/$(revisionId)).data.businessUid == uid
+        && firestore.get(/databases/(default)/documents/businessMediaUploadIntents/$(revisionId)).data.assetId == assetId
+        && firestore.get(/databases/(default)/documents/businessMediaUploadIntents/$(revisionId)).data.revisionId == revisionId
+        && firestore.get(/databases/(default)/documents/businessMediaUploadIntents/$(revisionId)).data.storagePath ==
+          'business_media_private/' + uid + '/' + assetId + '/' + revisionId + '/original'
+        && firestore.get(/databases/(default)/documents/businessMediaUploadIntents/$(revisionId)).data.status == 'open'
+        && firestore.get(/databases/(default)/documents/businessMediaUploadIntents/$(revisionId)).data.expiresAt > request.time;
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow update, delete: if false;
+    }
+
+    match /business_media_private/{uid}/{assetId}/{revisionId}/renditions/{fileName} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
 
     match /{allPaths=**} {
