@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_app/navigation/app_router.dart';
 import 'package:flutter_app/navigation/business_back_button.dart';
 
 void main() {
@@ -56,6 +57,81 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Business dashboard'), findsOneWidget);
     expect(find.text('Direct-linked Business page'), findsNothing);
+  });
+
+  testWidgets(
+    'direct-link fallback synchronizes rendered route and route information',
+    (tester) async {
+      final delegate = AppRouterDelegate(
+        (settings) => MaterialPageRoute<void>(
+          settings: settings,
+          builder: (context) => Scaffold(
+            appBar: settings.name == '/business/landing-pages'
+                ? AppBar(leading: const BusinessBackButton())
+                : null,
+            body: Text(settings.name ?? 'missing'),
+          ),
+        ),
+      );
+      final provider = PlatformRouteInformationProvider(
+        initialRouteInformation: RouteInformation(
+          uri: Uri.parse('/business/landing-pages'),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp.router(
+          routeInformationProvider: provider,
+          routeInformationParser: const AppRouteInformationParser(),
+          routerDelegate: delegate,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('/business/landing-pages'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('business-page-back-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('/business'), findsOneWidget);
+      expect(delegate.currentConfiguration, Uri.parse('/business'));
+      expect(provider.value.uri, Uri.parse('/business'));
+    },
+  );
+
+  testWidgets('stacked Business Back returns to the prior Business route', (
+    tester,
+  ) async {
+    final delegate = AppRouterDelegate(
+      (settings) => MaterialPageRoute<void>(
+        settings: settings,
+        builder: (context) => Scaffold(
+          appBar: settings.name == '/business/landing-pages'
+              ? AppBar(leading: const BusinessBackButton())
+              : null,
+          body: Text(settings.name ?? 'missing'),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp.router(
+        routeInformationParser: const AppRouteInformationParser(),
+        routerDelegate: delegate,
+      ),
+    );
+    delegate.navigate('/business/attribution');
+    await tester.pumpAndSettle();
+    delegate.navigate(
+      '/business/landing-pages',
+      context: tester.element(find.text('/business/attribution')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('business-page-back-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('/business/attribution'), findsOneWidget);
+    expect(delegate.currentConfiguration, Uri.parse('/business/attribution'));
   });
 
   testWidgets('guard can keep unsaved work in place', (tester) async {
@@ -115,4 +191,14 @@ void main() {
     expect(source, contains("'Leave without saving?'"));
     expect(source, isNot(contains('AppRoutes.businessDashboard')));
   });
+
+  test(
+    'router replacement publishes route information without Router.neglect',
+    () {
+      final source = File('lib/navigation/app_router.dart').readAsStringSync();
+      expect(source, isNot(contains('Router.neglect')));
+      expect(source, contains('Router.navigate(context, update)'));
+      expect(source, contains('popPreviousBusinessRoute'));
+    },
+  );
 }

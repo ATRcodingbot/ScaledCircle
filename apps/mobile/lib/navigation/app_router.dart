@@ -27,6 +27,7 @@ class AppRouterDelegate extends RouterDelegate<Uri>
 
   Uri _location = Uri(path: '/');
   Object? _arguments;
+  final List<Uri> _appHistory = <Uri>[];
 
   @override
   Uri get currentConfiguration => _location;
@@ -41,20 +42,37 @@ class AppRouterDelegate extends RouterDelegate<Uri>
     if (next == _location) return;
 
     void update() {
+      if (!replace) _appHistory.add(_location);
       _location = next;
       _arguments = arguments;
       notifyListeners();
     }
 
-    if (replace && context != null) {
-      Router.neglect(context, update);
+    if (!replace && context != null) {
+      Router.navigate(context, update);
     } else {
       update();
     }
   }
 
+  bool popPreviousBusinessRoute() {
+    while (_appHistory.isNotEmpty) {
+      final previous = _appHistory.removeLast();
+      if (!_isBusinessRoute(previous)) continue;
+      _location = previous;
+      _arguments = null;
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  static bool _isBusinessRoute(Uri location) =>
+      location.path == '/business' || location.path.startsWith('/business/');
+
   @override
   Future<void> setNewRoutePath(Uri configuration) async {
+    _appHistory.clear();
     _location = configuration;
     _arguments = null;
     notifyListeners();
@@ -121,7 +139,7 @@ abstract final class AppNavigation {
       Navigator.of(context).pushNamed(location, arguments: arguments);
       return;
     }
-    delegate.navigate(location, arguments: arguments);
+    delegate.navigate(location, context: context, arguments: arguments);
   }
 
   static void replace(

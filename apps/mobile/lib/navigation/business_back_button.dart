@@ -28,6 +28,9 @@ class BusinessBackButton extends StatelessWidget {
       return;
     }
 
+    final router = AppRouterScope.maybeOf(context);
+    if (router?.popPreviousBusinessRoute() ?? false) return;
+
     AppNavigation.replace(context, AppRoutes.businessDashboard);
   }
 
