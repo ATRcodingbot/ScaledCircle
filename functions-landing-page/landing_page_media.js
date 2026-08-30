@@ -54,10 +54,14 @@ async function approvedRevision(db, businessUid, selected) {
   const [assetSnap, revisionSnap] = await Promise.all([assetRef.get(), revisionRef.get()]);
   const asset = assetSnap.data?.() || {};
   const revision = revisionSnap.data?.() || {};
+  const generated = revision.origin === "generated_service_concept";
+  const approvalEvidence = generated ? revision.generatedContentAcknowledged === true &&
+    revision.moderationStatus === "passed" && Boolean(clean(revision.truthfulnessDisclosure, 320)) :
+    revision.rightsAttestation === true;
   if (!assetSnap.exists || !revisionSnap.exists || asset.businessUid !== businessUid ||
       revision.businessUid !== businessUid || asset.removed === true ||
       asset.approvedRevisionId !== selected.revisionId || revision.status !== "ready" ||
-      revision.approvalStatus !== "approved" || revision.rightsAttestation !== true) {
+      revision.approvalStatus !== "approved" || !approvalEvidence) {
     throw new Error("landing_page_media_not_approved");
   }
   return {asset, revision};
@@ -98,6 +102,10 @@ async function materializeSelection({db, bucket, businessUid, pageId, versionId,
       assetId: item.assetId, revisionId: item.revisionId,
       altText: clean(authority.revision.altText,240),
       origin: authority.revision.origin || "business_upload",...primary,derivatives});
+    if (authority.revision.origin === "generated_service_concept") {
+      published.at(-1).truthfulnessDisclosure = clean(authority.revision.truthfulnessDisclosure, 320);
+      published.at(-1).serviceCategory = clean(authority.revision.serviceLabel, 80) || null;
+    }
   }
   let brand = null;
   if (normalized.useBrandColors) {

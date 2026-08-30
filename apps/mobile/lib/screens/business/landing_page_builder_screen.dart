@@ -12,7 +12,12 @@ import '../../services/landing_page_service.dart';
 import '../../services/business_media_service.dart';
 
 class LandingPageBuilderScreen extends StatefulWidget {
-  const LandingPageBuilderScreen({super.key, this.pageId, this.service, this.mediaService});
+  const LandingPageBuilderScreen({
+    super.key,
+    this.pageId,
+    this.service,
+    this.mediaService,
+  });
   final String? pageId;
   final LandingPageGateway? service;
   final BusinessMediaGateway? mediaService;
@@ -291,13 +296,22 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
         ? Map<String, dynamic>.from(asset['revision'] as Map)
         : null;
     final revisionId = asset['approvedRevisionId']?.toString();
-    if (revision == null || revisionId == null ||
-        revision['status'] != 'ready' || revision['approvalStatus'] != 'approved') {
+    if (revision == null ||
+        revisionId == null ||
+        revision['status'] != 'ready' ||
+        revision['approvalStatus'] != 'approved') {
       return null;
     }
-    return {'assetId': asset['assetId'].toString(), 'revisionId': revisionId,
-      'altText': revision['altText']?.toString() ?? '', 'title': asset['title']?.toString() ?? 'Approved image',
-      'purpose': asset['purpose']?.toString() ?? 'service_visual', 'asset': asset};
+    return {
+      'assetId': asset['assetId'].toString(),
+      'revisionId': revisionId,
+      'altText': revision['altText']?.toString() ?? '',
+      'title': asset['title']?.toString() ?? 'Approved image',
+      'origin': revision['origin']?.toString() ?? 'business_upload',
+      'truthfulnessDisclosure': revision['truthfulnessDisclosure']?.toString(),
+      'purpose': asset['purpose']?.toString() ?? 'service_visual',
+      'asset': asset,
+    };
   }
 
   Widget _approvedAssetPreview(Map<String, dynamic> asset) => SizedBox(
@@ -317,50 +331,103 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
     ),
   );
 
-  Future<void> _pickApprovedMedia({required bool logo, int? replaceIndex}) async {
+  Future<void> _pickApprovedMedia({
+    required bool logo,
+    int? replaceIndex,
+  }) async {
     setState(() => _busy = true);
     try {
       final workspace = await _mediaService.workspace();
-      final options = (workspace['assets'] as List? ?? []).map((value) =>
-        _approvedRef(Map<String, dynamic>.from(value as Map))).whereType<Map<String, dynamic>>()
-        .where((value) => logo
-            ? value['purpose'] == 'logo'
-            : value['purpose'] != 'logo')
-        .toList();
+      final options = (workspace['assets'] as List? ?? [])
+          .map((value) => _approvedRef(Map<String, dynamic>.from(value as Map)))
+          .whereType<Map<String, dynamic>>()
+          .where(
+            (value) =>
+                logo ? value['purpose'] == 'logo' : value['purpose'] != 'logo',
+          )
+          .toList();
       if (!mounted) return;
       final picked = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (context) => SimpleDialog(
           title: Text(logo ? 'Choose approved logo' : 'Choose approved visual'),
           children: [
-            if (options.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('No approved images are ready. Upload and approve one in Brand Assets first.')),
-            ...options.map((item) => SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, item),
-              child: ListTile(leading: _approvedAssetPreview(Map<String, dynamic>.from(item['asset'] as Map)), title: Text(item['title'].toString()),
-                subtitle: Text(item['altText'].toString().isEmpty ? 'Approved image' : item['altText'].toString())),
-            )),
+            if (options.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'No approved images are ready. Upload and approve one in Brand Assets first.',
+                ),
+              ),
+            ...options.map(
+              (item) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, item),
+                child: ListTile(
+                  leading: _approvedAssetPreview(
+                    Map<String, dynamic>.from(item['asset'] as Map),
+                  ),
+                  title: Text(item['title'].toString()),
+                  subtitle: Text(
+                    item['origin'] == 'generated_service_concept'
+                        ? 'Generated concept · ${item['truthfulnessDisclosure'] ?? "Not a photo of completed work."}'
+                        : (item['altText'].toString().isEmpty
+                              ? 'Your approved photo'
+                              : item['altText'].toString()),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       );
       if (picked != null && mounted) {
         setState(() {
-        final selection = {'assetId': picked['assetId'], 'revisionId': picked['revisionId'],
-          'altText': picked['altText']};
-        if (logo) { _logo = selection; }
-        else if (replaceIndex != null) { _visuals[replaceIndex] = {...selection, 'role': _visuals[replaceIndex]['role'], 'slotId': _visuals[replaceIndex]['slotId']}; }
-        else if (_visuals.length < 6) { _visuals.add({...selection, 'role': _visuals.any((v) => v['role'] == 'hero') ? 'service' : 'hero', 'slotId': 'visual-${_visuals.length + 1}'}); }
+          final selection = {
+            'assetId': picked['assetId'],
+            'revisionId': picked['revisionId'],
+            'altText': picked['altText'],
+            'origin': picked['origin'],
+            'truthfulnessDisclosure': picked['truthfulnessDisclosure'],
+          };
+          if (logo) {
+            _logo = selection;
+          } else if (replaceIndex != null) {
+            _visuals[replaceIndex] = {
+              ...selection,
+              'role': _visuals[replaceIndex]['role'],
+              'slotId': _visuals[replaceIndex]['slotId'],
+            };
+          } else if (_visuals.length < 6) {
+            _visuals.add({
+              ...selection,
+              'role': _visuals.any((v) => v['role'] == 'hero')
+                  ? 'service'
+                  : 'hero',
+              'slotId': 'visual-${_visuals.length + 1}',
+            });
+          }
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _message = "We couldn't load approved Brand Assets. Try again.");
-    } finally { if (mounted) setState(() => _busy = false); }
+      if (mounted) {
+        setState(
+          () => _message = "We couldn't load approved Brand Assets. Try again.",
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _moveVisual(int index, int delta) {
     final target = index + delta;
     if (target < 0 || target >= _visuals.length) return;
-    setState(() { final item = _visuals.removeAt(index); _visuals.insert(target, item); });
+    setState(() {
+      final item = _visuals.removeAt(index);
+      _visuals.insert(target, item);
+    });
   }
+
   Future<void> _load() async {
     setState(() => _busy = true);
     try {
@@ -378,9 +445,15 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       _style = c['style'] ?? 'clean';
       _cta = c['ctaType'] ?? 'request_estimate';
       _tracking = p['trackingMode'] == 'first_party';
-      final media = c['media'] is Map ? Map<String, dynamic>.from(c['media'] as Map) : const <String, dynamic>{};
-      _logo = media['logo'] is Map ? Map<String, dynamic>.from(media['logo'] as Map) : null;
-      _visuals = (media['visuals'] as List? ?? []).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      final media = c['media'] is Map
+          ? Map<String, dynamic>.from(c['media'] as Map)
+          : const <String, dynamic>{};
+      _logo = media['logo'] is Map
+          ? Map<String, dynamic>.from(media['logo'] as Map)
+          : null;
+      _visuals = (media['visuals'] as List? ?? [])
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
       _useBrandColors = media['useBrandColors'] == true;
       _rememberSavedState();
       _slug = p['publicSlug']?.toString();
@@ -761,58 +834,127 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
                       onChanged: (v) => setState(() => _tracking = v),
                     ),
                     const Divider(height: 32),
-                    Text('Brand & service visuals', style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      'Brand & service visuals',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                     const SizedBox(height: 6),
-                    const Text('Only images you approved in Brand Assets can be published. Your current public page stays unchanged until publishing completes.'),
+                    const Text(
+                      'Only images you approved in Brand Assets can be published. Your current public page stays unchanged until publishing completes.',
+                    ),
                     const SizedBox(height: 12),
-                    Wrap(spacing: 10, runSpacing: 8, children: [
-                      OutlinedButton.icon(
-                        key: const Key('choose-approved-logo'),
-                        onPressed: _busy ? null : () => _pickApprovedMedia(logo: true),
-                        icon: const Icon(Icons.business), label: Text(_logo == null ? 'Choose approved logo' : 'Replace logo'),
-                      ),
-                      OutlinedButton.icon(
-                        key: const Key('add-approved-visual'),
-                        onPressed: _busy || _visuals.length >= 6 ? null : () => _pickApprovedMedia(logo: false),
-                        icon: const Icon(Icons.add_photo_alternate_outlined), label: const Text('Add approved visual'),
-                      ),
-                      TextButton.icon(
-                        onPressed: _busy ? null : () => AppNavigation.push(context, AppRoutes.businessBrandAssets),
-                        icon: const Icon(Icons.upload_outlined), label: const Text('Upload in Brand Assets'),
-                      ),
-                    ]),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          key: const Key('choose-approved-logo'),
+                          onPressed: _busy
+                              ? null
+                              : () => _pickApprovedMedia(logo: true),
+                          icon: const Icon(Icons.business),
+                          label: Text(
+                            _logo == null
+                                ? 'Choose approved logo'
+                                : 'Replace logo',
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          key: const Key('add-approved-visual'),
+                          onPressed: _busy || _visuals.length >= 6
+                              ? null
+                              : () => _pickApprovedMedia(logo: false),
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          label: const Text('Add approved visual'),
+                        ),
+                        TextButton.icon(
+                          onPressed: _busy
+                              ? null
+                              : () => AppNavigation.push(
+                                  context,
+                                  AppRoutes.businessBrandAssets,
+                                ),
+                          icon: const Icon(Icons.upload_outlined),
+                          label: const Text('Upload in Brand Assets'),
+                        ),
+                      ],
+                    ),
                     if (_logo != null)
-                      ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.verified_outlined),
-                        title: const Text('Approved logo selected'), subtitle: Text(_logo!['altText']?.toString() ?? ''),
-                        trailing: IconButton(tooltip: 'Remove logo', onPressed: () => setState(() => _logo = null), icon: const Icon(Icons.close))),
-                    ..._visuals.asMap().entries.map((entry) => Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.image_outlined),
-                        title: Text(entry.value['role'] == 'hero' ? 'Hero visual' : 'Service visual ${entry.key + 1}'),
-                        subtitle: Text(entry.value['altText']?.toString() ?? ''),
-                        trailing: PopupMenuButton<String>(
-                          tooltip: 'Visual actions',
-                          onSelected: (action) {
-                            if (action == 'earlier') _moveVisual(entry.key, -1);
-                            if (action == 'later') _moveVisual(entry.key, 1);
-                            if (action == 'replace') _pickApprovedMedia(logo: false, replaceIndex: entry.key);
-                            if (action == 'remove') setState(() => _visuals.removeAt(entry.key));
-                          },
-                          itemBuilder: (_) => [
-                            if (entry.key > 0) const PopupMenuItem(value: 'earlier', child: Text('Move earlier')),
-                            if (entry.key < _visuals.length - 1) const PopupMenuItem(value: 'later', child: Text('Move later')),
-                            const PopupMenuItem(value: 'replace', child: Text('Replace visual')),
-                            const PopupMenuItem(value: 'remove', child: Text('Remove visual')),
-                          ],
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.verified_outlined),
+                        title: const Text('Approved logo selected'),
+                        subtitle: Text(_logo!['altText']?.toString() ?? ''),
+                        trailing: IconButton(
+                          tooltip: 'Remove logo',
+                          onPressed: () => setState(() => _logo = null),
+                          icon: const Icon(Icons.close),
                         ),
                       ),
-                    )),
+                    ..._visuals.asMap().entries.map(
+                      (entry) => Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.image_outlined),
+                          title: Text(
+                            entry.value['role'] == 'hero'
+                                ? 'Hero visual'
+                                : 'Service visual ${entry.key + 1}',
+                          ),
+                          subtitle: Text(
+                            entry.value['origin'] == 'generated_service_concept'
+                                ? 'Generated concept · ${entry.value['truthfulnessDisclosure'] ?? "Not a photo of completed work."}'
+                                : entry.value['altText']?.toString() ?? '',
+                          ),
+                          trailing: PopupMenuButton<String>(
+                            tooltip: 'Visual actions',
+                            onSelected: (action) {
+                              if (action == 'earlier') {
+                                _moveVisual(entry.key, -1);
+                              }
+                              if (action == 'later') _moveVisual(entry.key, 1);
+                              if (action == 'replace') {
+                                _pickApprovedMedia(
+                                  logo: false,
+                                  replaceIndex: entry.key,
+                                );
+                              }
+                              if (action == 'remove') {
+                                setState(() => _visuals.removeAt(entry.key));
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              if (entry.key > 0)
+                                const PopupMenuItem(
+                                  value: 'earlier',
+                                  child: Text('Move earlier'),
+                                ),
+                              if (entry.key < _visuals.length - 1)
+                                const PopupMenuItem(
+                                  value: 'later',
+                                  child: Text('Move later'),
+                                ),
+                              const PopupMenuItem(
+                                value: 'replace',
+                                child: Text('Replace visual'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'remove',
+                                child: Text('Remove visual'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Use approved Brand Kit colors'),
-                      subtitle: const Text('Publishing snapshots the current approved colors for this version.'),
+                      subtitle: const Text(
+                        'Publishing snapshots the current approved colors for this version.',
+                      ),
                       value: _useBrandColors,
-                      onChanged: (value) => setState(() => _useBrandColors = value),
+                      onChanged: (value) =>
+                          setState(() => _useBrandColors = value),
                     ),
                     const Divider(height: 32),
                     SegmentedButton<bool>(

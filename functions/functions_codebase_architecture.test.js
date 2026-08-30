@@ -320,7 +320,10 @@ test("creative-media-core exclusively owns private Business media processing", (
   const names = ["getBusinessMediaWorkspace", "createBusinessMediaUploadIntent",
     "finalizeBusinessMediaUpload", "updateBusinessMediaRevisionMetadata",
     "approveBusinessMediaRevision", "rejectBusinessMediaRevision",
-    "removeBusinessMediaAsset", "updateBusinessBrandProfile"];
+    "removeBusinessMediaAsset", "updateBusinessBrandProfile",
+    "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
+    "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
+    "rejectGeneratedServiceVisual", "getGeneratedMediaOperations"];
   assert.deepEqual(exportsIn(creativeMediaCore).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
@@ -331,7 +334,8 @@ test("creative-media-core exclusively owns private Business media processing", (
     "firebase-admin", "firebase-functions", "sharp",
   ]);
   for (const forbidden of ["defineSecret", "OPENAI_API_KEY", "SMTP_PASSWORD", "STRIPE_",
-    "landingPages", "responseAssets", "visualGenerationJobs"]) {
+    "landingPages", "responseAssets", "api.openai.com", "generativelanguage.googleapis.com",
+    "stability.ai", "replicate.com"]) {
     assert.doesNotMatch(creativeMediaCore, new RegExp(forbidden));
   }
   for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {

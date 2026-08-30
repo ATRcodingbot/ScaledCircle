@@ -118,6 +118,9 @@ const creativeMediaExports = new Set([
   "getBusinessMediaWorkspace", "createBusinessMediaUploadIntent", "finalizeBusinessMediaUpload",
   "updateBusinessMediaRevisionMetadata", "approveBusinessMediaRevision",
   "rejectBusinessMediaRevision", "removeBusinessMediaAsset", "updateBusinessBrandProfile",
+  "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
+  "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
+  "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
 ]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
@@ -222,6 +225,8 @@ function transformIndex(mode) {
     const creativeMediaHelpers = new Set([
       "creativeMedia", "creativeMediaService", "requireCreativeMediaBusiness",
       "creativeMediaError", "creativeMediaCall",
+      "generationFoundation", "generationProjectId", "generationIsLocal", "generationFixture",
+      "generationAdapter", "generationService", "generationHttpsError", "generationBusinessCall",
     ]);
     ast.program.body = ast.program.body.flatMap((statement) => {
       if (statement.type === "FunctionDeclaration" && creativeMediaHelpers.has(statement.id?.name)) return [];
@@ -359,8 +364,10 @@ function copyPackage(destination, mode) {
     if (!["landing-page", "legacy"].includes(mode) && name === "landing_page_media.js") continue;
     if (mode === "landing-page" && name.endsWith(".js") &&
         !["landing_page.js", "landing_page_workspace.js", "landing_page_media.js"].includes(name)) continue;
-    if (mode === "creative-media" && name.endsWith(".js") && name !== "creative_media.js") continue;
-    if (mode !== "creative-media" && name === "creative_media.js") continue;
+    if (mode === "creative-media" && name.endsWith(".js") &&
+        !["creative_media.js", "generation_foundation.js"].includes(name)) continue;
+    if (mode !== "creative-media" &&
+        ["creative_media.js", "generation_foundation.js"].includes(name)) continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }

@@ -65,6 +65,7 @@ const transactionalEmail = require("./transactional_email");
 
 
 
+
 initializeApp();
 
 
@@ -79,6 +80,33 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -974,6 +1002,63 @@ exports.sendTransactionalEmailJob = onDocumentCreated(
 );
 
 /** Deliver only user-requested Managed Growth artifacts from an isolated queue. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

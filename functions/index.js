@@ -59,6 +59,7 @@ const managedGrowthProfile = require("./managed_growth_profile");
 const managedGrowthDelivery = require("./managed_growth_delivery");
 const socialWorkflow = require("./social_workflow");
 const creativeMedia = require("./creative_media");
+const generationFoundation = require("./generation_foundation");
 const internalBetaEntitlements = require("./internal_beta_entitlements");
 const adminOperations = require("./admin_operations");
 const adminOpsReadModel = require("./admin_ops_read_model");
@@ -106,6 +107,33 @@ const creativeMediaService = creativeMedia.createCreativeMediaService({
   FieldValue,
   FieldPath,
   Timestamp,
+});
+const generationProjectId = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT ||
+  process.env.GCP_PROJECT || "";
+const generationIsLocal = Boolean(process.env.FIRESTORE_EMULATOR_HOST) && /^demo-|^local-/.test(generationProjectId);
+const generationFixture = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAZ7hG3sAAAAASUVORK5CYII=",
+  "base64",
+);
+const generationAdapter = generationIsLocal ? generationFoundation.deterministicTestAdapter({
+  fixture: generationFixture,
+  environment: {projectId: generationProjectId, emulator: true, nodeEnv: "test"},
+}) : null;
+const generationService = generationFoundation.createGenerationService({
+  db, FieldValue, Timestamp, FieldPath, adapter: generationAdapter,
+  capability: async () => generationIsLocal ? "test_only" : "disabled",
+  budgetEnabled: async () => generationIsLocal,
+  approvedServices: async (actor) => {
+    const profile = await db.collection("businessBrandProfiles").doc(actor.uid).get();
+    return Array.isArray(profile.data()?.approvedServiceCategories) ? profile.data().approvedServiceCategories : [];
+  },
+  brandProfile: async (actor) => {
+    const profile = await db.collection("businessBrandProfiles").doc(actor.uid).get();
+    return profile.exists ? profile.data() : {};
+  },
+  ingestCandidate: (input) => creativeMediaService.ingestGeneratedCandidate(input),
+  approveCandidate: (input) => creativeMediaService.approveGeneratedCandidate(input),
+  rejectCandidate: (input) => creativeMediaService.rejectGeneratedCandidate(input),
 });
 
 function legalConsentError(error, message) {
@@ -10763,6 +10791,63 @@ exports.removeBusinessMediaAsset = onCall(
 exports.updateBusinessBrandProfile = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
   (request) => creativeMediaCall(request, creativeMediaService.updateBrand),
+);
+
+function generationHttpsError(error) {
+  const code = String(error?.message || error);
+  if (["generation_access_denied", "generation_job_not_found"].includes(code)) {
+    return new HttpsError("permission-denied", "That generated visual is not available.");
+  }
+  if (["generation_disabled", "provider_unavailable", "budget_disabled", "test_adapter_forbidden"].includes(code)) {
+    return new HttpsError("failed-precondition", "Generated visuals are temporarily unavailable.");
+  }
+  if (code === "generation_rate_limited") {
+    return new HttpsError("resource-exhausted", "You’ve reached the current generated-visual limit. Try again later.");
+  }
+  if (["invalid_generation_request", "unsupported_service_category", "invalid_visual_direction",
+    "invalid_generated_purpose", "invalid_generation_cursor"].includes(code)) {
+    return new HttpsError("invalid-argument", "Choose a supported service and visual direction.");
+  }
+  if (["generation_not_approvable", "moderation_blocked"].includes(code)) {
+    return new HttpsError("failed-precondition", "This concept cannot be approved for use.");
+  }
+  return new HttpsError("internal", "Generated visuals are temporarily unavailable.");
+}
+async function generationBusinessCall(request, operation) {
+  const actor = await requireCreativeMediaBusiness(request);
+  try { return await operation({actor, input: request.data || {}}); }
+  catch (error) { throw generationHttpsError(error); }
+}
+exports.getGeneratedServiceVisualWorkspace = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 4},
+  (request) => generationBusinessCall(request,
+    ({actor, input}) => generationService.list({actor, input, admin: false})),
+);
+exports.requestGeneratedServiceVisual = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 2},
+  (request) => generationBusinessCall(request, generationService.request),
+);
+exports.processGeneratedServiceVisual = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 2, timeoutSeconds: 120, memory: "1GiB"},
+  (request) => generationBusinessCall(request,
+    ({actor, input}) => generationService.process({actor, jobId: input.jobId})),
+);
+exports.approveGeneratedServiceVisual = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 4},
+  (request) => generationBusinessCall(request, generationService.approve),
+);
+exports.rejectGeneratedServiceVisual = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 4},
+  (request) => generationBusinessCall(request, generationService.reject),
+);
+exports.getGeneratedMediaOperations = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 2},
+  async (request) => {
+    const context = await authenticatedUserContext(request, "Admin access is required.");
+    if (context.isAdmin !== true) throw new HttpsError("permission-denied", "Admin access is required.");
+    try { return await generationService.operations({actor: context, input: request.data || {}}); }
+    catch (error) { throw generationHttpsError(error); }
+  },
 );
 
 // Attribution Foundation V1 extends the maintained Sales lead boundary. Public

@@ -60,6 +60,7 @@ const {
 
 
 
+
 const adminOperations = require("./admin_operations");
 const adminOpsReadModel = require("./admin_ops_read_model");
 
@@ -95,6 +96,33 @@ const adminOpsReadService = adminOpsReadModel.createAdminOpsReadService({
   db,
   FieldValue
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

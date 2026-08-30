@@ -65,6 +65,7 @@ const scalerJobAlertEmail = require("./scaler_job_alert_email");
 
 
 
+
 initializeApp();
 
 
@@ -79,6 +80,33 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

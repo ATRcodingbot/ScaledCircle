@@ -446,3 +446,20 @@ test("financial reads are scoped to participants and admins", async () => {
   await assertFails(store("scaler-two").doc("scalerTransfers/transfer-one").get());
   await assertSucceeds(store("admin-one").doc("scalerTransfers/transfer-one").get());
 });
+
+test("visual generation jobs remain server-authoritative for every client role", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("visualGenerationJobs/job-one").set({
+      businessUid: "business-one", status: "review_required", providerMode: "test",
+    });
+  });
+  for (const uid of ["business-one", "business-two", "scaler-one", "admin-one"]) {
+    const ref = store(uid).doc("visualGenerationJobs/job-one");
+    await assertFails(ref.get());
+    await assertFails(ref.set({businessUid: uid, status: "approved"}));
+    await assertFails(ref.update({status: "approved"}));
+    await assertFails(ref.delete());
+  }
+  await assertFails(environment.unauthenticatedContext().firestore()
+    .doc("visualGenerationJobs/public").set({status: "queued"}));
+});

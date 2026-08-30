@@ -7,8 +7,9 @@ import '../../navigation/business_back_button.dart';
 import '../../services/business_media_service.dart';
 
 class BrandAssetsScreen extends StatefulWidget {
-  const BrandAssetsScreen({super.key, this.service});
+  const BrandAssetsScreen({super.key, this.service, this.generationService});
   final BusinessMediaGateway? service;
+  final GeneratedVisualGateway? generationService;
   @override
   State<BrandAssetsScreen> createState() => _BrandAssetsScreenState();
 }
@@ -16,6 +17,8 @@ class BrandAssetsScreen extends StatefulWidget {
 class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
   late final BusinessMediaGateway _service =
       widget.service ?? BusinessMediaService();
+  late final GeneratedVisualGateway _generationService =
+      widget.generationService ?? BusinessMediaService();
   final ImagePicker _picker = ImagePicker();
   final List<Map<String, dynamic>> _assets = [];
   bool _loading = true;
@@ -24,11 +27,137 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
   String? _cursor;
   bool _hasMore = false;
   Map<String, dynamic> _brand = const {};
+  Map<String, dynamic> _generation = const {'capability': 'disabled'};
+  bool _generating = false;
 
   @override
   void initState() {
     super.initState();
     _load(reset: true);
+    _loadGeneration();
+  }
+
+  Future<void> _loadGeneration() async {
+    try {
+      final value = await _generationService.generationWorkspace();
+      if (mounted) setState(() => _generation = value);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _generation = const {'capability': 'disabled'});
+      }
+    }
+  }
+
+  Future<void> _createGenerated({String? priorJobId}) async {
+    final services =
+        (_generation['approvedServiceCategories'] as List? ?? const [])
+            .map((value) => value.toString())
+            .where((value) => value.isNotEmpty)
+            .toList();
+    final directions =
+        (_generation['visualDirections'] as List? ??
+                const ['clean', 'friendly', 'premium', 'practical', 'modern'])
+            .map((value) => value.toString())
+            .toList();
+    if (services.isEmpty) {
+      setState(
+        () => _error =
+            'Add an approved service category before creating a visual.',
+      );
+      return;
+    }
+    var selectedService = services.first;
+    var selectedDirection = directions.first;
+    final create = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(
+            priorJobId == null
+                ? 'Create a service visual'
+                : 'Try another concept',
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Generated concepts illustrate a service. They are not photos of completed work, people, customers, or property.',
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedService,
+                  decoration: const InputDecoration(labelText: 'Service'),
+                  items: services
+                      .map(
+                        (value) =>
+                            DropdownMenuItem(value: value, child: Text(value)),
+                      )
+                      .toList(),
+                  onChanged: (value) => setLocal(
+                    () => selectedService = value ?? selectedService,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedDirection,
+                  decoration: const InputDecoration(
+                    labelText: 'Visual direction',
+                  ),
+                  items: directions
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(
+                            value[0].toUpperCase() + value.substring(1),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setLocal(
+                    () => selectedDirection = value ?? selectedDirection,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Create visual'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (create != true) return;
+    setState(() {
+      _generating = true;
+      _error = null;
+    });
+    try {
+      final requestId =
+          'generated_${DateTime.now().microsecondsSinceEpoch}_${priorJobId ?? 'new'}';
+      final job = await _generationService.requestGeneration(
+        requestId: requestId,
+        serviceCategory: selectedService,
+        visualDirection: selectedDirection,
+      );
+      await _generationService.processGeneration(job['jobId'].toString());
+      await Future.wait([_loadGeneration(), _load(reset: true)]);
+    } catch (_) {
+      setState(
+        () => _error =
+            'Generated visuals are temporarily unavailable. Your existing images are unchanged.',
+      );
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
   }
 
   Future<void> _load({bool reset = false}) async {
@@ -329,6 +458,37 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
             const Text(
               'Keep reusable Business images here. You can still use ScaledCircle without uploading photos.',
             ),
+            const SizedBox(height: 18),
+            if (_generation['capability'] == 'test_only')
+              _GeneratedVisualPanel(
+                generation: _generation,
+                busy: _generating,
+                onCreate: () => _createGenerated(),
+                onApprove: (jobId) async {
+                  await _generationService.approveGeneration(jobId);
+                  await Future.wait([_loadGeneration(), _load(reset: true)]);
+                },
+                onReject: (jobId) async {
+                  await _generationService.rejectGeneration(jobId);
+                  await _loadGeneration();
+                },
+                onTryAnother: (jobId) => _createGenerated(priorJobId: jobId),
+              )
+            else if (_generation['capability'] == 'enabled')
+              _GeneratedVisualPanel(
+                generation: _generation,
+                busy: _generating,
+                onCreate: () => _createGenerated(),
+                onApprove: (jobId) async {
+                  await _generationService.approveGeneration(jobId);
+                  await Future.wait([_loadGeneration(), _load(reset: true)]);
+                },
+                onReject: (jobId) async {
+                  await _generationService.rejectGeneration(jobId);
+                  await _loadGeneration();
+                },
+                onTryAnother: (jobId) => _createGenerated(priorJobId: jobId),
+              ),
             if (_uploading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
@@ -436,6 +596,107 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
   }
 }
 
+class _GeneratedVisualPanel extends StatelessWidget {
+  const _GeneratedVisualPanel({
+    required this.generation,
+    required this.busy,
+    required this.onCreate,
+    required this.onApprove,
+    required this.onReject,
+    required this.onTryAnother,
+  });
+  final Map<String, dynamic> generation;
+  final bool busy;
+  final VoidCallback onCreate;
+  final Future<void> Function(String jobId) onApprove;
+  final Future<void> Function(String jobId) onReject;
+  final Future<void> Function(String jobId) onTryAnother;
+
+  String _status(String value) => switch (value) {
+    'queued' => 'Queued',
+    'processing' => 'Creating visual',
+    'review_required' => 'Ready for review · Approval required',
+    'approved' => 'Approved',
+    'rejected' => 'Rejected',
+    'blocked' => 'Blocked by visual safety checks',
+    'failed' => 'Temporarily unavailable',
+    _ => 'Ready to generate',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final jobs = (generation['jobs'] as List? ?? const [])
+        .whereType<Map>()
+        .map((job) => Map<String, dynamic>.from(job))
+        .toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Create visuals for me',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Create a generic service concept, review the exact image, and approve it before use. Test and local activity stays separate from customer media.',
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: busy ? null : onCreate,
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: Text(busy ? 'Creating visual' : 'Create service visual'),
+            ),
+            if (busy)
+              const LinearProgressIndicator(
+                semanticsLabel: 'Creating service concept visual',
+              ),
+            for (final job in jobs) ...[
+              const Divider(height: 28),
+              Text(
+                job['serviceCategory']?.toString() ?? 'Service concept',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Generated concept · ${_status(job['status']?.toString() ?? '')}',
+                semanticsLabel:
+                    'Generated concept status: ${_status(job['status']?.toString() ?? '')}',
+              ),
+              Text('Direction: ${job['visualDirection'] ?? 'selected style'}'),
+              const SizedBox(height: 6),
+              Text(
+                generation['disclosure']?.toString() ??
+                    "Service concept image — not a photo of this Business's completed work, team, customers, or property.",
+              ),
+              if (job['status'] == 'review_required')
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton(
+                      onPressed: () => onApprove(job['jobId'].toString()),
+                      child: const Text('Approve concept'),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => onTryAnother(job['jobId'].toString()),
+                      child: const Text('Try another'),
+                    ),
+                    TextButton(
+                      onPressed: () => onReject(job['jobId'].toString()),
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MediaCard extends StatelessWidget {
   const _MediaCard({
     required this.asset,
@@ -458,6 +719,7 @@ class _MediaCard extends StatelessWidget {
         : <String, dynamic>{};
     final status = revision['status']?.toString() ?? 'uploading';
     final approval = revision['approvalStatus']?.toString() ?? 'pending';
+    final generated = revision['origin'] == 'generated_service_concept';
     final label = status == 'ready'
         ? (approval == 'approved' ? 'Approved' : 'Ready for review')
         : status == 'processing' || status == 'upload_pending'
@@ -500,22 +762,26 @@ class _MediaCard extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(label, semanticsLabel: 'Status: $label'),
+            Text(generated ? 'Generated concept' : 'Your photo'),
+            if (generated && revision['truthfulnessDisclosure'] != null)
+              Text(revision['truthfulnessDisclosure'].toString()),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 4,
               children: [
-                if (status == 'ready' && approval != 'approved')
+                if (!generated && status == 'ready' && approval != 'approved')
                   FilledButton(
                     onPressed: onReview,
                     child: const Text('Review'),
                   ),
-                if (status == 'ready' && approval == 'pending')
+                if (!generated && status == 'ready' && approval == 'pending')
                   TextButton(onPressed: onReject, child: const Text('Reject')),
-                OutlinedButton(
-                  onPressed: onReplace,
-                  child: const Text('Replace'),
-                ),
+                if (!generated)
+                  OutlinedButton(
+                    onPressed: onReplace,
+                    child: const Text('Replace'),
+                  ),
                 TextButton(onPressed: onRemove, child: const Text('Remove')),
               ],
             ),

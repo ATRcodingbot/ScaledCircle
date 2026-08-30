@@ -63,6 +63,7 @@ const logger = require("firebase-functions/logger");
 
 
 
+
 const legalConsent = require("./legal_consent");
 
 initializeApp();
@@ -100,6 +101,33 @@ const db = getFirestore();
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -63,6 +63,9 @@ function revisionProjection(revisionDoc) {
   const revision = revisionDoc.data();
   return {revisionId: revisionDoc.id, status: revision.status, approvalStatus: revision.approvalStatus,
     altText: revision.altText || "", serviceLabel: revision.serviceLabel || "",
+    origin: revision.origin || "business_upload", moderationStatus: revision.moderationStatus || null,
+    truthfulnessDisclosure: revision.truthfulnessDisclosure || null,
+    generatedContentAcknowledged: revision.generatedContentAcknowledged === true,
     rightsAttestation: revision.rightsAttestation === true, failureCategory: revision.failureCategory || null,
     renditions: revision.renditions || {}};
 }
@@ -194,6 +197,86 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
       throw new Error(error.quarantine ? "media_file_unsuitable" : "media_processing_failed");
     }
   }
+  async function ingestGeneratedCandidate({businessUid, requestId: rawRequestId, purpose, serviceCategory,
+    binary, disclosure, moderation, jobId}) {
+    const idempotencyKey = requestId(rawRequestId);
+    if (!Buffer.isBuffer(binary) || binary.length < 1 || binary.length > MAX_BYTES) throw new Error("invalid_output");
+    if (!PURPOSES.has(purpose) || purpose === "logo") throw new Error("invalid_generated_purpose");
+    if (moderation?.status !== "passed") throw new Error("moderation_blocked");
+    const assetId = safeId("asset", businessUid, `generated-${idempotencyKey}`);
+    const revisionId = safeId("revision", businessUid, `generated-${idempotencyKey}`);
+    const assetRef = assets(businessUid).doc(assetId);
+    const revisionRef = revision(businessUid, assetId, revisionId);
+    const intentRef = db.collection("businessMediaUploadIntents").doc(revisionId);
+    const originalPath = pathFor(businessUid, assetId, revisionId);
+    const existing = await revisionRef.get();
+    if (existing.exists && existing.data().status === "ready") return {assetId, revisionId, idempotentReplay: true};
+    const at = FieldValue.serverTimestamp();
+    await db.runTransaction(async (tx) => {
+      const libraryRef = library(businessUid);
+      const [librarySnap, assetSnap, revisionSnap] = await Promise.all([
+        tx.get(libraryRef), tx.get(assetRef), tx.get(revisionRef),
+      ]);
+      const assetTotal = Number(librarySnap.data()?.assetCount || 0);
+      if (!assetSnap.exists && assetTotal >= MAX_ASSETS) throw new Error("media_asset_limit_reached");
+      if (!assetSnap.exists) tx.create(assetRef, {schemaVersion: SCHEMA_VERSION, businessUid,
+        purpose, title: `${text(serviceCategory, 80)} generated concept`, currentRevisionId: revisionId,
+        approvedRevisionId: null, removed: false, createdAt: at, updatedAt: at});
+      if (!revisionSnap.exists) tx.create(revisionRef, {schemaVersion: SCHEMA_VERSION, businessUid,
+        assetId, revisionId, origin: "generated_service_concept", purpose, status: "upload_pending",
+        approvalStatus: "pending", moderationStatus: "passed", moderation,
+        truthfulnessDisclosure: text(disclosure, 320), generatedContentAcknowledged: false,
+        privateOriginalPath: originalPath, renditions: {}, altText: `Concept image illustrating ${text(serviceCategory, 80)}`,
+        serviceLabel: text(serviceCategory, 80), rightsAttestation: false, requestId: idempotencyKey,
+        generationJobId: text(jobId, 160), createdAt: at, createdBy: "creative-media-core", updatedAt: at});
+      tx.set(intentRef, {schemaVersion: SCHEMA_VERSION, businessUid, assetId, revisionId,
+        storagePath: originalPath, status: "open", generatedBackendWrite: true, maximumBytes: MAX_BYTES,
+        allowedContentTypes: ["image/png", "image/jpeg", "image/webp"], createdAt: at,
+        expiresAt: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000)}, {merge: false});
+      tx.set(libraryRef, {schemaVersion: SCHEMA_VERSION, businessUid,
+        assetCount: assetTotal + (assetSnap.exists ? 0 : 1), updatedAt: at}, {merge: true});
+    });
+    await storageBucket().file(originalPath).save(binary, {resumable: false,
+      contentType: "application/octet-stream", metadata: {cacheControl: "private,no-store",
+        metadata: {assetId, revisionId, origin: "generated_service_concept"}}});
+    await finalizeUpload({actor: {uid: businessUid}, input: {assetId, revisionId}});
+    return {assetId, revisionId, idempotentReplay: false};
+  }
+  async function approveGeneratedCandidate({businessUid, assetId, revisionId, actorUid}) {
+    const assetRef = assets(businessUid).doc(text(assetId, 160));
+    const revisionRef = revision(businessUid, text(assetId, 160), text(revisionId, 160));
+    await db.runTransaction(async (tx) => {
+      const [assetSnap, revisionSnap] = await Promise.all([tx.get(assetRef), tx.get(revisionRef)]);
+      const data = revisionSnap.data?.() || {};
+      if (!assetSnap.exists || !revisionSnap.exists || data.businessUid !== businessUid ||
+          data.origin !== "generated_service_concept") throw new Error("media_access_denied");
+      if (data.status !== "ready" || data.moderationStatus !== "passed" ||
+          !text(data.truthfulnessDisclosure, 320)) throw new Error("media_approval_requirements_missing");
+      if (data.approvalStatus === "approved") return;
+      tx.update(revisionRef, {approvalStatus: "approved", generatedContentAcknowledged: true,
+        approvedAt: FieldValue.serverTimestamp(), approvedBy: actorUid,
+        updatedAt: FieldValue.serverTimestamp()});
+      tx.update(assetRef, {approvedRevisionId: revisionId, removed: false,
+        updatedAt: FieldValue.serverTimestamp()});
+    });
+    return {assetId, revisionId, approvalStatus: "approved"};
+  }
+  async function rejectGeneratedCandidate({businessUid, assetId, revisionId, actorUid}) {
+    const assetRef = assets(businessUid).doc(text(assetId, 160));
+    const revisionRef = revision(businessUid, text(assetId, 160), text(revisionId, 160));
+    await db.runTransaction(async (tx) => {
+      const [assetSnap, revisionSnap] = await Promise.all([tx.get(assetRef), tx.get(revisionRef)]);
+      const data = revisionSnap.data?.() || {};
+      if (!assetSnap.exists || !revisionSnap.exists || data.businessUid !== businessUid ||
+          data.origin !== "generated_service_concept") throw new Error("media_access_denied");
+      if (data.approvalStatus === "rejected") return;
+      tx.update(revisionRef, {approvalStatus: "rejected", rejectedAt: FieldValue.serverTimestamp(),
+        rejectedBy: actorUid, updatedAt: FieldValue.serverTimestamp()});
+      tx.update(assetRef, {removed: true, removedAt: FieldValue.serverTimestamp(),
+        removedBy: actorUid, updatedAt: FieldValue.serverTimestamp()});
+    });
+    return {assetId, revisionId, approvalStatus: "rejected"};
+  }
   async function failRevision(uid, revRef, intentRef, category, quarantined = false) {
     await db.runTransaction(async (tx) => {
       const intent = await tx.get(intentRef);
@@ -311,7 +394,9 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
       legacyCompatibility: {collection: "socialMediaLibraries", mode: "read_only_existing_workflow"},
       limits: {maximumAssets: MAX_ASSETS, maximumActiveUploads: ACTIVE_INTENT_LIMIT, maximumBytes: MAX_BYTES}};
   }
-  return {createUploadIntent, finalizeUpload, updateMetadata, approve: (args) => review({...args, approved: true}),
+  return {createUploadIntent, finalizeUpload, ingestGeneratedCandidate, approveGeneratedCandidate,
+    rejectGeneratedCandidate,
+    updateMetadata, approve: (args) => review({...args, approved: true}),
     reject: (args) => review({...args, approved: false}), remove, updateBrand, workspace};
 }
 

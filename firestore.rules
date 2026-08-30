@@ -996,6 +996,12 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // Generated-service-visual jobs, moderation state, provider references,
+    // usage, and candidate links are exclusively mediated by creative-media-core.
+    match /visualGenerationJobs/{jobId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /responseInteractions/{interactionId} {
       allow read, create, update, delete: if false;
     }

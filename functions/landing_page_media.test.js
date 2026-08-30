@@ -3,10 +3,10 @@ const test=require("node:test");const assert=require("node:assert/strict");
 const media=require("./landing_page_media");const lp=require("./landing_page");
 
 function snapshot(data){return{exists:data!=null,data:()=>data};}
-function dbFixture({approved=true,removed=false}={}){
+function dbFixture({approved=true,removed=false,generated=false,generatedAcknowledged=true,moderationStatus="passed"}={}){
   const records=new Map([
     ["businessMediaLibraries/business-a/mediaAssets/asset-a",{businessUid:"business-a",approvedRevisionId:approved?"revision-a":"revision-old",removed}],
-    ["businessMediaLibraries/business-a/mediaAssets/asset-a/revisions/revision-a",{businessUid:"business-a",origin:"business_upload",status:"ready",approvalStatus:"approved",rightsAttestation:true,altText:"A truthful service concept",renditions:{hero:{storagePath:"private/hero.webp",width:1600,height:900,mimeType:"image/webp"},card:{storagePath:"private/card.webp",width:900,height:675,mimeType:"image/webp"}}}],
+    ["businessMediaLibraries/business-a/mediaAssets/asset-a/revisions/revision-a",{businessUid:"business-a",origin:generated?"generated_service_concept":"business_upload",status:"ready",approvalStatus:"approved",rightsAttestation:!generated,generatedContentAcknowledged:generatedAcknowledged,moderationStatus,truthfulnessDisclosure:generated?"Service concept image — not a photo of completed work.":null,serviceLabel:generated?"Decks":"",altText:"A truthful service concept",renditions:{hero:{storagePath:"private/hero.webp",width:1600,height:900,mimeType:"image/webp"},card:{storagePath:"private/card.webp",width:900,height:675,mimeType:"image/webp"}}}],
     ["businessBrandProfiles/business-a",{primaryColor:"#123456",secondaryColor:"#654321",stylePreset:"clean"}],
   ]);
   class Ref{constructor(path){this.path=path;this.id=path.split("/").at(-1);}collection(name){return new Col(`${this.path}/${name}`);}async get(){return snapshot(records.get(this.path));}}
@@ -43,6 +43,15 @@ test("unapproved, removed, or wrong revision fails closed before publication",as
   await assert.rejects(()=>media.materializeSelection({db:dbFixture({removed:true}),bucket:bucketFixture(),businessUid:"business-a",pageId:"p",versionId:"v",selection}),/not_approved/);
 });
 
+test("generated publication requires moderation disclosure and explicit acknowledgment",async()=>{
+  const selection={visuals:[{assetId:"asset-a",revisionId:"revision-a",role:"hero"}]};
+  const published=await media.materializeSelection({db:dbFixture({generated:true}),bucket:bucketFixture(),businessUid:"business-a",pageId:"p",versionId:"v",selection});
+  assert.equal(published.visuals[0].origin,"generated_service_concept");
+  assert.match(published.visuals[0].truthfulnessDisclosure,/not a photo/i);
+  await assert.rejects(()=>media.materializeSelection({db:dbFixture({generated:true,generatedAcknowledged:false}),bucket:bucketFixture(),businessUid:"business-a",pageId:"p",versionId:"v2",selection}),/not_approved/);
+  await assert.rejects(()=>media.materializeSelection({db:dbFixture({generated:true,moderationStatus:"blocked"}),bucket:bucketFixture(),businessUid:"business-a",pageId:"p",versionId:"v3",selection}),/not_approved/);
+});
+
 test("SSR uses public immutable media only and preserves deterministic fallback",()=>{
   const content=lp.sanitizeDraft({headline:"Service",supportingText:"A truthful concept.",contactFields:["name","email"]});
   const fallback=lp.renderPage({page:{publicSlug:"slug"},version:{id:"v",content}});
@@ -57,5 +66,5 @@ test("future generated imagery is explicitly disclosed as conceptual",()=>{
   const html=lp.renderPage({page:{publicSlug:"slug"},version:{id:"v",content,mediaBucket:"demo.appspot.com",
     mediaSnapshot:{logo:null,visuals:[{role:"hero",origin:"generated_service_concept",altText:"Conceptual scene",
       publicDerivativePath:"landing_page_public/u/p/v/hero/hash.webp",width:1200,height:800}]}}});
-  assert.match(html,/Conceptual service visual/);assert.doesNotMatch(html,/completed work|our customer|our property/i);
+  assert.match(html,/Conceptual service visual/);assert.match(html,/Not a photo of this Business&#39;s completed work/);
 });
