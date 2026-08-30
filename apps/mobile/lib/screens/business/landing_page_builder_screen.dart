@@ -10,6 +10,7 @@ import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/landing_page_service.dart';
 import '../../services/business_media_service.dart';
+import '../../widgets/authenticated_media_preview.dart';
 
 class LandingPageBuilderScreen extends StatefulWidget {
   const LandingPageBuilderScreen({
@@ -317,17 +318,16 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
   Widget _approvedAssetPreview(Map<String, dynamic> asset) => SizedBox(
     width: 72,
     height: 54,
-    child: FutureBuilder<Uint8List?>(
-      future: _previewFutures.putIfAbsent(
-        asset['assetId'].toString(),
-        () => _mediaService.previewBytes(asset),
+    child: DecoratedBox(
+      decoration: const BoxDecoration(color: Color(0xFFEAF0F5)),
+      child: AuthenticatedMediaPreview(
+        compact: true,
+        load: () => _previewFutures.putIfAbsent(
+          asset['assetId'].toString(),
+          () => _mediaService.previewBytes(asset),
+        ),
+        semanticLabel: 'Approved image preview',
       ),
-      builder: (context, snapshot) => snapshot.data == null
-          ? const DecoratedBox(
-              decoration: BoxDecoration(color: Color(0xFFEAF0F5)),
-              child: Icon(Icons.image_outlined),
-            )
-          : Image.memory(snapshot.data!, fit: BoxFit.cover),
     ),
   );
 

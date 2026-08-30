@@ -138,11 +138,15 @@ const generationBudgetAuthority = generationBudget.createBudgetAuthority({
     db.collection("visualGenerationUsage").doc(`global_day_${keys.day}`).get(),
     db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`).get()]
     );
+    const consumed = (snap) => {const value = snap.data() || {};
+      return Number(value.actualUnits || 0) + Number(value.outstandingUnits ?? value.reservedUnits ?? 0);};
+    const cost = (snap) => {const value = snap.data() || {};
+      return Number(value.actualCostMicros || 0) +
+      Number(value.outstandingCostMicros ?? value.reservedCostMicros ?? 0);};
     return { config: business.config, business: { eligible: business.eligible, monthlyAllowance: business.monthlyAllowance },
-      usage: { businessRollingDay: 0, businessMonth: Number(businessMonth.data()?.reservedUnits || 0),
-        globalDay: Number(globalDay.data()?.reservedUnits || 0), globalMonth: Number(globalMonth.data()?.reservedUnits || 0),
-        globalDayCostMicros: Number(globalDay.data()?.reservedCostMicros || 0),
-        globalMonthCostMicros: Number(globalMonth.data()?.reservedCostMicros || 0) },
+      usage: { businessRollingDay: 0, businessMonth: consumed(businessMonth),
+        globalDay: consumed(globalDay), globalMonth: consumed(globalMonth),
+        globalDayCostMicros: cost(globalDay), globalMonthCostMicros: cost(globalMonth) },
       existingReservation: reservation.exists ? reservation.data() : null };
   },
   writeReservation: async (value) => {
@@ -158,15 +162,84 @@ const generationBudgetAuthority = generationBudget.createBudgetAuthority({
           reservedUnits: value.reservationUnits, reservedCostMicros: value.reservationCostMicros,
           createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
         tx.create(ref, reservation);
-        for (const usageRef of usageRefs) tx.set(usageRef, { reservedUnits: FieldValue.increment(1),
-          reservedCostMicros: FieldValue.increment(value.reservationCostMicros), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        for (const usageRef of usageRefs) tx.set(usageRef, { schemaVersion: "VisualGenerationUsageV2",
+          outstandingUnits: FieldValue.increment(1),
+          outstandingCostMicros: FieldValue.increment(value.reservationCostMicros),
+          reservedUnits: FieldValue.increment(1), reservedCostMicros: FieldValue.increment(value.reservationCostMicros),
+          updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         return reservation;
       });
     }
-    await ref.set({ status: value.status, usage: value.usage || null, cost: value.cost || null,
-      updatedAt: FieldValue.serverTimestamp() }, { merge: true });return { ...value, jobId };
+    return db.runTransaction(async (tx) => {
+      const currentSnap = await tx.get(ref);if (!currentSnap.exists) throw new Error("generation_reservation_missing");
+      const current = currentSnap.data();const transition = generationBudget.reservationTransition(current, value);
+      if (!transition.apply) return { ...current, ...transition };
+      const keys = current.keys || generationBudget.periodKeys();
+      const usageRefs = [db.collection("visualGenerationUsage").doc(`business_${current.businessUid}_${keys.month}`),
+      db.collection("visualGenerationUsage").doc(`global_day_${keys.day}`),
+      db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`)];
+      const usageSnaps = await Promise.all(usageRefs.map((usageRef) => tx.get(usageRef)));
+      for (let index = 0; index < usageRefs.length; index++) {
+        const data = usageSnaps[index].data() || {};
+        const outstandingUnits = Math.max(0, Number(data.outstandingUnits ?? data.reservedUnits ?? 0) +
+        transition.outstandingUnitsDelta);
+        const outstandingCostMicros = Math.max(0,
+        Number(data.outstandingCostMicros ?? data.reservedCostMicros ?? 0) + transition.outstandingCostMicrosDelta);
+        tx.set(usageRefs[index], { schemaVersion: "VisualGenerationUsageV2", outstandingUnits,
+          outstandingCostMicros, reservedUnits: outstandingUnits, reservedCostMicros: outstandingCostMicros,
+          actualUnits: Number(data.actualUnits || 0) + transition.actualUnitsDelta,
+          actualCostMicros: Number(data.actualCostMicros || 0) + transition.actualCostMicrosDelta,
+          updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      }
+      tx.set(ref, { status: value.status, providerAccepted: value.providerAccepted === true,
+        usage: value.usage || null, cost: value.cost || null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { ...value, jobId };
+    });
   }
 });
+async function reconcileGenerationAccounting(input = {}) {
+  const keys = generationBudget.periodKeys();
+  const releaseIds = Array.isArray(input.preProviderJobIds) ?
+  [...new Set(input.preProviderJobIds.map((value) => String(value || "").trim()))].slice(0, 20) : [];
+  for (const jobId of releaseIds) {
+    if (!/^visual_job_[A-Za-z0-9_-]{12,160}$/.test(jobId)) throw new Error("invalid_request");
+    await db.runTransaction(async (tx) => {
+      const jobRef = db.collection("visualGenerationJobs").doc(jobId);
+      const reservationRef = db.collection("visualGenerationReservations").doc(jobId);
+      const [jobSnap, reservationSnap] = await Promise.all([tx.get(jobRef), tx.get(reservationRef)]);
+      const job = jobSnap.data() || {};const reservation = reservationSnap.data() || {};
+      const definitivelyPreProvider = jobSnap.exists && reservationSnap.exists && job.status === "failed" &&
+      !job.providerRequestReference && !job.providerUsage && !job.actualCostMicros &&
+      reservation.status === "settled" && !reservation.usage && !reservation.cost;
+      if (!definitivelyPreProvider) throw new Error("generation_reconciliation_not_safe");
+      tx.set(reservationRef, { status: "released", providerAccepted: false,
+        reconciledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    });
+  }
+  const reservations = await db.collection("visualGenerationReservations").
+  where("keys.month", "==", keys.month).limit(501).get();
+  if (reservations.size > 500) throw new Error("generation_reconciliation_bound_exceeded");
+  const values = reservations.docs.map((doc) => ({ jobId: doc.id, ...doc.data() }));
+  const projections = generationBudget.summarizeReservations(values, keys);
+  const expectedIds = new Set(projections.keys());
+  for (const value of values) {
+    expectedIds.add(`business_${value.businessUid}_${keys.month}`);
+    expectedIds.add(`global_month_${keys.month}`);
+    if (value.keys?.day === keys.day) expectedIds.add(`global_day_${keys.day}`);
+  }
+  const batch = db.batch();
+  for (const id of expectedIds) {
+    const projection = projections.get(id) || { outstandingUnits: 0, outstandingCostMicros: 0,
+      actualUnits: 0, actualCostMicros: 0 };
+    batch.set(db.collection("visualGenerationUsage").doc(id), { schemaVersion: "VisualGenerationUsageV2",
+      ...projection, reservedUnits: projection.outstandingUnits,
+      reservedCostMicros: projection.outstandingCostMicros,
+      reconciledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  await batch.commit();
+  return { schemaVersion: "VisualGenerationUsageV2", period: keys,
+    reservationCount: values.length, projectionCount: expectedIds.size, releasedJobCount: releaseIds.length };
+}
 const generationAdapter = generationIsLocal ? generationFoundation.deterministicTestAdapter({
   fixture: generationFixture,
   environment: { projectId: generationProjectId, emulator: true, nodeEnv: "test" }
@@ -10944,7 +11017,10 @@ exports.getGeneratedMediaOperations = onCall(
   async (request) => {
     const context = await authenticatedUserContext(request, "Admin access is required.");
     if (context.isAdmin !== true) throw new HttpsError("permission-denied", "Admin access is required.");
-    try {return await generationService.operations({ actor: context, input: request.data || {} });}
+    try {const input = request.data || {};
+      const reconciliation = input.reconcileAccounting === true ? await reconcileGenerationAccounting(input) : null;
+      const result = await generationService.operations({ actor: context, input });
+      return { ...result, accountingReconciliation: reconciliation };}
     catch (error) {throw generationHttpsError(error);}
   }
 );

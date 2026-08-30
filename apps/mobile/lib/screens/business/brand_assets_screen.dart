@@ -1,10 +1,9 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../navigation/business_back_button.dart';
 import '../../services/business_media_service.dart';
+import '../../widgets/authenticated_media_preview.dart';
 
 class BrandAssetsScreen extends StatefulWidget {
   const BrandAssetsScreen({super.key, this.service, this.generationService});
@@ -912,25 +911,17 @@ class _MediaCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: FutureBuilder<Uint8List?>(
-                future: service.previewBytes(asset),
-                builder: (context, snapshot) => ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: snapshot.data == null
-                      ? Container(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.image_outlined, size: 48),
-                        )
-                      : Image.memory(
-                          snapshot.data!,
-                          fit: BoxFit.cover,
-                          semanticLabel:
-                              revision['altText']?.toString().isNotEmpty == true
-                              ? revision['altText'].toString()
-                              : 'Business image preview',
-                        ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ColoredBox(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: AuthenticatedMediaPreview(
+                    load: () => service.previewBytes(asset),
+                    semanticLabel:
+                        revision['altText']?.toString().isNotEmpty == true
+                        ? revision['altText'].toString()
+                        : 'Business image preview',
+                  ),
                 ),
               ),
             ),

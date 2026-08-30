@@ -11,9 +11,11 @@ const GOOGLE_METADATA_IDENTITY_ENDPOINT =
 const RETRYABLE = new Set(["rate_limited", "provider_unavailable"]);
 
 class ProviderAdapterError extends Error {
-  constructor(category, {outcome = "definitive", providerRequestId = null, cause = null} = {}) {
+  constructor(category, {outcome = "definitive", providerRequestId = null, providerAccepted = false,
+    usage = null, cost = null, cause = null} = {}) {
     super(category); this.name = "ProviderAdapterError"; this.category = category;
-    this.outcome = outcome; this.providerRequestId = providerRequestId; this.cause = cause;
+    this.outcome = outcome; this.providerRequestId = providerRequestId;
+    this.providerAccepted = providerAccepted; this.usage = usage; this.cost = cost; this.cause = cause;
   }
 }
 
@@ -198,18 +200,22 @@ function createOpenAIImageAdapter({clientFactory, configProvider, sleep = async 
           await sleep(Math.min(4000, 250 * (2 ** attempt++)));
         }
       }
+      const usage = normalizeUsage(response.usage); const actualCostMicros = calculateCostMicros(usage, config.pricing);
+      const cost = {estimatedCostMicros: Number(config.estimatedCostMicros || 41000), actualCostMicros};
+      const providerRequestId = response?._request_id || null;
+      const acceptedError = (category) => new ProviderAdapterError(category, {providerAccepted: true,
+        providerRequestId, usage, cost});
       const encoded = response?.data?.[0]?.b64_json;
-      if (typeof encoded !== "string" || encoded.length < 8) throw new ProviderAdapterError("invalid_output");
+      if (typeof encoded !== "string" || encoded.length < 8) throw acceptedError("invalid_output");
       const binary = Buffer.from(encoded, "base64");
-      if (!binary.length) throw new ProviderAdapterError("invalid_output");
+      if (!binary.length) throw acceptedError("invalid_output");
       if (config.secondaryModerationEnabled !== false && client.moderations?.create) {
         const moderation = await client.moderations.create({model: "omni-moderation-latest", input: [{type: "image_url",
           image_url: {url: `data:image/webp;base64,${encoded}`}}]}, {maxRetries: 0});
-        if (moderation?.results?.some((value) => value.flagged === true)) throw new ProviderAdapterError("moderation_blocked");
+        if (moderation?.results?.some((value) => value.flagged === true)) throw acceptedError("moderation_blocked");
       }
-      const usage = normalizeUsage(response.usage); const actualCostMicros = calculateCostMicros(usage, config.pricing);
-      return {binary, moderation: {status: "passed", flags: []}, providerRequestReference: response._request_id || null,
-        usage, cost: {estimatedCostMicros: Number(config.estimatedCostMicros || 41000), actualCostMicros},
+      return {binary, moderation: {status: "passed", flags: []}, providerRequestReference: providerRequestId,
+        usage, cost,
         provider: "openai", model, modelSnapshot, requestTimestamp};
     }});
 }

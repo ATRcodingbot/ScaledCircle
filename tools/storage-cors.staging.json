@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://scaledcircle-staging.web.app"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Length", "ETag"],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -194,7 +194,7 @@ test("admin operations run zero-model auth preflight only when explicitly reques
 });
 
 test("pre-provider auth failures retain safe categories and operational evidence", async () => {
-  const env = memoryDb(); const evidence = [];
+  const env = memoryDb(); const evidence = []; const transitions = [];
   const adapter = {id: "openai", mode: "external", async generateServiceConcept() {
     const error = new Error("private provider detail"); error.category = "google_claim_mismatch";
     error.outcome = "definitive"; throw error;
@@ -202,7 +202,10 @@ test("pre-provider auth failures retain safe categories and operational evidence
   const service = generation.createGenerationService({db: env, FieldValue: env.FieldValue,
     Timestamp: env.Timestamp, FieldPath: env.FieldPath, adapter, capability: async () => "enabled",
     budgetEnabled: async () => true, approvedServices: async () => ["Seasonal cleanup"],
-    ingestCandidate: async () => ({}), reportOperationalFailure: (value) => evidence.push(value)});
+    ingestCandidate: async () => ({}), reportOperationalFailure: (value) => evidence.push(value),
+    budgetAuthority: {reserve: async ({jobId}) => ({jobId, status: "reserved"}),
+      release: async ({reservation}) => transitions.push(["released", reservation.jobId]),
+      settle: async () => transitions.push(["settled"]), holdUnknown: async () => transitions.push(["unknown"])}});
   const actor = {uid: "business-safe"};
   const job = await service.request({actor, input: {requestId: "wif_failure_request_001",
     serviceCategory: "Seasonal cleanup", visualDirection: "clean"}});
@@ -210,5 +213,6 @@ test("pre-provider auth failures retain safe categories and operational evidence
   assert.equal(env.docs.get(`visualGenerationJobs/${job.jobId}`).failureCategory, "google_claim_mismatch");
   assert.deepEqual(evidence, [{jobId: job.jobId, category: "google_claim_mismatch",
     phase: "provider_or_ingestion", providerRequestReferencePresent: false}]);
+  assert.deepEqual(transitions, [["released", job.jobId]]);
   assert.equal(JSON.stringify(evidence).includes("private provider detail"), false);
 });

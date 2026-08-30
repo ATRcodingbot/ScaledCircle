@@ -24,13 +24,54 @@ function evaluateGenerationBudget({config = {}, business = {}, usage = {}, now =
   }
   return {allowed: true, keys, reservationUnits: 1, reservationCostMicros: reservationCost};
 }
+const HOLDING_STATUSES = new Set(["reserved", "unknown_provider_outcome"]);
+function reservationTransition(current = {}, next = {}) {
+  const from = String(current.status || ""); const to = String(next.status || "");
+  if (from === to) return {apply: false, idempotentReplay: true};
+  if (!HOLDING_STATUSES.has(from) || !["released", "settled", "unknown_provider_outcome"].includes(to)) {
+    return {apply: false, invalidTransition: true};
+  }
+  if (to === "unknown_provider_outcome") return {apply: true, holdOnly: true,
+    outstandingUnitsDelta: 0, outstandingCostMicrosDelta: 0, actualUnitsDelta: 0, actualCostMicrosDelta: 0};
+  const reservedUnits = Math.max(0, Number(current.reservedUnits || 0));
+  const reservedCostMicros = Math.max(0, Number(current.reservedCostMicros || 0));
+  const consumed = to === "settled" && next.providerAccepted === true;
+  return {apply: true, outstandingUnitsDelta: -reservedUnits,
+    outstandingCostMicrosDelta: -reservedCostMicros, actualUnitsDelta: consumed ? reservedUnits : 0,
+    actualCostMicrosDelta: consumed ? Math.max(0, Number(next.cost?.actualCostMicros || 0)) : 0};
+}
+function summarizeReservations(reservations = [], {day, month} = periodKeys()) {
+  const projections = new Map();
+  const add = (id, reservation) => {
+    const current = projections.get(id) || {outstandingUnits: 0, outstandingCostMicros: 0,
+      actualUnits: 0, actualCostMicros: 0};
+    if (HOLDING_STATUSES.has(reservation.status)) {
+      current.outstandingUnits += Math.max(0, Number(reservation.reservedUnits || 0));
+      current.outstandingCostMicros += Math.max(0, Number(reservation.reservedCostMicros || 0));
+    } else if (reservation.status === "settled" &&
+        (reservation.providerAccepted === true || reservation.usage || reservation.cost)) {
+      current.actualUnits += Math.max(0, Number(reservation.reservedUnits || 0));
+      current.actualCostMicros += Math.max(0, Number(reservation.cost?.actualCostMicros || 0));
+    }
+    projections.set(id, current);
+  };
+  for (const reservation of reservations) {
+    if (reservation?.keys?.month !== month) continue;
+    add(`business_${reservation.businessUid}_${month}`, reservation);
+    add(`global_month_${month}`, reservation);
+    if (reservation.keys.day === day) add(`global_day_${day}`, reservation);
+  }
+  return projections;
+}
 function createBudgetAuthority({readState, writeReservation}) {
   return {async reserve({actor, jobId}) { const state = await readState({actor, jobId});
     if (state.existingReservation) return {...state.existingReservation, idempotentReplay: true};
     const decision = evaluateGenerationBudget(state); if (!decision.allowed) throw new Error(decision.reason);
     return writeReservation({actor, jobId, ...decision, status: "reserved"}); },
-  async settle({reservation, usage, cost}) { return writeReservation({...reservation, usage, cost, status: "settled"}); },
+  async settle({reservation, usage, cost, providerAccepted = true}) {
+    return writeReservation({...reservation, usage, cost, providerAccepted, status: "settled"}); },
   async release({reservation}) { return writeReservation({...reservation, status: "released"}); },
   async holdUnknown({reservation}) { return writeReservation({...reservation, status: "unknown_provider_outcome"}); }};
 }
-module.exports = {DAY_MS, periodKeys, evaluateGenerationBudget, createBudgetAuthority};
+module.exports = {DAY_MS, periodKeys, evaluateGenerationBudget, reservationTransition,
+  summarizeReservations, createBudgetAuthority};

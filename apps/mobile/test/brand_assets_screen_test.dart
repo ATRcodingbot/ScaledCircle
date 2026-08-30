@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,13 +7,19 @@ import 'package:flutter_app/screens/business/brand_assets_screen.dart';
 import 'package:flutter_app/services/business_media_service.dart';
 
 class _FakeMedia implements BusinessMediaGateway {
-  _FakeMedia(this.result);
+  _FakeMedia(this.result, {this.preview, this.previewError});
   Map<String, dynamic> result;
+  Uint8List? preview;
+  Object? previewError;
   var brandUpdates = 0;
   @override
   Future<Map<String, dynamic>> workspace({String? cursor}) async => result;
   @override
-  Future<Uint8List?> previewBytes(Map<String, dynamic> asset) async => null;
+  Future<Uint8List?> previewBytes(Map<String, dynamic> asset) async {
+    if (previewError != null) throw previewError!;
+    return preview;
+  }
+
   @override
   Future<void> approve(String assetId, String revisionId) async {}
   @override
@@ -105,6 +112,9 @@ Widget _screen(_FakeMedia media, {_FakeGeneration? generation}) => MaterialApp(
 );
 
 void main() {
+  final validPng = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAZ7hG3sAAAAASUVORK5CYII=',
+  );
   testWidgets('zero state makes upload optional and obvious', (tester) async {
     await tester.pumpWidget(
       _screen(_FakeMedia({'assets': <dynamic>[], 'hasMore': false})),
@@ -148,6 +158,72 @@ void main() {
       expect(find.text('Remove'), findsOneWidget);
     },
   );
+
+  testWidgets('generated review shows the exact authenticated preview', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _screen(
+        _FakeMedia({
+          'hasMore': false,
+          'assets': [
+            {
+              'assetId': 'generated-one',
+              'title': 'Seasonal cleanup generated concept',
+              'purpose': 'service_visual',
+              'revision': {
+                'revisionId': 'generated-revision',
+                'status': 'ready',
+                'approvalStatus': 'pending',
+                'origin': 'generated_service_concept',
+                'altText': 'Generated seasonal cleanup concept',
+                'renditions': {
+                  'card': {'storagePath': 'private/card.webp'},
+                },
+              },
+            },
+          ],
+        }, preview: validPng),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel('Generated seasonal cleanup concept'),
+      findsOneWidget,
+    );
+    expect(find.text('Preview unavailable'), findsNothing);
+    expect(find.text('Generated concept'), findsOneWidget);
+  });
+
+  testWidgets('preview failure is explicit and retryable', (tester) async {
+    await tester.pumpWidget(
+      _screen(
+        _FakeMedia({
+          'hasMore': false,
+          'assets': [
+            {
+              'assetId': 'generated-one',
+              'title': 'Generated concept',
+              'purpose': 'service_visual',
+              'revision': {
+                'revisionId': 'generated-revision',
+                'status': 'ready',
+                'approvalStatus': 'pending',
+                'origin': 'generated_service_concept',
+                'renditions': {
+                  'card': {'storagePath': 'private/card.webp'},
+                },
+              },
+            },
+          ],
+        }, previewError: Exception('storage failure')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Preview unavailable'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.textContaining('storage failure'), findsNothing);
+  });
 
   testWidgets('Brand Assets remains usable at 390 by 844', (tester) async {
     tester.view.physicalSize = const Size(390, 844);

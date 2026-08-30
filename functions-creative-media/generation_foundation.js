@@ -156,12 +156,14 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     await ref.update({status: "processing", providerAttemptState: "attempting",
       attemptCount: Number(job.attemptCount || 0) + 1,
       processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    let providerResult = null;
     try {
       const result = await adapter.generateServiceConcept({jobId: ref.id, brief: job.safeBrief});
+      providerResult = result;
       const moderation = normalizeModeration(result.moderation);
       if (moderation.status !== "passed") {
         if (budgetAuthority && reservation) await budgetAuthority.settle({reservation,
-          usage: result.usage || null, cost: result.cost || null});
+          usage: result.usage || null, cost: result.cost || null, providerAccepted: true});
         await ref.update({status: "blocked", moderation, failureCategory: "moderation_blocked",
           completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
         return {jobId: ref.id, status: "blocked"};
@@ -183,7 +185,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
           updatedAt: FieldValue.serverTimestamp()});
       });
       if (budgetAuthority && reservation) await budgetAuthority.settle({reservation,
-        usage: result.usage || null, cost: result.cost || null});
+        usage: result.usage || null, cost: result.cost || null, providerAccepted: true});
       return {jobId: ref.id, status: "review_required", ...candidate};
     } catch (error) {
       const rawCategory = error?.category || error?.message;
@@ -193,9 +195,10 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
         providerRequestReferencePresent: Boolean(error?.providerRequestId)});
       if (budgetAuthority && reservation) {
         if (unknown) await budgetAuthority.holdUnknown({reservation});
-        else if (["generation_disabled", "budget_disabled", "invalid_request"].includes(rawCategory)) {
-          await budgetAuthority.release({reservation});
-        } else await budgetAuthority.settle({reservation, usage: null, cost: null});
+        else if (providerResult || error?.providerAccepted === true) await budgetAuthority.settle({reservation,
+          usage: providerResult?.usage || error?.usage || null,
+          cost: providerResult?.cost || error?.cost || null, providerAccepted: true});
+        else await budgetAuthority.release({reservation});
       }
       await ref.update({status: unknown ? "unknown_provider_outcome" : category === "moderation_blocked" ? "blocked" : "failed",
         failureCategory: category, providerAttemptState: unknown ? "unknown" : "completed",
@@ -242,11 +245,15 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
   async function operations({actor, input = {}}) {
     let query = jobs();
     if (input.businessUid) query = query.where("businessUid", "==", clean(input.businessUid, 160));
-    const snap = await query.orderBy("createdAt", "desc").limit(100).get();
+    const [snap, reservationSnap] = await Promise.all([query.orderBy("createdAt", "desc").limit(100).get(),
+      db.collection("visualGenerationReservations").orderBy("createdAt", "desc").limit(100).get()]);
     const counts = {queued: 0, processing: 0, review_required: 0, approved: 0,
       rejected: 0, failed: 0, blocked: 0, unknown_provider_outcome: 0};
     const failures = {}; let latencyTotal = 0; let completed = 0; let stuckJobs = 0;
     let estimatedCostMicros = 0; let actualCostMicros = 0; let providerRequestCount = 0;
+    const reservationCounts = {reserved: 0, settled: 0, released: 0, unknown_provider_outcome: 0};
+    for (const doc of reservationSnap.docs) { const status = doc.data()?.status;
+      if (Object.hasOwn(reservationCounts, status)) reservationCounts[status]++; }
     for (const doc of snap.docs) {
       const value = doc.data(); if (Object.hasOwn(counts, value.status)) counts[value.status]++;
       if (value.failureCategory) failures[value.failureCategory] = Number(failures[value.failureCategory] || 0) + 1;
@@ -269,7 +276,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       providerAvailability: adapter ? (adapter.mode === "test" ? "test_only" : "configured_disabled_by_default") : "not_configured",
       providerOperations: {configuredProvider: adapter?.id || null, providerRequestCount,
         configuredModel: adapter?.defaultModel || null,
-        configuredModelSnapshot: adapter?.defaultModelSnapshot || null,
+        configuredModelSnapshot: adapter?.defaultModelSnapshot || null, reservationCounts,
         estimatedCostMicros, actualCostMicros}, providerAuthPreflight: providerAuth};
   }
   return {request, process, approve: (args) => review({...args, approve: true}),
