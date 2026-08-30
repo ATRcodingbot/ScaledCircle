@@ -13,7 +13,10 @@ const PURPOSES = new Set(["service_visual", "hero"]);
 const TERMINAL = new Set(["approved", "rejected", "failed", "blocked", "unknown_provider_outcome"]);
 const FAILURE_CATEGORIES = new Set(["provider_unavailable", "rate_limited", "budget_disabled",
   "moderation_blocked", "invalid_output", "invalid_request", "processing_failed", "timeout",
-  "monthly_limit_reached", "global_budget_exhausted", "unknown_provider_outcome", "internal"]);
+  "monthly_limit_reached", "global_budget_exhausted", "unknown_provider_outcome", "internal",
+  "wif_config_missing", "google_metadata_unavailable", "google_subject_token_invalid",
+  "google_claim_mismatch", "openai_wif_exchange_failed", "openai_auth_rejected",
+  "provider_client_initialization_failed"]);
 
 function clean(value, maximum = 160) {
   return value == null ? "" : String(value).trim().replace(/\s+/g, " ").slice(0, maximum);
@@ -93,7 +96,8 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
   capability = async () => "disabled", budgetEnabled = async () => false,
   budgetAuthority = null,
   approvedServices = async () => [], brandProfile = async () => ({}), ingestCandidate,
-  approveCandidate = async () => {}, rejectCandidate = async () => {}, now = () => Date.now()}) {
+  approveCandidate = async () => {}, rejectCandidate = async () => {}, providerAuthPreflight = null,
+  reportOperationalFailure = () => {}, now = () => Date.now()}) {
   const jobs = () => db.collection("visualGenerationJobs");
   async function gate(actor) {
     const mode = normalizeCapability(await capability(actor));
@@ -185,6 +189,8 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       const rawCategory = error?.category || error?.message;
       const unknown = error?.outcome === "unknown_provider_outcome";
       const category = unknown ? "unknown_provider_outcome" : FAILURE_CATEGORIES.has(rawCategory) ? rawCategory : "internal";
+      reportOperationalFailure({jobId: ref.id, category, phase: "provider_or_ingestion",
+        providerRequestReferencePresent: Boolean(error?.providerRequestId)});
       if (budgetAuthority && reservation) {
         if (unknown) await budgetAuthority.holdUnknown({reservation});
         else if (["generation_disabled", "budget_disabled", "invalid_request"].includes(rawCategory)) {
@@ -251,6 +257,12 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       if (created && finished >= created) { latencyTotal += finished - created; completed++; }
       if (["queued", "processing"].includes(value.status) && created && now() - created > 15 * 60 * 1000) stuckJobs++;
     }
+    let providerAuth = null;
+    if (input.providerAuthPreflight === true) {
+      providerAuth = typeof providerAuthPreflight === "function" ? await providerAuthPreflight() :
+        {metadataToken: "FAIL", claimsMatch: "FAIL", openAIExchange: "FAIL",
+          failureCategory: "provider_client_initialization_failed", claims: null};
+    }
     return {schemaVersion: SCHEMA_VERSION, capability: normalizeCapability(await capability(actor)),
       budgetEnabled: await budgetEnabled(actor), sampleBound: 100, counts, failures, stuckJobs,
       averageCompletionLatencyMs: completed ? Math.round(latencyTotal / completed) : null,
@@ -258,7 +270,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       providerOperations: {configuredProvider: adapter?.id || null, providerRequestCount,
         configuredModel: adapter?.defaultModel || null,
         configuredModelSnapshot: adapter?.defaultModelSnapshot || null,
-        estimatedCostMicros, actualCostMicros}};
+        estimatedCostMicros, actualCostMicros}, providerAuthPreflight: providerAuth};
   }
   return {request, process, approve: (args) => review({...args, approve: true}),
     reject: (args) => review({...args, approve: false}), list, operations};

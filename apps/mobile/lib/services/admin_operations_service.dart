@@ -30,6 +30,16 @@ class AdminOperationsService {
       'status': status,
     });
   }
+
+  Future<GeneratedMediaWifPreflight> runGeneratedMediaWifPreflight() async {
+    final result = await _functions
+        .httpsCallable('getGeneratedMediaOperations')
+        .call<Map<Object?, Object?>>({'providerAuthPreflight': true});
+    final data = Map<String, dynamic>.from(result.data);
+    return GeneratedMediaWifPreflight.fromMap(
+      _map(data['providerAuthPreflight']),
+    );
+  }
 }
 
 Map<String, dynamic> _map(Object? value) =>
@@ -135,6 +145,31 @@ class AdminOpsHealth {
   );
   final String metric, state;
   final int issueCount;
+}
+
+class GeneratedMediaWifPreflight {
+  const GeneratedMediaWifPreflight({
+    required this.metadataToken,
+    required this.claimsMatch,
+    required this.openAIExchange,
+    this.failureCategory,
+  });
+
+  factory GeneratedMediaWifPreflight.fromMap(Map<String, dynamic> map) =>
+      GeneratedMediaWifPreflight(
+        metadataToken: map['metadataToken']?.toString() ?? 'FAIL',
+        claimsMatch: map['claimsMatch']?.toString() ?? 'FAIL',
+        openAIExchange: map['openAIExchange']?.toString() ?? 'FAIL',
+        failureCategory: map['failureCategory']?.toString(),
+      );
+
+  final String metadataToken, claimsMatch, openAIExchange;
+  final String? failureCategory;
+
+  bool get passed =>
+      metadataToken == 'PASS' &&
+      claimsMatch == 'PASS' &&
+      openAIExchange == 'PASS';
 }
 
 class AdminCampaignTimeline {

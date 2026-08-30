@@ -176,14 +176,35 @@ const generationAdapter = generationIsLocal ? generationFoundation.deterministic
     if (config.providerGenerationEnabled !== true) throw new Error("generation_disabled");
     const OpenAI = require("openai").default;
     if (config.authenticationMode !== "gcp_workload_identity") throw new Error("provider_unavailable");
-    const { gcpIDTokenProvider } = require("openai/auth");
-    const identityProviderId = String(config.openAIIdentityProviderId || "").slice(0, 160);
-    const serviceAccountId = String(config.openAIServiceAccountId || "").slice(0, 160);
-    if (!identityProviderId || !serviceAccountId) throw new Error("provider_unavailable");
-    return new OpenAI({ workloadIdentity: { identityProviderId, serviceAccountId,
-        provider: gcpIDTokenProvider("https://api.openai.com/v1") }, maxRetries: 0 });
+    return openAIImageAdapter.createOpenAIWifClient({ config, OpenAI });
   }
 });
+async function generationProviderAuthPreflight() {
+  const config = await generationProviderConfig();
+  if (config.authenticationMode !== "gcp_workload_identity") {
+    return { metadataToken: "FAIL", claimsMatch: "FAIL", openAIExchange: "FAIL",
+      failureCategory: "wif_config_missing", claims: null };
+  }
+  try {
+    const { WorkloadIdentityAuth } = require("openai/auth/workload-identity-auth");
+    const result = await openAIImageAdapter.runOpenAIWifPreflight({ config,
+      exchangeToken: async ({ identityProviderId, serviceAccountId, subjectToken }) => {
+        const auth = new WorkloadIdentityAuth({ identityProviderId, serviceAccountId,
+          provider: { tokenType: "jwt", getToken: async () => subjectToken } });
+        return auth.getToken();
+      } });
+    console.info("generated_visual_wif_preflight", { status: "pass", subject: result.claims.subject,
+      audience: result.claims.audience, issuer: result.claims.issuer });
+    return result;
+  } catch (error) {
+    const failureCategory = error?.category || "openai_wif_exchange_failed";
+    console.error("generated_visual_wif_preflight", { status: "fail", failureCategory });
+    return { metadataToken: ["google_metadata_unavailable", "google_subject_token_invalid"].includes(failureCategory) ?
+      "FAIL" : "PASS", claimsMatch: failureCategory === "google_claim_mismatch" ? "FAIL" :
+      ["google_metadata_unavailable", "google_subject_token_invalid"].includes(failureCategory) ? "NOT_RUN" : "PASS",
+      openAIExchange: "FAIL", failureCategory, claims: null };
+  }
+}
 const generationService = generationFoundation.createGenerationService({
   db, FieldValue, Timestamp, FieldPath, adapter: generationAdapter,
   capability: async () => {
@@ -203,7 +224,9 @@ const generationService = generationFoundation.createGenerationService({
   },
   ingestCandidate: (input) => creativeMediaService.ingestGeneratedCandidate(input),
   approveCandidate: (input) => creativeMediaService.approveGeneratedCandidate(input),
-  rejectCandidate: (input) => creativeMediaService.rejectGeneratedCandidate(input)
+  rejectCandidate: (input) => creativeMediaService.rejectGeneratedCandidate(input),
+  providerAuthPreflight: generationProviderAuthPreflight,
+  reportOperationalFailure: (evidence) => console.error("generated_visual_operation_failed", evidence)
 });
 
 

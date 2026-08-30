@@ -179,3 +179,36 @@ test("job pagination returns 20 + 20 + 5 unique jobs without leaking provider fi
   assert.equal(Object.hasOwn(first.jobs[0], "providerUsage"), false);
   assert.equal(Object.hasOwn(first.jobs[0], "actualCostMicros"), false);
 });
+
+test("admin operations run zero-model auth preflight only when explicitly requested", async () => {
+  const env = memoryDb(); let preflights = 0;
+  const service = generation.createGenerationService({db: env, FieldValue: env.FieldValue,
+    Timestamp: env.Timestamp, FieldPath: env.FieldPath, capability: async () => "disabled",
+    budgetEnabled: async () => false, providerAuthPreflight: async () => { preflights++;
+      return {metadataToken: "PASS", claimsMatch: "PASS", openAIExchange: "PASS", failureCategory: null}; }});
+  const ordinary = await service.operations({actor: {uid: "admin", isAdmin: true}});
+  assert.equal(ordinary.providerAuthPreflight, null); assert.equal(preflights, 0);
+  const diagnostic = await service.operations({actor: {uid: "admin", isAdmin: true},
+    input: {providerAuthPreflight: true}});
+  assert.equal(diagnostic.providerAuthPreflight.openAIExchange, "PASS"); assert.equal(preflights, 1);
+});
+
+test("pre-provider auth failures retain safe categories and operational evidence", async () => {
+  const env = memoryDb(); const evidence = [];
+  const adapter = {id: "openai", mode: "external", async generateServiceConcept() {
+    const error = new Error("private provider detail"); error.category = "google_claim_mismatch";
+    error.outcome = "definitive"; throw error;
+  }};
+  const service = generation.createGenerationService({db: env, FieldValue: env.FieldValue,
+    Timestamp: env.Timestamp, FieldPath: env.FieldPath, adapter, capability: async () => "enabled",
+    budgetEnabled: async () => true, approvedServices: async () => ["Seasonal cleanup"],
+    ingestCandidate: async () => ({}), reportOperationalFailure: (value) => evidence.push(value)});
+  const actor = {uid: "business-safe"};
+  const job = await service.request({actor, input: {requestId: "wif_failure_request_001",
+    serviceCategory: "Seasonal cleanup", visualDirection: "clean"}});
+  await assert.rejects(service.process({actor, jobId: job.jobId}), /google_claim_mismatch/);
+  assert.equal(env.docs.get(`visualGenerationJobs/${job.jobId}`).failureCategory, "google_claim_mismatch");
+  assert.deepEqual(evidence, [{jobId: job.jobId, category: "google_claim_mismatch",
+    phase: "provider_or_ingestion", providerRequestReferencePresent: false}]);
+  assert.equal(JSON.stringify(evidence).includes("private provider detail"), false);
+});

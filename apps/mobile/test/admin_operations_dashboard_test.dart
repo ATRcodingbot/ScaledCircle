@@ -3,7 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/admin/admin_dashboard_screen.dart';
 import 'package:flutter_app/services/admin_operations_service.dart';
 
-Widget subject(AdminOperationsSnapshot snapshot) => MaterialApp(
+Widget subject(
+  AdminOperationsSnapshot snapshot, {
+  GeneratedMediaWifPreflight? providerAuthPreflight,
+  VoidCallback? onRunProviderAuthPreflight,
+}) => MaterialApp(
   home: Scaffold(
     body: AdminOperationsContent(
       snapshot: snapshot,
@@ -13,6 +17,9 @@ Widget subject(AdminOperationsSnapshot snapshot) => MaterialApp(
       onOpenSubscriptions: () {},
       onOpenAttribution: () {},
       onOpenConfiguration: () {},
+      providerAuthPreflight: providerAuthPreflight,
+      providerAuthPreflightRunning: false,
+      onRunProviderAuthPreflight: onRunProviderAuthPreflight ?? () {},
       onOpenCampaign: (_) {},
     ),
   ),
@@ -84,6 +91,9 @@ void main() {
             onOpenSubscriptions: () {},
             onOpenAttribution: () {},
             onOpenConfiguration: () {},
+            providerAuthPreflight: null,
+            providerAuthPreflightRunning: false,
+            onRunProviderAuthPreflight: () {},
             onOpenCampaign: (_) {},
           ),
         ),
@@ -129,6 +139,9 @@ void main() {
             onOpenSubscriptions: () {},
             onOpenAttribution: () {},
             onOpenConfiguration: () {},
+            providerAuthPreflight: null,
+            providerAuthPreflightRunning: false,
+            onRunProviderAuthPreflight: () {},
             onOpenCampaign: (campaignId) => openedCampaign = campaignId,
           ),
         ),
@@ -166,5 +179,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Email: DEGRADED'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('generated-media auth preflight reports only safe status', (
+    tester,
+  ) async {
+    var invoked = 0;
+    await tester.pumpWidget(
+      subject(
+        emptySnapshot,
+        providerAuthPreflight: const GeneratedMediaWifPreflight(
+          metadataToken: 'PASS',
+          claimsMatch: 'PASS',
+          openAIExchange: 'PASS',
+        ),
+        onRunProviderAuthPreflight: () => invoked++,
+      ),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Run zero-model auth preflight'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      find.text('Metadata PASS • Claims PASS • OpenAI exchange PASS'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('access token'), findsNothing);
+    await tester.tap(find.text('Run zero-model auth preflight'));
+    expect(invoked, 1);
   });
 }

@@ -48,7 +48,12 @@ void main() {
   test('Admin Dashboard cards have explicit actions or disabled semantics', () {
     final dashboard = source('lib/screens/admin/admin_dashboard_screen.dart');
     final cards = source('lib/screens/admin/admin_dashboard_card.dart');
+    final service = source('lib/services/admin_operations_service.dart');
     expect(dashboard, contains('AdminOperationsService'));
+    expect(dashboard, contains('Run zero-model auth preflight'));
+    expect(dashboard, contains('does not request generated content'));
+    expect(service, contains("httpsCallable('getGeneratedMediaOperations')"));
+    expect(service, contains("'providerAuthPreflight': true"));
     expect(dashboard, contains('AdminCampaignTimelineScreen'));
     expect(dashboard, contains('updateSupportStatus'));
     expect(dashboard, contains('AdminRoleManagementScreen'));

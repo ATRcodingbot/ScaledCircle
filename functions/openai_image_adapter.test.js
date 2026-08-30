@@ -3,6 +3,17 @@ const test = require("node:test"); const assert = require("node:assert/strict");
 const adapterModule = require("./openai_image_adapter");
 
 const enabled = {providerGenerationEnabled: true, pricing: {imageOutputUsdPerMillion: 30}, estimatedCostMicros: 41000};
+const wifConfig = {openAIIdentityProviderId: "idp_test", openAIServiceAccountId: "user_test",
+  openAIWifAudience: adapterModule.DEFAULT_WIF_AUDIENCE, openAIMappedSubject: "123456789"};
+function jwt(claims = {}) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({alg: "RS256", typ: "JWT"})}.${encode({iss: adapterModule.GOOGLE_OIDC_ISSUER,
+    aud: adapterModule.DEFAULT_WIF_AUDIENCE, sub: "123456789", email: "runtime@example.iam.gserviceaccount.com",
+    email_verified: true, exp: Math.floor(Date.now() / 1000) + 3600, ...claims})}.signature`;
+}
+function metadataFetch({ok = true, body = jwt(), status = ok ? 200 : 500, inspect = null} = {}) {
+  return async (url, options) => { if (inspect) inspect(url, options); return {ok, status, text: async () => body}; };
+}
 function client(response, errors = []) { let calls = 0; return {get calls() { return calls; }, images: {async generate(input, options) {
   calls++; assert.equal(input.model, adapterModule.DEFAULT_SNAPSHOT); assert.equal(input.size, "1536x1024");
   assert.equal(input.quality, "medium"); assert.equal(options.maxRetries, 0); if (errors.length) throw errors.shift(); return response;}},
@@ -53,4 +64,80 @@ test("cost is calculated only from server-side provider usage and pricing", () =
     output_tokens_details: {image_tokens: 1000}});
   assert.deepEqual(usage, {textInputTokens: 10, imageInputTokens: 20, imageOutputTokens: 1000});
   assert.equal(adapterModule.calculateCostMicros(usage, {imageOutputUsdPerMillion: 30}), 30000);
+});
+
+test("official Google metadata request and OpenAI exchange preflight return safe claims only", async () => {
+  let request = null; let exchange = null;
+  const result = await adapterModule.runOpenAIWifPreflight({config: wifConfig,
+    fetchImpl: metadataFetch({inspect: (url, options) => { request = {url, options}; }}),
+    exchangeToken: async (input) => { exchange = input; return "short-lived-access-token"; }});
+  const url = new URL(request.url);
+  assert.equal(url.searchParams.get("audience"), adapterModule.DEFAULT_WIF_AUDIENCE);
+  assert.equal(url.searchParams.get("format"), "full");
+  assert.equal(request.options.headers["Metadata-Flavor"], "Google");
+  assert.equal(exchange.identityProviderId, "idp_test");
+  assert.equal(exchange.serviceAccountId, "user_test");
+  assert.equal(exchange.subjectToken.split(".").length, 3);
+  assert.deepEqual(result, {metadataToken: "PASS", claimsMatch: "PASS", openAIExchange: "PASS",
+    failureCategory: null, claims: {issuer: adapterModule.GOOGLE_OIDC_ISSUER,
+      audience: adapterModule.DEFAULT_WIF_AUDIENCE, subject: "123456789",
+      email: "runtime@example.iam.gserviceaccount.com", emailVerified: true,
+      expiresAtMillis: result.claims.expiresAtMillis}});
+  assert.equal(JSON.stringify(result).includes("short-lived-access-token"), false);
+  assert.equal(JSON.stringify(result).includes(exchange.subjectToken), false);
+});
+
+test("WIF config validation rejects each missing required value", () => {
+  for (const field of ["openAIIdentityProviderId", "openAIServiceAccountId", "openAIWifAudience", "openAIMappedSubject"]) {
+    const config = {...wifConfig}; delete config[field];
+    assert.throws(() => adapterModule.validatedWifConfig(config), (error) => error.category === "wif_config_missing");
+  }
+});
+
+test("metadata failures and malformed tokens receive safe operational categories", async () => {
+  await assert.rejects(adapterModule.runOpenAIWifPreflight({config: wifConfig,
+    fetchImpl: metadataFetch({ok: false}), exchangeToken: async () => "token"}),
+  (error) => error.category === "google_metadata_unavailable");
+  await assert.rejects(adapterModule.runOpenAIWifPreflight({config: wifConfig,
+    fetchImpl: metadataFetch({body: ""}), exchangeToken: async () => "token"}),
+  (error) => error.category === "google_subject_token_invalid");
+  await assert.rejects(adapterModule.runOpenAIWifPreflight({config: wifConfig,
+    fetchImpl: metadataFetch({body: "not-a-jwt"}), exchangeToken: async () => "token"}),
+  (error) => error.category === "google_subject_token_invalid");
+});
+
+test("issuer, audience, subject, verification and expiry mismatches fail before exchange", async () => {
+  const variants = [{iss: "https://issuer.invalid"}, {aud: "https://wrong.example"}, {sub: "other-subject"},
+    {email_verified: false}, {exp: Math.floor(Date.now() / 1000) - 10}];
+  for (const claims of variants) {
+    let exchanged = false;
+    await assert.rejects(adapterModule.runOpenAIWifPreflight({config: wifConfig,
+      fetchImpl: metadataFetch({body: jwt(claims)}), exchangeToken: async () => { exchanged = true; return "token"; }}),
+    (error) => error.category === "google_claim_mismatch");
+    assert.equal(exchanged, false);
+  }
+});
+
+test("OpenAI mapping and authentication exchange failures are classified without credentials", async () => {
+  for (const failure of [{status: 400, expected: "openai_wif_exchange_failed"},
+    {status: 401, expected: "openai_auth_rejected"}, {status: 403, expected: "openai_auth_rejected"}]) {
+    await assert.rejects(adapterModule.runOpenAIWifPreflight({config: wifConfig,
+      fetchImpl: metadataFetch(), exchangeToken: async () => { const error = new Error("provider detail");
+        error.status = failure.status; throw error; }}), (error) => error.category === failure.expected);
+  }
+  await assert.rejects(adapterModule.runOpenAIWifPreflight({config: wifConfig,
+    fetchImpl: metadataFetch(), exchangeToken: async () => ""}),
+  (error) => error.category === "openai_wif_exchange_failed");
+});
+
+test("OpenAI client initialization uses the JWT metadata provider and fails safely", async () => {
+  class FakeOpenAI { constructor(options) { this.options = options; } }
+  const api = adapterModule.createOpenAIWifClient({config: wifConfig, OpenAI: FakeOpenAI,
+    fetchImpl: metadataFetch()});
+  assert.equal(api.options.workloadIdentity.identityProviderId, "idp_test");
+  assert.equal(api.options.workloadIdentity.provider.tokenType, "jwt");
+  await assert.doesNotReject(api.options.workloadIdentity.provider.getToken());
+  assert.throws(() => adapterModule.createOpenAIWifClient({config: wifConfig,
+    OpenAI: class { constructor() { throw new Error("constructor failed"); } }}),
+  (error) => error.category === "provider_client_initialization_failed");
 });

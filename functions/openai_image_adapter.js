@@ -4,12 +4,132 @@ const DEFAULT_MODEL = "gpt-image-2";
 const DEFAULT_SNAPSHOT = "gpt-image-2-2026-04-21";
 const DEFAULT_SIZE = "1536x1024";
 const DEFAULT_QUALITY = "medium";
+const DEFAULT_WIF_AUDIENCE = "https://api.openai.com/v1";
+const GOOGLE_OIDC_ISSUER = "https://accounts.google.com";
+const GOOGLE_METADATA_IDENTITY_ENDPOINT =
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity";
 const RETRYABLE = new Set(["rate_limited", "provider_unavailable"]);
 
 class ProviderAdapterError extends Error {
   constructor(category, {outcome = "definitive", providerRequestId = null, cause = null} = {}) {
     super(category); this.name = "ProviderAdapterError"; this.category = category;
     this.outcome = outcome; this.providerRequestId = providerRequestId; this.cause = cause;
+  }
+}
+
+function clean(value, maximum = 200) {
+  return value == null ? "" : String(value).trim().slice(0, maximum);
+}
+
+function validatedWifConfig(config = {}) {
+  const identityProviderId = clean(config.openAIIdentityProviderId, 160);
+  const serviceAccountId = clean(config.openAIServiceAccountId, 160);
+  const audience = clean(config.openAIWifAudience, 200);
+  const expectedSubject = clean(config.openAIMappedSubject, 80);
+  if (!identityProviderId || !serviceAccountId || !audience || !expectedSubject) {
+    throw new ProviderAdapterError("wif_config_missing", {outcome: "definitive"});
+  }
+  return {identityProviderId, serviceAccountId, audience, expectedSubject};
+}
+
+function decodeJwtClaims(token) {
+  try {
+    const parts = clean(token, 20000).split(".");
+    if (parts.length !== 3 || !parts[1]) throw new Error("invalid_jwt");
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    if (!claims || typeof claims !== "object" || Array.isArray(claims)) throw new Error("invalid_claims");
+    return claims;
+  } catch (error) {
+    throw new ProviderAdapterError("google_subject_token_invalid", {outcome: "definitive", cause: error});
+  }
+}
+
+function validateGoogleIdentityClaims(claims, {audience, expectedSubject, now = Date.now()}) {
+  const expiresAtMillis = Number(claims?.exp || 0) * 1000;
+  const valid = claims?.iss === GOOGLE_OIDC_ISSUER && claims?.aud === audience &&
+    clean(claims?.sub, 80) === expectedSubject && claims?.email_verified === true &&
+    Number.isFinite(expiresAtMillis) && expiresAtMillis > now + 30000;
+  if (!valid) throw new ProviderAdapterError("google_claim_mismatch", {outcome: "definitive"});
+  return Object.freeze({issuer: claims.iss, audience: claims.aud, subject: clean(claims.sub, 80),
+    email: clean(claims.email, 200) || null, emailVerified: true, expiresAtMillis});
+}
+
+async function fetchGoogleMetadataIdentityToken({audience, fetchImpl = globalThis.fetch,
+  metadataEndpoint = GOOGLE_METADATA_IDENTITY_ENDPOINT, timeoutMs = 10000}) {
+  if (typeof fetchImpl !== "function") {
+    throw new ProviderAdapterError("google_metadata_unavailable", {outcome: "definitive"});
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const url = new URL(metadataEndpoint);
+    url.searchParams.set("audience", audience);
+    url.searchParams.set("format", "full");
+    const response = await fetchImpl(url.toString(), {
+      headers: {"Metadata-Flavor": "Google"}, signal: controller.signal,
+    });
+    if (!response?.ok) {
+      throw new ProviderAdapterError("google_metadata_unavailable", {outcome: "definitive"});
+    }
+    const token = clean(await response.text(), 20000);
+    if (!token) throw new ProviderAdapterError("google_subject_token_invalid", {outcome: "definitive"});
+    return token;
+  } catch (error) {
+    if (error instanceof ProviderAdapterError) throw error;
+    throw new ProviderAdapterError("google_metadata_unavailable", {outcome: "definitive", cause: error});
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function googleMetadataIdentityTokenProvider(config, options = {}) {
+  const validated = validatedWifConfig(config);
+  return Object.freeze({tokenType: "jwt", async getToken() {
+    const token = await fetchGoogleMetadataIdentityToken({audience: validated.audience, ...options});
+    validateGoogleIdentityClaims(decodeJwtClaims(token), validated);
+    return token;
+  }});
+}
+
+function classifyWifExchangeError(error) {
+  if (error instanceof ProviderAdapterError) return error;
+  const status = Number(error?.status || error?.response?.status || 0);
+  if (status === 401 || status === 403) {
+    return new ProviderAdapterError("openai_auth_rejected", {outcome: "definitive", cause: error});
+  }
+  return new ProviderAdapterError("openai_wif_exchange_failed", {outcome: "definitive", cause: error});
+}
+
+async function runOpenAIWifPreflight({config, exchangeToken, fetchImpl = globalThis.fetch,
+  metadataEndpoint = GOOGLE_METADATA_IDENTITY_ENDPOINT, now = Date.now()}) {
+  const validated = validatedWifConfig(config);
+  const token = await fetchGoogleMetadataIdentityToken({audience: validated.audience, fetchImpl, metadataEndpoint});
+  const safeClaims = validateGoogleIdentityClaims(decodeJwtClaims(token), {...validated, now});
+  if (typeof exchangeToken !== "function") {
+    throw new ProviderAdapterError("provider_client_initialization_failed", {outcome: "definitive"});
+  }
+  try {
+    const accessToken = await exchangeToken({...validated, subjectToken: token});
+    if (!clean(accessToken, 20000)) throw new Error("empty_access_token");
+  } catch (error) {
+    throw classifyWifExchangeError(error);
+  }
+  return Object.freeze({metadataToken: "PASS", claimsMatch: "PASS", openAIExchange: "PASS",
+    failureCategory: null, claims: safeClaims});
+}
+
+function createOpenAIWifClient({config, OpenAI, fetchImpl = globalThis.fetch}) {
+  if (typeof OpenAI !== "function") {
+    throw new ProviderAdapterError("provider_client_initialization_failed", {outcome: "definitive"});
+  }
+  const validated = validatedWifConfig(config);
+  try {
+    return new OpenAI({workloadIdentity: {identityProviderId: validated.identityProviderId,
+      serviceAccountId: validated.serviceAccountId,
+      provider: googleMetadataIdentityTokenProvider(config, {fetchImpl})}, maxRetries: 0});
+  } catch (error) {
+    if (error instanceof ProviderAdapterError) throw error;
+    throw new ProviderAdapterError("provider_client_initialization_failed", {outcome: "definitive", cause: error});
   }
 }
 
@@ -36,6 +156,7 @@ function classify(error) {
   if (code.includes("timeout") || error?.name === "AbortError") return new ProviderAdapterError("timeout", {
     outcome: error?.requestSent === false ? "safe_to_retry" : "unknown_provider_outcome", providerRequestId: requestId, cause: error});
   if (status === 400 || status === 404 || status === 422) return new ProviderAdapterError("invalid_request", {cause: error});
+  if (status === 401 || status === 403) return new ProviderAdapterError("openai_auth_rejected", {cause: error});
   if (code.includes("content_policy") || code.includes("moderation")) return new ProviderAdapterError("moderation_blocked", {cause: error});
   return new ProviderAdapterError("provider_unavailable", {outcome: error?.requestSent === false ? "safe_to_retry" : "unknown_provider_outcome", providerRequestId: requestId, cause: error});
 }
@@ -94,4 +215,7 @@ function createOpenAIImageAdapter({clientFactory, configProvider, sleep = async 
 }
 
 module.exports = {DEFAULT_MODEL, DEFAULT_SNAPSHOT, DEFAULT_SIZE, DEFAULT_QUALITY, ProviderAdapterError,
+  DEFAULT_WIF_AUDIENCE, GOOGLE_OIDC_ISSUER, GOOGLE_METADATA_IDENTITY_ENDPOINT,
+  validatedWifConfig, decodeJwtClaims, validateGoogleIdentityClaims, fetchGoogleMetadataIdentityToken,
+  googleMetadataIdentityTokenProvider, classifyWifExchangeError, runOpenAIWifPreflight, createOpenAIWifClient,
   buildPrompt, classify, normalizeUsage, calculateCostMicros, createOpenAIImageAdapter};

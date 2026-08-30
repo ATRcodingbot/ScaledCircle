@@ -24,6 +24,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late final AdminOperationsService _service =
       widget.service ?? AdminOperationsService();
   late Future<AdminOperationsSnapshot> _overview = _service.loadOverview();
+  GeneratedMediaWifPreflight? _providerAuthPreflight;
+  bool _providerAuthPreflightRunning = false;
   void _refresh() => setState(() => _overview = _service.loadOverview());
 
   @override
@@ -71,6 +73,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 _push(const AdminSubscriptionOverviewScreen()),
             onOpenAttribution: () => _push(const AdminAttributionScreen()),
             onOpenConfiguration: () => _push(const AdminPlatformHealthScreen()),
+            providerAuthPreflight: _providerAuthPreflight,
+            providerAuthPreflightRunning: _providerAuthPreflightRunning,
+            onRunProviderAuthPreflight: _runProviderAuthPreflight,
             onOpenCampaign: (campaignId) => _push(
               AdminCampaignTimelineScreen(
                 campaignId: campaignId,
@@ -85,6 +90,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _push(Widget screen) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+
+  Future<void> _runProviderAuthPreflight() async {
+    if (_providerAuthPreflightRunning) return;
+    setState(() => _providerAuthPreflightRunning = true);
+    try {
+      final result = await _service.runGeneratedMediaWifPreflight();
+      if (!mounted) return;
+      setState(() => _providerAuthPreflight = result);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Provider authentication preflight failed safely. Review operational logs.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _providerAuthPreflightRunning = false);
+    }
+  }
 
   void _openIssue(AdminOpsException issue) {
     if (issue.detailKind == 'campaign_timeline' &&
@@ -180,6 +206,9 @@ class AdminOperationsContent extends StatelessWidget {
     required this.onOpenSubscriptions,
     required this.onOpenAttribution,
     required this.onOpenConfiguration,
+    required this.providerAuthPreflight,
+    required this.providerAuthPreflightRunning,
+    required this.onRunProviderAuthPreflight,
     required this.onOpenCampaign,
     super.key,
   });
@@ -190,6 +219,9 @@ class AdminOperationsContent extends StatelessWidget {
       onOpenSubscriptions,
       onOpenAttribution,
       onOpenConfiguration;
+  final GeneratedMediaWifPreflight? providerAuthPreflight;
+  final bool providerAuthPreflightRunning;
+  final VoidCallback onRunProviderAuthPreflight;
   final ValueChanged<String> onOpenCampaign;
 
   @override
@@ -292,6 +324,52 @@ class AdminOperationsContent extends StatelessWidget {
         children: snapshot.health
             .map((item) => _HealthChip(item: item))
             .toList(),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Generated visual provider authentication',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(_providerAuthSummary(providerAuthPreflight)),
+              if (providerAuthPreflight?.failureCategory?.isNotEmpty == true)
+                Text(
+                  'Safe category: ${_category(providerAuthPreflight!.failureCategory!)}',
+                ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: providerAuthPreflightRunning
+                      ? null
+                      : onRunProviderAuthPreflight,
+                  icon: providerAuthPreflightRunning
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.verified_user_outlined),
+                  label: Text(
+                    providerAuthPreflightRunning
+                        ? 'Running preflight…'
+                        : 'Run zero-model auth preflight',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'This checks runtime identity and token exchange only. It does not request generated content.',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
       ),
       const SizedBox(height: 28),
       Text('Administration', style: Theme.of(context).textTheme.headlineSmall),
@@ -445,3 +523,9 @@ String _category(String value) => value
 String _formatTime(DateTime? value) => value == null
     ? 'Time unavailable'
     : value.toLocal().toString().split('.').first;
+
+String _providerAuthSummary(GeneratedMediaWifPreflight? value) {
+  if (value == null) return 'Not checked in this Admin session.';
+  return 'Metadata ${value.metadataToken} • Claims ${value.claimsMatch} • '
+      'OpenAI exchange ${value.openAIExchange}';
+}
