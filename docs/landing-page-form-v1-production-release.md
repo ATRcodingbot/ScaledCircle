@@ -134,3 +134,41 @@ Business and Admin desktop views passed. Business and Admin 390x844 views passed
 AI visual generation, a broad website builder, custom domains, tracked calls, inbound-email attribution, an advanced form builder, and autonomous marketing execution remain unavailable or Coming Soon. This release does not promote those capabilities.
 
 Final certification created no new production Landing Page, Response Asset, tracked redirect, interaction, form submission, lead, conversion, notification, or email. Financial actions, provider actions, IAM/secret changes, and Rules/index changes were zero.
+
+## Brand Assets Phase 2 approved-media integration
+
+Candidate `6612e7e856e728d3d4bfde4b085a6d2181d7706a` added the bounded Landing Page approved-media integration. Production retained Storage Rules ruleset `9415860b-c976-4d1c-b1ad-eb4cbb784116`; exactly `getLandingPageWorkspace`, `mutateLandingPageDraft`, `transitionLandingPage`, and `renderLandingPage` were promoted from the certified source, followed by Hosting. Firestore Rules, indexes, IAM, secrets, providers, Attribution, transactional email, financial systems, and unrelated Functions were unchanged.
+
+- Prior Hosting rollback version/release: `23da91cc2d119fdf` / `1788040108234000`
+- Phase 2 Hosting version/release: `1d5cce56c447171d` / `1788080260073000`
+- Certified/live `main.dart.js` SHA-256: `D89F96B72935221C97634B637264100B804C161FD3418E77AC4650239FE5D37C`
+- Landing Page Function source generations: `1788080151845040` (`getLandingPageWorkspace`), `1788080199600228` (`mutateLandingPageDraft`), `1788080199623713` (`transitionLandingPage`), and `1788080199550993` (`renderLandingPage`)
+- Runtime: Gen 2, Node.js 24, `us-east1`; secret bindings remained zero
+
+### Production actor proof
+
+The Founder-owned actor used one existing logical Brand Asset, `asset_37a716bc9ba9ea81fba7a74a1f2506b5a5d1f5c2`. Revision A remains historical. Revision B (`revision_0285a87e59d82fee6e909ba9dd384306aca64b6c`) was the approved current revision selected for Version 1. One repository-owned QA replacement upload created Revision C (`revision_edd0b6afbc2bff3b02e8a526fabb69c0cd045a57`) on that same asset. Sharp/libvips processing completed successfully, produced bounded WebP renditions, stripped EXIF/ICC/XMP/IPTC metadata, and retained the factual alt text `Internal QA replacement service image`. Rights were attested before the revision was approved once. The asset remains one logical record with three immutable revisions.
+
+One Tracking-Off QA page was created through the maintained Business workflow:
+
+- Landing Page: `page_724df026963f7d25153ae11bf3923bdda14bc420`
+- Stable public slug: `XDN6NA7BMMJQU63UXFKB4PWDAMXAT`
+- Stable public URL: `https://scaledcircle.com/p/XDN6NA7BMMJQU63UXFKB4PWDAMXAT`
+- Version 1: `aaWiGqRnPSaMQvKRd1AR`, frozen to Revision B
+- Version 1 derivative hash: `dd10990698b98adb82f2a4b388e50b9669c3ef7cd6876eed6eea8d405727c5a9`
+- Version 1 immutable derivative path ends in `aaWiGqRnPSaMQvKRd1AR/visual-1/dd10990698b98adb82f2a4b388e50b9669c3ef7cd6876eed6eea8d405727c5a9.webp`
+- Version 2: `PrJdFLIocENMUM9bjKiU`, frozen to Revision C
+- Version 2 derivative hash: `606e5bce512a7e79759fc306742a5263f201fd95b1efb0ced16a87e7a1ad6ece`
+- Version 2 immutable derivative path ends in `PrJdFLIocENMUM9bjKiU/visual-1/606e5bce512a7e79759fc306742a5263f201fd95b1efb0ced16a87e7a1ad6ece.webp`
+
+Publishing Version 2 advanced only the page's published pointer. Version 1 retained Revision B, its original content hash, and its content-addressed derivative; Version 2 retained Revision C and a distinct hash/path. The stable public route rendered Version 2 correctly on desktop and at 390×844 without overflow. Anonymous exact derivative read returned `200`; private original and private rendition reads returned `403`. Storage Rules regression also proved public listing, writing, and deletion remain denied.
+
+Tracking remained OFF. Records associated with this page were zero in `salesLeads`, `salesActivities`, `attributionConversions`, `landingPageSubmissionReceipts`, `notifications`, `outboundEmailJobs`, and `responseInteractions`. The existing Tracking-Off and Tracking-On certification pages retained their original slugs, published-version pointers, and tracking modes. Production creative-media and Landing Page runtime errors during the actor window were zero.
+
+### Phase 2 quality status
+
+- Technically Correct: **PASS** — immutable Revision B/Revision C snapshots, stable slug, private-source isolation, and content-addressed public derivatives were proven.
+- Customer Ready: **PASS** — the normal Business workflow supported select, publish, replace, review/attest/approve, reselect, and republish without a backend bypass.
+- Renewal Grade: **PASS** — replacing approved imagery updated the current page without altering historical published versions or exposing private media.
+
+Provider/image-generation calls and spend were zero. New logical Brand Assets were zero; exactly one replacement revision, one QA Landing Page, and two publishes were used. Forms, leads, conversions, notifications, emails, and Attribution interactions were zero.
