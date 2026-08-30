@@ -1002,6 +1002,18 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    match /visualGenerationReservations/{reservationId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /visualGenerationUsage/{usageId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /providerConfigurations/{configurationId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /responseInteractions/{interactionId} {
       allow read, create, update, delete: if false;
     }

@@ -66,6 +66,8 @@ const logger = require("firebase-functions/logger");
 
 
 
+
+
 initializeApp();
 
 
@@ -80,6 +82,74 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

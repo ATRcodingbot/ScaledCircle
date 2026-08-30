@@ -53,13 +53,15 @@ const {
 
 
 
-
+const subscriptionEntitlements = require("./subscription_entitlements");
 
 
 
 
 const creativeMedia = require("./creative_media");
 const generationFoundation = require("./generation_foundation");
+const openAIImageAdapter = require("./openai_image_adapter");
+const generationBudget = require("./generation_budget");
 
 
 
@@ -115,14 +117,82 @@ const generationFixture = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAZ7hG3sAAAAASUVORK5CYII=",
   "base64"
 );
+async function generationProviderConfig() {
+  const snapshot = await db.collection("providerConfigurations").doc("generated-service-visuals").get();
+  return snapshot.exists ? snapshot.data() : { providerGenerationEnabled: false };
+}
+async function generationBusinessBudget(actor) {
+  const [config, entitlementSnapshot] = await Promise.all([generationProviderConfig(),
+  db.collection("businessSubscriptions").doc(actor.uid).get()]);
+  const entitlement = entitlementSnapshot.data() || {};
+  const plan = String(entitlement.planId || entitlement.plan || "").trim().toLowerCase();
+  return { config, entitlement, plan, eligible: subscriptionEntitlements.hasActivePaidBusinessEntitlement(entitlement),
+    monthlyAllowance: Number(config.planMonthlyAllowances?.[plan] || 0) };
+}
+const generationBudgetAuthority = generationBudget.createBudgetAuthority({
+  readState: async ({ actor, jobId }) => {
+    const business = await generationBusinessBudget(actor);const keys = generationBudget.periodKeys();
+    const [reservation, businessMonth, globalDay, globalMonth] = await Promise.all([
+    db.collection("visualGenerationReservations").doc(jobId).get(),
+    db.collection("visualGenerationUsage").doc(`business_${actor.uid}_${keys.month}`).get(),
+    db.collection("visualGenerationUsage").doc(`global_day_${keys.day}`).get(),
+    db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`).get()]
+    );
+    return { config: business.config, business: { eligible: business.eligible, monthlyAllowance: business.monthlyAllowance },
+      usage: { businessRollingDay: 0, businessMonth: Number(businessMonth.data()?.reservedUnits || 0),
+        globalDay: Number(globalDay.data()?.reservedUnits || 0), globalMonth: Number(globalMonth.data()?.reservedUnits || 0),
+        globalDayCostMicros: Number(globalDay.data()?.reservedCostMicros || 0),
+        globalMonthCostMicros: Number(globalMonth.data()?.reservedCostMicros || 0) },
+      existingReservation: reservation.exists ? reservation.data() : null };
+  },
+  writeReservation: async (value) => {
+    const jobId = value.jobId || value.reservation?.jobId;const ref = db.collection("visualGenerationReservations").doc(jobId);
+    if (value.status === "reserved") {
+      return db.runTransaction(async (tx) => {
+        const current = await tx.get(ref);if (current.exists) return { ...current.data(), idempotentReplay: true };
+        const keys = value.keys || generationBudget.periodKeys();
+        const usageRefs = [db.collection("visualGenerationUsage").doc(`business_${value.actor.uid}_${keys.month}`),
+        db.collection("visualGenerationUsage").doc(`global_day_${keys.day}`),
+        db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`)];
+        const reservation = { jobId, businessUid: value.actor.uid, status: "reserved", keys,
+          reservedUnits: value.reservationUnits, reservedCostMicros: value.reservationCostMicros,
+          createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
+        tx.create(ref, reservation);
+        for (const usageRef of usageRefs) tx.set(usageRef, { reservedUnits: FieldValue.increment(1),
+          reservedCostMicros: FieldValue.increment(value.reservationCostMicros), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return reservation;
+      });
+    }
+    await ref.set({ status: value.status, usage: value.usage || null, cost: value.cost || null,
+      updatedAt: FieldValue.serverTimestamp() }, { merge: true });return { ...value, jobId };
+  }
+});
 const generationAdapter = generationIsLocal ? generationFoundation.deterministicTestAdapter({
   fixture: generationFixture,
   environment: { projectId: generationProjectId, emulator: true, nodeEnv: "test" }
-}) : null;
+}) : openAIImageAdapter.createOpenAIImageAdapter({
+  configProvider: generationProviderConfig,
+  clientFactory: async (config) => {
+    if (config.providerGenerationEnabled !== true) throw new Error("generation_disabled");
+    const OpenAI = require("openai").default;
+    if (config.authenticationMode !== "gcp_workload_identity") throw new Error("provider_unavailable");
+    const { gcpIDTokenProvider } = require("openai/auth");
+    const identityProviderId = String(config.openAIIdentityProviderId || "").slice(0, 160);
+    const serviceAccountId = String(config.openAIServiceAccountId || "").slice(0, 160);
+    if (!identityProviderId || !serviceAccountId) throw new Error("provider_unavailable");
+    return new OpenAI({ workloadIdentity: { identityProviderId, serviceAccountId,
+        provider: gcpIDTokenProvider("https://api.openai.com/v1") }, maxRetries: 0 });
+  }
+});
 const generationService = generationFoundation.createGenerationService({
   db, FieldValue, Timestamp, FieldPath, adapter: generationAdapter,
-  capability: async () => generationIsLocal ? "test_only" : "disabled",
-  budgetEnabled: async () => generationIsLocal,
+  capability: async () => {
+    if (generationIsLocal) return "test_only";
+    const config = await generationProviderConfig();
+    return config.providerGenerationEnabled === true ? "enabled" : "disabled";
+  },
+  budgetEnabled: async (actor) => generationIsLocal || (await generationBusinessBudget(actor)).monthlyAllowance > 0,
+  budgetAuthority: generationIsLocal ? null : generationBudgetAuthority,
   approvedServices: async (actor) => {
     const profile = await db.collection("businessBrandProfiles").doc(actor.uid).get();
     return Array.isArray(profile.data()?.approvedServiceCategories) ? profile.data().approvedServiceCategories : [];

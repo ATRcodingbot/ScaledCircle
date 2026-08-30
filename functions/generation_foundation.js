@@ -10,9 +10,10 @@ const MAX_REQUESTS_PER_DAY = 8;
 const CAPABILITIES = new Set(["disabled", "test_only", "enabled"]);
 const DIRECTIONS = new Set(["clean", "friendly", "premium", "practical", "modern"]);
 const PURPOSES = new Set(["service_visual", "hero"]);
-const TERMINAL = new Set(["approved", "rejected", "failed", "blocked"]);
+const TERMINAL = new Set(["approved", "rejected", "failed", "blocked", "unknown_provider_outcome"]);
 const FAILURE_CATEGORIES = new Set(["provider_unavailable", "rate_limited", "budget_disabled",
-  "moderation_blocked", "invalid_output", "processing_failed", "timeout", "internal"]);
+  "moderation_blocked", "invalid_output", "invalid_request", "processing_failed", "timeout",
+  "monthly_limit_reached", "global_budget_exhausted", "unknown_provider_outcome", "internal"]);
 
 function clean(value, maximum = 160) {
   return value == null ? "" : String(value).trim().replace(/\s+/g, " ").slice(0, maximum);
@@ -90,6 +91,7 @@ function deterministicTestAdapter({fixture, moderation = {status: "passed"}, env
 
 function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter = null,
   capability = async () => "disabled", budgetEnabled = async () => false,
+  budgetAuthority = null,
   approvedServices = async () => [], brandProfile = async () => ({}), ingestCandidate,
   approveCandidate = async () => {}, rejectCandidate = async () => {}, now = () => Date.now()}) {
   const jobs = () => db.collection("visualGenerationJobs");
@@ -142,12 +144,20 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     if (job.candidateRevisionId) return {jobId: ref.id, status: job.status,
       assetId: job.candidateAssetId, revisionId: job.candidateRevisionId, idempotentReplay: true};
     if (!adapter) throw new Error("provider_unavailable");
-    await ref.update({status: "processing", attemptCount: Number(job.attemptCount || 0) + 1,
+    if (["processing", "unknown_provider_outcome"].includes(job.status)) {
+      return {jobId: ref.id, status: job.status, idempotentReplay: true};
+    }
+    let reservation = null;
+    if (budgetAuthority) reservation = await budgetAuthority.reserve({actor, jobId: ref.id});
+    await ref.update({status: "processing", providerAttemptState: "attempting",
+      attemptCount: Number(job.attemptCount || 0) + 1,
       processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     try {
       const result = await adapter.generateServiceConcept({jobId: ref.id, brief: job.safeBrief});
       const moderation = normalizeModeration(result.moderation);
       if (moderation.status !== "passed") {
+        if (budgetAuthority && reservation) await budgetAuthority.settle({reservation,
+          usage: result.usage || null, cost: result.cost || null});
         await ref.update({status: "blocked", moderation, failureCategory: "moderation_blocked",
           completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
         return {jobId: ref.id, status: "blocked"};
@@ -160,15 +170,31 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
         if (fresh.data()?.candidateRevisionId) return;
         tx.update(ref, {status: "review_required", candidateAssetId: candidate.assetId,
           candidateRevisionId: candidate.revisionId, providerRequestReference: result.providerRequestReference || null,
-          providerUsage: result.usage || null, estimatedCostMicros: null, actualCostMicros: null,
+          provider: result.provider || null, providerModel: result.model || null,
+          providerModelSnapshot: result.modelSnapshot || null,
+          providerRequestTimestamp: result.requestTimestamp || null, providerAttemptState: "settled",
+          providerUsage: result.usage || null, estimatedCostMicros: result.cost?.estimatedCostMicros ?? null,
+          actualCostMicros: result.cost?.actualCostMicros ?? null,
           moderation, completedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()});
       });
+      if (budgetAuthority && reservation) await budgetAuthority.settle({reservation,
+        usage: result.usage || null, cost: result.cost || null});
       return {jobId: ref.id, status: "review_required", ...candidate};
     } catch (error) {
-      const category = FAILURE_CATEGORIES.has(error?.message) ? error.message : "internal";
-      await ref.update({status: category === "moderation_blocked" ? "blocked" : "failed",
-        failureCategory: category, completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      const rawCategory = error?.category || error?.message;
+      const unknown = error?.outcome === "unknown_provider_outcome";
+      const category = unknown ? "unknown_provider_outcome" : FAILURE_CATEGORIES.has(rawCategory) ? rawCategory : "internal";
+      if (budgetAuthority && reservation) {
+        if (unknown) await budgetAuthority.holdUnknown({reservation});
+        else if (["generation_disabled", "budget_disabled", "invalid_request"].includes(rawCategory)) {
+          await budgetAuthority.release({reservation});
+        } else await budgetAuthority.settle({reservation, usage: null, cost: null});
+      }
+      await ref.update({status: unknown ? "unknown_provider_outcome" : category === "moderation_blocked" ? "blocked" : "failed",
+        failureCategory: category, providerAttemptState: unknown ? "unknown" : "completed",
+        providerRequestReference: error?.providerRequestId || null,
+        completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
       throw new Error(category);
     }
   }
@@ -212,11 +238,15 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     if (input.businessUid) query = query.where("businessUid", "==", clean(input.businessUid, 160));
     const snap = await query.orderBy("createdAt", "desc").limit(100).get();
     const counts = {queued: 0, processing: 0, review_required: 0, approved: 0,
-      rejected: 0, failed: 0, blocked: 0};
+      rejected: 0, failed: 0, blocked: 0, unknown_provider_outcome: 0};
     const failures = {}; let latencyTotal = 0; let completed = 0; let stuckJobs = 0;
+    let estimatedCostMicros = 0; let actualCostMicros = 0; let providerRequestCount = 0;
     for (const doc of snap.docs) {
       const value = doc.data(); if (Object.hasOwn(counts, value.status)) counts[value.status]++;
       if (value.failureCategory) failures[value.failureCategory] = Number(failures[value.failureCategory] || 0) + 1;
+      if (value.providerRequestTimestamp) providerRequestCount++;
+      estimatedCostMicros += Number(value.estimatedCostMicros || 0);
+      actualCostMicros += Number(value.actualCostMicros || 0);
       const created = millis(value.createdAt); const finished = millis(value.completedAt);
       if (created && finished >= created) { latencyTotal += finished - created; completed++; }
       if (["queued", "processing"].includes(value.status) && created && now() - created > 15 * 60 * 1000) stuckJobs++;
@@ -224,8 +254,11 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     return {schemaVersion: SCHEMA_VERSION, capability: normalizeCapability(await capability(actor)),
       budgetEnabled: await budgetEnabled(actor), sampleBound: 100, counts, failures, stuckJobs,
       averageCompletionLatencyMs: completed ? Math.round(latencyTotal / completed) : null,
-      providerAvailability: adapter ? (adapter.mode === "test" ? "test_only" : "configured") : "not_configured",
-      providerUsageAndCost: "not_enabled"};
+      providerAvailability: adapter ? (adapter.mode === "test" ? "test_only" : "configured_disabled_by_default") : "not_configured",
+      providerOperations: {configuredProvider: adapter?.id || null, providerRequestCount,
+        configuredModel: adapter?.defaultModel || null,
+        configuredModelSnapshot: adapter?.defaultModelSnapshot || null,
+        estimatedCostMicros, actualCostMicros}};
   }
   return {request, process, approve: (args) => review({...args, approve: true}),
     reject: (args) => review({...args, approve: false}), list, operations};

@@ -225,8 +225,10 @@ function transformIndex(mode) {
     const creativeMediaHelpers = new Set([
       "creativeMedia", "creativeMediaService", "requireCreativeMediaBusiness",
       "creativeMediaError", "creativeMediaCall",
-      "generationFoundation", "generationProjectId", "generationIsLocal", "generationFixture",
-      "generationAdapter", "generationService", "generationHttpsError", "generationBusinessCall",
+      "generationFoundation", "openAIImageAdapter", "generationBudget", "generationProjectId",
+      "generationIsLocal", "generationFixture", "generationProviderConfig", "generationBusinessBudget",
+      "generationBudgetAuthority", "generationAdapter", "generationService", "generationHttpsError",
+      "generationBusinessCall",
     ]);
     ast.program.body = ast.program.body.flatMap((statement) => {
       if (statement.type === "FunctionDeclaration" && creativeMediaHelpers.has(statement.id?.name)) return [];
@@ -365,9 +367,9 @@ function copyPackage(destination, mode) {
     if (mode === "landing-page" && name.endsWith(".js") &&
         !["landing_page.js", "landing_page_workspace.js", "landing_page_media.js"].includes(name)) continue;
     if (mode === "creative-media" && name.endsWith(".js") &&
-        !["creative_media.js", "generation_foundation.js"].includes(name)) continue;
+        !["creative_media.js", "generation_foundation.js", "generation_budget.js", "openai_image_adapter.js"].includes(name)) continue;
     if (mode !== "creative-media" &&
-        ["creative_media.js", "generation_foundation.js"].includes(name)) continue;
+        ["creative_media.js", "generation_foundation.js", "generation_budget.js", "openai_image_adapter.js"].includes(name)) continue;
     fs.copyFileSync(source, path.join(destination, name));
   }
 }
@@ -406,7 +408,7 @@ function writePackageManifest(mode, destination) {
       : mode === "landing-page"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "creative-media"
-        ? ["firebase-admin", "firebase-functions", "sharp"]
+        ? ["firebase-admin", "firebase-functions", "openai", "sharp"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
