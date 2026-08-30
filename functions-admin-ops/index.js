@@ -327,6 +327,20 @@ const adminOpsReadService = adminOpsReadModel.createAdminOpsReadService({
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 setGlobalOptions({
   maxInstances: 10,
   region: "us-east1"

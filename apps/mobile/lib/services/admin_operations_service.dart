@@ -40,6 +40,14 @@ class AdminOperationsService {
       _map(data['providerAuthPreflight']),
     );
   }
+
+  Future<Map<String, dynamic>> reconcileGeneratedMediaAccounting() async {
+    final result = await _functions
+        .httpsCallable('getGeneratedMediaOperations')
+        .call<Map<Object?, Object?>>({'reconcileAccounting': true});
+    final data = Map<String, dynamic>.from(result.data);
+    return _map(data['accountingReconciliation']);
+  }
 }
 
 Map<String, dynamic> _map(Object? value) =>

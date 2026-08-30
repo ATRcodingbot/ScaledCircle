@@ -26,6 +26,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late Future<AdminOperationsSnapshot> _overview = _service.loadOverview();
   GeneratedMediaWifPreflight? _providerAuthPreflight;
   bool _providerAuthPreflightRunning = false;
+  Map<String, dynamic>? _accountingReconciliation;
+  bool _accountingReconciliationRunning = false;
   void _refresh() => setState(() => _overview = _service.loadOverview());
 
   @override
@@ -76,6 +78,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             providerAuthPreflight: _providerAuthPreflight,
             providerAuthPreflightRunning: _providerAuthPreflightRunning,
             onRunProviderAuthPreflight: _runProviderAuthPreflight,
+            accountingReconciliation: _accountingReconciliation,
+            accountingReconciliationRunning: _accountingReconciliationRunning,
+            onReconcileAccounting: _reconcileAccounting,
             onOpenCampaign: (campaignId) => _push(
               AdminCampaignTimelineScreen(
                 campaignId: campaignId,
@@ -109,6 +114,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     } finally {
       if (mounted) setState(() => _providerAuthPreflightRunning = false);
+    }
+  }
+
+  Future<void> _reconcileAccounting() async {
+    if (_accountingReconciliationRunning) return;
+    setState(() => _accountingReconciliationRunning = true);
+    try {
+      final result = await _service.reconcileGeneratedMediaAccounting();
+      if (!mounted) return;
+      setState(() => _accountingReconciliation = result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Generated visual accounting reconciled.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Accounting reconciliation failed safely.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _accountingReconciliationRunning = false);
     }
   }
 
@@ -209,6 +238,9 @@ class AdminOperationsContent extends StatelessWidget {
     required this.providerAuthPreflight,
     required this.providerAuthPreflightRunning,
     required this.onRunProviderAuthPreflight,
+    required this.accountingReconciliation,
+    required this.accountingReconciliationRunning,
+    required this.onReconcileAccounting,
     required this.onOpenCampaign,
     super.key,
   });
@@ -222,6 +254,9 @@ class AdminOperationsContent extends StatelessWidget {
   final GeneratedMediaWifPreflight? providerAuthPreflight;
   final bool providerAuthPreflightRunning;
   final VoidCallback onRunProviderAuthPreflight;
+  final Map<String, dynamic>? accountingReconciliation;
+  final bool accountingReconciliationRunning;
+  final VoidCallback onReconcileAccounting;
   final ValueChanged<String> onOpenCampaign;
 
   @override
@@ -366,6 +401,37 @@ class AdminOperationsContent extends StatelessWidget {
               const Text(
                 'This checks runtime identity and token exchange only. It does not request generated content.',
                 style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+              const Divider(height: 28),
+              Text(
+                'Reservation accounting',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                accountingReconciliation == null
+                    ? 'Rebuild bounded usage totals from canonical reservation evidence.'
+                    : 'Reconciled ${accountingReconciliation!['reservationCount'] ?? 0} reservations; released ${accountingReconciliation!['releasedJobCount'] ?? 0} definitive pre-provider failure.',
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: accountingReconciliationRunning
+                      ? null
+                      : onReconcileAccounting,
+                  icon: accountingReconciliationRunning
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.calculate_outlined),
+                  label: Text(
+                    accountingReconciliationRunning
+                        ? 'Reconciling…'
+                        : 'Reconcile accounting',
+                  ),
+                ),
               ),
             ],
           ),

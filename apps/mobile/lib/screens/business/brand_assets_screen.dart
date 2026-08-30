@@ -868,6 +868,14 @@ class _GeneratedVisualPanel extends StatelessWidget {
                     ),
                   ],
                 ),
+              if (job['status'] == 'approved')
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton(
+                    onPressed: () => onTryAnother(job['jobId'].toString()),
+                    child: const Text('Try another'),
+                  ),
+                ),
             ],
           ],
         ),

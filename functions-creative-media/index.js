@@ -199,8 +199,22 @@ const generationBudgetAuthority = generationBudget.createBudgetAuthority({
 });
 async function reconcileGenerationAccounting(input = {}) {
   const keys = generationBudget.periodKeys();
-  const releaseIds = Array.isArray(input.preProviderJobIds) ?
+  const requestedReleaseIds = Array.isArray(input.preProviderJobIds) ?
   [...new Set(input.preProviderJobIds.map((value) => String(value || "").trim()))].slice(0, 20) : [];
+  const currentReservations = await db.collection("visualGenerationReservations").
+  where("keys.month", "==", keys.month).limit(501).get();
+  if (currentReservations.size > 500) throw new Error("generation_reconciliation_bound_exceeded");
+  const currentValues = currentReservations.docs.map((doc) => ({ jobId: doc.id, ...doc.data() }));
+  const legacyCandidates = currentValues.filter((reservation) => reservation.status === "settled" &&
+  reservation.providerAccepted !== true && !reservation.usage && !reservation.cost).slice(0, 20);
+  const legacyJobs = legacyCandidates.length === 0 ? [] : await db.getAll(...legacyCandidates.map((reservation) =>
+  db.collection("visualGenerationJobs").doc(reservation.jobId)));
+  const automaticallySafeIds = legacyJobs.filter((jobSnap) => {
+    const job = jobSnap.data() || {};
+    return jobSnap.exists && job.status === "failed" && !job.providerRequestReference &&
+    !job.providerUsage && !job.actualCostMicros;
+  }).map((jobSnap) => jobSnap.id);
+  const releaseIds = [...new Set([...requestedReleaseIds, ...automaticallySafeIds])].slice(0, 20);
   for (const jobId of releaseIds) {
     if (!/^visual_job_[A-Za-z0-9_-]{12,160}$/.test(jobId)) throw new Error("invalid_request");
     await db.runTransaction(async (tx) => {
