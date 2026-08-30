@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..", "..");
@@ -92,7 +93,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, attributionRoot);
   resolveFrom(dependency, landingPageRoot);
 }
-for (const dependency of ["firebase-functions", "firebase-admin", "sharp"]) {
+for (const dependency of ["firebase-functions", "firebase-admin", "openai", "sharp"]) {
   resolveFrom(dependency, creativeMediaRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
@@ -163,10 +164,24 @@ assert.deepEqual(Object.keys(landingPage).sort(), [
   "submitLandingPageForm", "transitionLandingPage", "reconcileLandingPageInquiryDelivery",
 ].sort());
 assert.deepEqual(Object.keys(creativeMedia).sort(), [
-  "approveBusinessMediaRevision", "createBusinessMediaUploadIntent",
-  "finalizeBusinessMediaUpload", "getBusinessMediaWorkspace", "rejectBusinessMediaRevision",
-  "removeBusinessMediaAsset", "updateBusinessBrandProfile", "updateBusinessMediaRevisionMetadata",
+  "approveBusinessMediaRevision", "approveGeneratedServiceVisual",
+  "createBusinessMediaUploadIntent", "finalizeBusinessMediaUpload",
+  "getBusinessMediaWorkspace", "getGeneratedMediaOperations",
+  "getGeneratedServiceVisualWorkspace", "processGeneratedServiceVisual",
+  "rejectBusinessMediaRevision", "rejectGeneratedServiceVisual",
+  "removeBusinessMediaAsset", "requestGeneratedServiceVisual",
+  "updateBusinessBrandProfile", "updateBusinessMediaRevisionMetadata",
 ].sort());
+const canonicalEntitlements = fs.readFileSync(
+  path.join(root, "functions", "subscription_entitlements.js"), "utf8");
+const creativeMediaEntitlements = fs.readFileSync(
+  path.join(creativeMediaRoot, "subscription_entitlements.js"), "utf8");
+assert.equal(creativeMediaEntitlements, canonicalEntitlements,
+  "creative-media-core must package the canonical entitlement reader without modification");
+for (const forbidden of ["require\\(", "Stripe", "defineSecret", "collection\\(",
+  "\\.set\\(", "\\.update\\("]) {
+  assert.doesNotMatch(creativeMediaEntitlements, new RegExp(forbidden));
+}
 assert.equal(Object.hasOwn(legacy, "ensureLegacyWalletProjection"), false);
 assert.equal(Object.hasOwn(legacy, "sendArtifactDeliveryEmailJob"), false);
 assert.equal(Object.hasOwn(legacy, "sendScalerJobAlertEmailJob"), false);

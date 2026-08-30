@@ -367,7 +367,8 @@ function copyPackage(destination, mode) {
     if (mode === "landing-page" && name.endsWith(".js") &&
         !["landing_page.js", "landing_page_workspace.js", "landing_page_media.js"].includes(name)) continue;
     if (mode === "creative-media" && name.endsWith(".js") &&
-        !["creative_media.js", "generation_foundation.js", "generation_budget.js", "openai_image_adapter.js"].includes(name)) continue;
+        !["creative_media.js", "generation_foundation.js", "generation_budget.js",
+          "openai_image_adapter.js", "subscription_entitlements.js"].includes(name)) continue;
     if (mode !== "creative-media" &&
         ["creative_media.js", "generation_foundation.js", "generation_budget.js", "openai_image_adapter.js"].includes(name)) continue;
     fs.copyFileSync(source, path.join(destination, name));

@@ -103,6 +103,10 @@ const creativeMediaPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-creative-media", "package.json"), "utf8"));
 const creativeMediaLock = fs.readFileSync(
   path.join(root, "functions-creative-media", "package-lock.json"), "utf8");
+const canonicalSubscriptionEntitlements = fs.readFileSync(
+  path.join(root, "functions", "subscription_entitlements.js"), "utf8");
+const creativeMediaSubscriptionEntitlements = fs.readFileSync(
+  path.join(root, "functions-creative-media", "subscription_entitlements.js"), "utf8");
 const applicationPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-application", "package.json"), "utf8"));
 const applicationLock = fs.readFileSync(
@@ -340,6 +344,11 @@ test("creative-media-core exclusively owns private Business media processing", (
   }
   for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer"]) {
     assert.doesNotMatch(creativeMediaLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(creativeMediaSubscriptionEntitlements, canonicalSubscriptionEntitlements);
+  for (const forbidden of ["require\\(", "Stripe", "defineSecret", "collection\\(",
+    "\\.set\\(", "\\.update\\("]) {
+    assert.doesNotMatch(creativeMediaSubscriptionEntitlements, new RegExp(forbidden));
   }
   assert.equal(firebaseConfig.functions.find((entry) =>
     entry.codebase === "creative-media-core")?.source, "functions-creative-media");
