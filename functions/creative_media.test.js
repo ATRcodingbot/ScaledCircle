@@ -65,6 +65,9 @@ test("approved visual services are a normalized subset of canonical Business ser
   assert.throws(() => media.normalizeApprovedServiceCategories(
     ["Roofing"], ["Decks"],
   ), /brand_service_not_offered/);
+  assert.deepEqual(media.normalizeApprovedServiceCategories(
+    [" Seasonal   cleanup ", "seasonal cleanup", "Landscaping improvements"], [],
+  ), ["Seasonal cleanup", "Landscaping improvements"]);
 });
 
 test("approved visual services reject abusive text and enforce the server maximum", () => {

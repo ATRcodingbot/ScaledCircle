@@ -50,14 +50,15 @@ function normalizeApprovedServiceCategories(requested, offered) {
   if (requested.length > MAX_APPROVED_SERVICE_CATEGORIES) throw new Error("brand_service_limit_reached");
   const canonical = new Map(availableServiceCategories(offered)
     .map((label) => [label.toLocaleLowerCase("en-US"), label]));
+  const allowsBrandProfileLabels = canonical.size === 0;
   const result = []; const seen = new Set();
   for (const item of requested) {
     const normalized = normalizeServiceLabel(item);
     const identity = normalized.toLocaleLowerCase("en-US");
     if (seen.has(identity)) continue;
     const canonicalLabel = canonical.get(identity);
-    if (!canonicalLabel) throw new Error("brand_service_not_offered");
-    seen.add(identity); result.push(canonicalLabel);
+    if (!canonicalLabel && !allowsBrandProfileLabels) throw new Error("brand_service_not_offered");
+    seen.add(identity); result.push(canonicalLabel || normalized);
   }
   return result;
 }
@@ -434,9 +435,12 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
       db.collection("businessBrandProfiles").doc(actor.uid).get(),
       db.collection("businessGrowthProfiles").doc(actor.uid).get(),
     ]);
+    const growthServices = availableServiceCategories(growthProfile.data()?.servicesOffered);
+    const brandServices = availableServiceCategories(brand.data()?.approvedServiceCategories);
     return {assets: result, hasMore, nextCursor: hasMore && last ? encodeCursor(timestampMillis(last.data().createdAt), last.id) : null,
       brandProfile: brand.exists ? brand.data() : null,
-      availableServiceCategories: availableServiceCategories(growthProfile.data()?.servicesOffered),
+      availableServiceCategories: growthServices.length ? growthServices : brandServices,
+      serviceCategorySource: growthServices.length ? "growth_profile" : "brand_profile_manual",
       legacyCompatibility: {collection: "socialMediaLibraries", mode: "read_only_existing_workflow"},
       limits: {maximumAssets: MAX_ASSETS, maximumActiveUploads: ACTIVE_INTENT_LIMIT, maximumBytes: MAX_BYTES}};
   }

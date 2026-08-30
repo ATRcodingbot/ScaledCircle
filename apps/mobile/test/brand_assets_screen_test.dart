@@ -261,8 +261,11 @@ void main() {
     await tester.tap(find.text('Brand settings'));
     await tester.pumpAndSettle();
     expect(find.text('Services for visuals'), findsOneWidget);
+    await tester.ensureVisible(find.text('Decks'));
     await tester.tap(find.text('Decks'));
+    await tester.ensureVisible(find.text('Kitchen remodeling'));
     await tester.tap(find.text('Kitchen remodeling'));
+    await tester.ensureVisible(find.text('Save settings'));
     await tester.tap(find.text('Save settings'));
     await tester.pumpAndSettle();
     expect(media.brandUpdates, 1);
@@ -277,4 +280,47 @@ void main() {
     final chips = tester.widgetList<FilterChip>(find.byType(FilterChip));
     expect(chips.where((chip) => chip.selected), hasLength(2));
   });
+
+  testWidgets(
+    'Business can add a bounded visual service without a Growth Profile',
+    (tester) async {
+      final media = _FakeMedia({
+        'assets': <dynamic>[],
+        'hasMore': false,
+        'serviceCategorySource': 'brand_profile_manual',
+        'availableServiceCategories': <String>[],
+        'brandProfile': {
+          'primaryColor': '#176FD1',
+          'secondaryColor': '#10243E',
+          'stylePreset': 'clean',
+          'approvedServiceCategories': <String>[],
+        },
+      });
+      await tester.pumpWidget(_screen(media));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Brand settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add service'), findsOneWidget);
+      expect(find.text('Open Growth Profile'), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('brand-service-entry')),
+        '  Seasonal   cleanup  ',
+      );
+      await tester.ensureVisible(find.text('Add service'));
+      await tester.tap(find.text('Add service'));
+      await tester.pump();
+      expect(
+        find.widgetWithText(FilterChip, 'Seasonal cleanup'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('Save settings'));
+      await tester.tap(find.text('Save settings'));
+      await tester.pumpAndSettle();
+      expect(media.brandUpdates, 1);
+      expect(
+        (media.result['brandProfile'] as Map)['approvedServiceCategories'],
+        ['Seasonal cleanup'],
+      );
+    },
+  );
 }

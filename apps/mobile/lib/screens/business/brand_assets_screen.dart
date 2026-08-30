@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../navigation/business_back_button.dart';
 import '../../services/business_media_service.dart';
-import 'managed_growth_screen.dart';
 
 class BrandAssetsScreen extends StatefulWidget {
   const BrandAssetsScreen({super.key, this.service, this.generationService});
@@ -29,6 +28,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
   bool _hasMore = false;
   Map<String, dynamic> _brand = const {};
   List<String> _availableServices = const [];
+  String _serviceCategorySource = 'brand_profile_manual';
   Map<String, dynamic> _generation = const {'capability': 'disabled'};
   bool _generating = false;
   bool _savingBrand = false;
@@ -192,6 +192,8 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 .map((value) => value.toString())
                 .where((value) => value.isNotEmpty)
                 .toList(growable: false);
+        _serviceCategorySource =
+            data['serviceCategorySource']?.toString() ?? 'brand_profile_manual';
       });
     } catch (_) {
       setState(() => _error = 'We couldn’t load Brand Assets. Try again.');
@@ -352,11 +354,15 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
     final secondary = TextEditingController(
       text: _brand['secondaryColor']?.toString() ?? '#10243E',
     );
+    final manualService = TextEditingController();
     var preset = _brand['stylePreset']?.toString() ?? 'clean';
+    final manualMode = _serviceCategorySource == 'brand_profile_manual';
+    final available = _availableServices.toSet();
     final approved = (_brand['approvedServiceCategories'] as List? ?? const [])
         .map((value) => value.toString())
-        .where(_availableServices.contains)
+        .where((value) => manualMode || available.contains(value))
         .toSet();
+    if (manualMode) available.addAll(approved);
     String? serviceError;
     final action = await showDialog<String>(
       context: context,
@@ -414,20 +420,59 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                     'Choose the services ScaledCircle can use when creating marketing visuals.',
                   ),
                   const SizedBox(height: 12),
-                  if (_availableServices.isEmpty) ...[
+                  if (manualMode) ...[
                     const Text(
-                      'Add the services your Business offers in your Growth Profile first.',
+                      'Add only services your Business genuinely offers. These choices are used for visual concepts.',
                     ),
                     const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: () => Navigator.pop(context, 'growth'),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Open Growth Profile'),
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('brand-service-entry'),
+                            controller: manualService,
+                            maxLength: 80,
+                            decoration: const InputDecoration(
+                              labelText: 'Service',
+                              hintText: 'Seasonal cleanup',
+                            ),
+                            onSubmitted: (_) {},
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: () => setLocal(() {
+                            serviceError = null;
+                            final value = manualService.text.trim().replaceAll(
+                              RegExp(r'\s+'),
+                              ' ',
+                            );
+                            if (value.isEmpty || value.length > 80) {
+                              serviceError = 'Enter a service name.';
+                              return;
+                            }
+                            if (approved.length >= 12) {
+                              serviceError = 'Choose no more than 12 services.';
+                              return;
+                            }
+                            final duplicate = available.any(
+                              (item) =>
+                                  item.toLowerCase() == value.toLowerCase(),
+                            );
+                            if (!duplicate) {
+                              available.add(value);
+                              approved.add(value);
+                            }
+                            manualService.clear();
+                          }),
+                          child: const Text('Add service'),
+                        ),
+                      ],
                     ),
-                  ] else
+                    if (available.isNotEmpty) const SizedBox(height: 8),
+                  ],
+                  if (available.isNotEmpty)
                     Semantics(
                       container: true,
                       label:
@@ -435,7 +480,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                       child: Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: _availableServices
+                        children: available
                             .map(
                               (service) => FilterChip(
                                 label: Text(service),
@@ -486,15 +531,10 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
         ),
       ),
     );
-    if (action == 'growth') {
-      if (!mounted) return;
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => const ManagedGrowthScreen()),
-      );
-      await Future.wait([_load(reset: true), _loadGeneration()]);
-      if (mounted) await _brandSettings();
-      return;
-    }
+    // showDialog completes when pop starts; allow its exit animation to detach
+    // the TextField before disposing the controller it still references.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    manualService.dispose();
     if (action != 'save') return;
     setState(() {
       _savingBrand = true;
