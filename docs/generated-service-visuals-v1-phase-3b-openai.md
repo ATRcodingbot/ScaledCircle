@@ -50,23 +50,70 @@ estimated cost, and calculated actual cost. Normal Business responses omit these
 planning estimate of $0.041 per medium landscape output: 100 ≈ $4.10, 1,000 ≈ $41, 10,000 ≈ $410,
 and 50,000 ≈ $2,050, before inputs and any billable retry.
 
-## Future enablement manifest (not executed)
+## Production enablement manifest (not executed)
 
-1. Create isolated OpenAI staging project and project service account.
-2. Configure OpenAI workload identity for the exact staging Gen2 service identity; verify token
-   exchange without broadening IAM. If unsuitable, create the exact fallback Firebase secret.
-3. Populate the server-only staging configuration with provider/snapshot, identity resource IDs,
+1. Create an isolated OpenAI production project and project service account.
+2. Configure OpenAI workload identity for the exact production Gen2 service identity; verify token
+   exchange without broadening IAM. Do not create the API-key fallback unless a separately reviewed
+   production blocker proves workload identity unsuitable.
+3. Populate the server-only production configuration with provider/snapshot, identity resource IDs,
    current pricing, plan allowances, and conservative global daily/monthly ceilings while leaving
    `providerGenerationEnabled=false`.
 4. Deploy only the changed creative-media Functions, Firestore Rules, and Hosting surfaces derived
    from the final candidate; no image call during deployment verification.
-5. Obtain Founder approval, enable the kill switch for the bounded smoke, and generate at most three
+5. Obtain Founder approval, enable the provider for the bounded smoke, and generate at most three
    person-free concepts (deck/patio, landscaping/exterior, remodel/general contracting).
 6. Maximum estimated image-output cost: **$0.123** (3 × $0.041), plus small prompt-token cost. Score
    relevance, quality, adherence, people/property neutrality, signage/claims, composition/crop,
    moderation, latency, and actual cost. Disable immediately after the smoke.
 
-Provider health remains **DISABLED / NOT CERTIFIED** until that separately approved paid smoke.
 OpenAI customer-content ownership, output ownership to the extent permitted by law, and default
 API training/data-handling terms require normal business/legal review before broad enablement; this
 document is an engineering record, not legal advice.
+
+## Hosted staging provider certification — 2026-08-30
+
+The complete certified source is commit
+`9793d4566b6859084b84b692f42dcf57bfdb9869`. Staging used dedicated OpenAI project
+`proj_bzf7BjrWBxXJ4lb1KxtE0Ep5`, workload-identity provider
+`idp_7356073bf43a0d8255892c3d`, and OpenAI service identity
+`user-ce7ea16ba7f6d9247f9c116e`. Firebase Gen2 obtained a Google metadata ID token and exchanged it
+for a short-lived OpenAI credential. No API key, Firebase secret, GCP IAM change, or service-account
+key file was used.
+
+The pinned image model was `gpt-image-2-2026-04-21`; secondary moderation used
+`omni-moderation-latest`. The OpenAI staging project had a $1.00 hard smoke ceiling. Exactly three
+medium `1536x1024` image requests were accepted, duplicate calls were zero, and request four was
+never issued:
+
+- Seasonal cleanup / Clean: one accepted request, quality PASS, approved, actual cost $0.041725.
+- Landscaping improvements / Clean: one accepted request, quality PASS, approved, actual cost
+  $0.041725.
+- Landscaping improvements / Clean through the normal Try another workflow: job
+  `visual_job_351077bdc865932da9a46f03bccf42e21f8ea373`, OpenAI request
+  `req_5572b0076d384a54a41a3e3409368b49`, one attempt, 113 text-input tokens, 1,372 image-output
+  tokens, actual cost $0.041725, quality PASS, and exact authenticated preview visible.
+
+Total measured provider cost was **$0.125175**. All candidates passed provider safety,
+`omni-moderation-latest`, ScaledCircle domain-truthfulness checks, person exclusion, before/after
+exclusion, unsupported-claim/signage exclusion, Sharp/libvips decoding and normalization, metadata
+stripping, and immutable `generated_service_concept` ingestion. Existing Business-uploaded media
+and published Landing Pages remained unchanged unless explicitly selected by the Business.
+
+Two hosted remediations were certified during the smoke. Authenticated private generated previews
+now use the same owner-safe media authority in Brand Assets and the Landing Page picker on desktop
+and 390x844; anonymous private rendition access remains denied. Reservation transitions now remove
+outstanding units/cost on release or settlement, preserve actual provider usage exactly once, and
+hold indeterminate outcomes. The historical pre-provider workload-identity failure released its
+allowance without deleting its audit job. After the third request, all three usage projections read
+three actual units, $0.125175 actual cost, and zero outstanding reservation units/cost.
+
+One approved generated revision was selected and published through the maintained Landing Page
+pipeline with a visible conceptual-service disclosure, immutable asset/revision/hash context,
+Tracking off, and zero forms, leads, conversions, notifications, emails, or Attribution
+interactions. The staging provider capability was returned to `DISABLED` after the smoke and the
+Business UI could not dispatch request four.
+
+Staging quality gates: **Technically Correct PASS**, **Customer Ready PASS**, and
+**Renewal Grade provider gate PASS**. Production provider configuration, credentials, calls, and
+deployment remain absent and require a separate Founder enablement approval.
