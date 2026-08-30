@@ -12,6 +12,7 @@ const MAX_PIXELS = 40_000_000;
 const PAGE_SIZE = 20;
 const MAX_ASSETS = 200;
 const ACTIVE_INTENT_LIMIT = 3;
+const MAX_APPROVED_SERVICE_CATEGORIES = 12;
 const PURPOSES = new Set(["logo", "hero", "service_visual"]);
 const ALLOWED_FORMATS = new Set(["jpeg", "png", "webp"]);
 const RENDITIONS = Object.freeze({
@@ -22,6 +23,43 @@ const RENDITIONS = Object.freeze({
 
 function text(value, maximum = 240) {
   return value == null ? "" : String(value).trim().slice(0, maximum);
+}
+function normalizeServiceLabel(value) {
+  if (typeof value !== "string") throw new Error("invalid_brand_service");
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (!normalized || normalized.length > 80 ||
+      !/^[\p{L}\p{N}][\p{L}\p{N}\s&/+\-'’().,]*$/u.test(normalized) ||
+      /\b(ignore|disregard|override)\b.{0,40}\b(instructions?|prompt|policy)\b|\b(system|developer|assistant)\s+(message|prompt)\b/i.test(normalized)) {
+    throw new Error("invalid_brand_service");
+  }
+  return normalized;
+}
+function availableServiceCategories(value) {
+  if (!Array.isArray(value)) return [];
+  const result = []; const seen = new Set();
+  for (const item of value) {
+    let normalized;
+    try { normalized = normalizeServiceLabel(item); } catch (_) { continue; }
+    const identity = normalized.toLocaleLowerCase("en-US");
+    if (!seen.has(identity)) { seen.add(identity); result.push(normalized); }
+  }
+  return result;
+}
+function normalizeApprovedServiceCategories(requested, offered) {
+  if (!Array.isArray(requested)) throw new Error("invalid_brand_service");
+  if (requested.length > MAX_APPROVED_SERVICE_CATEGORIES) throw new Error("brand_service_limit_reached");
+  const canonical = new Map(availableServiceCategories(offered)
+    .map((label) => [label.toLocaleLowerCase("en-US"), label]));
+  const result = []; const seen = new Set();
+  for (const item of requested) {
+    const normalized = normalizeServiceLabel(item);
+    const identity = normalized.toLocaleLowerCase("en-US");
+    if (seen.has(identity)) continue;
+    const canonicalLabel = canonical.get(identity);
+    if (!canonicalLabel) throw new Error("brand_service_not_offered");
+    seen.add(identity); result.push(canonicalLabel);
+  }
+  return result;
 }
 function requestId(value) {
   const normalized = text(value, 128);
@@ -349,8 +387,12 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
       if (!["clean", "bold", "friendly", "premium"].includes(preset)) throw new Error("invalid_brand_style");
       patch.stylePreset = preset;
     }
-    if (Array.isArray(input.approvedServiceCategories)) patch.approvedServiceCategories =
-      input.approvedServiceCategories.slice(0, 12).map((v) => text(v, 80)).filter(Boolean);
+    if (Object.hasOwn(input, "approvedServiceCategories")) {
+      const growthProfile = await db.collection("businessGrowthProfiles").doc(actor.uid).get();
+      patch.approvedServiceCategories = normalizeApprovedServiceCategories(
+        input.approvedServiceCategories, growthProfile.data()?.servicesOffered,
+      );
+    }
     if (Array.isArray(input.visualDirectionTags)) patch.visualDirectionTags =
       input.visualDirectionTags.slice(0, 8).map((v) => text(v, 60)).filter(Boolean);
     await db.runTransaction(async (tx) => {
@@ -388,9 +430,13 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
       result.push(publicAsset(doc, current, approved));
     }
     const last = page.at(-1); const hasMore = snapshot.size > PAGE_SIZE;
-    const brand = await db.collection("businessBrandProfiles").doc(actor.uid).get();
+    const [brand, growthProfile] = await Promise.all([
+      db.collection("businessBrandProfiles").doc(actor.uid).get(),
+      db.collection("businessGrowthProfiles").doc(actor.uid).get(),
+    ]);
     return {assets: result, hasMore, nextCursor: hasMore && last ? encodeCursor(timestampMillis(last.data().createdAt), last.id) : null,
       brandProfile: brand.exists ? brand.data() : null,
+      availableServiceCategories: availableServiceCategories(growthProfile.data()?.servicesOffered),
       legacyCompatibility: {collection: "socialMediaLibraries", mode: "read_only_existing_workflow"},
       limits: {maximumAssets: MAX_ASSETS, maximumActiveUploads: ACTIVE_INTENT_LIMIT, maximumBytes: MAX_BYTES}};
   }
@@ -401,5 +447,6 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
 }
 
 module.exports = {SCHEMA_VERSION, BRAND_VERSION, MAX_BYTES, MAX_WIDTH, MAX_HEIGHT, MAX_PIXELS,
-  PAGE_SIZE, MAX_ASSETS, ACTIVE_INTENT_LIMIT, RENDITIONS, pathFor, encodeCursor, decodeCursor,
-  createCreativeMediaService};
+  PAGE_SIZE, MAX_ASSETS, ACTIVE_INTENT_LIMIT, MAX_APPROVED_SERVICE_CATEGORIES, RENDITIONS,
+  pathFor, encodeCursor, decodeCursor, normalizeServiceLabel, availableServiceCategories,
+  normalizeApprovedServiceCategories, createCreativeMediaService};

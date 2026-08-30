@@ -76,7 +76,7 @@ class _FakeBusinessMediaGateway implements BusinessMediaGateway {
   @override Future<void> selectLogo(String a,String r) async {}
   @override Future<Uint8List?> previewBytes(Map<String,dynamic> a) async => null;
   @override Future<void> saveReviewMetadata({required String assetId,required String revisionId,required String altText,required String serviceLabel,required bool rightsAttestation}) async {}
-  @override Future<void> updateBrand({required String primaryColor,required String secondaryColor,required String stylePreset}) async {}
+  @override Future<void> updateBrand({required String primaryColor,required String secondaryColor,required String stylePreset,required List<String> approvedServiceCategories}) async {}
   @override Future<void> upload({required Uint8List bytes,required String filename,required String purpose,String? assetId}) async {}
 }
 

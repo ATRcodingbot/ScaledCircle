@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../navigation/business_back_button.dart';
 import '../../services/business_media_service.dart';
+import 'managed_growth_screen.dart';
 
 class BrandAssetsScreen extends StatefulWidget {
   const BrandAssetsScreen({super.key, this.service, this.generationService});
@@ -27,8 +28,10 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
   String? _cursor;
   bool _hasMore = false;
   Map<String, dynamic> _brand = const {};
+  List<String> _availableServices = const [];
   Map<String, dynamic> _generation = const {'capability': 'disabled'};
   bool _generating = false;
+  bool _savingBrand = false;
 
   @override
   void initState() {
@@ -184,6 +187,11 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
         _brand = data['brandProfile'] is Map
             ? Map<String, dynamic>.from(data['brandProfile'] as Map)
             : const {};
+        _availableServices =
+            (data['availableServiceCategories'] as List? ?? const [])
+                .map((value) => value.toString())
+                .where((value) => value.isNotEmpty)
+                .toList(growable: false);
       });
     } catch (_) {
       setState(() => _error = 'We couldn’t load Brand Assets. Try again.');
@@ -345,70 +353,175 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
       text: _brand['secondaryColor']?.toString() ?? '#10243E',
     );
     var preset = _brand['stylePreset']?.toString() ?? 'clean';
-    final save = await showDialog<bool>(
+    final approved = (_brand['approvedServiceCategories'] as List? ?? const [])
+        .map((value) => value.toString())
+        .where(_availableServices.contains)
+        .toSet();
+    String? serviceError;
+    final action = await showDialog<String>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setLocal) => AlertDialog(
           title: const Text('Brand settings'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: primary,
-                decoration: const InputDecoration(
-                  labelText: 'Primary color (#RRGGBB)',
-                ),
-              ),
-              TextField(
-                controller: secondary,
-                decoration: const InputDecoration(
-                  labelText: 'Secondary color (#RRGGBB)',
-                ),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: preset,
-                decoration: const InputDecoration(labelText: 'Style preset'),
-                items: const ['clean', 'bold', 'friendly', 'premium']
-                    .map(
-                      (value) => DropdownMenuItem(
-                        value: value,
-                        child: Text(
-                          value[0].toUpperCase() + value.substring(1),
-                        ),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: primary,
+                    decoration: const InputDecoration(
+                      labelText: 'Primary color (#RRGGBB)',
+                    ),
+                  ),
+                  TextField(
+                    controller: secondary,
+                    decoration: const InputDecoration(
+                      labelText: 'Secondary color (#RRGGBB)',
+                    ),
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: preset,
+                    decoration: const InputDecoration(
+                      labelText: 'Style preset',
+                    ),
+                    items: const ['clean', 'bold', 'friendly', 'premium']
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(
+                              value[0].toUpperCase() + value.substring(1),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setLocal(() => preset = value ?? 'clean'),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'ScaledCircle keeps text contrast readable when these colors are used in future customer-facing designs.',
+                  ),
+                  const Divider(height: 32),
+                  Text(
+                    'Services for visuals',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Choose the services ScaledCircle can use when creating marketing visuals.',
+                  ),
+                  const SizedBox(height: 12),
+                  if (_availableServices.isEmpty) ...[
+                    const Text(
+                      'Add the services your Business offers in your Growth Profile first.',
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(context, 'growth'),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Open Growth Profile'),
                       ),
-                    )
-                    .toList(),
-                onChanged: (value) => setLocal(() => preset = value ?? 'clean'),
+                    ),
+                  ] else
+                    Semantics(
+                      container: true,
+                      label:
+                          'Services for visuals. ${approved.length} selected.',
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _availableServices
+                            .map(
+                              (service) => FilterChip(
+                                label: Text(service),
+                                selected: approved.contains(service),
+                                onSelected: (selected) => setLocal(() {
+                                  serviceError = null;
+                                  if (selected && approved.length >= 12) {
+                                    serviceError =
+                                        'Choose no more than 12 services.';
+                                    return;
+                                  }
+                                  selected
+                                      ? approved.add(service)
+                                      : approved.remove(service);
+                                }),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  if (serviceError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      serviceError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Text('${approved.length} of 12 selected'),
+                ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'ScaledCircle keeps text contrast readable when these colors are used in future customer-facing designs.',
-              ),
-            ],
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: serviceError == null
+                  ? () => Navigator.pop(context, 'save')
+                  : null,
               child: const Text('Save settings'),
             ),
           ],
         ),
       ),
     );
-    if (save != true) return;
+    if (action == 'growth') {
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => const ManagedGrowthScreen()),
+      );
+      await Future.wait([_load(reset: true), _loadGeneration()]);
+      if (mounted) await _brandSettings();
+      return;
+    }
+    if (action != 'save') return;
+    setState(() {
+      _savingBrand = true;
+      _error = null;
+    });
     try {
       await _service.updateBrand(
         primaryColor: primary.text,
         secondaryColor: secondary.text,
         stylePreset: preset,
+        approvedServiceCategories: approved.toList(growable: false),
       );
-      await _load(reset: true);
+      await Future.wait([_load(reset: true), _loadGeneration()]);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Brand settings saved.')));
+      }
     } catch (_) {
-      setState(() => _error = 'Use colors in #RRGGBB format and try again.');
+      if (mounted) {
+        setState(
+          () => _error =
+              'We couldn’t save Brand Settings. Check your colors and service choices, then try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingBrand = false);
     }
   }
 
@@ -422,7 +535,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
         actions: compact
             ? [
                 IconButton(
-                  onPressed: _brandSettings,
+                  onPressed: _savingBrand ? null : _brandSettings,
                   tooltip: 'Brand settings',
                   icon: const Icon(Icons.palette_outlined),
                 ),
@@ -434,7 +547,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
               ]
             : [
                 TextButton.icon(
-                  onPressed: _brandSettings,
+                  onPressed: _savingBrand ? null : _brandSettings,
                   icon: const Icon(Icons.palette_outlined),
                   label: const Text('Brand settings'),
                 ),
@@ -464,6 +577,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 generation: _generation,
                 busy: _generating,
                 onCreate: () => _createGenerated(),
+                onChooseServices: _brandSettings,
                 onApprove: (jobId) async {
                   await _generationService.approveGeneration(jobId);
                   await Future.wait([_loadGeneration(), _load(reset: true)]);
@@ -479,6 +593,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 generation: _generation,
                 busy: _generating,
                 onCreate: () => _createGenerated(),
+                onChooseServices: _brandSettings,
                 onApprove: (jobId) async {
                   await _generationService.approveGeneration(jobId);
                   await Future.wait([_loadGeneration(), _load(reset: true)]);
@@ -494,6 +609,13 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: LinearProgressIndicator(
                   semanticsLabel: 'Uploading and processing image',
+                ),
+              ),
+            if (_savingBrand)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: LinearProgressIndicator(
+                  semanticsLabel: 'Saving Brand settings',
                 ),
               ),
             if (_error != null)
@@ -601,6 +723,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
     required this.generation,
     required this.busy,
     required this.onCreate,
+    required this.onChooseServices,
     required this.onApprove,
     required this.onReject,
     required this.onTryAnother,
@@ -608,6 +731,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
   final Map<String, dynamic> generation;
   final bool busy;
   final VoidCallback onCreate;
+  final VoidCallback onChooseServices;
   final Future<void> Function(String jobId) onApprove;
   final Future<void> Function(String jobId) onReject;
   final Future<void> Function(String jobId) onTryAnother;
@@ -625,6 +749,11 @@ class _GeneratedVisualPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final approvedServices =
+        (generation['approvedServiceCategories'] as List? ?? const [])
+            .map((value) => value.toString())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false);
     final jobs = (generation['jobs'] as List? ?? const [])
         .whereType<Map>()
         .map((job) => Map<String, dynamic>.from(job))
@@ -644,11 +773,22 @@ class _GeneratedVisualPanel extends StatelessWidget {
               'Create a generic service concept, review the exact image, and approve it before use. Test and local activity stays separate from customer media.',
             ),
             const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: busy ? null : onCreate,
-              icon: const Icon(Icons.auto_awesome_outlined),
-              label: Text(busy ? 'Creating visual' : 'Create service visual'),
-            ),
+            if (approvedServices.isEmpty) ...[
+              const Text(
+                'Choose at least one service before creating a visual.',
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: busy ? null : onChooseServices,
+                icon: const Icon(Icons.checklist_outlined),
+                label: const Text('Choose services'),
+              ),
+            ] else
+              FilledButton.icon(
+                onPressed: busy ? null : onCreate,
+                icon: const Icon(Icons.auto_awesome_outlined),
+                label: Text(busy ? 'Creating visual' : 'Create service visual'),
+              ),
             if (busy)
               const LinearProgressIndicator(
                 semanticsLabel: 'Creating service concept visual',

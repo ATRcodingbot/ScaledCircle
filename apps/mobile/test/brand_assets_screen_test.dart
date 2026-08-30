@@ -7,7 +7,8 @@ import 'package:flutter_app/services/business_media_service.dart';
 
 class _FakeMedia implements BusinessMediaGateway {
   _FakeMedia(this.result);
-  final Map<String, dynamic> result;
+  Map<String, dynamic> result;
+  var brandUpdates = 0;
   @override
   Future<Map<String, dynamic>> workspace({String? cursor}) async => result;
   @override
@@ -25,7 +26,21 @@ class _FakeMedia implements BusinessMediaGateway {
     required String primaryColor,
     required String secondaryColor,
     required String stylePreset,
-  }) async {}
+    required List<String> approvedServiceCategories,
+  }) async {
+    brandUpdates++;
+    result = {
+      ...result,
+      'brandProfile': {
+        ...(result['brandProfile'] as Map? ?? const {}),
+        'primaryColor': primaryColor,
+        'secondaryColor': secondaryColor,
+        'stylePreset': stylePreset,
+        'approvedServiceCategories': approvedServiceCategories,
+      },
+    };
+  }
+
   @override
   Future<void> saveReviewMetadata({
     required String assetId,
@@ -197,5 +212,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Create visuals for me'), findsNothing);
     expect(find.text('Create service visual'), findsNothing);
+  });
+
+  testWidgets('zero services provides a useful choose-services action', (
+    tester,
+  ) async {
+    final media = _FakeMedia({
+      'assets': <dynamic>[],
+      'hasMore': false,
+      'availableServiceCategories': ['Decks'],
+      'brandProfile': <String, dynamic>{},
+    });
+    await tester.pumpWidget(
+      _screen(
+        media,
+        generation: _FakeGeneration({
+          'capability': 'enabled',
+          'approvedServiceCategories': <dynamic>[],
+          'jobs': <dynamic>[],
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Choose at least one service before creating a visual.'),
+      findsOneWidget,
+    );
+    expect(find.text('Choose services'), findsOneWidget);
+    expect(find.text('Create service visual'), findsNothing);
+  });
+
+  testWidgets('Business selects, saves, and reloads visual services', (
+    tester,
+  ) async {
+    final media = _FakeMedia({
+      'assets': <dynamic>[],
+      'hasMore': false,
+      'availableServiceCategories': ['Decks', 'Kitchen remodeling'],
+      'brandProfile': {
+        'primaryColor': '#176FD1',
+        'secondaryColor': '#10243E',
+        'stylePreset': 'clean',
+        'approvedServiceCategories': <String>[],
+      },
+    });
+    await tester.pumpWidget(_screen(media));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Brand settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Services for visuals'), findsOneWidget);
+    await tester.tap(find.text('Decks'));
+    await tester.tap(find.text('Kitchen remodeling'));
+    await tester.tap(find.text('Save settings'));
+    await tester.pumpAndSettle();
+    expect(media.brandUpdates, 1);
+    expect((media.result['brandProfile'] as Map)['approvedServiceCategories'], [
+      'Decks',
+      'Kitchen remodeling',
+    ]);
+    expect(find.text('Brand settings saved.'), findsOneWidget);
+
+    await tester.tap(find.text('Brand settings'));
+    await tester.pumpAndSettle();
+    final chips = tester.widgetList<FilterChip>(find.byType(FilterChip));
+    expect(chips.where((chip) => chip.selected), hasLength(2));
   });
 }

@@ -10814,8 +10814,14 @@ function creativeMediaError(error) {
     media_upload_incomplete: "The upload has not finished yet."
   }[code]);
   if (["invalid_request_id", "invalid_media_purpose", "invalid_media_cursor",
-  "invalid_brand_color", "invalid_brand_style"].includes(code)) {
+  "invalid_brand_color", "invalid_brand_style", "invalid_brand_service"].includes(code)) {
     return new HttpsError("invalid-argument", "Check the Brand Asset details and try again.");
+  }
+  if (code === "brand_service_limit_reached") {
+    return new HttpsError("resource-exhausted", "Choose no more than 12 services for visuals.");
+  }
+  if (code === "brand_service_not_offered") {
+    return new HttpsError("failed-precondition", "Choose services saved in your Business Growth Profile.");
   }
   if (["media_file_unsuitable", "media_processing_failed"].includes(code)) {
     return new HttpsError("failed-precondition", code === "media_file_unsuitable" ?

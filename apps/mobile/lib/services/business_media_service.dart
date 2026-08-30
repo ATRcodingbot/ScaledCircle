@@ -26,6 +26,7 @@ abstract interface class BusinessMediaGateway {
     required String primaryColor,
     required String secondaryColor,
     required String stylePreset,
+    required List<String> approvedServiceCategories,
   });
   Future<Uint8List?> previewBytes(Map<String, dynamic> asset);
 }
@@ -127,10 +128,12 @@ class BusinessMediaService
     required String primaryColor,
     required String secondaryColor,
     required String stylePreset,
+    required List<String> approvedServiceCategories,
   }) => _functions.httpsCallable('updateBusinessBrandProfile').call({
     'primaryColor': primaryColor,
     'secondaryColor': secondaryColor,
     'stylePreset': stylePreset,
+    'approvedServiceCategories': approvedServiceCategories,
   });
 
   @override
