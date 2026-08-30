@@ -3,6 +3,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const generation = require("./generation_foundation");
+const authorized = async () => ({authorized: true, qaAllowlistEnabled: true,
+  founderOnlyMode: true, authorizedBusinessCount: 1, configurationValid: true});
 
 function memoryDb() {
   const docs = new Map(); let clock = 1_800_000_000_000;
@@ -54,6 +56,19 @@ test("generated constants preserve immutable origin disclosure and conservative 
   assert.equal(generation.MAX_REQUESTS_PER_DAY, 8);
 });
 
+test("Founder QA allowlist is bounded, normalized, and fail-closed", () => {
+  assert.deepEqual(generation.normalizeAuthorizedBusinessUids([" business-a ", "business-a", "business-b"]),
+    ["business-a", "business-b"]);
+  assert.equal(generation.normalizeAuthorizedBusinessUids(undefined), null);
+  assert.equal(generation.normalizeAuthorizedBusinessUids("business-a"), null);
+  assert.equal(generation.normalizeAuthorizedBusinessUids(["business-a", null]), null);
+  assert.equal(generation.normalizeAuthorizedBusinessUids(Array(21).fill("business-a")), null);
+  assert.equal(generation.generationAuthorizationPolicy(undefined, "business-a").authorized, false);
+  assert.equal(generation.generationAuthorizationPolicy([], "business-a").authorized, false);
+  assert.equal(generation.generationAuthorizationPolicy(["business-a"], "business-a").authorized, true);
+  assert.equal(generation.generationAuthorizationPolicy(["business-a"], "business-b").authorized, false);
+});
+
 test("safe request accepts only approved services and bounded visual directions", () => {
   const result = generation.sanitizeRequest({requestId: "request_safe_123", serviceCategory: "Decks",
     visualDirection: "modern", requestedPurpose: "service_visual"}, ["Decks"]);
@@ -98,6 +113,7 @@ test("request retry, duplicate processing, approval, and Try another remain dist
     return {providerRequestReference: jobId, binary: Buffer.from("fixture"), moderation: {status: "passed"}, usage: {outputs: 1}}; }};
   const service = generation.createGenerationService({db: env, FieldValue: env.FieldValue,
     Timestamp: env.Timestamp, FieldPath: env.FieldPath, adapter, capability: async () => "test_only",
+    authorization: authorized,
     budgetEnabled: async () => true, approvedServices: async () => ["Decks"],
     ingestCandidate: async ({requestId}) => { ingests++; return {assetId: `asset_${requestId}`, revisionId: `revision_${requestId}`}; },
     approveCandidate: async () => { approvals++; }, now: () => 1_800_000_000_000});
@@ -121,6 +137,7 @@ test("capability, budget, tenant, and moderation boundaries fail closed", async 
       FieldPath: env.FieldPath, adapter: {id: "test", mode: "test", async generateServiceConcept() {
         return {binary: Buffer.from("x"), moderation: overrides.moderation || {status: "passed"}}; }},
       capability: async () => overrides.capability || "test_only",
+      authorization: authorized,
       budgetEnabled: async () => overrides.budget !== false, approvedServices: async () => ["Decks"],
       ingestCandidate: async () => ({assetId: "asset", revisionId: "revision"})})}; };
   const input = {requestId: "generation_request_003", serviceCategory: "Decks", visualDirection: "clean"};
@@ -143,7 +160,7 @@ test("daily and active request limits are enforced per tenant", async () => {
   const makeService = () => generation.createGenerationService({db: env, FieldValue: env.FieldValue,
     Timestamp: env.Timestamp, FieldPath: env.FieldPath,
     adapter: {id: "test", mode: "test", async generateServiceConcept() {}},
-    capability: async () => "test_only", budgetEnabled: async () => true,
+    capability: async () => "test_only", authorization: authorized, budgetEnabled: async () => true,
     approvedServices: async () => ["Decks"], ingestCandidate: async () => ({}), now: () => now});
   const service = makeService(); const actor = {uid: "limited-business"};
   for (let index = 0; index < 2; index++) await service.request({actor, input: {
@@ -201,6 +218,7 @@ test("pre-provider auth failures retain safe categories and operational evidence
   }};
   const service = generation.createGenerationService({db: env, FieldValue: env.FieldValue,
     Timestamp: env.Timestamp, FieldPath: env.FieldPath, adapter, capability: async () => "enabled",
+    authorization: authorized,
     budgetEnabled: async () => true, approvedServices: async () => ["Seasonal cleanup"],
     ingestCandidate: async () => ({}), reportOperationalFailure: (value) => evidence.push(value),
     budgetAuthority: {reserve: async ({jobId}) => ({jobId, status: "reserved"}),
@@ -215,4 +233,32 @@ test("pre-provider auth failures retain safe categories and operational evidence
     phase: "provider_or_ingestion", providerRequestReferencePresent: false}]);
   assert.deepEqual(transitions, [["released", job.jobId]]);
   assert.equal(JSON.stringify(evidence).includes("private provider detail"), false);
+});
+
+test("unauthorized request and Try another fail before reservation or provider dispatch", async () => {
+  const env = memoryDb(); let reservations = 0; let providerCalls = 0; let allow = true;
+  const service = generation.createGenerationService({db: env, FieldValue: env.FieldValue,
+    Timestamp: env.Timestamp, FieldPath: env.FieldPath,
+    authorization: async () => ({authorized: allow, qaAllowlistEnabled: true,
+      founderOnlyMode: true, authorizedBusinessCount: 1, configurationValid: true}),
+    capability: async () => "test_only", budgetEnabled: async () => true,
+    approvedServices: async () => ["Decks"],
+    adapter: {id: "test", mode: "test", async generateServiceConcept() { providerCalls++;
+      return {binary: Buffer.from("x"), moderation: {status: "passed"}}; }},
+    budgetAuthority: {reserve: async () => { reservations++; return {}; }},
+    ingestCandidate: async () => ({assetId: "asset", revisionId: "revision"})});
+  const actor = {uid: "business-a"};
+  const first = await service.request({actor, input: {requestId: "allowlisted_request_001",
+    serviceCategory: "Decks", visualDirection: "clean"}});
+  allow = false;
+  await assert.rejects(service.request({actor, input: {requestId: "try_another_request_002",
+    serviceCategory: "Decks", visualDirection: "clean"}}),
+  /business_not_authorized_for_provider_generation/);
+  await assert.rejects(service.process({actor, jobId: first.jobId}),
+    /business_not_authorized_for_provider_generation/);
+  assert.equal(reservations, 0);
+  assert.equal(providerCalls, 0);
+  assert.equal(env.docs.has(`visualGenerationJobs/${generation.stableId("visual_job", actor.uid,
+    "try_another_request_002")}`), false);
+  assert.equal(env.docs.get(`visualGenerationJobs/${first.jobId}`).status, "queued");
 });

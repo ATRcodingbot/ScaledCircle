@@ -171,6 +171,7 @@ assert.deepEqual(Object.keys(creativeMedia).sort(), [
   "rejectBusinessMediaRevision", "rejectGeneratedServiceVisual",
   "removeBusinessMediaAsset", "requestGeneratedServiceVisual",
   "updateBusinessBrandProfile", "updateBusinessMediaRevisionMetadata",
+  "updateGeneratedMediaSafetyConfiguration",
 ].sort());
 const canonicalEntitlements = fs.readFileSync(
   path.join(root, "functions", "subscription_entitlements.js"), "utf8");

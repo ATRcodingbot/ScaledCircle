@@ -244,6 +244,7 @@ void main() {
   ) async {
     final generation = _FakeGeneration({
       'capability': 'test_only',
+      'businessAuthorized': true,
       'budgetEnabled': true,
       'approvedServiceCategories': ['Decks'],
       'visualDirections': ['clean', 'premium'],
@@ -290,6 +291,29 @@ void main() {
     expect(find.text('Create service visual'), findsNothing);
   });
 
+  testWidgets('non-authorized Business has no generated visual dispatch path', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _screen(
+        _FakeMedia({'assets': <dynamic>[], 'hasMore': false}),
+        generation: _FakeGeneration({
+          'capability': 'enabled',
+          'businessAuthorized': false,
+          'approvedServiceCategories': ['Decks'],
+          'jobs': <dynamic>[],
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Create visuals for me'), findsNothing);
+    expect(find.text('Create service visual'), findsNothing);
+    expect(
+      find.text('Generated visuals aren’t available for this account yet.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('zero services provides a useful choose-services action', (
     tester,
   ) async {
@@ -304,6 +328,7 @@ void main() {
         media,
         generation: _FakeGeneration({
           'capability': 'enabled',
+          'businessAuthorized': true,
           'approvedServiceCategories': <dynamic>[],
           'jobs': <dynamic>[],
         }),

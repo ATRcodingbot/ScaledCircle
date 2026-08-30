@@ -463,3 +463,30 @@ test("visual generation jobs remain server-authoritative for every client role",
   await assertFails(environment.unauthenticatedContext().firestore()
     .doc("visualGenerationJobs/public").set({status: "queued"}));
 });
+
+test("provider generation configuration and QA allowlist remain server-only", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().doc("providerConfigurations/generated-service-visuals").set({
+      providerGenerationEnabled: false,
+      authorizedBusinessUids: ["business-one"],
+    });
+  });
+
+  const clients = [
+    environment.unauthenticatedContext().firestore(),
+    store("business-one"),
+    store("business-two"),
+    store("scaler-one"),
+    store("admin-one"),
+  ];
+  for (const db of clients) {
+    const ref = db.doc("providerConfigurations/generated-service-visuals");
+    await assertFails(ref.get());
+    await assertFails(ref.set({
+      providerGenerationEnabled: true,
+      authorizedBusinessUids: ["business-one"],
+    }));
+    await assertFails(ref.update({providerGenerationEnabled: true}));
+    await assertFails(ref.delete());
+  }
+});

@@ -117,3 +117,27 @@ Business UI could not dispatch request four.
 Staging quality gates: **Technically Correct PASS**, **Customer Ready PASS**, and
 **Renewal Grade provider gate PASS**. Production provider configuration, credentials, calls, and
 deployment remain absent and require a separate Founder enablement approval.
+
+## Founder QA Business allowlist
+
+Production-provider preparation adds a server-authoritative, fail-closed QA allowlist to the
+existing `providerConfigurations/generated-service-visuals` document. The bounded field is
+`authorizedBusinessUids` (maximum 20 unique Firebase Auth UIDs). Missing, null, malformed, or empty
+configuration authorizes nobody. The raw list remains server-only under the existing Firestore
+Rules denial; Business clients receive only their own derived `businessAuthorized` capability and
+Admin operations receive only validity, enabled state, Founder-only mode, and authorized count.
+
+The enforced order is authenticated active Business, provider configuration, QA authorization,
+provider capability, paid entitlement, approved service, daily/monthly/global budgets, reservation,
+then provider dispatch. Generation requests and Try another both re-check authorization before any
+reservation, WIF/client initialization, or provider call. Removing a Business blocks future work
+without rewriting historical jobs, usage, approved revisions, or immutable Landing Page versions;
+work already past provider acceptance continues to its canonical reconciliation outcome.
+
+`updateGeneratedMediaSafetyConfiguration` is the narrow Admin-only mutation authority for provider
+enabled/disabled state, the bounded QA allowlist, and bounded global request/cost ceilings. It does
+not accept provider/model/WIF fields, arbitrary configuration, subscription changes, or raw client
+authorization flags. The maintained Admin workflow selects existing internal generation-job
+evidence; the server resolves its owning Business and persists only the canonical UID projection.
+Neither the callable response nor the normal Admin UI exposes the raw UID list. Customer copy never
+mentions UIDs or Founder configuration.

@@ -121,6 +121,7 @@ const creativeMediaExports = new Set([
   "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
   "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
   "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
+  "updateGeneratedMediaSafetyConfiguration",
 ]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
@@ -226,7 +227,8 @@ function transformIndex(mode) {
       "creativeMedia", "creativeMediaService", "requireCreativeMediaBusiness",
       "creativeMediaError", "creativeMediaCall",
       "generationFoundation", "openAIImageAdapter", "generationBudget", "generationProjectId",
-      "generationIsLocal", "generationFixture", "generationProviderConfig", "generationBusinessBudget",
+      "generationIsLocal", "generationFixture", "generationProviderConfig", "generationAccessPolicy",
+      "generationBusinessBudget",
       "generationBudgetAuthority", "generationAdapter", "generationService", "generationHttpsError",
       "generationBusinessCall",
     ]);

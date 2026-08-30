@@ -7,6 +7,8 @@ Widget subject(
   AdminOperationsSnapshot snapshot, {
   GeneratedMediaWifPreflight? providerAuthPreflight,
   VoidCallback? onRunProviderAuthPreflight,
+  TextEditingController? founderQaJobController,
+  VoidCallback? onConfigureFounderQaAllowlist,
 }) => MaterialApp(
   home: Scaffold(
     body: AdminOperationsContent(
@@ -23,6 +25,8 @@ Widget subject(
       accountingReconciliation: null,
       accountingReconciliationRunning: false,
       onReconcileAccounting: () {},
+      founderQaJobController: founderQaJobController,
+      onConfigureFounderQaAllowlist: onConfigureFounderQaAllowlist,
       onOpenCampaign: (_) {},
     ),
   ),
@@ -44,6 +48,35 @@ const emptySnapshot = AdminOperationsSnapshot(
 );
 
 void main() {
+  testWidgets('Founder QA control resolves job evidence without raw UID UI', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var submitted = false;
+    await tester.pumpWidget(
+      subject(
+        emptySnapshot,
+        founderQaJobController: controller,
+        onConfigureFounderQaAllowlist: () => submitted = true,
+      ),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Founder QA generation access'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Founder QA generation access'), findsOneWidget);
+    expect(find.textContaining('Business UID is resolved server-side'), findsOneWidget);
+    expect(find.textContaining('authorizedBusinessUids'), findsNothing);
+    await tester.enterText(
+      find.byType(TextField),
+      'visual_job_351077bdc865932da9a46f03bccf42e21f8ea373',
+    );
+    await tester.tap(find.text('Restrict to this QA Business'));
+    expect(submitted, isTrue);
+  });
+
   testWidgets('Admin home presents the simple four-section command center', (
     tester,
   ) async {

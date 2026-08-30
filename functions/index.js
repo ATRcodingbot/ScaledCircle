@@ -121,6 +121,14 @@ async function generationProviderConfig() {
   const snapshot = await db.collection("providerConfigurations").doc("generated-service-visuals").get();
   return snapshot.exists ? snapshot.data() : {providerGenerationEnabled: false};
 }
+async function generationAccessPolicy(actor) {
+  if (generationIsLocal) {
+    return {authorized: true, qaAllowlistEnabled: true, founderOnlyMode: true,
+      authorizedBusinessCount: 1, configurationValid: true};
+  }
+  const config = await generationProviderConfig();
+  return generationFoundation.generationAuthorizationPolicy(config.authorizedBusinessUids, actor?.uid);
+}
 async function generationBusinessBudget(actor) {
   const [config, entitlementSnapshot] = await Promise.all([generationProviderConfig(),
     db.collection("businessSubscriptions").doc(actor.uid).get()]);
@@ -294,6 +302,7 @@ async function generationProviderAuthPreflight() {
 }
 const generationService = generationFoundation.createGenerationService({
   db, FieldValue, Timestamp, FieldPath, adapter: generationAdapter,
+  authorization: generationAccessPolicy,
   capability: async () => {
     if (generationIsLocal) return "test_only";
     const config = await generationProviderConfig();
@@ -10984,7 +10993,8 @@ function generationHttpsError(error) {
   if (["generation_access_denied", "generation_job_not_found"].includes(code)) {
     return new HttpsError("permission-denied", "That generated visual is not available.");
   }
-  if (["generation_disabled", "provider_unavailable", "budget_disabled", "test_adapter_forbidden"].includes(code)) {
+  if (["generation_disabled", "provider_unavailable", "budget_disabled", "test_adapter_forbidden",
+    "business_not_authorized_for_provider_generation"].includes(code)) {
     return new HttpsError("failed-precondition", "Generated visuals are temporarily unavailable.");
   }
   if (code === "generation_rate_limited") {
@@ -11036,6 +11046,82 @@ exports.getGeneratedMediaOperations = onCall(
       const result = await generationService.operations({actor: context, input});
       return {...result, accountingReconciliation: reconciliation}; }
     catch (error) { throw generationHttpsError(error); }
+  },
+);
+exports.updateGeneratedMediaSafetyConfiguration = onCall(
+  {region: "us-east1", enforceAppCheck: false, maxInstances: 2},
+  async (request) => {
+    const context = await authenticatedUserContext(request, "Admin access is required.");
+    if (context.isAdmin !== true) throw new HttpsError("permission-denied", "Admin access is required.");
+    const input = request.data || {}; const patch = {};
+    const allowedFields = new Set(["providerGenerationEnabled", "authorizedBusinessUids",
+      "authorizedBusinessJobIds", "globalDailyMaximum", "globalMonthlyMaximum",
+      "globalDailyCostMicros", "globalMonthlyCostMicros"]);
+    if (Object.keys(input).some((field) => !allowedFields.has(field))) {
+      throw new HttpsError("invalid-argument", "Choose only supported generated-media safety settings.");
+    }
+    if (Object.hasOwn(input, "providerGenerationEnabled")) {
+      if (typeof input.providerGenerationEnabled !== "boolean") {
+        throw new HttpsError("invalid-argument", "Choose a valid provider capability state.");
+      }
+      patch.providerGenerationEnabled = input.providerGenerationEnabled;
+    }
+    if (Object.hasOwn(input, "authorizedBusinessUids")) {
+      if (Object.hasOwn(input, "authorizedBusinessJobIds")) {
+        throw new HttpsError("invalid-argument", "Choose one QA Business selection method.");
+      }
+      const normalized = generationFoundation.normalizeAuthorizedBusinessUids(input.authorizedBusinessUids);
+      if (normalized === null) throw new HttpsError("invalid-argument", "Choose a valid bounded QA Business list.");
+      patch.authorizedBusinessUids = normalized;
+    }
+    if (Object.hasOwn(input, "authorizedBusinessJobIds")) {
+      const values = input.authorizedBusinessJobIds;
+      if (!Array.isArray(values) || values.length === 0 ||
+          values.length > generationFoundation.MAX_AUTHORIZED_BUSINESSES ||
+          values.some((value) => typeof value !== "string" ||
+            !/^visual_job_[a-f0-9]{40}$/.test(value.trim()))) {
+        throw new HttpsError("invalid-argument", "Choose valid bounded generated-media job evidence.");
+      }
+      const jobSnapshots = await Promise.all([...new Set(values.map((value) => value.trim()))]
+        .map((jobId) => db.collection("visualGenerationJobs").doc(jobId).get()));
+      if (jobSnapshots.some((snapshot) => !snapshot.exists ||
+          typeof snapshot.data()?.businessUid !== "string")) {
+        throw new HttpsError("not-found", "The selected generated-media job evidence was not found.");
+      }
+      const normalized = generationFoundation.normalizeAuthorizedBusinessUids(
+        jobSnapshots.map((snapshot) => snapshot.data().businessUid),
+      );
+      if (normalized === null || normalized.length === 0) {
+        throw new HttpsError("invalid-argument", "Choose valid generated-media job evidence.");
+      }
+      patch.authorizedBusinessUids = normalized;
+    }
+    const boundedIntegers = {
+      globalDailyMaximum: [0, 1000], globalMonthlyMaximum: [0, 10000],
+      globalDailyCostMicros: [0, 100000000], globalMonthlyCostMicros: [0, 1000000000],
+    };
+    for (const [field, [minimum, maximum]] of Object.entries(boundedIntegers)) {
+      if (!Object.hasOwn(input, field)) continue;
+      const value = input[field];
+      if (!Number.isInteger(value) || value < minimum || value > maximum) {
+        throw new HttpsError("invalid-argument", "Choose valid bounded provider safety limits.");
+      }
+      patch[field] = value;
+    }
+    if (Object.keys(patch).length === 0) {
+      throw new HttpsError("invalid-argument", "Choose at least one generated-media safety setting.");
+    }
+    await db.collection("providerConfigurations").doc("generated-service-visuals").set({
+      ...patch, safetyConfigurationUpdatedAt: FieldValue.serverTimestamp(),
+      safetyConfigurationUpdatedBy: context.uid,
+    }, {merge: true});
+    const updated = await generationProviderConfig();
+    const policy = generationFoundation.generationAuthorizationPolicy(updated.authorizedBusinessUids, null);
+    return {providerGenerationEnabled: updated.providerGenerationEnabled === true,
+      qaAllowlistEnabled: policy.qaAllowlistEnabled,
+      founderOnlyMode: policy.founderOnlyMode,
+      authorizedBusinessCount: policy.authorizedBusinessCount,
+      configurationValid: policy.configurationValid};
   },
 );
 

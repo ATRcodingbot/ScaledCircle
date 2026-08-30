@@ -611,7 +611,8 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
               'Keep reusable Business images here. You can still use ScaledCircle without uploading photos.',
             ),
             const SizedBox(height: 18),
-            if (_generation['capability'] == 'test_only')
+            if (_generation['businessAuthorized'] == true &&
+                _generation['capability'] == 'test_only')
               _GeneratedVisualPanel(
                 generation: _generation,
                 busy: _generating,
@@ -627,7 +628,8 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 },
                 onTryAnother: (jobId) => _createGenerated(priorJobId: jobId),
               )
-            else if (_generation['capability'] == 'enabled')
+            else if (_generation['businessAuthorized'] == true &&
+                _generation['capability'] == 'enabled')
               _GeneratedVisualPanel(
                 generation: _generation,
                 busy: _generating,
@@ -642,6 +644,18 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                   await _loadGeneration();
                 },
                 onTryAnother: (jobId) => _createGenerated(priorJobId: jobId),
+              ),
+            if (_generation['businessAuthorized'] == true &&
+                _generation['capability'] == 'disabled')
+              const _GeneratedVisualUnavailableCard(
+                message:
+                    'Generated visuals are temporarily unavailable. Your existing images are unchanged.',
+              )
+            else if (_generation['businessAuthorized'] != true &&
+                _generation['capability'] != 'disabled')
+              const _GeneratedVisualUnavailableCard(
+                message:
+                    'Generated visuals aren’t available for this account yet.',
               ),
             if (_uploading)
               const Padding(
@@ -755,6 +769,20 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
       ),
     );
   }
+}
+
+class _GeneratedVisualUnavailableCard extends StatelessWidget {
+  const _GeneratedVisualUnavailableCard({required this.message});
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      leading: const Icon(Icons.auto_awesome_outlined),
+      title: const Text('Generated service visuals'),
+      subtitle: Text(message),
+    ),
+  );
 }
 
 class _GeneratedVisualPanel extends StatelessWidget {

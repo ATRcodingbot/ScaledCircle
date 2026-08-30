@@ -7,6 +7,7 @@ const DISCLOSURE = "Service concept image — not a photo of this Business's com
 const PAGE_SIZE = 20;
 const MAX_ACTIVE_JOBS = 2;
 const MAX_REQUESTS_PER_DAY = 8;
+const MAX_AUTHORIZED_BUSINESSES = 20;
 const CAPABILITIES = new Set(["disabled", "test_only", "enabled"]);
 const DIRECTIONS = new Set(["clean", "friendly", "premium", "practical", "modern"]);
 const PURPOSES = new Set(["service_visual", "hero"]);
@@ -17,6 +18,30 @@ const FAILURE_CATEGORIES = new Set(["provider_unavailable", "rate_limited", "bud
   "wif_config_missing", "google_metadata_unavailable", "google_subject_token_invalid",
   "google_claim_mismatch", "openai_wif_exchange_failed", "openai_auth_rejected",
   "provider_client_initialization_failed"]);
+
+function normalizeAuthorizedBusinessUids(value) {
+  if (!Array.isArray(value) || value.length > MAX_AUTHORIZED_BUSINESSES) return null;
+  const result = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") return null;
+    const uid = entry.trim();
+    if (uid.length < 1 || uid.length > 128 || /\s|[\u0000-\u001F\u007F]/.test(uid)) return null;
+    if (!result.includes(uid)) result.push(uid);
+  }
+  return result;
+}
+function generationAuthorizationPolicy(value, businessUid) {
+  const normalized = normalizeAuthorizedBusinessUids(value);
+  const valid = normalized !== null;
+  const authorizedBusinessCount = valid ? normalized.length : 0;
+  return Object.freeze({
+    authorized: valid && normalized.includes(String(businessUid || "")),
+    qaAllowlistEnabled: valid && authorizedBusinessCount > 0,
+    founderOnlyMode: true,
+    authorizedBusinessCount,
+    configurationValid: valid,
+  });
+}
 
 function clean(value, maximum = 160) {
   return value == null ? "" : String(value).trim().replace(/\s+/g, " ").slice(0, maximum);
@@ -94,12 +119,15 @@ function deterministicTestAdapter({fixture, moderation = {status: "passed"}, env
 
 function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter = null,
   capability = async () => "disabled", budgetEnabled = async () => false,
+  authorization = async () => generationAuthorizationPolicy(undefined, null),
   budgetAuthority = null,
   approvedServices = async () => [], brandProfile = async () => ({}), ingestCandidate,
   approveCandidate = async () => {}, rejectCandidate = async () => {}, providerAuthPreflight = null,
   reportOperationalFailure = () => {}, now = () => Date.now()}) {
   const jobs = () => db.collection("visualGenerationJobs");
   async function gate(actor) {
+    const access = await authorization(actor);
+    if (access?.authorized !== true) throw new Error("business_not_authorized_for_provider_generation");
     const mode = normalizeCapability(await capability(actor));
     if (mode === "disabled") throw new Error("generation_disabled");
     if (!(await budgetEnabled(actor))) throw new Error("budget_disabled");
@@ -236,7 +264,9 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       candidateRevisionId: d.candidateRevisionId, failureCategory: d.failureCategory || null,
       moderationStatus: d.moderation?.status || null, createdAt: millis(d.createdAt), updatedAt: millis(d.updatedAt)}; });
     const last = docs.at(-1); const hasMore = snap.size > PAGE_SIZE;
+    const access = await authorization(actor);
     return {schemaVersion: SCHEMA_VERSION, capability: normalizeCapability(await capability(actor)),
+      businessAuthorized: access?.authorized === true,
       budgetEnabled: await budgetEnabled(actor), approvedServiceCategories: (await approvedServices(actor)).slice(0, 12),
       visualDirections: [...DIRECTIONS], disclosure: DISCLOSURE, jobs: safe, hasMore,
       nextCursor: hasMore && last ? encodeCursor(millis(last.data().createdAt), last.id) : null,
@@ -270,6 +300,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
         {metadataToken: "FAIL", claimsMatch: "FAIL", openAIExchange: "FAIL",
           failureCategory: "provider_client_initialization_failed", claims: null};
     }
+    const access = await authorization(actor);
     return {schemaVersion: SCHEMA_VERSION, capability: normalizeCapability(await capability(actor)),
       budgetEnabled: await budgetEnabled(actor), sampleBound: 100, counts, failures, stuckJobs,
       averageCompletionLatencyMs: completed ? Math.round(latencyTotal / completed) : null,
@@ -277,13 +308,19 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       providerOperations: {configuredProvider: adapter?.id || null, providerRequestCount,
         configuredModel: adapter?.defaultModel || null,
         configuredModelSnapshot: adapter?.defaultModelSnapshot || null, reservationCounts,
-        estimatedCostMicros, actualCostMicros}, providerAuthPreflight: providerAuth};
+        estimatedCostMicros, actualCostMicros},
+      providerAccess: {qaAllowlistEnabled: access?.qaAllowlistEnabled === true,
+        founderOnlyMode: access?.founderOnlyMode !== false,
+        authorizedBusinessCount: Number(access?.authorizedBusinessCount || 0),
+        configurationValid: access?.configurationValid === true},
+      providerAuthPreflight: providerAuth};
   }
   return {request, process, approve: (args) => review({...args, approve: true}),
     reject: (args) => review({...args, approve: false}), list, operations};
 }
 
 module.exports = {SCHEMA_VERSION, DISCLOSURE, PAGE_SIZE, MAX_ACTIVE_JOBS, MAX_REQUESTS_PER_DAY,
+  MAX_AUTHORIZED_BUSINESSES, normalizeAuthorizedBusinessUids, generationAuthorizationPolicy,
   DIRECTIONS, FAILURE_CATEGORIES, stableId, normalizeCapability, assertTestAdapterEnvironment,
   sanitizeRequest, safeBrief, normalizeModeration, encodeCursor, decodeCursor,
   deterministicTestAdapter, createGenerationService};

@@ -327,7 +327,8 @@ test("creative-media-core exclusively owns private Business media processing", (
     "removeBusinessMediaAsset", "updateBusinessBrandProfile",
     "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
     "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
-    "rejectGeneratedServiceVisual", "getGeneratedMediaOperations"];
+    "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
+    "updateGeneratedMediaSafetyConfiguration"];
   assert.deepEqual(exportsIn(creativeMediaCore).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));

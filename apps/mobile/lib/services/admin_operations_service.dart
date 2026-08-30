@@ -48,6 +48,18 @@ class AdminOperationsService {
     final data = Map<String, dynamic>.from(result.data);
     return _map(data['accountingReconciliation']);
   }
+
+  Future<Map<String, dynamic>> restrictGeneratedMediaToFounderQaBusiness(
+    String generationJobId,
+  ) async {
+    final result = await _functions
+        .httpsCallable('updateGeneratedMediaSafetyConfiguration')
+        .call<Map<Object?, Object?>>({
+          'providerGenerationEnabled': false,
+          'authorizedBusinessJobIds': [generationJobId.trim()],
+        });
+    return Map<String, dynamic>.from(result.data);
+  }
 }
 
 Map<String, dynamic> _map(Object? value) =>

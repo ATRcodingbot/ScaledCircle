@@ -28,7 +28,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _providerAuthPreflightRunning = false;
   Map<String, dynamic>? _accountingReconciliation;
   bool _accountingReconciliationRunning = false;
+  final TextEditingController _founderQaJobController = TextEditingController();
+  bool _founderQaAllowlistUpdating = false;
   void _refresh() => setState(() => _overview = _service.loadOverview());
+
+  @override
+  void dispose() {
+    _founderQaJobController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => AdminRoleGate(
@@ -81,6 +89,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             accountingReconciliation: _accountingReconciliation,
             accountingReconciliationRunning: _accountingReconciliationRunning,
             onReconcileAccounting: _reconcileAccounting,
+            founderQaJobController: _founderQaJobController,
+            founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
+            onConfigureFounderQaAllowlist: _configureFounderQaAllowlist,
             onOpenCampaign: (campaignId) => _push(
               AdminCampaignTimelineScreen(
                 campaignId: campaignId,
@@ -138,6 +149,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     } finally {
       if (mounted) setState(() => _accountingReconciliationRunning = false);
+    }
+  }
+
+  Future<void> _configureFounderQaAllowlist() async {
+    if (_founderQaAllowlistUpdating) return;
+    final jobId = _founderQaJobController.text.trim();
+    if (!RegExp(r'^visual_job_[a-f0-9]{40}$').hasMatch(jobId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter valid generated-media job evidence.')),
+      );
+      return;
+    }
+    setState(() => _founderQaAllowlistUpdating = true);
+    try {
+      final result = await _service.restrictGeneratedMediaToFounderQaBusiness(jobId);
+      if (!mounted) return;
+      final count = (result['authorizedBusinessCount'] as num?)?.toInt() ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count == 1 && result['providerGenerationEnabled'] != true
+                ? 'Founder QA access is restricted to one Business. Generation remains disabled.'
+                : 'Generated-media access could not be verified safely.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Founder QA access update failed safely.')),
+      );
+    } finally {
+      if (mounted) setState(() => _founderQaAllowlistUpdating = false);
     }
   }
 
@@ -242,6 +286,9 @@ class AdminOperationsContent extends StatelessWidget {
     required this.accountingReconciliationRunning,
     required this.onReconcileAccounting,
     required this.onOpenCampaign,
+    this.founderQaJobController,
+    this.founderQaAllowlistUpdating = false,
+    this.onConfigureFounderQaAllowlist,
     super.key,
   });
   final AdminOperationsSnapshot snapshot;
@@ -257,6 +304,9 @@ class AdminOperationsContent extends StatelessWidget {
   final Map<String, dynamic>? accountingReconciliation;
   final bool accountingReconciliationRunning;
   final VoidCallback onReconcileAccounting;
+  final TextEditingController? founderQaJobController;
+  final bool founderQaAllowlistUpdating;
+  final VoidCallback? onConfigureFounderQaAllowlist;
   final ValueChanged<String> onOpenCampaign;
 
   @override
@@ -433,6 +483,47 @@ class AdminOperationsContent extends StatelessWidget {
                   ),
                 ),
               ),
+              if (founderQaJobController != null &&
+                  onConfigureFounderQaAllowlist != null) ...[
+                const Divider(height: 28),
+                Text(
+                  'Founder QA generation access',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Select an existing internal QA generation job. Its Business becomes the only account authorized for future provider requests; generation stays disabled.',
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: founderQaJobController,
+                  enabled: !founderQaAllowlistUpdating,
+                  decoration: const InputDecoration(
+                    labelText: 'Internal QA generation job ID',
+                    helperText: 'The Business UID is resolved server-side and is not displayed.',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.tonalIcon(
+                    onPressed: founderQaAllowlistUpdating
+                        ? null
+                        : onConfigureFounderQaAllowlist,
+                    icon: founderQaAllowlistUpdating
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.lock_person_outlined),
+                    label: Text(
+                      founderQaAllowlistUpdating
+                          ? 'Restricting access…'
+                          : 'Restrict to this QA Business',
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
