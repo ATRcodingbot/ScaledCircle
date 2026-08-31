@@ -113,3 +113,42 @@ mode; configure the first-five cohort and 50-call/$10 daily plus $100 monthly bu
 OpenAI project hard ceiling to $100/month only with explicit approval; verify zero-call capability
 responses; then explicitly enable `beta_cohort`. Production provider activation, cohort membership,
 plan allowances, OpenAI account limits, and any real generation remain outside this candidate.
+
+## Founder-only production safety remediation
+
+Production verification completed on 2026-08-31 from application candidate
+`26bdffbb6245c8740d6e233ab27ab07527096ccf`. The prior Admin Founder-only action restored only
+the rollout mode and provider kill switch; it could not also clear an inactive stored Beta cohort
+and apply the approved commercial safety ceilings without selecting Beta-cohort mode. The narrow
+client remediation extended that maintained Admin/server-authoritative action to submit the complete
+safe Founder-only configuration in one operation. No direct Firestore write or backend authority
+change was introduced.
+
+The verified production configuration is:
+
+- `providerGenerationEnabled=false`
+- `rolloutMode=founder_only`
+- empty `betaCohortBusinessUids`
+- `betaCohortStage=initial_5`
+- `globalDailyMaximum=50`
+- `globalMonthlyMaximum=300`
+- `globalDailyCostMicros=10000000` ($10)
+- `globalMonthlyCostMicros=100000000` ($100)
+
+Commercial budget configuration does not grant access: Beta-cohort and plan-entitled modes remain
+inactive, and paid-plan entitlement alone cannot dispatch generation. The Founder allowlist remains
+the only account-level path in Founder-only mode, while the provider kill switch remains off.
+
+The Hosting-only production release is version `15f3b90b41805f89`, release
+`1788191615115000`, with live `main.dart.js` SHA-256
+`94B98656B0F1FDAAD82A395BE7206FFDAD9D3DED54CA295519E71C45926E0305`. Desktop and 390×844
+Admin verification showed Founder Only, provider disabled, cohort 0/5, 50 daily calls, 300 monthly
+calls, $10 daily cost, $100 monthly cost, and zero outstanding reservations. Founder Business
+verification preserved existing Brand Assets, generated media, and Landing Pages while generation
+remained unavailable.
+
+This remediation added zero generation jobs, reservations, provider image or moderation calls, and
+provider spend. The historical three generated jobs and their settled accounting remain unchanged.
+Functions, Firestore Rules, Storage Rules, indexes, IAM, and secrets were not deployed or changed.
+Private Beta activation, commercial enrollment, provider enablement, and any OpenAI project-limit
+increase remain separate approval boundaries.
