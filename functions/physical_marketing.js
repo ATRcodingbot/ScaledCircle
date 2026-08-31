@@ -11,12 +11,47 @@ const {
 
 const SCHEMA_VERSION = "PhysicalMarketingExecutionV1";
 const PRICING_POLICY_VERSION = "PhysicalFulfillmentPricingV1";
+const TEMPLATE_SCHEMA_VERSION = "PhysicalMarketingTemplateV1";
+const MARKETING_READINESS_VERSION = "PhysicalMarketingReadinessV1";
 const MAX_WORKSPACE_ITEMS = 50;
 const MAX_ADMIN_ITEMS = 100;
 const MIN_EFFECTIVE_DPI = 300;
 const PDF_X_VERSION = "PDF/X-4";
 const FONT_REGULAR = require.resolve("@fontsource/roboto/files/roboto-latin-400-normal.woff");
 const FONT_BOLD = require.resolve("@fontsource/roboto/files/roboto-latin-700-normal.woff");
+
+const TEMPLATE_SPECS = Object.freeze({
+  door_hanger_service_hero_v1: Object.freeze({
+    templateId: "door_hanger_service_hero_v1", version: 1, label: "Service Hero",
+    purpose: "Visual-first service marketing", productType: "door_hanger",
+    requiresMedia: true, requiresOffer: false, mediaOptional: false,
+  }),
+  door_hanger_offer_action_v1: Object.freeze({
+    templateId: "door_hanger_offer_action_v1", version: 1, label: "Offer / Action",
+    purpose: "A Business-authorized offer with a strong next step", productType: "door_hanger",
+    requiresMedia: true, requiresOffer: true, mediaOptional: false,
+  }),
+  door_hanger_professional_services_v1: Object.freeze({
+    templateId: "door_hanger_professional_services_v1", version: 1,
+    label: "Professional Services", purpose: "Business identity and bounded service context",
+    productType: "door_hanger", requiresMedia: false, requiresOffer: false, mediaOptional: true,
+  }),
+});
+
+const PLACEHOLDER_PATTERNS = Object.freeze([
+  /\b(?:lorem\s+ipsum|test\s+business|sample\s+company|dummy\s+cta|fixture)\b/i,
+  /\b(?:example\.(?:com|org|net)|placeholder(?:@|\s|$))\b/i,
+  /\b(?:555[\s)./-]*01\d\d|\(?555\)?[\s.-]*\d{3}[\s.-]*\d{4})\b/i,
+  /\b(?:test|sample|dummy)\s+(?:phone|email|address|service|offer|headline)\b/i,
+]);
+
+const UNSUPPORTED_CLAIM_PATTERNS = Object.freeze([
+  /(?:^|\W)#\s*1(?:\W|$)/i,
+  /\b(?:best|guaranteed?|award[- ]winning|five[- ]star|5[- ]star|free estimates?|insured)\b/i,
+  /\b(?:licensed|certified)\b/i,
+  /\b\d+\s+years?(?:\s+of)?\s+experience\b/i,
+  /\b\d+\s*%\s*off\b/i,
+]);
 
 const PRODUCT_SPECS = Object.freeze({
   door_hanger_3_5x8_5: Object.freeze({
@@ -108,6 +143,57 @@ function validHexColor(value, fallback) {
   return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : fallback;
 }
 
+function templateSpec(templateId, productType = "door_hanger") {
+  if (productType !== "door_hanger") return {templateId: "physical_generic_v1", version: 1,
+    label: "Professional print", purpose: "Provider-neutral print layout", productType,
+    requiresMedia: false, requiresOffer: false, mediaOptional: true,
+    schemaVersion: TEMPLATE_SCHEMA_VERSION};
+  const id = text(templateId, 100) || "door_hanger_service_hero_v1";
+  const spec = TEMPLATE_SPECS[id];
+  if (!spec || spec.productType !== productType) throw new Error("physical_template_unsupported");
+  return {...spec, schemaVersion: TEMPLATE_SCHEMA_VERSION};
+}
+
+function publicTemplateSpecs() {
+  return Object.values(TEMPLATE_SPECS).map((item) => ({...item,
+    schemaVersion: TEMPLATE_SCHEMA_VERSION}));
+}
+
+function containsPlaceholder(value) {
+  const candidate = text(value, 1000);
+  return Boolean(candidate && PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(candidate)));
+}
+
+function containsUnsupportedClaim(value) {
+  const candidate = text(value, 1000);
+  return Boolean(candidate && UNSUPPORTED_CLAIM_PATTERNS.some((pattern) => pattern.test(candidate)));
+}
+
+function normalizedComparable(value) {
+  return text(value, 160).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function readableColor(background) {
+  const hex = validHexColor(background, "#176FD1");
+  const rgb = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255)
+    .map((value) => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  const luminance = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  const whiteRatio = 1.05 / (luminance + 0.05);
+  const blackRatio = (luminance + 0.05) / 0.05;
+  return whiteRatio >= blackRatio ? {hex: "#FFFFFF", ratio: whiteRatio} :
+    {hex: "#111827", ratio: blackRatio};
+}
+
+function suggestedCopy(service) {
+  const normalized = requiredText(service, 80, "physical_service_required");
+  const lower = normalized.toLowerCase();
+  const headline = /deck/.test(lower) ? "Build the deck your home deserves" :
+    /fence/.test(lower) ? "A better-looking boundary starts here" :
+      `Make your ${lower} project easier to start`;
+  return {headline, supportingText: `Explore professional ${lower} options for your property.`,
+    cta: "Scan to learn more"};
+}
+
 function normalizeDraft(input = {}) {
   const spec = productSpec(input.productSpecId);
   const sideCount = Number(input.sideCount || spec.defaultSides);
@@ -123,11 +209,12 @@ function normalizeDraft(input = {}) {
     headline: requiredText(input.headline, 90, "physical_headline_required"),
     offer: text(input.offer, 180),
     cta: requiredText(input.cta || "Learn more", 50, "physical_cta_required"),
-    phone: text(input.phone, 40),
+    includeBusinessPhone: input.includeBusinessPhone === true,
     landingPageId: requiredText(input.landingPageId, 160, "physical_landing_page_required"),
     trackingPhoneAssetId: text(input.trackingPhoneAssetId, 160) || null,
     media: media?.assetId && media?.revisionId ? media : null,
-    template: ["clean", "bold", "friendly"].includes(input.template) ? input.template : "clean",
+    templateId: templateSpec(input.templateId ||
+      (input.template ? "door_hanger_service_hero_v1" : null), spec.productType).templateId,
     primaryColor: validHexColor(input.primaryColor, "#176FD1"),
     secondaryColor: validHexColor(input.secondaryColor, "#10243E"),
   };
@@ -263,16 +350,250 @@ async function normalizePlacedImage(imageBuffer, placement) {
   const effectiveDpi = Math.min(metadata.width / placement.widthInches,
     metadata.height / placement.heightInches);
   if (effectiveDpi < MIN_EFFECTIVE_DPI) throw new Error("physical_media_resolution_low");
-  const cmykJpeg = await image.toColourspace("cmyk").jpeg({quality: 92, chromaSubsampling: "4:4:4"})
+  const width = Math.ceil(placement.widthInches * MIN_EFFECTIVE_DPI);
+  const height = Math.ceil(placement.heightInches * MIN_EFFECTIVE_DPI);
+  const cmykJpeg = await image.clone().resize({width, height, fit: "cover", position: "attention"})
+    .toColourspace("cmyk").jpeg({quality: 92, chromaSubsampling: "4:4:4"})
     .withIccProfile("cmyk").toBuffer();
-  const proof = await sharp(imageBuffer).rotate().resize({width: 1600, height: 1600, fit: "inside",
-    withoutEnlargement: true}).jpeg({quality: 88}).toBuffer();
+  const proof = await sharp(imageBuffer).rotate().resize({width, height, fit: "cover",
+    position: "attention"}).jpeg({quality: 90}).toBuffer();
   return {cmykJpeg, proof, width: metadata.width, height: metadata.height,
     effectiveDpi: Math.floor(effectiveDpi)};
 }
 
-async function renderPrintMaster({version, trackedUrl, mediaBuffer}) {
+async function normalizeLogo(logoBuffer) {
+  if (!logoBuffer) return null;
+  const source = sharp(logoBuffer, {failOn: "error", limitInputPixels: 20_000_000}).rotate();
+  const metadata = await source.metadata();
+  if (!metadata.width || !metadata.height || metadata.width < 180 || metadata.height < 80) {
+    throw new Error("physical_logo_resolution_low");
+  }
+  const prepared = source.clone().resize({width: 900, height: 300, fit: "contain",
+    background: "#FFFFFF", withoutEnlargement: false}).flatten({background: "#FFFFFF"});
+  return {cmykJpeg: await prepared.clone().toColourspace("cmyk")
+    .jpeg({quality: 94, chromaSubsampling: "4:4:4"}).withIccProfile("cmyk").toBuffer(),
+  proof: await prepared.jpeg({quality: 92}).toBuffer(),
+  wordmark: metadata.width / metadata.height >= 2.4};
+}
+
+function textSizeFor(font, value, width, maximum, minimum, maximumLines) {
+  for (let size = maximum; size >= minimum; size -= 1) {
+    if (wrap(font, value, size, width).length <= maximumLines) return size;
+  }
+  throw new Error("physical_copy_does_not_fit");
+}
+
+function drawWrappedText(page, font, value, options) {
+  const {x, top, width, size, color, maximumLines, lineHeight = size * 1.16} = options;
+  const lines = wrap(font, value, size, width);
+  if (lines.length > maximumLines) throw new Error("physical_copy_does_not_fit");
+  let y = top - size;
+  for (const line of lines) {
+    page.drawText(line, {x, y, size, font, color});
+    y -= lineHeight;
+  }
+  return {bottom: y, lines: lines.length, minimumFontPoints: size};
+}
+
+function serviceList(snapshot, selected) {
+  const result = [selected, ...(Array.isArray(snapshot?.services) ? snapshot.services : [])]
+    .map((item) => text(item, 80)).filter(Boolean);
+  return [...new Map(result.map((item) => [normalizedComparable(item), item])).values()].slice(0, 4);
+}
+
+function doorHangerLayoutEvidence(template, layout, draft, businessSnapshot, fontEvidence, hasMedia,
+  generatedMedia) {
+  return {templateId: template.templateId, templateVersion: template.version,
+    minimumVisualMarginPoints: layout.safe + layout.bleed,
+    ctaAssociatedWithQr: true, ctaInsideSafeArea: true, qrBreathingRoomPoints: 18,
+    frontBackDifferentiated: draft.sideCount === 2,
+    emptyRequiredRegions: [!businessSnapshot?.businessName && "business_identity",
+      template.requiresMedia && !hasMedia && "hero_media", template.requiresOffer && !draft.offer && "offer"]
+      .filter(Boolean),
+    minimumFontPoints: Math.min(...fontEvidence), requiredRegionCount: template.requiresOffer ? 8 : 7,
+    conceptualDisclosurePresent: generatedMedia !== true || hasMedia === true};
+}
+
+async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer}) {
+  const spec = productSpec(version.productSpecId); const draft = version.content;
+  const business = version.brandSnapshot || {};
+  const generatedMedia = version.mediaSnapshot?.origin === "generated_service_concept";
+  const template = templateSpec(version.templateId || draft.templateId, spec.productType);
+  const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit);
+  const regular = await pdf.embedFont(fs.readFileSync(FONT_REGULAR), {subset: true});
+  const bold = await pdf.embedFont(fs.readFileSync(FONT_BOLD), {subset: true});
+  const fixedDate = new Date("2000-01-01T00:00:00.000Z");
+  pdf.setTitle(`${business.businessName || "Business"} - ${spec.label} - ${draft.headline}`);
+  pdf.setAuthor("ScaledCircle"); pdf.setCreator("ScaledCircle Physical Marketing Execution V1");
+  pdf.setProducer("ScaledCircle"); pdf.setCreationDate(fixedDate); pdf.setModificationDate(fixedDate);
+  addPdfXMetadata(pdf, await cmykOutputProfile());
+  const placement = {widthInches: spec.widthInches - 0.36, heightInches: 2.7};
+  const normalizedMedia = await normalizePlacedImage(mediaBuffer, placement);
+  const normalizedLogo = await normalizeLogo(logoBuffer);
+  const embeddedImage = normalizedMedia ? await pdf.embedJpg(normalizedMedia.cmykJpeg) : null;
+  const embeddedLogo = normalizedLogo ? await pdf.embedJpg(normalizedLogo.cmykJpeg) : null;
+  const primaryHex = validHexColor(business.primaryColor || draft.primaryColor, "#176FD1");
+  const secondaryHex = validHexColor(business.secondaryColor || draft.secondaryColor, "#10243E");
+  const primary = hexToCmyk(primaryHex); const secondary = hexToCmyk(secondaryHex);
+  const primaryInk = hexToCmyk(readableColor(primaryHex).hex);
+  const qr = qrMatrix(trackedUrl); const sideEvidence = []; const pageEvidence = [];
+  const fontEvidence = [];
+  for (let side = 1; side <= draft.sideCount; side += 1) {
+    const layout = sideLayout(spec, draft, side); const page = pdf.addPage([layout.width, layout.height]);
+    const protectedFromTop = spec.dieCut && side === 1 ? spec.dieCut.centerFromTopInches +
+      spec.dieCut.diameterInches / 2 + spec.dieCut.exclusionPaddingInches : null;
+    pageEvidence.push({side, widthPoints: layout.width, heightPoints: layout.height,
+      bleedPoints: layout.bleed, safePoints: layout.safe, contentTopPoints: layout.top,
+      dieSafeContentTopPoints: protectedFromTop == null ? null :
+        layout.height - layout.bleed - protectedFromTop * 72});
+    page.drawRectangle({x: 0, y: 0, width: layout.width, height: layout.height,
+      color: side === 1 ? primary : cmyk(0, 0, 0, 0)});
+    const headerHeight = 34; const headerY = layout.top - headerHeight;
+    if (side === 1) {
+      if (embeddedLogo) page.drawImage(embeddedLogo, {x: layout.left, y: headerY + 3,
+        width: normalizedLogo.wordmark ? 156 : 58, height: 23});
+      if (!normalizedLogo?.wordmark) {
+        const identityX = embeddedLogo ? layout.left + 66 : layout.left;
+        const identitySize = textSizeFor(bold, business.businessName, layout.right - identityX,
+          13, 9, 2); fontEvidence.push(identitySize);
+        drawWrappedText(page, bold, business.businessName, {x: identityX, top: layout.top - 2,
+          width: layout.right - identityX, size: identitySize, color: primaryInk, maximumLines: 2});
+      } else fontEvidence.push(9);
+      const heroTop = headerY - 12; const headlineSize = textSizeFor(bold, draft.headline,
+        layout.contentWidth, 27, 17, 3); fontEvidence.push(headlineSize);
+      const headline = drawWrappedText(page, bold, draft.headline, {x: layout.left, top: heroTop,
+        width: layout.contentWidth, size: headlineSize, color: primaryInk, maximumLines: 3});
+      page.drawText(draft.service.toUpperCase(), {x: layout.left, y: headline.bottom - 3,
+        size: 9, font: bold, color: primaryInk}); fontEvidence.push(9);
+      const imageTop = headline.bottom - 22; const imageHeight = Math.min(194, imageTop - 151);
+      if (embeddedImage && imageHeight >= 140) {
+        const imageY = imageTop - imageHeight;
+        page.drawImage(embeddedImage, {x: layout.left, y: imageY,
+          width: layout.contentWidth, height: imageHeight});
+        if (generatedMedia) {
+          page.drawRectangle({x: layout.left, y: imageY, width: layout.contentWidth,
+            height: 17, color: cmyk(0, 0, 0, 0)});
+          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: layout.left + 6,
+            y: imageY + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
+        }
+      }
+      if (!embeddedImage && template.templateId === "door_hanger_professional_services_v1") {
+        const services = serviceList(business, draft.service).slice(0, 3);
+        const panelHeight = Math.min(194, Math.max(148, imageHeight));
+        const panelY = imageTop - panelHeight;
+        page.drawRectangle({x: layout.left, y: panelY, width: layout.contentWidth,
+          height: panelHeight, color: cmyk(0.035, 0.018, 0, 0)});
+        page.drawText("SERVICES FOR YOUR PROPERTY", {x: layout.left + 12,
+          y: panelY + panelHeight - 20, size: 7.5, font: bold, color: secondary});
+        fontEvidence.push(7.5);
+        const cardHeight = Math.min(74, (panelHeight - 42) / Math.max(services.length, 1) - 6);
+        let cardY = panelY + panelHeight - 36 - cardHeight;
+        for (const item of services) {
+          page.drawRectangle({x: layout.left + 12, y: cardY, width: layout.contentWidth - 24,
+            height: cardHeight, color: cmyk(0, 0, 0, 0)});
+          page.drawRectangle({x: layout.left + 12, y: cardY, width: 5,
+            height: cardHeight, color: primary});
+          page.drawText(item, {x: layout.left + 27, y: cardY + cardHeight / 2 - 4,
+            size: 11, font: bold, color: secondary});
+          cardY -= cardHeight + 7; fontEvidence.push(11);
+        }
+      }
+      const bandHeight = 92; const bandY = layout.bottom + 12;
+      page.drawRectangle({x: layout.left, y: bandY, width: layout.contentWidth,
+        height: bandHeight, color: cmyk(0, 0, 0, 0.08)});
+      const supporting = draft.offer || `Professional ${draft.service.toLowerCase()} options for your property.`;
+      const supportSize = textSizeFor(regular, supporting, layout.contentWidth - 24, 11, 9, 3);
+      fontEvidence.push(supportSize);
+      drawWrappedText(page, regular, supporting, {x: layout.left + 12, top: bandY + bandHeight - 10,
+        width: layout.contentWidth - 24, size: supportSize, color: secondary, maximumLines: 3});
+      page.drawText(draft.cta.toUpperCase(), {x: layout.left + 12, y: bandY + 13,
+        size: 10, font: bold, color: secondary}); fontEvidence.push(10);
+    } else {
+      page.drawRectangle({x: 0, y: layout.top - 54, width: layout.width, height: 54,
+        color: primary});
+      if (embeddedLogo) page.drawImage(embeddedLogo, {x: layout.left, y: layout.top - 44,
+        width: normalizedLogo.wordmark ? 152 : 58, height: 23});
+      if (!normalizedLogo?.wordmark) {
+        const identityX = embeddedLogo ? layout.left + 66 : layout.left;
+        const identitySize = textSizeFor(bold, business.businessName, layout.right - identityX,
+          13, 9, 2); fontEvidence.push(identitySize);
+        drawWrappedText(page, bold, business.businessName, {x: identityX, top: layout.top - 12,
+          width: layout.right - identityX, size: identitySize, color: primaryInk, maximumLines: 2});
+      } else fontEvidence.push(9);
+      const backHeadline = template.templateId === "door_hanger_offer_action_v1" && draft.offer ?
+        draft.offer : `Ready to plan your ${draft.service.toLowerCase()} project?`;
+      const backSize = textSizeFor(bold, backHeadline, layout.contentWidth, 22, 15, 3);
+      fontEvidence.push(backSize);
+      const backTitle = drawWrappedText(page, bold, backHeadline, {x: layout.left,
+        top: layout.top - 72, width: layout.contentWidth, size: backSize,
+        color: secondary, maximumLines: 3});
+      let listY = backTitle.bottom - 8;
+      for (const item of serviceList(business, draft.service).slice(0, 3)) {
+        page.drawText(`• ${item}`, {x: layout.left, y: listY, size: 10,
+          font: regular, color: secondary}); listY -= 19; fontEvidence.push(10);
+      }
+      const cardY = layout.bottom + 16; const cardHeight = 170;
+      const middleBottom = cardY + cardHeight + 16;
+      const middleTop = Math.max(middleBottom + 60, listY - 6);
+      const middleHeight = middleTop - middleBottom;
+      if (embeddedImage && middleHeight >= 70) {
+        page.drawImage(embeddedImage, {x: layout.left, y: middleBottom,
+          width: layout.contentWidth, height: middleHeight});
+        if (generatedMedia) {
+          page.drawRectangle({x: layout.left, y: middleBottom, width: layout.contentWidth,
+            height: 17, color: cmyk(0, 0, 0, 0)});
+          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: layout.left + 6,
+            y: middleBottom + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
+        }
+      } else if (middleHeight >= 70) {
+        page.drawRectangle({x: layout.left, y: middleBottom, width: layout.contentWidth,
+          height: middleHeight, color: primary});
+        page.drawText("YOUR NEXT PROJECT", {x: layout.left + 14,
+          y: middleBottom + middleHeight - 30, size: 8, font: bold, color: primaryInk});
+        const focusSize = textSizeFor(bold, draft.service, layout.contentWidth - 28, 24, 16, 3);
+        fontEvidence.push(8, focusSize);
+        drawWrappedText(page, bold, draft.service, {x: layout.left + 14,
+          top: middleBottom + middleHeight - 42, width: layout.contentWidth - 28,
+          size: focusSize, color: primaryInk, maximumLines: 3});
+      }
+      page.drawRectangle({x: layout.left, y: cardY, width: layout.contentWidth,
+        height: cardHeight, color: cmyk(0.04, 0.015, 0, 0)});
+      const qrSize = 84; const qrX = layout.left + 12; const qrY = cardY + 42;
+      const qrEvidence = drawQr(page, qr, qrX, qrY, qrSize); sideEvidence.push({side, qr: qrEvidence});
+      page.drawText("SCAN TO GET STARTED", {x: qrX, y: cardY + 22,
+        size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
+      const ctaX = qrX + qrSize + 13; const ctaWidth = layout.right - 10 - ctaX;
+      const ctaSize = textSizeFor(bold, draft.cta, ctaWidth, 16, 10, 3); fontEvidence.push(ctaSize);
+      const ctaText = drawWrappedText(page, bold, draft.cta, {x: ctaX,
+        top: cardY + cardHeight - 18, width: ctaWidth, size: ctaSize,
+        color: secondary, maximumLines: 3});
+      drawWrappedText(page, regular, "Scan to learn more and choose your next step.", {x: ctaX,
+        top: ctaText.bottom - 4, width: ctaWidth, size: 8.5, color: secondary, maximumLines: 4});
+      if (business.phone) page.drawText(business.phone, {x: ctaX, y: cardY + 24,
+        size: 8.5, font: bold, color: secondary});
+    }
+  }
+  const pdfBytes = Buffer.from(await pdf.save({useObjectStreams: false, addDefaultPage: false}));
+  const proofs = [];
+  for (let side = 1; side <= draft.sideCount; side += 1) proofs.push(await renderDoorHangerProof({
+    spec, draft, side, trackedUrl, mediaProof: normalizedMedia?.proof || null,
+    logoProof: normalizedLogo?.proof || null, logoWordmark: normalizedLogo?.wordmark === true,
+    business, template, generatedMedia,
+  }));
+  const layout = sideLayout(spec, draft, 1);
+  return {pdf: pdfBytes, proofs, digitalJpg: proofs[0].jpg,
+    evidence: {pdfXVersion: PDF_X_VERSION, outputIntent: "CMYK", fontsEmbedded: true,
+      sideCount: draft.sideCount, sideEvidence, pageEvidence,
+      effectiveRasterDpi: normalizedMedia?.effectiveDpi || null, vectorOnly: !normalizedMedia,
+      marketingLayout: doorHangerLayoutEvidence(template, layout, draft, business,
+        fontEvidence, Boolean(normalizedMedia), generatedMedia),
+      colorContrastRatio: readableColor(primaryHex).ratio}};
+}
+
+async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer}) {
   const spec = productSpec(version.productSpecId);
+  if (spec.productType === "door_hanger") return renderDoorHangerPrintMaster({version, trackedUrl,
+    mediaBuffer, logoBuffer});
   const draft = version.content;
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
@@ -379,6 +700,169 @@ function svgQr(matrix, x, y, size) {
   return output;
 }
 
+function svgWrap(value, maximumCharacters, maximumLines) {
+  const words = text(value, 1000).split(" ").filter(Boolean); const lines = []; let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (candidate.length <= maximumCharacters || !line) line = candidate;
+    else { lines.push(line); line = word; }
+  }
+  if (line) lines.push(line);
+  if (lines.length > maximumLines) throw new Error("physical_copy_does_not_fit");
+  return lines;
+}
+
+function svgTextBlock(value, {x, y, size, fill, weight = 400, maximumCharacters,
+  maximumLines, lineHeight = size * 1.16}) {
+  const lines = svgWrap(value, maximumCharacters, maximumLines);
+  return {height: lines.length * lineHeight, svg: `<text x="${x}" y="${y}" fill="${fill}" ` +
+    `font-size="${size}" font-weight="${weight}" font-family="Arial, sans-serif">` +
+    lines.map((line, index) => `<tspan x="${x}" dy="${index ? lineHeight : 0}">` +
+      `${xml(line)}</tspan>`).join("") + `</text>`};
+}
+
+function svgAdaptiveTextBlock(value, {x, y, width, maximumSize, minimumSize,
+  fill, weight = 400, maximumLines}) {
+  for (let size = maximumSize; size >= minimumSize; size -= 1) {
+    const maximumCharacters = Math.max(8, Math.floor(width / (size * 0.54)));
+    try {
+      return svgTextBlock(value, {x, y, size, fill, weight, maximumCharacters,
+        maximumLines, lineHeight: size * 1.14});
+    } catch (error) {
+      if (error?.message !== "physical_copy_does_not_fit") throw error;
+    }
+  }
+  throw new Error("physical_copy_does_not_fit");
+}
+
+async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof, logoProof,
+  logoWordmark, business, template, generatedMedia}) {
+  const dpi = 150; const width = Math.round((spec.widthInches + spec.bleedInches * 2) * dpi);
+  const height = Math.round((spec.heightInches + spec.bleedInches * 2) * dpi);
+  const bleed = spec.bleedInches * dpi; const safe = spec.safeInches * dpi;
+  const left = bleed + safe; const right = width - bleed - safe; const contentWidth = right - left;
+  let top = bleed + safe;
+  if (spec.dieCut && side === 1) top = bleed + (spec.dieCut.centerFromTopInches +
+    spec.dieCut.diameterInches / 2 + spec.dieCut.exclusionPaddingInches) * dpi;
+  const primary = validHexColor(business.primaryColor || draft.primaryColor, "#176FD1");
+  const secondary = validHexColor(business.secondaryColor || draft.secondaryColor, "#10243E");
+  const primaryInk = readableColor(primary).hex;
+  const image = mediaProof ? `data:image/jpeg;base64,${mediaProof.toString("base64")}` : null;
+  const logo = logoProof ? `data:image/jpeg;base64,${logoProof.toString("base64")}` : null;
+  const qr = qrMatrix(trackedUrl);
+  let body = `<rect width="100%" height="100%" fill="${side === 1 ? primary : "#FFFFFF"}"/>`;
+  if (side === 1) {
+    if (logo) body += `<image href="${logo}" x="${left}" y="${top}" width="${logoWordmark ? 300 : 110}" height="45" ` +
+      `preserveAspectRatio="xMidYMid meet"/>`;
+    if (!logoWordmark) {
+      const identityX = logo ? left + 123 : left;
+      const identity = svgAdaptiveTextBlock(business.businessName, {x: identityX, y: top + 24,
+        width: right - identityX, maximumSize: 21, minimumSize: 14,
+        fill: primaryInk, weight: 700, maximumLines: 2});
+      body += identity.svg;
+    }
+    const headlineY = top + 82;
+    const headline = svgAdaptiveTextBlock(draft.headline, {x: left, y: headlineY,
+      width: contentWidth, maximumSize: 41, minimumSize: 26,
+      fill: primaryInk, weight: 700, maximumLines: 3});
+    body += headline.svg;
+    const serviceY = headlineY + headline.height + 14;
+    body += `<text x="${left}" y="${serviceY}" fill="${primaryInk}" font-size="16" ` +
+      `font-weight="700" letter-spacing="1.5" font-family="Arial, sans-serif">` +
+      `${xml(draft.service.toUpperCase())}</text>`;
+    const imageY = serviceY + 25; const cardY = height - bleed - safe - 150;
+    const imageHeight = Math.max(210, cardY - imageY - 22);
+    if (image) {
+      body += `<image href="${image}" x="${left}" y="${imageY}" width="${contentWidth}" ` +
+        `height="${imageHeight}" preserveAspectRatio="xMidYMid slice"/>`;
+      if (generatedMedia) body += `<rect x="${left}" y="${imageY + imageHeight - 27}" ` +
+        `width="${contentWidth}" height="27" fill="#FFFFFF"/><text x="${left + 9}" ` +
+        `y="${imageY + imageHeight - 9}" fill="${secondary}" font-size="10" font-weight="700" ` +
+        `font-family="Arial,sans-serif">CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK</text>`;
+    }
+    if (!image && template.templateId === "door_hanger_professional_services_v1") {
+      body += `<rect x="${left}" y="${imageY}" width="${contentWidth}" height="${imageHeight}" ` +
+        `fill="#F1F5F9"/>`;
+      body += `<text x="${left + 22}" y="${imageY + 38}" fill="${secondary}" font-size="14" ` +
+        `font-weight="700" letter-spacing="1" font-family="Arial, sans-serif">SERVICES FOR YOUR PROPERTY</text>`;
+      let listY = imageY + 62;
+      const services = serviceList(business, draft.service).slice(0, 3);
+      const itemHeight = Math.min(180, Math.max(82,
+        (imageHeight - 105 - (services.length - 1) * 16) / Math.max(services.length, 1)));
+      for (const item of services) {
+        body += `<rect x="${left + 20}" y="${listY}" width="${contentWidth - 40}" height="${itemHeight}" ` +
+          `rx="8" fill="#FFFFFF"/><rect x="${left + 20}" y="${listY}" width="9" height="${itemHeight}" ` +
+          `rx="4" fill="${primary}"/><text x="${left + 48}" y="${listY + itemHeight / 2 + 8}" ` +
+          `fill="${secondary}" font-size="25" font-weight="700" font-family="Arial, sans-serif">${xml(item)}</text>`;
+        listY += itemHeight + 16;
+      }
+    }
+    body += `<rect x="${left}" y="${cardY}" width="${contentWidth}" height="138" ` +
+      `rx="8" fill="#FFFFFF" fill-opacity="0.94"/>`;
+    const supporting = draft.offer || `Professional ${draft.service.toLowerCase()} options for your property.`;
+    const support = svgTextBlock(supporting, {x: left + 20, y: cardY + 36, size: 20,
+      fill: secondary, maximumCharacters: 36, maximumLines: 3, lineHeight: 25}); body += support.svg;
+    body += `<text x="${left + 20}" y="${cardY + 118}" fill="${secondary}" font-size="17" ` +
+      `font-weight="700" letter-spacing="1" font-family="Arial, sans-serif">${xml(draft.cta.toUpperCase())}</text>`;
+  } else {
+    body += `<rect x="0" y="${top}" width="${width}" height="82" fill="${primary}"/>`;
+    if (logo) body += `<image href="${logo}" x="${left}" y="${top + 14}" width="${logoWordmark ? 290 : 105}" height="45" ` +
+      `preserveAspectRatio="xMidYMid meet"/>`;
+    if (!logoWordmark) {
+      const identityX = logo ? left + 118 : left;
+      body += svgAdaptiveTextBlock(business.businessName, {x: identityX, y: top + 40,
+        width: right - identityX, maximumSize: 20, minimumSize: 14,
+        fill: primaryInk, weight: 700, maximumLines: 2}).svg;
+    }
+    const backHeadline = template.templateId === "door_hanger_offer_action_v1" && draft.offer ?
+      draft.offer : `Ready to plan your ${draft.service.toLowerCase()} project?`;
+    const heading = svgAdaptiveTextBlock(backHeadline, {x: left, y: top + 135,
+      width: contentWidth, maximumSize: 34, minimumSize: 23,
+      fill: secondary, weight: 700, maximumLines: 3});
+    body += heading.svg; let listY = top + 147 + heading.height;
+    for (const item of serviceList(business, draft.service).slice(0, 3)) {
+      body += `<text x="${left}" y="${listY}" fill="${secondary}" font-size="19" ` +
+        `font-family="Arial, sans-serif">• ${xml(item)}</text>`; listY += 32;
+    }
+    const cardY = height - bleed - safe - 275;
+    const middleY = listY + 16; const middleHeight = cardY - middleY - 20;
+    if (image && middleHeight >= 140) {
+      body += `<image href="${image}" x="${left}" y="${middleY}" width="${contentWidth}" ` +
+        `height="${middleHeight}" preserveAspectRatio="xMidYMid slice"/>`;
+      if (generatedMedia) body += `<rect x="${left}" y="${middleY + middleHeight - 27}" ` +
+        `width="${contentWidth}" height="27" fill="#FFFFFF"/><text x="${left + 9}" ` +
+        `y="${middleY + middleHeight - 9}" fill="${secondary}" font-size="10" font-weight="700" ` +
+        `font-family="Arial,sans-serif">CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK</text>`;
+    } else if (middleHeight >= 140) {
+      body += `<rect x="${left}" y="${middleY}" width="${contentWidth}" height="${middleHeight}" ` +
+        `rx="10" fill="${primary}"/><text x="${left + 24}" y="${middleY + 45}" fill="${primaryInk}" ` +
+        `font-size="14" font-weight="700" letter-spacing="1.2" font-family="Arial,sans-serif">YOUR NEXT PROJECT</text>`;
+      body += svgAdaptiveTextBlock(draft.service, {x: left + 24, y: middleY + 105,
+        width: contentWidth - 48, maximumSize: 38, minimumSize: 24,
+        fill: primaryInk, weight: 700, maximumLines: 3}).svg;
+    }
+    body += `<rect x="${left}" y="${cardY}" width="${contentWidth}" height="255" rx="10" ` +
+      `fill="#F1F5F9"/>`;
+    const qrSize = 145; const qrX = left + 18; const qrY = cardY + 58;
+    body += svgQr(qr, qrX, qrY, qrSize);
+    body += `<text x="${qrX}" y="${cardY + 225}" fill="${secondary}" font-size="12" ` +
+      `font-weight="700" font-family="Arial, sans-serif">SCAN TO GET STARTED</text>`;
+    const ctaX = qrX + qrSize + 20; const ctaWidth = right - ctaX - 12;
+    body += svgAdaptiveTextBlock(draft.cta, {x: ctaX, y: cardY + 62, width: ctaWidth,
+      maximumSize: 25, minimumSize: 17, fill: secondary, weight: 700, maximumLines: 3}).svg;
+    body += svgTextBlock("Scan to learn more and choose your next step.", {x: ctaX, y: cardY + 155,
+      size: 15, fill: secondary, maximumCharacters: Math.max(12, Math.floor(ctaWidth / 8)),
+      maximumLines: 4, lineHeight: 19}).svg;
+    if (business.phone) body += `<text x="${ctaX}" y="${cardY + 226}" fill="${secondary}" ` +
+      `font-size="15" font-weight="700" font-family="Arial, sans-serif">${xml(business.phone)}</text>`;
+  }
+  const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" ` +
+    `height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`);
+  const webp = await sharp(svg).webp({quality: 90}).toBuffer();
+  const jpg = await sharp(svg).jpeg({quality: 93, chromaSubsampling: "4:4:4"}).toBuffer();
+  return {side, webp, jpg, width, height};
+}
+
 async function renderProof({spec, draft, side, trackedUrl, mediaProof}) {
   const dpi = 150;
   const width = Math.round((spec.widthInches + spec.bleedInches * 2) * dpi);
@@ -449,6 +933,79 @@ function preflightReport({version, renderEvidence, artifactHash}) {
     qr: {vector: true, scanValidation: "matrix_round_trip_required"}};
 }
 
+function marketingReadinessReport({version, renderEvidence}) {
+  const draft = version.content || {}; const brand = version.brandSnapshot || {};
+  const template = templateSpec(version.templateId || draft.templateId,
+    productSpec(version.productSpecId).productType);
+  const layout = renderEvidence?.marketingLayout || {};
+  const authoritativeServices = Array.isArray(brand.services) ? brand.services : [];
+  const exactTexts = [brand.businessName, draft.service, draft.headline, draft.offer, draft.cta,
+    brand.phone, version.landingPage?.destination];
+  const claims = [draft.headline, draft.offer, draft.cta];
+  const serviceAuthorized = authoritativeServices.some((item) =>
+    normalizedComparable(item) === normalizedComparable(draft.service));
+  const checks = {
+    canonicalBusinessIdentity: Boolean(text(brand.businessName, 160) && brand.businessNameSource),
+    placeholderFree: exactTexts.filter(Boolean).every((item) => !containsPlaceholder(item)),
+    serviceAuthorized,
+    ctaPresent: Boolean(text(draft.cta, 50)),
+    destinationPresent: Boolean(version.landingPage?.landingPageId && version.responseAssetId &&
+      /^https:\/\//.test(String(version.trackedUrl || ""))),
+    templateRequirements: (!template.requiresMedia || Boolean(version.mediaSnapshot)) &&
+      (!template.requiresOffer || Boolean(text(draft.offer, 180))),
+    immutableMediaBinding: !version.mediaSnapshot || Boolean(version.mediaSnapshot.assetId &&
+      version.mediaSnapshot.revisionId && version.mediaSnapshot.contentHash),
+    verifiedContactOnly: !brand.phone || (draft.includeBusinessPhone === true &&
+      brand.phoneSource === "business_growth_profile"),
+    meaningfulRequiredRegions: Array.isArray(layout.emptyRequiredRegions) &&
+      layout.emptyRequiredRegions.length === 0,
+    ctaSafePlacement: layout.ctaInsideSafeArea === true,
+    visualMargins: Number(layout.minimumVisualMarginPoints) >= 12 &&
+      Number(layout.qrBreathingRoomPoints) >= 16,
+    readableTypography: Number(layout.minimumFontPoints) >= 7.5,
+    contrast: Number(renderEvidence?.colorContrastRatio) >= 4.5,
+    frontBackDifferentiated: draft.sideCount !== 2 || layout.frontBackDifferentiated === true,
+    generatedOriginDisclosure: version.mediaSnapshot?.origin !== "generated_service_concept" ||
+      layout.conceptualDisclosurePresent === true,
+    noUnsupportedClaims: claims.filter(Boolean).every((item) => !containsUnsupportedClaim(item)),
+  };
+  return {version: MARKETING_READINESS_VERSION,
+    status: Object.values(checks).every(Boolean) ? "pass" : "fail", checks,
+    template: {templateId: template.templateId, templateVersion: template.version},
+    businessVisualApprovalRequired: true,
+    failures: Object.entries(checks).filter(([, value]) => !value).map(([key]) => key)};
+}
+
+function validateAuthorizedDraft(draft, authority = {}) {
+  const template = templateSpec(draft.templateId, productSpec(draft.productSpecId).productType);
+  const exactTexts = [authority.businessName, draft.service, draft.headline, draft.offer, draft.cta,
+    authority.phone, authority.destination];
+  if (exactTexts.filter(Boolean).some(containsPlaceholder)) throw new Error("physical_placeholder_blocked");
+  if ([draft.headline, draft.offer, draft.cta].filter(Boolean).some(containsUnsupportedClaim)) {
+    throw new Error("physical_unsupported_claim");
+  }
+  if (!authority.businessName || !authority.businessNameSource) throw new Error("physical_business_identity_missing");
+  const services = Array.isArray(authority.services) ? authority.services : [];
+  if (!services.some((item) => normalizedComparable(item) === normalizedComparable(draft.service))) {
+    throw new Error("physical_service_not_authorized");
+  }
+  if (template.requiresMedia && !draft.media) throw new Error("physical_template_media_required");
+  if (template.requiresOffer && (!authority.authorizedOffer ||
+      normalizedComparable(draft.offer) !== normalizedComparable(authority.authorizedOffer))) {
+    throw new Error("physical_offer_not_authorized");
+  }
+  if (draft.includeBusinessPhone && (!authority.phone ||
+      authority.phoneSource !== "business_growth_profile")) {
+    throw new Error("physical_verified_phone_missing");
+  }
+  return {template, businessName: authority.businessName, service: draft.service};
+}
+
+function versionOrderReady(version = {}) {
+  return version.preflightStatus === "pass" && version.printReadinessStatus === "pass" &&
+    version.marketingReadinessStatus === "pass";
+}
+
 function resolvePhysicalBusinessUid(actor, requested) {
   if (!actor?.uid || !["business", "admin"].includes(actor.role)) {
     throw new Error("physical_actor_forbidden");
@@ -484,7 +1041,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       publicSlug: data.publicSlug, destination: `${publicBaseUrl}/p/${encodeURIComponent(data.publicSlug)}`};
   }
 
-  async function ownedMedia(uid, media) {
+  async function ownedMedia(uid, media, options = {}) {
     if (!media) return {snapshot: null, buffer: null};
     const assetRef = db.collection("businessMediaLibraries").doc(uid).collection("assets").doc(media.assetId);
     const [assetSnap, revisionSnap] = await Promise.all([
@@ -495,21 +1052,64 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
         revision.approvalStatus !== "approved" || revision.status !== "ready") {
       throw new Error("physical_media_forbidden");
     }
+    if (options.requiredPurpose && revision.purpose !== options.requiredPurpose) {
+      throw new Error("physical_media_purpose_invalid");
+    }
+    if (options.excludePurpose && revision.purpose === options.excludePurpose) {
+      throw new Error("physical_media_purpose_invalid");
+    }
     const rendition = revision.renditions?.hero || revision.renditions?.card;
     if (!rendition?.storagePath) throw new Error("physical_media_unavailable");
     const [buffer] = await bucket().file(rendition.storagePath).download();
     return {snapshot: {assetId: media.assetId, revisionId: media.revisionId,
       origin: revision.origin || "business_upload", contentHash: revision.contentHash || null,
+      purpose: revision.purpose || "general", altText: text(revision.altText, 240) || null,
+      serviceLabel: text(revision.serviceLabel, 80) || null,
       storagePath: rendition.storagePath}, buffer};
+  }
+
+  async function businessAuthority(uid, draft = {}) {
+    const [growthSnap, brandSnap, userSnap] = await Promise.all([
+      db.collection("businessGrowthProfiles").doc(uid).get(),
+      db.collection("businessBrandProfiles").doc(uid).get(),
+      db.collection("users").doc(uid).get(),
+    ]);
+    const growth = growthSnap.data() || {}; const brand = brandSnap.data() || {};
+    const user = userSnap.data() || {};
+    const businessName = text(growth.businessName || user.businessName || user.companyName ||
+      user.displayName, 120);
+    const businessNameSource = growth.businessName ? "business_growth_profile" :
+      user.businessName || user.companyName || user.displayName ? "business_user_profile" : null;
+    const growthServices = Array.isArray(growth.servicesOffered) ? growth.servicesOffered : [];
+    const brandServices = Array.isArray(brand.approvedServiceCategories) ?
+      brand.approvedServiceCategories : [];
+    const services = (growthServices.length ? growthServices : brandServices)
+      .slice(0, 20).map((item) => text(item, 80)).filter(Boolean);
+    const verifiedPhone = text(growth.primaryPhone, 40);
+    const phone = draft.includeBusinessPhone === true && verifiedPhone ? verifiedPhone : null;
+    const approvedLogo = brand.approvedLogo?.assetId && brand.approvedLogo?.revisionId ?
+      {assetId: text(brand.approvedLogo.assetId, 160),
+        revisionId: text(brand.approvedLogo.revisionId, 160)} : null;
+    return {businessName, businessNameSource, services,
+      serviceSource: growthServices.length ? "business_growth_profile" : "business_brand_profile",
+      primaryColor: validHexColor(brand.primaryColor, "#176FD1"),
+      secondaryColor: validHexColor(brand.secondaryColor, "#10243E"),
+      stylePreset: text(brand.stylePreset, 30) || "clean", approvedLogo,
+      phone, phoneSource: phone ? "business_growth_profile" : null,
+      verifiedPhoneAvailable: Boolean(verifiedPhone),
+      authorizedOffer: text(growth.directMailOffer, 180) || null,
+      serviceAreas: Array.isArray(growth.serviceAreas) ? growth.serviceAreas.slice(0, 8)
+        .map((item) => text(item, 100)).filter(Boolean) : []};
   }
 
   async function workspace(input, actor) {
     const uid = resolvePhysicalBusinessUid(actor, input?.businessUid);
-    const [materialQuery, campaignQuery, pageQuery, mediaQuery] = await Promise.all([
+    const [materialQuery, campaignQuery, pageQuery, mediaQuery, authority] = await Promise.all([
       materials.where("businessUid", "==", uid).limit(MAX_WORKSPACE_ITEMS).get(),
       db.collection("campaigns").where("businessId", "==", uid).limit(50).get(),
       db.collection("landingPages").where("businessUid", "==", uid).limit(50).get(),
       db.collection("businessMediaLibraries").doc(uid).collection("assets").limit(50).get(),
+      businessAuthority(uid),
     ]);
     const materialItems = await Promise.all(materialQuery.docs.map(async (doc) => {
       const data = doc.data() || {}; const versionId = data.reviewVersionId || data.approvedVersionId;
@@ -521,16 +1121,19 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
         artifact: artifact ? {artifactId: artifact.artifactId, format: artifact.format,
           storagePath: artifact.storagePath, digitalJpgPath: artifact.digitalJpgPath,
           proofs: artifact.proofs, artifactHash: artifact.artifactHash,
-          preflight: artifact.preflight} : null} : null};
+          preflight: artifact.preflight, printReadiness: artifact.printReadiness || artifact.preflight,
+          marketingReadiness: artifact.marketingReadiness || version.marketingReadiness || null} : null} : null};
     }));
     const media = [];
     for (const doc of mediaQuery.docs) {
       const data = doc.data() || {}; const revisionId = data.approvedRevisionId;
       if (!revisionId || data.removed === true) continue;
       const revision = await doc.ref.collection("revisions").doc(revisionId).get();
-      if (revision.exists && revision.data()?.approvalStatus === "approved") media.push({
+      if (revision.exists && revision.data()?.approvalStatus === "approved" &&
+          revision.data()?.purpose !== "logo") media.push({
         assetId: doc.id, revisionId, title: text(data.title || "Approved image", 120),
         origin: revision.data()?.origin || "business_upload",
+        serviceLabel: text(revision.data()?.serviceLabel, 80) || null,
       });
     }
     return {
@@ -541,6 +1144,17 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       landingPages: pageQuery.docs.filter((doc) => doc.data()?.status === "published")
         .map((doc) => ({landingPageId: doc.id, title: text(doc.data()?.title || doc.data()?.publicSlug || "Landing Page", 120)})),
       approvedMedia: media,
+      businessIdentity: {businessName: authority.businessName,
+        hasApprovedLogo: Boolean(authority.approvedLogo),
+        primaryColor: authority.primaryColor, secondaryColor: authority.secondaryColor,
+        verifiedPhoneAvailable: authority.verifiedPhoneAvailable},
+      availableServices: authority.services,
+      authorizedOffer: authority.authorizedOffer,
+      templateSpecs: publicTemplateSpecs().map((template) => ({...template,
+        available: (!template.requiresMedia || media.length > 0) &&
+          (!template.requiresOffer || Boolean(authority.authorizedOffer))})),
+      copySuggestions: Object.fromEntries(authority.services.map((service) =>
+        [service, suggestedCopy(service)])),
       productSpecs: publicProductSpecs(),
       pricingPolicy: {...PRICING_POLICY},
       fulfillment: {download: "available", print: "coming_soon", mail: "coming_soon",
@@ -553,8 +1167,10 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const action = text(input?.action, 40);
     const draft = normalizeDraft(input?.draft || {});
     await ownedCampaign(uid, draft.campaignId);
-    await ownedLandingPage(uid, draft.landingPageId);
-    if (draft.media) await ownedMedia(uid, draft.media);
+    const page = await ownedLandingPage(uid, draft.landingPageId);
+    const authority = await businessAuthority(uid, draft);
+    validateAuthorizedDraft(draft, {...authority, destination: page.destination});
+    if (draft.media) await ownedMedia(uid, draft.media, {excludePurpose: "logo"});
     const now = FieldValue.serverTimestamp();
     if (action === "create") {
       const requestId = requiredText(input?.requestId, 160, "physical_request_required");
@@ -597,7 +1213,11 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const draft = normalizeDraft(material.draft || {}); const spec = productSpec(draft.productSpecId);
     const campaign = await ownedCampaign(uid, draft.campaignId);
     const page = await ownedLandingPage(uid, draft.landingPageId);
-    const media = await ownedMedia(uid, draft.media);
+    const authority = await businessAuthority(uid, draft);
+    validateAuthorizedDraft(draft, {...authority, destination: page.destination});
+    const media = await ownedMedia(uid, draft.media, {excludePurpose: "logo"});
+    const logo = authority.approvedLogo ? await ownedMedia(uid, authority.approvedLogo,
+      {requiredPurpose: "logo"}) : {snapshot: null, buffer: null};
     const draftHash = digest({materialId, revision: material.draftRevision, draft, page, media: media.snapshot});
     const versionId = `version_${digest(`${materialId}:${material.draftRevision}:${draftHash}`).slice(0, 40)}`;
     const existing = await versions.doc(versionId).get();
@@ -613,12 +1233,19 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     }, actor);
     const snapshot = {schemaVersion: SCHEMA_VERSION, versionId, materialId, businessUid: uid,
       campaign, productSpecId: spec.specId, productSpecVersion: spec.version, content: draft,
+      templateId: templateSpec(draft.templateId, spec.productType).templateId,
+      templateVersion: templateSpec(draft.templateId, spec.productType).version,
+      copySnapshot: {headline: draft.headline, supportingText: draft.offer || null,
+        cta: draft.cta, service: draft.service},
+      brandSnapshot: {...authority, approvedLogo: logo.snapshot},
+      layoutSnapshot: {templateId: draft.templateId,
+        imageFit: "cover_attention", optionalRegionsRebalance: true},
       mediaSnapshot: media.snapshot, landingPage: page,
       responseAssetId: response.responseAssetId, trackedUrl: response.trackedUrl,
       trackingPhoneAssetId: draft.trackingPhoneAssetId, immutable: true};
     snapshot.contentHash = digest(snapshot);
     const rendered = await renderPrintMaster({version: snapshot, trackedUrl: response.trackedUrl,
-      mediaBuffer: media.buffer});
+      mediaBuffer: media.buffer, logoBuffer: logo.buffer});
     const artifactHash = digest(rendered.pdf);
     const artifactId = `artifact_${digest(`${versionId}:${artifactHash}`).slice(0, 40)}`;
     const base = `physical_marketing_private/${uid}/${materialId}/${versionId}`;
@@ -639,10 +1266,13 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     ]);
     const preflight = preflightReport({version: snapshot, renderEvidence: rendered.evidence, artifactHash});
     if (preflight.status !== "pass") throw new Error("physical_preflight_failed");
+    const marketingReadiness = marketingReadinessReport({version: snapshot,
+      renderEvidence: rendered.evidence});
     const at = FieldValue.serverTimestamp();
     const artifact = {schemaVersion: SCHEMA_VERSION, artifactId, businessUid: uid, materialId, versionId,
       contentHash: snapshot.contentHash, artifactHash, immutable: true, format: "PDF/X-4",
       storagePath: pdfPath, digitalJpgPath: jpgPath, proofs: proofRecords, preflight,
+      printReadiness: preflight, marketingReadiness,
       providerArtifactHash: null, createdAt: at};
     await db.runTransaction(async (tx) => {
       const current = await tx.get(ref); const versionRef = versions.doc(versionId);
@@ -653,11 +1283,15 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
         throw new Error("physical_draft_changed");
       }
       tx.create(artifactRef, artifact);
-      tx.create(versionRef, {...snapshot, artifactId, artifactHash, preflightStatus: "pass", createdAt: at});
+      tx.create(versionRef, {...snapshot, artifactId, artifactHash, preflightStatus: "pass",
+        printReadinessStatus: "pass", marketingReadinessStatus: marketingReadiness.status,
+        marketingReadiness,
+        createdAt: at});
       tx.update(ref, {status: "READY_FOR_REVIEW", reviewVersionId: versionId,
         responseAssetId: response.responseAssetId, updatedAt: at});
     });
     return {materialId, versionId, artifactId, status: "READY_FOR_REVIEW", preflight,
+      marketingReadiness,
       artifact: {storagePath: pdfPath, digitalJpgPath: jpgPath, proofs: proofRecords, artifactHash}};
   }
 
@@ -673,12 +1307,13 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       ]);
       if (!materialSnap.exists || !versionSnap.exists || materialSnap.data()?.businessUid !== uid ||
           versionSnap.data()?.businessUid !== uid || versionSnap.data()?.materialId !== materialId ||
-          materialSnap.data()?.reviewVersionId !== versionId || versionSnap.data()?.preflightStatus !== "pass") {
+          materialSnap.data()?.reviewVersionId !== versionId || !versionOrderReady(versionSnap.data())) {
         throw new Error("physical_approval_forbidden");
       }
       if (!approvalSnap.exists) tx.create(approvalRef, {schemaVersion: SCHEMA_VERSION, businessUid: uid,
         materialId, versionId, artifactId: versionSnap.data()?.artifactId, decision: "approved",
-        approvedBy: actor.uid, approvedAt: at, immutable: true});
+        approvedBy: actor.uid, approvedAt: at, immutable: true,
+        printReady: true, marketingReady: true, businessVisualApproval: true});
       tx.update(ref, {status: "ORDER_READY", approvedVersionId: versionId,
         reviewVersionId: versionId, updatedAt: at});
     });
@@ -696,10 +1331,32 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       const status = text(doc.data()?.status, 40) || "UNKNOWN";
       statusCounts[status] = (statusCounts[status] || 0) + 1;
     }
+    const marketingFailures = versionQuery.docs.filter((doc) =>
+      doc.data()?.marketingReadinessStatus && doc.data()?.marketingReadinessStatus !== "pass");
+    const artifactByVersion = new Map(artifactQuery.docs.map((doc) =>
+      [doc.data()?.versionId, {artifactId: doc.id, ...doc.data()}]));
+    const recentVersions = versionQuery.docs.slice(0, 25).map((doc) => {
+      const version = doc.data() || {}; const artifact = artifactByVersion.get(doc.id) || {};
+      return {versionId: doc.id, materialId: version.materialId,
+        templateId: version.templateId || null, templateVersion: version.templateVersion || null,
+        printReady: version.printReadinessStatus === "pass",
+        marketingReady: version.marketingReadinessStatus === "pass",
+        marketingReadinessFailures: Array.isArray(version.marketingReadiness?.failures) ?
+          version.marketingReadiness.failures : [],
+        selectedMediaRevisionId: version.mediaSnapshot?.revisionId || null,
+        selectedMediaOrigin: version.mediaSnapshot?.origin || null,
+        responseAssetId: version.responseAssetId || null,
+        landingPageId: version.landingPage?.landingPageId || null,
+        artifactHash: artifact.artifactHash || version.artifactHash || null};
+    });
     return {schemaVersion: SCHEMA_VERSION, environment: "provider_free", materials: materialQuery.size,
       versions: versionQuery.size, artifacts: artifactQuery.size, approvals: approvalQuery.size,
       statusCounts, preflightFailures: artifactQuery.docs.filter((doc) =>
         doc.data()?.preflight?.status !== "pass").length,
+      marketingReadinessFailures: marketingFailures.length,
+      templateVersions: [...new Set(versionQuery.docs.map((doc) =>
+        `${doc.data()?.templateId || "unknown"}@${doc.data()?.templateVersion || "unknown"}`))],
+      recentVersions,
       fulfillment: {download: "available", providerTraffic: 0, print: "not_connected", mail: "not_connected"},
       pricingPolicy: {version: PRICING_POLICY.version, feeRateBps: PRICING_POLICY.fulfillmentFeeRateBps,
         minimumUsd: PRICING_POLICY.fulfillmentFeeMinimumMinor / 100},
@@ -710,8 +1367,12 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
 }
 
 module.exports = {
-  SCHEMA_VERSION, PRICING_POLICY_VERSION, PRODUCT_SPECS, PRICING_POLICY, MIN_EFFECTIVE_DPI,
+  SCHEMA_VERSION, PRICING_POLICY_VERSION, TEMPLATE_SCHEMA_VERSION, MARKETING_READINESS_VERSION,
+  PRODUCT_SPECS, TEMPLATE_SPECS, PRICING_POLICY, MIN_EFFECTIVE_DPI,
   PDF_X_VERSION, text, stable, digest, productSpec, publicProductSpecs, normalizeDraft,
+  templateSpec, publicTemplateSpecs, containsPlaceholder, containsUnsupportedClaim,
+  readableColor, suggestedCopy, validateAuthorizedDraft, marketingReadinessReport,
+  versionOrderReady,
   calculateFulfillmentQuote,
   qrMatrix, renderPrintMaster, preflightReport, resolvePhysicalBusinessUid,
   createPhysicalMarketingService,

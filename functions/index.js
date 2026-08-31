@@ -11340,6 +11340,35 @@ function physicalMarketingHttpsError(error) {
   if (["physical_media_unavailable", "physical_preflight_failed", "physical_draft_changed"].includes(code)) {
     return new HttpsError("failed-precondition", "This material is not ready for a print file yet.");
   }
+  if (["physical_placeholder_blocked", "physical_unsupported_claim"].includes(code)) {
+    return new HttpsError("failed-precondition",
+      "Replace sample details or unsupported claims with your Business information.");
+  }
+  if (code === "physical_business_identity_missing") {
+    return new HttpsError("failed-precondition",
+      "Add your Business name before preparing this material.");
+  }
+  if (code === "physical_service_not_authorized") {
+    return new HttpsError("failed-precondition",
+      "Choose a service from your Business profile.");
+  }
+  if (["physical_template_media_required", "physical_media_resolution_low",
+    "physical_logo_resolution_low", "physical_media_purpose_invalid"].includes(code)) {
+    return new HttpsError("failed-precondition",
+      "Choose an approved, print-quality Brand Asset for this template.");
+  }
+  if (code === "physical_offer_not_authorized") {
+    return new HttpsError("failed-precondition",
+      "This template requires a Business-approved offer.");
+  }
+  if (code === "physical_verified_phone_missing") {
+    return new HttpsError("failed-precondition",
+      "Choose a verified Business phone or continue with the Landing Page QR only.");
+  }
+  if (["physical_marketing_readiness_failed", "physical_copy_does_not_fit"].includes(code)) {
+    return new HttpsError("failed-precondition",
+      "Adjust the material content so it fits the selected professional layout.");
+  }
   console.error("physical_marketing_operation_failed", {category: code.slice(0, 120)});
   return new HttpsError("internal", "Unable to complete the marketing material operation.");
 }

@@ -49,14 +49,54 @@ class _FakePhysicalMarketing implements PhysicalMarketingGateway {
   }) async => image;
 }
 
-Map<String, dynamic> _workspace({String status = 'ORDER_READY'}) => {
+Map<String, dynamic> _workspace({
+  String status = 'ORDER_READY',
+  String? businessName = 'Attractive Remodel',
+  bool marketingReady = true,
+}) => {
   'campaigns': [
     {'campaignId': 'campaign-one', 'name': 'Spring outreach'},
   ],
   'landingPages': [
     {'landingPageId': 'page-one', 'title': 'Seasonal cleanup'},
   ],
-  'approvedMedia': <dynamic>[],
+  'approvedMedia': [
+    {
+      'assetId': 'asset-one',
+      'revisionId': 'revision-one',
+      'title': 'Approved deck image',
+    },
+  ],
+  'businessIdentity': {
+    'businessName': businessName,
+    'hasApprovedLogo': true,
+    'verifiedPhoneAvailable': false,
+  },
+  'availableServices': ['Build decks', 'Fences'],
+  'copySuggestions': {
+    'Build decks': {
+      'headline': 'Build the deck your home deserves',
+      'supportingText': 'Explore professional deck options for your property.',
+      'cta': 'Scan to learn more',
+    },
+    'Fences': {
+      'headline': 'A better-looking boundary starts here',
+      'supportingText': 'Explore professional fence options for your property.',
+      'cta': 'Scan to learn more',
+    },
+  },
+  'templateSpecs': [
+    {
+      'templateId': 'door_hanger_service_hero_v1',
+      'label': 'Service Hero',
+      'available': true,
+    },
+    {
+      'templateId': 'door_hanger_professional_services_v1',
+      'label': 'Professional Services',
+      'available': true,
+    },
+  ],
   'productSpecs': [
     {
       'specId': 'door_hanger_3_5x8_5',
@@ -85,7 +125,14 @@ Map<String, dynamic> _workspace({String status = 'ORDER_READY'}) => {
                 'storagePath': 'private/proof.webp',
                 'contentHash': 'proof-hash',
               },
+              {
+                'side': 2,
+                'storagePath': 'private/proof-back.webp',
+                'contentHash': 'proof-back-hash',
+              },
             ],
+            'printReadiness': {'status': 'pass'},
+            'marketingReadiness': {'status': marketingReady ? 'pass' : 'fail'},
           },
         },
     },
@@ -110,7 +157,10 @@ void main() {
     expect(find.text('Pick Up Nearby'), findsOneWidget);
     expect(find.text('Print-ready PDF'), findsOneWidget);
     expect(find.text('Print — Coming Soon'), findsOneWidget);
-    expect(find.bySemanticsLabel('Exact print proof'), findsOneWidget);
+    expect(find.bySemanticsLabel('Exact print proof side 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Exact print proof side 2'), findsOneWidget);
+    expect(find.text('Print quality Ready'), findsOneWidget);
+    expect(find.text('Marketing content Ready'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -145,5 +195,72 @@ void main() {
     await tester.tap(button);
     await tester.pumpAndSettle();
     expect(service.prepares, 1);
+  });
+
+  testWidgets('creation uses canonical service, template, and approved media', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakePhysicalMarketing(_workspace(status: 'DRAFT'));
+    await tester.pumpWidget(_screen(service));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create material'));
+    await tester.pumpAndSettle();
+    expect(find.text('Attractive Remodel'), findsOneWidget);
+    expect(find.text('Service Hero'), findsOneWidget);
+    expect(find.text('Approved deck image'), findsOneWidget);
+    expect(find.text('Build the deck your home deserves'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('missing canonical Business name blocks creation actionably', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _FakePhysicalMarketing(
+      _workspace(status: 'DRAFT', businessName: null),
+    );
+    await tester.pumpWidget(_screen(service));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Set Up Your Growth Profile'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Create material'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Create material'),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('legacy order-ready fixture is downgraded when marketing fails', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      _screen(
+        _FakePhysicalMarketing(
+          _workspace(status: 'ORDER_READY', marketingReady: false),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('READY FOR REVIEW'), findsOneWidget);
+    expect(find.text('Print-ready PDF'), findsNothing);
+    expect(find.text('Marketing content Needs attention'), findsOneWidget);
   });
 }

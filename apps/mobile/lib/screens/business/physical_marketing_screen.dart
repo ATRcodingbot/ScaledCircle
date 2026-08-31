@@ -34,9 +34,31 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
     final pages = _maps(workspace['landingPages']);
     final specs = _maps(workspace['productSpecs']);
     final media = _maps(workspace['approvedMedia']);
-    if (campaigns.isEmpty || pages.isEmpty || specs.isEmpty) {
+    final templates = _maps(workspace['templateSpecs']);
+    final services = (workspace['availableServices'] as List? ?? const [])
+        .map((item) => item.toString())
+        .where((item) => item.trim().isNotEmpty)
+        .toList();
+    final suggestions = workspace['copySuggestions'] is Map
+        ? Map<String, dynamic>.from(workspace['copySuggestions'] as Map)
+        : <String, dynamic>{};
+    final identity = workspace['businessIdentity'] is Map
+        ? Map<String, dynamic>.from(workspace['businessIdentity'] as Map)
+        : <String, dynamic>{};
+    final businessName = identity['businessName']?.toString().trim() ?? '';
+    if (businessName.isEmpty) {
       _message(
-        'Create a campaign and publish a Landing Page before making a tracked print file.',
+        'Add your Business name in Grow → Growth Plan → Set Up Your Growth Profile before creating a material.',
+      );
+      return;
+    }
+    if (campaigns.isEmpty ||
+        pages.isEmpty ||
+        specs.isEmpty ||
+        templates.isEmpty ||
+        services.isEmpty) {
+      _message(
+        'Complete your Business profile, choose services, create a campaign, and publish a Landing Page first.',
       );
       return;
     }
@@ -48,14 +70,33 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
           orElse: () => specs.first,
         )['specId']
         .toString();
-    String? mediaKey;
-    final service = TextEditingController(text: 'Seasonal cleanup');
-    final headline = TextEditingController(text: 'Refresh your outdoor space');
-    final offer = TextEditingController(
-      text: 'Professional help for a cleaner property',
+    var service = services.first;
+    var templateId = templates
+        .firstWhere(
+          (item) => item['available'] == true,
+          orElse: () => templates.first,
+        )['templateId']
+        .toString();
+    String? mediaKey = media.isEmpty
+        ? null
+        : '${media.first['assetId']}|${media.first['revisionId']}';
+    var includeBusinessPhone = false;
+    Map<String, dynamic> copyFor(String value) => suggestions[value] is Map
+        ? Map<String, dynamic>.from(suggestions[value] as Map)
+        : <String, dynamic>{};
+    var suggested = copyFor(service);
+    final headline = TextEditingController(
+      text: suggested['headline']?.toString() ?? '',
     );
-    final cta = TextEditingController(text: 'See what we can do');
-    final phone = TextEditingController();
+    final offer = TextEditingController(
+      text:
+          workspace['authorizedOffer']?.toString() ??
+          suggested['supportingText']?.toString() ??
+          '',
+    );
+    final cta = TextEditingController(
+      text: suggested['cta']?.toString() ?? 'Scan to learn more',
+    );
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -70,7 +111,15 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Choose the campaign and message. ScaledCircle handles the print layout, QR, bleed, and proof.',
+                      'Choose a service, professional layout, approved image, and destination. ScaledCircle handles the print details.',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      businessName,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -87,6 +136,52 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                         .toList(),
                     onChanged: (value) =>
                         setLocal(() => specId = value ?? specId),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: service,
+                    decoration: const InputDecoration(labelText: 'Service'),
+                    items: services
+                        .map(
+                          (item) =>
+                              DropdownMenuItem(value: item, child: Text(item)),
+                        )
+                        .toList(),
+                    onChanged: (value) => setLocal(() {
+                      service = value ?? service;
+                      suggested = copyFor(service);
+                      headline.text = suggested['headline']?.toString() ?? '';
+                      cta.text =
+                          suggested['cta']?.toString() ?? 'Scan to learn more';
+                      if (templateId != 'door_hanger_offer_action_v1') {
+                        offer.text =
+                            suggested['supportingText']?.toString() ?? '';
+                      }
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: templateId,
+                    decoration: const InputDecoration(labelText: 'Template'),
+                    items: templates
+                        .where((item) => item['available'] == true)
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item['templateId'].toString(),
+                            child: Text(item['label'].toString()),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) => setLocal(() {
+                      templateId = value ?? templateId;
+                      if (templateId == 'door_hanger_offer_action_v1') {
+                        offer.text =
+                            workspace['authorizedOffer']?.toString() ?? '';
+                      } else if (offer.text.isEmpty) {
+                        offer.text =
+                            suggested['supportingText']?.toString() ?? '';
+                      }
+                    }),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
@@ -124,7 +219,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                   DropdownButtonFormField<String?>(
                     initialValue: mediaKey,
                     decoration: const InputDecoration(
-                      labelText: 'Approved image (optional)',
+                      labelText: 'Approved image',
                     ),
                     items: <DropdownMenuItem<String?>>[
                       const DropdownMenuItem(
@@ -142,13 +237,12 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: service,
-                    decoration: const InputDecoration(labelText: 'Service'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
                     controller: headline,
-                    decoration: const InputDecoration(labelText: 'Headline'),
+                    decoration: const InputDecoration(
+                      labelText: 'Headline',
+                      helperText:
+                          'Suggested from your selected service. You can edit it.',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -164,13 +258,19 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                       labelText: 'Call to action',
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone (optional)',
+                  if (identity['verifiedPhoneAvailable'] == true) ...[
+                    const SizedBox(height: 8),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: includeBusinessPhone,
+                      title: const Text('Include verified Business phone'),
+                      subtitle: const Text(
+                        'Uses the phone saved in your Business profile.',
+                      ),
+                      onChanged: (value) =>
+                          setLocal(() => includeBusinessPhone = value),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -181,7 +281,16 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed:
+                  headline.text.trim().isEmpty ||
+                      cta.text.trim().isEmpty ||
+                      ((templateId == 'door_hanger_service_hero_v1' ||
+                              templateId == 'door_hanger_offer_action_v1') &&
+                          mediaKey == null) ||
+                      (templateId == 'door_hanger_offer_action_v1' &&
+                          offer.text.trim().isEmpty)
+                  ? null
+                  : () => Navigator.pop(context, true),
               child: const Text('Create draft'),
             ),
           ],
@@ -197,16 +306,16 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
           'productSpecId': specId,
           'sideCount': 2,
           'campaignId': campaignId,
-          'service': service.text,
+          'service': service,
           'headline': headline.text,
           'offer': offer.text,
           'cta': cta.text,
-          'phone': phone.text,
+          'includeBusinessPhone': includeBusinessPhone,
           'landingPageId': pageId,
           'media': selectedMedia == null
               ? null
               : {'assetId': selectedMedia[0], 'revisionId': selectedMedia[1]},
-          'template': 'clean',
+          'templateId': templateId,
         },
       );
       _message(
@@ -217,7 +326,9 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
 
   Future<void> _prepare(String materialId) => _run(() async {
     await _service.prepare(materialId);
-    _message('Print preflight passed. Review the exact proof before approval.');
+    _message(
+      'Print quality and marketing content passed. Review the exact proof before approval.',
+    );
   });
 
   Future<void> _approve(String materialId, String versionId) => _run(() async {
@@ -287,6 +398,11 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
         }
         final workspace = snapshot.data!;
         final materials = _maps(workspace['materials']);
+        final identity = workspace['businessIdentity'] is Map
+            ? Map<String, dynamic>.from(workspace['businessIdentity'] as Map)
+            : <String, dynamic>{};
+        final missingBusinessName =
+            identity['businessName']?.toString().trim().isEmpty ?? true;
         return ListView(
           padding: const EdgeInsets.all(20),
           children: [
@@ -307,10 +423,32 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                     const SizedBox(height: 20),
                     const _FulfillmentChoices(),
                     const SizedBox(height: 20),
+                    if (missingBusinessName) ...[
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(18),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.info_outline),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Add your Business name in Grow → Growth Plan → Set Up Your Growth Profile. ScaledCircle will never invent it for customer material.',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     Align(
                       alignment: Alignment.centerLeft,
                       child: FilledButton.icon(
-                        onPressed: _working ? null : () => _create(workspace),
+                        onPressed: _working || missingBusinessName
+                            ? null
+                            : () => _create(workspace),
                         icon: const Icon(Icons.add),
                         label: const Text('Create material'),
                       ),
@@ -466,10 +604,17 @@ class _MaterialCard extends StatelessWidget {
     final proofs = (artifact['proofs'] as List? ?? const [])
         .whereType<Map>()
         .toList();
-    final proof = proofs.isEmpty
-        ? null
-        : Map<String, dynamic>.from(proofs.first);
-    final status = material['status']?.toString() ?? 'DRAFT';
+    final printReadiness = _map(
+      artifact['printReadiness'] ?? artifact['preflight'],
+    );
+    final marketingReadiness = _map(artifact['marketingReadiness']);
+    final printReady = printReadiness['status'] == 'pass';
+    final marketingReady = marketingReadiness['status'] == 'pass';
+    final storedStatus = material['status']?.toString() ?? 'DRAFT';
+    final status =
+        storedStatus == 'ORDER_READY' && (!printReady || !marketingReady)
+        ? 'READY_FOR_REVIEW'
+        : storedStatus;
     final materialId = material['materialId'].toString();
     final versionId = version['versionId']?.toString();
     return Card(
@@ -477,33 +622,56 @@ class _MaterialCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final preview = SizedBox(
-              width: 190,
-              child: AspectRatio(
-                aspectRatio: 3.5 / 8.5,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: proof == null
-                      ? const Center(child: Text('Prepare proof'))
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(13),
-                          child: AuthenticatedMediaPreview(
-                            identity:
-                                proof['contentHash'] ?? proof['storagePath'],
-                            semanticLabel: 'Exact print proof',
-                            fit: BoxFit.contain,
-                            load: () => service.bytes(
-                              proof['storagePath'].toString(),
-                              maximumBytes: 8 * 1024 * 1024,
+            final preview = proofs.isEmpty
+                ? const SizedBox(
+                    width: 190,
+                    height: 300,
+                    child: Card(child: Center(child: Text('Prepare proof'))),
+                  )
+                : Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: proofs.map((item) {
+                      final proof = Map<String, dynamic>.from(item);
+                      final side = proof['side'] ?? '';
+                      return SizedBox(
+                        width: 158,
+                        child: Column(
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 3.5 / 8.5,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Theme.of(context).dividerColor,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(13),
+                                  child: AuthenticatedMediaPreview(
+                                    identity:
+                                        proof['contentHash'] ??
+                                        proof['storagePath'],
+                                    semanticLabel:
+                                        'Exact print proof side $side',
+                                    fit: BoxFit.contain,
+                                    load: () => service.bytes(
+                                      proof['storagePath'].toString(),
+                                      maximumBytes: 8 * 1024 * 1024,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 6),
+                            Text(side == 1 ? 'Front' : 'Back'),
+                          ],
                         ),
-                ),
-              ),
-            );
+                      );
+                    }).toList(),
+                  );
             final details = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -522,7 +690,34 @@ class _MaterialCard extends StatelessWidget {
                 ),
                 if (artifact.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  const Text('Print preflight passed • PDF/X-4 • tracked QR'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Chip(
+                        avatar: Icon(
+                          printReady ? Icons.check_circle : Icons.info_outline,
+                          size: 18,
+                        ),
+                        label: Text(
+                          'Print quality ${printReady ? 'Ready' : 'Needs attention'}',
+                        ),
+                      ),
+                      Chip(
+                        avatar: Icon(
+                          marketingReady
+                              ? Icons.check_circle
+                              : Icons.info_outline,
+                          size: 18,
+                        ),
+                        label: Text(
+                          'Marketing content ${marketingReady ? 'Ready' : 'Needs attention'}',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('PDF/X-4 • tracked QR • immutable exact version'),
                 ],
                 const SizedBox(height: 16),
                 Wrap(
@@ -534,7 +729,10 @@ class _MaterialCard extends StatelessWidget {
                         onPressed: busy ? null : () => onPrepare(materialId),
                         child: const Text('Prepare proof'),
                       ),
-                    if (status == 'READY_FOR_REVIEW' && versionId != null)
+                    if (status == 'READY_FOR_REVIEW' &&
+                        versionId != null &&
+                        printReady &&
+                        marketingReady)
                       FilledButton(
                         onPressed: busy
                             ? null
@@ -584,17 +782,13 @@ class _MaterialCard extends StatelessWidget {
             if (constraints.maxWidth < 680) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(child: preview),
-                  const SizedBox(height: 18),
-                  details,
-                ],
+                children: [preview, const SizedBox(height: 18), details],
               );
             }
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                preview,
+                SizedBox(width: 328, child: preview),
                 const SizedBox(width: 24),
                 Expanded(child: details),
               ],
