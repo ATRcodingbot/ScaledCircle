@@ -11273,6 +11273,14 @@ const attributionProjectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJE
   process.env.GOOGLE_CLOUD_PROJECT || "";
 const attributionService = attributionFoundation.createAttributionService({db, FieldValue,
   publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId)});
+const physicalMarketing = require("./physical_marketing");
+const physicalMarketingService = physicalMarketing.createPhysicalMarketingService({
+  db,
+  FieldValue,
+  bucket: () => getStorage().bucket(),
+  createResponseAsset: (input, actor) => attributionService.createResponseAsset(input, actor),
+  publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId),
+});
 
 function attributionHttpsError(error) {
   const code = String(error?.message || "");
@@ -11313,6 +11321,45 @@ async function requireAttributionActor(request) {
   }
 }
 
+function physicalMarketingHttpsError(error) {
+  const code = String(error?.message || error);
+  if (["physical_actor_forbidden", "physical_cross_tenant_forbidden", "physical_material_forbidden",
+    "physical_campaign_forbidden", "physical_landing_page_forbidden", "physical_media_forbidden",
+    "physical_approval_forbidden", "physical_admin_required"].includes(code)) {
+    return new HttpsError("permission-denied", "That marketing material is not available.");
+  }
+  if (["physical_material_required", "physical_version_required", "physical_business_required",
+    "physical_mutation_invalid", "physical_product_spec_invalid", "physical_draft_invalid",
+    "physical_request_required", "physical_creation_conflict", "physical_product_unsupported",
+    "physical_side_count_invalid", "physical_campaign_required", "physical_service_required",
+    "physical_headline_required", "physical_cta_required", "physical_landing_page_required",
+    "physical_pricing_policy_invalid", "physical_quote_money_invalid"].includes(code)) {
+    return new HttpsError("invalid-argument", "Choose valid marketing material details.");
+  }
+  if (["physical_media_unavailable", "physical_preflight_failed", "physical_draft_changed"].includes(code)) {
+    return new HttpsError("failed-precondition", "This material is not ready for a print file yet.");
+  }
+  console.error("physical_marketing_operation_failed", {category: code.slice(0, 120)});
+  return new HttpsError("internal", "Unable to complete the marketing material operation.");
+}
+
+async function requirePhysicalMarketingActor(request, {admin = false} = {}) {
+  const context = await authenticatedUserContext(request, "Sign in to use physical marketing tools.");
+  try { attributionFoundation.assertAttributionActor(context); } catch (error) {
+    throw physicalMarketingHttpsError(error);
+  }
+  if (admin && context.isAdmin !== true) throw physicalMarketingHttpsError(new Error("physical_admin_required"));
+  if (!admin && context.role !== "business") throw physicalMarketingHttpsError(new Error("physical_actor_forbidden"));
+  return context;
+}
+
+async function physicalMarketingCall(request, operation, options) {
+  const actor = await requirePhysicalMarketingActor(request, options);
+  try { return await operation(request.data || {}, actor); } catch (error) {
+    throw physicalMarketingHttpsError(error);
+  }
+}
+
 exports.createResponseAsset = onCall(
   {enforceAppCheck: false, maxInstances: 4},
   async (request) => {
@@ -11321,6 +11368,27 @@ exports.createResponseAsset = onCall(
       throw attributionHttpsError(error);
     }
   },
+);
+
+exports.getPhysicalMarketingWorkspace = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  (request) => physicalMarketingCall(request, physicalMarketingService.workspace),
+);
+exports.mutatePhysicalMarketingMaterial = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  (request) => physicalMarketingCall(request, physicalMarketingService.mutate),
+);
+exports.preparePhysicalMarketingVersion = onCall(
+  {enforceAppCheck: false, maxInstances: 2, timeoutSeconds: 120, memory: "1GiB"},
+  (request) => physicalMarketingCall(request, physicalMarketingService.prepare),
+);
+exports.approvePhysicalMarketingVersion = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  (request) => physicalMarketingCall(request, physicalMarketingService.approve),
+);
+exports.getPhysicalMarketingOperations = onCall(
+  {enforceAppCheck: false, maxInstances: 2},
+  (request) => physicalMarketingCall(request, physicalMarketingService.operations, {admin: true}),
 );
 
 /** Process an explicitly reconciled job without replaying arbitrary updates. */

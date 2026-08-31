@@ -11274,6 +11274,14 @@ process.env.GOOGLE_CLOUD_PROJECT || "";
 const attributionService = attributionFoundation.createAttributionService({ db, FieldValue,
   publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId) });
 
+
+
+
+
+
+
+
+
 function attributionHttpsError(error) {
   const code = String(error?.message || "");
   if (["attribution_actor_required", "cross_business_attribution_forbidden",
@@ -11313,6 +11321,45 @@ async function requireAttributionActor(request) {
   }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 exports.createResponseAsset = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
   async (request) => {
@@ -11323,7 +11370,28 @@ exports.createResponseAsset = onCall(
   }
 );
 
-/** Process an explicitly reconciled job without replaying arbitrary updates. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

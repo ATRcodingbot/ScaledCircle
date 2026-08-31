@@ -1014,6 +1014,53 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // Physical Marketing Execution V1 is server-authoritative. Draft roots,
+    // immutable versions, print artifacts, approvals, pricing, quotes, orders,
+    // recipients, payment state, and provider receipts are never client-written.
+    match /marketingMaterials/{materialId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /marketingMaterialVersions/{versionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /printReadyArtifacts/{artifactId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /marketingMaterialApprovals/{versionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /fulfillmentPricingPolicies/{policyId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /printQuotes/{quoteId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /printOrders/{orderId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /mailCampaigns/{mailCampaignId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /mailAudienceSnapshots/{snapshotId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /providerReceipts/{receiptId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /physicalFulfillmentPayments/{paymentId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /responseInteractions/{interactionId} {
       allow read, create, update, delete: if false;
     }

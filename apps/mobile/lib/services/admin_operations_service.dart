@@ -104,6 +104,13 @@ class AdminOperationsService {
         });
     return Map<String, dynamic>.from(result.data);
   }
+
+  Future<Map<String, dynamic>> loadPhysicalMarketingOperations() async {
+    final result = await _functions
+        .httpsCallable('getPhysicalMarketingOperations')
+        .call<Map<Object?, Object?>>(const {});
+    return Map<String, dynamic>.from(result.data);
+  }
 }
 
 Map<String, dynamic> _map(Object? value) =>

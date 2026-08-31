@@ -26,6 +26,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late Future<AdminOperationsSnapshot> _overview = _service.loadOverview();
   late Future<GeneratedMediaCommercialMetrics> _generatedMediaMetrics = _service
       .loadGeneratedMediaCommercialMetrics();
+  late Future<Map<String, dynamic>> _physicalMarketingOperations = _service
+      .loadPhysicalMarketingOperations();
   GeneratedMediaWifPreflight? _providerAuthPreflight;
   bool _providerAuthPreflightRunning = false;
   Map<String, dynamic>? _accountingReconciliation;
@@ -36,6 +38,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _refresh() => setState(() {
     _overview = _service.loadOverview();
     _generatedMediaMetrics = _service.loadGeneratedMediaCommercialMetrics();
+    _physicalMarketingOperations = _service.loadPhysicalMarketingOperations();
   });
 
   @override
@@ -82,35 +85,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           }
           return FutureBuilder<GeneratedMediaCommercialMetrics>(
             future: _generatedMediaMetrics,
-            builder: (context, generatedSnapshot) => AdminOperationsContent(
-              snapshot: snapshot.data!,
-              commercialMetrics: generatedSnapshot.data,
-              onOpenIssue: _openIssue,
-              onOpenAdminAccounts: () =>
-                  _push(const AdminRoleManagementScreen()),
-              onOpenBeta: () => _push(const InternalBetaEntitlementsScreen()),
-              onOpenSubscriptions: () =>
-                  _push(const AdminSubscriptionOverviewScreen()),
-              onOpenAttribution: () => _push(const AdminAttributionScreen()),
-              onOpenConfiguration: () =>
-                  _push(const AdminPlatformHealthScreen()),
-              providerAuthPreflight: _providerAuthPreflight,
-              providerAuthPreflightRunning: _providerAuthPreflightRunning,
-              onRunProviderAuthPreflight: _runProviderAuthPreflight,
-              accountingReconciliation: _accountingReconciliation,
-              accountingReconciliationRunning: _accountingReconciliationRunning,
-              onReconcileAccounting: _reconcileAccounting,
-              founderQaJobController: _founderQaJobController,
-              founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
-              onConfigureFounderQaAllowlist: _configureFounderQaAllowlist,
-              commercialControlsUpdating: _commercialControlsUpdating,
-              onStagePrivateBetaControls: _stagePrivateBetaControls,
-              onRestoreFounderOnlyControls: _restoreFounderOnlyControls,
-              onOpenCampaign: (campaignId) => _push(
-                AdminCampaignTimelineScreen(
-                  campaignId: campaignId,
-                  service: _service,
-                ),
+            builder: (context, generatedSnapshot) => FutureBuilder<Map<String, dynamic>>(
+              future: _physicalMarketingOperations,
+              builder: (context, physicalSnapshot) => AdminOperationsContent(
+                snapshot: snapshot.data!,
+                commercialMetrics: generatedSnapshot.data,
+                physicalMarketingOperations: physicalSnapshot.data,
+                onOpenIssue: _openIssue,
+                onOpenAdminAccounts: () => _push(const AdminRoleManagementScreen()),
+                onOpenBeta: () => _push(const InternalBetaEntitlementsScreen()),
+                onOpenSubscriptions: () => _push(const AdminSubscriptionOverviewScreen()),
+                onOpenAttribution: () => _push(const AdminAttributionScreen()),
+                onOpenConfiguration: () => _push(const AdminPlatformHealthScreen()),
+                providerAuthPreflight: _providerAuthPreflight,
+                providerAuthPreflightRunning: _providerAuthPreflightRunning,
+                onRunProviderAuthPreflight: _runProviderAuthPreflight,
+                accountingReconciliation: _accountingReconciliation,
+                accountingReconciliationRunning: _accountingReconciliationRunning,
+                onReconcileAccounting: _reconcileAccounting,
+                founderQaJobController: _founderQaJobController,
+                founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
+                onConfigureFounderQaAllowlist: _configureFounderQaAllowlist,
+                commercialControlsUpdating: _commercialControlsUpdating,
+                onStagePrivateBetaControls: _stagePrivateBetaControls,
+                onRestoreFounderOnlyControls: _restoreFounderOnlyControls,
+                onOpenCampaign: (campaignId) => _push(AdminCampaignTimelineScreen(campaignId: campaignId, service: _service)),
               ),
             ),
           );
@@ -363,6 +362,7 @@ class AdminOperationsContent extends StatelessWidget {
   const AdminOperationsContent({
     required this.snapshot,
     this.commercialMetrics,
+    this.physicalMarketingOperations,
     required this.onOpenIssue,
     required this.onOpenAdminAccounts,
     required this.onOpenBeta,
@@ -386,6 +386,7 @@ class AdminOperationsContent extends StatelessWidget {
   });
   final AdminOperationsSnapshot snapshot;
   final GeneratedMediaCommercialMetrics? commercialMetrics;
+  final Map<String, dynamic>? physicalMarketingOperations;
   final ValueChanged<AdminOpsException> onOpenIssue;
   final VoidCallback onOpenAdminAccounts,
       onOpenBeta,
@@ -506,6 +507,28 @@ class AdminOperationsContent extends StatelessWidget {
         children: snapshot.health
             .map((item) => _HealthChip(item: item))
             .toList(),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Physical marketing artifacts', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 6),
+              if (physicalMarketingOperations == null)
+                const Text('Artifact diagnostics are temporarily unavailable.')
+              else ...[
+                Text('Environment: ${_category(physicalMarketingOperations!['environment']?.toString() ?? 'provider_free')}'),
+                Text('Materials: ${physicalMarketingOperations!['materials'] ?? 0} · Versions: ${physicalMarketingOperations!['versions'] ?? 0}'),
+                Text('Artifacts: ${physicalMarketingOperations!['artifacts'] ?? 0} · Approvals: ${physicalMarketingOperations!['approvals'] ?? 0}'),
+                Text('Preflight failures: ${physicalMarketingOperations!['preflightFailures'] ?? 0}'),
+                const Text('Provider traffic: 0 · Recipient data and credentials hidden'),
+              ],
+            ],
+          ),
+        ),
       ),
       const SizedBox(height: 12),
       Card(

@@ -160,6 +160,27 @@ test("staging asset resolves end to end and production rendering stays isolated"
   assert.equal(production.trackedUrl, `https://scaledcircle.com/r?code=${"a".repeat(24)}`);
 });
 
+test("response-asset creation is request-idempotent and conflicts fail closed", async () => {
+  const db = fakeFirestore({"users/business-1": {role: "business"}});
+  const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
+  const actor = {uid: "business-1", role: "business", emailVerified: true, user: {active: true}};
+  const service = attribution.createAttributionService({db, FieldValue, now: () => 2000,
+    randomBytes: (size) => Buffer.alloc(size, 7),
+    publicBaseUrl: attribution.publicResponseOrigin("scaledcircle-staging")});
+  const request = {type: "qr", requestId: "material-version-a", label: "Door hanger QR",
+    destination: "https://scaledcircle-staging.web.app/p/QA",
+    attribution: {source: "qr", materialId: "material-a", creativeVersion: "version-a"}};
+  const created = await service.createResponseAsset(request, actor);
+  assert.equal(created.idempotentReplay, false);
+  const replay = await service.createResponseAsset(request, actor);
+  assert.equal(replay.responseAssetId, created.responseAssetId);
+  assert.equal(replay.publicCode, created.publicCode);
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal([...db.records.keys()].filter((key) => key.startsWith("responseAssets/")).length, 1);
+  await assert.rejects(service.createResponseAsset({...request,
+    destination: "https://scaledcircle-staging.web.app/p/DIFFERENT"}, actor), /already_exists/);
+});
+
 test("interaction events are request-idempotent while unique responders stay deduplicated", async () => {
   const code = "abcdefghijklmnopqrstuvwx";
   const db = fakeFirestore({

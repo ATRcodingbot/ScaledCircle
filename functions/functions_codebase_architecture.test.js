@@ -103,6 +103,12 @@ const creativeMediaPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-creative-media", "package.json"), "utf8"));
 const creativeMediaLock = fs.readFileSync(
   path.join(root, "functions-creative-media", "package-lock.json"), "utf8");
+const physicalMarketingCore = fs.readFileSync(
+  path.join(root, "functions-physical-marketing", "index.js"), "utf8");
+const physicalMarketingPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-physical-marketing", "package.json"), "utf8"));
+const physicalMarketingLock = fs.readFileSync(
+  path.join(root, "functions-physical-marketing", "package-lock.json"), "utf8");
 const canonicalSubscriptionEntitlements = fs.readFileSync(
   path.join(root, "functions", "subscription_entitlements.js"), "utf8");
 const creativeMediaSubscriptionEntitlements = fs.readFileSync(
@@ -355,6 +361,31 @@ test("creative-media-core exclusively owns private Business media processing", (
     entry.codebase === "creative-media-core")?.source, "functions-creative-media");
 });
 
+test("physical-marketing-core exclusively owns provider-free immutable print authority", () => {
+  const names = ["getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
+    "preparePhysicalMarketingVersion", "approvePhysicalMarketingVersion",
+    "getPhysicalMarketingOperations"];
+  assert.deepEqual(exportsIn(physicalMarketingCore).sort(), [...names].sort());
+  for (const name of names) {
+    assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+    assert.doesNotMatch(creativeMediaCore, new RegExp(`exports\\.${name}\\s*=`));
+  }
+  assert.deepEqual(Object.keys(physicalMarketingPackage.dependencies).sort(), [
+    "@fontsource/roboto", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
+    "pdf-lib", "qrcode", "sharp",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "OPENAI_API_KEY", "SMTP_PASSWORD",
+    "PostGrid", "4over", "FedEx", "providerGenerationEnabled"]) {
+    assert.doesNotMatch(physicalMarketingCore, new RegExp(forbidden));
+  }
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(physicalMarketingLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "physical-marketing-core")?.source, "functions-physical-marketing");
+});
+
 test("legal-core exclusively owns immutable zero-secret consent authority", () => {
   assert.deepEqual(exportsIn(legal).sort(), ["getLegalConsentStatus", "recordLegalConsent"]);
   for (const name of ["recordLegalConsent", "getLegalConsentStatus"]) {
@@ -578,7 +609,7 @@ test("new notification triggers do not silently enable production retries", () =
 test("generated codebase preparation installs dependencies after regeneration", () => {
   for (const codebase of firebaseConfig.functions.filter((item) =>
     ["default", "platform-core", "wallet-core", "artifact-email", "campaign-funding", "sales-core",
-      "application-core"]
+      "application-core", "physical-marketing-core"]
       .includes(item.codebase))) {
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }
@@ -600,4 +631,12 @@ test("generated codebase preparation installs dependencies after regeneration", 
   assert.deepEqual(Object.keys(salesPackage.dependencies).sort(), [
     "firebase-admin", "firebase-functions",
   ]);
+  assert.deepEqual(Object.keys(physicalMarketingPackage.dependencies).sort(), [
+    "@fontsource/roboto", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
+    "pdf-lib", "qrcode", "sharp",
+  ]);
+  const preparation = fs.readFileSync(
+    path.join(root, "functions", "scripts", "prepare_functions_codebases.js"), "utf8");
+  assert.match(preparation, /"functions-physical-marketing"/);
+  assert.match(preparation, /\["functions-creative-media", "functions-physical-marketing"\]/);
 });

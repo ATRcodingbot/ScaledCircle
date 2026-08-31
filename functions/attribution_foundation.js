@@ -205,14 +205,38 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     const attribution = canonicalEnvelope({...input?.attribution, source: input?.attribution?.source || type});
     await validateOwnedReferences(businessUid, attribution);
     const destination = assertHttpsDestination(input?.destination);
-    const ref = db.collection("responseAssets").doc();
+    const creationRequestId = text(input?.requestId, 160) || null;
+    const deterministicId = creationRequestId ? `response_${crypto.createHash("sha256")
+      .update(`${businessUid}:${creationRequestId}`).digest("hex").slice(0, 40)}` : null;
+    const ref = db.collection("responseAssets").doc(deterministicId || undefined);
+    const replay = async () => {
+      const existing = await ref.get();
+      const data = existing.data() || {};
+      if (!existing.exists || data.businessUid !== businessUid || data.creationRequestId !== creationRequestId ||
+          data.type !== type || data.destination !== destination ||
+          JSON.stringify(canonicalEnvelope(data.attribution || {})) !==
+            JSON.stringify({...attribution, responseAssetId: ref.id})) return null;
+      return {responseAssetId: ref.id, publicCode: data.publicCode,
+        trackedUrl: `${origin}/r?code=${encodeURIComponent(data.publicCode)}`, idempotentReplay: true};
+    };
+    if (creationRequestId) {
+      const existing = await replay();
+      if (existing) return existing;
+    }
     const code = opaqueCode(randomBytes);
-    await ref.create({schemaVersion: SCHEMA_VERSION, businessUid, type, publicCode: code,
-      status: "active", label: text(input?.label, 160) || null, destination,
-      attribution: {...attribution, responseAssetId: ref.id}, createdBy: actor.uid,
-      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    try {
+      await ref.create({schemaVersion: SCHEMA_VERSION, businessUid, type, publicCode: code,
+        status: "active", label: text(input?.label, 160) || null, destination,
+        attribution: {...attribution, responseAssetId: ref.id}, creationRequestId,
+        createdBy: actor.uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    } catch (error) {
+      if (!creationRequestId) throw error;
+      const existing = await replay();
+      if (existing) return existing;
+      throw error;
+    }
     return {responseAssetId: ref.id, publicCode: code,
-      trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`};
+      trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`, idempotentReplay: false};
   }
 
   async function resolveAndRecord({code, ip, userAgent, requestIdentity}) {

@@ -19,6 +19,7 @@ const packageDirectories = [
   "functions-attribution",
   "functions-landing-page",
   "functions-creative-media",
+  "functions-physical-marketing",
 ];
 
 function runNpmCi(cwd, nativeInstall = false) {
@@ -46,7 +47,7 @@ try {
     for (const file of ["package.json", "package-lock.json"]) {
       fs.copyFileSync(path.join(source, file), path.join(destination, file));
     }
-    runNpmCi(destination, directory === "functions-creative-media");
+    runNpmCi(destination, ["functions-creative-media", "functions-physical-marketing"].includes(directory));
     console.log(`PASS ${directory}`);
   }
 } finally {

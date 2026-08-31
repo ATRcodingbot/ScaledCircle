@@ -490,3 +490,30 @@ test("provider generation configuration and QA allowlist remain server-only", as
     await assertFails(ref.delete());
   }
 });
+
+test("physical-marketing versions, artifacts, fulfillment, and pricing remain server-only", async () => {
+  const collections = [
+    "marketingMaterials", "marketingMaterialVersions", "printReadyArtifacts",
+    "marketingMaterialApprovals", "fulfillmentPricingPolicies", "printQuotes",
+    "printOrders", "mailCampaigns", "mailAudienceSnapshots", "providerReceipts",
+    "physicalFulfillmentPayments",
+  ];
+  await environment.withSecurityRulesDisabled(async (context) => {
+    for (const collection of collections) {
+      await context.firestore().doc(`${collection}/record-one`).set({businessUid: "business-one"});
+    }
+  });
+  const clients = [
+    environment.unauthenticatedContext().firestore(),
+    store("business-one"), store("business-two"), store("scaler-one"), store("admin-one"),
+  ];
+  for (const db of clients) {
+    for (const collection of collections) {
+      const ref = db.doc(`${collection}/record-one`);
+      await assertFails(ref.get());
+      await assertFails(ref.set({businessUid: "business-one", status: "ordered"}));
+      await assertFails(ref.update({status: "ordered"}));
+      await assertFails(ref.delete());
+    }
+  }
+});

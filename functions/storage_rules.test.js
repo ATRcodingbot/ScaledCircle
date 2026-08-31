@@ -195,3 +195,16 @@ test("Landing Page publication derivatives are public-read and backend-write onl
   await assertFails(ref("business-one", "landing_page_public/business-one/page-one/version-one/hero-main/other.webp")
     .put(new Uint8Array([5]), {contentType: "image/webp"}));
 });
+
+test("physical-marketing artifacts are exact-path owner-readable and backend-write only", async () => {
+  const path = "physical_marketing_private/business-one/material-one/version-one/print-ready.pdf";
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await context.storage().ref(path).put(new Uint8Array([1, 2, 3]), {contentType: "application/pdf"});
+  });
+  await assertSucceeds(ref("business-one", path).getDownloadURL());
+  await assertFails(ref("business-two", path).getDownloadURL());
+  await assertFails(ref("admin-one", path).getDownloadURL());
+  await assertFails(environment.unauthenticatedContext().storage().ref(path).getDownloadURL());
+  await assertFails(ref("business-one", path).put(new Uint8Array([4]), {contentType: "application/pdf"}));
+  await assertFails(ref("business-one", path).delete());
+});

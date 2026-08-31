@@ -114,6 +114,8 @@ unlinked_spec.ds
 
 # Coverage
 coverage/
+/tmp/
+/output/
 
 # Symbols
 app.*.symbols

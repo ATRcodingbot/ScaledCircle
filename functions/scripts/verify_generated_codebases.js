@@ -22,6 +22,7 @@ const applicationRoot = path.join(root, "functions-application");
 const attributionRoot = path.join(root, "functions-attribution");
 const landingPageRoot = path.join(root, "functions-landing-page");
 const creativeMediaRoot = path.join(root, "functions-creative-media");
+const physicalMarketingRoot = path.join(root, "functions-physical-marketing");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -96,6 +97,10 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
 for (const dependency of ["firebase-functions", "firebase-admin", "openai", "sharp"]) {
   resolveFrom(dependency, creativeMediaRoot);
 }
+for (const dependency of ["firebase-functions", "firebase-admin", "sharp", "pdf-lib", "qrcode",
+  "@pdf-lib/fontkit", "@fontsource/roboto"]) {
+  resolveFrom(dependency, physicalMarketingRoot);
+}
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer"]) {
   resolveFrom(dependency, transactionalEmailRoot);
 }
@@ -128,6 +133,7 @@ const application = require(path.join(applicationRoot, "index.js"));
 const attribution = require(path.join(attributionRoot, "index.js"));
 const landingPage = require(path.join(landingPageRoot, "index.js"));
 const creativeMedia = require(path.join(creativeMediaRoot, "index.js"));
+const physicalMarketing = require(path.join(physicalMarketingRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(attribution).sort(), [
   "bridgeResponseLead", "createResponseAsset", "getAttributionOverview", "resolveTrackedResponse",
@@ -173,6 +179,11 @@ assert.deepEqual(Object.keys(creativeMedia).sort(), [
   "updateBusinessBrandProfile", "updateBusinessMediaRevisionMetadata",
   "updateGeneratedMediaSafetyConfiguration",
 ].sort());
+assert.deepEqual(Object.keys(physicalMarketing).sort(), [
+  "approvePhysicalMarketingVersion", "getPhysicalMarketingOperations",
+  "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
+  "preparePhysicalMarketingVersion",
+].sort());
 const canonicalEntitlements = fs.readFileSync(
   path.join(root, "functions", "subscription_entitlements.js"), "utf8");
 const creativeMediaEntitlements = fs.readFileSync(
@@ -203,6 +214,7 @@ for (const name of Object.keys(legal)) assert.equal(Object.hasOwn(legacy, name),
 for (const name of Object.keys(application)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(landingPage)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(creativeMedia)) assert.equal(Object.hasOwn(legacy, name), false);
+for (const name of Object.keys(physicalMarketing)) assert.equal(Object.hasOwn(legacy, name), false);
 
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
@@ -216,6 +228,7 @@ inventories.push(Object.keys(application));
 inventories.push(Object.keys(attribution));
 inventories.push(Object.keys(landingPage));
 inventories.push(Object.keys(creativeMedia));
+inventories.push(Object.keys(physicalMarketing));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 

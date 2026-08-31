@@ -25,6 +25,7 @@ const applicationRoot = path.join(root, "functions-application");
 const attributionRoot = path.join(root, "functions-attribution");
 const landingPageRoot = path.join(root, "functions-landing-page");
 const creativeMediaRoot = path.join(root, "functions-creative-media");
+const physicalMarketingRoot = path.join(root, "functions-physical-marketing");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -123,6 +124,11 @@ const creativeMediaExports = new Set([
   "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
   "updateGeneratedMediaSafetyConfiguration",
 ]);
+const physicalMarketingExports = new Set([
+  "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
+  "preparePhysicalMarketingVersion", "approvePhysicalMarketingVersion",
+  "getPhysicalMarketingOperations",
+]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.
@@ -210,7 +216,8 @@ function transformIndex(mode) {
   if (mode === "attribution") selectedProgram(ast, attributionExports);
   if (mode === "landing-page") selectedProgram(ast, landingPageExports);
   if (mode === "creative-media") selectedProgram(ast, creativeMediaExports);
-  if (mode !== "attribution") {
+  if (mode === "physical-marketing") selectedProgram(ast, physicalMarketingExports);
+  if (!["attribution", "physical-marketing"].includes(mode)) {
     const attributionHelpers = new Set([
       "attributionFoundation", "attributionService", "attributionHttpsError", "requireAttributionActor",
     ]);
@@ -240,6 +247,20 @@ function transformIndex(mode) {
       return declarations.length ? [{...statement, declarations}] : [];
     });
   }
+  if (mode !== "physical-marketing") {
+    const physicalMarketingHelpers = new Set([
+      "physicalMarketing", "physicalMarketingService", "physicalMarketingHttpsError",
+      "requirePhysicalMarketingActor", "physicalMarketingCall",
+    ]);
+    ast.program.body = ast.program.body.flatMap((statement) => {
+      if (statement.type === "FunctionDeclaration" &&
+          physicalMarketingHelpers.has(statement.id?.name)) return [];
+      if (statement.type !== "VariableDeclaration") return [statement];
+      const declarations = statement.declarations.filter((declaration) =>
+        !physicalMarketingHelpers.has(declaration.id?.name));
+      return declarations.length ? [{...statement, declarations}] : [];
+    });
+  }
   ast.program.body = ast.program.body.flatMap((statement) => {
     const name = exportedName(statement);
     const excludedFromLegacy = new Set([
@@ -256,6 +277,7 @@ function transformIndex(mode) {
       ...attributionExports,
       ...landingPageExports,
       ...creativeMediaExports,
+      ...physicalMarketingExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
     ]);
@@ -276,6 +298,7 @@ function transformIndex(mode) {
       (mode === "attribution" && !attributionExports.has(name)) ||
       (mode === "landing-page" && !landingPageExports.has(name)) ||
       (mode === "creative-media" && !creativeMediaExports.has(name)) ||
+      (mode === "physical-marketing" && !physicalMarketingExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -301,6 +324,7 @@ function transformIndex(mode) {
       if (mode === "attribution") return false;
       if (mode === "landing-page") return false;
       if (mode === "creative-media") return false;
+      if (mode === "physical-marketing") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -357,7 +381,11 @@ function copyPackage(destination, mode) {
     if (mode === "legal" && name.endsWith(".js") && name !== "legal_consent.js") continue;
     if (mode === "application" && name.endsWith(".js") &&
         !["legal_consent.js", "tracking_security.js", "operational_layer.js"].includes(name)) continue;
-    if (mode !== "attribution" && name === "attribution_foundation.js") continue;
+    if (mode === "physical-marketing" && name.endsWith(".js") &&
+        !["physical_marketing.js", "physical_fulfillment_providers.js",
+          "attribution_foundation.js"].includes(name)) continue;
+    if (!["attribution", "physical-marketing"].includes(mode) &&
+        name === "attribution_foundation.js") continue;
     if (mode === "attribution" && name.endsWith(".js") &&
         name !== "attribution_foundation.js") continue;
     // The transformed legacy index still initializes the shared landing-page
@@ -412,6 +440,9 @@ function writePackageManifest(mode, destination) {
         ? ["firebase-admin", "firebase-functions"]
       : mode === "creative-media"
         ? ["firebase-admin", "firebase-functions", "openai", "sharp"]
+      : mode === "physical-marketing"
+        ? ["firebase-admin", "firebase-functions", "sharp", "pdf-lib", "qrcode",
+          "@pdf-lib/fontkit", "@fontsource/roboto"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
@@ -488,6 +519,7 @@ for (const [mode, destination] of [
   ["attribution", attributionRoot],
   ["landing-page", landingPageRoot],
   ["creative-media", creativeMediaRoot],
+  ["physical-marketing", physicalMarketingRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
   // payment boundary. Never regenerate it from the subscription/payout-heavy
@@ -507,4 +539,4 @@ for (const [mode, destination] of [
 fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
   path.join(campaignFundingRoot, "legal_consent.js"));
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, physical-marketing-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");

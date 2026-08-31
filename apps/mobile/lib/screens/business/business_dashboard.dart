@@ -638,6 +638,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 value: 'brand_assets',
                 child: Text('Brand Assets — Beta'),
               ),
+              const PopupMenuItem(
+                value: 'physical_marketing',
+                child: Text('Physical Marketing — Beta'),
+              ),
               PopupMenuItem(
                 value: 'responses',
                 enabled: AppEnvironmentConfig.responseTrackingEnabled,
@@ -668,6 +672,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 AppNavigation.push(context, AppRoutes.businessLandingPages);
               } else if (value == 'brand_assets') {
                 AppNavigation.push(context, AppRoutes.businessBrandAssets);
+              } else if (value == 'physical_marketing') {
+                AppNavigation.push(context, AppRoutes.businessPhysicalMarketing);
               } else if (value == 'account') {
                 Navigator.push(
                   context,

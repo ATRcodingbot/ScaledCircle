@@ -150,6 +150,14 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // Provider-free physical-marketing masters and proofs are normalized and
+    // written only by physical-marketing-core. The owning Business may fetch an
+    // exact known artifact, but cannot list, replace, publish, or share it.
+    match /physical_marketing_private/{uid}/{materialId}/{versionId}/{fileName} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
     // Immutable publication derivatives created only by the Landing Page
     // backend. Public pages may read exact objects; clients cannot create,
     // replace, delete, or list through a broader rule.
