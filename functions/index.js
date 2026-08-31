@@ -11323,6 +11323,7 @@ async function requireAttributionActor(request) {
 
 function physicalMarketingHttpsError(error) {
   const code = String(error?.message || error);
+  console.warn("physical_marketing_request_rejected", {category: code.slice(0, 120)});
   if (["physical_actor_forbidden", "physical_cross_tenant_forbidden", "physical_material_forbidden",
     "physical_campaign_forbidden", "physical_landing_page_forbidden", "physical_media_forbidden",
     "physical_approval_forbidden", "physical_admin_required"].includes(code)) {
