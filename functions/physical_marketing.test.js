@@ -22,6 +22,17 @@ test("bounded V1 product specs include required door hanger and supported front/
   assert.equal(Object.values(physical.PRODUCT_SPECS).filter((item) => !item.uiHidden).length, 5);
 });
 
+test("customer-visible ProductSpecs retain their stable server validation identifiers", () => {
+  const specs = physical.publicProductSpecs();
+  assert.equal(specs.length, 5);
+  assert.equal(specs.find((item) => item.productType === "door_hanger").specId,
+    "door_hanger_3_5x8_5");
+  for (const item of specs) {
+    assert.equal(physical.productSpec(item.specId).specId, item.specId);
+    assert.equal(item.version, "PhysicalProductSpecV1");
+  }
+});
+
 test("drafts are bounded and reject unsupported products, sides, and missing campaign or destination", () => {
   assert.equal(draft().headline, "Build a better outdoor space");
   assert.throws(() => draft({productSpecId: "yard_sign"}), /physical_product_unsupported/);

@@ -96,6 +96,13 @@ function productSpec(specId) {
   return {specId: id, version: "PhysicalProductSpecV1", ...spec};
 }
 
+function publicProductSpecs() {
+  return Object.entries(PRODUCT_SPECS)
+    .filter(([, spec]) => !spec.uiHidden)
+    .map(([specId, spec]) => ({specId, version: "PhysicalProductSpecV1", ...spec,
+      dieCut: spec.dieCut || null}));
+}
+
 function validHexColor(value, fallback) {
   const normalized = text(value, 7).toUpperCase();
   return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : fallback;
@@ -534,8 +541,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       landingPages: pageQuery.docs.filter((doc) => doc.data()?.status === "published")
         .map((doc) => ({landingPageId: doc.id, title: text(doc.data()?.title || doc.data()?.publicSlug || "Landing Page", 120)})),
       approvedMedia: media,
-      productSpecs: Object.values(PRODUCT_SPECS).filter((spec) => !spec.uiHidden)
-        .map((spec) => ({...spec, dieCut: spec.dieCut || null})),
+      productSpecs: publicProductSpecs(),
       pricingPolicy: {...PRICING_POLICY},
       fulfillment: {download: "available", print: "coming_soon", mail: "coming_soon",
         localPickup: "not_integrated"},
@@ -705,7 +711,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
 
 module.exports = {
   SCHEMA_VERSION, PRICING_POLICY_VERSION, PRODUCT_SPECS, PRICING_POLICY, MIN_EFFECTIVE_DPI,
-  PDF_X_VERSION, text, stable, digest, productSpec, normalizeDraft, calculateFulfillmentQuote,
+  PDF_X_VERSION, text, stable, digest, productSpec, publicProductSpecs, normalizeDraft,
+  calculateFulfillmentQuote,
   qrMatrix, renderPrintMaster, preflightReport, resolvePhysicalBusinessUid,
   createPhysicalMarketingService,
 };
