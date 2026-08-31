@@ -952,6 +952,8 @@ class _MediaCard extends StatelessWidget {
                 child: ColoredBox(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: AuthenticatedMediaPreview(
+                    identity:
+                        '${asset['assetId']}:${revision['revisionId']}',
                     load: () => service.previewBytes(asset),
                     semanticLabel:
                         revision['altText']?.toString().isNotEmpty == true

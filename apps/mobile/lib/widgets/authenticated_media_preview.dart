@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 class AuthenticatedMediaPreview extends StatefulWidget {
   const AuthenticatedMediaPreview({
     required this.load,
+    required this.identity,
     required this.semanticLabel,
     this.fit = BoxFit.cover,
     this.compact = false,
@@ -12,6 +13,7 @@ class AuthenticatedMediaPreview extends StatefulWidget {
   });
 
   final Future<Uint8List?> Function() load;
+  final Object identity;
   final String semanticLabel;
   final BoxFit fit;
   final bool compact;
@@ -23,6 +25,12 @@ class AuthenticatedMediaPreview extends StatefulWidget {
 
 class _AuthenticatedMediaPreviewState extends State<AuthenticatedMediaPreview> {
   late Future<Uint8List?> _future = widget.load();
+
+  @override
+  void didUpdateWidget(covariant AuthenticatedMediaPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.identity != widget.identity) _future = widget.load();
+  }
 
   void _retry() => setState(() => _future = widget.load());
 

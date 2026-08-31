@@ -322,8 +322,10 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       decoration: const BoxDecoration(color: Color(0xFFEAF0F5)),
       child: AuthenticatedMediaPreview(
         compact: true,
+        identity:
+            '${asset['assetId']}:${asset['approvedRevisionId'] ?? (asset['revision'] as Map?)?['revisionId']}',
         load: () => _previewFutures.putIfAbsent(
-          asset['assetId'].toString(),
+          '${asset['assetId']}:${asset['approvedRevisionId'] ?? (asset['revision'] as Map?)?['revisionId']}',
           () => _mediaService.previewBytes(asset),
         ),
         semanticLabel: 'Approved image preview',
