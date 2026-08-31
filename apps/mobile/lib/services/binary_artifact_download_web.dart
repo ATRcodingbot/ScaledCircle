@@ -20,5 +20,6 @@ Future<void> downloadBinaryArtifactFile({
   web.document.body?.append(anchor);
   anchor.click();
   anchor.remove();
+  await Future<void>.delayed(const Duration(seconds: 1));
   web.URL.revokeObjectURL(url);
 }
