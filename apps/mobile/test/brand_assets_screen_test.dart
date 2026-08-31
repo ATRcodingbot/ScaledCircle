@@ -269,9 +269,116 @@ void main() {
     expect(find.text('Create visuals for me'), findsOneWidget);
     expect(find.textContaining('Generated concept'), findsWidgets);
     expect(find.text('Approve concept'), findsOneWidget);
-    expect(find.text('Try another'), findsOneWidget);
+    expect(find.text('Try another · Uses 1 generated visual'), findsOneWidget);
     expect(find.text('Remove'), findsOneWidget);
     expect(find.textContaining('not a photo'), findsWidgets);
+  });
+
+  testWidgets('commercial usage and Try another cost are explicit', (
+    tester,
+  ) async {
+    final generation = _FakeGeneration({
+      'capability': 'enabled',
+      'businessAuthorized': true,
+      'budgetEnabled': true,
+      'approvedServiceCategories': ['Decks'],
+      'usage': {
+        'used': 3,
+        'pending': 0,
+        'total': 5,
+        'remaining': 2,
+        'resetAt': DateTime.utc(2026, 9, 1).millisecondsSinceEpoch,
+      },
+      'jobs': [
+        {
+          'jobId': 'job-review',
+          'status': 'review_required',
+          'serviceCategory': 'Decks',
+          'visualDirection': 'clean',
+        },
+      ],
+    });
+    await tester.pumpWidget(
+      _screen(
+        _FakeMedia({'assets': <dynamic>[], 'hasMore': false}),
+        generation: generation,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('3 of 5 used this month'), findsOneWidget);
+    expect(find.textContaining('Resets September 1'), findsOneWidget);
+    expect(find.text('Try another · Uses 1 generated visual'), findsOneWidget);
+  });
+
+  testWidgets('provider-disabled Beta keeps usage and alternatives visible', (
+    tester,
+  ) async {
+    final generation = _FakeGeneration({
+      'capability': 'disabled',
+      'businessAuthorized': true,
+      'usage': {
+        'used': 0,
+        'pending': 0,
+        'total': 60,
+        'remaining': 60,
+        'resetAt': DateTime.utc(2026, 9, 1).millisecondsSinceEpoch,
+      },
+      'jobs': <dynamic>[],
+    });
+    await tester.pumpWidget(
+      _screen(
+        _FakeMedia({'assets': <dynamic>[], 'hasMore': false}),
+        generation: generation,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Beta'), findsOneWidget);
+    expect(find.textContaining('0 of 60 used this month'), findsOneWidget);
+    expect(find.textContaining('Resets September 1'), findsOneWidget);
+    expect(
+      find.textContaining('Try another uses 1 generated visual'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('temporarily unavailable'), findsOneWidget);
+    expect(find.textContaining('upload your own photo'), findsOneWidget);
+  });
+
+  testWidgets('monthly limit preserves useful no-generation alternatives', (
+    tester,
+  ) async {
+    final generation = _FakeGeneration({
+      'capability': 'enabled',
+      'businessAuthorized': true,
+      'budgetEnabled': true,
+      'approvedServiceCategories': ['Decks'],
+      'usage': {
+        'used': 5,
+        'pending': 0,
+        'total': 5,
+        'remaining': 0,
+        'limitReached': true,
+        'resetAt': DateTime.utc(2026, 9, 1).millisecondsSinceEpoch,
+      },
+      'jobs': <dynamic>[],
+    });
+    await tester.pumpWidget(
+      _screen(
+        _FakeMedia({'assets': <dynamic>[], 'hasMore': false}),
+        generation: generation,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('used your generated visuals for this period'),
+      findsOneWidget,
+    );
+    expect(find.text('Upload your own photo'), findsOneWidget);
+    expect(find.text('Existing visuals remain usable'), findsOneWidget);
+    expect(
+      find.text('Publishing without a photo is available'),
+      findsOneWidget,
+    );
+    expect(find.text('Create service visual'), findsNothing);
   });
 
   testWidgets('deployed disabled capability exposes no generation action', (
@@ -309,7 +416,7 @@ void main() {
     expect(find.text('Create visuals for me'), findsNothing);
     expect(find.text('Create service visual'), findsNothing);
     expect(
-      find.text('Generated visuals aren’t available for this account yet.'),
+      find.textContaining('available for this account yet'),
       findsOneWidget,
     );
   });

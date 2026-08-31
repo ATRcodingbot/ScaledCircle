@@ -49,6 +49,16 @@ class AdminOperationsService {
     return _map(data['accountingReconciliation']);
   }
 
+  Future<GeneratedMediaCommercialMetrics>
+  loadGeneratedMediaCommercialMetrics() async {
+    final result = await _functions
+        .httpsCallable('getGeneratedMediaOperations')
+        .call<Map<Object?, Object?>>(const {});
+    return GeneratedMediaCommercialMetrics.fromMap(
+      Map<String, dynamic>.from(result.data),
+    );
+  }
+
   Future<Map<String, dynamic>> restrictGeneratedMediaToFounderQaBusiness(
     String generationJobId,
   ) async {
@@ -57,6 +67,34 @@ class AdminOperationsService {
         .call<Map<Object?, Object?>>({
           'providerGenerationEnabled': false,
           'authorizedBusinessJobIds': [generationJobId.trim()],
+        });
+    return Map<String, dynamic>.from(result.data);
+  }
+
+  Future<Map<String, dynamic>> stageGeneratedMediaPrivateBeta(
+    String generationJobId,
+  ) async {
+    final result = await _functions
+        .httpsCallable('updateGeneratedMediaSafetyConfiguration')
+        .call<Map<Object?, Object?>>({
+          'providerGenerationEnabled': false,
+          'rolloutMode': 'beta_cohort',
+          'betaCohortStage': 'initial_5',
+          'betaCohortBusinessJobIds': [generationJobId.trim()],
+          'globalDailyMaximum': 50,
+          'globalMonthlyMaximum': 300,
+          'globalDailyCostMicros': 10000000,
+          'globalMonthlyCostMicros': 100000000,
+        });
+    return Map<String, dynamic>.from(result.data);
+  }
+
+  Future<Map<String, dynamic>> restoreGeneratedMediaFounderOnly() async {
+    final result = await _functions
+        .httpsCallable('updateGeneratedMediaSafetyConfiguration')
+        .call<Map<Object?, Object?>>({
+          'providerGenerationEnabled': false,
+          'rolloutMode': 'founder_only',
         });
     return Map<String, dynamic>.from(result.data);
   }
@@ -191,6 +229,98 @@ class GeneratedMediaWifPreflight {
       claimsMatch == 'PASS' &&
       openAIExchange == 'PASS';
 }
+
+class GeneratedMediaCommercialMetrics {
+  const GeneratedMediaCommercialMetrics({
+    required this.providerEnabled,
+    required this.rolloutMode,
+    required this.betaCohortStage,
+    required this.betaCohortEnabled,
+    required this.betaCohortCount,
+    required this.betaCohortLimit,
+    required this.planAllowances,
+    required this.requestsByPlan,
+    required this.customerUnitsByPlan,
+    required this.providerUnitsByPlan,
+    required this.dailyCalls,
+    required this.dailyCallLimit,
+    required this.dailyCostMicros,
+    required this.dailyCostLimitMicros,
+    required this.monthlyCostMicros,
+    required this.monthlyCostLimitMicros,
+    required this.outstandingReservations,
+    required this.systemRejections,
+    required this.limitExhaustions,
+    required this.averageLatencyMs,
+    required this.providerFailures,
+  });
+
+  factory GeneratedMediaCommercialMetrics.fromMap(Map<String, dynamic> map) {
+    final commercial = _map(map['commercial']);
+    final access = _map(map['providerAccess']);
+    final operations = _map(map['providerOperations']);
+    final limits = _map(commercial['limits']);
+    final utilization = _map(commercial['utilization']);
+    return GeneratedMediaCommercialMetrics(
+      providerEnabled: commercial['providerGenerationEnabled'] == true,
+      rolloutMode: commercial['rolloutMode']?.toString() ?? 'founder_only',
+      betaCohortStage: commercial['betaCohortStage']?.toString() ?? 'initial_5',
+      betaCohortEnabled: commercial['betaCohortEnabled'] == true,
+      betaCohortCount:
+          (commercial['betaCohortCount'] as num?)?.toInt() ??
+          (access['betaCohortCount'] as num?)?.toInt() ??
+          0,
+      betaCohortLimit: (commercial['betaCohortLimit'] as num?)?.toInt() ?? 5,
+      planAllowances: _intMap(commercial['planMonthlyAllowances']),
+      requestsByPlan: _intMap(operations['requestsByPlan']),
+      customerUnitsByPlan: _intMap(operations['customerConsumedUnitsByPlan']),
+      providerUnitsByPlan: _intMap(operations['providerBilledUnitsByPlan']),
+      dailyCalls: (utilization['dailyCalls'] as num?)?.toInt() ?? 0,
+      dailyCallLimit: (limits['globalDailyMaximum'] as num?)?.toInt() ?? 0,
+      dailyCostMicros: (utilization['dailyCostMicros'] as num?)?.toInt() ?? 0,
+      dailyCostLimitMicros:
+          (limits['globalDailyCostMicros'] as num?)?.toInt() ?? 0,
+      monthlyCostMicros:
+          (utilization['monthlyCostMicros'] as num?)?.toInt() ?? 0,
+      monthlyCostLimitMicros:
+          (limits['globalMonthlyCostMicros'] as num?)?.toInt() ?? 0,
+      outstandingReservations:
+          (operations['outstandingReservationUnits'] as num?)?.toInt() ?? 0,
+      systemRejections:
+          (operations['systemRejectionCount'] as num?)?.toInt() ?? 0,
+      limitExhaustions:
+          (utilization['customerLimitExhaustionCount'] as num?)?.toInt() ?? 0,
+      averageLatencyMs:
+          (map['averageCompletionLatencyMs'] as num?)?.toInt() ?? 0,
+      providerFailures: _intMap(
+        map['failures'],
+      ).values.fold(0, (a, b) => a + b),
+    );
+  }
+
+  final bool providerEnabled, betaCohortEnabled;
+  final String rolloutMode, betaCohortStage;
+  final int betaCohortCount,
+      betaCohortLimit,
+      dailyCalls,
+      dailyCallLimit,
+      dailyCostMicros,
+      dailyCostLimitMicros,
+      monthlyCostMicros,
+      monthlyCostLimitMicros,
+      outstandingReservations,
+      systemRejections,
+      limitExhaustions,
+      averageLatencyMs,
+      providerFailures;
+  final Map<String, int> planAllowances,
+      requestsByPlan,
+      customerUnitsByPlan,
+      providerUnitsByPlan;
+}
+
+Map<String, int> _intMap(Object? value) =>
+    _map(value).map((key, item) => MapEntry(key, (item as num?)?.toInt() ?? 0));
 
 class AdminCampaignTimeline {
   const AdminCampaignTimeline({

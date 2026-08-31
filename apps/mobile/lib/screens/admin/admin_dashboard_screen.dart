@@ -24,13 +24,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late final AdminOperationsService _service =
       widget.service ?? AdminOperationsService();
   late Future<AdminOperationsSnapshot> _overview = _service.loadOverview();
+  late Future<GeneratedMediaCommercialMetrics> _generatedMediaMetrics = _service
+      .loadGeneratedMediaCommercialMetrics();
   GeneratedMediaWifPreflight? _providerAuthPreflight;
   bool _providerAuthPreflightRunning = false;
   Map<String, dynamic>? _accountingReconciliation;
   bool _accountingReconciliationRunning = false;
   final TextEditingController _founderQaJobController = TextEditingController();
   bool _founderQaAllowlistUpdating = false;
-  void _refresh() => setState(() => _overview = _service.loadOverview());
+  bool _commercialControlsUpdating = false;
+  void _refresh() => setState(() {
+    _overview = _service.loadOverview();
+    _generatedMediaMetrics = _service.loadGeneratedMediaCommercialMetrics();
+  });
 
   @override
   void dispose() {
@@ -74,28 +80,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           if (snapshot.hasError || !snapshot.hasData) {
             return _LoadFailure(onRetry: _refresh);
           }
-          return AdminOperationsContent(
-            snapshot: snapshot.data!,
-            onOpenIssue: _openIssue,
-            onOpenAdminAccounts: () => _push(const AdminRoleManagementScreen()),
-            onOpenBeta: () => _push(const InternalBetaEntitlementsScreen()),
-            onOpenSubscriptions: () =>
-                _push(const AdminSubscriptionOverviewScreen()),
-            onOpenAttribution: () => _push(const AdminAttributionScreen()),
-            onOpenConfiguration: () => _push(const AdminPlatformHealthScreen()),
-            providerAuthPreflight: _providerAuthPreflight,
-            providerAuthPreflightRunning: _providerAuthPreflightRunning,
-            onRunProviderAuthPreflight: _runProviderAuthPreflight,
-            accountingReconciliation: _accountingReconciliation,
-            accountingReconciliationRunning: _accountingReconciliationRunning,
-            onReconcileAccounting: _reconcileAccounting,
-            founderQaJobController: _founderQaJobController,
-            founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
-            onConfigureFounderQaAllowlist: _configureFounderQaAllowlist,
-            onOpenCampaign: (campaignId) => _push(
-              AdminCampaignTimelineScreen(
-                campaignId: campaignId,
-                service: _service,
+          return FutureBuilder<GeneratedMediaCommercialMetrics>(
+            future: _generatedMediaMetrics,
+            builder: (context, generatedSnapshot) => AdminOperationsContent(
+              snapshot: snapshot.data!,
+              commercialMetrics: generatedSnapshot.data,
+              onOpenIssue: _openIssue,
+              onOpenAdminAccounts: () =>
+                  _push(const AdminRoleManagementScreen()),
+              onOpenBeta: () => _push(const InternalBetaEntitlementsScreen()),
+              onOpenSubscriptions: () =>
+                  _push(const AdminSubscriptionOverviewScreen()),
+              onOpenAttribution: () => _push(const AdminAttributionScreen()),
+              onOpenConfiguration: () =>
+                  _push(const AdminPlatformHealthScreen()),
+              providerAuthPreflight: _providerAuthPreflight,
+              providerAuthPreflightRunning: _providerAuthPreflightRunning,
+              onRunProviderAuthPreflight: _runProviderAuthPreflight,
+              accountingReconciliation: _accountingReconciliation,
+              accountingReconciliationRunning: _accountingReconciliationRunning,
+              onReconcileAccounting: _reconcileAccounting,
+              founderQaJobController: _founderQaJobController,
+              founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
+              onConfigureFounderQaAllowlist: _configureFounderQaAllowlist,
+              commercialControlsUpdating: _commercialControlsUpdating,
+              onStagePrivateBetaControls: _stagePrivateBetaControls,
+              onRestoreFounderOnlyControls: _restoreFounderOnlyControls,
+              onOpenCampaign: (campaignId) => _push(
+                AdminCampaignTimelineScreen(
+                  campaignId: campaignId,
+                  service: _service,
+                ),
               ),
             ),
           );
@@ -157,13 +172,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final jobId = _founderQaJobController.text.trim();
     if (!RegExp(r'^visual_job_[a-f0-9]{40}$').hasMatch(jobId)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter valid generated-media job evidence.')),
+        const SnackBar(
+          content: Text('Enter valid generated-media job evidence.'),
+        ),
       );
       return;
     }
     setState(() => _founderQaAllowlistUpdating = true);
     try {
-      final result = await _service.restrictGeneratedMediaToFounderQaBusiness(jobId);
+      final result = await _service.restrictGeneratedMediaToFounderQaBusiness(
+        jobId,
+      );
       if (!mounted) return;
       final count = (result['authorizedBusinessCount'] as num?)?.toInt() ?? 0;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -178,10 +197,80 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Founder QA access update failed safely.')),
+        const SnackBar(
+          content: Text('Founder QA access update failed safely.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _founderQaAllowlistUpdating = false);
+    }
+  }
+
+  Future<void> _stagePrivateBetaControls() async {
+    if (_commercialControlsUpdating) return;
+    final jobId = _founderQaJobController.text.trim();
+    if (!RegExp(r'^visual_job_[a-f0-9]{40}$').hasMatch(jobId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter valid generated-media job evidence.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _commercialControlsUpdating = true);
+    try {
+      final result = await _service.stageGeneratedMediaPrivateBeta(jobId);
+      if (!mounted) return;
+      final safe =
+          result['providerGenerationEnabled'] != true &&
+          result['rolloutMode'] == 'beta_cohort' &&
+          result['betaCohortCount'] == 1;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            safe
+                ? 'First-five Private Beta controls staged. Generation remains disabled.'
+                : 'Private Beta controls could not be verified safely.',
+          ),
+        ),
+      );
+      _refresh();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Private Beta controls failed safely.')),
+      );
+    } finally {
+      if (mounted) setState(() => _commercialControlsUpdating = false);
+    }
+  }
+
+  Future<void> _restoreFounderOnlyControls() async {
+    if (_commercialControlsUpdating) return;
+    setState(() => _commercialControlsUpdating = true);
+    try {
+      final result = await _service.restoreGeneratedMediaFounderOnly();
+      if (!mounted) return;
+      final safe =
+          result['providerGenerationEnabled'] != true &&
+          result['rolloutMode'] == 'founder_only';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            safe
+                ? 'Founder-only mode restored. Generation remains disabled.'
+                : 'Founder-only controls could not be verified safely.',
+          ),
+        ),
+      );
+      _refresh();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Founder-only controls failed safely.')),
+      );
+    } finally {
+      if (mounted) setState(() => _commercialControlsUpdating = false);
     }
   }
 
@@ -273,6 +362,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 class AdminOperationsContent extends StatelessWidget {
   const AdminOperationsContent({
     required this.snapshot,
+    this.commercialMetrics,
     required this.onOpenIssue,
     required this.onOpenAdminAccounts,
     required this.onOpenBeta,
@@ -289,9 +379,13 @@ class AdminOperationsContent extends StatelessWidget {
     this.founderQaJobController,
     this.founderQaAllowlistUpdating = false,
     this.onConfigureFounderQaAllowlist,
+    this.commercialControlsUpdating = false,
+    this.onStagePrivateBetaControls,
+    this.onRestoreFounderOnlyControls,
     super.key,
   });
   final AdminOperationsSnapshot snapshot;
+  final GeneratedMediaCommercialMetrics? commercialMetrics;
   final ValueChanged<AdminOpsException> onOpenIssue;
   final VoidCallback onOpenAdminAccounts,
       onOpenBeta,
@@ -307,6 +401,9 @@ class AdminOperationsContent extends StatelessWidget {
   final TextEditingController? founderQaJobController;
   final bool founderQaAllowlistUpdating;
   final VoidCallback? onConfigureFounderQaAllowlist;
+  final bool commercialControlsUpdating;
+  final VoidCallback? onStagePrivateBetaControls;
+  final VoidCallback? onRestoreFounderOnlyControls;
   final ValueChanged<String> onOpenCampaign;
 
   @override
@@ -418,6 +515,57 @@ class AdminOperationsContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
+                'Generated visual commercial controls',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              if (commercialMetrics == null)
+                const Text('Commercial metrics are temporarily unavailable.')
+              else ...[
+                Text(
+                  'Provider: ${commercialMetrics!.providerEnabled ? 'Enabled' : 'Disabled'}',
+                ),
+                Text('Rollout: ${_category(commercialMetrics!.rolloutMode)}'),
+                Text(
+                  'Beta cohort: ${commercialMetrics!.betaCohortEnabled ? 'Enabled' : 'Disabled'} · ${commercialMetrics!.betaCohortCount} / ${commercialMetrics!.betaCohortLimit} Businesses · ${_category(commercialMetrics!.betaCohortStage)}',
+                ),
+                Text(
+                  'Daily calls: ${commercialMetrics!.dailyCalls} / ${commercialMetrics!.dailyCallLimit}',
+                ),
+                Text(
+                  'Daily spend: ${_money(commercialMetrics!.dailyCostMicros)} / ${_money(commercialMetrics!.dailyCostLimitMicros)}',
+                ),
+                Text(
+                  'Monthly spend: ${_money(commercialMetrics!.monthlyCostMicros)} / ${_money(commercialMetrics!.monthlyCostLimitMicros)}',
+                ),
+                Text(
+                  'Outstanding reservations: ${commercialMetrics!.outstandingReservations}',
+                ),
+                Text(
+                  'System rejections: ${commercialMetrics!.systemRejections} · Limit exhaustion: ${commercialMetrics!.limitExhaustions}',
+                ),
+                Text(
+                  'Average completion: ${commercialMetrics!.averageLatencyMs > 0 ? '${(commercialMetrics!.averageLatencyMs / 1000).toStringAsFixed(1)}s' : 'No completed sample'}',
+                ),
+                Text(
+                  'Provider failures: ${commercialMetrics!.providerFailures}',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Plan allowances: ${_planMap(commercialMetrics!.planAllowances)}',
+                ),
+                Text(
+                  'Requests by plan: ${_planMap(commercialMetrics!.requestsByPlan)}',
+                ),
+                Text(
+                  'Customer units by plan: ${_planMap(commercialMetrics!.customerUnitsByPlan)}',
+                ),
+                Text(
+                  'Provider-billed units by plan: ${_planMap(commercialMetrics!.providerUnitsByPlan)}',
+                ),
+              ],
+              const Divider(height: 28),
+              Text(
                 'Generated visual provider authentication',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
@@ -500,7 +648,8 @@ class AdminOperationsContent extends StatelessWidget {
                   enabled: !founderQaAllowlistUpdating,
                   decoration: const InputDecoration(
                     labelText: 'Internal QA generation job ID',
-                    helperText: 'The Business UID is resolved server-side and is not displayed.',
+                    helperText:
+                        'The Business UID is resolved server-side and is not displayed.',
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -523,6 +672,35 @@ class AdminOperationsContent extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onStagePrivateBetaControls != null &&
+                    onRestoreFounderOnlyControls != null) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Private Beta staging uses the same server-resolved Business evidence. Both actions keep provider generation disabled.',
+                    style: TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: commercialControlsUpdating
+                            ? null
+                            : onStagePrivateBetaControls,
+                        icon: const Icon(Icons.groups_outlined),
+                        label: const Text('Stage first-five Beta controls'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: commercialControlsUpdating
+                            ? null
+                            : onRestoreFounderOnlyControls,
+                        icon: const Icon(Icons.shield_outlined),
+                        label: const Text('Return to Founder-only'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ],
           ),
@@ -680,6 +858,12 @@ String _category(String value) => value
 String _formatTime(DateTime? value) => value == null
     ? 'Time unavailable'
     : value.toLocal().toString().split('.').first;
+String _money(int micros) => '\$${(micros / 1000000).toStringAsFixed(2)}';
+String _planMap(Map<String, int> values) => values.isEmpty
+    ? 'No bounded sample'
+    : values.entries
+          .map((entry) => '${_category(entry.key)} ${entry.value}')
+          .join(' · ');
 
 String _providerAuthSummary(GeneratedMediaWifPreflight? value) {
   if (value == null) return 'Not checked in this Admin session.';

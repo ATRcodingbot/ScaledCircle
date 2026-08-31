@@ -32,11 +32,12 @@ candidate.
 ## Provider and budget controls
 
 `providerConfigurations/generated-service-visuals` is server-only and absent/disabled by default.
-An external call requires the global kill switch, an active paid Business entitlement, a configured
-per-plan monthly allowance, the rolling daily limit (8), global daily/monthly ceilings, and a
-successful deterministic reservation. Plan allowances are deliberately configuration-driven; this
-candidate does not alter subscriptions or pricing. Suggested commercial-review starting points,
-not enabled entitlements, are 10 Starter, 30 Growth, and 60 Scale/Managed Growth images monthly.
+An external call requires the global kill switch, an authorized server-side rollout mode, an active
+paid or managed Business entitlement where the mode requires it, a code-authoritative per-plan
+monthly allowance, the rolling daily attempt limit (8), global daily/monthly ceilings, and a
+successful deterministic reservation. The approved Beta allowances are 5 Starter, 15 Growth, 30
+Scale, and 60 Managed Growth images per UTC calendar month. These allowances do not alter
+subscription pricing and are not commercially active until a separate production activation.
 
 A reservation is retained for an indeterminate provider outcome. Only a failure known to occur
 before provider acceptance is safe to retry/release. A 429 or proven pre-dispatch transport error

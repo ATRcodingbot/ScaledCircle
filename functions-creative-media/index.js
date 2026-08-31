@@ -123,11 +123,13 @@ async function generationProviderConfig() {
 }
 async function generationAccessPolicy(actor) {
   if (generationIsLocal) {
-    return { authorized: true, qaAllowlistEnabled: true, founderOnlyMode: true,
-      authorizedBusinessCount: 1, configurationValid: true };
+    return generationFoundation.generationAuthorizationPolicy({ rolloutMode: "founder_only",
+      authorizedBusinessUids: [actor?.uid], betaCohortBusinessUids: [] }, actor?.uid,
+    { eligible: true, plan: "scale" });
   }
-  const config = await generationProviderConfig();
-  return generationFoundation.generationAuthorizationPolicy(config.authorizedBusinessUids, actor?.uid);
+  const business = await generationBusinessBudget(actor);
+  return generationFoundation.generationAuthorizationPolicy(business.config, actor?.uid,
+  { eligible: business.eligible, plan: business.plan });
 }
 async function generationBusinessBudget(actor) {
   const [config, entitlementSnapshot] = await Promise.all([generationProviderConfig(),
@@ -135,7 +137,50 @@ async function generationBusinessBudget(actor) {
   const entitlement = entitlementSnapshot.data() || {};
   const plan = String(entitlement.planId || entitlement.plan || "").trim().toLowerCase();
   return { config, entitlement, plan, eligible: subscriptionEntitlements.hasActivePaidBusinessEntitlement(entitlement),
-    monthlyAllowance: Number(config.planMonthlyAllowances?.[plan] || 0) };
+    monthlyAllowance: generationFoundation.planMonthlyAllowance(plan) };
+}
+async function generationBusinessUsageSummary(actor) {
+  if (generationIsLocal) return { plan: "scale", used: 0, pending: 0, total: 30, remaining: 30,
+    resetAt: generationBudget.monthlyResetAt(), limitReached: false };
+  const business = await generationBusinessBudget(actor);const keys = generationBudget.periodKeys();
+  const usage = (await db.collection("visualGenerationUsage").doc(`business_${actor.uid}_${keys.month}`).get()).
+  data() || {};
+  const used = Math.max(0, Number(usage.customerConsumedUnits || 0));
+  const pending = Math.max(0, Number(usage.outstandingUnits ?? usage.reservedUnits ?? 0));
+  const total = Math.max(0, Number(business.monthlyAllowance || 0));
+  const access = generationFoundation.generationAuthorizationPolicy(business.config, actor.uid,
+  { eligible: business.eligible, plan: business.plan });
+  return { plan: business.plan || null, used, pending, total,
+    remaining: Math.max(0, total - used - pending), resetAt: generationBudget.monthlyResetAt(),
+    limitReached: total <= 0 || used + pending >= total, rolloutMode: access.rolloutMode,
+    betaAvailable: access.betaAvailable === true };
+}
+async function generationCommercialOperations() {
+  const config = await generationProviderConfig();const keys = generationBudget.periodKeys();
+  const [globalDaySnap, globalMonthSnap] = await Promise.all([
+  db.collection("visualGenerationUsage").doc(`global_day_${keys.day}`).get(),
+  db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`).get()]
+  );
+  const globalDay = globalDaySnap.data() || {};const globalMonth = globalMonthSnap.data() || {};
+  const access = generationFoundation.generationAuthorizationPolicy(config, null, {});
+  const usedUnits = (value) => Number(value.actualUnits || 0) +
+  Number(value.outstandingUnits ?? value.reservedUnits ?? 0);
+  const usedCost = (value) => Number(value.actualCostMicros || 0) +
+  Number(value.outstandingCostMicros ?? value.reservedCostMicros ?? 0);
+  return { rolloutMode: access.rolloutMode, providerGenerationEnabled: config.providerGenerationEnabled === true,
+    betaCohortEnabled: access.betaCohortEnabled, betaCohortCount: access.betaCohortCount,
+    betaCohortStage: access.betaCohortStage, betaCohortLimit: access.betaCohortLimit,
+    planMonthlyAllowances: generationFoundation.PLAN_MONTHLY_ALLOWANCES,
+    limits: { businessDailyMaximum: Number(config.businessDailyMaximum || 8),
+      globalDailyMaximum: Number(config.globalDailyMaximum || 0),
+      globalMonthlyMaximum: Number(config.globalMonthlyMaximum || 0),
+      globalDailyCostMicros: Number(config.globalDailyCostMicros || 0),
+      globalMonthlyCostMicros: Number(config.globalMonthlyCostMicros || 0) },
+    utilization: { dailyCalls: usedUnits(globalDay), monthlyCalls: usedUnits(globalMonth),
+      dailyCostMicros: usedCost(globalDay), monthlyCostMicros: usedCost(globalMonth),
+      customerLimitExhaustionCount: Number(globalMonth.customerLimitExhaustionCount || 0),
+      globalBudgetExhaustionCount: Number(globalMonth.globalBudgetExhaustionCount || 0) },
+    period: { ...keys, resetAt: generationBudget.monthlyResetAt() } };
 }
 const generationBudgetAuthority = generationBudget.createBudgetAuthority({
   readState: async ({ actor, jobId }) => {
@@ -146,16 +191,34 @@ const generationBudgetAuthority = generationBudget.createBudgetAuthority({
     db.collection("visualGenerationUsage").doc(`global_day_${keys.day}`).get(),
     db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`).get()]
     );
-    const consumed = (snap) => {const value = snap.data() || {};
+    const providerConsumed = (snap) => {const value = snap.data() || {};
       return Number(value.actualUnits || 0) + Number(value.outstandingUnits ?? value.reservedUnits ?? 0);};
+    const customerConsumed = (snap) => {const value = snap.data() || {};
+      return Number(value.customerConsumedUnits || 0) +
+      Number(value.outstandingUnits ?? value.reservedUnits ?? 0);};
     const cost = (snap) => {const value = snap.data() || {};
       return Number(value.actualCostMicros || 0) +
       Number(value.outstandingCostMicros ?? value.reservedCostMicros ?? 0);};
-    return { config: business.config, business: { eligible: business.eligible, monthlyAllowance: business.monthlyAllowance },
-      usage: { businessRollingDay: 0, businessMonth: consumed(businessMonth),
-        globalDay: consumed(globalDay), globalMonth: consumed(globalMonth),
+    return { config: business.config, business: { eligible: business.eligible, plan: business.plan,
+        monthlyAllowance: business.monthlyAllowance },
+      usage: { businessRollingDay: 0, businessMonth: customerConsumed(businessMonth),
+        globalDay: providerConsumed(globalDay), globalMonth: providerConsumed(globalMonth),
         globalDayCostMicros: cost(globalDay), globalMonthCostMicros: cost(globalMonth) },
       existingReservation: reservation.exists ? reservation.data() : null };
+  },
+  recordDenial: async ({ actor, decision }) => {
+    if (!["monthly_limit_reached", "global_budget_exhausted"].includes(decision.reason)) return;
+    const keys = decision.keys || generationBudget.periodKeys();
+    const field = decision.reason === "monthly_limit_reached" ?
+    "customerLimitExhaustionCount" : "globalBudgetExhaustionCount";
+    const batch = db.batch();
+    batch.set(db.collection("visualGenerationUsage").doc(`business_${actor.uid}_${keys.month}`),
+    { schemaVersion: "VisualGenerationUsageV3", [field]: FieldValue.increment(1),
+      periodMonth: keys.month, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    batch.set(db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`),
+    { schemaVersion: "VisualGenerationUsageV3", [field]: FieldValue.increment(1),
+      periodMonth: keys.month, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await batch.commit();
   },
   writeReservation: async (value) => {
     const jobId = value.jobId || value.reservation?.jobId;const ref = db.collection("visualGenerationReservations").doc(jobId);
@@ -166,11 +229,12 @@ const generationBudgetAuthority = generationBudget.createBudgetAuthority({
         const usageRefs = [db.collection("visualGenerationUsage").doc(`business_${value.actor.uid}_${keys.month}`),
         db.collection("visualGenerationUsage").doc(`global_day_${keys.day}`),
         db.collection("visualGenerationUsage").doc(`global_month_${keys.month}`)];
-        const reservation = { jobId, businessUid: value.actor.uid, status: "reserved", keys,
+        const reservation = { jobId, businessUid: value.actor.uid, planId: value.plan || null,
+          status: "reserved", keys,
           reservedUnits: value.reservationUnits, reservedCostMicros: value.reservationCostMicros,
           createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
         tx.create(ref, reservation);
-        for (const usageRef of usageRefs) tx.set(usageRef, { schemaVersion: "VisualGenerationUsageV2",
+        for (const usageRef of usageRefs) tx.set(usageRef, { schemaVersion: "VisualGenerationUsageV3",
           outstandingUnits: FieldValue.increment(1),
           outstandingCostMicros: FieldValue.increment(value.reservationCostMicros),
           reservedUnits: FieldValue.increment(1), reservedCostMicros: FieldValue.increment(value.reservationCostMicros),
@@ -193,14 +257,17 @@ const generationBudgetAuthority = generationBudget.createBudgetAuthority({
         transition.outstandingUnitsDelta);
         const outstandingCostMicros = Math.max(0,
         Number(data.outstandingCostMicros ?? data.reservedCostMicros ?? 0) + transition.outstandingCostMicrosDelta);
-        tx.set(usageRefs[index], { schemaVersion: "VisualGenerationUsageV2", outstandingUnits,
+        tx.set(usageRefs[index], { schemaVersion: "VisualGenerationUsageV3", outstandingUnits,
           outstandingCostMicros, reservedUnits: outstandingUnits, reservedCostMicros: outstandingCostMicros,
           actualUnits: Number(data.actualUnits || 0) + transition.actualUnitsDelta,
           actualCostMicros: Number(data.actualCostMicros || 0) + transition.actualCostMicrosDelta,
+          customerConsumedUnits: Math.max(0, Number(data.customerConsumedUnits || 0) +
+          Number(transition.customerConsumedUnitsDelta || 0)),
           updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       }
       tx.set(ref, { status: value.status, providerAccepted: value.providerAccepted === true,
-        usage: value.usage || null, cost: value.cost || null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        customerConsumed: value.customerConsumed === true, usage: value.usage || null,
+        cost: value.cost || null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return { ...value, jobId };
     });
   }
@@ -241,7 +308,16 @@ async function reconcileGenerationAccounting(input = {}) {
   const reservations = await db.collection("visualGenerationReservations").
   where("keys.month", "==", keys.month).limit(501).get();
   if (reservations.size > 500) throw new Error("generation_reconciliation_bound_exceeded");
-  const values = reservations.docs.map((doc) => ({ jobId: doc.id, ...doc.data() }));
+  const reservationValues = reservations.docs.map((doc) => ({ jobId: doc.id, ...doc.data() }));
+  const jobSnapshots = reservationValues.length === 0 ? [] : await db.getAll(...reservationValues.map((value) =>
+  db.collection("visualGenerationJobs").doc(value.jobId)));
+  const values = reservationValues.map((value, index) => {
+    if (typeof value.customerConsumed === "boolean") return value;
+    const job = jobSnapshots[index]?.data() || {};
+    const usable = Boolean(job.candidateRevisionId) &&
+    ["review_required", "approved", "rejected"].includes(job.status);
+    return { ...value, customerConsumed: usable };
+  });
   const projections = generationBudget.summarizeReservations(values, keys);
   const expectedIds = new Set(projections.keys());
   for (const value of values) {
@@ -252,14 +328,14 @@ async function reconcileGenerationAccounting(input = {}) {
   const batch = db.batch();
   for (const id of expectedIds) {
     const projection = projections.get(id) || { outstandingUnits: 0, outstandingCostMicros: 0,
-      actualUnits: 0, actualCostMicros: 0 };
-    batch.set(db.collection("visualGenerationUsage").doc(id), { schemaVersion: "VisualGenerationUsageV2",
+      actualUnits: 0, actualCostMicros: 0, customerConsumedUnits: 0 };
+    batch.set(db.collection("visualGenerationUsage").doc(id), { schemaVersion: "VisualGenerationUsageV3",
       ...projection, reservedUnits: projection.outstandingUnits,
       reservedCostMicros: projection.outstandingCostMicros,
       reconciledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   }
   await batch.commit();
-  return { schemaVersion: "VisualGenerationUsageV2", period: keys,
+  return { schemaVersion: "VisualGenerationUsageV3", period: keys,
     reservationCount: values.length, projectionCount: expectedIds.size, releasedJobCount: releaseIds.length };
 }
 const generationAdapter = generationIsLocal ? generationFoundation.deterministicTestAdapter({
@@ -322,6 +398,19 @@ const generationService = generationFoundation.createGenerationService({
   approveCandidate: (input) => creativeMediaService.approveGeneratedCandidate(input),
   rejectCandidate: (input) => creativeMediaService.rejectGeneratedCandidate(input),
   providerAuthPreflight: generationProviderAuthPreflight,
+  usageSummary: generationBusinessUsageSummary,
+  commercialOperations: generationCommercialOperations,
+  notifyReady: async ({ businessUid, jobId, serviceCategory }) => {
+    const notificationId = `generated-visual-ready_${jobId}`;
+    await db.collection("notifications").doc(notificationId).set({ schemaVersion: 2,
+      id: notificationId, userId: businessUid, type: "generated_visual_ready",
+      title: "Generated visual ready for review",
+      message: `${String(serviceCategory || "Service concept").slice(0, 80)} is ready for review.`,
+      entityId: jobId, deepLink: { destination: "brand_assets", jobId }, priority: "normal",
+      metadata: { generationJobId: jobId }, read: false, channel: "in_app",
+      emailRequested: false, pushRequested: false, createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  },
   reportOperationalFailure: (evidence) => console.error("generated_visual_operation_failed", evidence)
 });
 
@@ -11000,6 +11089,14 @@ function generationHttpsError(error) {
   if (code === "generation_rate_limited") {
     return new HttpsError("resource-exhausted", "You’ve reached the current generated-visual limit. Try again later.");
   }
+  if (code === "monthly_limit_reached") {
+    return new HttpsError("resource-exhausted", "You’ve used your generated visuals for this period.",
+    { reason: "MONTHLY_LIMIT_REACHED" });
+  }
+  if (code === "global_budget_exhausted") {
+    return new HttpsError("unavailable", "Generated visuals are temporarily unavailable.",
+    { reason: "PROVIDER_TEMPORARILY_UNAVAILABLE" });
+  }
   if (["invalid_generation_request", "unsupported_service_category", "invalid_visual_direction",
   "invalid_generated_purpose", "invalid_generation_cursor"].includes(code)) {
     return new HttpsError("invalid-argument", "Choose a supported service and visual direction.");
@@ -11054,8 +11151,9 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
     const context = await authenticatedUserContext(request, "Admin access is required.");
     if (context.isAdmin !== true) throw new HttpsError("permission-denied", "Admin access is required.");
     const input = request.data || {};const patch = {};
-    const allowedFields = new Set(["providerGenerationEnabled", "authorizedBusinessUids",
-    "authorizedBusinessJobIds", "globalDailyMaximum", "globalMonthlyMaximum",
+    const allowedFields = new Set(["providerGenerationEnabled", "rolloutMode", "betaCohortStage",
+    "authorizedBusinessUids",
+    "authorizedBusinessJobIds", "betaCohortBusinessJobIds", "globalDailyMaximum", "globalMonthlyMaximum",
     "globalDailyCostMicros", "globalMonthlyCostMicros"]);
     if (Object.keys(input).some((field) => !allowedFields.has(field))) {
       throw new HttpsError("invalid-argument", "Choose only supported generated-media safety settings.");
@@ -11066,6 +11164,18 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
       }
       patch.providerGenerationEnabled = input.providerGenerationEnabled;
     }
+    if (Object.hasOwn(input, "rolloutMode")) {
+      if (!generationFoundation.ROLLOUT_MODES.has(input.rolloutMode)) {
+        throw new HttpsError("invalid-argument", "Choose a supported generated-media rollout mode.");
+      }
+      patch.rolloutMode = input.rolloutMode;
+    }
+    if (Object.hasOwn(input, "betaCohortStage")) {
+      if (!generationFoundation.BETA_COHORT_STAGES.has(input.betaCohortStage)) {
+        throw new HttpsError("invalid-argument", "Choose a supported Beta cohort stage.");
+      }
+      patch.betaCohortStage = input.betaCohortStage;
+    }
     if (Object.hasOwn(input, "authorizedBusinessUids")) {
       if (Object.hasOwn(input, "authorizedBusinessJobIds")) {
         throw new HttpsError("invalid-argument", "Choose one QA Business selection method.");
@@ -11073,6 +11183,30 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
       const normalized = generationFoundation.normalizeAuthorizedBusinessUids(input.authorizedBusinessUids);
       if (normalized === null) throw new HttpsError("invalid-argument", "Choose a valid bounded QA Business list.");
       patch.authorizedBusinessUids = normalized;
+    }
+    if (Object.hasOwn(input, "betaCohortBusinessJobIds")) {
+      const values = input.betaCohortBusinessJobIds;
+      const existingConfig = await generationProviderConfig();
+      const cohortMaximum = generationFoundation.betaCohortMaximum(
+        input.betaCohortStage || existingConfig.betaCohortStage);
+      if (!Array.isArray(values) || values.length > cohortMaximum ||
+      values.some((value) => typeof value !== "string" ||
+      !/^visual_job_[a-f0-9]{40}$/.test(value.trim()))) {
+        throw new HttpsError("invalid-argument", "Choose valid bounded Beta Business evidence.");
+      }
+      const jobSnapshots = values.length === 0 ? [] : await Promise.all(
+        [...new Set(values.map((value) => value.trim()))].
+        map((jobId) => db.collection("visualGenerationJobs").doc(jobId).get()));
+      if (jobSnapshots.some((snapshot) => !snapshot.exists ||
+      typeof snapshot.data()?.businessUid !== "string")) {
+        throw new HttpsError("not-found", "The selected Beta Business evidence was not found.");
+      }
+      const normalized = generationFoundation.normalizeAuthorizedBusinessUids(
+        jobSnapshots.map((snapshot) => snapshot.data().businessUid));
+      if (normalized === null || normalized.length > generationFoundation.MAX_BETA_COHORT_BUSINESSES) {
+        throw new HttpsError("invalid-argument", "Choose valid bounded Beta Business evidence.");
+      }
+      patch.betaCohortBusinessUids = normalized;
     }
     if (Object.hasOwn(input, "authorizedBusinessJobIds")) {
       const values = input.authorizedBusinessJobIds;
@@ -11116,11 +11250,17 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
       safetyConfigurationUpdatedBy: context.uid
     }, { merge: true });
     const updated = await generationProviderConfig();
-    const policy = generationFoundation.generationAuthorizationPolicy(updated.authorizedBusinessUids, null);
+    const policy = generationFoundation.generationAuthorizationPolicy(updated, null, {});
     return { providerGenerationEnabled: updated.providerGenerationEnabled === true,
+      rolloutMode: policy.rolloutMode,
+      betaCohortStage: policy.betaCohortStage,
+      betaCohortLimit: policy.betaCohortLimit,
       qaAllowlistEnabled: policy.qaAllowlistEnabled,
       founderOnlyMode: policy.founderOnlyMode,
       authorizedBusinessCount: policy.authorizedBusinessCount,
+      betaCohortEnabled: policy.betaCohortEnabled,
+      betaCohortCount: policy.betaCohortCount,
+      planMonthlyAllowances: generationFoundation.PLAN_MONTHLY_ALLOWANCES,
       configurationValid: policy.configurationValid };
   }
 );

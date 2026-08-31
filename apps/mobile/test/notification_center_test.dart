@@ -34,6 +34,11 @@ void main() {
     expect(source, isNot(contains(r'Unable to open notification: $e')));
   });
 
+  test('generated visual completion opens Brand Assets', () {
+    expect(source, contains("destination == 'brand_assets'"));
+    expect(source, contains('AppRoutes.businessBrandAssets'));
+  });
+
   test('notification interaction acknowledges only the selected item', () {
     expect(source, contains('await _markAsRead(notification.reference)'));
     expect(source, contains("'read': true"));

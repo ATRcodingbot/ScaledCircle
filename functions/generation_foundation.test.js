@@ -69,6 +69,37 @@ test("Founder QA allowlist is bounded, normalized, and fail-closed", () => {
   assert.equal(generation.generationAuthorizationPolicy(["business-a"], "business-b").authorized, false);
 });
 
+test("commercial rollout modes fail closed and enforce cohort plus canonical plan eligibility", () => {
+  const founderConfig = {authorizedBusinessUids: ["founder"], betaCohortBusinessUids: ["beta"]};
+  assert.equal(generation.generationAuthorizationPolicy(founderConfig, "founder",
+    {eligible: true, plan: "scale"}).authorized, true);
+  assert.equal(generation.generationAuthorizationPolicy({...founderConfig, rolloutMode: "unknown"},
+    "beta", {eligible: true, plan: "scale"}).authorized, false);
+  const beta = {...founderConfig, rolloutMode: "beta_cohort"};
+  assert.equal(generation.generationAuthorizationPolicy(beta, "beta",
+    {eligible: true, plan: "growth"}).authorized, true);
+  assert.equal(generation.generationAuthorizationPolicy(beta, "other",
+    {eligible: true, plan: "growth"}).authorized, false);
+  assert.equal(generation.generationAuthorizationPolicy(beta, "beta",
+    {eligible: false, plan: "growth"}).authorized, false);
+  const commercial = {...founderConfig, rolloutMode: "plan_entitled"};
+  assert.equal(generation.generationAuthorizationPolicy(commercial, "paid",
+    {eligible: true, plan: "managed_growth"}).authorized, true);
+  assert.equal(generation.generationAuthorizationPolicy(commercial, "free",
+    {eligible: false, plan: "scale"}).authorized, false);
+  const six = Array.from({length: 6}, (_, index) => `business-${index}`);
+  assert.equal(generation.generationAuthorizationPolicy({rolloutMode: "beta_cohort",
+    betaCohortBusinessUids: six}, "business-0", {eligible: true, plan: "starter"}).authorized, false);
+  assert.equal(generation.generationAuthorizationPolicy({rolloutMode: "beta_cohort",
+    betaCohortStage: "expanded_10", betaCohortBusinessUids: six}, "business-0",
+  {eligible: true, plan: "starter"}).authorized, true);
+  assert.equal(generation.generationAuthorizationPolicy({rolloutMode: "beta_cohort",
+    betaCohortStage: "invalid", betaCohortBusinessUids: six}, "business-0",
+  {eligible: true, plan: "starter"}).authorized, false);
+  assert.deepEqual(generation.PLAN_MONTHLY_ALLOWANCES,
+    {starter: 5, growth: 15, scale: 30, managed_growth: 60});
+});
+
 test("safe request accepts only approved services and bounded visual directions", () => {
   const result = generation.sanitizeRequest({requestId: "request_safe_123", serviceCategory: "Decks",
     visualDirection: "modern", requestedPurpose: "service_visual"}, ["Decks"]);
@@ -129,6 +160,34 @@ test("request retry, duplicate processing, approval, and Try another remain dist
   assert.equal(approvals, 1);
   const another = await service.request({actor, input: {...input, requestId: "generation_request_002"}});
   assert.notEqual(another.jobId, first.jobId);
+});
+
+test("usable output consumes one customer unit, system rejection consumes zero, and ready notification deduplicates", async () => {
+  const env = memoryDb(); const settlements = []; const notifications = [];
+  let moderation = {status: "passed"};
+  const service = generation.createGenerationService({db: env, FieldValue: env.FieldValue,
+    Timestamp: env.Timestamp, FieldPath: env.FieldPath,
+    adapter: {id: "test", mode: "test", async generateServiceConcept() {
+      return {binary: Buffer.from("x"), moderation, usage: {outputs: 1},
+        cost: {actualCostMicros: 41725}}; }}, capability: async () => "test_only",
+    authorization: async () => ({authorized: true, plan: "starter"}), budgetEnabled: async () => true,
+    budgetAuthority: {reserve: async ({jobId}) => ({jobId, status: "reserved"}),
+      lookup: async () => null, settle: async (value) => settlements.push(value),
+      release: async () => {}, holdUnknown: async () => {}}, approvedServices: async () => ["Decks"],
+    ingestCandidate: async ({requestId}) => ({assetId: `asset_${requestId}`, revisionId: `revision_${requestId}`}),
+    notifyReady: async (value) => notifications.push(value)});
+  const actor = {uid: "business-a"};
+  const usable = await service.request({actor, input: {requestId: "customer_unit_request_001",
+    serviceCategory: "Decks", visualDirection: "clean"}});
+  await service.process({actor, jobId: usable.jobId});
+  await service.process({actor, jobId: usable.jobId});
+  assert.equal(settlements[0].customerConsumed, true);
+  assert.equal(notifications.length, 1);
+  moderation = {flags: ["identifiable_people"]};
+  const blocked = await service.request({actor, input: {requestId: "customer_unit_request_002",
+    serviceCategory: "Decks", visualDirection: "clean"}});
+  await service.process({actor, jobId: blocked.jobId});
+  assert.equal(settlements.at(-1).customerConsumed, false);
 });
 
 test("capability, budget, tenant, and moderation boundaries fail closed", async () => {

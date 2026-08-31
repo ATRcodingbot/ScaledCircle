@@ -5,14 +5,18 @@ import 'package:flutter_app/services/admin_operations_service.dart';
 
 Widget subject(
   AdminOperationsSnapshot snapshot, {
+  GeneratedMediaCommercialMetrics? commercialMetrics,
   GeneratedMediaWifPreflight? providerAuthPreflight,
   VoidCallback? onRunProviderAuthPreflight,
   TextEditingController? founderQaJobController,
   VoidCallback? onConfigureFounderQaAllowlist,
+  VoidCallback? onStagePrivateBetaControls,
+  VoidCallback? onRestoreFounderOnlyControls,
 }) => MaterialApp(
   home: Scaffold(
     body: AdminOperationsContent(
       snapshot: snapshot,
+      commercialMetrics: commercialMetrics,
       onOpenIssue: (_) {},
       onOpenAdminAccounts: () {},
       onOpenBeta: () {},
@@ -27,6 +31,8 @@ Widget subject(
       onReconcileAccounting: () {},
       founderQaJobController: founderQaJobController,
       onConfigureFounderQaAllowlist: onConfigureFounderQaAllowlist,
+      onStagePrivateBetaControls: onStagePrivateBetaControls,
+      onRestoreFounderOnlyControls: onRestoreFounderOnlyControls,
       onOpenCampaign: (_) {},
     ),
   ),
@@ -48,6 +54,62 @@ const emptySnapshot = AdminOperationsSnapshot(
 );
 
 void main() {
+  testWidgets('commercial metrics separate customer and provider usage', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      subject(
+        emptySnapshot,
+        commercialMetrics: const GeneratedMediaCommercialMetrics(
+          providerEnabled: false,
+          rolloutMode: 'beta_cohort',
+          betaCohortStage: 'initial_5',
+          betaCohortEnabled: true,
+          betaCohortCount: 5,
+          betaCohortLimit: 5,
+          planAllowances: {
+            'starter': 5,
+            'growth': 15,
+            'scale': 30,
+            'managed_growth': 60,
+          },
+          requestsByPlan: {'starter': 4},
+          customerUnitsByPlan: {'starter': 3},
+          providerUnitsByPlan: {'starter': 4},
+          dailyCalls: 4,
+          dailyCallLimit: 50,
+          dailyCostMicros: 167000,
+          dailyCostLimitMicros: 10000000,
+          monthlyCostMicros: 167000,
+          monthlyCostLimitMicros: 100000000,
+          outstandingReservations: 0,
+          systemRejections: 1,
+          limitExhaustions: 2,
+          averageLatencyMs: 50000,
+          providerFailures: 0,
+        ),
+      ),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Generated visual commercial controls'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Rollout: Beta Cohort'), findsOneWidget);
+    expect(find.textContaining('Beta cohort: Enabled · 5 / 5'), findsOneWidget);
+    expect(find.textContaining('Daily calls: 4 / 50'), findsOneWidget);
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Customer units by plan: Starter 3'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Provider-billed units by plan: Starter 4'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Founder QA control resolves job evidence without raw UID UI', (
     tester,
   ) async {
@@ -67,7 +129,10 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Founder QA generation access'), findsOneWidget);
-    expect(find.textContaining('Business UID is resolved server-side'), findsOneWidget);
+    expect(
+      find.textContaining('Business UID is resolved server-side'),
+      findsOneWidget,
+    );
     expect(find.textContaining('authorizedBusinessUids'), findsNothing);
     await tester.enterText(
       find.byType(TextField),
@@ -75,6 +140,42 @@ void main() {
     );
     await tester.tap(find.text('Restrict to this QA Business'));
     expect(submitted, isTrue);
+  });
+
+  testWidgets('private Beta controls remain provider-disabled and reversible', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var staged = 0;
+    var restored = 0;
+    await tester.pumpWidget(
+      subject(
+        emptySnapshot,
+        founderQaJobController: controller,
+        onConfigureFounderQaAllowlist: () {},
+        onStagePrivateBetaControls: () => staged++,
+        onRestoreFounderOnlyControls: () => restored++,
+      ),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Stage first-five Beta controls'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      find.textContaining('keep provider generation disabled'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Stage first-five Beta controls'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stage first-five Beta controls'));
+    await tester.ensureVisible(find.text('Return to Founder-only'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Return to Founder-only'));
+    expect(staged, 1);
+    expect(restored, 1);
+    expect(find.textContaining('Business UID'), findsOneWidget);
   });
 
   testWidgets('Admin home presents the simple four-section command center', (
@@ -248,6 +349,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('access token'), findsNothing);
+    await tester.ensureVisible(find.text('Run zero-model auth preflight'));
+    await tester.drag(find.byType(ListView), const Offset(0, -100));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Run zero-model auth preflight'));
     expect(invoked, 1);
   });

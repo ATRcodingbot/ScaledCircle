@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -51,6 +52,17 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
   }
 
   Future<void> _createGenerated({String? priorJobId}) async {
+    final usage = _generation['usage'] is Map
+        ? Map<String, dynamic>.from(_generation['usage'] as Map)
+        : const <String, dynamic>{};
+    if (usage['limitReached'] == true ||
+        (usage['remaining'] as num?)?.toInt() == 0) {
+      setState(
+        () => _error =
+            'You’ve used your generated visuals for this period. Use an existing image, upload your own photo, or wait until the displayed reset date.',
+      );
+      return;
+    }
     final services =
         (_generation['approvedServiceCategories'] as List? ?? const [])
             .map((value) => value.toString())
@@ -87,6 +99,13 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 const Text(
                   'Generated concepts illustrate a service. They are not photos of completed work, people, customers, or property.',
                 ),
+                if (priorJobId != null) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Try another uses 1 generated visual.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: selectedService,
@@ -131,7 +150,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Create visual'),
+              child: Text(priorJobId == null ? 'Create visual' : 'Try another'),
             ),
           ],
         ),
@@ -152,10 +171,16 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
       );
       await _generationService.processGeneration(job['jobId'].toString());
       await Future.wait([_loadGeneration(), _load(reset: true)]);
-    } catch (_) {
+    } catch (error) {
+      final details =
+          error is FirebaseFunctionsException && error.details is Map
+          ? Map<String, dynamic>.from(error.details as Map)
+          : const <String, dynamic>{};
+      final monthlyLimit = details['reason'] == 'MONTHLY_LIMIT_REACHED';
       setState(
-        () => _error =
-            'Generated visuals are temporarily unavailable. Your existing images are unchanged.',
+        () => _error = monthlyLimit
+            ? 'You’ve used your generated visuals for this period. Use an existing image, upload your own photo, or wait until the displayed reset date.'
+            : 'Generated visuals are temporarily unavailable. Your existing images and pages are unaffected.',
       );
     } finally {
       if (mounted) setState(() => _generating = false);
@@ -618,6 +643,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 busy: _generating,
                 onCreate: () => _createGenerated(),
                 onChooseServices: _brandSettings,
+                onUpload: () => _upload(),
                 onApprove: (jobId) async {
                   await _generationService.approveGeneration(jobId);
                   await Future.wait([_loadGeneration(), _load(reset: true)]);
@@ -635,6 +661,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                 busy: _generating,
                 onCreate: () => _createGenerated(),
                 onChooseServices: _brandSettings,
+                onUpload: () => _upload(),
                 onApprove: (jobId) async {
                   await _generationService.approveGeneration(jobId);
                   await Future.wait([_loadGeneration(), _load(reset: true)]);
@@ -647,9 +674,10 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
               ),
             if (_generation['businessAuthorized'] == true &&
                 _generation['capability'] == 'disabled')
-              const _GeneratedVisualUnavailableCard(
+              _GeneratedVisualUnavailableCard(
                 message:
                     'Generated visuals are temporarily unavailable. Your existing images are unchanged.',
+                generation: _generation,
               )
             else if (_generation['businessAuthorized'] != true &&
                 _generation['capability'] != 'disabled')
@@ -772,17 +800,77 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
 }
 
 class _GeneratedVisualUnavailableCard extends StatelessWidget {
-  const _GeneratedVisualUnavailableCard({required this.message});
+  const _GeneratedVisualUnavailableCard({
+    required this.message,
+    this.generation = const <String, dynamic>{},
+  });
   final String message;
+  final Map<String, dynamic> generation;
+
+  String _resetDate(Object? value) {
+    final millis = (value as num?)?.toInt();
+    if (millis == null) return 'the next UTC month';
+    final date = DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true);
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      leading: const Icon(Icons.auto_awesome_outlined),
-      title: const Text('Generated service visuals'),
-      subtitle: Text(message),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final usage = generation['usage'] is Map
+        ? Map<String, dynamic>.from(generation['usage'] as Map)
+        : const <String, dynamic>{};
+    final used = (usage['used'] as num?)?.toInt() ?? 0;
+    final total = (usage['total'] as num?)?.toInt() ?? 0;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.auto_awesome_outlined),
+                SizedBox(width: 12),
+                Expanded(child: Text('Generated service visuals')),
+                Chip(label: Text('Beta')),
+              ],
+            ),
+            if (total > 0) ...[
+              const SizedBox(height: 8),
+              Semantics(
+                label:
+                    '$used of $total generated visuals used this month. Resets ${_resetDate(usage['resetAt'])}.',
+                child: Text(
+                  '$used of $total used this month\nResets ${_resetDate(usage['resetAt'])}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              '$message You can still use existing Brand Assets, upload your own photo, or publish without a photo.',
+            ),
+            const SizedBox(height: 8),
+            const Text('Try another uses 1 generated visual when generation is available.'),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _GeneratedVisualPanel extends StatelessWidget {
@@ -791,6 +879,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
     required this.busy,
     required this.onCreate,
     required this.onChooseServices,
+    required this.onUpload,
     required this.onApprove,
     required this.onReject,
     required this.onTryAnother,
@@ -799,6 +888,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
   final bool busy;
   final VoidCallback onCreate;
   final VoidCallback onChooseServices;
+  final VoidCallback onUpload;
   final Future<void> Function(String jobId) onApprove;
   final Future<void> Function(String jobId) onReject;
   final Future<void> Function(String jobId) onTryAnother;
@@ -814,6 +904,27 @@ class _GeneratedVisualPanel extends StatelessWidget {
     _ => 'Ready to generate',
   };
 
+  String _resetDate(Object? value) {
+    final millis = (value as num?)?.toInt();
+    if (millis == null) return 'the next UTC month';
+    final date = DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true);
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final approvedServices =
@@ -825,6 +936,14 @@ class _GeneratedVisualPanel extends StatelessWidget {
         .whereType<Map>()
         .map((job) => Map<String, dynamic>.from(job))
         .toList();
+    final usage = generation['usage'] is Map
+        ? Map<String, dynamic>.from(generation['usage'] as Map)
+        : const <String, dynamic>{};
+    final used = (usage['used'] as num?)?.toInt() ?? 0;
+    final total = (usage['total'] as num?)?.toInt() ?? 0;
+    final pending = (usage['pending'] as num?)?.toInt() ?? 0;
+    final limitReached =
+        usage['limitReached'] == true || (total > 0 && used + pending >= total);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -836,10 +955,47 @@ class _GeneratedVisualPanel extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 6),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(label: Text('Beta')),
+            ),
             const Text(
               'Create a generic service concept, review the exact image, and approve it before use. Test and local activity stays separate from customer media.',
             ),
             const SizedBox(height: 12),
+            if (total > 0) ...[
+              Semantics(
+                label:
+                    '$used of $total generated visuals used this month. Resets ${_resetDate(usage['resetAt'])}.',
+                child: Text(
+                  'Generated visuals\n$used of $total used this month${pending > 0 ? ' · $pending pending' : ''}\nResets ${_resetDate(usage['resetAt'])}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (limitReached) ...[
+              const Text(
+                'You’ve used your generated visuals for this period. Existing approved visuals remain available.',
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : onUpload,
+                    icon: const Icon(Icons.upload_outlined),
+                    label: const Text('Upload your own photo'),
+                  ),
+                  const Chip(label: Text('Existing visuals remain usable')),
+                  const Chip(
+                    label: Text('Publishing without a photo is available'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             if (approvedServices.isEmpty) ...[
               const Text(
                 'Choose at least one service before creating a visual.',
@@ -850,15 +1006,24 @@ class _GeneratedVisualPanel extends StatelessWidget {
                 icon: const Icon(Icons.checklist_outlined),
                 label: const Text('Choose services'),
               ),
-            ] else
+            ] else if (!limitReached)
               FilledButton.icon(
                 onPressed: busy ? null : onCreate,
                 icon: const Icon(Icons.auto_awesome_outlined),
                 label: Text(busy ? 'Creating visual' : 'Create service visual'),
               ),
             if (busy)
-              const LinearProgressIndicator(
-                semanticsLabel: 'Creating service concept visual',
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LinearProgressIndicator(
+                    semanticsLabel: 'Creating service concept visual',
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'This usually takes about a minute. You can leave this page and return later.',
+                  ),
+                ],
               ),
             for (final job in jobs) ...[
               const Divider(height: 28),
@@ -888,7 +1053,9 @@ class _GeneratedVisualPanel extends StatelessWidget {
                     ),
                     OutlinedButton(
                       onPressed: () => onTryAnother(job['jobId'].toString()),
-                      child: const Text('Try another'),
+                      child: const Text(
+                        'Try another · Uses 1 generated visual',
+                      ),
                     ),
                     TextButton(
                       onPressed: () => onReject(job['jobId'].toString()),
@@ -901,8 +1068,12 @@ class _GeneratedVisualPanel extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: OutlinedButton(
                     onPressed: () => onTryAnother(job['jobId'].toString()),
-                    child: const Text('Try another'),
+                    child: const Text('Try another · Uses 1 generated visual'),
                   ),
+                ),
+              if (job['status'] == 'blocked')
+                const Text(
+                  'This concept couldn’t be used. It did not count against your monthly generated-visual allowance.',
                 ),
             ],
           ],
@@ -952,8 +1123,7 @@ class _MediaCard extends StatelessWidget {
                 child: ColoredBox(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: AuthenticatedMediaPreview(
-                    identity:
-                        '${asset['assetId']}:${revision['revisionId']}',
+                    identity: '${asset['assetId']}:${revision['revisionId']}',
                     load: () => service.previewBytes(asset),
                     semanticLabel:
                         revision['altText']?.toString().isNotEmpty == true

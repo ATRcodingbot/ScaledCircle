@@ -8,6 +8,11 @@ const PAGE_SIZE = 20;
 const MAX_ACTIVE_JOBS = 2;
 const MAX_REQUESTS_PER_DAY = 8;
 const MAX_AUTHORIZED_BUSINESSES = 20;
+const MAX_BETA_COHORT_BUSINESSES = 10;
+const ROLLOUT_MODES = new Set(["founder_only", "beta_cohort", "plan_entitled"]);
+const BETA_COHORT_STAGES = new Set(["initial_5", "expanded_10"]);
+const PLAN_MONTHLY_ALLOWANCES = Object.freeze({starter: 5, growth: 15, scale: 30,
+  managed_growth: 60});
 const CAPABILITIES = new Set(["disabled", "test_only", "enabled"]);
 const DIRECTIONS = new Set(["clean", "friendly", "premium", "practical", "modern"]);
 const PURPOSES = new Set(["service_visual", "hero"]);
@@ -30,16 +35,54 @@ function normalizeAuthorizedBusinessUids(value) {
   }
   return result;
 }
-function generationAuthorizationPolicy(value, businessUid) {
-  const normalized = normalizeAuthorizedBusinessUids(value);
-  const valid = normalized !== null;
-  const authorizedBusinessCount = valid ? normalized.length : 0;
+function normalizeRolloutMode(value) {
+  const normalized = clean(value, 30).toLowerCase();
+  return ROLLOUT_MODES.has(normalized) ? normalized : "founder_only";
+}
+function normalizeBetaCohortStage(value) {
+  const normalized = clean(value, 30).toLowerCase();
+  return BETA_COHORT_STAGES.has(normalized) ? normalized : "initial_5";
+}
+function betaCohortMaximum(stage) {
+  return normalizeBetaCohortStage(stage) === "expanded_10" ? 10 : 5;
+}
+function planMonthlyAllowance(plan) {
+  return Number(PLAN_MONTHLY_ALLOWANCES[clean(plan, 40).toLowerCase()] || 0);
+}
+function generationAuthorizationPolicy(value, businessUid, entitlement = {}) {
+  const config = Array.isArray(value) || value == null ? {authorizedBusinessUids: value} : value;
+  const founder = normalizeAuthorizedBusinessUids(Object.hasOwn(config || {}, "authorizedBusinessUids") ?
+    config.authorizedBusinessUids : []);
+  const beta = normalizeAuthorizedBusinessUids(Object.hasOwn(config || {}, "betaCohortBusinessUids") ?
+    config.betaCohortBusinessUids : []);
+  const rolloutMode = normalizeRolloutMode(config?.rolloutMode);
+  const betaCohortStage = normalizeBetaCohortStage(config?.betaCohortStage);
+  const betaCohortLimit = betaCohortMaximum(betaCohortStage);
+  const authorizedBusinessCount = founder === null ? 0 : founder.length;
+  const betaCohortCount = beta === null ? 0 : beta.length;
+  const plan = clean(entitlement.plan, 40).toLowerCase();
+  const monthlyAllowance = planMonthlyAllowance(plan);
+  const commerciallyEligible = entitlement.eligible === true && monthlyAllowance > 0;
+  const uid = String(businessUid || "");
+  const configurationValid = founder !== null && beta !== null && beta.length <= betaCohortLimit;
+  const authorized = configurationValid && (rolloutMode === "founder_only" ? founder.includes(uid) :
+    rolloutMode === "beta_cohort" ? beta.includes(uid) && commerciallyEligible :
+    rolloutMode === "plan_entitled" ? commerciallyEligible : false);
   return Object.freeze({
-    authorized: valid && normalized.includes(String(businessUid || "")),
-    qaAllowlistEnabled: valid && authorizedBusinessCount > 0,
-    founderOnlyMode: true,
+    authorized,
+    rolloutMode,
+    betaCohortStage,
+    betaCohortLimit,
+    plan,
+    monthlyAllowance,
+    commerciallyEligible,
+    betaAvailable: rolloutMode === "beta_cohort" && authorized,
+    qaAllowlistEnabled: founder !== null && authorizedBusinessCount > 0,
+    betaCohortEnabled: rolloutMode === "beta_cohort" && configurationValid && betaCohortCount > 0,
+    founderOnlyMode: rolloutMode === "founder_only",
     authorizedBusinessCount,
-    configurationValid: valid,
+    betaCohortCount,
+    configurationValid,
   });
 }
 
@@ -123,7 +166,8 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
   budgetAuthority = null,
   approvedServices = async () => [], brandProfile = async () => ({}), ingestCandidate,
   approveCandidate = async () => {}, rejectCandidate = async () => {}, providerAuthPreflight = null,
-  reportOperationalFailure = () => {}, now = () => Date.now()}) {
+  usageSummary = async () => null, commercialOperations = async () => ({}),
+  notifyReady = async () => {}, reportOperationalFailure = () => {}, now = () => Date.now()}) {
   const jobs = () => db.collection("visualGenerationJobs");
   async function gate(actor) {
     const access = await authorization(actor);
@@ -134,10 +178,10 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     if (!adapter) throw new Error("provider_unavailable");
     if (mode === "test_only" && adapter.mode !== "test") throw new Error("provider_unavailable");
     if (mode === "enabled" && adapter.mode === "test") throw new Error("test_adapter_forbidden");
-    return mode;
+    return {mode, access};
   }
   async function request({actor, input}) {
-    const mode = await gate(actor);
+    const gated = await gate(actor); const mode = gated.mode;
     const valid = sanitizeRequest(input, await approvedServices(actor));
     const jobId = stableId("visual_job", actor.uid, valid.requestId);
     const ref = jobs().doc(jobId);
@@ -161,6 +205,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       requestedAt: at, requestedBy: actor.uid, providerAdapter: adapter.id,
       providerMode: mode === "test_only" ? "test" : "external", safeBrief: brief,
       providerExecutionMode: clean(adapter.executionMode, 30) || "synchronous",
+      planId: clean(gated.access?.plan, 40) || null,
       candidateAssetId: null, candidateRevisionId: null, failureCategory: null,
       providerUsage: null, estimatedCostMicros: null, actualCostMicros: null,
       attemptCount: 0, createdAt: at, updatedAt: at});
@@ -173,8 +218,19 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     const job = snapshot.data();
     if (!actor || job.businessUid !== actor.uid) throw new Error("generation_access_denied");
     await gate(actor);
-    if (job.candidateRevisionId) return {jobId: ref.id, status: job.status,
-      assetId: job.candidateAssetId, revisionId: job.candidateRevisionId, idempotentReplay: true};
+    if (job.candidateRevisionId) {
+      if (budgetAuthority && job.customerAllowanceConsumed !== true) {
+        const existing = await budgetAuthority.lookup({actor, jobId: ref.id});
+        if (["reserved", "unknown_provider_outcome"].includes(existing?.status)) {
+          await budgetAuthority.settle({reservation: existing, usage: job.providerUsage || null,
+            cost: {actualCostMicros: Number(job.actualCostMicros || 0)}, providerAccepted: true,
+            customerConsumed: true});
+          await ref.update({customerAllowanceConsumed: true, updatedAt: FieldValue.serverTimestamp()});
+        }
+      }
+      return {jobId: ref.id, status: job.status,
+        assetId: job.candidateAssetId, revisionId: job.candidateRevisionId, idempotentReplay: true};
+    }
     if (!adapter) throw new Error("provider_unavailable");
     if (["processing", "unknown_provider_outcome"].includes(job.status)) {
       return {jobId: ref.id, status: job.status, idempotentReplay: true};
@@ -184,15 +240,17 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     await ref.update({status: "processing", providerAttemptState: "attempting",
       attemptCount: Number(job.attemptCount || 0) + 1,
       processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
-    let providerResult = null;
+    let providerResult = null; let usableCandidate = false;
     try {
       const result = await adapter.generateServiceConcept({jobId: ref.id, brief: job.safeBrief});
       providerResult = result;
       const moderation = normalizeModeration(result.moderation);
       if (moderation.status !== "passed") {
         if (budgetAuthority && reservation) await budgetAuthority.settle({reservation,
-          usage: result.usage || null, cost: result.cost || null, providerAccepted: true});
+          usage: result.usage || null, cost: result.cost || null, providerAccepted: true,
+          customerConsumed: false});
         await ref.update({status: "blocked", moderation, failureCategory: "moderation_blocked",
+          customerAllowanceConsumed: false,
           completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
         return {jobId: ref.id, status: "blocked"};
       }
@@ -209,11 +267,18 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
           providerRequestTimestamp: result.requestTimestamp || null, providerAttemptState: "settled",
           providerUsage: result.usage || null, estimatedCostMicros: result.cost?.estimatedCostMicros ?? null,
           actualCostMicros: result.cost?.actualCostMicros ?? null,
-          moderation, completedAt: FieldValue.serverTimestamp(),
+          moderation, customerAllowanceConsumed: true, completedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()});
       });
+      usableCandidate = true;
       if (budgetAuthority && reservation) await budgetAuthority.settle({reservation,
-        usage: result.usage || null, cost: result.cost || null, providerAccepted: true});
+        usage: result.usage || null, cost: result.cost || null, providerAccepted: true,
+        customerConsumed: true});
+      try { await notifyReady({businessUid: job.businessUid, jobId: ref.id,
+        serviceCategory: job.serviceCategory}); } catch (_) {
+        reportOperationalFailure({jobId: ref.id, category: "notification_failed",
+          phase: "ready_notification", providerRequestReferencePresent: true});
+      }
       return {jobId: ref.id, status: "review_required", ...candidate};
     } catch (error) {
       const rawCategory = error?.category || error?.message;
@@ -225,11 +290,13 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
         if (unknown) await budgetAuthority.holdUnknown({reservation});
         else if (providerResult || error?.providerAccepted === true) await budgetAuthority.settle({reservation,
           usage: providerResult?.usage || error?.usage || null,
-          cost: providerResult?.cost || error?.cost || null, providerAccepted: true});
+          cost: providerResult?.cost || error?.cost || null, providerAccepted: true,
+          customerConsumed: usableCandidate});
         else await budgetAuthority.release({reservation});
       }
       await ref.update({status: unknown ? "unknown_provider_outcome" : category === "moderation_blocked" ? "blocked" : "failed",
         failureCategory: category, providerAttemptState: unknown ? "unknown" : "completed",
+        customerAllowanceConsumed: usableCandidate,
         providerRequestReference: error?.providerRequestId || null,
         completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
       throw new Error(category);
@@ -265,9 +332,12 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       moderationStatus: d.moderation?.status || null, createdAt: millis(d.createdAt), updatedAt: millis(d.updatedAt)}; });
     const last = docs.at(-1); const hasMore = snap.size > PAGE_SIZE;
     const access = await authorization(actor);
+    const usage = await usageSummary(actor);
     return {schemaVersion: SCHEMA_VERSION, capability: normalizeCapability(await capability(actor)),
       businessAuthorized: access?.authorized === true,
+      rolloutMode: access?.rolloutMode || "founder_only", betaAvailable: access?.betaAvailable === true,
       budgetEnabled: await budgetEnabled(actor), approvedServiceCategories: (await approvedServices(actor)).slice(0, 12),
+      usage,
       visualDirections: [...DIRECTIONS], disclosure: DISCLOSURE, jobs: safe, hasMore,
       nextCursor: hasMore && last ? encodeCursor(millis(last.data().createdAt), last.id) : null,
       limits: {pageSize: PAGE_SIZE, maximumActiveJobs: MAX_ACTIVE_JOBS, maximumRequestsPerDay: MAX_REQUESTS_PER_DAY}};
@@ -279,21 +349,35 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       db.collection("visualGenerationReservations").orderBy("createdAt", "desc").limit(100).get()]);
     const counts = {queued: 0, processing: 0, review_required: 0, approved: 0,
       rejected: 0, failed: 0, blocked: 0, unknown_provider_outcome: 0};
-    const failures = {}; let latencyTotal = 0; let completed = 0; let stuckJobs = 0;
+    const failures = {}; const requestsByPlan = {}; const customerConsumedUnitsByPlan = {};
+    const providerBilledUnitsByPlan = {}; let latencyTotal = 0; let completed = 0; let stuckJobs = 0;
     let estimatedCostMicros = 0; let actualCostMicros = 0; let providerRequestCount = 0;
+    let systemRejectionCount = 0; let outstandingReservationUnits = 0;
     const reservationCounts = {reserved: 0, settled: 0, released: 0, unknown_provider_outcome: 0};
-    for (const doc of reservationSnap.docs) { const status = doc.data()?.status;
+    for (const doc of reservationSnap.docs) { const reservation = doc.data() || {}; const status = reservation.status;
       if (Object.hasOwn(reservationCounts, status)) reservationCounts[status]++; }
     for (const doc of snap.docs) {
       const value = doc.data(); if (Object.hasOwn(counts, value.status)) counts[value.status]++;
       if (value.failureCategory) failures[value.failureCategory] = Number(failures[value.failureCategory] || 0) + 1;
       if (value.providerRequestTimestamp) providerRequestCount++;
+      const plan = clean(value.planId, 40) || "unknown";
+      requestsByPlan[plan] = Number(requestsByPlan[plan] || 0) + 1;
+      const providerBilled = Boolean(value.providerRequestTimestamp) || Number(value.actualCostMicros || 0) > 0;
+      const customerConsumed = value.customerAllowanceConsumed === true ||
+        (!Object.hasOwn(value, "customerAllowanceConsumed") && Boolean(value.candidateRevisionId) &&
+          ["review_required", "approved", "rejected"].includes(value.status));
+      if (providerBilled) providerBilledUnitsByPlan[plan] = Number(providerBilledUnitsByPlan[plan] || 0) + 1;
+      if (customerConsumed) customerConsumedUnitsByPlan[plan] =
+        Number(customerConsumedUnitsByPlan[plan] || 0) + 1;
+      if (providerBilled && !customerConsumed && ["blocked", "failed"].includes(value.status)) systemRejectionCount++;
       estimatedCostMicros += Number(value.estimatedCostMicros || 0);
       actualCostMicros += Number(value.actualCostMicros || 0);
       const created = millis(value.createdAt); const finished = millis(value.completedAt);
       if (created && finished >= created) { latencyTotal += finished - created; completed++; }
       if (["queued", "processing"].includes(value.status) && created && now() - created > 15 * 60 * 1000) stuckJobs++;
     }
+    for (const doc of reservationSnap.docs) if (["reserved", "unknown_provider_outcome"]
+      .includes(doc.data()?.status)) outstandingReservationUnits += Number(doc.data()?.reservedUnits || 0);
     let providerAuth = null;
     if (input.providerAuthPreflight === true) {
       providerAuth = typeof providerAuthPreflight === "function" ? await providerAuthPreflight() :
@@ -301,6 +385,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
           failureCategory: "provider_client_initialization_failed", claims: null};
     }
     const access = await authorization(actor);
+    const commercial = await commercialOperations(actor);
     return {schemaVersion: SCHEMA_VERSION, capability: normalizeCapability(await capability(actor)),
       budgetEnabled: await budgetEnabled(actor), sampleBound: 100, counts, failures, stuckJobs,
       averageCompletionLatencyMs: completed ? Math.round(latencyTotal / completed) : null,
@@ -308,11 +393,18 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       providerOperations: {configuredProvider: adapter?.id || null, providerRequestCount,
         configuredModel: adapter?.defaultModel || null,
         configuredModelSnapshot: adapter?.defaultModelSnapshot || null, reservationCounts,
-        estimatedCostMicros, actualCostMicros},
+        estimatedCostMicros, actualCostMicros, outstandingReservationUnits,
+        requestsByPlan, customerConsumedUnitsByPlan, providerBilledUnitsByPlan,
+        systemRejectionCount, systemRejectionRate: providerRequestCount > 0 ?
+          systemRejectionCount / providerRequestCount : 0},
       providerAccess: {qaAllowlistEnabled: access?.qaAllowlistEnabled === true,
         founderOnlyMode: access?.founderOnlyMode !== false,
+        rolloutMode: access?.rolloutMode || "founder_only",
+        betaCohortEnabled: access?.betaCohortEnabled === true,
+        betaCohortCount: Number(access?.betaCohortCount || 0),
         authorizedBusinessCount: Number(access?.authorizedBusinessCount || 0),
         configurationValid: access?.configurationValid === true},
+      commercial,
       providerAuthPreflight: providerAuth};
   }
   return {request, process, approve: (args) => review({...args, approve: true}),
@@ -320,7 +412,10 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
 }
 
 module.exports = {SCHEMA_VERSION, DISCLOSURE, PAGE_SIZE, MAX_ACTIVE_JOBS, MAX_REQUESTS_PER_DAY,
-  MAX_AUTHORIZED_BUSINESSES, normalizeAuthorizedBusinessUids, generationAuthorizationPolicy,
+  MAX_AUTHORIZED_BUSINESSES, MAX_BETA_COHORT_BUSINESSES, ROLLOUT_MODES, BETA_COHORT_STAGES,
+  PLAN_MONTHLY_ALLOWANCES,
+  normalizeAuthorizedBusinessUids, normalizeRolloutMode, normalizeBetaCohortStage, betaCohortMaximum,
+  planMonthlyAllowance, generationAuthorizationPolicy,
   DIRECTIONS, FAILURE_CATEGORIES, stableId, normalizeCapability, assertTestAdapterEnvironment,
   sanitizeRequest, safeBrief, normalizeModeration, encodeCursor, decodeCursor,
   deterministicTestAdapter, createGenerationService};

@@ -76,6 +76,10 @@ class NotificationsScreen extends StatelessWidget {
         );
         return;
       }
+      if (destination == 'brand_assets') {
+        AppNavigation.push(context, AppRoutes.businessBrandAssets);
+        return;
+      }
       final linkedZoneId = deepLink['zoneId']?.toString() ?? zoneId;
       if ({'job_room', 'material_change_review'}.contains(destination) &&
           linkedZoneId != null &&
