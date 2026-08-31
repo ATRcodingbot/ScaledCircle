@@ -1,6 +1,6 @@
 # Physical Marketing Execution V1
 
-Status: provider-free foundation hosted and staging-certified on 2026-08-31.
+Status: provider-free foundation hosted and production-certified on 2026-08-31.
 
 Certified implementation candidate: `0e1b57c4235aa72f7d43cc8d333380c8215d49e6`.
 
@@ -216,4 +216,75 @@ Business content, recipient data, or credentials.
 
 Provider traffic, provider quotes/orders, mail pieces, print orders, payment
 captures, customer charges, new credentials, and additional spend were all
-zero. Production was not changed.
+zero during staging certification.
+
+## Production provider-free release
+
+Founder-authorized production promotion completed on 2026-08-31 from exact
+implementation candidate `0e1b57c4235aa72f7d43cc8d333380c8215d49e6` and
+documentation descendant `4b7d01195179bb3abeb5173ce46cf3d8a091a584`.
+Deployment was ordered Firestore Rules, Storage Rules, the isolated
+`physical-marketing-core` codebase, then Hosting last. No index, unrelated
+Function, secret, provider credential, payment behavior, or manual IAM role
+change was included.
+
+The exact production release is:
+
+- Firestore ruleset
+  `projects/scaled-circle/rulesets/8dae6adc-b688-4387-aec5-d473ca454c5e`,
+  content SHA-256
+  `76B3EBE4F564281F61F5C0C0EF42054EAAF4C6564DF37060723C19901D1D83CE`.
+- Storage ruleset
+  `projects/scaled-circle/rulesets/4344c84b-9c8a-41a3-8de2-53d119f68d6d`,
+  content SHA-256
+  `A06AB1974FF51DC46D7B91126E7EB22C1F703122FE14A944899C013DFF8AD8A7`.
+- Five ACTIVE Node.js 24 Functions in `us-east1`: the exact five callables
+  listed under Authority and data model. All use isolated codebase
+  `physical-marketing-core`, source hash
+  `15c73f4e5f9ea1c808540c7a2865d290a24206a6`, and production runtime identity
+  `1010956217112-compute@developer.gserviceaccount.com`.
+- Hosting version `47cc0099ce8f21e5`, live release
+  `1788203041501000`, and live bundle SHA-256
+  `CCAD45C3446BBBFB3C0221FBC2AF6F6F0866F2679C6C49BB79166968F00B87D4`.
+  Both `scaledcircle.com` and `scaled-circle.web.app` returned that exact
+  bundle.
+
+Attractive Remodel completed the normal production Business flow for a
+legitimate 3.5 × 8.5 two-sided `Build decks` door hanger: Create, prepare
+proof, review, approve, and download both the Print-ready PDF and Digital JPG.
+The authenticated exact proof and downloads passed on desktop and at 390 ×
+844. `Ship to Me`, `Pick Up Nearby`, `Print`, and `Print + Mail` remained
+disabled and visibly Coming Soon.
+
+The immutable production evidence is:
+
+- Material `material_dcaa15d5569521594af80e6466786d19ee3f09c6`, status
+  `ORDER_READY`.
+- Version `version_04af1bf207e4c2a817dd42bbf9e1d5c816286c28`, ProductSpec
+  `door_hanger_3_5x8_5`, content hash
+  `3f928ad1d60d25a02d2673bb6d3d3f65a74ef6a9bb3b5a69366c3c0659a03be8`.
+- Artifact `artifact_092b17cc0f567f27820916c624ebe67ed79262d1`, format
+  `PDF/X-4`, artifact hash
+  `13bcc89f6f863658f28be27455045effb341cabeadecb84c768afec64f4cc2f6`.
+- Two exact proof hashes:
+  `53aa70c4eede0793186eacbc5f37d6686d4cad285a7bf633c5a1e0707eb871d7`
+  and
+  `ff52e6facaddd0690abc14000893e061543c48052f4f61b649d930667e9b52b8`.
+- Preflight status `pass`: exact trim, 0.0625-inch bleed, safe area,
+  die-cut exclusion, two-page order, effective resolution, CMYK/output intent,
+  embedded fonts, QR quiet zone and physical size, content bounds, and artifact
+  hash all passed. The QR remained vector and the tracked destination completed
+  the required matrix round-trip validation.
+
+An unauthenticated request for the exact private PDF returned HTTP 403. The
+deployed Storage Rules content exactly matches the cross-tenant-denial ruleset
+that passed the 10/10 Storage emulator suite. There is no public download token
+or provider URL in the Business model.
+
+Production reconciliation after actor proof records one material, one version,
+one artifact, and one approval; `printQuotes`, `printOrders`, `mailCampaigns`,
+`providerReceipts`, and `physicalFulfillmentPayments` remain empty. Generated
+Service Visuals remains `founder_only` with
+`providerGenerationEnabled=false`. Real physical print orders, real mail,
+physical Stripe charges, fulfillment-provider requests, and provider spend
+remain zero.
