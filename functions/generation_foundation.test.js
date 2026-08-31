@@ -102,14 +102,42 @@ test("commercial rollout modes fail closed and enforce cohort plus canonical pla
 
 test("safe request accepts only approved services and bounded visual directions", () => {
   const result = generation.sanitizeRequest({requestId: "request_safe_123", serviceCategory: "Decks",
-    visualDirection: "modern", requestedPurpose: "service_visual"}, ["Decks"]);
+    visualDirection: "modern", requestedPurpose: "service_visual", campaignId: "campaign_safe_123",
+    materialSlot: "door_hanger_service_hero", serviceAreaVisualContext: {address: "ignored"}}, ["Decks"]);
   assert.equal(result.serviceCategory, "Decks");
+  assert.equal(result.campaignId, "campaign_safe_123");
+  assert.equal(result.materialSlot, "door_hanger_service_hero");
+  assert.equal(Object.hasOwn(result, "serviceAreaVisualContext"), false);
   assert.throws(() => generation.sanitizeRequest({...result, requestId: "request_safe_124",
     serviceCategory: "Invented awards"}, ["Decks"]), /unsupported_service_category/);
   assert.throws(() => generation.sanitizeRequest({...result, requestId: "request_safe_125",
     visualDirection: "raw prompt"}, ["Decks"]), /invalid_visual_direction/);
   assert.throws(() => generation.sanitizeRequest({...result, requestId: "request_safe_126",
     requestedPurpose: "logo"}, ["Decks"]), /invalid_generated_purpose/);
+});
+
+test("area-context snapshot is bounded, immutable, non-personal, and service language is natural", () => {
+  assert.deepEqual(generation.serviceLanguage("Build decks"), {
+    canonical: "Build decks", subject: "deck", customerProject: "deck project",
+    visualSubject: "a pristine, professionally constructed residential deck",
+  });
+  const context = generation.sanitizeServiceAreaVisualContext({areaLabel: "Frederick County, Maryland",
+    propertyStyle: "detached residential", lotCharacter: "suburban yards", terrain: "gently rolling",
+    vegetation: "Mid-Atlantic deciduous vegetation", climateSeason: "late spring", source: "campaign"});
+  assert.equal(context.schemaVersion, "ServiceAreaVisualContextV1");
+  assert.match(context.contextDigest, /^[a-f0-9]{64}$/);
+  assert.equal(Object.isFrozen(context), true);
+  for (const unsafe of [{address: "123 Main Street"}, {residentName: "Person"}, {incomeBand: "high"},
+    {religion: "unknown"}, {race: "unknown"}]) {
+    assert.throws(() => generation.sanitizeServiceAreaVisualContext(unsafe),
+      /invalid_service_area_visual_context/);
+  }
+  const brief = generation.safeBrief({serviceCategory: "Build decks", visualDirection: "clean",
+    requestedPurpose: "service_visual", materialSlot: "door_hanger_service_hero",
+    campaignId: "campaign_safe_123"}, {}, context);
+  assert.equal(brief.serviceLanguage.customerProject, "deck project");
+  assert.match(brief.composition, /door-hanger crop/);
+  assert.equal(brief.serviceAreaVisualContext.contextDigest, context.contextDigest);
 });
 
 test("safe brief excludes people property before-after credentials text and logos", () => {

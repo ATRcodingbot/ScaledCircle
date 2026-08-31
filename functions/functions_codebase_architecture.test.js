@@ -23,7 +23,7 @@ const expected = [
   "acknowledgeJobReadiness", "transitionMaterialHandoff",
   "grantInternalBetaEntitlement", "revokeInternalBetaEntitlement",
   "setApplicationAdminRole", "confirmAdminLoginReadiness", "createAdminIssue",
-  "saveBusinessGrowthProfile", "generateManagedGrowthArtifact",
+  "generateManagedGrowthArtifact",
   "saveArtifactDeliveryPreference", "deliverManagedGrowthArtifact",
   "getSocialProviderAvailability", "createSocialPostDraft", "updateSocialPostDraft",
   "approveSocialPostDraft", "scheduleSocialPostDraft", "registerSocialMediaItem",
@@ -109,6 +109,12 @@ const physicalMarketingPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-physical-marketing", "package.json"), "utf8"));
 const physicalMarketingLock = fs.readFileSync(
   path.join(root, "functions-physical-marketing", "package-lock.json"), "utf8");
+const businessProfileCore = fs.readFileSync(
+  path.join(root, "functions-business-profile", "index.js"), "utf8");
+const businessProfilePackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-business-profile", "package.json"), "utf8"));
+const businessProfileLock = fs.readFileSync(
+  path.join(root, "functions-business-profile", "package-lock.json"), "utf8");
 const canonicalSubscriptionEntitlements = fs.readFileSync(
   path.join(root, "functions", "subscription_entitlements.js"), "utf8");
 const creativeMediaSubscriptionEntitlements = fs.readFileSync(
@@ -386,6 +392,25 @@ test("physical-marketing-core exclusively owns provider-free immutable print aut
     entry.codebase === "physical-marketing-core")?.source, "functions-physical-marketing");
 });
 
+test("business-profile-core exclusively owns the zero-secret customer profile save authority", () => {
+  assert.deepEqual(exportsIn(businessProfileCore), ["saveBusinessGrowthProfile"]);
+  for (const source of [platform, legacy, physicalMarketingCore]) {
+    assert.doesNotMatch(source, /exports\.saveBusinessGrowthProfile\s*=/);
+  }
+  assert.deepEqual(Object.keys(businessProfilePackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
+    "CENSUS_API_KEY", "nodemailer"]) {
+    assert.doesNotMatch(businessProfileCore, new RegExp(forbidden));
+  }
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(businessProfileLock, new RegExp(forbiddenPackage));
+  }
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "business-profile-core")?.source, "functions-business-profile");
+});
+
 test("legal-core exclusively owns immutable zero-secret consent authority", () => {
   assert.deepEqual(exportsIn(legal).sort(), ["getLegalConsentStatus", "recordLegalConsent"]);
   for (const name of ["recordLegalConsent", "getLegalConsentStatus"]) {
@@ -609,7 +634,7 @@ test("new notification triggers do not silently enable production retries", () =
 test("generated codebase preparation installs dependencies after regeneration", () => {
   for (const codebase of firebaseConfig.functions.filter((item) =>
     ["default", "platform-core", "wallet-core", "artifact-email", "campaign-funding", "sales-core",
-      "application-core", "physical-marketing-core"]
+      "application-core", "physical-marketing-core", "business-profile-core"]
       .includes(item.codebase))) {
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }
@@ -638,5 +663,5 @@ test("generated codebase preparation installs dependencies after regeneration", 
   const preparation = fs.readFileSync(
     path.join(root, "functions", "scripts", "prepare_functions_codebases.js"), "utf8");
   assert.match(preparation, /"functions-physical-marketing"/);
-  assert.match(preparation, /\["functions-creative-media", "functions-physical-marketing"\]/);
+  assert.match(preparation, /"functions-business-profile"/);
 });

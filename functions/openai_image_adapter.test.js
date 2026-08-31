@@ -27,8 +27,20 @@ test("maps the safe provider-neutral brief to pinned GPT-Image-2 defaults", asyn
   const result = await service(api).generateServiceConcept({jobId: "job_1", brief: {serviceCategory: "Decks", visualDirection: "clean"}});
   assert.equal(result.modelSnapshot, "gpt-image-2-2026-04-21"); assert.equal(result.providerRequestReference, "req_safe");
   assert.equal(result.cost.actualCostMicros, 30000); assert.equal(api.calls, 1);
-  const prompt = adapterModule.buildPrompt({serviceCategory: "Decks"});
-  for (const value of ["No people", "generic", "No people, faces", "before-and-after"]) assert.match(prompt, new RegExp(value, "i"));
+  const prompt = adapterModule.buildPrompt({serviceCategory: "Build decks",
+    visualSubject: "a pristine, professionally constructed residential deck",
+    workmanship: "physically plausible professional execution",
+    composition: "portrait print composition with a narrow door-hanger crop",
+    serviceAreaVisualContext: {areaLabel: "Frederick County, Maryland",
+      propertyStyle: "detached residential", terrain: "gently rolling",
+      vegetation: "Mid-Atlantic deciduous vegetation"}});
+  for (const value of ["No people", "before-and-after", "Frederick County", "pristine",
+    "physically plausible", "door-hanger crop", "specific real home", "mansion bias"]) {
+    assert.match(prompt, new RegExp(value, "i"));
+  }
+  for (const unsafe of ["resident name", "recipient", "income", "race", "religion", "123 Main Street"]) {
+    assert.doesNotMatch(prompt, new RegExp(unsafe, "i"));
+  }
 });
 
 test("provider remains disabled without any client creation or external call", async () => {

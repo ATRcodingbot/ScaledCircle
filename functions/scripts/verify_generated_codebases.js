@@ -23,6 +23,7 @@ const attributionRoot = path.join(root, "functions-attribution");
 const landingPageRoot = path.join(root, "functions-landing-page");
 const creativeMediaRoot = path.join(root, "functions-creative-media");
 const physicalMarketingRoot = path.join(root, "functions-physical-marketing");
+const businessProfileRoot = path.join(root, "functions-business-profile");
 const expectedExports = [
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
@@ -42,7 +43,6 @@ const expectedExports = [
   "setApplicationAdminRole",
   "confirmAdminLoginReadiness",
   "createAdminIssue",
-  "saveBusinessGrowthProfile",
   "generateManagedGrowthArtifact",
   "saveArtifactDeliveryPreference",
   "deliverManagedGrowthArtifact",
@@ -93,6 +93,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, applicationRoot);
   resolveFrom(dependency, attributionRoot);
   resolveFrom(dependency, landingPageRoot);
+  resolveFrom(dependency, businessProfileRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "openai", "sharp"]) {
   resolveFrom(dependency, creativeMediaRoot);
@@ -134,6 +135,7 @@ const attribution = require(path.join(attributionRoot, "index.js"));
 const landingPage = require(path.join(landingPageRoot, "index.js"));
 const creativeMedia = require(path.join(creativeMediaRoot, "index.js"));
 const physicalMarketing = require(path.join(physicalMarketingRoot, "index.js"));
+const businessProfile = require(path.join(businessProfileRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(attribution).sort(), [
   "bridgeResponseLead", "createResponseAsset", "getAttributionOverview", "resolveTrackedResponse",
@@ -184,6 +186,7 @@ assert.deepEqual(Object.keys(physicalMarketing).sort(), [
   "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
   "preparePhysicalMarketingVersion",
 ].sort());
+assert.deepEqual(Object.keys(businessProfile).sort(), ["saveBusinessGrowthProfile"]);
 const canonicalEntitlements = fs.readFileSync(
   path.join(root, "functions", "subscription_entitlements.js"), "utf8");
 const creativeMediaEntitlements = fs.readFileSync(
@@ -215,6 +218,7 @@ for (const name of Object.keys(application)) assert.equal(Object.hasOwn(legacy, 
 for (const name of Object.keys(landingPage)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(creativeMedia)) assert.equal(Object.hasOwn(legacy, name), false);
 for (const name of Object.keys(physicalMarketing)) assert.equal(Object.hasOwn(legacy, name), false);
+for (const name of Object.keys(businessProfile)) assert.equal(Object.hasOwn(legacy, name), false);
 
 const inventories = [Object.keys(platform), Object.keys(legacy), Object.keys(wallet),
   Object.keys(artifactEmail), Object.keys(jobAlertEmail), Object.keys(campaignFunding),
@@ -229,6 +233,7 @@ inventories.push(Object.keys(attribution));
 inventories.push(Object.keys(landingPage));
 inventories.push(Object.keys(creativeMedia));
 inventories.push(Object.keys(physicalMarketing));
+inventories.push(Object.keys(businessProfile));
 const assigned = inventories.flat();
 assert.equal(new Set(assigned).size, assigned.length, "A Function export belongs to multiple codebases.");
 
@@ -335,4 +340,4 @@ for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer"
   assert.doesNotMatch(legalLock, new RegExp(forbiddenPackage));
 }
 
-console.log(`Verified ${expectedExports.length} platform-core exports plus isolated assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core exports.`);
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated business-profile-core, assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core exports.`);

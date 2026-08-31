@@ -16,6 +16,7 @@ const PLAN_MONTHLY_ALLOWANCES = Object.freeze({starter: 5, growth: 15, scale: 30
 const CAPABILITIES = new Set(["disabled", "test_only", "enabled"]);
 const DIRECTIONS = new Set(["clean", "friendly", "premium", "practical", "modern"]);
 const PURPOSES = new Set(["service_visual", "hero"]);
+const MATERIAL_SLOTS = new Set(["landing_page_hero", "door_hanger_service_hero"]);
 const TERMINAL = new Set(["approved", "rejected", "failed", "blocked", "unknown_provider_outcome"]);
 const FAILURE_CATEGORIES = new Set(["provider_unavailable", "rate_limited", "budget_disabled",
   "moderation_blocked", "invalid_output", "invalid_request", "processing_failed", "timeout",
@@ -111,15 +112,83 @@ function sanitizeRequest(input, approvedServices = []) {
   if (!DIRECTIONS.has(visualDirection)) throw new Error("invalid_visual_direction");
   const requestedPurpose = clean(input?.requestedPurpose || "service_visual", 30).toLowerCase();
   if (!PURPOSES.has(requestedPurpose) || requestedPurpose === "logo") throw new Error("invalid_generated_purpose");
-  return {requestId, serviceCategory, visualDirection, requestedPurpose};
+  const campaignId = clean(input?.campaignId, 160) || null;
+  if (campaignId && !/^[A-Za-z0-9_-]{3,160}$/.test(campaignId)) throw new Error("invalid_generation_campaign");
+  const materialSlot = clean(input?.materialSlot || "landing_page_hero", 40).toLowerCase();
+  if (!MATERIAL_SLOTS.has(materialSlot)) throw new Error("invalid_generation_material_slot");
+  return {requestId, serviceCategory, visualDirection, requestedPurpose, campaignId, materialSlot};
 }
-function safeBrief(request, brand = {}) {
+
+function serviceLanguage(value) {
+  const canonical = clean(value, 80);
+  const lower = canonical.toLowerCase();
+  const singular = lower.replace(/^build\s+/, "").replace(/^install\s+/, "")
+    .replace(/\bdecks\b/g, "deck").replace(/\bfences\b/g, "fence")
+    .replace(/\bpatios\b/g, "patio").replace(/\bservices\b/g, "service");
+  const subject = /seasonal cleanup/.test(lower) ? "seasonal cleanup" :
+    /landscap/.test(lower) ? "landscaping" : singular;
+  const customerProject = /deck/.test(lower) ? "deck project" :
+    /fence/.test(lower) ? "fence project" : /patio/.test(lower) ? "patio project" :
+      /seasonal cleanup/.test(lower) ? "seasonal cleanup" :
+        /landscap/.test(lower) ? "landscaping project" : `${subject} project`;
+  const visualSubject = /deck/.test(lower) ? "a pristine, professionally constructed residential deck" :
+    /fence/.test(lower) ? "a straight, professionally installed residential fence with a proper gate" :
+      /patio/.test(lower) ? "a clean, professionally built patio with believable grading and drainage" :
+        /landscap/.test(lower) ? "polished, region-appropriate residential landscaping" :
+          /seasonal cleanup/.test(lower) ? "a professionally completed seasonal yard cleanup" :
+            `a professionally completed ${subject} project`;
+  return Object.freeze({canonical, subject, customerProject, visualSubject});
+}
+
+function sanitizeServiceAreaVisualContext(value) {
+  if (value == null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("invalid_service_area_visual_context");
+  }
+  const allowed = {
+    areaLabel: 120, city: 80, county: 80, postalZone: 20, propertyStyle: 100,
+    lotCharacter: 100, terrain: 80, vegetation: 100, climateSeason: 100,
+    settlementContext: 40, source: 60,
+  };
+  const forbidden = /(address|resident|recipient|person|email|phone|name|race|ethnic|relig|income|wealth|gender|age|disab|politic)/i;
+  const derived = new Set(["schemaVersion", "contextDigest"]);
+  for (const key of Object.keys(value)) {
+    if (derived.has(key)) continue;
+    if (!Object.hasOwn(allowed, key) || forbidden.test(key)) {
+      throw new Error("invalid_service_area_visual_context");
+    }
+  }
+  const result = {};
+  for (const [key, maximum] of Object.entries(allowed)) {
+    const normalized = clean(value[key], maximum);
+    if (normalized) result[key] = normalized;
+  }
+  if (!Object.keys(result).length) return null;
+  result.schemaVersion = "ServiceAreaVisualContextV1";
+  result.contextDigest = crypto.createHash("sha256")
+    .update(JSON.stringify(Object.fromEntries(Object.entries(result).sort(([a], [b]) => a.localeCompare(b)))))
+    .digest("hex");
+  return Object.freeze(result);
+}
+
+function safeBrief(request, brand = {}, serviceAreaContext = null) {
+  const language = serviceLanguage(request.serviceCategory);
+  const context = sanitizeServiceAreaVisualContext(serviceAreaContext);
   return Object.freeze({
     serviceCategory: request.serviceCategory,
     visualDirection: request.visualDirection,
     purpose: request.requestedPurpose,
     brandStyle: clean(brand.stylePreset, 30) || null,
     brandColors: [brand.primaryColor, brand.secondaryColor].filter((v) => /^#[0-9A-F]{6}$/i.test(String(v || ""))),
+    campaignId: request.campaignId || null,
+    materialSlot: request.materialSlot || "landing_page_hero",
+    serviceLanguage: language,
+    serviceAreaVisualContext: context,
+    visualSubject: language.visualSubject,
+    workmanship: "physically plausible professional execution with clean lines, realistic proportions, and appropriate site conditions",
+    composition: request.materialSlot === "door_hanger_service_hero" ?
+      "portrait print composition; keep the marketed service and regional property context visible through a narrow door-hanger crop" :
+      "landscape hero composition with a safe central crop",
     exclusions: ["identifiable_people", "real_customer_property", "before_after", "credentials_or_awards",
       "reviews_or_ratings", "factual_signage", "business_logo", "completed_work_claim"],
     embeddedText: "avoid",
@@ -164,7 +233,8 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
   capability = async () => "disabled", budgetEnabled = async () => false,
   authorization = async () => generationAuthorizationPolicy(undefined, null),
   budgetAuthority = null,
-  approvedServices = async () => [], brandProfile = async () => ({}), ingestCandidate,
+  approvedServices = async () => [], brandProfile = async () => ({}),
+  serviceAreaVisualContext = async () => null, ingestCandidate,
   approveCandidate = async () => {}, rejectCandidate = async () => {}, providerAuthPreflight = null,
   usageSummary = async () => null, commercialOperations = async () => ({}),
   notifyReady = async () => {}, reportOperationalFailure = () => {}, now = () => Date.now()}) {
@@ -197,11 +267,12 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     if (recent.docs.filter((doc) => millis(doc.data().createdAt) >= dayStartMillis).length >= MAX_REQUESTS_PER_DAY) {
       throw new Error("generation_rate_limited");
     }
-    const brief = safeBrief(valid, await brandProfile(actor));
+    const brief = safeBrief(valid, await brandProfile(actor), await serviceAreaVisualContext(actor, valid));
     const at = FieldValue.serverTimestamp();
     await ref.create({schemaVersion: SCHEMA_VERSION, jobId, businessUid: actor.uid,
       requestId: valid.requestId, status: "queued", serviceCategory: valid.serviceCategory,
       visualDirection: valid.visualDirection, requestedPurpose: valid.requestedPurpose,
+      campaignId: valid.campaignId, materialSlot: valid.materialSlot,
       requestedAt: at, requestedBy: actor.uid, providerAdapter: adapter.id,
       providerMode: mode === "test_only" ? "test" : "external", safeBrief: brief,
       providerExecutionMode: clean(adapter.executionMode, 30) || "synchronous",
@@ -417,5 +488,6 @@ module.exports = {SCHEMA_VERSION, DISCLOSURE, PAGE_SIZE, MAX_ACTIVE_JOBS, MAX_RE
   normalizeAuthorizedBusinessUids, normalizeRolloutMode, normalizeBetaCohortStage, betaCohortMaximum,
   planMonthlyAllowance, generationAuthorizationPolicy,
   DIRECTIONS, FAILURE_CATEGORIES, stableId, normalizeCapability, assertTestAdapterEnvironment,
-  sanitizeRequest, safeBrief, normalizeModeration, encodeCursor, decodeCursor,
+  MATERIAL_SLOTS, sanitizeRequest, serviceLanguage, sanitizeServiceAreaVisualContext, safeBrief,
+  normalizeModeration, encodeCursor, decodeCursor,
   deterministicTestAdapter, createGenerationService};

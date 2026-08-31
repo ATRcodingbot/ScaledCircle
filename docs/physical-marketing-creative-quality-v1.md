@@ -44,9 +44,35 @@ and dummy/fixture copy fail closed. Unsupported rankings, guarantees,
 credentials, ratings, discounts, and experience claims also fail closed unless
 a later explicit authority is designed for them.
 
+Customer-visible media has an additional fail-closed boundary. Low-fidelity
+`deterministic_fixture`, `test_fixture`, and `renderer_fixture` media cannot
+pass marketing readiness merely because it is printable. It is eligible only
+when it is an exact approved revision intentionally selected by the Business.
+This keeps deterministic renderer fixtures useful without presenting them as
+customer-quality Service Hero artwork.
+
 Approved `generated_service_concept` media retains its origin and receives a
 visible “Conceptual service visual — not completed work” disclosure in the
 print master and review proof.
+
+## Area-contextual service visual authority
+
+Generated Service Visuals now accepts an optional server-derived,
+campaign-bound `ServiceAreaVisualContextV1` snapshot for an intended material
+slot. The client may send only a Business-owned `campaignId` and bounded slot;
+it cannot supply or override geography traits. The server derives the snapshot
+from the owned campaign or confirmed Growth Profile area and records a stable
+digest. Allowed context is limited to non-personal place labels and aggregate
+physical traits such as general property style, lot character, terrain,
+vegetation, climate/season, and urban/suburban/rural context.
+
+Specific addresses, resident/recipient identity, contact data, and protected
+or socioeconomic demographic traits are rejected. The image brief requires
+physically plausible professional workmanship, an aspirational but attainable
+property, no mansion bias, no people/logos/text/claims, and a crop-aware
+portrait composition that preserves both the service and regional property
+context in `door_hanger_service_hero`. This authority is locally certified with
+mocks only; no staging image request has been dispatched.
 
 ## Print readiness preserved
 
@@ -79,15 +105,15 @@ provider credentials, or recipient data.
 
 ## Local certification
 
-- Physical marketing focused authority/renderer/QR suite: 17/17 pass.
-- Focused physical, attribution, creative-media, OpenAI-mocked, and Landing Page suite: 111/111 pass.
-- Curated backend full suite: 368/368 pass.
+- Area-context, OpenAI-mocked, and physical-marketing focused suite: 47/47 pass.
+- Focused generated-package, media, Growth Profile, and physical suite: 108/108 pass.
+- Curated backend full suite: 369/369 pass.
 - Firestore Rules emulator: 23/23 pass.
 - Storage Rules emulator: 10/10 pass.
-- Flutter physical marketing UI: 4/4 pass, including desktop and 390 × 844.
-- Flutter full with explicit local environment: 390 pass, 1 intentionally skipped.
+- Flutter physical marketing UI: 6/6 pass, including desktop and 390 × 844.
+- Flutter full with explicit local environment: 392 pass, 1 intentionally skipped.
 - Flutter analyzer: no issues.
-- Generated Function packages: 18/18 clean-installable; deployment preparation and module-load architecture pass.
+- Generated Function packages: 19/19 clean-installable; deployment preparation and module-load architecture pass.
 - Production dependency audit: no high/critical advisory; existing Firebase/Google `uuid` chain remains moderate maintenance debt.
 - Changed-source credential scan and `git diff --check`: pass.
 - Production-regression bundle SHA-256: `9811A081EDD7367C252EA5B509CD0A6AC03D7A9CA669A1287C6936E0398C0BD3`.
@@ -105,22 +131,23 @@ staging runtime identity. Hosting was deployed last:
 - production-regression bundle SHA-256: `7ED82836EB548151178FFC3423FF4D5FF6F8C93F5BFC173A150D226B580FBF5C`.
 
 Desktop and 390 × 844 hosted checks prove the release is truthful and
-fail-closed. The current Attractive Remodel staging QA actor has no canonical
-Business name, Growth Profile, approved logo, or approved media revision. The
-server therefore rejects creation before material/version/artifact writes. The
-UI now explains the exact maintained remedy (`Grow → Growth Plan → Set Up Your
-Growth Profile`) and disables Create rather than showing a generic failure.
-The existing pre-remediation fixture is projected as `READY_FOR_REVIEW`, with
-`Print quality Ready` and `Marketing content Needs attention`; it no longer
-shows or exposes a print-ready download even though its historical stored
-status predates the marketing-readiness gate.
+fail-closed. Through the maintained Growth Profile customer form, the staging
+Business saved only its Founder-confirmed canonical name, `Attractive Remodel`.
+No unrelated profile field was changed and no Firestore seed was used. The
+Physical Marketing capability refreshed normally after return/reopen.
 
-No canonical Business facts or media were fabricated or directly seeded. As a
-result, the requested fresh Attractive Remodel Create → Review → Approve →
-Download actor proof remains blocked on customer-owned canonical Business
-profile and approved-media setup. Provider traffic, print/mail orders, and
-physical Stripe charges remained zero. Production deployment remains out of
-scope.
+A fresh material used the canonical `Seasonal cleanup` service, the existing
+published Landing Page and Response Asset QR, no phone, no offer, no credential
+claim, and the `door_hanger_professional_services_v1` no-image fallback. The
+exact two-sided proof passed print readiness, marketing readiness, Business
+approval, QR decode, desktop, and 390 × 844 checks and reached `ORDER_READY`.
+The hosted output is a professional truthful no-image fallback; it is not used
+as evidence that the low-fidelity Service Hero fixture is customer ready.
+
+No clearly attributable Attractive Remodel logo or approved project image was
+found in the read-only repository/workspace audit. Provider traffic,
+print/mail orders, and physical Stripe charges remained zero. Production
+deployment remains out of scope.
 
 ## Tracking Phone V1 integration point
 

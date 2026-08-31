@@ -184,13 +184,28 @@ function readableColor(background) {
     {hex: "#111827", ratio: blackRatio};
 }
 
+function customerServiceLanguage(service) {
+  const canonical = requiredText(service, 80, "physical_service_required");
+  const lower = canonical.toLowerCase();
+  if (/deck/.test(lower)) return {canonical, noun: "deck", project: "deck project"};
+  if (/fence/.test(lower)) return {canonical, noun: "fence", project: "fence project"};
+  if (/patio/.test(lower)) return {canonical, noun: "patio", project: "patio project"};
+  if (/seasonal cleanup/.test(lower)) return {canonical, noun: "seasonal cleanup", project: "seasonal cleanup"};
+  if (/landscap/.test(lower)) return {canonical, noun: "landscaping", project: "landscaping project"};
+  const noun = lower.replace(/^build\s+/, "").replace(/^install\s+/, "")
+    .replace(/\bservices\b/g, "service").replace(/\s+/g, " ").trim();
+  return {canonical, noun, project: `${noun} project`};
+}
+
 function suggestedCopy(service) {
   const normalized = requiredText(service, 80, "physical_service_required");
   const lower = normalized.toLowerCase();
+  const language = customerServiceLanguage(normalized);
   const headline = /deck/.test(lower) ? "Build the deck your home deserves" :
     /fence/.test(lower) ? "A better-looking boundary starts here" :
-      `Make your ${lower} project easier to start`;
-  return {headline, supportingText: `Explore professional ${lower} options for your property.`,
+      /seasonal cleanup/.test(lower) ? "Make seasonal cleanup easier to start" :
+        `Make your ${language.project} easier to start`;
+  return {headline, supportingText: `Explore professional ${language.noun} options for your property.`,
     cta: "Scan to learn more"};
 }
 
@@ -942,6 +957,9 @@ function marketingReadinessReport({version, renderEvidence}) {
   const exactTexts = [brand.businessName, draft.service, draft.headline, draft.offer, draft.cta,
     brand.phone, version.landingPage?.destination];
   const claims = [draft.headline, draft.offer, draft.cta];
+  const media = version.mediaSnapshot || null;
+  const fixtureLikeMedia = media?.testFixture === true ||
+    ["deterministic_fixture", "test_fixture", "renderer_fixture"].includes(media?.origin);
   const serviceAuthorized = authoritativeServices.some((item) =>
     normalizedComparable(item) === normalizedComparable(draft.service));
   const checks = {
@@ -955,6 +973,8 @@ function marketingReadinessReport({version, renderEvidence}) {
       (!template.requiresOffer || Boolean(text(draft.offer, 180))),
     immutableMediaBinding: !version.mediaSnapshot || Boolean(version.mediaSnapshot.assetId &&
       version.mediaSnapshot.revisionId && version.mediaSnapshot.contentHash),
+    customerVisibleMediaEligible: !fixtureLikeMedia ||
+      (media.customerSelected === true && media.approvalStatus === "approved"),
     verifiedContactOnly: !brand.phone || (draft.includeBusinessPhone === true &&
       brand.phoneSource === "business_growth_profile"),
     meaningfulRequiredRegions: Array.isArray(layout.emptyRequiredRegions) &&
@@ -1065,6 +1085,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       origin: revision.origin || "business_upload", contentHash: revision.contentHash || null,
       purpose: revision.purpose || "general", altText: text(revision.altText, 240) || null,
       serviceLabel: text(revision.serviceLabel, 80) || null,
+      approvalStatus: "approved", customerSelected: true,
       storagePath: rendition.storagePath}, buffer};
   }
 
@@ -1371,7 +1392,7 @@ module.exports = {
   PRODUCT_SPECS, TEMPLATE_SPECS, PRICING_POLICY, MIN_EFFECTIVE_DPI,
   PDF_X_VERSION, text, stable, digest, productSpec, publicProductSpecs, normalizeDraft,
   templateSpec, publicTemplateSpecs, containsPlaceholder, containsUnsupportedClaim,
-  readableColor, suggestedCopy, validateAuthorizedDraft, marketingReadinessReport,
+  readableColor, customerServiceLanguage, suggestedCopy, validateAuthorizedDraft, marketingReadinessReport,
   versionOrderReady,
   calculateFulfillmentQuote,
   qrMatrix, renderPrintMaster, preflightReport, resolvePhysicalBusinessUid,

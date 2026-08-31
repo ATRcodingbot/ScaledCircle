@@ -138,13 +138,30 @@ function createOpenAIWifClient({config, OpenAI, fetchImpl = globalThis.fetch}) {
 function buildPrompt(brief = {}) {
   const category = String(brief.serviceCategory || "professional service").slice(0, 80);
   const direction = String(brief.visualDirection || "clean").slice(0, 24);
+  const subject = clean(brief.visualSubject, 240) || `a professionally completed ${category} project`;
+  const context = brief.serviceAreaVisualContext && typeof brief.serviceAreaVisualContext === "object" ?
+    brief.serviceAreaVisualContext : {};
+  const region = [context.areaLabel, context.city, context.county, context.postalZone]
+    .map((value) => clean(value, 120)).filter(Boolean).join(", ");
+  const traits = [context.propertyStyle, context.lotCharacter, context.terrain,
+    context.vegetation, context.climateSeason, context.settlementContext]
+    .map((value) => clean(value, 120)).filter(Boolean).join("; ");
+  const contextualDirection = region || traits ?
+    `Use only non-personal area context${region ? ` for ${region}` : ""}${traits ? `: ${traits}` : ""}. ` +
+      "Depict a plausible regional property type without reproducing any specific real home or address." :
+    "Use an attainable, generic property setting without reproducing any specific real home or address.";
+  const composition = clean(brief.composition, 300) ||
+    "landscape hero composition with a safe central crop";
   return [
-    `Create one professional ${direction} landscape service-concept image for ${category}.`,
-    "Show an empty, generic residential or commercial work setting, service materials, and the service subject.",
-    "The property must be generic and must not imply it belongs to a customer or this Business.",
+    `Create one photorealistic, professional ${direction} service-concept image for ${category}.`,
+    `Make ${subject} the visual hero.`,
+    contextualDirection,
+    `Workmanship must be ${clean(brief.workmanship, 300) || "physically plausible, clean, and professionally executed"}.`,
+    "The result should be aspirational but attainable: avoid extravagant mansion bias, implausible architecture,",
+    "physically absurd construction, unrelated geography, and generic stock-photo staging.",
+    `Compose for ${composition}; preserve both the service work and enough property context after cropping.`,
     "No people, faces, crews, logos, readable text, signage, credentials, awards, ratings, reviews, guarantees,",
     "before-and-after composition, or claim that the depicted work was completed by the Business.",
-    "Compose for a landing-page hero with a safe central crop and useful negative space.",
   ].join(" ");
 }
 

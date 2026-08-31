@@ -52,6 +52,7 @@ for (const directory of [
   "functions-landing-page",
   "functions-creative-media",
   "functions-physical-marketing",
+  "functions-business-profile",
 ]) {
   if (["functions-wallet", "functions-artifact-email", "functions-job-alert-email",
     "functions-campaign-funding", "functions-assignment", "functions-discovery",
@@ -59,7 +60,7 @@ for (const directory of [
     "functions-transactional-email", "functions-admin-ops", "functions-sales",
     "functions-legal", "functions-application", "functions-attribution",
     "functions-landing-page", "functions-creative-media",
-    "functions-physical-marketing"].includes(directory)) {
+    "functions-physical-marketing", "functions-business-profile"].includes(directory)) {
     prunePackageLock(path.join(root, directory));
   }
   runNpmCi(path.join(root, directory),

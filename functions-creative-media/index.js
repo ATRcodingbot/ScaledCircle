@@ -394,6 +394,29 @@ const generationService = generationFoundation.createGenerationService({
     const profile = await db.collection("businessBrandProfiles").doc(actor.uid).get();
     return profile.exists ? profile.data() : {};
   },
+  serviceAreaVisualContext: async (actor, request) => {
+    const growthPromise = db.collection("businessGrowthProfiles").doc(actor.uid).get();
+    let campaign = null;
+    if (request.campaignId) {
+      const campaignSnapshot = await db.collection("campaigns").doc(request.campaignId).get();
+      campaign = campaignSnapshot.data() || {};
+      if (!campaignSnapshot.exists || campaign.businessId !== actor.uid) {
+        throw new Error("generation_access_denied");
+      }
+    }
+    const growth = (await growthPromise).data() || {};
+    const savedArea = Array.isArray(growth.serviceAreas) ? growth.serviceAreas.
+    map((value) => String(value || "").trim()).find(Boolean) : null;
+    const areaLabel = String(campaign?.areaLabel || campaign?.locationName ||
+    campaign?.serviceAreaTemplateName || savedArea || "").trim();
+    const propertyStyle = String(campaign?.propertyType || "").trim();
+    if (!areaLabel && !propertyStyle) return null;
+    return generationFoundation.sanitizeServiceAreaVisualContext({
+      areaLabel: areaLabel || undefined,
+      propertyStyle: propertyStyle || undefined,
+      source: request.campaignId ? "business_owned_campaign" : "business_growth_profile"
+    });
+  },
   ingestCandidate: (input) => creativeMediaService.ingestGeneratedCandidate(input),
   approveCandidate: (input) => creativeMediaService.approveGeneratedCandidate(input),
   rejectCandidate: (input) => creativeMediaService.rejectGeneratedCandidate(input),
@@ -11098,7 +11121,8 @@ function generationHttpsError(error) {
     { reason: "PROVIDER_TEMPORARILY_UNAVAILABLE" });
   }
   if (["invalid_generation_request", "unsupported_service_category", "invalid_visual_direction",
-  "invalid_generated_purpose", "invalid_generation_cursor"].includes(code)) {
+  "invalid_generated_purpose", "invalid_generation_cursor", "invalid_generation_campaign",
+  "invalid_generation_material_slot", "invalid_service_area_visual_context"].includes(code)) {
     return new HttpsError("invalid-argument", "Choose a supported service and visual direction.");
   }
   if (["generation_not_approvable", "moderation_blocked"].includes(code)) {

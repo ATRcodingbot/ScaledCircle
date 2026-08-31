@@ -20,6 +20,7 @@ const packageDirectories = [
   "functions-landing-page",
   "functions-creative-media",
   "functions-physical-marketing",
+  "functions-business-profile",
 ];
 
 function runNpmCi(cwd, nativeInstall = false) {

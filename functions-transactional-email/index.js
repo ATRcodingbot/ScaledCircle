@@ -439,6 +439,29 @@ const db = getFirestore();
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 setGlobalOptions({
   maxInstances: 10,
   region: "us-east1"
@@ -1280,6 +1303,7 @@ exports.sendTransactionalEmailJob = onDocumentCreated(
 );
 
 /** Deliver only user-requested Managed Growth artifacts from an isolated queue. */
+
 
 
 

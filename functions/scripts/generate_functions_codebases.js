@@ -26,6 +26,7 @@ const attributionRoot = path.join(root, "functions-attribution");
 const landingPageRoot = path.join(root, "functions-landing-page");
 const creativeMediaRoot = path.join(root, "functions-creative-media");
 const physicalMarketingRoot = path.join(root, "functions-physical-marketing");
+const businessProfileRoot = path.join(root, "functions-business-profile");
 
 const platformExports = new Set([
   "analyzePropertyIntelligence",
@@ -46,7 +47,6 @@ const platformExports = new Set([
   "setApplicationAdminRole",
   "confirmAdminLoginReadiness",
   "createAdminIssue",
-  "saveBusinessGrowthProfile",
   "generateManagedGrowthArtifact",
   "saveArtifactDeliveryPreference",
   "deliverManagedGrowthArtifact",
@@ -129,6 +129,7 @@ const physicalMarketingExports = new Set([
   "preparePhysicalMarketingVersion", "approvePhysicalMarketingVersion",
   "getPhysicalMarketingOperations",
 ]);
+const businessProfileExports = new Set(["saveBusinessGrowthProfile"]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.
@@ -217,6 +218,7 @@ function transformIndex(mode) {
   if (mode === "landing-page") selectedProgram(ast, landingPageExports);
   if (mode === "creative-media") selectedProgram(ast, creativeMediaExports);
   if (mode === "physical-marketing") selectedProgram(ast, physicalMarketingExports);
+  if (mode === "business-profile") selectedProgram(ast, businessProfileExports);
   if (!["attribution", "physical-marketing"].includes(mode)) {
     const attributionHelpers = new Set([
       "attributionFoundation", "attributionService", "attributionHttpsError", "requireAttributionActor",
@@ -278,6 +280,7 @@ function transformIndex(mode) {
       ...landingPageExports,
       ...creativeMediaExports,
       ...physicalMarketingExports,
+      ...businessProfileExports,
       ...migratedLegacyExports,
       ...retiredProductionExports,
     ]);
@@ -299,6 +302,7 @@ function transformIndex(mode) {
       (mode === "landing-page" && !landingPageExports.has(name)) ||
       (mode === "creative-media" && !creativeMediaExports.has(name)) ||
       (mode === "physical-marketing" && !physicalMarketingExports.has(name)) ||
+      (mode === "business-profile" && !businessProfileExports.has(name)) ||
       (mode === "legacy" && excludedFromLegacy.has(name))
     )) {
       return [];
@@ -325,6 +329,7 @@ function transformIndex(mode) {
       if (mode === "landing-page") return false;
       if (mode === "creative-media") return false;
       if (mode === "physical-marketing") return false;
+      if (mode === "business-profile") return false;
       return !platformSecrets.has(identifier);
     });
     return declarations.length ? [{...statement, declarations}] : [];
@@ -338,7 +343,16 @@ function transformIndex(mode) {
 function resetDirectory(destination) {
   fs.mkdirSync(destination, {recursive: true});
   for (const entry of fs.readdirSync(destination)) {
-    fs.rmSync(path.join(destination, entry), {recursive: true, force: true});
+    // npm ci owns dependency replacement. Leaving node_modules in place here
+    // avoids Windows file-lock races while the Firebase CLI is running the
+    // predeploy hook; generated source and lockfiles are still rebuilt below.
+    if (entry === "node_modules") continue;
+    fs.rmSync(path.join(destination, entry), {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 200,
+    });
   }
 }
 
@@ -384,6 +398,8 @@ function copyPackage(destination, mode) {
     if (mode === "physical-marketing" && name.endsWith(".js") &&
         !["physical_marketing.js", "physical_fulfillment_providers.js",
           "attribution_foundation.js"].includes(name)) continue;
+    if (mode === "business-profile" && name.endsWith(".js") &&
+        !["managed_growth_profile.js", "subscription_entitlements.js"].includes(name)) continue;
     if (!["attribution", "physical-marketing"].includes(mode) &&
         name === "attribution_foundation.js") continue;
     if (mode === "attribution" && name.endsWith(".js") &&
@@ -443,6 +459,8 @@ function writePackageManifest(mode, destination) {
       : mode === "physical-marketing"
         ? ["firebase-admin", "firebase-functions", "sharp", "pdf-lib", "qrcode",
           "@pdf-lib/fontkit", "@fontsource/roboto"]
+      : mode === "business-profile"
+        ? ["firebase-admin", "firebase-functions"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
@@ -520,6 +538,7 @@ for (const [mode, destination] of [
   ["landing-page", landingPageRoot],
   ["creative-media", creativeMediaRoot],
   ["physical-marketing", physicalMarketingRoot],
+  ["business-profile", businessProfileRoot],
 ]) {
   // Campaign funding is deliberately hand-maintained as a small, auditable
   // payment boundary. Never regenerate it from the subscription/payout-heavy
@@ -539,4 +558,4 @@ for (const [mode, destination] of [
 fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
   path.join(campaignFundingRoot, "legal_consent.js"));
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, physical-marketing-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, physical-marketing-core, business-profile-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");

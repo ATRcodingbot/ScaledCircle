@@ -194,6 +194,18 @@
       ]
     },
     {
+      "source": "functions-business-profile",
+      "codebase": "business-profile-core",
+      "predeploy": ["npm --prefix functions run prepare:function-codebases"],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    },
+    {
       "source": "functions-attribution",
       "codebase": "attribution-core",
       "predeploy": ["npm --prefix functions run prepare:function-codebases"],

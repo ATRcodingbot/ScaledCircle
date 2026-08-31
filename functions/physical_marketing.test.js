@@ -147,6 +147,9 @@ test("template behavior is versioned and copy assistance remains bounded and cla
     assert.equal(item.version, 1); assert.equal(item.schemaVersion, "PhysicalMarketingTemplateV1");
   }
   const suggestion = physical.suggestedCopy("Build decks");
+  assert.equal(suggestion.headline, "Build the deck your home deserves");
+  assert.match(suggestion.supportingText, /professional deck options/i);
+  assert.doesNotMatch(Object.values(suggestion).join(" "), /build decks project/i);
   assert.equal(physical.containsUnsupportedClaim(Object.values(suggestion).join(" ")), false);
   assert.equal(physical.readableColor("#176FD1").ratio >= 4.5, true);
 });
@@ -228,7 +231,7 @@ test("professional-services template gracefully rebalances without media while m
 test("approved generated concepts retain a visible conceptual-origin disclosure in print and proof layouts", async () => {
   const snapshot = version({mediaSnapshot: {assetId: "asset-generated",
     revisionId: "revision-generated", contentHash: "c".repeat(64),
-    origin: "generated_service_concept"}});
+    origin: "generated_service_concept", approvalStatus: "approved", customerSelected: true}});
   const rendered = await physical.renderPrintMaster({version: snapshot,
     trackedUrl: snapshot.trackedUrl, mediaBuffer: await serviceImage()});
   assert.equal(rendered.evidence.marketingLayout.conceptualDisclosurePresent, true);
@@ -236,6 +239,21 @@ test("approved generated concepts retain a visible conceptual-origin disclosure 
     renderEvidence: rendered.evidence});
   assert.equal(marketing.status, "pass");
   assert.equal(marketing.checks.generatedOriginDisclosure, true);
+});
+
+test("low-fidelity renderer fixtures cannot become customer MARKETING_READY unless explicitly approved and selected", async () => {
+  const fixture = version({mediaSnapshot: {assetId: "asset-fixture", revisionId: "revision-fixture",
+    contentHash: "d".repeat(64), origin: "renderer_fixture", testFixture: true}});
+  const rendered = await physical.renderPrintMaster({version: fixture,
+    trackedUrl: fixture.trackedUrl, mediaBuffer: await serviceImage()});
+  const blocked = physical.marketingReadinessReport({version: fixture,
+    renderEvidence: rendered.evidence});
+  assert.equal(blocked.status, "fail");
+  assert.ok(blocked.failures.includes("customerVisibleMediaEligible"));
+  const selected = {...fixture, mediaSnapshot: {...fixture.mediaSnapshot,
+    customerSelected: true, approvalStatus: "approved"}};
+  assert.equal(physical.marketingReadinessReport({version: selected,
+    renderEvidence: rendered.evidence}).checks.customerVisibleMediaEligible, true);
 });
 
 test("long canonical Business copy and wide or tall approved logos remain bounded", async () => {

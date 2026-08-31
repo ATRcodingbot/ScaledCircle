@@ -439,6 +439,29 @@ const db = getFirestore();
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 setGlobalOptions({
   maxInstances: 10,
   region: "us-east1"
@@ -509,6 +532,7 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
+
 
 
 
