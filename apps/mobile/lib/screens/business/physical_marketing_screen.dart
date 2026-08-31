@@ -234,6 +234,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
         bytes: bytes,
         mimeType: mimeType,
       );
+      _message('Download started. Check your downloads.');
     },
   );
 
