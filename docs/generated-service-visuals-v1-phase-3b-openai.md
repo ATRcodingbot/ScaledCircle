@@ -118,6 +118,73 @@ Staging quality gates: **Technically Correct PASS**, **Customer Ready PASS**, an
 **Renewal Grade provider gate PASS**. Production provider configuration, credentials, calls, and
 deployment remain absent and require a separate Founder enablement approval.
 
+## Production Founder smoke certification — 2026-08-31
+
+The exact production remediation candidate is commit
+`2bab25ae69c662fd6b4297f9168d75cfe07a2fcd`. Production Hosting version
+`8c2068ba003300d9`, release `1788173353518000`, serves the certified Flutter bundle with SHA-256
+`8C7E3465F62E4A71C1041EE196DA0E375522D59DA8CB7D172442C871B965D09A`.
+
+Production provider access uses dedicated OpenAI project `proj_yBQvELngZSCXIXc3NxYmRjiL`,
+workload-identity provider `idp_aee38fd10fc43b959c95987d`, and dedicated OpenAI service identity
+`user-d1lIOqmdAWddw0s1AakAYxxl`. Firebase Gen2 exchanges the attached Google runtime identity for a
+short-lived OpenAI credential. Runtime authentication used **GCP Workload Identity only**: no API
+key, Firebase secret, GCP service-account key, or new GCP IAM binding was used. The configured image
+model was `gpt-image-2-2026-04-21`; secondary moderation used `omni-moderation-latest`.
+
+The Founder-only production allowlist contained exactly one internal QA Business. A $1.00 hard QA
+ceiling and maximum of three provider requests were active. Exactly three medium `1536x1024`
+requests were dispatched, each in one attempt, with zero duplicate calls and no request four:
+
+- `build decks` / Clean: job `visual_job_62a1ee5b32e3c9c7adbbb01449c8dce0edd291e6`,
+  OpenAI request `req_deb6f111eb4442db8d55885a80eda1ca`, 113 text-input tokens, 1,372
+  image-output tokens, actual cost **$0.041725**, quality PASS, and approved.
+- `fences` / Clean: job `visual_job_d054c66e8240c5f8a87b276cad78c7d51bd833ba`, OpenAI
+  request `req_19bc1d24be2c44b4a11f5f3a55c4d07f`, 112 text-input tokens, 1,372 image-output
+  tokens, actual cost **$0.041720**, quality PASS, and approved.
+- `fences` / Clean through the normal Try another flow: job
+  `visual_job_d48b2a426e894428001d524d132beec694e87146`, OpenAI request
+  `req_ea3fe6d21dbc40ddb84489e07a40c19c`, 112 text-input tokens, 1,372 image-output
+  tokens, actual cost **$0.041720**, quality PASS, and left ready for Business review.
+
+Total actual production QA provider cost was **$0.125165**. All three reservations settled
+idempotently to three actual units, $0.125165 actual cost, and zero outstanding units or cost.
+Definitive pre-provider failures release their holds, successful requests settle authoritative
+usage once, and unknown provider outcomes retain their reservation without a blind retry.
+
+All three outputs passed provider safety, secondary moderation, ScaledCircle domain-truthfulness
+checks, identifiable-person exclusion, before/after exclusion, unsupported claim/signage/review
+exclusion, Sharp/libvips decoding and normalization, metadata stripping, private rendition
+creation, and immutable `generated_service_concept` ingestion. Business approval, rejection,
+removal, and Landing Page selection do not consume another provider unit.
+
+Two preview defects were remediated and production-certified. First, the private-media bucket CORS
+policy now permits authenticated `GET`/`HEAD` preview responses only to `https://scaledcircle.com`;
+anonymous private reads remain denied. Second, the shared Flutter authenticated-preview state now
+reloads when the exact asset/revision identity changes, and Landing Page picker preview caching is
+keyed by both asset and revision. Exact uploaded and generated previews passed in Brand Assets and
+the Landing Page picker on desktop and 390x844 without public download tokens or private URL
+exposure.
+
+The internal QA Landing Page `page_724df026963f7d25153ae11bf3923bdda14bc420` published immutable
+version `6jkl2mnhN5XZT1kbcPQO` with generated revision
+`revision_a83d6ece4e823c3078c34f27a50e9f421f4d19b3`, frozen origin
+`generated_service_concept`, content-addressed public derivative, and visible “Conceptual service
+visual” disclosure. Desktop and 390x844 rendering passed. Tracking remained off and the proof
+created zero submission receipts, leads, conversions, notifications, emails, or Attribution
+interactions.
+
+After certification, `providerGenerationEnabled` was returned to `false`. The Founder allowlist
+remains one Business, customer-wide generation and commercial monthly allowances remain disabled,
+and existing uploaded/generated Brand Assets and published Landing Pages continue to work. The
+incident kill switch is the server-authoritative `providerGenerationEnabled=false`; it stops new
+WIF exchange/provider dispatch without a deployment. Application rollback targets are prior
+Hosting version `51efa2497b4a9292` / release `1788137273012000`; canonical jobs, usage, media,
+approved revisions, and immutable Landing Page versions must not be deleted during rollback.
+
+Production quality gates: **Technically Correct PASS**, **Customer Ready PASS**, and **Renewal
+Grade provider gate PASS**. Commercial availability remains a separate Founder product decision.
+
 ## Founder QA Business allowlist
 
 Production-provider preparation adds a server-authoritative, fail-closed QA allowlist to the
