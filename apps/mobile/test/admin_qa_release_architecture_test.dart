@@ -66,6 +66,22 @@ void main() {
     expect(cards, contains('Icons.lock_outline'));
   });
 
+  test('Founder-only commercial safety action is complete and fail-closed', () {
+    final dashboard = source('lib/screens/admin/admin_dashboard_screen.dart');
+    final service = source('lib/services/admin_operations_service.dart');
+    expect(service, contains("'providerGenerationEnabled': false"));
+    expect(service, contains("'rolloutMode': 'founder_only'"));
+    expect(service, contains("'betaCohortBusinessJobIds': <String>[]"));
+    expect(service, contains("'betaCohortStage': 'initial_5'"));
+    expect(service, contains("'globalDailyMaximum': 50"));
+    expect(service, contains("'globalMonthlyMaximum': 300"));
+    expect(service, contains("'globalDailyCostMicros': 10000000"));
+    expect(service, contains("'globalMonthlyCostMicros': 100000000"));
+    expect(dashboard, contains('Apply Founder-only safety controls'));
+    expect(dashboard, contains('clears the commercial cohort'));
+    expect(dashboard, contains('300 calls/month'));
+  });
+
   test('Admin destinations independently enforce authoritative role', () {
     final gate = source('lib/screens/admin/admin_role_gate.dart');
     final subscriptions = source(

@@ -170,12 +170,16 @@ void main() {
     await tester.ensureVisible(find.text('Stage first-five Beta controls'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Stage first-five Beta controls'));
-    await tester.ensureVisible(find.text('Return to Founder-only'));
+    await tester.ensureVisible(
+      find.text('Apply Founder-only safety controls'),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Return to Founder-only'));
+    await tester.tap(find.text('Apply Founder-only safety controls'));
     expect(staged, 1);
     expect(restored, 1);
     expect(find.textContaining('Business UID'), findsOneWidget);
+    expect(find.textContaining('clears the commercial cohort'), findsOneWidget);
+    expect(find.textContaining('300 calls/month'), findsOneWidget);
   });
 
   testWidgets('Admin home presents the simple four-section command center', (

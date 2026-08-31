@@ -95,6 +95,12 @@ class AdminOperationsService {
         .call<Map<Object?, Object?>>({
           'providerGenerationEnabled': false,
           'rolloutMode': 'founder_only',
+          'betaCohortBusinessJobIds': <String>[],
+          'betaCohortStage': 'initial_5',
+          'globalDailyMaximum': 50,
+          'globalMonthlyMaximum': 300,
+          'globalDailyCostMicros': 10000000,
+          'globalMonthlyCostMicros': 100000000,
         });
     return Map<String, dynamic>.from(result.data);
   }

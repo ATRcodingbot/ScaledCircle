@@ -676,7 +676,7 @@ class AdminOperationsContent extends StatelessWidget {
                     onRestoreFounderOnlyControls != null) ...[
                   const SizedBox(height: 10),
                   const Text(
-                    'Private Beta staging uses the same server-resolved Business evidence. Both actions keep provider generation disabled.',
+                    'Private Beta staging uses the same server-resolved Business evidence. Founder-only clears the commercial cohort and safely preconfigures 50 calls/day, 300 calls/month, \$10/day, and \$100/month. Both actions keep provider generation disabled.',
                     style: TextStyle(fontStyle: FontStyle.italic),
                   ),
                   const SizedBox(height: 10),
@@ -696,7 +696,7 @@ class AdminOperationsContent extends StatelessWidget {
                             ? null
                             : onRestoreFounderOnlyControls,
                         icon: const Icon(Icons.shield_outlined),
-                        label: const Text('Return to Founder-only'),
+                        label: const Text('Apply Founder-only safety controls'),
                       ),
                     ],
                   ),
