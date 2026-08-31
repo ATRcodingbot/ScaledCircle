@@ -1,6 +1,8 @@
 # Physical Marketing Execution V1
 
-Status: provider-free foundation locally certified; staging certification pending.
+Status: provider-free foundation hosted and staging-certified on 2026-08-31.
+
+Certified implementation candidate: `0e1b57c4235aa72f7d43cc8d333380c8215d49e6`.
 
 ## Authority and data model
 
@@ -185,3 +187,33 @@ The staging manifest is limited to:
 
 No index is required. Production deployment, provider credentials, live print
 or mail, and payment capture remain outside this release.
+
+The certified staging deployment is:
+
+- Hosting version `bcdaf502fffc4e2c`, release `1788198842184000`.
+- `main.dart.js` SHA-256
+  `FE13D287B9F516E9565BD645F77CC602FF79D02B99CB4622071A895A8B545FEB`.
+- Five ACTIVE Node.js 24 `physical-marketing-core` Functions in `us-east1`,
+  source hash `2d46e27b5599b9b466032f7e68d07b127ed91f0d`, with zero secret binding.
+- Firestore and Storage Rules compile and emulator suites pass. The private
+  artifact path is owner-readable by exact object only and remains anonymous,
+  cross-tenant, list, write, and delete denied.
+
+Attractive Remodel staging completed the normal Business flow for a 3.5 × 8.5
+two-sided door hanger: Create draft → prepare exact proof → PDF/X-4 preflight →
+approve immutable version → download Print-ready PDF and Digital JPG. The exact
+authenticated proof was visible on desktop and at 390 × 844. Both download
+controls completed through authenticated byte retrieval and the browser showed
+`Download started. Check your downloads.` `Ship to Me`, `Pick Up Nearby`,
+`Print`, and `Print + Mail` remained visibly unavailable/Coming Soon.
+
+Hosted certification found and corrected one projection defect before final
+approval: customer-visible ProductSpecs omitted their stable server validation
+IDs. The canonical workspace now emits a versioned `specId`, and focused tests
+prove every visible ProductSpec round-trips through server validation. A safe
+category-only operational diagnostic records validation categories without
+Business content, recipient data, or credentials.
+
+Provider traffic, provider quotes/orders, mail pieces, print orders, payment
+captures, customer charges, new credentials, and additional spend were all
+zero. Production was not changed.
