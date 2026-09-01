@@ -447,6 +447,33 @@ test("financial reads are scoped to participants and admins", async () => {
   await assertSucceeds(store("admin-one").doc("scalerTransfers/transfer-one").get());
 });
 
+test("Tracking Phone canonical telecom authority is client read/write denied", async () => {
+  const paths = [
+    "trackingPhoneAssets/phone-a",
+    "phoneForwardingDestinations/destination-a",
+    "phoneForwardingDestinationVersions/version-a",
+    "trackingPhoneBindings/binding-a",
+    "callSessions/call-a",
+    "callWebhookEvents/event-a",
+    "phoneProvisioningJobs/job-a",
+    "phoneUsageLedger/usage-a",
+    "trackingPhoneConfigurations/default",
+    "releasedTrackingPhoneTombstones/fingerprint-a",
+  ];
+  await environment.withSecurityRulesDisabled(async (context) => {
+    for (const path of paths) await context.firestore().doc(path).set({businessUid: "business-one"});
+  });
+  for (const uid of ["business-one", "business-two", "admin-one"]) {
+    const db = store(uid);
+    for (const path of paths) {
+      await assertFails(db.doc(path).get());
+      await assertFails(db.doc(path).set({businessUid: uid, forged: true}));
+      await assertFails(db.doc(path).update({forged: true}));
+      await assertFails(db.doc(path).delete());
+    }
+  }
+});
+
 test("visual generation jobs remain server-authoritative for every client role", async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
     await context.firestore().doc("visualGenerationJobs/job-one").set({

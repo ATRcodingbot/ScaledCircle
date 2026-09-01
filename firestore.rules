@@ -1057,6 +1057,49 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // Tracking Phone Number V1 is server-authoritative. Clients use bounded
+    // callables and cannot provision numbers, self-verify destinations, forge
+    // call events, rewrite lifecycle/cost truth, or enumerate telecom PII.
+    match /trackingPhoneAssets/{assetId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneForwardingDestinations/{destinationId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneForwardingDestinationVersions/{versionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /trackingPhoneBindings/{bindingId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /callSessions/{callSessionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /callWebhookEvents/{eventId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneProvisioningJobs/{jobId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneUsageLedger/{entryId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /trackingPhoneConfigurations/{configurationId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /releasedTrackingPhoneTombstones/{fingerprint} {
+      allow read, create, update, delete: if false;
+    }
+
     match /physicalFulfillmentPayments/{paymentId} {
       allow read, create, update, delete: if false;
     }

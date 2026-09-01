@@ -89,6 +89,8 @@ const legalPackage = JSON.parse(fs.readFileSync(
 const legalLock = fs.readFileSync(path.join(root, "functions-legal", "package-lock.json"), "utf8");
 const application = fs.readFileSync(path.join(root, "functions-application", "index.js"), "utf8");
 const attributionCore = fs.readFileSync(path.join(root, "functions-attribution", "index.js"), "utf8");
+const trackingPhoneCore = fs.readFileSync(
+  path.join(root, "functions-attribution", "tracking_phone.js"), "utf8");
 const attributionPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-attribution", "package.json"), "utf8"));
 const attributionLock = fs.readFileSync(
@@ -283,7 +285,7 @@ test("sales-core exclusively owns the bounded zero-secret Sales authority", () =
 
 test("attribution-core exclusively owns the zero-secret response and analytics boundary", () => {
   const names = ["createResponseAsset", "getAttributionOverview", "bridgeResponseLead",
-    "resolveTrackedResponse"];
+    "resolveTrackedResponse", "getTrackingPhoneWorkspace", "getTrackingPhoneOperations"];
   assert.deepEqual(exportsIn(attributionCore).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
@@ -295,6 +297,8 @@ test("attribution-core exclusively owns the zero-secret response and analytics b
   ]);
   for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
     "CENSUS_API_KEY", "nodemailer"]) assert.doesNotMatch(attributionCore, new RegExp(forbidden));
+  assert.match(attributionCore, /createDisabledProvider/);
+  assert.match(trackingPhoneCore, /providerTraffic:\s*0/);
   for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
     assert.doesNotMatch(attributionLock, new RegExp(forbiddenPackage));
   }

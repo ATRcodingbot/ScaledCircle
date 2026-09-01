@@ -448,6 +448,22 @@ test("lead bridge preserves first/last attribution and immutable conversion auth
   assert.match(source, /economicValue: null, immutable: true/);
 });
 
+test("phone interaction bridges into canonical attribution without becoming a lead", async () => {
+  const db = fakeFirestore({"campaigns/campaign-phone": {businessId: "business-1", status: "active"}});
+  const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
+  const service = attribution.createAttributionService({db, FieldValue, now: () => 2000,
+    publicBaseUrl: attribution.publicResponseOrigin("scaledcircle-staging")});
+  const input = {businessUid: "business-1", callSessionId: "call-session-a",
+    callerIdentityHash: "a".repeat(64), attribution: {source: "phone",
+      campaignId: "campaign-phone", materialId: "material-a", creativeVersion: "version-a"}};
+  const first = await service.recordPhoneInteraction(input);
+  const replay = await service.recordPhoneInteraction(input);
+  assert.equal(first.created, true); assert.equal(replay.created, false);
+  const record = db.records.get(`responseInteractions/${first.interactionId}`);
+  assert.equal(record.attribution.source, "phone"); assert.equal(record.analyticsClass, "live");
+  assert.equal(record.leadId, null); assert.equal(record.conversionId, null);
+});
+
 test("Business and Admin overview remains bounded and server-mediated", () => {
   const source = fs.readFileSync(path.join(__dirname, "attribution_foundation.js"), "utf8");
   assert.match(source, /actor\.role === "admin" && !requestedBusinessUid/);

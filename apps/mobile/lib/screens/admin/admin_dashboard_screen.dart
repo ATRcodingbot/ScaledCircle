@@ -29,6 +29,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       .loadGeneratedMediaCommercialMetrics();
   late Future<Map<String, dynamic>> _physicalMarketingOperations = _service
       .loadPhysicalMarketingOperations();
+  late Future<Map<String, dynamic>> _trackingPhoneOperations = _service
+      .loadTrackingPhoneOperations();
   GeneratedMediaWifPreflight? _providerAuthPreflight;
   bool _providerAuthPreflightRunning = false;
   Map<String, dynamic>? _accountingReconciliation;
@@ -41,6 +43,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _overview = _service.loadOverview();
     _generatedMediaMetrics = _service.loadGeneratedMediaCommercialMetrics();
     _physicalMarketingOperations = _service.loadPhysicalMarketingOperations();
+    _trackingPhoneOperations = _service.loadTrackingPhoneOperations();
   });
 
   @override
@@ -90,11 +93,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             builder: (context, generatedSnapshot) =>
                 FutureBuilder<Map<String, dynamic>>(
                   future: _physicalMarketingOperations,
-                  builder: (context, physicalSnapshot) =>
-                      AdminOperationsContent(
+                  builder: (context, physicalSnapshot) => FutureBuilder<Map<String, dynamic>>(
+                    future: _trackingPhoneOperations,
+                    builder: (context, phoneSnapshot) => AdminOperationsContent(
                         snapshot: snapshot.data!,
                         commercialMetrics: generatedSnapshot.data,
                         physicalMarketingOperations: physicalSnapshot.data,
+                        trackingPhoneOperations: phoneSnapshot.data,
                         onOpenIssue: _openIssue,
                         onOpenAdminAccounts: () =>
                             _push(const AdminRoleManagementScreen()),
@@ -134,6 +139,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                         ),
                       ),
+                  ),
                 ),
           );
         },
@@ -417,6 +423,7 @@ class AdminOperationsContent extends StatelessWidget {
     required this.snapshot,
     this.commercialMetrics,
     this.physicalMarketingOperations,
+    this.trackingPhoneOperations,
     required this.onOpenIssue,
     required this.onOpenAdminAccounts,
     required this.onOpenBeta,
@@ -443,6 +450,7 @@ class AdminOperationsContent extends StatelessWidget {
   final AdminOperationsSnapshot snapshot;
   final GeneratedMediaCommercialMetrics? commercialMetrics;
   final Map<String, dynamic>? physicalMarketingOperations;
+  final Map<String, dynamic>? trackingPhoneOperations;
   final ValueChanged<AdminOpsException> onOpenIssue;
   final VoidCallback onOpenAdminAccounts,
       onOpenBeta,
@@ -565,6 +573,46 @@ class AdminOperationsContent extends StatelessWidget {
         children: snapshot.health
             .map((item) => _HealthChip(item: item))
             .toList(),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tracking Numbers — Beta',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              if (trackingPhoneOperations == null)
+                const Text(
+                  'Tracking Number diagnostics are temporarily unavailable.',
+                )
+              else ...[
+                Text(
+                  'Provider: ${_category(trackingPhoneOperations!['provider']?.toString() ?? 'twilio')} · ${trackingPhoneOperations!['providerConfigured'] == true ? 'Configured' : 'Not configured'}',
+                ),
+                Text(
+                  'Numbers: ${trackingPhoneOperations!['numberInventory'] ?? 0} · Active: ${trackingPhoneOperations!['activeNumbers'] ?? 0} · Grace: ${trackingPhoneOperations!['graceNumbers'] ?? 0}',
+                ),
+                Text(
+                  'Calls: ${trackingPhoneOperations!['callSessions'] ?? 0} · Answered: ${trackingPhoneOperations!['answeredCalls'] ?? 0} · Missed: ${trackingPhoneOperations!['missedCalls'] ?? 0}',
+                ),
+                Text(
+                  'Provisioning failures: ${trackingPhoneOperations!['failedProvisioning'] ?? 0} · Unknown outcomes: ${trackingPhoneOperations!['unknownOutcomes'] ?? 0}',
+                ),
+                Text(
+                  'Webhook duplicates: ${trackingPhoneOperations!['duplicateWebhookReceipts'] ?? 0} · Provider cost: ${_money((trackingPhoneOperations!['providerCostMicros'] as num?)?.toInt() ?? 0)}',
+                ),
+                const Text(
+                  'Provider traffic: 0 · Recording, transcription, outbound calling, and SMS are off · Caller and forwarding numbers masked',
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
       const SizedBox(height: 12),
       Card(

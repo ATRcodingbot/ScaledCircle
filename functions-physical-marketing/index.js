@@ -11292,6 +11292,10 @@ const attributionProjectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJE
 process.env.GOOGLE_CLOUD_PROJECT || "";
 const attributionService = attributionFoundation.createAttributionService({ db, FieldValue,
   publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId) });
+
+
+
+
 const physicalMarketing = require("./physical_marketing");
 const physicalMarketingService = physicalMarketing.createPhysicalMarketingService({
   db,
@@ -11340,12 +11344,39 @@ const physicalMarketingService = physicalMarketing.createPhysicalMarketingServic
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function physicalMarketingHttpsError(error) {
   const code = String(error?.message || error);
   console.warn("physical_marketing_request_rejected", { category: code.slice(0, 120) });
   if (["physical_actor_forbidden", "physical_cross_tenant_forbidden", "physical_material_forbidden",
   "physical_campaign_forbidden", "physical_landing_page_forbidden", "physical_media_forbidden",
-  "physical_approval_forbidden", "physical_admin_required"].includes(code)) {
+  "physical_tracking_phone_forbidden", "physical_approval_forbidden", "physical_admin_required"].includes(code)) {
     return new HttpsError("permission-denied", "That marketing material is not available.");
   }
   if (["physical_material_required", "physical_version_required", "physical_business_required",
@@ -11408,6 +11439,16 @@ async function physicalMarketingCall(request, operation, options) {
     throw physicalMarketingHttpsError(error);
   }
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -642,6 +642,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 value: 'physical_marketing',
                 child: Text('Physical Marketing — Beta'),
               ),
+              const PopupMenuItem(
+                value: 'tracking_phone',
+                child: Text('Tracking Numbers — Beta'),
+              ),
               PopupMenuItem(
                 value: 'responses',
                 enabled: AppEnvironmentConfig.responseTrackingEnabled,
@@ -674,6 +678,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 AppNavigation.push(context, AppRoutes.businessBrandAssets);
               } else if (value == 'physical_marketing') {
                 AppNavigation.push(context, AppRoutes.businessPhysicalMarketing);
+              } else if (value == 'tracking_phone') {
+                AppNavigation.push(context, AppRoutes.businessTrackingPhone);
               } else if (value == 'account') {
                 Navigator.push(
                   context,

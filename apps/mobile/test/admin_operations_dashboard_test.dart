@@ -6,6 +6,7 @@ import 'package:flutter_app/services/admin_operations_service.dart';
 Widget subject(
   AdminOperationsSnapshot snapshot, {
   GeneratedMediaCommercialMetrics? commercialMetrics,
+  Map<String, dynamic>? trackingPhoneOperations,
   GeneratedMediaWifPreflight? providerAuthPreflight,
   VoidCallback? onRunProviderAuthPreflight,
   TextEditingController? founderQaJobController,
@@ -18,6 +19,7 @@ Widget subject(
     body: AdminOperationsContent(
       snapshot: snapshot,
       commercialMetrics: commercialMetrics,
+      trackingPhoneOperations: trackingPhoneOperations,
       onOpenIssue: (_) {},
       onOpenAdminAccounts: () {},
       onOpenBeta: () {},
@@ -56,6 +58,21 @@ const emptySnapshot = AdminOperationsSnapshot(
 );
 
 void main() {
+  testWidgets('Tracking Number operations are bounded and provider-free', (tester) async {
+    await tester.pumpWidget(subject(emptySnapshot, trackingPhoneOperations: const {
+      'provider': 'twilio', 'providerConfigured': false, 'numberInventory': 0,
+      'activeNumbers': 0, 'graceNumbers': 0, 'callSessions': 0, 'answeredCalls': 0,
+      'missedCalls': 0, 'failedProvisioning': 0, 'unknownOutcomes': 0,
+      'duplicateWebhookReceipts': 0, 'providerCostMicros': 0,
+    }));
+    await tester.scrollUntilVisible(find.text('Tracking Numbers — Beta'), 300,
+      scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('Provider: Twilio · Not configured'), findsOneWidget);
+    expect(find.textContaining('Provider traffic: 0'), findsOneWidget);
+    expect(find.textContaining('Caller and forwarding numbers masked'), findsOneWidget);
+    expect(find.textContaining('Account Auth Token'), findsNothing);
+  });
+
   testWidgets('commercial metrics separate customer and provider usage', (
     tester,
   ) async {

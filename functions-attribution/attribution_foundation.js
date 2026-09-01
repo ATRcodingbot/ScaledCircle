@@ -323,6 +323,38 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     return {leadId: leadRef.id, conversionId: conversionRef.id};
   }
 
+  async function recordPhoneInteraction(input = {}) {
+    const businessUid = text(input.businessUid, 160);
+    const callSessionId = text(input.callSessionId, 160);
+    const campaignId = text(input.attribution?.campaignId, 160);
+    const callerIdentityHash = text(input.callerIdentityHash, 80);
+    if (!businessUid || !callSessionId || !campaignId || !callerIdentityHash) {
+      throw new Error("phone_interaction_invalid");
+    }
+    const campaign = await db.collection("campaigns").doc(campaignId).get();
+    if (!campaign.exists || campaign.data()?.businessId !== businessUid) {
+      throw new Error("attribution_reference_forbidden");
+    }
+    const analyticsClass = responseActivityClass({status: "active",
+      attribution: {campaignId}}, campaign.data());
+    const interactionId = `phone_${crypto.createHash("sha256").update(callSessionId).digest("hex")}`;
+    const ref = db.collection("responseInteractions").doc(interactionId);
+    let created = false;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(ref);
+      if (existing.exists) return;
+      const envelope = canonicalEnvelope({...input.attribution, source: "phone",
+        interactionId});
+      transaction.create(ref, {schemaVersion: SCHEMA_VERSION, businessUid,
+        responseAssetId: envelope.responseAssetId, callSessionId,
+        attribution: envelope, callerIdentityHash, analyticsClass,
+        liveAttribution: analyticsClass === "live", occurredAt: FieldValue.serverTimestamp(),
+        immutable: true, leadId: null, conversionId: null});
+      created = true;
+    });
+    return {interactionId, analyticsClass, created};
+  }
+
   async function getOverview(input, actor) {
     assertAttributionActor(actor);
     const requestedBusinessUid = text(input?.businessUid, 160);
@@ -420,7 +452,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       page: {limit, bounded: true}};
   }
 
-  return {createResponseAsset, resolveAndRecord, bridgeLead, getOverview};
+  return {createResponseAsset, resolveAndRecord, recordPhoneInteraction, bridgeLead, getOverview};
 }
 
 module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,

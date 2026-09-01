@@ -11292,6 +11292,10 @@ const attributionProjectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJE
 process.env.GOOGLE_CLOUD_PROJECT || "";
 const attributionService = attributionFoundation.createAttributionService({ db, FieldValue,
   publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId) });
+const trackingPhone = require("./tracking_phone");
+const trackingPhoneService = trackingPhone.createTrackingPhoneService({
+  db, FieldValue, provider: trackingPhone.createDisabledProvider()
+});
 
 
 
@@ -11337,6 +11341,33 @@ async function requireAttributionActor(request) {
       context.user?.active !== false && context.user?.disabled !== true : null
     });
     throw attributionHttpsError(error);
+  }
+}
+
+function trackingPhoneHttpsError(error) {
+  const code = String(error?.message || error);
+  console.warn("tracking_phone_request_rejected", { category: code.slice(0, 120) });
+  if (["tracking_phone_actor_required", "tracking_phone_cross_tenant_forbidden",
+  "tracking_phone_admin_required"].includes(code)) {
+    return new HttpsError("permission-denied", "Tracking Number access is not available.");
+  }
+  if (["tracking_phone_business_required", "tracking_phone_plan_ineligible"].includes(code)) {
+    return new HttpsError("failed-precondition", "Tracking Numbers are not available for this account yet.");
+  }
+  return new HttpsError("internal", "Tracking Numbers are temporarily unavailable.");
+}
+
+async function requireTrackingPhoneActor(request, { admin = false } = {}) {
+  const context = await authenticatedUserContext(request, "Sign in to use Tracking Numbers.");
+  if (admin && context.isAdmin !== true) throw trackingPhoneHttpsError(new Error("tracking_phone_admin_required"));
+  if (!admin && context.role !== "business") throw trackingPhoneHttpsError(new Error("tracking_phone_actor_required"));
+  return context;
+}
+
+async function trackingPhoneCall(request, operation, options) {
+  const actor = await requireTrackingPhoneActor(request, options);
+  try {return await operation(request.data || {}, actor);} catch (error) {
+    throw trackingPhoneHttpsError(error);
   }
 }
 
@@ -11417,6 +11448,16 @@ exports.createResponseAsset = onCall(
       throw attributionHttpsError(error);
     }
   }
+);
+
+exports.getTrackingPhoneWorkspace = onCall(
+  { enforceAppCheck: false, maxInstances: 4 },
+  (request) => trackingPhoneCall(request, trackingPhoneService.workspace)
+);
+
+exports.getTrackingPhoneOperations = onCall(
+  { enforceAppCheck: false, maxInstances: 2 },
+  (request) => trackingPhoneCall(request, trackingPhoneService.operations, { admin: true })
 );
 
 

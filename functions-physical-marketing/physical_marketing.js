@@ -1146,6 +1146,23 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       storagePath: rendition.storagePath}, buffer};
   }
 
+  async function ownedTrackingPhone(uid, trackingPhoneAssetId, campaignId) {
+    if (!trackingPhoneAssetId) return null;
+    const assetSnap = await db.collection("trackingPhoneAssets").doc(trackingPhoneAssetId).get();
+    const asset = assetSnap.data() || {};
+    if (!assetSnap.exists || asset.businessUid !== uid || asset.status !== "ACTIVE" ||
+        !asset.activeBindingId) throw new Error("physical_tracking_phone_forbidden");
+    const bindingSnap = await db.collection("trackingPhoneBindings").doc(asset.activeBindingId).get();
+    const binding = bindingSnap.data() || {};
+    if (!bindingSnap.exists || binding.businessUid !== uid ||
+        binding.trackingPhoneAssetId !== trackingPhoneAssetId || binding.campaignId !== campaignId ||
+        binding.effectiveUntil) throw new Error("physical_tracking_phone_forbidden");
+    return {trackingPhoneAssetId, bindingId: bindingSnap.id,
+      bindingVersion: Number(binding.bindingVersion || 1), campaignId,
+      displayNumber: text(asset.displayNumber, 40), numberType: text(asset.numberType, 20) || "local",
+      immutable: true};
+  }
+
   async function businessAuthority(uid, draft = {}) {
     const [growthSnap, brandSnap, userSnap] = await Promise.all([
       db.collection("businessGrowthProfiles").doc(uid).get(),
@@ -1182,12 +1199,13 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
 
   async function workspace(input, actor) {
     const uid = resolvePhysicalBusinessUid(actor, input?.businessUid);
-    const [materialQuery, campaignQuery, pageQuery, mediaQuery, authority] = await Promise.all([
+    const [materialQuery, campaignQuery, pageQuery, mediaQuery, trackingPhoneQuery, authority] = await Promise.all([
       materials.where("businessUid", "==", uid).limit(MAX_WORKSPACE_ITEMS).get(),
       db.collection("campaigns").where("businessId", "==", uid).limit(50).get(),
       db.collection("landingPages").where("businessUid", "==", uid).limit(50).get(),
       db.collection("businessMediaLibraries").doc(uid)
         .collection(MEDIA_ASSET_SUBCOLLECTION).limit(50).get(),
+      db.collection("trackingPhoneAssets").where("businessUid", "==", uid).limit(50).get(),
       businessAuthority(uid),
     ]);
     const materialItems = await Promise.all(materialQuery.docs.map(async (doc) => {
@@ -1224,6 +1242,10 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       landingPages: pageQuery.docs.filter((doc) => doc.data()?.status === "published")
         .map((doc) => ({landingPageId: doc.id, title: text(doc.data()?.title || doc.data()?.publicSlug || "Landing Page", 120)})),
       approvedMedia: media,
+      trackingNumbers: trackingPhoneQuery.docs.filter((doc) => doc.data()?.status === "ACTIVE")
+        .map((doc) => ({trackingPhoneAssetId: doc.id,
+          displayNumber: text(doc.data()?.displayNumber, 40),
+          campaignId: text(doc.data()?.campaignId, 160), status: "ACTIVE"})),
       businessIdentity: {businessName: authority.businessName,
         hasApprovedLogo: Boolean(authority.approvedLogo),
         primaryColor: authority.primaryColor, secondaryColor: authority.secondaryColor,
@@ -1251,6 +1273,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const authority = await businessAuthority(uid, draft);
     validateAuthorizedDraft(draft, {...authority, destination: page.destination});
     if (draft.media) await ownedMedia(uid, draft.media, {excludePurpose: "logo"});
+    await ownedTrackingPhone(uid, draft.trackingPhoneAssetId, draft.campaignId);
     const now = FieldValue.serverTimestamp();
     if (action === "create") {
       const requestId = requiredText(input?.requestId, 160, "physical_request_required");
@@ -1296,6 +1319,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const authority = await businessAuthority(uid, draft);
     validateAuthorizedDraft(draft, {...authority, destination: page.destination});
     const media = await ownedMedia(uid, draft.media, {excludePurpose: "logo"});
+    const trackingPhoneSnapshot = await ownedTrackingPhone(uid, draft.trackingPhoneAssetId,
+      draft.campaignId);
     const logo = authority.approvedLogo ? await ownedMedia(uid, authority.approvedLogo,
       {requiredPurpose: "logo"}) : {snapshot: null, buffer: null};
     const draftHash = digest({materialId, revision: material.draftRevision, draft, page, media: media.snapshot});
@@ -1322,7 +1347,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
         imageFit: "cover_attention", optionalRegionsRebalance: true},
       mediaSnapshot: media.snapshot, landingPage: page,
       responseAssetId: response.responseAssetId, trackedUrl: response.trackedUrl,
-      trackingPhoneAssetId: draft.trackingPhoneAssetId, immutable: true};
+      trackingPhoneAssetId: draft.trackingPhoneAssetId,
+      trackingPhoneSnapshot, immutable: true};
     snapshot.contentHash = digest(snapshot);
     const rendered = await renderPrintMaster({version: snapshot, trackedUrl: response.trackedUrl,
       mediaBuffer: media.buffer, logoBuffer: logo.buffer});

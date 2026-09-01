@@ -16,6 +16,7 @@ import 'screens/business/business_attribution_screen.dart';
 import 'screens/business/landing_page_builder_screen.dart';
 import 'screens/business/brand_assets_screen.dart';
 import 'screens/business/physical_marketing_screen.dart';
+import 'screens/business/tracking_phone_screen.dart';
 import 'screens/campaigns/campaign_funding_return_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -183,6 +184,16 @@ class ScaledCircleApp extends StatelessWidget {
           routeName: AppRoutes.businessPhysicalMarketing,
           audience: ProtectedRouteAudience.business,
           builder: (_, _) => const PhysicalMarketingScreen(),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.businessTrackingPhone) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.businessTrackingPhone,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => const TrackingPhoneScreen(),
         ),
       );
     }

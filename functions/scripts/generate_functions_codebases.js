@@ -110,6 +110,7 @@ const legalExports = new Set(["recordLegalConsent", "getLegalConsentStatus"]);
 const applicationExports = new Set(["applyToCampaign"]);
 const attributionExports = new Set([
   "createResponseAsset", "getAttributionOverview", "bridgeResponseLead", "resolveTrackedResponse",
+  "getTrackingPhoneWorkspace", "getTrackingPhoneOperations",
 ]);
 const landingPageExports = new Set([
   "getLandingPageWorkspace", "mutateLandingPageDraft", "transitionLandingPage",
@@ -222,6 +223,8 @@ function transformIndex(mode) {
   if (!["attribution", "physical-marketing"].includes(mode)) {
     const attributionHelpers = new Set([
       "attributionFoundation", "attributionService", "attributionHttpsError", "requireAttributionActor",
+      "trackingPhone", "trackingPhoneService", "trackingPhoneHttpsError",
+      "requireTrackingPhoneActor", "trackingPhoneCall",
     ]);
     ast.program.body = ast.program.body.flatMap((statement) => {
       if (statement.type === "FunctionDeclaration" && attributionHelpers.has(statement.id?.name)) return [];
@@ -403,7 +406,7 @@ function copyPackage(destination, mode) {
     if (!["attribution", "physical-marketing"].includes(mode) &&
         name === "attribution_foundation.js") continue;
     if (mode === "attribution" && name.endsWith(".js") &&
-        name !== "attribution_foundation.js") continue;
+        !["attribution_foundation.js", "tracking_phone.js"].includes(name)) continue;
     // The transformed legacy index still initializes the shared landing-page
     // service even though its public exports are removed. Keep the canonical
     // module loadable there while preserving landing-page-core as the sole
