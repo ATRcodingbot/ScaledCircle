@@ -437,6 +437,10 @@ function serviceList(snapshot, selected) {
   return [...new Map(result.map((item) => [normalizedComparable(item), item])).values()].slice(0, 4);
 }
 
+function customerServiceList(snapshot, selected) {
+  return serviceList(snapshot, selected).map((item) => customerServiceLanguage(item).noun);
+}
+
 function doorHangerLayoutEvidence(template, layout, draft, businessSnapshot, fontEvidence, hasMedia,
   generatedMedia) {
   return {templateId: template.templateId, templateVersion: template.version,
@@ -453,8 +457,14 @@ function doorHangerLayoutEvidence(template, layout, draft, businessSnapshot, fon
 async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer}) {
   const spec = productSpec(version.productSpecId); const draft = version.content;
   const business = version.brandSnapshot || {};
+  const serviceLanguage = customerServiceLanguage(draft.service);
+  const renderedServices = customerServiceList(business, draft.service).slice(0, 3);
+  const supporting = draft.offer ||
+    `Professional ${serviceLanguage.noun} options for your property.`;
   const generatedMedia = version.mediaSnapshot?.origin === "generated_service_concept";
   const template = templateSpec(version.templateId || draft.templateId, spec.productType);
+  const backHeadline = template.templateId === "door_hanger_offer_action_v1" && draft.offer ?
+    draft.offer : `Ready to plan your ${serviceLanguage.project}?`;
   const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit);
   const regular = await pdf.embedFont(fs.readFileSync(FONT_REGULAR), {subset: true});
   const bold = await pdf.embedFont(fs.readFileSync(FONT_BOLD), {subset: true});
@@ -499,7 +509,7 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
         layout.contentWidth, 27, 17, 3); fontEvidence.push(headlineSize);
       const headline = drawWrappedText(page, bold, draft.headline, {x: layout.left, top: heroTop,
         width: layout.contentWidth, size: headlineSize, color: primaryInk, maximumLines: 3});
-      page.drawText(draft.service.toUpperCase(), {x: layout.left, y: headline.bottom - 3,
+      page.drawText(serviceLanguage.noun.toUpperCase(), {x: layout.left, y: headline.bottom - 3,
         size: 9, font: bold, color: primaryInk}); fontEvidence.push(9);
       const imageTop = headline.bottom - 22; const imageHeight = Math.min(194, imageTop - 151);
       if (embeddedImage && imageHeight >= 140) {
@@ -516,7 +526,7 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
         }
       }
       if (!embeddedImage && template.templateId === "door_hanger_professional_services_v1") {
-        const services = serviceList(business, draft.service).slice(0, 3);
+        const services = renderedServices;
         const panelHeight = Math.min(194, Math.max(148, imageHeight));
         const panelY = imageTop - panelHeight;
         page.drawRectangle({x: layout.left, y: panelY, width: layout.contentWidth,
@@ -539,7 +549,6 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
       const bandHeight = 92; const bandY = layout.bottom + 12;
       page.drawRectangle({x: layout.left, y: bandY, width: layout.contentWidth,
         height: bandHeight, color: cmyk(0, 0, 0, 0.08)});
-      const supporting = draft.offer || `Professional ${draft.service.toLowerCase()} options for your property.`;
       const supportSize = textSizeFor(regular, supporting, layout.contentWidth - 24, 11, 9, 3);
       fontEvidence.push(supportSize);
       drawWrappedText(page, regular, supporting, {x: layout.left + 12, top: bandY + bandHeight - 10,
@@ -558,15 +567,13 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
         drawWrappedText(page, bold, business.businessName, {x: identityX, top: layout.top - 12,
           width: layout.right - identityX, size: identitySize, color: primaryInk, maximumLines: 2});
       } else fontEvidence.push(9);
-      const backHeadline = template.templateId === "door_hanger_offer_action_v1" && draft.offer ?
-        draft.offer : `Ready to plan your ${draft.service.toLowerCase()} project?`;
       const backSize = textSizeFor(bold, backHeadline, layout.contentWidth, 22, 15, 3);
       fontEvidence.push(backSize);
       const backTitle = drawWrappedText(page, bold, backHeadline, {x: layout.left,
         top: layout.top - 72, width: layout.contentWidth, size: backSize,
         color: secondary, maximumLines: 3});
       let listY = backTitle.bottom - 8;
-      for (const item of serviceList(business, draft.service).slice(0, 3)) {
+      for (const item of renderedServices) {
         page.drawText(`• ${item}`, {x: layout.left, y: listY, size: 10,
           font: regular, color: secondary}); listY -= 19; fontEvidence.push(10);
       }
@@ -590,9 +597,10 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
           height: middleHeight, color: primary});
         page.drawText("YOUR NEXT PROJECT", {x: layout.left + 14,
           y: middleBottom + middleHeight - 30, size: 8, font: bold, color: primaryInk});
-        const focusSize = textSizeFor(bold, draft.service, layout.contentWidth - 28, 24, 16, 3);
+        const focusSize = textSizeFor(bold, serviceLanguage.noun,
+          layout.contentWidth - 28, 24, 16, 3);
         fontEvidence.push(8, focusSize);
-        drawWrappedText(page, bold, draft.service, {x: layout.left + 14,
+        drawWrappedText(page, bold, serviceLanguage.noun, {x: layout.left + 14,
           top: middleBottom + middleHeight - 42, width: layout.contentWidth - 28,
           size: focusSize, color: primaryInk, maximumLines: 3});
       }
@@ -624,6 +632,9 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
   return {pdf: pdfBytes, proofs, digitalJpg: proofs[0].jpg,
     evidence: {pdfXVersion: PDF_X_VERSION, outputIntent: "CMYK", fontsEmbedded: true,
       sideCount: draft.sideCount, sideEvidence, pageEvidence,
+      finalRenderedServiceCopy: {canonical: serviceLanguage.canonical,
+        serviceLabel: serviceLanguage.noun, supporting, backHeadline,
+        serviceList: renderedServices, focusText: serviceLanguage.noun},
       effectiveRasterDpi: normalizedMedia?.effectiveDpi || null, vectorOnly: !normalizedMedia,
       marketingLayout: doorHangerLayoutEvidence(template, layout, draft, business,
         fontEvidence, Boolean(normalizedMedia), generatedMedia),
@@ -635,6 +646,7 @@ async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer})
   if (spec.productType === "door_hanger") return renderDoorHangerPrintMaster({version, trackedUrl,
     mediaBuffer, logoBuffer});
   const draft = version.content;
+  const serviceLanguage = customerServiceLanguage(draft.service);
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const regular = await pdf.embedFont(fs.readFileSync(FONT_REGULAR), {subset: true});
@@ -691,7 +703,8 @@ async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer})
             y: layout.bottom + 34, width: w, height: h});
         }
       }
-      page.drawText(draft.service, {x: layout.left, y: layout.bottom, size: 10, font: bold, color: ink});
+      page.drawText(serviceLanguage.noun, {x: layout.left, y: layout.bottom,
+        size: 10, font: bold, color: ink});
     } else {
       const titleSize = Math.max(15, Math.min(28, layout.contentWidth / 12));
       const lines = wrap(bold, draft.cta, titleSize, layout.contentWidth).slice(0, 3);
@@ -791,6 +804,12 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
   const image = mediaProof ? `data:image/jpeg;base64,${mediaProof.toString("base64")}` : null;
   const logo = logoProof ? `data:image/jpeg;base64,${logoProof.toString("base64")}` : null;
   const qr = qrMatrix(trackedUrl);
+  const serviceLanguage = customerServiceLanguage(draft.service);
+  const renderedServices = customerServiceList(business, draft.service).slice(0, 3);
+  const supporting = draft.offer ||
+    `Professional ${serviceLanguage.noun} options for your property.`;
+  const backHeadline = template.templateId === "door_hanger_offer_action_v1" && draft.offer ?
+    draft.offer : `Ready to plan your ${serviceLanguage.project}?`;
   let body = `<rect width="100%" height="100%" fill="${side === 1 ? primary : "#FFFFFF"}"/>`;
   if (side === 1) {
     if (logo) body += `<image href="${logo}" x="${left}" y="${top}" width="${logoWordmark ? 300 : 110}" height="45" ` +
@@ -810,7 +829,7 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
     const serviceY = headlineY + headline.height + 14;
     body += `<text x="${left}" y="${serviceY}" fill="${primaryInk}" font-size="16" ` +
       `font-weight="700" letter-spacing="1.5" font-family="Arial, sans-serif">` +
-      `${xml(draft.service.toUpperCase())}</text>`;
+      `${xml(serviceLanguage.noun.toUpperCase())}</text>`;
     const imageY = serviceY + 25; const cardY = height - bleed - safe - 150;
     const imageHeight = Math.max(210, cardY - imageY - 22);
     if (image) {
@@ -832,7 +851,7 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
       body += `<text x="${left + 22}" y="${imageY + 38}" fill="${secondary}" font-size="14" ` +
         `font-weight="700" letter-spacing="1" font-family="Arial, sans-serif">SERVICES FOR YOUR PROPERTY</text>`;
       let listY = imageY + 62;
-      const services = serviceList(business, draft.service).slice(0, 3);
+      const services = renderedServices;
       const itemHeight = Math.min(180, Math.max(82,
         (imageHeight - 105 - (services.length - 1) * 16) / Math.max(services.length, 1)));
       for (const item of services) {
@@ -845,7 +864,6 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
     }
     body += `<rect x="${left}" y="${cardY}" width="${contentWidth}" height="138" ` +
       `rx="8" fill="#FFFFFF" fill-opacity="0.94"/>`;
-    const supporting = draft.offer || `Professional ${draft.service.toLowerCase()} options for your property.`;
     const support = svgTextBlock(supporting, {x: left + 20, y: cardY + 36, size: 20,
       fill: secondary, maximumCharacters: 36, maximumLines: 3, lineHeight: 25}); body += support.svg;
     body += `<text x="${left + 20}" y="${cardY + 118}" fill="${secondary}" font-size="17" ` +
@@ -860,13 +878,11 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
         width: right - identityX, maximumSize: 20, minimumSize: 14,
         fill: primaryInk, weight: 700, maximumLines: 2}).svg;
     }
-    const backHeadline = template.templateId === "door_hanger_offer_action_v1" && draft.offer ?
-      draft.offer : `Ready to plan your ${draft.service.toLowerCase()} project?`;
     const heading = svgAdaptiveTextBlock(backHeadline, {x: left, y: top + 135,
       width: contentWidth, maximumSize: 34, minimumSize: 23,
       fill: secondary, weight: 700, maximumLines: 3});
     body += heading.svg; let listY = top + 147 + heading.height;
-    for (const item of serviceList(business, draft.service).slice(0, 3)) {
+    for (const item of renderedServices) {
       body += `<text x="${left}" y="${listY}" fill="${secondary}" font-size="19" ` +
         `font-family="Arial, sans-serif">• ${xml(item)}</text>`; listY += 32;
     }
@@ -888,7 +904,7 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
       body += `<rect x="${left}" y="${middleY}" width="${contentWidth}" height="${middleHeight}" ` +
         `rx="10" fill="${primary}"/><text x="${left + 24}" y="${middleY + 45}" fill="${primaryInk}" ` +
         `font-size="14" font-weight="700" letter-spacing="1.2" font-family="Arial,sans-serif">YOUR NEXT PROJECT</text>`;
-      body += svgAdaptiveTextBlock(draft.service, {x: left + 24, y: middleY + 105,
+      body += svgAdaptiveTextBlock(serviceLanguage.noun, {x: left + 24, y: middleY + 105,
         width: contentWidth - 48, maximumSize: 38, minimumSize: 24,
         fill: primaryInk, weight: 700, maximumLines: 3}).svg;
     }
@@ -911,7 +927,10 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
     `height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`);
   const webp = await sharp(svg).webp({quality: 90}).toBuffer();
   const jpg = await sharp(svg).jpeg({quality: 93, chromaSubsampling: "4:4:4"}).toBuffer();
-  return {side, webp, jpg, width, height};
+  return {side, webp, jpg, width, height, svg,
+    customerVisibleServiceCopy: {canonical: serviceLanguage.canonical,
+      serviceLabel: serviceLanguage.noun, supporting, backHeadline,
+      serviceList: renderedServices, focusText: serviceLanguage.noun}};
 }
 
 async function renderProof({spec, draft, side, trackedUrl, mediaProof}) {
@@ -921,6 +940,7 @@ async function renderProof({spec, draft, side, trackedUrl, mediaProof}) {
   const bleed = spec.bleedInches * dpi; const safe = spec.safeInches * dpi;
   const left = bleed + safe; const right = width - bleed - safe;
   const primary = draft.primaryColor; const secondary = draft.secondaryColor;
+  const serviceLanguage = customerServiceLanguage(draft.service);
   let top = bleed + safe;
   if (spec.dieCut && side === 1) top = bleed + (spec.dieCut.centerFromTopInches +
     spec.dieCut.diameterInches / 2 + spec.dieCut.exclusionPaddingInches) * dpi;
@@ -934,7 +954,7 @@ async function renderProof({spec, draft, side, trackedUrl, mediaProof}) {
     (image ? `<image href="${image}" x="${left}" y="${top + 110}" width="${right-left}" ` +
       `height="${Math.max(120, height-top-190)}" preserveAspectRatio="xMidYMid slice"/>` : "") +
     `<text x="${left}" y="${height-bleed-safe}" fill="#fff" font-size="18" font-weight="700" ` +
-    `font-family="Arial, sans-serif">${xml(draft.service)}</text>`;
+    `font-family="Arial, sans-serif">${xml(serviceLanguage.noun)}</text>`;
   const back = `<rect width="100%" height="100%" fill="#fff"/>` +
     `<text x="${left}" y="${top + 44}" fill="${secondary}" font-size="36" font-weight="700" ` +
     `font-family="Arial, sans-serif">${xml(draft.cta)}</text>` +
@@ -945,7 +965,7 @@ async function renderProof({spec, draft, side, trackedUrl, mediaProof}) {
     `viewBox="0 0 ${width} ${height}">${side === 1 ? front : back}</svg>`);
   const webp = await sharp(svg).webp({quality: 88}).toBuffer();
   const jpg = await sharp(svg).jpeg({quality: 92, chromaSubsampling: "4:4:4"}).toBuffer();
-  return {side, webp, jpg, width, height};
+  return {side, webp, jpg, width, height, svg};
 }
 
 function preflightReport({version, renderEvidence, artifactHash}) {

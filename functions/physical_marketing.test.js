@@ -205,6 +205,46 @@ test("door-hanger renderer creates deterministic PDF/X-4 evidence, CMYK intent, 
   assert.ok(rendered.evidence.marketingLayout.qrBreathingRoomPoints >= 16);
 });
 
+test("final PDF and SVG proof renderers use bounded customer service language", async () => {
+  const cases = [
+    {canonical: "Build decks", noun: "deck", project: "deck project",
+      forbidden: "build decks project"},
+    {canonical: "Seasonal cleanup", noun: "seasonal cleanup", project: "seasonal cleanup",
+      forbidden: "seasonal cleanup project project"},
+    {canonical: "Landscaping improvements", noun: "landscaping", project: "landscaping project",
+      forbidden: "landscaping improvements project"},
+    {canonical: "Fences", noun: "fence", project: "fence project",
+      forbidden: "fences project"},
+  ];
+  for (const fixture of cases) {
+    const content = draft({service: fixture.canonical, offer: "", media: null,
+      templateId: "door_hanger_professional_services_v1"});
+    const snapshot = version({content, mediaSnapshot: null,
+      brandSnapshot: authority({services: [fixture.canonical]})});
+    const rendered = await physical.renderPrintMaster({version: snapshot,
+      trackedUrl: snapshot.trackedUrl});
+    const expectedBack = `Ready to plan your ${fixture.project}?`;
+    const expectedSupporting = `Professional ${fixture.noun} options for your property.`;
+
+    assert.deepEqual(rendered.evidence.finalRenderedServiceCopy, {
+      canonical: fixture.canonical, serviceLabel: fixture.noun,
+      supporting: expectedSupporting, backHeadline: expectedBack,
+      serviceList: [fixture.noun], focusText: fixture.noun,
+    });
+    assert.doesNotMatch(rendered.pdf.toString("latin1"), new RegExp(fixture.forbidden, "i"));
+    assert.ok(rendered.digitalJpg.length > 1000);
+    for (const proof of rendered.proofs) {
+      assert.deepEqual(proof.customerVisibleServiceCopy,
+        rendered.evidence.finalRenderedServiceCopy);
+      const svg = proof.svg.toString("utf8");
+      const visibleSvgText = svg.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      assert.doesNotMatch(svg, new RegExp(fixture.forbidden, "i"));
+      assert.ok(visibleSvgText.toLowerCase().includes(
+        (proof.side === 1 ? fixture.noun : expectedBack).toLowerCase()));
+    }
+  }
+});
+
 test("QR decodes from the rendered door-hanger proof at physical output size", async () => {
   const trackedUrl = "https://scaledcircle.com/r?code=door-hanger-proof";
   const snapshot = version({trackedUrl});
