@@ -15,6 +15,7 @@ const TEMPLATE_SCHEMA_VERSION = "PhysicalMarketingTemplateV1";
 const MARKETING_READINESS_VERSION = "PhysicalMarketingReadinessV1";
 const MAX_WORKSPACE_ITEMS = 50;
 const MAX_ADMIN_ITEMS = 100;
+const MEDIA_ASSET_SUBCOLLECTION = "mediaAssets";
 const MIN_EFFECTIVE_DPI = 300;
 const PDF_X_VERSION = "PDF/X-4";
 const FONT_REGULAR = require.resolve("@fontsource/roboto/files/roboto-latin-400-normal.woff");
@@ -102,6 +103,15 @@ const PRICING_POLICY = Object.freeze({
 
 function text(value, maximum = 160) {
   return String(value == null ? "" : value).trim().replace(/\s+/g, " ").slice(0, maximum);
+}
+
+function timestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  const seconds = Number(value.seconds ?? value._seconds);
+  if (Number.isFinite(seconds)) return seconds * 1000;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function requiredText(value, maximum, code) {
@@ -359,21 +369,32 @@ function sideLayout(spec, draft, side) {
 
 async function normalizePlacedImage(imageBuffer, placement) {
   if (!imageBuffer) return null;
-  const image = sharp(imageBuffer, {failOn: "error", limitInputPixels: 40_000_000}).rotate();
-  const metadata = await image.metadata();
-  if (!metadata.width || !metadata.height) throw new Error("physical_media_invalid");
-  const effectiveDpi = Math.min(metadata.width / placement.widthInches,
-    metadata.height / placement.heightInches);
+  const trimmed = await sharp(imageBuffer, {failOn: "error", limitInputPixels: 40_000_000})
+    .rotate().trim({background: "#FFFFFF", threshold: 12}).toBuffer({resolveWithObject: true});
+  const image = sharp(trimmed.data, {failOn: "error", limitInputPixels: 40_000_000});
+  if (!trimmed.info.width || !trimmed.info.height) throw new Error("physical_media_invalid");
+  const effectiveDpi = Math.min(trimmed.info.width / placement.widthInches,
+    trimmed.info.height / placement.heightInches);
   if (effectiveDpi < MIN_EFFECTIVE_DPI) throw new Error("physical_media_resolution_low");
   const width = Math.ceil(placement.widthInches * MIN_EFFECTIVE_DPI);
   const height = Math.ceil(placement.heightInches * MIN_EFFECTIVE_DPI);
   const cmykJpeg = await image.clone().resize({width, height, fit: "cover", position: "attention"})
     .toColourspace("cmyk").jpeg({quality: 92, chromaSubsampling: "4:4:4"})
     .withIccProfile("cmyk").toBuffer();
-  const proof = await sharp(imageBuffer).rotate().resize({width, height, fit: "cover",
+  const proof = await image.clone().resize({width, height, fit: "cover",
     position: "attention"}).jpeg({quality: 90}).toBuffer();
-  return {cmykJpeg, proof, width: metadata.width, height: metadata.height,
+  return {cmykJpeg, proof, width: trimmed.info.width, height: trimmed.info.height,
     effectiveDpi: Math.floor(effectiveDpi)};
+}
+
+function doorHangerMediaPlacement(spec) {
+  return {widthInches: Math.min(2.5, spec.widthInches - 0.36), heightInches: 2.7};
+}
+
+function fittedImageBox(image, maximumWidth, maximumHeight, centerX, centerY) {
+  const scale = Math.min(maximumWidth / image.width, maximumHeight / image.height);
+  const width = image.width * scale; const height = image.height * scale;
+  return {x: centerX - width / 2, y: centerY - height / 2, width, height};
 }
 
 async function normalizeLogo(logoBuffer) {
@@ -442,7 +463,7 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
   pdf.setAuthor("ScaledCircle"); pdf.setCreator("ScaledCircle Physical Marketing Execution V1");
   pdf.setProducer("ScaledCircle"); pdf.setCreationDate(fixedDate); pdf.setModificationDate(fixedDate);
   addPdfXMetadata(pdf, await cmykOutputProfile());
-  const placement = {widthInches: spec.widthInches - 0.36, heightInches: 2.7};
+  const placement = doorHangerMediaPlacement(spec);
   const normalizedMedia = await normalizePlacedImage(mediaBuffer, placement);
   const normalizedLogo = await normalizeLogo(logoBuffer);
   const embeddedImage = normalizedMedia ? await pdf.embedJpg(normalizedMedia.cmykJpeg) : null;
@@ -483,13 +504,15 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
       const imageTop = headline.bottom - 22; const imageHeight = Math.min(194, imageTop - 151);
       if (embeddedImage && imageHeight >= 140) {
         const imageY = imageTop - imageHeight;
-        page.drawImage(embeddedImage, {x: layout.left, y: imageY,
-          width: layout.contentWidth, height: imageHeight});
+        const imageBox = fittedImageBox(embeddedImage,
+          placement.widthInches * 72, imageHeight,
+          layout.left + layout.contentWidth / 2, imageY + imageHeight / 2);
+        page.drawImage(embeddedImage, imageBox);
         if (generatedMedia) {
-          page.drawRectangle({x: layout.left, y: imageY, width: layout.contentWidth,
+          page.drawRectangle({x: imageBox.x, y: imageBox.y, width: imageBox.width,
             height: 17, color: cmyk(0, 0, 0, 0)});
-          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: layout.left + 6,
-            y: imageY + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
+          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: imageBox.x + 6,
+            y: imageBox.y + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
         }
       }
       if (!embeddedImage && template.templateId === "door_hanger_professional_services_v1") {
@@ -552,13 +575,15 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
       const middleTop = Math.max(middleBottom + 60, listY - 6);
       const middleHeight = middleTop - middleBottom;
       if (embeddedImage && middleHeight >= 70) {
-        page.drawImage(embeddedImage, {x: layout.left, y: middleBottom,
-          width: layout.contentWidth, height: middleHeight});
+        const imageBox = fittedImageBox(embeddedImage,
+          placement.widthInches * 72, middleHeight,
+          layout.left + layout.contentWidth / 2, middleBottom + middleHeight / 2);
+        page.drawImage(embeddedImage, imageBox);
         if (generatedMedia) {
-          page.drawRectangle({x: layout.left, y: middleBottom, width: layout.contentWidth,
+          page.drawRectangle({x: imageBox.x, y: imageBox.y, width: imageBox.width,
             height: 17, color: cmyk(0, 0, 0, 0)});
-          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: layout.left + 6,
-            y: middleBottom + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
+          page.drawText("CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK", {x: imageBox.x + 6,
+            y: imageBox.y + 5, size: 7.5, font: bold, color: secondary}); fontEvidence.push(7.5);
         }
       } else if (middleHeight >= 70) {
         page.drawRectangle({x: layout.left, y: middleBottom, width: layout.contentWidth,
@@ -762,6 +787,7 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
   const primary = validHexColor(business.primaryColor || draft.primaryColor, "#176FD1");
   const secondary = validHexColor(business.secondaryColor || draft.secondaryColor, "#10243E");
   const primaryInk = readableColor(primary).hex;
+  const placement = doorHangerMediaPlacement(spec);
   const image = mediaProof ? `data:image/jpeg;base64,${mediaProof.toString("base64")}` : null;
   const logo = logoProof ? `data:image/jpeg;base64,${logoProof.toString("base64")}` : null;
   const qr = qrMatrix(trackedUrl);
@@ -788,11 +814,16 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
     const imageY = serviceY + 25; const cardY = height - bleed - safe - 150;
     const imageHeight = Math.max(210, cardY - imageY - 22);
     if (image) {
-      body += `<image href="${image}" x="${left}" y="${imageY}" width="${contentWidth}" ` +
-        `height="${imageHeight}" preserveAspectRatio="xMidYMid slice"/>`;
-      if (generatedMedia) body += `<rect x="${left}" y="${imageY + imageHeight - 27}" ` +
-        `width="${contentWidth}" height="27" fill="#FFFFFF"/><text x="${left + 9}" ` +
-        `y="${imageY + imageHeight - 9}" fill="${secondary}" font-size="10" font-weight="700" ` +
+      const mediaHeight = Math.min(imageHeight, placement.heightInches * dpi);
+      const mediaWidth = Math.min(contentWidth, mediaHeight * placement.widthInches /
+        placement.heightInches);
+      const mediaX = left + (contentWidth - mediaWidth) / 2;
+      const mediaY = imageY + (imageHeight - mediaHeight) / 2;
+      body += `<image href="${image}" x="${mediaX}" y="${mediaY}" width="${mediaWidth}" ` +
+        `height="${mediaHeight}" preserveAspectRatio="xMidYMid meet"/>`;
+      if (generatedMedia) body += `<rect x="${mediaX}" y="${mediaY + mediaHeight - 27}" ` +
+        `width="${mediaWidth}" height="27" fill="#FFFFFF"/><text x="${mediaX + 9}" ` +
+        `y="${mediaY + mediaHeight - 9}" fill="${secondary}" font-size="10" font-weight="700" ` +
         `font-family="Arial,sans-serif">CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK</text>`;
     }
     if (!image && template.templateId === "door_hanger_professional_services_v1") {
@@ -842,11 +873,16 @@ async function renderDoorHangerProof({spec, draft, side, trackedUrl, mediaProof,
     const cardY = height - bleed - safe - 275;
     const middleY = listY + 16; const middleHeight = cardY - middleY - 20;
     if (image && middleHeight >= 140) {
-      body += `<image href="${image}" x="${left}" y="${middleY}" width="${contentWidth}" ` +
-        `height="${middleHeight}" preserveAspectRatio="xMidYMid slice"/>`;
-      if (generatedMedia) body += `<rect x="${left}" y="${middleY + middleHeight - 27}" ` +
-        `width="${contentWidth}" height="27" fill="#FFFFFF"/><text x="${left + 9}" ` +
-        `y="${middleY + middleHeight - 9}" fill="${secondary}" font-size="10" font-weight="700" ` +
+      const mediaHeight = Math.min(middleHeight, placement.heightInches * dpi);
+      const mediaWidth = Math.min(contentWidth, mediaHeight * placement.widthInches /
+        placement.heightInches);
+      const mediaX = left + (contentWidth - mediaWidth) / 2;
+      const mediaY = middleY + (middleHeight - mediaHeight) / 2;
+      body += `<image href="${image}" x="${mediaX}" y="${mediaY}" width="${mediaWidth}" ` +
+        `height="${mediaHeight}" preserveAspectRatio="xMidYMid meet"/>`;
+      if (generatedMedia) body += `<rect x="${mediaX}" y="${mediaY + mediaHeight - 27}" ` +
+        `width="${mediaWidth}" height="27" fill="#FFFFFF"/><text x="${mediaX + 9}" ` +
+        `y="${mediaY + mediaHeight - 9}" fill="${secondary}" font-size="10" font-weight="700" ` +
         `font-family="Arial,sans-serif">CONCEPTUAL SERVICE VISUAL — NOT COMPLETED WORK</text>`;
     } else if (middleHeight >= 140) {
       body += `<rect x="${left}" y="${middleY}" width="${contentWidth}" height="${middleHeight}" ` +
@@ -1063,7 +1099,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
 
   async function ownedMedia(uid, media, options = {}) {
     if (!media) return {snapshot: null, buffer: null};
-    const assetRef = db.collection("businessMediaLibraries").doc(uid).collection("assets").doc(media.assetId);
+    const assetRef = db.collection("businessMediaLibraries").doc(uid)
+      .collection(MEDIA_ASSET_SUBCOLLECTION).doc(media.assetId);
     const [assetSnap, revisionSnap] = await Promise.all([
       assetRef.get(), assetRef.collection("revisions").doc(media.revisionId).get(),
     ]);
@@ -1129,7 +1166,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       materials.where("businessUid", "==", uid).limit(MAX_WORKSPACE_ITEMS).get(),
       db.collection("campaigns").where("businessId", "==", uid).limit(50).get(),
       db.collection("landingPages").where("businessUid", "==", uid).limit(50).get(),
-      db.collection("businessMediaLibraries").doc(uid).collection("assets").limit(50).get(),
+      db.collection("businessMediaLibraries").doc(uid)
+        .collection(MEDIA_ASSET_SUBCOLLECTION).limit(50).get(),
       businessAuthority(uid),
     ]);
     const materialItems = await Promise.all(materialQuery.docs.map(async (doc) => {
@@ -1159,7 +1197,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     }
     return {
       schemaVersion: SCHEMA_VERSION,
-      materials: materialItems.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))),
+      materials: materialItems.sort((a, b) =>
+        timestampMillis(b.updatedAt || b.createdAt) - timestampMillis(a.updatedAt || a.createdAt)),
       campaigns: campaignQuery.docs.map((doc) => ({campaignId: doc.id,
         name: text(doc.data()?.name || doc.data()?.title || "Campaign", 120)})),
       landingPages: pageQuery.docs.filter((doc) => doc.data()?.status === "published")
@@ -1390,7 +1429,9 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
 module.exports = {
   SCHEMA_VERSION, PRICING_POLICY_VERSION, TEMPLATE_SCHEMA_VERSION, MARKETING_READINESS_VERSION,
   PRODUCT_SPECS, TEMPLATE_SPECS, PRICING_POLICY, MIN_EFFECTIVE_DPI,
-  PDF_X_VERSION, text, stable, digest, productSpec, publicProductSpecs, normalizeDraft,
+  MEDIA_ASSET_SUBCOLLECTION,
+  PDF_X_VERSION, text, timestampMillis, stable, digest, productSpec, publicProductSpecs, normalizeDraft,
+  normalizePlacedImage, doorHangerMediaPlacement,
   templateSpec, publicTemplateSpecs, containsPlaceholder, containsUnsupportedClaim,
   readableColor, customerServiceLanguage, suggestedCopy, validateAuthorizedDraft, marketingReadinessReport,
   versionOrderReady,

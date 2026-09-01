@@ -651,10 +651,12 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
               'Keep reusable Business images here. You can still use ScaledCircle without uploading photos.',
             ),
             const SizedBox(height: 18),
-            if (_generation['businessAuthorized'] == true &&
-                _generation['capability'] == 'test_only')
+            if (_generation['businessAuthorized'] == true)
               _GeneratedVisualPanel(
                 generation: _generation,
+                generationEnabled:
+                    _generation['capability'] == 'enabled' ||
+                    _generation['capability'] == 'test_only',
                 busy: _generating,
                 onCreate: () => _createGenerated(),
                 onChooseServices: _brandSettings,
@@ -668,31 +670,6 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                   await _loadGeneration();
                 },
                 onTryAnother: (jobId) => _createGenerated(priorJobId: jobId),
-              )
-            else if (_generation['businessAuthorized'] == true &&
-                _generation['capability'] == 'enabled')
-              _GeneratedVisualPanel(
-                generation: _generation,
-                busy: _generating,
-                onCreate: () => _createGenerated(),
-                onChooseServices: _brandSettings,
-                onUpload: () => _upload(),
-                onApprove: (jobId) async {
-                  await _generationService.approveGeneration(jobId);
-                  await Future.wait([_loadGeneration(), _load(reset: true)]);
-                },
-                onReject: (jobId) async {
-                  await _generationService.rejectGeneration(jobId);
-                  await _loadGeneration();
-                },
-                onTryAnother: (jobId) => _createGenerated(priorJobId: jobId),
-              ),
-            if (_generation['businessAuthorized'] == true &&
-                _generation['capability'] == 'disabled')
-              _GeneratedVisualUnavailableCard(
-                message:
-                    'Generated visuals are temporarily unavailable. Your existing images are unchanged.',
-                generation: _generation,
               )
             else if (_generation['businessAuthorized'] != true &&
                 _generation['capability'] != 'disabled')
@@ -815,41 +792,11 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
 }
 
 class _GeneratedVisualUnavailableCard extends StatelessWidget {
-  const _GeneratedVisualUnavailableCard({
-    required this.message,
-    this.generation = const <String, dynamic>{},
-  });
+  const _GeneratedVisualUnavailableCard({required this.message});
   final String message;
-  final Map<String, dynamic> generation;
-
-  String _resetDate(Object? value) {
-    final millis = (value as num?)?.toInt();
-    if (millis == null) return 'the next UTC month';
-    final date = DateTime.fromMillisecondsSinceEpoch(millis, isUtc: true);
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[date.month - 1]} ${date.day}';
-  }
 
   @override
   Widget build(BuildContext context) {
-    final usage = generation['usage'] is Map
-        ? Map<String, dynamic>.from(generation['usage'] as Map)
-        : const <String, dynamic>{};
-    final used = (usage['used'] as num?)?.toInt() ?? 0;
-    final total = (usage['total'] as num?)?.toInt() ?? 0;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -864,17 +811,6 @@ class _GeneratedVisualUnavailableCard extends StatelessWidget {
                 Chip(label: Text('Beta')),
               ],
             ),
-            if (total > 0) ...[
-              const SizedBox(height: 8),
-              Semantics(
-                label:
-                    '$used of $total generated visuals used this month. Resets ${_resetDate(usage['resetAt'])}.',
-                child: Text(
-                  '$used of $total used this month\nResets ${_resetDate(usage['resetAt'])}',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
             const SizedBox(height: 8),
             Text(
               '$message You can still use existing Brand Assets, upload your own photo, or publish without a photo.',
@@ -893,6 +829,7 @@ class _GeneratedVisualUnavailableCard extends StatelessWidget {
 class _GeneratedVisualPanel extends StatelessWidget {
   const _GeneratedVisualPanel({
     required this.generation,
+    this.generationEnabled = true,
     required this.busy,
     required this.onCreate,
     required this.onChooseServices,
@@ -902,6 +839,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
     required this.onTryAnother,
   });
   final Map<String, dynamic> generation;
+  final bool generationEnabled;
   final bool busy;
   final VoidCallback onCreate;
   final VoidCallback onChooseServices;
@@ -991,7 +929,25 @@ class _GeneratedVisualPanel extends StatelessWidget {
               ),
               const SizedBox(height: 12),
             ],
-            if (limitReached) ...[
+            if (!generationEnabled) ...[
+              const Text(
+                'Generated visuals are temporarily unavailable. Your existing images and pages are unaffected.',
+              ),
+              const Text(
+                'Try another uses 1 generated visual when generation is available.',
+              ),
+              const SizedBox(height: 8),
+              const Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(label: Text('Existing visuals remain usable')),
+                  Chip(label: Text('Upload your own photo')),
+                  Chip(label: Text('Publish without a photo')),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ] else if (limitReached) ...[
               const Text(
                 'You’ve used your generated visuals for this period. Existing approved visuals remain available.',
               ),
@@ -1013,7 +969,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
               ),
               const SizedBox(height: 12),
             ],
-            if (approvedServices.isEmpty) ...[
+            if (generationEnabled && approvedServices.isEmpty) ...[
               const Text(
                 'Choose at least one service before creating a visual.',
               ),
@@ -1023,7 +979,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
                 icon: const Icon(Icons.checklist_outlined),
                 label: const Text('Choose services'),
               ),
-            ] else if (!limitReached)
+            ] else if (generationEnabled && !limitReached)
               FilledButton.icon(
                 onPressed: busy ? null : onCreate,
                 icon: const Icon(Icons.auto_awesome_outlined),
@@ -1068,19 +1024,20 @@ class _GeneratedVisualPanel extends StatelessWidget {
                       onPressed: () => onApprove(job['jobId'].toString()),
                       child: const Text('Approve concept'),
                     ),
-                    OutlinedButton(
-                      onPressed: () => onTryAnother(job['jobId'].toString()),
-                      child: const Text(
-                        'Try another · Uses 1 generated visual',
+                    if (generationEnabled)
+                      OutlinedButton(
+                        onPressed: () => onTryAnother(job['jobId'].toString()),
+                        child: const Text(
+                          'Try another · Uses 1 generated visual',
+                        ),
                       ),
-                    ),
                     TextButton(
                       onPressed: () => onReject(job['jobId'].toString()),
                       child: const Text('Remove'),
                     ),
                   ],
                 ),
-              if (job['status'] == 'approved')
+              if (generationEnabled && job['status'] == 'approved')
                 Align(
                   alignment: Alignment.centerLeft,
                   child: OutlinedButton(

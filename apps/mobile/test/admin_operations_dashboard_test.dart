@@ -12,6 +12,7 @@ Widget subject(
   VoidCallback? onConfigureFounderQaAllowlist,
   VoidCallback? onStagePrivateBetaControls,
   VoidCallback? onRestoreFounderOnlyControls,
+  ValueChanged<bool>? onSetStagingProviderEnabled,
 }) => MaterialApp(
   home: Scaffold(
     body: AdminOperationsContent(
@@ -33,6 +34,7 @@ Widget subject(
       onConfigureFounderQaAllowlist: onConfigureFounderQaAllowlist,
       onStagePrivateBetaControls: onStagePrivateBetaControls,
       onRestoreFounderOnlyControls: onRestoreFounderOnlyControls,
+      onSetStagingProviderEnabled: onSetStagingProviderEnabled,
       onOpenCampaign: (_) {},
     ),
   ),
@@ -170,9 +172,7 @@ void main() {
     await tester.ensureVisible(find.text('Stage first-five Beta controls'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Stage first-five Beta controls'));
-    await tester.ensureVisible(
-      find.text('Apply Founder-only safety controls'),
-    );
+    await tester.ensureVisible(find.text('Apply Founder-only safety controls'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apply Founder-only safety controls'));
     expect(staged, 1);
@@ -180,6 +180,52 @@ void main() {
     expect(find.textContaining('Business UID'), findsOneWidget);
     expect(find.textContaining('clears the commercial cohort'), findsOneWidget);
     expect(find.textContaining('300 calls/month'), findsOneWidget);
+  });
+
+  testWidgets('bounded staging proof control uses paired enable and disable', (
+    tester,
+  ) async {
+    final updates = <bool>[];
+    await tester.pumpWidget(
+      subject(
+        emptySnapshot,
+        commercialMetrics: const GeneratedMediaCommercialMetrics(
+          providerEnabled: false,
+          rolloutMode: 'beta_cohort',
+          betaCohortStage: 'initial_5',
+          betaCohortEnabled: true,
+          betaCohortCount: 1,
+          betaCohortLimit: 5,
+          planAllowances: {},
+          requestsByPlan: {},
+          customerUnitsByPlan: {},
+          providerUnitsByPlan: {},
+          dailyCalls: 0,
+          dailyCallLimit: 50,
+          dailyCostMicros: 0,
+          dailyCostLimitMicros: 10000000,
+          monthlyCostMicros: 0,
+          monthlyCostLimitMicros: 100000000,
+          outstandingReservations: 0,
+          systemRejections: 0,
+          limitExhaustions: 0,
+          averageLatencyMs: 0,
+          providerFailures: 0,
+        ),
+        onSetStagingProviderEnabled: updates.add,
+      ),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Enable bounded staging proof'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.textContaining('Staging only.'), findsOneWidget);
+    await tester.ensureVisible(find.text('Enable bounded staging proof'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enable bounded staging proof'));
+    expect(updates, [true]);
+    expect(find.text('Disable staging provider'), findsOneWidget);
   });
 
   testWidgets('Admin home presents the simple four-section command center', (

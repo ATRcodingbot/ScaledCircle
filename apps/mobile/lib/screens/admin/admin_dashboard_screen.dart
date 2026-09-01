@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../config/app_environment.dart';
 import '../../services/admin_operations_service.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
@@ -35,6 +36,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final TextEditingController _founderQaJobController = TextEditingController();
   bool _founderQaAllowlistUpdating = false;
   bool _commercialControlsUpdating = false;
+  bool _stagingProviderUpdating = false;
   void _refresh() => setState(() {
     _overview = _service.loadOverview();
     _generatedMediaMetrics = _service.loadGeneratedMediaCommercialMetrics();
@@ -85,33 +87,54 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           }
           return FutureBuilder<GeneratedMediaCommercialMetrics>(
             future: _generatedMediaMetrics,
-            builder: (context, generatedSnapshot) => FutureBuilder<Map<String, dynamic>>(
-              future: _physicalMarketingOperations,
-              builder: (context, physicalSnapshot) => AdminOperationsContent(
-                snapshot: snapshot.data!,
-                commercialMetrics: generatedSnapshot.data,
-                physicalMarketingOperations: physicalSnapshot.data,
-                onOpenIssue: _openIssue,
-                onOpenAdminAccounts: () => _push(const AdminRoleManagementScreen()),
-                onOpenBeta: () => _push(const InternalBetaEntitlementsScreen()),
-                onOpenSubscriptions: () => _push(const AdminSubscriptionOverviewScreen()),
-                onOpenAttribution: () => _push(const AdminAttributionScreen()),
-                onOpenConfiguration: () => _push(const AdminPlatformHealthScreen()),
-                providerAuthPreflight: _providerAuthPreflight,
-                providerAuthPreflightRunning: _providerAuthPreflightRunning,
-                onRunProviderAuthPreflight: _runProviderAuthPreflight,
-                accountingReconciliation: _accountingReconciliation,
-                accountingReconciliationRunning: _accountingReconciliationRunning,
-                onReconcileAccounting: _reconcileAccounting,
-                founderQaJobController: _founderQaJobController,
-                founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
-                onConfigureFounderQaAllowlist: _configureFounderQaAllowlist,
-                commercialControlsUpdating: _commercialControlsUpdating,
-                onStagePrivateBetaControls: _stagePrivateBetaControls,
-                onRestoreFounderOnlyControls: _restoreFounderOnlyControls,
-                onOpenCampaign: (campaignId) => _push(AdminCampaignTimelineScreen(campaignId: campaignId, service: _service)),
-              ),
-            ),
+            builder: (context, generatedSnapshot) =>
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _physicalMarketingOperations,
+                  builder: (context, physicalSnapshot) =>
+                      AdminOperationsContent(
+                        snapshot: snapshot.data!,
+                        commercialMetrics: generatedSnapshot.data,
+                        physicalMarketingOperations: physicalSnapshot.data,
+                        onOpenIssue: _openIssue,
+                        onOpenAdminAccounts: () =>
+                            _push(const AdminRoleManagementScreen()),
+                        onOpenBeta: () =>
+                            _push(const InternalBetaEntitlementsScreen()),
+                        onOpenSubscriptions: () =>
+                            _push(const AdminSubscriptionOverviewScreen()),
+                        onOpenAttribution: () =>
+                            _push(const AdminAttributionScreen()),
+                        onOpenConfiguration: () =>
+                            _push(const AdminPlatformHealthScreen()),
+                        providerAuthPreflight: _providerAuthPreflight,
+                        providerAuthPreflightRunning:
+                            _providerAuthPreflightRunning,
+                        onRunProviderAuthPreflight: _runProviderAuthPreflight,
+                        accountingReconciliation: _accountingReconciliation,
+                        accountingReconciliationRunning:
+                            _accountingReconciliationRunning,
+                        onReconcileAccounting: _reconcileAccounting,
+                        founderQaJobController: _founderQaJobController,
+                        founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
+                        onConfigureFounderQaAllowlist:
+                            _configureFounderQaAllowlist,
+                        commercialControlsUpdating: _commercialControlsUpdating,
+                        onStagePrivateBetaControls: _stagePrivateBetaControls,
+                        onRestoreFounderOnlyControls:
+                            _restoreFounderOnlyControls,
+                        stagingProviderUpdating: _stagingProviderUpdating,
+                        onSetStagingProviderEnabled:
+                            AppEnvironmentConfig.isStaging
+                            ? _setStagingProviderEnabled
+                            : null,
+                        onOpenCampaign: (campaignId) => _push(
+                          AdminCampaignTimelineScreen(
+                            campaignId: campaignId,
+                            service: _service,
+                          ),
+                        ),
+                      ),
+                ),
           );
         },
       ),
@@ -273,6 +296,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  Future<void> _setStagingProviderEnabled(bool enabled) async {
+    if (_stagingProviderUpdating || !AppEnvironmentConfig.isStaging) return;
+    setState(() => _stagingProviderUpdating = true);
+    try {
+      final result = await _service.setStagingGeneratedMediaProviderEnabled(
+        enabled,
+      );
+      if (!mounted) return;
+      final applied = result['providerGenerationEnabled'] == enabled;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            applied
+                ? enabled
+                      ? 'Staging provider enabled for the bounded Founder proof.'
+                      : 'Staging provider disabled.'
+                : 'Staging provider state could not be verified safely.',
+          ),
+        ),
+      );
+      _refresh();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Staging provider update failed safely.')),
+      );
+    } finally {
+      if (mounted) setState(() => _stagingProviderUpdating = false);
+    }
+  }
+
   void _openIssue(AdminOpsException issue) {
     if (issue.detailKind == 'campaign_timeline' &&
         issue.campaignId?.isNotEmpty == true) {
@@ -382,6 +436,8 @@ class AdminOperationsContent extends StatelessWidget {
     this.commercialControlsUpdating = false,
     this.onStagePrivateBetaControls,
     this.onRestoreFounderOnlyControls,
+    this.stagingProviderUpdating = false,
+    this.onSetStagingProviderEnabled,
     super.key,
   });
   final AdminOperationsSnapshot snapshot;
@@ -405,6 +461,8 @@ class AdminOperationsContent extends StatelessWidget {
   final bool commercialControlsUpdating;
   final VoidCallback? onStagePrivateBetaControls;
   final VoidCallback? onRestoreFounderOnlyControls;
+  final bool stagingProviderUpdating;
+  final ValueChanged<bool>? onSetStagingProviderEnabled;
   final ValueChanged<String> onOpenCampaign;
 
   @override
@@ -515,16 +573,29 @@ class AdminOperationsContent extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Physical marketing artifacts', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Physical marketing artifacts',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 6),
               if (physicalMarketingOperations == null)
                 const Text('Artifact diagnostics are temporarily unavailable.')
               else ...[
-                Text('Environment: ${_category(physicalMarketingOperations!['environment']?.toString() ?? 'provider_free')}'),
-                Text('Materials: ${physicalMarketingOperations!['materials'] ?? 0} · Versions: ${physicalMarketingOperations!['versions'] ?? 0}'),
-                Text('Artifacts: ${physicalMarketingOperations!['artifacts'] ?? 0} · Approvals: ${physicalMarketingOperations!['approvals'] ?? 0}'),
-                Text('Preflight failures: ${physicalMarketingOperations!['preflightFailures'] ?? 0}'),
-                const Text('Provider traffic: 0 · Recipient data and credentials hidden'),
+                Text(
+                  'Environment: ${_category(physicalMarketingOperations!['environment']?.toString() ?? 'provider_free')}',
+                ),
+                Text(
+                  'Materials: ${physicalMarketingOperations!['materials'] ?? 0} · Versions: ${physicalMarketingOperations!['versions'] ?? 0}',
+                ),
+                Text(
+                  'Artifacts: ${physicalMarketingOperations!['artifacts'] ?? 0} · Approvals: ${physicalMarketingOperations!['approvals'] ?? 0}',
+                ),
+                Text(
+                  'Preflight failures: ${physicalMarketingOperations!['preflightFailures'] ?? 0}',
+                ),
+                const Text(
+                  'Provider traffic: 0 · Recipient data and credentials hidden',
+                ),
               ],
             ],
           ),
@@ -724,6 +795,42 @@ class AdminOperationsContent extends StatelessWidget {
                     ],
                   ),
                 ],
+              ],
+              if (onSetStagingProviderEnabled != null) ...[
+                const Divider(height: 28),
+                Text(
+                  'Bounded staging provider proof',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Staging only. Keep the existing one-Business authorization and disable immediately after the approved proof request.',
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed:
+                          stagingProviderUpdating ||
+                              commercialMetrics?.providerEnabled == true
+                          ? null
+                          : () => onSetStagingProviderEnabled!(true),
+                      icon: const Icon(Icons.play_arrow_outlined),
+                      label: const Text('Enable bounded staging proof'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed:
+                          stagingProviderUpdating ||
+                              commercialMetrics?.providerEnabled != true
+                          ? null
+                          : () => onSetStagingProviderEnabled!(false),
+                      icon: const Icon(Icons.stop_circle_outlined),
+                      label: const Text('Disable staging provider'),
+                    ),
+                  ],
+                ),
               ],
             ],
           ),

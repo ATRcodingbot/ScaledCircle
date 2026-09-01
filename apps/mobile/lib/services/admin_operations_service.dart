@@ -105,6 +105,15 @@ class AdminOperationsService {
     return Map<String, dynamic>.from(result.data);
   }
 
+  Future<Map<String, dynamic>> setStagingGeneratedMediaProviderEnabled(
+    bool enabled,
+  ) async {
+    final result = await _functions
+        .httpsCallable('updateGeneratedMediaSafetyConfiguration')
+        .call<Map<Object?, Object?>>({'providerGenerationEnabled': enabled});
+    return Map<String, dynamic>.from(result.data);
+  }
+
   Future<Map<String, dynamic>> loadPhysicalMarketingOperations() async {
     final result = await _functions
         .httpsCallable('getPhysicalMarketingOperations')

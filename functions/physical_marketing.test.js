@@ -46,12 +46,40 @@ async function serviceImage() {
   return sharp(svg).jpeg({quality: 94}).toBuffer();
 }
 
+async function gutteredServiceImage() {
+  const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
+    <rect width="1536" height="1024" fill="#fff"/><rect x="371" width="793" height="1024" fill="#365c3f"/>
+    <path d="M371 760 L760 420 L1164 760 V1024 H371 Z" fill="#92704e"/></svg>`);
+  return sharp(svg).webp().toBuffer();
+}
+
 test("bounded V1 product specs include required door hanger and supported front/back profiles", () => {
   const door = physical.productSpec("door_hanger_3_5x8_5");
   assert.equal(door.widthInches, 3.5); assert.equal(door.heightInches, 8.5);
   assert.deepEqual(door.sides, [1, 2]); assert.deepEqual(door.quantities, [100, 250, 500, 1000, 2500]);
   assert.equal(door.dieCut.kind, "standard_circular_hole");
   assert.equal(Object.values(physical.PRODUCT_SPECS).filter((item) => !item.uiHidden).length, 5);
+});
+
+test("Physical Marketing consumes the canonical approved Brand Asset collection", () => {
+  assert.equal(physical.MEDIA_ASSET_SUBCOLLECTION, "mediaAssets");
+});
+
+test("workspace ordering understands Firestore Timestamp values", () => {
+  assert.equal(physical.timestampMillis({_seconds: 1788242022}), 1788242022000);
+  assert.equal(physical.timestampMillis({seconds: 1788242023}), 1788242023000);
+  assert.equal(physical.timestampMillis({toMillis: () => 1788242024000}), 1788242024000);
+});
+
+test("print media normalization removes provider canvas gutters before effective-DPI certification", async () => {
+  const placement = physical.doorHangerMediaPlacement(physical.productSpec("door_hanger_3_5x8_5"));
+  const normalized = await physical.normalizePlacedImage(await gutteredServiceImage(), placement);
+  assert.equal(normalized.width, 794);
+  assert.equal(normalized.height, 1024);
+  assert.equal(normalized.effectiveDpi, 317);
+  const proof = await sharp(normalized.proof).metadata();
+  assert.equal(proof.width, 750);
+  assert.equal(proof.height, 810);
 });
 
 test("customer-visible ProductSpecs retain their stable server validation identifiers", () => {

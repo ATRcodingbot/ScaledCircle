@@ -356,7 +356,15 @@ void main() {
         'remaining': 60,
         'resetAt': DateTime.utc(2026, 9, 1).millisecondsSinceEpoch,
       },
-      'jobs': <dynamic>[],
+      'approvedServiceCategories': ['Seasonal cleanup'],
+      'jobs': [
+        {
+          'jobId': 'job-review',
+          'status': 'review_required',
+          'serviceCategory': 'Seasonal cleanup',
+          'visualDirection': 'clean',
+        },
+      ],
     });
     await tester.pumpWidget(
       _screen(
@@ -373,7 +381,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('temporarily unavailable'), findsOneWidget);
-    expect(find.textContaining('upload your own photo'), findsOneWidget);
+    expect(find.textContaining('Upload your own photo'), findsOneWidget);
+    expect(find.text('Approve concept'), findsOneWidget);
+    expect(find.text('Create service visual'), findsNothing);
+    expect(find.text('Try another · Uses 1 generated visual'), findsNothing);
   });
 
   testWidgets('monthly limit preserves useful no-generation alternatives', (
