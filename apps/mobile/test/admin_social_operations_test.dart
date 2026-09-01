@@ -7,7 +7,10 @@ void main() {
     final screen = File(
       'lib/screens/admin/admin_social_operations_screen.dart',
     ).readAsStringSync();
-    expect(screen, contains('Provider-free operational health'));
+    expect(screen, contains('Social connection operational health'));
+    expect(screen, contains('Token:'));
+    expect(screen, contains('Configure read-only provider'));
+    expect(screen, contains('Write scopes: Off'));
     expect(screen, contains('External publishing'));
     expect(screen, contains('Ad mutations'));
     expect(screen, contains('Bulk email delivery'));
@@ -19,5 +22,6 @@ void main() {
       'lib/services/admin_operations_service.dart',
     ).readAsStringSync();
     expect(service, contains('getSocialOperationsAdminSummary'));
+    expect(service, contains('configureSocialProviderV1'));
   });
 }

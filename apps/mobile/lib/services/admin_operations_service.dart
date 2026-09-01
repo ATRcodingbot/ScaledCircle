@@ -134,6 +134,27 @@ class AdminOperationsService {
         .call<Map<Object?, Object?>>(const {});
     return Map<String, dynamic>.from(result.data);
   }
+
+  Future<Map<String, dynamic>> configureSocialProvider({
+    required String provider,
+    required String appName,
+    required String clientId,
+    required String redirectUri,
+    required bool enabled,
+    required bool historicalSyncEnabled,
+  }) async {
+    final result = await _functions
+        .httpsCallable('configureSocialProviderV1')
+        .call<Map<Object?, Object?>>({
+          'provider': provider,
+          'appName': appName,
+          'clientId': clientId,
+          'redirectUri': redirectUri,
+          'enabled': enabled,
+          'historicalSyncEnabled': historicalSyncEnabled,
+        });
+    return Map<String, dynamic>.from(result.data);
+  }
 }
 
 Map<String, dynamic> _map(Object? value) =>

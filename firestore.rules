@@ -512,6 +512,12 @@ service cloud.firestore {
     match /socialConnectionCredentials/{document=**} {
       allow read, write: if false;
     }
+    match /socialOAuthAttempts/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialProviderConfigs/{document=**} {
+      allow read, write: if false;
+    }
 
     // Areas and discovery preferences are separate from identity and billing.
     // Owners can read their sanitized projection; versioned writes and matching

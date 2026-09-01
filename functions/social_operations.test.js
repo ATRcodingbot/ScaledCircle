@@ -68,9 +68,19 @@ test("publish jobs fail closed and are replay safe", () => {
     connection: {provider: "facebook", status: "not_connected"}, now}), /connection_required/);
   const input = {businessUid: "biz", contentItemId: "item", versionRecord: version,
     provider: "facebook", scheduledFor: "2030-01-02T00:00:00Z",
-    connection: {provider: "facebook", status: "connected",
+    connection: {provider: "facebook", status: "connected_write", writeScopesGranted: true,
       capabilities: {publishText: true}}, now};
   assert.equal(social.publishJob(input).id, social.publishJob(input).id);
+});
+
+test("read-only OAuth connections can never create publish jobs", () => {
+  const version = social.approveContentVersion({businessUid: "biz",
+    record: social.contentItemVersion({businessUid: "biz", planId: "plan", item: baseItem, now}),
+    version: 1, now});
+  assert.throws(() => social.publishJob({businessUid: "biz", contentItemId: "item",
+    versionRecord: version, provider: "facebook", scheduledFor: "2030-01-02T00:00:00Z",
+    connection: {provider: "facebook", status: "connected_read_only",
+      capabilities: {publishText: false, analytics: true}}, now}), /connection_required/);
 });
 
 test("published requires provider evidence and unknown outcome reconciles", () => {

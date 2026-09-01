@@ -36,6 +36,37 @@ class SocialOperationsService {
     );
   }
 
+  Future<Map<String, dynamic>> beginReadOnlyConnection(String provider) async {
+    final result = await _functions
+        .httpsCallable('beginSocialOAuthConnectionV1')
+        .call({'provider': provider});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> connectionAttempt(String attemptId) async {
+    final result = await _functions
+        .httpsCallable('getSocialOAuthAttemptV1')
+        .call({'attemptId': attemptId});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> confirmReadOnlyConnection({
+    required String attemptId,
+    required String candidateId,
+  }) async {
+    final result = await _functions
+        .httpsCallable('confirmSocialOAuthConnectionV1')
+        .call({'attemptId': attemptId, 'candidateId': candidateId});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> syncReadOnlyPerformance(String provider) async {
+    final result = await _functions
+        .httpsCallable('syncSocialReadOnlyPerformanceV1')
+        .call({'provider': provider});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
   Future<Map<String, dynamic>> createPlan({
     required String goal,
     required DateTime startsOn,

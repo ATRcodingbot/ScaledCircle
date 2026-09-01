@@ -48,12 +48,21 @@ function validateAutomationMode({mode, planId, managedAuthorization = false}) {
 function connectionProjection(input = {}) {
   const provider = text(input.provider, 40).toLowerCase();
   if (!PROVIDERS.includes(provider)) throw new Error("unsupported_social_provider");
-  const status = ["not_connected", "connected", "expired", "revoked", "attention_required"]
-    .includes(input.status) ? input.status : "not_connected";
+  const status = ["disconnected", "not_connected", "authorizing", "identity_pending",
+    "connected_read_only", "connected_write", "reauth_required", "expired", "revoked",
+    "error", "attention_required", "write_scope_pending"]
+    .includes(input.status) ? input.status : "disconnected";
   return {schemaVersion: SCHEMA_VERSION, provider, status,
     accountDisplayName: text(input.accountDisplayName, 180) || null,
     accountType: text(input.accountType, 80) || null,
-    requiresReconnect: ["expired", "revoked", "attention_required"].includes(status),
+    handle: text(input.handle, 180) || null,
+    providerAccountId: text(input.providerAccountId, 240) || null,
+    pendingAttemptId: text(input.pendingAttemptId, 128) || null,
+    grantedScopes: list(input.grantedScopes, 20, 180),
+    writeScopesGranted: status === "connected_write" && input.writeScopesGranted === true,
+    readOnly: status === "connected_read_only",
+    requiresReconnect: ["reauth_required", "expired", "revoked", "error",
+      "attention_required"].includes(status),
     capabilities: {
       profile: input.capabilities?.profile === true,
       publishText: input.capabilities?.publishText === true,
@@ -62,7 +71,7 @@ function connectionProjection(input = {}) {
       schedule: input.capabilities?.schedule === true,
       analytics: input.capabilities?.analytics === true,
     },
-    // Tokens, provider account IDs, and secrets never enter this projection.
+    // Tokens, provider secrets, and raw credential records never enter this projection.
     authorizationUpdatedAt: input.authorizationUpdatedAt || null};
 }
 
@@ -152,7 +161,7 @@ function publishJob({businessUid, contentItemId, versionRecord, provider,
   }
   const normalizedProvider = text(provider, 40).toLowerCase();
   const projection = connectionProjection(connection || {provider: normalizedProvider});
-  if (projection.status !== "connected" || projection.requiresReconnect ||
+  if (projection.status !== "connected_write" || projection.requiresReconnect ||
       !(projection.capabilities.publishText || projection.capabilities.publishImage ||
         projection.capabilities.publishVideo)) throw new Error("social_connection_required");
   const scheduled = new Date(scheduledFor);

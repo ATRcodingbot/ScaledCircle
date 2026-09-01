@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Social Operations is honest, responsive, and provider free', () {
+  test('Social Operations is honest, responsive, and read-only', () {
     final screen = File(
       'lib/screens/business/social_operations_screen.dart',
     ).readAsStringSync();
@@ -12,7 +12,12 @@ void main() {
       screen,
       contains('Connect → Plan → Review → Schedule → Measure → Improve'),
     );
-    expect(screen, contains('No social account is connected yet'));
+    expect(screen, contains('Read-only connection phase'));
+    expect(screen, contains('Connect read only'));
+    expect(
+      screen,
+      contains('Publishing, bulk email delivery, and ad changes remain off'),
+    );
     expect(screen, contains('30-Day Email Content'));
     expect(screen, contains('Ads — Read Only'));
     expect(screen, contains('Exact balance unavailable through connected API'));
@@ -29,6 +34,9 @@ void main() {
       expect(service, contains('createSocialContentPlanV1'));
       expect(service, contains('approveSocialContentPlanV1'));
       expect(service, contains('createEmailContentPlanV1'));
+      expect(service, contains('beginSocialOAuthConnectionV1'));
+      expect(service, contains('confirmSocialOAuthConnectionV1'));
+      expect(service, contains('syncSocialReadOnlyPerformanceV1'));
       expect(service, contains("'managedAuthorization': false"));
       expect(service, isNot(contains('accessToken')));
       expect(service, isNot(contains('clientSecret')));

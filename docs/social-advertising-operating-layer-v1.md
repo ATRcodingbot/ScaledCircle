@@ -195,6 +195,81 @@ idempotency key for a separate explicit Founder approval. That approval must
 authorize the write-scope upgrade and the named first post; connection approval
 alone never authorizes publication.
 
+## Read-only connection candidate
+
+The local descendant of `2972f7b7c9e855f888679dcdb89af2b9c6acd0e9`
+adds the bounded connection layer without enabling any external mutation:
+
+- `socialOAuthAttempts` contains ten-minute, one-use authorization attempts.
+  OAuth state is opaque and stored only as a digest. X and YouTube use PKCE S256.
+- `socialProviderConfigs` is Admin/server-owned configuration for client ID,
+  exact HTTPS callback, environment, and read-sync enablement. It cannot enable
+  publishing or write scopes.
+- `socialConnectionCredentials` contains AES-256-GCM encrypted token and account
+  envelopes. Access and refresh tokens never enter Flutter, Hosting, ordinary
+  Firestore projections, logs, or Admin responses.
+- `socialConnections/{businessUid}/providers/{provider}` exposes only the exact
+  identity awaiting confirmation or the sanitized connected-account projection.
+  A Business must explicitly confirm the provider-returned identity before it
+  becomes `connected_read_only`.
+- Provider performance import writes normalized, immutable
+  `socialPerformanceSnapshots`. Unsupported metrics remain `unavailable`; they
+  are never converted to zero.
+- Publishing requires `connected_write`. A read-only connection cannot create a
+  provider publish job, even if a client attempts to spoof capabilities.
+
+The staging callback intended for this batch is:
+
+`https://us-east1-scaledcircle-staging.cloudfunctions.net/socialOAuthCallbackV1`
+
+The required staging Secret Manager names are:
+
+- `SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY`
+- `META_SOCIAL_APP_SECRET`
+- `X_SOCIAL_CLIENT_SECRET`
+- `YOUTUBE_SOCIAL_CLIENT_SECRET`
+
+No placeholder secrets may be created. Staging deployment therefore waits for
+the corresponding provider applications and exact callback registrations.
+Production Functions, Hosting, Rules, IAM, secrets, and provider configuration
+remain unchanged.
+
+### Current provider boundary
+
+- Meta for Developers is not authenticated in the active provider session.
+- X Developer Portal is not authenticated. X API reads use prepaid pay-per-use
+  credits; purchasing credits is a separate financial approval boundary.
+- Google Cloud is authenticated as `skotiatrades@gmail.com`. ScaledCircle must
+  not create the dedicated production project under that identity unless the
+  Founder confirms it is the intended Scaled Circle LLC authority or switches
+  to the intended account.
+- Creating any provider application, OAuth client, API credential, or persistent
+  account connection requires confirmation at the exact action boundary.
+- No OAuth connection, token, provider read, external post, email, ad, or spend
+  has occurred in this candidate.
+
+### Verification evidence
+
+- Social/OAuth/backend focused tests: 40/40 pass.
+- Full backend: 409/409 pass.
+- Firestore Rules emulator: 24/24 pass.
+- Storage Rules emulator: 10/10 pass.
+- Flutter: 403 pass, one intentional skip.
+- Flutter analyzer: pass.
+- Generated Functions architecture: pass.
+- Clean install verification: 19/19 Functions packages pass.
+- Staging web bundle SHA-256:
+  `FE76DFB5679F1E452531D9B3CC46A9FCFE869B7CBB28BB528F612EFA638126D0`.
+- Production-regression web bundle SHA-256:
+  `8BCD5C2AF25D546ECA96D38641A05C81DC5E457A83815DBCFA7CBAAE53A2BBA4`.
+- `git diff --check`: pass.
+
+The candidate has not been deployed or pushed. The previously certified
+Tracking Phone work remains in its separate checkout; its approved-compliance,
+provider-disabled, zero-verification/number/call/spend resume state is unchanged.
+The Android Firebase registration blocker and PostGrid/4over/FedEx response work
+also remain unchanged.
+
 ## Official references reviewed
 
 - Meta Instagram API official Postman workspace:

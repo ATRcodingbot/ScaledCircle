@@ -3,13 +3,36 @@
 const {getApps, initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {setGlobalOptions} = require("firebase-functions/v2");
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const {defineSecret} = require("firebase-functions/params");
 const socialOperations = require("./social_operations");
+const socialOAuth = require("./social_oauth");
 const subscriptionEntitlements = require("./subscription_entitlements");
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
 setGlobalOptions({region: "us-east1"});
+
+const socialOAuthEncryptionKey = defineSecret("SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY");
+const metaSocialAppSecret = defineSecret("META_SOCIAL_APP_SECRET");
+const xSocialClientSecret = defineSecret("X_SOCIAL_CLIENT_SECRET");
+const youtubeSocialClientSecret = defineSecret("YOUTUBE_SOCIAL_CLIENT_SECRET");
+
+function runtimeEnvironment() {
+  return String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "")
+    .toLowerCase().includes("staging") ? "staging" : "production";
+}
+
+function providerConfigRef(provider, environment = runtimeEnvironment()) {
+  return db.collection("socialProviderConfigs").doc(`${environment}_${provider}`);
+}
+
+function providerSecret(provider) {
+  if (provider === "meta") return metaSocialAppSecret.value();
+  if (provider === "x") return xSocialClientSecret.value();
+  if (provider === "youtube") return youtubeSocialClientSecret.value();
+  throw new Error("unsupported_social_oauth_provider");
+}
 
 function readText(value, maximumLength = 500) {
   return typeof value === "string" ? value.trim().slice(0, maximumLength) : "";
@@ -270,22 +293,391 @@ exports.getSocialOperationsAdminSummary = onCall(
     if (!context.isAdmin) {
       throw new HttpsError("permission-denied", "Administrator authority is required.");
     }
-    const [plans, jobs, connections, snapshots] = await Promise.all([
+    const [plans, jobs, connections, snapshots, configs] = await Promise.all([
       db.collection("socialContentPlans").count().get(),
       db.collection("socialPublishingJobs").count().get(),
-      db.collectionGroup("providers").count().get(),
+      db.collectionGroup("providers").limit(100).get(),
       db.collection("socialPerformanceSnapshots").count().get(),
+      db.collection("socialProviderConfigs").where("environment", "==", runtimeEnvironment())
+        .limit(10).get(),
     ]);
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
       contentPlanCount: plans.data().count,
       publishJobCount: jobs.data().count,
-      connectionProjectionCount: connections.data().count,
+      connectionProjectionCount: connections.size,
+      connections: connections.docs.map((doc) => {
+        const data = doc.data();
+        const projection = socialOperations.connectionProjection({provider: doc.id, ...data});
+        return {
+          provider: projection.provider,
+          status: projection.status,
+          accountDisplayName: projection.accountDisplayName,
+          handle: projection.handle,
+          readOnly: projection.readOnly,
+          requiresReconnect: projection.requiresReconnect,
+          analyticsAvailable: projection.capabilities.analytics,
+          lastSyncAt: data.lastSyncAt || null,
+          tokenHealth: projection.requiresReconnect ? "attention_required" :
+            projection.status.startsWith("connected_") ? "healthy" : "not_connected",
+        };
+      }),
+      providerConfigs: configs.docs.map((doc) => ({
+        provider: doc.data().provider || doc.id.split("_").at(-1),
+        environment: doc.data().environment || runtimeEnvironment(),
+        appName: doc.data().appName || null,
+        enabled: doc.data().enabled === true,
+        historicalSyncEnabled: doc.data().historicalSyncEnabled === true,
+        writeScopesEnabled: false,
+        externalPublishingEnabled: false,
+      })),
       performanceSnapshotCount: snapshots.data().count,
       externalPublishingEnabled: false,
       adMutationsEnabled: false,
       emailDeliveryEnabled: false,
       tokenValuesExposed: false,
     };
+  },
+);
+
+exports.configureSocialProviderV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 2},
+  async (request) => {
+    const context = await requireVerifiedUser(request, "Administrator authentication is required.");
+    if (!context.isAdmin) throw new HttpsError("permission-denied", "Administrator authority is required.");
+    const environment = runtimeEnvironment();
+    let config;
+    try {
+      config = socialOAuth.validateProviderConfig({
+        provider: request.data?.provider,
+        clientId: request.data?.clientId,
+        redirectUri: request.data?.redirectUri,
+        environment,
+        enabled: request.data?.enabled === true,
+        historicalSyncEnabled: request.data?.historicalSyncEnabled === true,
+        appName: request.data?.appName,
+      });
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Review the provider configuration and try again.");
+    }
+    await providerConfigRef(config.provider, environment).set({
+      schemaVersion: "SocialProviderConfigV1",
+      ...config,
+      writeScopesEnabled: false,
+      externalPublishingEnabled: false,
+      configuredByUid: context.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: false});
+    return {
+      provider: config.provider,
+      environment,
+      enabled: config.enabled,
+      historicalSyncEnabled: config.historicalSyncEnabled,
+      redirectUri: config.redirectUri,
+      writeScopesEnabled: false,
+      externalPublishingEnabled: false,
+    };
+  },
+);
+
+exports.beginSocialOAuthConnectionV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 4, secrets: [socialOAuthEncryptionKey]},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    const provider = socialOAuth.normalizeProvider(request.data?.provider);
+    const environment = runtimeEnvironment();
+    const config = (await providerConfigRef(provider, environment).get()).data();
+    let attempt;
+    try {
+      attempt = socialOAuth.createAttempt({
+        businessUid: business.uid,
+        provider,
+        config,
+        encryptionKey: socialOAuthEncryptionKey.value(),
+        now: Date.now(),
+      });
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "This read-only connection is not configured yet.");
+    }
+    await db.collection("socialOAuthAttempts").doc(attempt.attemptId).set({
+      ...attempt.record,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: false});
+    await db.collection("socialConnections").doc(business.uid).collection("providers")
+      .doc(provider === "meta" ? "facebook" : provider).set({
+        schemaVersion: socialOperations.SCHEMA_VERSION,
+        provider: provider === "meta" ? "facebook" : provider,
+        status: "authorizing",
+        pendingAttemptId: attempt.attemptId,
+        capabilities: {profile: false, analytics: false, publishText: false,
+          publishImage: false, publishVideo: false, schedule: false},
+        environment,
+        authorizationUpdatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    return {
+      provider,
+      attemptId: attempt.attemptId,
+      authorizationUrl: attempt.authorizationUrl,
+      status: "authorizing",
+      requestedScopes: socialOAuth.PROVIDER_SCOPES[provider],
+      writeScopesRequested: false,
+    };
+  },
+);
+
+exports.getSocialOAuthAttemptV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    const attemptId = readText(request.data?.attemptId, 128);
+    const record = (await db.collection("socialOAuthAttempts").doc(attemptId).get()).data();
+    if (!record || record.businessUid !== business.uid) {
+      throw new HttpsError("not-found", "The connection attempt is unavailable.");
+    }
+    return {
+      attemptId,
+      provider: record.provider,
+      status: record.status,
+      candidates: Array.isArray(record.safeCandidates) ? record.safeCandidates : [],
+      grantedScopes: Array.isArray(record.grantedScopes) ? record.grantedScopes : [],
+      missingScopes: Array.isArray(record.missingScopes) ? record.missingScopes : [],
+      writeScopesGranted: false,
+    };
+  },
+);
+
+exports.confirmSocialOAuthConnectionV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey]},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    const attemptId = readText(request.data?.attemptId, 128);
+    const attemptRef = db.collection("socialOAuthAttempts").doc(attemptId);
+    const attemptSnapshot = await attemptRef.get();
+    const attempt = attemptSnapshot.data();
+    if (!attempt || attempt.businessUid !== business.uid) {
+      throw new HttpsError("not-found", "The connection attempt is unavailable.");
+    }
+    let selected;
+    try {
+      selected = socialOAuth.selectCandidate({
+        attempt,
+        candidateId: request.data?.candidateId,
+        encryptionKey: socialOAuthEncryptionKey.value(),
+        now: Date.now(),
+      });
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "Review and confirm the provider identity again.");
+    }
+    const credentialId = socialOAuth.digest(
+      `${business.uid}:${attempt.provider}:${selected.privateAccount.accountId}`);
+    const connectionRoot = db.collection("socialConnections").doc(business.uid)
+      .collection("providers");
+    const batch = db.batch();
+    batch.set(db.collection("socialConnectionCredentials").doc(credentialId), {
+      ...selected.credentialRecord,
+      accountEnvelope: socialOAuth.encryptJson(selected.privateAccount,
+        socialOAuthEncryptionKey.value(), `${business.uid}:${attempt.provider}:${credentialId}`),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: false});
+    const base = {
+      schemaVersion: socialOperations.SCHEMA_VERSION,
+      status: "connected_read_only",
+      accountDisplayName: selected.safeCandidate.accountDisplayName,
+      accountType: selected.safeCandidate.accountType,
+      handle: selected.safeCandidate.handle,
+      providerAccountId: selected.safeCandidate.candidateId,
+      credentialId,
+      capabilities: selected.safeCandidate.capabilities,
+      grantedScopes: attempt.grantedScopes,
+      writeScopesGranted: false,
+      environment: attempt.environment,
+      authorizationUpdatedAt: FieldValue.serverTimestamp(),
+    };
+    if (attempt.provider === "meta") {
+      batch.set(connectionRoot.doc("facebook"), {...base, provider: "facebook"}, {merge: false});
+      if (selected.safeCandidate.linkedHandle || selected.safeCandidate.linkedAccountDisplayName) {
+        batch.set(connectionRoot.doc("instagram"), {
+          ...base,
+          provider: "instagram",
+          accountDisplayName: selected.safeCandidate.linkedAccountDisplayName ||
+            selected.safeCandidate.linkedHandle,
+          accountType: "instagram_professional",
+          handle: selected.safeCandidate.linkedHandle,
+          providerAccountId: `${selected.safeCandidate.candidateId}_instagram`,
+        }, {merge: false});
+      }
+    } else {
+      batch.set(connectionRoot.doc(attempt.provider), {...base, provider: attempt.provider}, {merge: false});
+    }
+    batch.update(attemptRef, {
+      status: "connected_read_only",
+      selectedCandidate: selected.safeCandidate,
+      candidateEnvelope: FieldValue.delete(),
+      verifierEnvelope: FieldValue.delete(),
+      connectedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+    return {
+      provider: attempt.provider,
+      status: "connected_read_only",
+      identity: selected.safeCandidate,
+      writeScopesGranted: false,
+      externalPublishingEnabled: false,
+    };
+  },
+);
+
+exports.socialOAuthCallbackV1 = onRequest(
+  {maxInstances: 4, secrets: [socialOAuthEncryptionKey, metaSocialAppSecret,
+    xSocialClientSecret, youtubeSocialClientSecret]},
+  async (request, response) => {
+    response.set("Cache-Control", "no-store");
+    const state = readText(request.query?.state, 1000);
+    const code = readText(request.query?.code, 10000);
+    const attemptId = socialOAuth.digest(state);
+    const attemptRef = db.collection("socialOAuthAttempts").doc(attemptId);
+    try {
+      if (!state || !code || request.query?.error) throw new Error("social_oauth_callback_invalid");
+      const attempt = await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(attemptRef);
+        const current = snapshot.data();
+        socialOAuth.assertAttempt(current, {now: Date.now()});
+        if (current.status !== "authorizing") throw new Error("social_oauth_exchange_in_progress");
+        transaction.update(attemptRef, {status: "exchanging",
+          updatedAt: FieldValue.serverTimestamp()});
+        return {...current, status: "exchanging"};
+      });
+      const config = socialOAuth.validateProviderConfig({
+        ...(await providerConfigRef(attempt.provider, attempt.environment).get()).data(),
+        provider: attempt.provider,
+      });
+      const completed = await socialOAuth.completeExchange({
+        attempt,
+        code,
+        config,
+        clientSecret: providerSecret(attempt.provider),
+        encryptionKey: socialOAuthEncryptionKey.value(),
+        now: Date.now(),
+      });
+      await attemptRef.update({
+        ...completed,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      response.status(200).type("html").send(socialOAuth.callbackHtml({
+        success: completed.status === "identity_pending",
+        message: completed.status === "identity_pending" ?
+          "Return to ScaledCircle to review and confirm the exact account identity." :
+          "The provider did not grant every required read-only permission.",
+      }));
+    } catch (error) {
+      const exchangeAlreadyInProgress = String(error?.message || error)
+        .includes("social_oauth_exchange_in_progress");
+      if (state && !exchangeAlreadyInProgress) {
+        await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(attemptRef);
+          if (["authorizing", "exchanging"].includes(snapshot.data()?.status)) {
+            transaction.set(attemptRef, {status: "error", safeFailure: "connection_failed",
+              updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+          }
+        }).catch(() => {});
+      }
+      response.status(400).type("html").send(socialOAuth.callbackHtml({
+        success: false,
+        message: "The read-only authorization could not be completed. No account was connected.",
+      }));
+    }
+  },
+);
+
+exports.syncSocialReadOnlyPerformanceV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey,
+    metaSocialAppSecret, xSocialClientSecret, youtubeSocialClientSecret]},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    const surface = readText(request.data?.provider, 30).toLowerCase();
+    if (!socialOperations.PROVIDERS.includes(surface)) {
+      throw new HttpsError("invalid-argument", "Choose a supported connected account.");
+    }
+    const provider = ["facebook", "instagram"].includes(surface) ? "meta" : surface;
+    const environment = runtimeEnvironment();
+    const config = socialOAuth.validateProviderConfig({
+      ...(await providerConfigRef(provider, environment).get()).data(), provider,
+    });
+    if (!config.historicalSyncEnabled) {
+      throw new HttpsError("failed-precondition", "Historical sync is not enabled for this provider.");
+    }
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc(surface);
+    const connection = (await connectionRef.get()).data();
+    if (!connection || connection.status !== "connected_read_only" || !connection.credentialId) {
+      throw new HttpsError("failed-precondition", "Connect this account read only first.");
+    }
+    const credentialRef = db.collection("socialConnectionCredentials").doc(connection.credentialId);
+    const credentialSnapshot = await credentialRef.get();
+    const credential = credentialSnapshot.data();
+    if (!credential || credential.businessUid !== business.uid || credential.provider !== provider) {
+      throw new HttpsError("permission-denied", "The connection credential is unavailable.");
+    }
+    try {
+      const account = socialOAuth.decryptJson(credential.accountEnvelope,
+        socialOAuthEncryptionKey.value(), `${business.uid}:${provider}:${connection.credentialId}`);
+      const tokenAad = `${business.uid}:${provider}:${account.accountId}`;
+      let tokens = socialOAuth.decryptJson(credential.tokenEnvelope,
+        socialOAuthEncryptionKey.value(), tokenAad);
+      tokens = await socialOAuth.refreshTokens({provider, tokens, config,
+        clientSecret: providerSecret(provider)});
+      const snapshots = await socialOAuth.readHistoricalPerformance({
+        provider, surface, tokens, account, now: Date.now(),
+      });
+      const batch = db.batch();
+      for (const snapshot of snapshots) {
+        const normalized = socialOperations.normalizePerformance({
+          businessUid: business.uid,
+          provider: surface,
+          contentItemId: `historical_${socialOAuth.digest(snapshot.providerObjectId).slice(0, 24)}`,
+          observedAt: snapshot.observedAtMillis,
+          metrics: snapshot.metrics,
+          unavailable: snapshot.unavailable,
+        });
+        const id = `social_performance_${socialOAuth.digest({surface,
+          providerObjectId: snapshot.providerObjectId, observedAt: snapshot.observedAtMillis})}`;
+        batch.set(db.collection("socialPerformanceSnapshots").doc(id), {
+          ...normalized,
+          source: "provider_read_only_import",
+          periodStart: snapshot.periodStart || null,
+          periodEnd: snapshot.periodEnd || null,
+          createdAt: FieldValue.serverTimestamp(),
+        }, {merge: false});
+      }
+      if (tokens.refreshed) {
+        const secretFields = {...tokens};
+        delete secretFields.refreshed;
+        batch.update(credentialRef, {
+          tokenEnvelope: socialOAuth.encryptJson(secretFields,
+            socialOAuthEncryptionKey.value(), tokenAad),
+          expiresAtMillis: tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : null,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+      batch.update(connectionRef, {
+        lastSyncAt: FieldValue.serverTimestamp(),
+        metricCollectionHealth: snapshots.length ? "healthy" : "no_data",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+      return {
+        provider: surface,
+        importedSnapshotCount: snapshots.length,
+        metricCollectionHealth: snapshots.length ? "healthy" : "no_data",
+        externalPublishingEnabled: false,
+      };
+    } catch (_) {
+      await connectionRef.set({status: "reauth_required", metricCollectionHealth: "error",
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      throw new HttpsError("unavailable", "The read-only performance sync needs attention.");
+    }
   },
 );

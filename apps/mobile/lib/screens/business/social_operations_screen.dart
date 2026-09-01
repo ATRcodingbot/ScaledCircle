@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/social_operations_service.dart';
 
@@ -238,6 +239,151 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     _ => provider,
   };
 
+  String _oauthProvider(String provider) =>
+      provider == 'facebook' || provider == 'instagram' ? 'meta' : provider;
+
+  Future<void> _beginConnection(String provider) async {
+    try {
+      final result = await _service.beginReadOnlyConnection(
+        _oauthProvider(provider),
+      );
+      final uri = Uri.tryParse(result['authorizationUrl']?.toString() ?? '');
+      if (uri == null || !await launchUrl(uri, webOnlyWindowName: '_blank')) {
+        throw StateError('Unable to open provider authorization.');
+      }
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Complete read-only authorization, then return here to confirm the exact account.',
+            ),
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'This connection is not ready yet.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _reviewConnection(Map<String, dynamic> connection) async {
+    final attemptId = connection['pendingAttemptId']?.toString() ?? '';
+    if (attemptId.isEmpty) return;
+    try {
+      final attempt = await _service.connectionAttempt(attemptId);
+      final candidates = (attempt['candidates'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+      if (attempt['status'] != 'identity_pending' || candidates.isEmpty) {
+        await _load();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Authorization is not ready for identity confirmation yet.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      final selected = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirm the exact account'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Only read-only identity and analytics access will be connected. Publishing remains off.',
+                ),
+                const SizedBox(height: 12),
+                for (final candidate in candidates)
+                  Card(
+                    child: ListTile(
+                      title: Text(
+                        candidate['accountDisplayName']?.toString() ??
+                            'Provider account',
+                      ),
+                      subtitle: Text(
+                        [
+                              candidate['handle']?.toString(),
+                              candidate['linkedAccountDisplayName']?.toString(),
+                              candidate['linkedHandle']?.toString(),
+                              candidate['candidateId']?.toString(),
+                            ]
+                            .whereType<String>()
+                            .where((value) => value.isNotEmpty)
+                            .join(' · '),
+                      ),
+                      trailing: FilledButton.tonal(
+                        onPressed: () => Navigator.pop(context, candidate),
+                        child: const Text('Use this account'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      if (selected == null) return;
+      await _service.confirmReadOnlyConnection(
+        attemptId: attemptId,
+        candidateId: selected['candidateId']?.toString() ?? '',
+      );
+      await _load();
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'Unable to confirm this account.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _syncPerformance(String provider) async {
+    try {
+      final result = await _service.syncReadOnlyPerformance(provider);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${result['importedSnapshotCount'] ?? 0} read-only performance snapshot(s) imported.',
+            ),
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'Performance sync is unavailable.'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -298,9 +444,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   Widget _notice() => const Card(
     child: ListTile(
       leading: Icon(Icons.shield_outlined),
-      title: Text('Provider-free foundation'),
+      title: Text('Read-only connection phase'),
       subtitle: Text(
-        'No social account is connected yet. Publishing, bulk email delivery, and ad changes remain off.',
+        'Account identity and available analytics may be connected. Publishing, bulk email delivery, and ad changes remain off.',
       ),
     ),
   );
@@ -320,44 +466,85 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     ),
   );
 
-  Widget _connections(
-    SocialOperationsWorkspace workspace,
-    bool wide,
-  ) => GridView.count(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    crossAxisCount: wide ? 4 : 2,
-    childAspectRatio: wide ? 1.55 : 1.25,
-    crossAxisSpacing: 8,
-    mainAxisSpacing: 8,
-    children: workspace.connections
-        .map((connection) {
-          final status = connection['status']?.toString() ?? 'not_connected';
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _providerLabel(connection['provider'].toString()),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+  Widget _connections(SocialOperationsWorkspace workspace, bool wide) =>
+      GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: wide ? 4 : 2,
+        childAspectRatio: wide ? 1.55 : 1.25,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        children: workspace.connections
+            .map((connection) {
+              final status = connection['status']?.toString() ?? 'disconnected';
+              final connected = status == 'connected_read_only';
+              final authorizing =
+                  status == 'authorizing' || status == 'identity_pending';
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _providerLabel(connection['provider'].toString()),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const Spacer(),
+                      Text(
+                        connected
+                            ? 'Connected · Read only'
+                            : authorizing
+                            ? 'Authorizing'
+                            : 'Not connected',
+                      ),
+                      if (connected)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              [
+                                    connection['accountDisplayName'],
+                                    connection['handle'],
+                                  ]
+                                  .whereType<String>()
+                                  .where((value) => value.isNotEmpty)
+                                  .join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            TextButton(
+                              onPressed: () => _syncPerformance(
+                                connection['provider']?.toString() ?? '',
+                              ),
+                              child: const Text('Sync insights'),
+                            ),
+                          ],
+                        )
+                      else
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: authorizing
+                                ? () => _reviewConnection(connection)
+                                : () => _beginConnection(
+                                    connection['provider']?.toString() ?? '',
+                                  ),
+                            child: Text(
+                              authorizing
+                                  ? 'Check & confirm'
+                                  : 'Connect read only',
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  const Spacer(),
-                  Text(status == 'connected' ? 'Connected' : 'Not connected'),
-                  Text(
-                    status == 'connected'
-                        ? 'Authorization active'
-                        : 'OAuth connection coming next',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          );
-        })
-        .toList(growable: false),
-  );
+                ),
+              );
+            })
+            .toList(growable: false),
+      );
 
   Widget _plans(SocialOperationsWorkspace workspace) => Column(
     children: [

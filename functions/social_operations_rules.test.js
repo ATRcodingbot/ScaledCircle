@@ -10,7 +10,7 @@ const rules = fs.readFileSync(path.join(__dirname, "..", "firestore.rules"), "ut
 for (const collection of ["socialContentPlans", "socialContentItems", "socialContentVersions",
   "socialProviderReceipts", "socialPerformanceSnapshots", "socialLearningSignals",
   "managedGrowthPlans", "emailContentPlans", "adConnections", "adAccounts",
-  "adCampaignSnapshots", "adAccountHealth"]) {
+  "adCampaignSnapshots", "adAccountHealth", "socialOAuthAttempts", "socialProviderConfigs"]) {
   test(`${collection} is server-only`, () => {
     const pattern = new RegExp(`match /${collection}/\\{document=\\*\\*\\} \\{[\\s\\S]*?` +
       "allow read, write: if false;[\\s\\S]*?\\}");
