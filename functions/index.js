@@ -396,6 +396,7 @@ const generationService = generationFoundation.createGenerationService({
   },
   serviceAreaVisualContext: async (actor, request) => {
     const growthPromise = db.collection("businessGrowthProfiles").doc(actor.uid).get();
+    const discoveryPromise = db.collection("discoveryPreferences").doc(actor.uid).get();
     let campaign = null;
     if (request.campaignId) {
       const campaignSnapshot = await db.collection("campaigns").doc(request.campaignId).get();
@@ -404,18 +405,12 @@ const generationService = generationFoundation.createGenerationService({
         throw new Error("generation_access_denied");
       }
     }
-    const growth = (await growthPromise).data() || {};
-    const savedArea = Array.isArray(growth.serviceAreas) ? growth.serviceAreas
-      .map((value) => String(value || "").trim()).find(Boolean) : null;
-    const areaLabel = String(campaign?.areaLabel || campaign?.locationName ||
-      campaign?.serviceAreaTemplateName || savedArea || "").trim();
-    const propertyStyle = String(campaign?.propertyType || "").trim();
-    if (!areaLabel && !propertyStyle) return null;
-    return generationFoundation.sanitizeServiceAreaVisualContext({
-      areaLabel: areaLabel || undefined,
-      propertyStyle: propertyStyle || undefined,
-      source: request.campaignId ? "business_owned_campaign" : "business_growth_profile",
-    });
+    const [growthSnapshot, discoverySnapshot] = await Promise.all([growthPromise, discoveryPromise]);
+    const growth = growthSnapshot.data() || {};
+    const discovery = discoverySnapshot.exists &&
+      discoverySnapshot.data()?.role === "business" ? discoverySnapshot.data() : null;
+    return generationFoundation.serviceAreaVisualContextFromSources({campaign, growth, discovery,
+      campaignSelected: Boolean(request.campaignId)});
   },
   ingestCandidate: (input) => creativeMediaService.ingestGeneratedCandidate(input),
   approveCandidate: (input) => creativeMediaService.approveGeneratedCandidate(input),

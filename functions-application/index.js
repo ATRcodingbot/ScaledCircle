@@ -432,11 +432,6 @@ const legalConsentService = legalConsent.createLegalConsentService({ db, FieldVa
 
 
 
-
-
-
-
-
 function legalConsentError(error, message) {
   if (error?.message !== "legal_consent_required") return null;
   return new HttpsError(

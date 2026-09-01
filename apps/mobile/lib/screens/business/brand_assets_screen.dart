@@ -82,6 +82,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
     }
     var selectedService = services.first;
     var selectedDirection = directions.first;
+    var doorHangerServiceHero = false;
     final create = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -140,6 +141,17 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                     () => selectedDirection = value ?? selectedDirection,
                   ),
                 ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: doorHangerServiceHero,
+                  title: const Text('Create for a door hanger Service Hero'),
+                  subtitle: const Text(
+                    'Uses your saved service area and composes the image for the narrow print layout.',
+                  ),
+                  onChanged: (value) =>
+                      setLocal(() => doorHangerServiceHero = value == true),
+                ),
               ],
             ),
           ),
@@ -168,6 +180,9 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
         requestId: requestId,
         serviceCategory: selectedService,
         visualDirection: selectedDirection,
+        materialSlot: doorHangerServiceHero
+            ? 'door_hanger_service_hero'
+            : 'landing_page_hero',
       );
       await _generationService.processGeneration(job['jobId'].toString());
       await Future.wait([_loadGeneration(), _load(reset: true)]);
@@ -865,7 +880,9 @@ class _GeneratedVisualUnavailableCard extends StatelessWidget {
               '$message You can still use existing Brand Assets, upload your own photo, or publish without a photo.',
             ),
             const SizedBox(height: 8),
-            const Text('Try another uses 1 generated visual when generation is available.'),
+            const Text(
+              'Try another uses 1 generated visual when generation is available.',
+            ),
           ],
         ),
       ),

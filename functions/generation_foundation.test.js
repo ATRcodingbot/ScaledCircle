@@ -140,6 +140,21 @@ test("area-context snapshot is bounded, immutable, non-personal, and service lan
   assert.equal(brief.serviceAreaVisualContext.contextDigest, context.contextDigest);
 });
 
+test("maintained discovery preferences are the canonical saved-area source", () => {
+  const context = generation.serviceAreaVisualContextFromSources({
+    growth: {serviceAreas: ["Legacy area"]},
+    discovery: {areas: [{name: "Howard County", centerLabel: "Columbia, MD",
+      primary: true, enabled: true}]},
+  });
+  assert.equal(context.areaLabel, "Howard County, Columbia, MD");
+  assert.equal(context.source, "business_discovery_preferences");
+  const fallback = generation.serviceAreaVisualContextFromSources({
+    growth: {serviceAreas: ["Legacy area"]}, discovery: {areas: []},
+  });
+  assert.equal(fallback.areaLabel, "Legacy area");
+  assert.equal(fallback.source, "business_growth_profile");
+});
+
 test("safe brief excludes people property before-after credentials text and logos", () => {
   const brief = generation.safeBrief({serviceCategory: "Decks", visualDirection: "clean",
     requestedPurpose: "service_visual"}, {primaryColor: "#112233", stylePreset: "clean"});

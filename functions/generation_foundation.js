@@ -171,6 +171,30 @@ function sanitizeServiceAreaVisualContext(value) {
   return Object.freeze(result);
 }
 
+function serviceAreaVisualContextFromSources({campaign = null, growth = null,
+  discovery = null, campaignSelected = false} = {}) {
+  const enabledAreas = Array.isArray(discovery?.areas) ? discovery.areas
+    .filter((area) => area && typeof area === "object" && area.enabled !== false) : [];
+  const preferredArea = enabledAreas.find((area) => area.primary === true) || enabledAreas[0] || {};
+  const legacyArea = Array.isArray(growth?.serviceAreas) ? growth.serviceAreas
+    .map((value) => clean(value, 100)).find(Boolean) : "";
+  const areaName = clean(preferredArea.name, 100);
+  const resolvedLocation = clean(preferredArea.displayName || preferredArea.centerLabel, 100) ||
+    [preferredArea.city, preferredArea.county, preferredArea.state]
+      .map((value) => clean(value, 100)).filter(Boolean).join(", ");
+  const discoveredParts = resolvedLocation.toLowerCase().includes(areaName.toLowerCase()) ?
+    [resolvedLocation] : [areaName, resolvedLocation];
+  const discoveredArea = discoveredParts.filter(Boolean).join(", ");
+  const areaLabel = clean(campaign?.areaLabel || campaign?.locationName ||
+    campaign?.serviceAreaTemplateName || discoveredArea || legacyArea, 120);
+  const propertyStyle = clean(campaign?.propertyType, 100);
+  if (!areaLabel && !propertyStyle) return null;
+  return sanitizeServiceAreaVisualContext({areaLabel: areaLabel || undefined,
+    propertyStyle: propertyStyle || undefined,
+    source: campaignSelected ? "business_owned_campaign" :
+      discoveredArea ? "business_discovery_preferences" : "business_growth_profile"});
+}
+
 function safeBrief(request, brand = {}, serviceAreaContext = null) {
   const language = serviceLanguage(request.serviceCategory);
   const context = sanitizeServiceAreaVisualContext(serviceAreaContext);
@@ -488,6 +512,7 @@ module.exports = {SCHEMA_VERSION, DISCLOSURE, PAGE_SIZE, MAX_ACTIVE_JOBS, MAX_RE
   normalizeAuthorizedBusinessUids, normalizeRolloutMode, normalizeBetaCohortStage, betaCohortMaximum,
   planMonthlyAllowance, generationAuthorizationPolicy,
   DIRECTIONS, FAILURE_CATEGORIES, stableId, normalizeCapability, assertTestAdapterEnvironment,
-  MATERIAL_SLOTS, sanitizeRequest, serviceLanguage, sanitizeServiceAreaVisualContext, safeBrief,
+  MATERIAL_SLOTS, sanitizeRequest, serviceLanguage, sanitizeServiceAreaVisualContext,
+  serviceAreaVisualContextFromSources, safeBrief,
   normalizeModeration, encodeCursor, decodeCursor,
   deterministicTestAdapter, createGenerationService};

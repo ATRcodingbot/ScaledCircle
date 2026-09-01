@@ -37,6 +37,7 @@ abstract interface class GeneratedVisualGateway {
     required String requestId,
     required String serviceCategory,
     required String visualDirection,
+    String materialSlot = 'landing_page_hero',
   });
   Future<Map<String, dynamic>> processGeneration(String jobId);
   Future<void> approveGeneration(String jobId);
@@ -179,6 +180,7 @@ class BusinessMediaService
     required String requestId,
     required String serviceCategory,
     required String visualDirection,
+    String materialSlot = 'landing_page_hero',
   }) async {
     final response = await _functions
         .httpsCallable('requestGeneratedServiceVisual')
@@ -187,6 +189,7 @@ class BusinessMediaService
           'serviceCategory': serviceCategory,
           'visualDirection': visualDirection,
           'requestedPurpose': 'service_visual',
+          'materialSlot': materialSlot,
         });
     return Map<String, dynamic>.from(response.data as Map);
   }

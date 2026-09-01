@@ -72,6 +72,7 @@ class _FakeGeneration implements GeneratedVisualGateway {
   var processes = 0;
   var approvals = 0;
   var rejections = 0;
+  String? materialSlot;
   @override
   Future<Map<String, dynamic>> generationWorkspace({String? cursor}) async =>
       result;
@@ -80,8 +81,10 @@ class _FakeGeneration implements GeneratedVisualGateway {
     required String requestId,
     required String serviceCategory,
     required String visualDirection,
+    String materialSlot = 'landing_page_hero',
   }) async {
     requests++;
+    this.materialSlot = materialSlot;
     return {'jobId': 'job-one', 'status': 'queued'};
   }
 
@@ -308,6 +311,36 @@ void main() {
     expect(find.textContaining('3 of 5 used this month'), findsOneWidget);
     expect(find.textContaining('Resets September 1'), findsOneWidget);
     expect(find.text('Try another · Uses 1 generated visual'), findsOneWidget);
+  });
+
+  testWidgets('door-hanger Service Hero sends the bounded material slot', (
+    tester,
+  ) async {
+    final generation = _FakeGeneration({
+      'capability': 'enabled',
+      'businessAuthorized': true,
+      'budgetEnabled': true,
+      'approvedServiceCategories': ['Seasonal cleanup'],
+      'visualDirections': ['clean'],
+      'usage': {'used': 0, 'pending': 0, 'total': 5, 'remaining': 5},
+      'jobs': <dynamic>[],
+    });
+    await tester.pumpWidget(
+      _screen(
+        _FakeMedia({'assets': <dynamic>[], 'hasMore': false}),
+        generation: generation,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create service visual'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create for a door hanger Service Hero'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create visual'));
+    await tester.pumpAndSettle();
+    expect(generation.requests, 1);
+    expect(generation.processes, 1);
+    expect(generation.materialSlot, 'door_hanger_service_hero');
   });
 
   testWidgets('provider-disabled Beta keeps usage and alternatives visible', (
