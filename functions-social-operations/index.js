@@ -14,8 +14,6 @@ const db = getFirestore();
 setGlobalOptions({region: "us-east1"});
 
 const socialOAuthEncryptionKey = defineSecret("SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY");
-const metaSocialAppSecret = defineSecret("META_SOCIAL_APP_SECRET");
-const xSocialClientSecret = defineSecret("X_SOCIAL_CLIENT_SECRET");
 const youtubeSocialClientSecret = defineSecret("YOUTUBE_SOCIAL_CLIENT_SECRET");
 
 function runtimeEnvironment() {
@@ -27,11 +25,19 @@ function providerConfigRef(provider, environment = runtimeEnvironment()) {
   return db.collection("socialProviderConfigs").doc(`${environment}_${provider}`);
 }
 
-function providerSecret(provider) {
-  if (provider === "meta") return metaSocialAppSecret.value();
-  if (provider === "x") return xSocialClientSecret.value();
-  if (provider === "youtube") return youtubeSocialClientSecret.value();
-  throw new Error("unsupported_social_oauth_provider");
+const providerSecretBindings = Object.freeze({
+  youtube: Object.freeze({secret: youtubeSocialClientSecret,
+    secretName: "YOUTUBE_SOCIAL_CLIENT_SECRET"}),
+});
+
+function providerSecretBinding(provider) {
+  const binding = providerSecretBindings[provider];
+  if (!binding) throw new Error("unsupported_social_oauth_provider");
+  return binding;
+}
+
+function requireRuntimeProvider(expectedProvider, actualProvider) {
+  if (actualProvider !== expectedProvider) throw new Error("social_oauth_provider_runtime_mismatch");
 }
 
 function readText(value, maximumLength = 500) {
@@ -530,10 +536,8 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
   },
 );
 
-exports.socialOAuthCallbackV1 = onRequest(
-  {maxInstances: 4, secrets: [socialOAuthEncryptionKey, metaSocialAppSecret,
-    xSocialClientSecret, youtubeSocialClientSecret]},
-  async (request, response) => {
+function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
+  return async (request, response) => {
     response.set("Cache-Control", "no-store");
     const state = readText(request.query?.state, 1000);
     const code = readText(request.query?.code, 10000);
@@ -550,6 +554,7 @@ exports.socialOAuthCallbackV1 = onRequest(
           updatedAt: FieldValue.serverTimestamp()});
         return {...current, status: "exchanging"};
       });
+      requireRuntimeProvider(expectedProvider, attempt.provider);
       const config = socialOAuth.validateProviderConfig({
         ...(await providerConfigRef(attempt.provider, attempt.environment).get()).data(),
         provider: attempt.provider,
@@ -558,7 +563,7 @@ exports.socialOAuthCallbackV1 = onRequest(
         attempt,
         code,
         config,
-        clientSecret: providerSecret(attempt.provider),
+        clientSecret: providerSecretParameter.value(),
         encryptionKey: socialOAuthEncryptionKey.value(),
         now: Date.now(),
       });
@@ -589,19 +594,28 @@ exports.socialOAuthCallbackV1 = onRequest(
         message: "The read-only authorization could not be completed. No account was connected.",
       }));
     }
-  },
+  };
+}
+
+exports.socialOAuthCallbackV1 = onRequest(
+  {maxInstances: 4, secrets: [socialOAuthEncryptionKey,
+    providerSecretBinding("youtube").secret]},
+  socialOAuthCallbackHandler("youtube", providerSecretBinding("youtube").secret),
 );
 
-exports.syncSocialReadOnlyPerformanceV1 = onCall(
-  {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey,
-    metaSocialAppSecret, xSocialClientSecret, youtubeSocialClientSecret]},
-  async (request) => {
+function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretParameter) {
+  return async (request) => {
     const business = await requireSocialOperationsBusiness(request);
     const surface = readText(request.data?.provider, 30).toLowerCase();
     if (!socialOperations.PROVIDERS.includes(surface)) {
       throw new HttpsError("invalid-argument", "Choose a supported connected account.");
     }
     const provider = ["facebook", "instagram"].includes(surface) ? "meta" : surface;
+    try {
+      requireRuntimeProvider(expectedProvider, provider);
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Choose the matching connected provider.");
+    }
     const environment = runtimeEnvironment();
     const config = socialOAuth.validateProviderConfig({
       ...(await providerConfigRef(provider, environment).get()).data(), provider,
@@ -628,7 +642,7 @@ exports.syncSocialReadOnlyPerformanceV1 = onCall(
       let tokens = socialOAuth.decryptJson(credential.tokenEnvelope,
         socialOAuthEncryptionKey.value(), tokenAad);
       tokens = await socialOAuth.refreshTokens({provider, tokens, config,
-        clientSecret: providerSecret(provider)});
+        clientSecret: providerSecretParameter.value()});
       const snapshots = await socialOAuth.readHistoricalPerformance({
         provider, surface, tokens, account, now: Date.now(),
       });
@@ -679,5 +693,11 @@ exports.syncSocialReadOnlyPerformanceV1 = onCall(
         updatedAt: FieldValue.serverTimestamp()}, {merge: true});
       throw new HttpsError("unavailable", "The read-only performance sync needs attention.");
     }
-  },
+  };
+}
+
+exports.syncSocialReadOnlyPerformanceV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey,
+    providerSecretBinding("youtube").secret]},
+  syncSocialReadOnlyPerformanceHandler("youtube", providerSecretBinding("youtube").secret),
 );
