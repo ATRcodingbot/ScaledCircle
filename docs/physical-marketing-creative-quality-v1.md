@@ -158,3 +158,89 @@ bindings, provider events, call interaction evidence, retention, idempotent
 reconciliation, and immediate disablement. The physical renderer should receive
 only a server-verified display number snapshot; clients must never supply raw
 tracking authority or provider credentials.
+
+## Final-render copy normalization production closeout
+
+The final Creative Quality V1 blocker was a renderer-boundary defect rather
+than a canonical-service-data defect. The bounded `customerServiceLanguage()`
+authority already produced natural customer language, but PDF and SVG proof
+fallbacks inserted raw canonical service values directly into labels,
+supporting copy, service lists, the back headline, and the project-focus block.
+That produced the production phrase “Ready to plan your build decks project?”
+even though the immutable version correctly remained unapproved.
+
+Release `48b7ca8d98cde62cad970f6d5cb49b838a838bfc` routes every final-render
+service insertion through the existing bounded authority. The canonical
+Business service remains `build decks`; the exact customer-facing production
+render now uses `deck`, `deck project`, and “Ready to plan your deck project?”.
+The same final-render assertions cover `Seasonal cleanup`, `Landscaping
+improvements`, and `Fences` in the PDF evidence model and the exact SVG source
+used to generate WebP/JPG proofs. No AI, provider, offer, credential, or claim
+generation was added.
+
+The historical defect evidence remains immutable and unapproved:
+
+- material `material_1400e28a27cede66644e27965bcf7d6d36d5718d`;
+- version `version_037cf003a524f3e602a9647c8cc341b451715b7f`;
+- artifact `artifact_f9142685acfed15ba55b1f06cd9335d3aed7edd4`;
+- status `READY_FOR_REVIEW`; approved version absent.
+
+Staging deployed only
+`physical-marketing-core:preparePhysicalMarketingVersion`. A fresh
+`Seasonal cleanup` Professional Services material reached `ORDER_READY` through
+the normal Attractive Remodel workflow:
+
+- material `material_ccb5f8b0c3cb23ed5b2f31ba5616657846449c32`;
+- version `version_c09aac232c88fc1d34d816288e672ecedcdce6a4`;
+- artifact `artifact_59a02b7addb3ad96a361d6f1fb03cd8482f70f1e`;
+- canonical artifact hash
+  `84dac221a4650db66751507ec98f45801f7eef5865d5bc7b106b7e21bf310a5a`;
+- exact PDF byte SHA-256
+  `f5bc21cb8972093668aa084a6703d85f34031d4ff5ae7a88d4dc3b7d2ee13b72`;
+- exact back proof: “Ready to plan your seasonal cleanup?”;
+- print readiness, marketing readiness, QR decode, approval, PDF/JPG download,
+  desktop, and 390 × 844: pass.
+
+Production then deployed only
+`physical-marketing-core:preparePhysicalMarketingVersion` from the same source.
+The Gen 2 / Node.js 24 function is ACTIVE as revision
+`preparephysicalmarketingversion-00003-yur`. A fresh production material used
+only Attractive Remodel's canonical `build decks` service, the Professional
+Services no-image layout, its existing Landing Page and Response Asset, and no
+phone, offer, generated image, or new claim:
+
+- material `material_a5ee8ad07caf0929b8d9d1c3afb5551e0163f62a`;
+- version `version_bcaaace6ee81876287cbedd772cbc166e7cf16c4`;
+- artifact `artifact_12af04306886c6f6d979b9d6ccad9ee94c3f9309`;
+- canonical artifact hash
+  `2b8b4ed5432053736668375a64820a181d3a9f18082b76c6850ab092be1d5241`;
+- content hash
+  `5faa0f00f11a60fbc59d7fb142e2e929f61284ddc2a99c13138c6554899823cd`;
+- exact PDF byte SHA-256
+  `0127a3a7d696529d33109402b5f90161eaac9e404de42504e68b63147e201adb`;
+- exact digital-front JPG SHA-256
+  `64cbead9d7ad7b219aeee841c5db4050e9d8640f74bb0f049b2181294a40404d`;
+- Response Asset `response_98573ba46a6c7230939911b53eee34da83181590`;
+- Landing Page `V6LVp8VsxADGrMb8g5FN`, immutable version
+  `VRtN8Mqn3Mc4uOixcY5q`;
+- headline “Build the deck your home deserves”;
+- back headline “Ready to plan your deck project?”.
+
+The exact production proof and two-page PDF/X-4 master passed print readiness,
+marketing readiness, QR decoding, Business approval, `ORDER_READY`, PDF/JPG
+downloads, desktop, and 390 × 844. The QR was decoded locally and its immutable
+version linkage was verified without creating a production tracking
+interaction.
+
+Local closeout certification passed 22/22 physical-marketing renderer tests,
+369/369 backend tests, 6/6 focused Flutter tests, 394 full Flutter tests with
+one intentional skip, Flutter analysis, 23/23 Firestore Rules tests, 10/10
+Storage Rules tests, generated-codebase verification, production web build,
+credential/provider scan, and `git diff --check`.
+
+Generated Visuals remained `providerGenerationEnabled=false` and
+`rolloutMode=founder_only`. Its three historical provider-accepted jobs,
+125,165 actual cost micros, three settled reservations, and zero outstanding
+reservations were unchanged. This closeout created zero OpenAI/PostGrid/4over/
+FedEx calls, zero print/mail orders, zero physical Stripe charges, and zero
+additional provider spend.
