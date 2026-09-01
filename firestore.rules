@@ -465,6 +465,45 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Social Operations V1 is server-owned. Clients consume bounded callable
+    // projections instead of writing plans, metrics, Ads health, or learning.
+    match /socialContentPlans/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialContentItems/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialContentVersions/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialProviderReceipts/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialPerformanceSnapshots/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialLearningSignals/{document=**} {
+      allow read, write: if false;
+    }
+    match /managedGrowthPlans/{document=**} {
+      allow read, write: if false;
+    }
+    match /emailContentPlans/{document=**} {
+      allow read, write: if false;
+    }
+    match /adConnections/{document=**} {
+      allow read, write: if false;
+    }
+    match /adAccounts/{document=**} {
+      allow read, write: if false;
+    }
+    match /adCampaignSnapshots/{document=**} {
+      allow read, write: if false;
+    }
+    match /adAccountHealth/{document=**} {
+      allow read, write: if false;
+    }
+
     match /socialMediaLibraries/{businessId}/items/{mediaId} {
       allow read: if isApprovedAccount() && request.auth.uid == businessId;
       allow create, update, delete: if false;

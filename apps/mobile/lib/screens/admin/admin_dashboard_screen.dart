@@ -12,6 +12,7 @@ import 'admin_dashboard_card.dart';
 import 'admin_platform_health_screen.dart';
 import 'admin_role_gate.dart';
 import 'admin_role_management_screen.dart';
+import 'admin_social_operations_screen.dart';
 import 'admin_subscription_overview_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -93,53 +94,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             builder: (context, generatedSnapshot) =>
                 FutureBuilder<Map<String, dynamic>>(
                   future: _physicalMarketingOperations,
-                  builder: (context, physicalSnapshot) => FutureBuilder<Map<String, dynamic>>(
-                    future: _trackingPhoneOperations,
-                    builder: (context, phoneSnapshot) => AdminOperationsContent(
-                        snapshot: snapshot.data!,
-                        commercialMetrics: generatedSnapshot.data,
-                        physicalMarketingOperations: physicalSnapshot.data,
-                        trackingPhoneOperations: phoneSnapshot.data,
-                        onOpenIssue: _openIssue,
-                        onOpenAdminAccounts: () =>
-                            _push(const AdminRoleManagementScreen()),
-                        onOpenBeta: () =>
-                            _push(const InternalBetaEntitlementsScreen()),
-                        onOpenSubscriptions: () =>
-                            _push(const AdminSubscriptionOverviewScreen()),
-                        onOpenAttribution: () =>
-                            _push(const AdminAttributionScreen()),
-                        onOpenConfiguration: () =>
-                            _push(const AdminPlatformHealthScreen()),
-                        providerAuthPreflight: _providerAuthPreflight,
-                        providerAuthPreflightRunning:
-                            _providerAuthPreflightRunning,
-                        onRunProviderAuthPreflight: _runProviderAuthPreflight,
-                        accountingReconciliation: _accountingReconciliation,
-                        accountingReconciliationRunning:
-                            _accountingReconciliationRunning,
-                        onReconcileAccounting: _reconcileAccounting,
-                        founderQaJobController: _founderQaJobController,
-                        founderQaAllowlistUpdating: _founderQaAllowlistUpdating,
-                        onConfigureFounderQaAllowlist:
-                            _configureFounderQaAllowlist,
-                        commercialControlsUpdating: _commercialControlsUpdating,
-                        onStagePrivateBetaControls: _stagePrivateBetaControls,
-                        onRestoreFounderOnlyControls:
-                            _restoreFounderOnlyControls,
-                        stagingProviderUpdating: _stagingProviderUpdating,
-                        onSetStagingProviderEnabled:
-                            AppEnvironmentConfig.isStaging
-                            ? _setStagingProviderEnabled
-                            : null,
-                        onOpenCampaign: (campaignId) => _push(
-                          AdminCampaignTimelineScreen(
-                            campaignId: campaignId,
-                            service: _service,
-                          ),
-                        ),
+                  builder: (context, physicalSnapshot) =>
+                      FutureBuilder<Map<String, dynamic>>(
+                        future: _trackingPhoneOperations,
+                        builder: (context, phoneSnapshot) =>
+                            AdminOperationsContent(
+                              snapshot: snapshot.data!,
+                              commercialMetrics: generatedSnapshot.data,
+                              physicalMarketingOperations:
+                                  physicalSnapshot.data,
+                              trackingPhoneOperations: phoneSnapshot.data,
+                              onOpenIssue: _openIssue,
+                              onOpenAdminAccounts: () =>
+                                  _push(const AdminRoleManagementScreen()),
+                              onOpenBeta: () =>
+                                  _push(const InternalBetaEntitlementsScreen()),
+                              onOpenSubscriptions: () => _push(
+                                const AdminSubscriptionOverviewScreen(),
+                              ),
+                              onOpenAttribution: () =>
+                                  _push(const AdminAttributionScreen()),
+                              onOpenConfiguration: () =>
+                                  _push(const AdminPlatformHealthScreen()),
+                              onOpenSocialOperations: () =>
+                                  _push(const AdminSocialOperationsScreen()),
+                              providerAuthPreflight: _providerAuthPreflight,
+                              providerAuthPreflightRunning:
+                                  _providerAuthPreflightRunning,
+                              onRunProviderAuthPreflight:
+                                  _runProviderAuthPreflight,
+                              accountingReconciliation:
+                                  _accountingReconciliation,
+                              accountingReconciliationRunning:
+                                  _accountingReconciliationRunning,
+                              onReconcileAccounting: _reconcileAccounting,
+                              founderQaJobController: _founderQaJobController,
+                              founderQaAllowlistUpdating:
+                                  _founderQaAllowlistUpdating,
+                              onConfigureFounderQaAllowlist:
+                                  _configureFounderQaAllowlist,
+                              commercialControlsUpdating:
+                                  _commercialControlsUpdating,
+                              onStagePrivateBetaControls:
+                                  _stagePrivateBetaControls,
+                              onRestoreFounderOnlyControls:
+                                  _restoreFounderOnlyControls,
+                              stagingProviderUpdating: _stagingProviderUpdating,
+                              onSetStagingProviderEnabled:
+                                  AppEnvironmentConfig.isStaging
+                                  ? _setStagingProviderEnabled
+                                  : null,
+                              onOpenCampaign: (campaignId) => _push(
+                                AdminCampaignTimelineScreen(
+                                  campaignId: campaignId,
+                                  service: _service,
+                                ),
+                              ),
+                            ),
                       ),
-                  ),
                 ),
           );
         },
@@ -430,6 +442,7 @@ class AdminOperationsContent extends StatelessWidget {
     required this.onOpenSubscriptions,
     required this.onOpenAttribution,
     required this.onOpenConfiguration,
+    this.onOpenSocialOperations,
     required this.providerAuthPreflight,
     required this.providerAuthPreflightRunning,
     required this.onRunProviderAuthPreflight,
@@ -457,6 +470,7 @@ class AdminOperationsContent extends StatelessWidget {
       onOpenSubscriptions,
       onOpenAttribution,
       onOpenConfiguration;
+  final VoidCallback? onOpenSocialOperations;
   final GeneratedMediaWifPreflight? providerAuthPreflight;
   final bool providerAuthPreflightRunning;
   final VoidCallback onRunProviderAuthPreflight;
@@ -573,6 +587,18 @@ class AdminOperationsContent extends StatelessWidget {
         children: snapshot.health
             .map((item) => _HealthChip(item: item))
             .toList(),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.hub_outlined),
+          title: const Text('Social Operations — Beta'),
+          subtitle: const Text(
+            'Connections, publish queue, performance collection, and provider-free safety state.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onOpenSocialOperations,
+        ),
       ),
       const SizedBox(height: 12),
       Card(

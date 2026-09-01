@@ -26,6 +26,18 @@
       ]
     },
     {
+      "source": "functions-social-operations",
+      "codebase": "social-operations",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    },
+    {
       "source": "functions-weather",
       "codebase": "weather",
       "disallowLegacyRuntimeConfig": true,

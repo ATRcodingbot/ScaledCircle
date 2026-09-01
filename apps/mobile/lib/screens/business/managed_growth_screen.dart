@@ -7,6 +7,7 @@ import '../../services/artifact_export_service.dart';
 import '../../services/managed_growth_service.dart';
 import 'business_growth_profile_wizard.dart';
 import 'social_approval_screen.dart';
+import 'social_operations_screen.dart';
 
 class ManagedGrowthScreen extends StatefulWidget {
   const ManagedGrowthScreen({super.key, this.postcardHandoff});
@@ -666,6 +667,21 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                   padding: EdgeInsets.all(16),
                   child: Text(
                     'LIMITED BETA • Drafts require Business approval. No channel launches automatically. Unknown facts remain unknown.',
+                  ),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.hub_outlined),
+                  title: const Text('Social Operations — Beta'),
+                  subtitle: const Text(
+                    'Connections, 30-day calendar, approvals, performance, email content, and read-only Ads health.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SocialOperationsScreen(),
+                    ),
                   ),
                 ),
               ),

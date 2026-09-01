@@ -127,6 +127,13 @@ class AdminOperationsService {
         .call<Map<Object?, Object?>>(const {});
     return Map<String, dynamic>.from(result.data);
   }
+
+  Future<Map<String, dynamic>> loadSocialOperations() async {
+    final result = await _functions
+        .httpsCallable('getSocialOperationsAdminSummary')
+        .call<Map<Object?, Object?>>(const {});
+    return Map<String, dynamic>.from(result.data);
+  }
 }
 
 Map<String, dynamic> _map(Object? value) =>
