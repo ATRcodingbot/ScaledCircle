@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const social = require("./social_operations");
+const social = require("../functions-social-operations/social_operations");
 
 const now = Date.parse("2030-01-01T12:00:00Z");
 const baseItem = {itemKey: "education_1", scheduledFor: "2030-01-02T14:00:00Z",
@@ -141,4 +141,149 @@ test("mock adapters cover every organic provider without external traffic", () =
   const adapters = social.mockProviderAdapters();
   assert.deepEqual(Object.keys(adapters), ["facebook", "instagram", "x", "youtube"]);
   assert.equal(Object.values(adapters).every((adapter) => adapter.calls.length === 0), true);
+});
+
+test("quality optimization policy never auto-deletes published content", () => {
+  const manual = social.optimizationPolicy({mode: "manual", planId: "scale"});
+  assert.equal(manual.unpublishedMinorOptimizationEnabled, false);
+  assert.equal(manual.publishedDeletionAutomatic, false);
+  const approvedPlan = social.optimizationPolicy({mode: "approve_plan", planId: "scale"});
+  assert.equal(approvedPlan.unpublishedReschedulingEnabled, true);
+  assert.equal(approvedPlan.unpublishedReplacementEnabled, false);
+  const managed = social.optimizationPolicy({mode: "managed", planId: "managed_growth",
+    managedAuthorization: true});
+  assert.equal(managed.unpublishedReplacementEnabled, true);
+  assert.equal(managed.materialReplacementVisible, true);
+  assert.equal(managed.providerMutationsEnabled, false);
+});
+
+test("scheduled quality review is deterministic, evidence-aware, and never publishes", () => {
+  const version = social.contentItemVersion({businessUid: "biz", planId: "plan",
+    item: {...baseItem, variants: [{provider: "facebook", format: "feed",
+      copy: "ScaledCircle helps Maryland local businesses connect maps, Landing Pages, and tracked QR response.",
+      callToAction: "See the workflow", destinationUrl: "https://scaledcircle.com"}]}, now});
+  const assessment = social.assessScheduledContent({businessUid: "biz",
+    contentItemId: "item", versionRecord: version,
+    businessContext: {businessName: "ScaledCircle", services: ["Landing Pages"],
+      geography: ["Maryland"]}, performanceEvidence: [], now});
+  assert.equal(assessment.schemaVersion, "SocialContentQualityAssessmentV1");
+  assert.equal(assessment.variantAssessments[0].evidenceStatus, "initial_experiment");
+  assert.equal(assessment.variantAssessments[0].timing.confidence, "low");
+  assert.equal(Object.hasOwn(assessment, "providerMutationRequested"), false);
+});
+
+test("repetition detection flags repeated copy, CTA, and media before scheduling", () => {
+  const variant = {provider: "instagram", copy: "A useful local marketing workflow",
+    callToAction: "Learn more", mediaRevisionId: "media_v1"};
+  const result = social.repetitionAssessment({variant, recentVariants: [variant]});
+  assert.equal(result.repeated, true);
+  assert.equal(result.score, 0);
+});
+
+test("discovery guidance remains bounded and platform-specific", () => {
+  const instagram = social.discoveryRecommendation({variant: {provider: "instagram",
+    copy: "Maryland contractors can connect landing pages to tracked QR response.",
+    hashtags: Array.from({length: 18}, (_, index) => `tag${index}`)},
+  services: ["Landing Pages"], geography: ["Maryland"], brandTerms: ["ScaledCircle"]});
+  assert.equal(instagram.presentKeywords.includes("maryland"), true);
+  assert.equal(instagram.hashtagGuidance, "reduce_spammy_hashtag_block");
+  const facebook = social.discoveryRecommendation({variant: {provider: "facebook",
+    copy: "A useful explanation."}});
+  assert.equal(facebook.hashtagScore, null);
+});
+
+test("best-time recommendations label generic or missing evidence as low confidence", () => {
+  const insufficient = social.bestTimeRecommendation({provider: "x",
+    scheduledFor: "2030-01-02T14:00:00Z", now});
+  assert.equal(insufficient.confidence, "low");
+  assert.equal(insufficient.basis, "insufficient_evidence");
+  assert.equal(insufficient.shouldReschedule, false);
+  const evidenced = social.bestTimeRecommendation({provider: "x",
+    scheduledFor: "2030-01-02T14:00:00Z",
+    firstPartyWindows: [{startsAt: "2030-01-03T18:00:00Z", sampleSize: 12, score: 9}], now});
+  assert.equal(evidenced.confidence, "high");
+  assert.equal(evidenced.basis, "business_history");
+  assert.equal(evidenced.shouldReschedule, true);
+});
+
+test("provider post actions come only from authoritative per-post capability evidence", () => {
+  const unknown = social.postCapabilityProjection({provider: "x", providerPostId: "post"});
+  assert.deepEqual(social.availablePostActions({capability: unknown}).actions,
+    ["keep", "no_provider_mutation_available"]);
+  const editable = social.postCapabilityProjection({provider: "instagram", providerPostId: "post",
+    evidence: {authoritative: true, canEdit: true, canDelete: true, canReplace: true,
+      editWindowExpiresAt: "2030-01-02T12:00:00Z"}, now});
+  assert.deepEqual(social.availablePostActions({capability: editable}).actions,
+    ["keep", "edit", "improve", "replace", "create_follow_up", "delete",
+      "delete_and_replace"]);
+});
+
+test("expired edit windows never misrepresent delete and repost as edit", () => {
+  const expired = social.postCapabilityProjection({provider: "x", providerPostId: "post",
+    evidence: {authoritative: true, canEdit: true, canDelete: true, canReplace: true,
+      editWindowExpiresAt: "2029-12-31T12:00:00Z"}, now});
+  const actions = social.availablePostActions({capability: expired}).actions;
+  assert.equal(actions.includes("edit"), false);
+  assert.equal(actions.includes("delete_and_replace"), true);
+  assert.equal(actions.includes("create_follow_up"), true);
+});
+
+test("past-post rating separates creative quality from insufficient performance", () => {
+  const rating = social.ratePastPost({businessUid: "biz", provider: "youtube",
+    contentItemId: "video", creativeEvidence: {copyQuality: 80},
+    performanceSnapshot: {metrics: {views: {status: "unavailable", value: null}}}, now});
+  assert.equal(rating.creativeScore, 80);
+  assert.equal(rating.performanceScore, null);
+  assert.equal(rating.performanceEvidenceStatus, "insufficient_evidence");
+  assert.equal(rating.explicitBusinessApprovalRequired, true);
+  assert.equal(rating.providerMutationRequested, false);
+});
+
+test("past-post rating preserves deleted provider state and historical evidence", () => {
+  const rating = social.ratePastPost({businessUid: "biz", provider: "x",
+    contentItemId: "deleted-post", creativeEvidence: {copyQuality: 55},
+    performanceSnapshot: {metrics: {views: {status: "available", value: 14},
+      engagements: {status: "available", value: 2}}},
+    capability: social.postCapabilityProjection({provider: "x", providerPostId: "p1",
+      providerState: "deleted", evidence: {authoritative: true, canEdit: false,
+        canDelete: false, canReplace: true}, now}), now});
+  assert.equal(rating.providerState, "deleted");
+  assert.equal(rating.performanceEvidenceStatus, "available");
+  assert.equal(rating.providerMutationRequested, false);
+});
+
+test("replacement proposal is replay-safe and preserves immutable source evidence", () => {
+  const source = social.contentItemVersion({businessUid: "biz", planId: "plan",
+    item: baseItem, now});
+  const input = {businessUid: "biz", contentItemId: "item", sourceVersion: source,
+    replacementItem: {...baseItem, variants: [{provider: "x",
+      copy: "A stronger evidence-aware replacement."}]}, reason: "Weak generic hook",
+    providerPostId: "original-post", originalMetricsSnapshotId: "metrics-1", now};
+  const first = social.replacementProposal(input);
+  const second = social.replacementProposal(input);
+  assert.equal(first.id, second.id);
+  assert.equal(first.record.replacementVersion.version, 2);
+  assert.equal(first.record.providerPostId, "original-post");
+  assert.equal(first.record.originalMetricsSnapshotId, "metrics-1");
+  assert.equal(first.record.providerMutationRequested, false);
+  assert.equal(first.record.supersedesOnlyAfterApproval, true);
+});
+
+test("content health projection never enables provider cleanup mutations", () => {
+  const projection = social.contentHealthProjection({assessments: [
+    {qualityBand: "weak"}, {qualityBand: "strong"}], ratings: []});
+  assert.equal(projection.needsAttentionCount, 1);
+  assert.equal(projection.strongCount, 1);
+  assert.equal(projection.providerMutationsEnabled, false);
+});
+
+test("quality learning is tenant-isolated and refuses tiny samples", () => {
+  const result = social.qualityLearningComparison({businessUid: "biz",
+    assessments: [{businessUid: "biz", contentItemId: "one", score: 90},
+      {businessUid: "other", contentItemId: "two", score: 10}],
+    snapshots: [{businessUid: "biz", contentItemId: "one", metrics: {}},
+      {businessUid: "other", contentItemId: "two", metrics: {}}], now});
+  assert.equal(result.status, "insufficient_evidence");
+  assert.equal(result.sampleSize, 1);
+  assert.equal(result.crossTenantTrainingEnabled, false);
 });

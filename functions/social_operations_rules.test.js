@@ -9,6 +9,8 @@ const rules = fs.readFileSync(path.join(__dirname, "..", "firestore.rules"), "ut
 
 for (const collection of ["socialContentPlans", "socialContentItems", "socialContentVersions",
   "socialProviderReceipts", "socialPerformanceSnapshots", "socialLearningSignals",
+  "socialContentQualityAssessments", "socialPostCapabilitySnapshots",
+  "socialPastPostRatings", "socialContentReplacementProposals",
   "managedGrowthPlans", "emailContentPlans", "adConnections", "adAccounts",
   "adCampaignSnapshots", "adAccountHealth", "socialOAuthAttempts", "socialProviderConfigs"]) {
   test(`${collection} is server-only`, () => {

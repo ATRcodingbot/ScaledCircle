@@ -174,6 +174,12 @@ class _AdminSocialOperationsScreenState
               value['connectionProjectionCount'],
             ),
             _metric('Performance snapshots', value['performanceSnapshotCount']),
+            _metric(
+              'Content quality reviews',
+              value['contentQualityAssessmentCount'],
+            ),
+            _metric('Past-post ratings', value['pastPostRatingCount']),
+            _metric('Replacement proposals', value['replacementProposalCount']),
             for (final config
                 in (value['providerConfigs'] as List? ?? const [])
                     .whereType<Map>())
@@ -231,6 +237,10 @@ class _AdminSocialOperationsScreenState
                     _state(
                       'Bulk email delivery',
                       value['emailDeliveryEnabled'] == true,
+                    ),
+                    _state(
+                      'Provider cleanup mutations',
+                      value['providerCleanupMutationsEnabled'] == true,
                     ),
                     const Text(
                       'Tokens, passwords, private media, and content bodies are not shown.',

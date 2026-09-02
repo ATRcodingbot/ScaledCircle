@@ -33,6 +33,18 @@ void main() {
     expect(screen, isNot(contains('client secret')));
     expect(screen, isNot(contains('callback URL')));
     expect(screen, isNot(contains('Secret Manager')));
+    expect(screen, contains("_section('Content Health'"));
+    expect(screen, contains('Needs Attention'));
+    expect(screen, contains('Strong Posts'));
+    expect(screen, contains('Scheduled'));
+    expect(screen, contains('Past Posts'));
+    expect(screen, contains('Review scheduled content'));
+    expect(screen, contains('Rate past posts'));
+    expect(screen, contains('NO AUTO-DELETE'));
+    expect(
+      screen,
+      contains('Missing provider evidence stays unavailable—not zero.'),
+    );
   });
 
   test(
@@ -50,6 +62,8 @@ void main() {
       expect(service, contains('syncSocialReadOnlyPerformanceV1'));
       expect(service, contains('syncXSocialReadOnlyPerformanceV1'));
       expect(service, contains('syncMetaSocialReadOnlyPerformanceV1'));
+      expect(service, contains('reviewScheduledSocialContentV1'));
+      expect(service, contains('rateHistoricalSocialContentV1'));
       expect(service, contains("'managedAuthorization': false"));
       expect(service, isNot(contains('accessToken')));
       expect(service, isNot(contains('clientSecret')));

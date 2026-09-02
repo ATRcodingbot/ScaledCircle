@@ -485,6 +485,18 @@ service cloud.firestore {
     match /socialLearningSignals/{document=**} {
       allow read, write: if false;
     }
+    match /socialContentQualityAssessments/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialPostCapabilitySnapshots/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialPastPostRatings/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialContentReplacementProposals/{document=**} {
+      allow read, write: if false;
+    }
     match /managedGrowthPlans/{document=**} {
       allow read, write: if false;
     }
@@ -518,7 +530,6 @@ service cloud.firestore {
     match /socialProviderConfigs/{document=**} {
       allow read, write: if false;
     }
-
     // Areas and discovery preferences are separate from identity and billing.
     // Owners can read their sanitized projection; versioned writes and matching
     // flow through platform-core so clients cannot spoof role or match reasons.

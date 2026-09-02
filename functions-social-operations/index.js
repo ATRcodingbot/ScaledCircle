@@ -50,6 +50,13 @@ function readText(value, maximumLength = 500) {
   return typeof value === "string" ? value.trim().slice(0, maximumLength) : "";
 }
 
+function isoValue(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate().toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 async function requireVerifiedUser(request, message) {
   if (!request.auth) throw new HttpsError("unauthenticated", message);
   const user = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
@@ -100,13 +107,18 @@ exports.getSocialOperationsWorkspace = onCall(
   {enforceAppCheck: false, maxInstances: 6},
   async (request) => {
     const business = await requireSocialOperationsBusiness(request);
-    const [connections, plans, emailPlans, snapshots, metaAds, googleAds] = await Promise.all([
+    const [connections, plans, emailPlans, snapshots, metaAds, googleAds,
+      qualityAssessments, pastPostRatings] = await Promise.all([
       db.collection("socialConnections").doc(business.uid).collection("providers").get(),
       db.collection("socialContentPlans").where("businessUid", "==", business.uid).limit(10).get(),
       db.collection("emailContentPlans").where("businessUid", "==", business.uid).limit(10).get(),
       db.collection("socialPerformanceSnapshots").where("businessUid", "==", business.uid).limit(50).get(),
       db.collection("adAccountHealth").doc(`${business.uid}_meta_ads`).get(),
       db.collection("adAccountHealth").doc(`${business.uid}_google_ads`).get(),
+      db.collection("socialContentQualityAssessments")
+        .where("businessUid", "==", business.uid).limit(100).get(),
+      db.collection("socialPastPostRatings")
+        .where("businessUid", "==", business.uid).limit(100).get(),
     ]);
     const connectionMap = new Map(connections.docs.map((doc) => [doc.id, doc.data()]));
     const safeConnections = socialOperations.PROVIDERS.map((provider) =>
@@ -128,10 +140,173 @@ exports.getSocialOperationsWorkspace = onCall(
         snapshots: performance,
         now: Date.now(),
       }),
+      contentHealth: socialOperations.contentHealthProjection({
+        assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),
+        ratings: pastPostRatings.docs.map((doc) => ({id: doc.id, ...doc.data()})),
+      }),
+      contentQualityLearning: socialOperations.qualityLearningComparison({
+        businessUid: business.uid,
+        assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),
+        snapshots: performance,
+        now: Date.now(),
+      }),
       externalPublishingEnabled: false,
       adMutationsEnabled: false,
       emailDeliveryEnabled: false,
     };
+  },
+);
+
+exports.reviewScheduledSocialContentV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    const [profileSnapshot, itemSnapshots, versionSnapshots, performanceSnapshots] =
+      await Promise.all([
+        db.collection("businessGrowthProfiles").doc(business.uid).get(),
+        db.collection("socialContentItems").where("businessUid", "==", business.uid)
+          .limit(60).get(),
+        db.collection("socialContentVersions").where("businessUid", "==", business.uid)
+          .limit(120).get(),
+        db.collection("socialPerformanceSnapshots").where("businessUid", "==", business.uid)
+          .limit(100).get(),
+      ]);
+    const profile = profileSnapshot.data() || {};
+    const versions = new Map(versionSnapshots.docs.map((doc) => [doc.id, doc.data()]));
+    const performance = performanceSnapshots.docs.map((doc) => doc.data());
+    const batch = db.batch();
+    const assessments = [];
+    for (const item of itemSnapshots.docs) {
+      const data = item.data();
+      if (["published", "canceled"].includes(data.status)) continue;
+      const versionNumber = Number(data.currentVersion || 0);
+      const sourceVersionId = `${item.id}_v${versionNumber}`;
+      const source = versions.get(sourceVersionId);
+      if (!source) continue;
+      const recentVariants = versionSnapshots.docs
+        .filter((doc) => doc.id !== sourceVersionId)
+        .flatMap((doc) => doc.data().variants || []);
+      const assessment = socialOperations.assessScheduledContent({
+        businessUid: business.uid,
+        contentItemId: item.id,
+        versionRecord: {...source,
+          scheduledFor: isoValue(source.scheduledFor || data.scheduledFor)},
+        businessContext: {
+          businessName: profile.businessName,
+          services: profile.services || profile.selectedServices || [],
+          geography: [profile.serviceArea, profile.city, profile.county]
+            .filter((value) => typeof value === "string" && value.trim()),
+        },
+        recentVariants,
+        performanceEvidence: performance,
+        now: Date.now(),
+      });
+      const assessmentId = `${item.id}_v${versionNumber}`;
+      batch.set(db.collection("socialContentQualityAssessments").doc(assessmentId), {
+        ...assessment,
+        assessedAt: FieldValue.serverTimestamp(),
+        providerMutationsEnabled: false,
+      }, {merge: false});
+      assessments.push({id: assessmentId, ...assessment});
+    }
+    if (assessments.length) await batch.commit();
+    return {
+      assessedCount: assessments.length,
+      needsAttentionCount: assessments.filter((item) =>
+        ["weak", "needs_attention"].includes(item.qualityBand)).length,
+      readyToPublishCount: assessments.filter((item) => item.readyToPublish === true).length,
+      providerMutationsEnabled: false,
+      externalPublishingEnabled: false,
+    };
+  },
+);
+
+exports.rateHistoricalSocialContentV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    const requested = Number(request.data?.lookbackDays || 30);
+    const lookbackDays = [7, 30, 90].includes(requested) ? requested :
+      Math.max(1, Math.min(180, Math.round(requested)));
+    const [snapshotDocs, capabilityDocs] = await Promise.all([
+      db.collection("socialPerformanceSnapshots").where("businessUid", "==", business.uid)
+        .limit(100).get(),
+      db.collection("socialPostCapabilitySnapshots").where("businessUid", "==", business.uid)
+        .limit(100).get(),
+    ]);
+    const cutoff = Date.now() - lookbackDays * 86400000;
+    const capabilityMap = new Map(capabilityDocs.docs.map((doc) => {
+      const data = doc.data();
+      return [`${data.provider}_${data.providerPostId || data.contentItemId}`, data];
+    }));
+    const ratings = [];
+    const batch = db.batch();
+    for (const snapshot of snapshotDocs.docs) {
+      const data = snapshot.data();
+      const observedAt = isoValue(data.observedAt) || isoValue(data.createdAt);
+      if (observedAt && new Date(observedAt).getTime() < cutoff) continue;
+      const key = `${data.provider}_${data.providerPostId || data.contentItemId}`;
+      const capabilityData = capabilityMap.get(key);
+      const capability = capabilityData ? socialOperations.postCapabilityProjection({
+        provider: data.provider,
+        providerPostId: data.providerPostId,
+        providerState: capabilityData.providerState,
+        evidence: {...capabilityData, authoritative: true},
+        observedAt: isoValue(capabilityData.observedAt) || Date.now(),
+      }) : socialOperations.postCapabilityProjection({provider: data.provider,
+        providerPostId: data.providerPostId});
+      const rating = socialOperations.ratePastPost({businessUid: business.uid,
+        provider: data.provider, contentItemId: data.contentItemId || snapshot.id,
+        performanceSnapshot: data, capability, now: Date.now()});
+      const ratingId = `${business.uid}_${snapshot.id}_${lookbackDays}`.slice(0, 1500);
+      batch.set(db.collection("socialPastPostRatings").doc(ratingId), {
+        ...rating,
+        lookbackDays,
+        ratedAt: FieldValue.serverTimestamp(),
+      }, {merge: false});
+      ratings.push(rating);
+    }
+    if (ratings.length) await batch.commit();
+    return {lookbackDays, ratedCount: ratings.length,
+      insufficientPerformanceEvidenceCount: ratings.filter((item) =>
+        item.performanceEvidenceStatus === "insufficient_evidence").length,
+      providerMutationsEnabled: false};
+  },
+);
+
+exports.proposeScheduledSocialReplacementV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 4},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    const contentItemId = readText(request.data?.contentItemId, 500);
+    const itemSnapshot = await db.collection("socialContentItems").doc(contentItemId).get();
+    const item = itemSnapshot.data();
+    if (!item || item.businessUid !== business.uid) {
+      throw new HttpsError("permission-denied", "This scheduled item is not available.");
+    }
+    if (["published", "canceled"].includes(item.status)) {
+      throw new HttpsError("failed-precondition", "Only unpublished content can be replaced here.");
+    }
+    const sourceVersion = Number(item.currentVersion || 0);
+    const sourceSnapshot = await db.collection("socialContentVersions")
+      .doc(`${contentItemId}_v${sourceVersion}`).get();
+    let proposal;
+    try {
+      proposal = socialOperations.replacementProposal({businessUid: business.uid,
+        contentItemId, sourceVersion: sourceSnapshot.data(),
+        replacementItem: request.data?.replacementItem,
+        reason: request.data?.reason, now: Date.now()});
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "Review the replacement draft and try again.");
+    }
+    await db.collection("socialContentReplacementProposals").doc(proposal.id).set({
+      ...proposal.record,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: false});
+    return {proposalId: proposal.id, status: proposal.record.status,
+      sourceVersion, replacementVersion: proposal.record.replacementVersion.version,
+      providerMutationRequested: false, externalPublishingEnabled: false};
   },
 );
 
@@ -305,13 +480,17 @@ exports.getSocialOperationsAdminSummary = onCall(
     if (!context.isAdmin) {
       throw new HttpsError("permission-denied", "Administrator authority is required.");
     }
-    const [plans, jobs, connections, snapshots, configs] = await Promise.all([
+    const [plans, jobs, connections, snapshots, configs, qualityAssessments,
+      pastPostRatings, replacementProposals] = await Promise.all([
       db.collection("socialContentPlans").count().get(),
       db.collection("socialPublishingJobs").count().get(),
       db.collectionGroup("providers").limit(100).get(),
       db.collection("socialPerformanceSnapshots").count().get(),
       db.collection("socialProviderConfigs").where("environment", "==", runtimeEnvironment())
         .limit(10).get(),
+      db.collection("socialContentQualityAssessments").count().get(),
+      db.collection("socialPastPostRatings").count().get(),
+      db.collection("socialContentReplacementProposals").count().get(),
     ]);
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
@@ -344,6 +523,10 @@ exports.getSocialOperationsAdminSummary = onCall(
         externalPublishingEnabled: false,
       })),
       performanceSnapshotCount: snapshots.data().count,
+      contentQualityAssessmentCount: qualityAssessments.data().count,
+      pastPostRatingCount: pastPostRatings.data().count,
+      replacementProposalCount: replacementProposals.data().count,
+      providerCleanupMutationsEnabled: false,
       externalPublishingEnabled: false,
       adMutationsEnabled: false,
       emailDeliveryEnabled: false,

@@ -10,6 +10,8 @@ class SocialOperationsWorkspace {
   List<Map<String, dynamic>> get plans => _maps(data['plans']);
   List<Map<String, dynamic>> get emailPlans => _maps(data['emailPlans']);
   List<Map<String, dynamic>> get ads => _maps(data['ads']);
+  Map<String, dynamic> get contentHealth =>
+      Map<String, dynamic>.from(data['contentHealth'] as Map? ?? const {});
   Map<String, dynamic> get learning =>
       Map<String, dynamic>.from(data['weeklyLearning'] as Map? ?? const {});
 
@@ -74,6 +76,20 @@ class SocialOperationsService {
     final result = await _functions.httpsCallable(callableName).call({
       'provider': provider,
     });
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> reviewScheduledContent() async {
+    final result = await _functions
+        .httpsCallable('reviewScheduledSocialContentV1')
+        .call();
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> ratePastPosts(int lookbackDays) async {
+    final result = await _functions
+        .httpsCallable('rateHistoricalSocialContentV1')
+        .call({'lookbackDays': lookbackDays});
     return Map<String, dynamic>.from(result.data as Map);
   }
 

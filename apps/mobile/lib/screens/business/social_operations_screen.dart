@@ -17,6 +17,8 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   final _service = SocialOperationsService();
   SocialOperationsWorkspace? _workspace;
   bool _loading = true;
+  bool _reviewingContent = false;
+  bool _ratingPosts = false;
   String? _error;
 
   @override
@@ -505,6 +507,62 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     }
   }
 
+  Future<void> _reviewScheduledContent() async {
+    if (_reviewingContent) return;
+    setState(() => _reviewingContent = true);
+    try {
+      final result = await _service.reviewScheduledContent();
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${result['assessedCount'] ?? 0} unpublished item(s) reviewed. Nothing was changed or published.',
+            ),
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'Content review is unavailable.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _reviewingContent = false);
+    }
+  }
+
+  Future<void> _ratePastPosts(int lookbackDays) async {
+    if (_ratingPosts) return;
+    setState(() => _ratingPosts = true);
+    try {
+      final result = await _service.ratePastPosts(lookbackDays);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${result['ratedCount'] ?? 0} historical item(s) reviewed for the last $lookbackDays days. No provider post was changed.',
+            ),
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'Past-post review is unavailable.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _ratingPosts = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -553,6 +611,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           const SizedBox(height: 16),
           _section('Connections', _connections(workspace, wide)),
           _section('30-Day Plan', _plans(workspace)),
+          _section('Content Health', _contentHealth(workspace)),
           _section("What's Working", _learning(workspace)),
           if (workspace.managedGrowth)
             _section('30-Day Email Content', _email(workspace)),
@@ -734,6 +793,142 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       ),
     );
   }
+
+  Widget _contentHealth(SocialOperationsWorkspace workspace) {
+    final health = workspace.contentHealth;
+    final scheduled = (health['scheduled'] as List? ?? const [])
+        .whereType<Map>()
+        .toList(growable: false);
+    final pastPosts = (health['pastPosts'] as List? ?? const [])
+        .whereType<Map>()
+        .toList(growable: false);
+    final needsAttention =
+        (health['needsAttentionCount'] as num?)?.toInt() ?? 0;
+    final strong = (health['strongCount'] as num?)?.toInt() ?? 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _healthMetric(
+              'Needs Attention',
+              needsAttention,
+              Icons.warning_amber,
+            ),
+            _healthMetric('Strong Posts', strong, Icons.star_outline),
+            _healthMetric('Scheduled', scheduled.length, Icons.schedule),
+            _healthMetric('Past Posts', pastPosts.length, Icons.history),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Would you be proud to have this represent your Business?',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'ScaledCircle checks relevance, hook, copy, CTA, visual quality, repetition, platform fit, discovery language, and timing. Recommendations never change or remove provider content automatically.',
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: _reviewingContent
+                          ? null
+                          : _reviewScheduledContent,
+                      icon: const Icon(Icons.fact_check_outlined),
+                      label: Text(
+                        _reviewingContent
+                            ? 'Reviewing…'
+                            : 'Review scheduled content',
+                      ),
+                    ),
+                    PopupMenuButton<int>(
+                      enabled: !_ratingPosts,
+                      onSelected: _ratePastPosts,
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(value: 7, child: Text('Last 7 days')),
+                        PopupMenuItem(value: 30, child: Text('Last 30 days')),
+                        PopupMenuItem(value: 90, child: Text('Last 90 days')),
+                      ],
+                      child: Chip(
+                        avatar: const Icon(Icons.analytics_outlined),
+                        label: Text(
+                          _ratingPosts ? 'Reviewing…' : 'Rate past posts',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        for (final assessment in scheduled.take(6))
+          _qualityCard(Map<String, dynamic>.from(assessment)),
+        for (final rating in pastPosts.take(6))
+          _pastPostCard(Map<String, dynamic>.from(rating)),
+        if (scheduled.isEmpty && pastPosts.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.health_and_safety_outlined),
+              title: Text('No content needs attention yet'),
+              subtitle: Text(
+                'Review scheduled content or select a past-post lookback. Missing provider evidence stays unavailable—not zero.',
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _healthMetric(String label, int value, IconData icon) => SizedBox(
+    width: 170,
+    child: Card(
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(
+          '$value',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        subtitle: Text(label),
+      ),
+    ),
+  );
+
+  Widget _qualityCard(Map<String, dynamic> assessment) => Card(
+    child: ListTile(
+      leading: CircleAvatar(child: Text('${assessment['score'] ?? '—'}')),
+      title: Text('${assessment['recommendation'] ?? 'keep'}'.toUpperCase()),
+      subtitle: Text(
+        '${assessment['qualityBand'] ?? 'unrated'} · Business approval is required before any replacement, reschedule, or removal.',
+      ),
+      trailing: const Chip(label: Text('REVIEW ONLY')),
+    ),
+  );
+
+  Widget _pastPostCard(Map<String, dynamic> rating) => Card(
+    child: ListTile(
+      leading: const Icon(Icons.history),
+      title: Text(
+        '${rating['provider'] ?? 'Provider'} · ${rating['overallRecommendation'] ?? 'keep'}',
+      ),
+      subtitle: Text(
+        'Creative: ${rating['creativeScore'] ?? 'Unavailable'} · Performance: ${rating['performanceScore'] ?? 'Insufficient evidence'}',
+      ),
+      trailing: const Chip(label: Text('NO AUTO-DELETE')),
+    ),
+  );
 
   Widget _email(SocialOperationsWorkspace workspace) => Card(
     child: ListTile(
