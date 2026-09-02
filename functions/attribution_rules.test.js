@@ -18,7 +18,8 @@ for (const collection of ["responseAssets", "responseInteractions", "attribution
 
 test("public response traffic is routed through a Function, not Firestore Rules", () => {
   const firebase = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "firebase.json"), "utf8"));
-  assert.deepEqual(firebase.hosting.rewrites[0], {
+  const responseRewrite = firebase.hosting.rewrites.find((rewrite) => rewrite.source === "/r");
+  assert.deepEqual(responseRewrite, {
     source: "/r", function: {functionId: "resolveTrackedResponse", region: "us-east1"},
   });
 });
