@@ -91,6 +91,132 @@ test("X callback exchanges with PKCE and returns only safe identity metadata", a
   assert.match(String(calls[0].options.body), /code_verifier=/);
 });
 
+test("Meta callback returns the exact owned Page and linked professional account safely", async () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "meta",
+    config: config("meta"), encryptionKey: key, now: 1000});
+  const responses = [
+    {access_token: "short-secret"},
+    {access_token: "long-secret", expires_in: 3600},
+    {data: oauth.PROVIDER_SCOPES.meta.map((permission) => ({permission, status: "granted"}))},
+    {data: [{id: "1198660363339503", name: "Scaled Circle", access_token: "page-secret",
+      tasks: ["ANALYZE"]}]},
+    {id: "1198660363339503", name: "Scaled Circle",
+      instagram_business_account: {id: "17841441730285620",
+        username: "scaledcircleapp", name: "Scaled Circle"}},
+  ];
+  const completed = await oauth.completeExchange({attempt: attempt.record, code: "code",
+    config: config("meta"), clientSecret: "client-secret", encryptionKey: key,
+    fetchImpl: async () => ({ok: true, json: async () => responses.shift()}), now: 2000});
+  assert.equal(completed.status, "identity_pending");
+  assert.deepEqual(completed.safeCandidates[0], {
+    candidateId: "meta_page_1198660363339503", provider: "meta",
+    accountDisplayName: "Scaled Circle", accountType: "facebook_page", handle: null,
+    linkedAccountDisplayName: "Scaled Circle", linkedHandle: "scaledcircleapp",
+    capabilities: {profile: true, analytics: true, publishText: false,
+      publishImage: false, publishVideo: false, schedule: false},
+  });
+  assert.equal(JSON.stringify(completed).includes("page-secret"), false);
+  assert.equal(JSON.stringify(completed).includes("long-secret"), false);
+});
+
+test("Meta callback resolves the exact granularly selected Page when me/accounts is empty", async () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "meta",
+    config: config("meta"), encryptionKey: key, now: 1000});
+  const responses = [
+    {access_token: "short-secret"},
+    {access_token: "long-secret", expires_in: 3600},
+    {data: oauth.PROVIDER_SCOPES.meta.map((permission) => ({permission, status: "granted"}))},
+    {data: []},
+    {data: {granular_scopes: [
+      {scope: "pages_show_list", target_ids: ["1198660363339503"]},
+      {scope: "instagram_basic", target_ids: ["17841441730285620"]},
+      {scope: "read_insights", target_ids: ["1198660363339503", "17841441730285620"]},
+    ]}},
+    {id: "1198660363339503", name: "Scaled Circle",
+      instagram_business_account: {id: "17841441730285620",
+        username: "scaledcircleapp", name: "Scaled Circle"}},
+  ];
+  const calls = [];
+  const completed = await oauth.completeExchange({attempt: attempt.record, code: "code",
+    config: config("meta"), clientSecret: "client-secret", encryptionKey: key,
+    fetchImpl: async (url) => {
+      calls.push(String(url));
+      return {ok: true, json: async () => responses.shift()};
+    }, now: 2000});
+  assert.equal(completed.status, "identity_pending");
+  assert.equal(completed.safeCandidates[0].candidateId, "meta_page_1198660363339503");
+  assert.equal(completed.safeCandidates[0].linkedHandle, "scaledcircleapp");
+  assert.equal(calls.some((url) => url.includes("debug_token")), true);
+  assert.equal(calls.some((url) => url.includes("1198660363339503")), true);
+  assert.equal(calls.some((url) => url.includes("17841441730285620") &&
+    !url.includes("debug_token")), false);
+  assert.equal(JSON.stringify(completed).includes("page-secret"), false);
+});
+
+test("Meta Page fallback excludes accounts-edge-only fields after provider code 100", async () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "meta",
+    config: config("meta"), encryptionKey: key, now: 1000});
+  const responses = [
+    {access_token: "short-secret"},
+    {access_token: "long-secret", expires_in: 3600},
+    {data: oauth.PROVIDER_SCOPES.meta.map((permission) => ({permission, status: "granted"}))},
+    {data: []},
+    {data: {granular_scopes: [
+      {scope: "pages_show_list", target_ids: ["1198660363339503"]},
+      {scope: "instagram_basic", target_ids: ["17841441730285620"]},
+    ]}},
+    {id: "1198660363339503", name: "Scaled Circle",
+      instagram_business_account: {id: "17841441730285620",
+        username: "scaledcircleapp", name: "Scaled Circle"}},
+  ];
+  const calls = [];
+  const completed = await oauth.completeExchange({attempt: attempt.record, code: "code",
+    config: config("meta"), clientSecret: "client-secret", encryptionKey: key,
+    fetchImpl: async (url) => {
+      calls.push(String(url));
+      return {ok: true, json: async () => responses.shift()};
+    }, now: 2000});
+  const pageCall = calls.find((url) => url.includes("1198660363339503") &&
+    !url.includes("debug_token"));
+  assert.match(decodeURIComponent(pageCall), /fields=id,name,instagram_business_account/);
+  assert.doesNotMatch(decodeURIComponent(pageCall), /access_token,tasks/);
+  assert.equal(completed.safeCandidates[0].linkedHandle, "scaledcircleapp");
+});
+
+test("Meta provider failures retain safe Graph diagnostics without credential material", async () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "meta",
+    config: config("meta"), encryptionKey: key, now: 1000});
+  const responses = [
+    {ok: true, body: {access_token: "short-secret"}},
+    {ok: true, body: {access_token: "long-secret", expires_in: 3600}},
+    {ok: true, body: {data: oauth.PROVIDER_SCOPES.meta.map((permission) =>
+      ({permission, status: "granted"}))}},
+    {ok: true, body: {data: []}},
+    {ok: true, body: {data: {granular_scopes: [
+      {scope: "pages_show_list", target_ids: ["1198660363339503"]},
+    ]}}},
+    {ok: false, status: 400, body: {error: {code: 100, error_subcode: 33,
+      message: "Unsupported get request. access_token=must-not-log"}}},
+  ];
+  await assert.rejects(() => oauth.completeExchange({attempt: attempt.record, code: "code",
+    config: config("meta"), clientSecret: "client-secret", encryptionKey: key,
+    fetchImpl: async () => {
+      const response = responses.shift();
+      return {ok: response.ok, status: response.status || 200,
+        json: async () => response.body};
+    }, now: 2000}), (error) => {
+    assert.equal(error.providerStage, "meta_page_identity");
+    assert.equal(error.providerEndpoint, "/{page-id}");
+    assert.equal(error.providerGraphVersion, "v23.0");
+    assert.equal(error.providerTokenClass, "long_lived_user");
+    assert.equal(error.selectedPageId, "1198660363339503");
+    assert.equal(error.providerCode, "100");
+    assert.equal(error.providerSubcode, "33");
+    assert.doesNotMatch(error.providerMessage, /must-not-log/);
+    return true;
+  });
+});
+
 test("identity confirmation stores encrypted credentials and never grants writes", () => {
   const attempt = oauth.createAttempt({businessUid: "biz", provider: "youtube",
     config: config("youtube"), encryptionKey: key, now: 1000});
@@ -144,4 +270,20 @@ test("Instagram reach remains available when returned by the provider", async ()
     ]})})});
   assert.equal(snapshots[0].metrics.reach, 30);
   assert.equal(snapshots[0].unavailable.includes("reach"), false);
+});
+
+test("missing Meta provider evidence remains unavailable instead of becoming zero", async () => {
+  const snapshots = await oauth.readHistoricalPerformance({provider: "meta",
+    surface: "facebook", tokens: {pageAccessToken: "token"}, account: {accountId: "page"},
+    fetchImpl: async () => ({ok: true, json: async () => ({data: []})})});
+  assert.deepEqual(snapshots, []);
+
+  const partial = await oauth.readHistoricalPerformance({provider: "meta",
+    surface: "facebook", tokens: {pageAccessToken: "token"}, account: {accountId: "page"},
+    fetchImpl: async () => ({ok: true, json: async () => ({data: [
+      {name: "page_impressions", values: [{value: 0}]},
+    ]})})});
+  assert.equal(partial[0].metrics.impressions, 0);
+  assert.equal(partial[0].metrics.engagements, null);
+  assert.equal(partial[0].metrics.profileActions, null);
 });

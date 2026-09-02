@@ -13,7 +13,10 @@ void main() {
       contains('Connect → Plan → Review → Schedule → Measure → Improve'),
     );
     expect(screen, contains('Read-only connection phase'));
-    expect(screen, contains('Connect read only'));
+    expect(screen, contains('Connect Facebook & Instagram'));
+    expect(screen, contains("return 'Connect \${_providerLabel(provider)}'"));
+    expect(screen, contains("return 'Reconnect'"));
+    expect(screen, contains('Use this account?'));
     expect(screen, contains("'Continue with \$providerLabel'"));
     expect(screen, contains("webOnlyWindowName: '_self'"));
     expect(screen, contains("'\$providerLabel authorization is ready'"));
@@ -26,6 +29,10 @@ void main() {
     expect(screen, contains('Ads — Read Only'));
     expect(screen, contains('Exact balance unavailable through connected API'));
     expect(screen, contains('constraints.maxWidth >= 820'));
+    expect(screen, isNot(contains('OAuth client ID')));
+    expect(screen, isNot(contains('client secret')));
+    expect(screen, isNot(contains('callback URL')));
+    expect(screen, isNot(contains('Secret Manager')));
   });
 
   test(
@@ -42,6 +49,7 @@ void main() {
       expect(service, contains('confirmSocialOAuthConnectionV1'));
       expect(service, contains('syncSocialReadOnlyPerformanceV1'));
       expect(service, contains('syncXSocialReadOnlyPerformanceV1'));
+      expect(service, contains('syncMetaSocialReadOnlyPerformanceV1'));
       expect(service, contains("'managedAuthorization': false"));
       expect(service, isNot(contains('accessToken')));
       expect(service, isNot(contains('clientSecret')));

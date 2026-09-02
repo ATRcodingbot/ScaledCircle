@@ -64,6 +64,7 @@ class SocialOperationsService {
     final callableName = switch (provider) {
       'x' => 'syncXSocialReadOnlyPerformanceV1',
       'youtube' => 'syncSocialReadOnlyPerformanceV1',
+      'facebook' || 'instagram' => 'syncMetaSocialReadOnlyPerformanceV1',
       _ => throw ArgumentError.value(
         provider,
         'provider',

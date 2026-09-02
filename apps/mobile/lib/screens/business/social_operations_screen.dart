@@ -244,6 +244,23 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   String _oauthProvider(String provider) =>
       provider == 'facebook' || provider == 'instagram' ? 'meta' : provider;
 
+  bool _connectionNeedsReconnect(String status) => const {
+    'expired',
+    'reauthorization_required',
+    'revoked',
+    'token_expired',
+  }.contains(status);
+
+  String _connectLabel(Map<String, dynamic> connection) {
+    final status = connection['status']?.toString() ?? 'disconnected';
+    if (_connectionNeedsReconnect(status)) return 'Reconnect';
+    final provider = connection['provider']?.toString() ?? '';
+    if (_oauthProvider(provider) == 'meta') {
+      return 'Connect Facebook & Instagram';
+    }
+    return 'Connect ${_providerLabel(provider)}';
+  }
+
   Future<void> _beginConnection(String provider) async {
     try {
       final result = await _service.beginReadOnlyConnection(
@@ -402,7 +419,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       final selected = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Confirm the exact account'),
+          title: const Text('Use this account?'),
           content: SizedBox(
             width: 520,
             child: Column(
@@ -653,7 +670,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                               onPressed: () => _beginConnection(
                                 connection['provider']?.toString() ?? '',
                               ),
-                              child: const Text('Connect read only'),
+                              child: Text(_connectLabel(connection)),
                             ),
                     ),
                 ],

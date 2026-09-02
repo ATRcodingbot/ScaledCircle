@@ -231,13 +231,22 @@ function assertAttempt(record, {provider, now = Date.now()} = {}) {
   return record;
 }
 
-async function fetchJson(fetchImpl, url, options = {}) {
+function safeProviderMessage(value) {
+  return text(value, 240)
+    .replace(/access_token=[^&\s]+/gi, "access_token=[redacted]")
+    .replace(/bearer\s+[^\s]+/gi, "Bearer [redacted]");
+}
+
+async function fetchJson(fetchImpl, url, options = {}, safeContext = {}) {
   const response = await fetchImpl(url, options);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error("social_provider_request_failed");
     error.providerStatus = response.status;
     error.providerCode = text(body?.error?.code || body?.error || body?.title, 100);
+    error.providerSubcode = text(body?.error?.error_subcode, 100) || null;
+    error.providerMessage = safeProviderMessage(body?.error?.message || body?.error_description || "");
+    Object.assign(error, safeContext);
     throw error;
   }
   return body;
@@ -252,28 +261,92 @@ function form(values) {
 }
 
 async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
-  const tokenUrl = new URL("https://graph.facebook.com/v23.0/oauth/access_token");
+  const graphVersion = "v23.0";
+  const graphBase = `https://graph.facebook.com/${graphVersion}`;
+  const tokenUrl = new URL(`${graphBase}/oauth/access_token`);
   tokenUrl.searchParams.set("client_id", config.clientId);
   tokenUrl.searchParams.set("client_secret", clientSecret);
   tokenUrl.searchParams.set("redirect_uri", config.redirectUri);
   tokenUrl.searchParams.set("code", code);
-  const short = await fetchJson(fetchImpl, tokenUrl);
-  const longUrl = new URL("https://graph.facebook.com/v23.0/oauth/access_token");
+  const short = await fetchJson(fetchImpl, tokenUrl, {}, {
+    providerStage: "meta_code_exchange", providerEndpoint: "/oauth/access_token",
+    providerGraphVersion: graphVersion, providerObjectType: "oauth_code",
+    providerTokenClass: "authorization_code",
+  });
+  const longUrl = new URL(`${graphBase}/oauth/access_token`);
   longUrl.searchParams.set("grant_type", "fb_exchange_token");
   longUrl.searchParams.set("client_id", config.clientId);
   longUrl.searchParams.set("client_secret", clientSecret);
   longUrl.searchParams.set("fb_exchange_token", short.access_token);
-  const token = await fetchJson(fetchImpl, longUrl);
-  const permissionsUrl = new URL("https://graph.facebook.com/v23.0/me/permissions");
+  const token = await fetchJson(fetchImpl, longUrl, {}, {
+    providerStage: "meta_long_lived_exchange", providerEndpoint: "/oauth/access_token",
+    providerGraphVersion: graphVersion, providerObjectType: "oauth_token",
+    providerTokenClass: "short_lived_user",
+  });
+  const permissionsUrl = new URL(`${graphBase}/me/permissions`);
   permissionsUrl.searchParams.set("access_token", token.access_token);
-  const permissions = await fetchJson(fetchImpl, permissionsUrl);
-  const accountUrl = new URL("https://graph.facebook.com/v23.0/me/accounts");
-  accountUrl.searchParams.set("fields",
-    "id,name,access_token,tasks,instagram_business_account{id,username,name}");
+  const permissions = await fetchJson(fetchImpl, permissionsUrl, {}, {
+    providerStage: "meta_permissions", providerEndpoint: "/me/permissions",
+    providerGraphVersion: graphVersion, providerObjectType: "user_permissions",
+    providerTokenClass: "long_lived_user",
+  });
+  const grantedScopes = (permissions.data || [])
+    .filter((permission) => permission.status === "granted")
+    .map((permission) => text(permission.permission, 180)).filter(Boolean);
+  const accountFields = "id,name,access_token,tasks";
+  const pageIdentityFields = "id,name,instagram_business_account{id,username,name}";
+  const accountUrl = new URL(`${graphBase}/me/accounts`);
+  accountUrl.searchParams.set("fields", accountFields);
   accountUrl.searchParams.set("limit", "100");
   accountUrl.searchParams.set("access_token", token.access_token);
-  const accounts = await fetchJson(fetchImpl, accountUrl);
-  const candidates = (accounts.data || []).map((page) => ({
+  const accounts = await fetchJson(fetchImpl, accountUrl, {}, {
+    providerStage: "meta_page_enumeration", providerEndpoint: "/me/accounts",
+    providerGraphVersion: graphVersion, providerObjectType: "user_accounts_edge",
+    providerFields: accountFields, providerTokenClass: "long_lived_user", grantedScopes,
+  });
+  let pages = await Promise.all((accounts.data || []).map(async (page) => {
+    const pageId = text(page.id, 180);
+    const pageToken = text(page.access_token, 10000) || text(token.access_token, 10000);
+    const pageUrl = new URL(`${graphBase}/${encodeURIComponent(pageId)}`);
+    pageUrl.searchParams.set("fields", pageIdentityFields);
+    pageUrl.searchParams.set("access_token", pageToken);
+    const identity = await fetchJson(fetchImpl, pageUrl, {}, {
+      providerStage: "meta_page_identity", providerEndpoint: "/{page-id}",
+      providerGraphVersion: graphVersion, providerObjectType: "page",
+      providerFields: pageIdentityFields,
+      providerTokenClass: page.access_token ? "page" : "long_lived_user",
+      selectedPageId: pageId, grantedScopes,
+    });
+    return {...page, ...identity, access_token: text(page.access_token, 10000)};
+  }));
+  if (!pages.length) {
+    const debugUrl = new URL(`${graphBase}/debug_token`);
+    debugUrl.searchParams.set("input_token", token.access_token);
+    debugUrl.searchParams.set("access_token", `${config.clientId}|${clientSecret}`);
+    const debug = await fetchJson(fetchImpl, debugUrl, {}, {
+      providerStage: "meta_token_introspection", providerEndpoint: "/debug_token",
+      providerGraphVersion: graphVersion, providerObjectType: "user_token",
+      providerTokenClass: "app_access_token", grantedScopes,
+    });
+    const granularScopes = debug.data?.granular_scopes || [];
+    const pageScope = granularScopes.find((scope) =>
+      text(scope.scope, 180) === "pages_show_list") ||
+      granularScopes.find((scope) => text(scope.scope, 180) === "pages_read_engagement");
+    const selectedPageIds = [...new Set((Array.isArray(pageScope?.target_ids) ?
+      pageScope.target_ids : []).map((id) => text(id, 180)).filter(Boolean))];
+    pages = await Promise.all(selectedPageIds.map(async (pageId) => {
+      const pageUrl = new URL(`${graphBase}/${encodeURIComponent(pageId)}`);
+      pageUrl.searchParams.set("fields", pageIdentityFields);
+      pageUrl.searchParams.set("access_token", token.access_token);
+      return fetchJson(fetchImpl, pageUrl, {}, {
+        providerStage: "meta_page_identity", providerEndpoint: "/{page-id}",
+        providerGraphVersion: graphVersion, providerObjectType: "page",
+        providerFields: pageIdentityFields, providerTokenClass: "long_lived_user",
+        selectedPageId: pageId, grantedScopes,
+      });
+    }));
+  }
+  const candidates = pages.map((page) => ({
     candidateId: `meta_page_${text(page.id, 180)}`,
     provider: "meta",
     accountId: text(page.id, 180),
@@ -288,9 +361,7 @@ async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
     expiresIn: Number(token.expires_in || 0) || null,
     capabilities: {profile: true, analytics: true},
   })).filter((candidate) => candidate.accountId && candidate.accountDisplayName);
-  return {candidates, scopes: (permissions.data || [])
-    .filter((permission) => permission.status === "granted")
-    .map((permission) => text(permission.permission, 180)).filter(Boolean)};
+  return {candidates, scopes: grantedScopes};
 }
 
 async function exchangeX({code, verifier, config, clientSecret, fetchImpl}) {
@@ -486,13 +557,18 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
   url.searchParams.set("period", "days_28");
   url.searchParams.set("access_token", pageToken);
   const body = await fetchJson(fetchImpl, url);
-  const metric = Object.fromEntries((body.data || []).map((item) =>
-    [item.name, Number(item.values?.at(-1)?.value || 0)]));
+  const providerMetrics = Array.isArray(body.data) ? body.data : [];
+  if (!providerMetrics.length) return [];
+  const metric = Object.fromEntries(providerMetrics.map((item) => {
+    const raw = item.values?.at(-1)?.value;
+    const value = raw == null || !Number.isFinite(Number(raw)) ? null : Number(raw);
+    return [item.name, value];
+  }));
   return [{providerObjectId: text(targetId, 180), observedAtMillis: now,
     periodStart: utcDate(28, now), periodEnd: utcDate(0, now),
-    metrics: instagram ? {views: metric.views ?? 0, reach: metric.reach ?? 0,
-      profileActions: metric.profile_views ?? 0} : {impressions: metric.page_impressions ?? 0,
-      engagements: metric.page_post_engagements ?? 0, profileActions: metric.page_views_total ?? 0},
+    metrics: instagram ? {views: metric.views ?? null, reach: metric.reach ?? null,
+      profileActions: metric.profile_views ?? null} : {impressions: metric.page_impressions ?? null,
+      engagements: metric.page_post_engagements ?? null, profileActions: metric.page_views_total ?? null},
     unavailable: instagram ? ["clicks", "saves", "leads", "conversions"] :
       ["reach", "clicks", "saves", "leads", "conversions"]}];
 }

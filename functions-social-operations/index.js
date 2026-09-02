@@ -14,6 +14,7 @@ const db = getFirestore();
 setGlobalOptions({region: "us-east1"});
 
 const socialOAuthEncryptionKey = defineSecret("SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY");
+const metaSocialAppSecret = defineSecret("META_SOCIAL_APP_SECRET");
 const youtubeSocialClientSecret = defineSecret("YOUTUBE_SOCIAL_CLIENT_SECRET");
 const xSocialClientSecret = defineSecret("X_SOCIAL_CLIENT_SECRET");
 
@@ -27,6 +28,8 @@ function providerConfigRef(provider, environment = runtimeEnvironment()) {
 }
 
 const providerSecretBindings = Object.freeze({
+  meta: Object.freeze({secret: metaSocialAppSecret,
+    secretName: "META_SOCIAL_APP_SECRET"}),
   youtube: Object.freeze({secret: youtubeSocialClientSecret,
     secretName: "YOUTUBE_SOCIAL_CLIENT_SECRET"}),
   x: Object.freeze({secret: xSocialClientSecret,
@@ -614,6 +617,17 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
         failure: readText(error?.message || error, 120),
         providerStatus: Number(error?.providerStatus || 0) || null,
         providerCode: readText(error?.providerCode, 100) || null,
+        providerSubcode: readText(error?.providerSubcode, 100) || null,
+        providerMessage: readText(error?.providerMessage, 240) || null,
+        providerStage: readText(error?.providerStage, 80) || null,
+        providerEndpoint: readText(error?.providerEndpoint, 120) || null,
+        providerGraphVersion: readText(error?.providerGraphVersion, 40) || null,
+        providerObjectType: readText(error?.providerObjectType, 80) || null,
+        providerFields: readText(error?.providerFields, 240) || null,
+        providerTokenClass: readText(error?.providerTokenClass, 80) || null,
+        selectedPageId: readText(error?.selectedPageId, 180) || null,
+        grantedScopes: Array.isArray(error?.grantedScopes) ?
+          error.grantedScopes.map((scope) => readText(scope, 180)).filter(Boolean) : [],
       });
       const exchangeAlreadyInProgress = String(error?.message || error)
         .includes("social_oauth_exchange_in_progress");
@@ -644,6 +658,12 @@ exports.socialOAuthXCallbackV1 = onRequest(
   {maxInstances: 4, secrets: [socialOAuthEncryptionKey,
     providerSecretBinding("x").secret]},
   socialOAuthCallbackHandler("x", providerSecretBinding("x").secret),
+);
+
+exports.socialOAuthMetaCallbackV1 = onRequest(
+  {maxInstances: 4, secrets: [socialOAuthEncryptionKey,
+    providerSecretBinding("meta").secret]},
+  socialOAuthCallbackHandler("meta", providerSecretBinding("meta").secret),
 );
 
 function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretParameter) {
@@ -749,4 +769,10 @@ exports.syncXSocialReadOnlyPerformanceV1 = onCall(
   {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey,
     providerSecretBinding("x").secret]},
   syncSocialReadOnlyPerformanceHandler("x", providerSecretBinding("x").secret),
+);
+
+exports.syncMetaSocialReadOnlyPerformanceV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey,
+    providerSecretBinding("meta").secret]},
+  syncSocialReadOnlyPerformanceHandler("meta", providerSecretBinding("meta").secret),
 );
