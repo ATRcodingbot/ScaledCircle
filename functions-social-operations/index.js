@@ -8,6 +8,7 @@ const {defineSecret} = require("firebase-functions/params");
 const socialOperations = require("./social_operations");
 const socialOAuth = require("./social_oauth");
 const subscriptionEntitlements = require("./subscription_entitlements");
+const scaledCircleLaunchPlan = require("./scaledcircle_launch_plan");
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -108,7 +109,7 @@ exports.getSocialOperationsWorkspace = onCall(
   async (request) => {
     const business = await requireSocialOperationsBusiness(request);
     const [connections, plans, emailPlans, snapshots, metaAds, googleAds,
-      qualityAssessments, pastPostRatings] = await Promise.all([
+      qualityAssessments, pastPostRatings, profileSnapshot] = await Promise.all([
       db.collection("socialConnections").doc(business.uid).collection("providers").get(),
       db.collection("socialContentPlans").where("businessUid", "==", business.uid).limit(10).get(),
       db.collection("emailContentPlans").where("businessUid", "==", business.uid).limit(10).get(),
@@ -119,6 +120,7 @@ exports.getSocialOperationsWorkspace = onCall(
         .where("businessUid", "==", business.uid).limit(100).get(),
       db.collection("socialPastPostRatings")
         .where("businessUid", "==", business.uid).limit(100).get(),
+      db.collection("businessGrowthProfiles").doc(business.uid).get(),
     ]);
     const connectionMap = new Map(connections.docs.map((doc) => [doc.id, doc.data()]));
     const safeConnections = socialOperations.PROVIDERS.map((provider) =>
@@ -126,6 +128,8 @@ exports.getSocialOperationsWorkspace = onCall(
     const performance = snapshots.docs.map((doc) => ({id: doc.id, ...doc.data()}));
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
+      canonicalBusinessId: business.uid,
+      canonicalBusinessName: readText(profileSnapshot.data()?.businessName, 240) || null,
       planId: business.planId,
       managedGrowth: business.planId === "managed_growth",
       connections: safeConnections,
@@ -153,6 +157,12 @@ exports.getSocialOperationsWorkspace = onCall(
       externalPublishingEnabled: false,
       adMutationsEnabled: false,
       emailDeliveryEnabled: false,
+      internalPlanAlignment: runtimeEnvironment() === "staging" && business.isAdmin ? {
+        sourcePlanId: scaledCircleLaunchPlan.PLAN_ID,
+        sourceArtifact: scaledCircleLaunchPlan.SOURCE_ARTIFACT,
+        migrationAvailable: plans.size === 0,
+        canonicalBusinessId: business.uid,
+      } : null,
     };
   },
 );
@@ -186,6 +196,8 @@ exports.reviewScheduledSocialContentV1 = onCall(
       const recentVariants = versionSnapshots.docs
         .filter((doc) => doc.id !== sourceVersionId)
         .flatMap((doc) => doc.data().variants || []);
+      const itemPerformance = performance.filter((snapshot) =>
+        snapshot.contentItemId === item.id);
       const assessment = socialOperations.assessScheduledContent({
         businessUid: business.uid,
         contentItemId: item.id,
@@ -198,12 +210,17 @@ exports.reviewScheduledSocialContentV1 = onCall(
             .filter((value) => typeof value === "string" && value.trim()),
         },
         recentVariants,
-        performanceEvidence: performance,
+        performanceEvidence: itemPerformance,
         now: Date.now(),
       });
       const assessmentId = `${item.id}_v${versionNumber}`;
       batch.set(db.collection("socialContentQualityAssessments").doc(assessmentId), {
         ...assessment,
+        sourceVersionId,
+        versionId: source.versionId || `v${versionNumber}`,
+        planId: source.planId || data.planId,
+        campaignId: source.campaignId || data.campaignId || null,
+        scheduledFor: source.scheduledFor || data.scheduledFor || null,
         assessedAt: FieldValue.serverTimestamp(),
         providerMutationsEnabled: false,
       }, {merge: false});
@@ -307,6 +324,73 @@ exports.proposeScheduledSocialReplacementV1 = onCall(
     return {proposalId: proposal.id, status: proposal.record.status,
       sourceVersion, replacementVersion: proposal.record.replacementVersion.version,
       providerMutationRequested: false, externalPublishingEnabled: false};
+  },
+);
+
+exports.ingestScaledCircleLaunchPlanV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    if (runtimeEnvironment() !== "staging" || !business.isAdmin) {
+      throw new HttpsError("permission-denied", "This staging plan alignment is unavailable.");
+    }
+    const [connectionsSnapshot, existingPlan] = await Promise.all([
+      db.collection("socialConnections").doc(business.uid).collection("providers").get(),
+      db.collection("socialContentPlans").doc(scaledCircleLaunchPlan.PLAN_ID).get(),
+    ]);
+    const connections = new Map(connectionsSnapshot.docs.map((doc) => [doc.id, doc.data()]));
+    const required = ["facebook", "instagram", "x", "youtube"];
+    const normalizedHandle = (provider) => readText(connections.get(provider)?.handle, 180)
+      .toLowerCase().replace(/^@/, "");
+    if (required.some((provider) => connections.get(provider)?.status !== "connected_read_only") ||
+        connections.get("facebook")?.providerAccountId !== "meta_page_1198660363339503" ||
+        normalizedHandle("instagram") !== "scaledcircleapp" ||
+        normalizedHandle("x") !== "scaledcircle" ||
+        normalizedHandle("youtube") !== "scaledcircle") {
+      throw new HttpsError("failed-precondition",
+        "Confirm all four ScaledCircle read-only provider identities before aligning the plan.");
+    }
+    const migration = scaledCircleLaunchPlan.buildScaledCircleLaunchPlan({
+      businessUid: business.uid, subscriptionPlanId: business.planId, now: Date.now(),
+    });
+    if (existingPlan.exists) {
+      const existing = existingPlan.data() || {};
+      if (existing.businessUid !== business.uid ||
+          existing.contentHash !== migration.planRecord.contentHash) {
+        throw new HttpsError("already-exists",
+          "A different canonical record already uses this plan identity.");
+      }
+      return {canonicalBusinessId: business.uid, planId: migration.planId,
+        planVersionId: migration.planVersionId, campaignId: migration.campaignId,
+        itemCount: migration.content.length,
+        platformVersionCount: migration.content.reduce((sum, entry) =>
+          sum + entry.versionRecord.variants.length, 0), responseAssetCount: 0,
+        reused: true, externalPublishingEnabled: false};
+    }
+    const batch = db.batch();
+    batch.create(db.collection("socialContentPlans").doc(migration.planId), {
+      ...migration.planRecord, createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    for (const entry of migration.content) {
+      batch.create(db.collection("socialContentItems").doc(entry.itemId), {
+        ...entry.itemRecord,
+        scheduledFor: Timestamp.fromDate(new Date(entry.itemRecord.scheduledFor)),
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      });
+      batch.create(db.collection("socialContentVersions").doc(entry.versionRecordId), {
+        ...entry.versionRecord,
+        scheduledFor: Timestamp.fromDate(new Date(entry.versionRecord.scheduledFor)),
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    return {canonicalBusinessId: business.uid, planId: migration.planId,
+      planVersionId: migration.planVersionId, campaignId: migration.campaignId,
+      itemCount: migration.content.length,
+      platformVersionCount: migration.content.reduce((sum, entry) =>
+        sum + entry.versionRecord.variants.length, 0), responseAssetCount: 0,
+      reused: false, externalPublishingEnabled: false};
   },
 );
 

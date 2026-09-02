@@ -56,6 +56,7 @@ test("Social Operations exports the provider-free surface plus bounded read-only
     "getSocialOAuthAttemptV1",
     "getSocialOperationsAdminSummary",
     "getSocialOperationsWorkspace",
+    "ingestScaledCircleLaunchPlanV1",
     "proposeScheduledSocialReplacementV1",
     "rateHistoricalSocialContentV1",
     "reviewScheduledSocialContentV1",

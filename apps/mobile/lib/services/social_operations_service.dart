@@ -14,6 +14,10 @@ class SocialOperationsWorkspace {
       Map<String, dynamic>.from(data['contentHealth'] as Map? ?? const {});
   Map<String, dynamic> get learning =>
       Map<String, dynamic>.from(data['weeklyLearning'] as Map? ?? const {});
+  Map<String, dynamic>? get internalPlanAlignment =>
+      data['internalPlanAlignment'] is Map
+      ? Map<String, dynamic>.from(data['internalPlanAlignment'] as Map)
+      : null;
 
   static List<Map<String, dynamic>> _maps(dynamic value) =>
       (value as List? ?? const [])
@@ -164,6 +168,13 @@ class SocialOperationsService {
             startsOn.day,
           ).toIso8601String(),
         });
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> ingestScaledCircleLaunchPlan() async {
+    final result = await _functions
+        .httpsCallable('ingestScaledCircleLaunchPlanV1')
+        .call();
     return Map<String, dynamic>.from(result.data as Map);
   }
 

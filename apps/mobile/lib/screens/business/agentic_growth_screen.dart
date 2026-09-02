@@ -78,13 +78,8 @@ class _AgenticGrowthScreenState extends State<AgenticGrowthScreen> {
       _runResult = null;
     });
     try {
-      final day = DateTime.now()
-          .toUtc()
-          .toIso8601String()
-          .substring(0, 10)
-          .replaceAll('-', '');
       final result = await _service.runMarketingObserve(
-        'scaledcircle_observe_$day',
+        'current_social_evidence',
       );
       if (mounted) {
         setState(
@@ -253,8 +248,11 @@ class _AgenticGrowthScreenState extends State<AgenticGrowthScreen> {
                   '${item['recommendation'] ?? 'Review'} · ${item['platform'] ?? 'Social'}',
                 ),
                 subtitle: Text(
-                  item['reason']?.toString() ??
-                      'Review the supporting evidence.',
+                  'Item ${item['contentItemId'] ?? 'Unavailable'} · Version ${item['versionId'] ?? 'Unavailable'}\n'
+                  'Quality ${item['qualityScore'] ?? 'Unavailable'} · Performance ${item['performanceEvidenceState'] ?? 'UNAVAILABLE'} · Timing ${item['timingConfidence'] ?? 'LOW'}\n'
+                  '${item['reason'] ?? 'Review the supporting evidence.'}\n'
+                  '${item['discoveryNotes'] ?? 'No discovery evidence.'} ${item['hashtagNotes'] ?? ''}\n'
+                  'Repetition ${item['repetitionRisk'] ?? 'NOT_FLAGGED'}',
                 ),
                 trailing: item['founderActionNeeded'] == true
                     ? const Chip(label: Text('Needs review'))

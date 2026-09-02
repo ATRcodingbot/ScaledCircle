@@ -363,9 +363,12 @@ function platformVariant(input = {}) {
   return {provider, format: text(input.format, 60) || "feed", copy,
     mediaAssetId: text(input.mediaAssetId, 180) || null,
     mediaRevisionId: text(input.mediaRevisionId, 180) || null,
+    mediaRequirement: text(input.mediaRequirement, 1200) || null,
+    altText: text(input.altText, 1000) || null,
     callToAction: text(input.callToAction, 300) || null,
     destinationUrl: text(input.destinationUrl, 1200) || null,
     responseAssetId: text(input.responseAssetId, 180) || null,
+    responseAssetRequirement: text(input.responseAssetRequirement, 600) || null,
     hashtags: list(input.hashtags, 30, 80)};
 }
 

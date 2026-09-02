@@ -19,6 +19,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   bool _loading = true;
   bool _reviewingContent = false;
   bool _ratingPosts = false;
+  bool _aligningPlan = false;
   String? _error;
 
   @override
@@ -173,6 +174,34 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _alignExistingPlan() async {
+    if (_aligningPlan) return;
+    setState(() => _aligningPlan = true);
+    try {
+      final result = await _service.ingestScaledCircleLaunchPlan();
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${result['itemCount'] ?? 0} existing plan items aligned. Nothing was published.',
+            ),
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'Unable to align the existing plan.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _aligningPlan = false);
     }
   }
 
@@ -740,15 +769,18 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         .toList(growable: false),
   );
 
-  Widget _plans(SocialOperationsWorkspace workspace) => Column(
-    children: [
+  Widget _plans(SocialOperationsWorkspace workspace) {
+    final alignment = workspace.internalPlanAlignment;
+    final migrationAvailable = alignment?['migrationAvailable'] == true;
+    return Column(
+      children: [
       for (final plan in workspace.plans)
         Card(
           child: ListTile(
             leading: const Icon(Icons.calendar_month_outlined),
             title: Text(plan['goal']?.toString() ?? '30-day content plan'),
             subtitle: Text(
-              '${plan['items'] is List ? (plan['items'] as List).length : 0} calendar items · ${plan['status'] ?? 'ready for review'}',
+              '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',
             ),
             trailing: plan['status'] == 'ready_for_review'
                 ? FilledButton.tonal(
@@ -773,8 +805,31 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ),
         ),
       ),
-    ],
-  );
+      if (alignment != null)
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.verified_outlined),
+            title: Text(
+              migrationAvailable
+                  ? 'Existing ScaledCircle plan is ready to align'
+                  : 'Staging plan alignment verified',
+            ),
+            subtitle: Text(
+              migrationAvailable
+                  ? 'Use the maintained plan authority to preserve the existing launch-plan lineage in this workspace.'
+                  : 'Plan ${alignment['sourcePlanId']} · Canonical Business ${alignment['canonicalBusinessId']}',
+            ),
+            trailing: migrationAvailable
+                ? FilledButton.tonal(
+                    onPressed: _aligningPlan ? null : _alignExistingPlan,
+                    child: Text(_aligningPlan ? 'Aligning…' : 'Align Plan'),
+                  )
+                : const Chip(label: Text('ALIGNED')),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _learning(SocialOperationsWorkspace workspace) {
     final ready = workspace.learning['status'] == 'evidence_available';

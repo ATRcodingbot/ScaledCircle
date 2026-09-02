@@ -56,6 +56,7 @@ class _FakeAgenticGateway implements AgenticGrowthGateway {
   @override
   Future<Map<String, dynamic>> runMarketingObserve(String requestKey) async {
     observeCalls += 1;
+    expect(requestKey, 'current_social_evidence');
     return {'runId': 'run-one', 'recommendationCount': 0};
   }
 }

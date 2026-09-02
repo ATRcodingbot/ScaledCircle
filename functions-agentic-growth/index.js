@@ -47,6 +47,15 @@ function docs(snapshot) {
   return snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
 }
 
+function timeMillis(value) {
+  if (value && typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  const seconds = Number(value?.seconds ?? value?._seconds);
+  if (Number.isFinite(seconds)) return seconds * 1000;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 function evidenceState(snapshot) {
   if (!snapshot) return "NO_DATA";
   const raw = safeText(snapshot.availability || snapshot.status, 80).toLowerCase();
@@ -58,21 +67,40 @@ function evidenceState(snapshot) {
     "AVAILABLE" : "INSUFFICIENT_EVIDENCE";
 }
 
-function recommendationRecord({businessUid, assessment, performance, now}) {
+function recommendationRecord({businessUid, assessment, variantAssessment, performance, now}) {
   const contentItemId = safeText(assessment.contentItemId, 500) || assessment.id;
   const versionId = safeText(assessment.versionId || assessment.sourceVersionId, 500) || null;
-  const platform = safeText(assessment.platform || assessment.provider, 60) || "unknown";
-  const recommendation = safeText(assessment.recommendation, 40).toUpperCase() || "KEEP";
-  const score = Number(assessment.creativeQualityScore ?? assessment.overallScore);
+  const variant = variantAssessment && typeof variantAssessment === "object" ?
+    variantAssessment : assessment;
+  const platform = safeText(variant.platform || variant.provider, 60) || "unknown";
+  const recommendation = safeText(variant.recommendation || assessment.recommendation, 40)
+    .toUpperCase() || "KEEP";
+  const score = Number(variant.score ?? assessment.score ??
+    assessment.creativeQualityScore ?? assessment.overallScore);
   const creativeEvidence = Number.isFinite(score) ?
     `Creative quality ${Math.round(score)}/100.` : "Creative quality evidence is unavailable.";
   const performanceStatus = evidenceState(performance);
-  const timing = assessment.timing || {};
-  const repetition = assessment.repetition || {};
-  const discovery = assessment.discovery || {};
-  const reason = safeText(assessment.reason || assessment.summary, 700) ||
-    `${recommendation === "KEEP" ? "Keep" : "Review"} based on the current bounded quality assessment.`;
-  const source = {businessUid, contentItemId, versionId, platform, recommendation};
+  const timing = variant.timing || assessment.timing || {};
+  const repetition = variant.repetition || assessment.repetition || {};
+  const discovery = variant.discovery || assessment.discovery || {};
+  const dimensionScores = variant.scores && typeof variant.scores === "object" ?
+    variant.scores : {};
+  const weakDimensions = Object.entries(dimensionScores)
+    .filter(([, value]) => Number.isFinite(Number(value)) && Number(value) < 70)
+    .sort((left, right) => Number(left[1]) - Number(right[1]))
+    .slice(0, 3).map(([key]) => key);
+  const reason = safeText(variant.reason || assessment.reason || assessment.summary, 700) ||
+    (weakDimensions.length ?
+      `Review ${weakDimensions.join(", ")} before approval.` :
+      `${recommendation === "KEEP" ? "Keep" : "Review"} based on the current bounded quality assessment.`);
+  const discoveryNotes = discovery.keywords?.length ?
+    `Suggested natural terms: ${discovery.keywords.slice(0, 6).join(", ")}.` :
+    "No additional discovery-language evidence is available.";
+  const hashtagNotes = safeText(discovery.hashtagGuidance, 180) ||
+    "No platform-specific hashtag evidence is available.";
+  const source = {businessUid, contentItemId, versionId, platform, recommendation,
+    qualityScore: Number.isFinite(score) ? Math.round(score) : null,
+    immutableSourceHash: safeText(assessment.immutableSourceHash, 80) || null};
   return {
     id: stableId("agent_recommendation", source),
     record: {
@@ -82,13 +110,15 @@ function recommendationRecord({businessUid, assessment, performance, now}) {
       contentItemId,
       versionId,
       platform,
-      currentQualityState: safeText(assessment.qualityBand, 60).toUpperCase() || "UNAVAILABLE",
+      qualityScore: Number.isFinite(score) ? Math.round(score) : null,
+      currentQualityState: safeText(variant.qualityBand || assessment.qualityBand, 60)
+        .toUpperCase() || "UNAVAILABLE",
       creativeQualityEvidence: creativeEvidence,
       performanceEvidenceState: performanceStatus,
       timingConfidence: safeText(timing.confidence || assessment.timingConfidence, 20)
         .toUpperCase() || "LOW",
-      discoveryNotes: safeText(discovery.reason || assessment.discoveryNotes, 500) ||
-        "No additional discovery-language evidence is available.",
+      discoveryNotes,
+      hashtagNotes,
       repetitionRisk: repetition.repeated === true ? "FLAGGED" :
         safeText(assessment.repetitionRisk, 30).toUpperCase() || "NOT_FLAGGED",
       recommendation,
@@ -151,21 +181,30 @@ exports.getAgenticGrowthWorkspaceV1 = onCall(
       db.collection("agentHealth").doc(actor.uid).get(),
     ]);
     const profileMap = new Map(docs(profiles).map((item) => [item.agentType, item]));
+    const runRecords = docs(runs).sort((left, right) =>
+      timeMillis(right.createdAt) - timeMillis(left.createdAt));
+    const observationRecords = docs(observations).sort((left, right) =>
+      timeMillis(right.createdAt) - timeMillis(left.createdAt));
+    const prioritizedRecommendations = docs(recommendations).sort((left, right) =>
+      Number(left.qualityScore ?? 101) - Number(right.qualityScore ?? 101) ||
+      safeText(left.platform, 60).localeCompare(safeText(right.platform, 60)));
     return {schemaVersion: agentic.SCHEMA_VERSION, title: "AI Team",
       initialized: profiles.size > 0,
       agents: agentic.AGENT_TYPES.map((type) => ({type, ...SAFE_AGENT_LABELS[type],
         enabled: profileMap.get(type)?.enabled === true})),
-      runs: docs(runs).map((item) => ({id: item.id, status: item.status,
+      runs: runRecords.map((item) => ({id: item.id, status: item.status,
         agentType: item.agentType, createdAt: item.createdAt || null})),
-      observations: docs(observations).map((item) => ({id: item.id,
+      observations: observationRecords.map((item) => ({id: item.id,
         evidenceState: item.evidenceState, summary: item.safeSummary,
         createdAt: item.createdAt || null})),
-      recommendations: docs(recommendations).map((item) => ({id: item.id,
+      recommendations: prioritizedRecommendations.map((item) => ({id: item.id,
         contentItemId: item.contentItemId, versionId: item.versionId, platform: item.platform,
+        qualityScore: item.qualityScore,
         currentQualityState: item.currentQualityState,
         creativeQualityEvidence: item.creativeQualityEvidence,
         performanceEvidenceState: item.performanceEvidenceState,
         timingConfidence: item.timingConfidence, discoveryNotes: item.discoveryNotes,
+        hashtagNotes: item.hashtagNotes,
         repetitionRisk: item.repetitionRisk, recommendation: item.recommendation,
         reason: item.reason, founderActionNeeded: item.founderActionNeeded === true})),
       externalActionsEnabled: false, externalExecutionRouteCount: 0,
@@ -177,19 +216,10 @@ exports.runMarketingManagerObserveV1 = onCall(
   {enforceAppCheck: false, maxInstances: 1},
   async (request) => {
     const actor = await requireAgenticActor(request);
-    const requestKey = safeText(request.data?.requestKey, 160);
-    if (!/^[A-Za-z0-9_-]{12,160}$/.test(requestKey)) {
+    const requestedKey = safeText(request.data?.requestKey, 160);
+    if (!/^[A-Za-z0-9_-]{12,160}$/.test(requestedKey)) {
       throw new HttpsError("invalid-argument", "The review request is not valid.");
     }
-    const run = agentic.createAgentRun({businessUid: actor.uid,
-      agentType: "marketing_manager", requestKey});
-    const runRef = db.collection("agentRuns").doc(run.id);
-    const existing = await runRef.get();
-    if (existing.exists) return {runId: run.id, reused: true,
-      observationCount: Number(existing.data()?.observationCount || 0),
-      recommendationCount: Number(existing.data()?.recommendationCount || 0),
-      externalExecutionAllowed: false};
-
     const [assessmentsSnapshot, ratingsSnapshot, performanceSnapshot,
       plansSnapshot, connectionsSnapshot] = await Promise.all([
       db.collection("socialContentQualityAssessments").where("businessUid", "==", actor.uid)
@@ -204,12 +234,36 @@ exports.runMarketingManagerObserveV1 = onCall(
     const assessments = docs(assessmentsSnapshot);
     const ratings = docs(ratingsSnapshot);
     const performance = docs(performanceSnapshot);
+    const evidenceRevision = stableId("social_evidence", {
+      businessUid: actor.uid,
+      plans: docs(plansSnapshot).map((item) => [item.id, item.contentHash || null]),
+      assessments: assessments.map((item) => [item.id, item.immutableSourceHash || null]),
+      ratings: ratings.map((item) => item.id),
+      performance: performance.map((item) => [item.id, item.observedAt || null]),
+    });
+    const requestKey = requestedKey === "current_social_evidence" ? evidenceRevision : requestedKey;
+    const run = agentic.createAgentRun({businessUid: actor.uid,
+      agentType: "marketing_manager", requestKey});
+    const runRef = db.collection("agentRuns").doc(run.id);
+    const existing = await runRef.get();
+    if (existing.exists) return {runId: run.id, reused: true,
+      observationCount: Number(existing.data()?.observationCount || 0),
+      recommendationCount: Number(existing.data()?.recommendationCount || 0),
+      evidenceRevision, externalExecutionAllowed: false};
     const byContent = new Map(performance.map((item) => [item.contentItemId, item]));
     const now = Date.now();
-    const recommendations = assessments.map((assessment) => recommendationRecord({
-      businessUid: actor.uid, assessment,
-      performance: byContent.get(assessment.contentItemId), now,
-    }));
+    const recommendations = assessments.flatMap((assessment) => {
+      const variants = Array.isArray(assessment.variantAssessments) &&
+          assessment.variantAssessments.length ? assessment.variantAssessments : [assessment];
+      return variants.map((variantAssessment) => recommendationRecord({
+        businessUid: actor.uid, assessment, variantAssessment,
+        performance: byContent.get(assessment.contentItemId), now,
+      }));
+    }).sort((left, right) => {
+      const scoreDelta = Number(left.record.qualityScore ?? 101) -
+        Number(right.record.qualityScore ?? 101);
+      return scoreDelta || left.record.platform.localeCompare(right.record.platform);
+    });
     const evidenceStateValue = assessments.length || ratings.length || performance.length ?
       "AVAILABLE" : "NO_DATA";
     const observationSource = {businessUid: actor.uid, requestKey,
@@ -242,7 +296,7 @@ exports.runMarketingManagerObserveV1 = onCall(
     });
     return {runId: run.id, reused: false, observationCount: 1,
       recommendationCount: recommendations.length, evidenceState: evidenceStateValue,
-      externalExecutionAllowed: false, externalExecutionRouteCount: 0};
+      evidenceRevision, externalExecutionAllowed: false, externalExecutionRouteCount: 0};
   },
 );
 
@@ -256,8 +310,10 @@ exports.getAgenticGrowthAdminSummaryV1 = onCall(
       db.collection("agentRecommendations").limit(200).get(),
       db.collection("agentActions").limit(1).get(), db.collection("agentHealth").limit(200).get(),
     ]);
-    const runRecords = docs(runs);
-    const observationRecords = docs(observations);
+    const runRecords = docs(runs).sort((left, right) =>
+      timeMillis(right.createdAt) - timeMillis(left.createdAt));
+    const observationRecords = docs(observations).sort((left, right) =>
+      timeMillis(right.createdAt) - timeMillis(left.createdAt));
     return {schemaVersion: agentic.SCHEMA_VERSION, agentCount: profiles.size,
       runCount: runs.size, observationCount: observations.size,
       recommendationCount: recommendations.size, actionObjectCount: actions.size,

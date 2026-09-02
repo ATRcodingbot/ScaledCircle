@@ -39,6 +39,8 @@ void main() {
     expect(screen, contains('Scheduled'));
     expect(screen, contains('Past Posts'));
     expect(screen, contains('Review scheduled content'));
+    expect(screen, contains('Staging plan alignment verified'));
+    expect(screen, contains('Align Plan'));
     expect(screen, contains('Rate past posts'));
     expect(screen, contains('NO AUTO-DELETE'));
     expect(
@@ -64,6 +66,7 @@ void main() {
       expect(service, contains('syncMetaSocialReadOnlyPerformanceV1'));
       expect(service, contains('reviewScheduledSocialContentV1'));
       expect(service, contains('rateHistoricalSocialContentV1'));
+      expect(service, contains('ingestScaledCircleLaunchPlanV1'));
       expect(service, contains("'managedAuthorization': false"));
       expect(service, isNot(contains('accessToken')));
       expect(service, isNot(contains('clientSecret')));
