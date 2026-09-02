@@ -259,11 +259,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         return;
       }
       if (uri == null) {
+        final providerLabel = _providerLabel(provider);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Authorization is already in progress. Return from Google, then check and confirm.',
+                'Authorization is already in progress. Return from $providerLabel, then check and confirm.',
               ),
             ),
           );
@@ -272,7 +273,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       }
       final popupOpened = await launchUrl(uri, webOnlyWindowName: '_blank');
       if (mounted) {
-        await _showContinuation(uri, popupOpened: popupOpened);
+        await _showContinuation(
+          uri,
+          provider: provider,
+          popupOpened: popupOpened,
+        );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -293,15 +298,20 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     }
   }
 
-  Future<void> _showContinuation(Uri uri, {required bool popupOpened}) async {
+  Future<void> _showContinuation(
+    Uri uri, {
+    required String provider,
+    required bool popupOpened,
+  }) async {
     if (!mounted) return;
+    final providerLabel = _providerLabel(provider);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('YouTube authorization is ready'),
+        title: Text('$providerLabel authorization is ready'),
         content: Text(
           popupOpened
-              ? 'Complete Google consent in the opened tab. If it is unavailable, continue here in this tab.'
+              ? 'Complete $providerLabel consent in the opened tab. If it is unavailable, continue here in this tab.'
               : 'Your browser blocked the authorization window. Continue securely in this tab.',
         ),
         actions: [
@@ -314,7 +324,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               Navigator.pop(dialogContext);
               unawaited(launchUrl(uri, webOnlyWindowName: '_self'));
             },
-            child: const Text('Continue with Google'),
+            child: Text('Continue with $providerLabel'),
           ),
         ],
       ),
@@ -336,18 +346,25 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       }
       final uri = Uri.tryParse(attempt['authorizationUrl']?.toString() ?? '');
       if (uri == null) {
+        final providerLabel = _providerLabel(
+          connection['provider']?.toString() ?? '',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'The existing authorization is still open. Return from Google, then check and confirm.',
+                'The existing authorization is still open. Return from $providerLabel, then check and confirm.',
               ),
             ),
           );
         }
         return;
       }
-      await _showContinuation(uri, popupOpened: false);
+      await _showContinuation(
+        uri,
+        provider: connection['provider']?.toString() ?? '',
+        popupOpened: false,
+      );
     } on FirebaseFunctionsException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -553,95 +570,99 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     ),
   );
 
-  Widget _connections(SocialOperationsWorkspace workspace, bool wide) =>
-      GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: wide ? 4 : 2,
-        childAspectRatio: wide ? 1.55 : 1.25,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        children: workspace.connections
-            .map((connection) {
-              final status = connection['status']?.toString() ?? 'disconnected';
-              final connected = status == 'connected_read_only';
-              final authorizing =
-                  status == 'authorizing' || status == 'identity_pending';
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _providerLabel(connection['provider'].toString()),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const Spacer(),
-                      Text(
-                        connected
-                            ? 'Connected · Read only'
-                            : authorizing
-                            ? 'Authorizing'
-                            : 'Not connected',
-                      ),
-                      if (connected)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              [
-                                    connection['accountDisplayName'],
-                                    connection['handle'],
-                                  ]
-                                  .whereType<String>()
-                                  .where((value) => value.isNotEmpty)
-                                  .join(' · '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            TextButton(
-                              onPressed: () => _syncPerformance(
+  Widget _connections(
+    SocialOperationsWorkspace workspace,
+    bool wide,
+  ) => GridView.count(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    crossAxisCount: wide ? 4 : 2,
+    childAspectRatio: wide ? 1.55 : 1.25,
+    crossAxisSpacing: 8,
+    mainAxisSpacing: 8,
+    children: workspace.connections
+        .map((connection) {
+          final status = connection['status']?.toString() ?? 'disconnected';
+          final connected = status == 'connected_read_only';
+          final authorizing =
+              status == 'authorizing' || status == 'identity_pending';
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _providerLabel(connection['provider'].toString()),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const Spacer(),
+                  Text(
+                    connected
+                        ? 'Connected · Read only'
+                        : authorizing
+                        ? 'Authorizing'
+                        : 'Not connected',
+                  ),
+                  if (connected)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          [
+                                connection['accountDisplayName'],
+                                connection['handle'],
+                              ]
+                              .whereType<String>()
+                              .where((value) => value.isNotEmpty)
+                              .join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        TextButton(
+                          onPressed: () => _syncPerformance(
+                            connection['provider']?.toString() ?? '',
+                          ),
+                          child: const Text('Sync insights'),
+                        ),
+                      ],
+                    )
+                  else
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: authorizing
+                          ? Wrap(
+                              spacing: 4,
+                              children: [
+                                TextButton(
+                                  onPressed: () =>
+                                      _continueConnection(connection),
+                                  child: Text(
+                                    'Continue with ${_providerLabel(connection['provider']?.toString() ?? '')}',
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      _reviewConnection(connection),
+                                  child: const Text('Check & confirm'),
+                                ),
+                              ],
+                            )
+                          : TextButton(
+                              onPressed: () => _beginConnection(
                                 connection['provider']?.toString() ?? '',
                               ),
-                              child: const Text('Sync insights'),
+                              child: const Text('Connect read only'),
                             ),
-                          ],
-                        )
-                      else
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: authorizing
-                              ? Wrap(
-                                  spacing: 4,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          _continueConnection(connection),
-                                      child: const Text('Continue with Google'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () =>
-                                          _reviewConnection(connection),
-                                      child: const Text('Check & confirm'),
-                                    ),
-                                  ],
-                                )
-                              : TextButton(
-                                  onPressed: () => _beginConnection(
-                                    connection['provider']?.toString() ?? '',
-                                  ),
-                                  child: const Text('Connect read only'),
-                                ),
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            })
-            .toList(growable: false),
-      );
+                    ),
+                ],
+              ),
+            ),
+          );
+        })
+        .toList(growable: false),
+  );
 
   Widget _plans(SocialOperationsWorkspace workspace) => Column(
     children: [

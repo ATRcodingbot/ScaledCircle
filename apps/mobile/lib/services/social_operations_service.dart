@@ -61,9 +61,18 @@ class SocialOperationsService {
   }
 
   Future<Map<String, dynamic>> syncReadOnlyPerformance(String provider) async {
-    final result = await _functions
-        .httpsCallable('syncSocialReadOnlyPerformanceV1')
-        .call({'provider': provider});
+    final callableName = switch (provider) {
+      'x' => 'syncXSocialReadOnlyPerformanceV1',
+      'youtube' => 'syncSocialReadOnlyPerformanceV1',
+      _ => throw ArgumentError.value(
+        provider,
+        'provider',
+        'Read-only performance sync is not available for this provider.',
+      ),
+    };
+    final result = await _functions.httpsCallable(callableName).call({
+      'provider': provider,
+    });
     return Map<String, dynamic>.from(result.data as Map);
   }
 

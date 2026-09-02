@@ -14,9 +14,9 @@ void main() {
     );
     expect(screen, contains('Read-only connection phase'));
     expect(screen, contains('Connect read only'));
-    expect(screen, contains('Continue with Google'));
+    expect(screen, contains("'Continue with \$providerLabel'"));
     expect(screen, contains("webOnlyWindowName: '_self'"));
-    expect(screen, contains('YouTube authorization is ready'));
+    expect(screen, contains("'\$providerLabel authorization is ready'"));
     expect(screen, contains('Check & confirm'));
     expect(
       screen,
@@ -41,6 +41,7 @@ void main() {
       expect(service, contains('beginSocialOAuthConnectionV1'));
       expect(service, contains('confirmSocialOAuthConnectionV1'));
       expect(service, contains('syncSocialReadOnlyPerformanceV1'));
+      expect(service, contains('syncXSocialReadOnlyPerformanceV1'));
       expect(service, contains("'managedAuthorization': false"));
       expect(service, isNot(contains('accessToken')));
       expect(service, isNot(contains('clientSecret')));

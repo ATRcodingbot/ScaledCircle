@@ -15,6 +15,7 @@ setGlobalOptions({region: "us-east1"});
 
 const socialOAuthEncryptionKey = defineSecret("SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY");
 const youtubeSocialClientSecret = defineSecret("YOUTUBE_SOCIAL_CLIENT_SECRET");
+const xSocialClientSecret = defineSecret("X_SOCIAL_CLIENT_SECRET");
 
 function runtimeEnvironment() {
   return String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "")
@@ -28,6 +29,8 @@ function providerConfigRef(provider, environment = runtimeEnvironment()) {
 const providerSecretBindings = Object.freeze({
   youtube: Object.freeze({secret: youtubeSocialClientSecret,
     secretName: "YOUTUBE_SOCIAL_CLIENT_SECRET"}),
+  x: Object.freeze({secret: xSocialClientSecret,
+    secretName: "X_SOCIAL_CLIENT_SECRET"}),
 });
 
 function providerSecretBinding(provider) {
@@ -606,6 +609,12 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
           "The provider did not grant every required read-only permission.",
       }));
     } catch (error) {
+      console.warn("social_oauth_callback_failed", {
+        provider: expectedProvider,
+        failure: readText(error?.message || error, 120),
+        providerStatus: Number(error?.providerStatus || 0) || null,
+        providerCode: readText(error?.providerCode, 100) || null,
+      });
       const exchangeAlreadyInProgress = String(error?.message || error)
         .includes("social_oauth_exchange_in_progress");
       if (state && !exchangeAlreadyInProgress) {
@@ -629,6 +638,12 @@ exports.socialOAuthCallbackV1 = onRequest(
   {maxInstances: 4, secrets: [socialOAuthEncryptionKey,
     providerSecretBinding("youtube").secret]},
   socialOAuthCallbackHandler("youtube", providerSecretBinding("youtube").secret),
+);
+
+exports.socialOAuthXCallbackV1 = onRequest(
+  {maxInstances: 4, secrets: [socialOAuthEncryptionKey,
+    providerSecretBinding("x").secret]},
+  socialOAuthCallbackHandler("x", providerSecretBinding("x").secret),
 );
 
 function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretParameter) {
@@ -728,4 +743,10 @@ exports.syncSocialReadOnlyPerformanceV1 = onCall(
   {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey,
     providerSecretBinding("youtube").secret]},
   syncSocialReadOnlyPerformanceHandler("youtube", providerSecretBinding("youtube").secret),
+);
+
+exports.syncXSocialReadOnlyPerformanceV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 2, secrets: [socialOAuthEncryptionKey,
+    providerSecretBinding("x").secret]},
+  syncSocialReadOnlyPerformanceHandler("x", providerSecretBinding("x").secret),
 );
