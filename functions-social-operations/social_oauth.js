@@ -157,10 +157,11 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
   const codeChallenge = base64url(crypto.createHash("sha256").update(verifier).digest());
   const attemptId = digest(state);
   const aad = `${uid}:${normalized}:${attemptId}`;
+  const continueUrl = authorizationUrl({provider: normalized, config: valid, state, codeChallenge});
   return {
     attemptId,
     state,
-    authorizationUrl: authorizationUrl({provider: normalized, config: valid, state, codeChallenge}),
+    authorizationUrl: continueUrl,
     record: {
       schemaVersion: "SocialOAuthAttemptV1",
       businessUid: uid,
@@ -169,6 +170,8 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
       status: "authorizing",
       stateDigest: attemptId,
       verifierEnvelope: encryptJson({verifier}, encryptionKey, aad, randomBytes),
+      authorizationEnvelope: encryptJson({authorizationUrl: continueUrl}, encryptionKey,
+        `${aad}:authorization`, randomBytes),
       safeCandidates: [],
       candidateEnvelope: null,
       grantedScopes: [],
@@ -178,6 +181,23 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
       completedAtMillis: null,
     },
   };
+}
+
+function isReusableAttempt(record, {businessUid, provider, now = Date.now()} = {}) {
+  if (!record || record.businessUid !== text(businessUid, 180) ||
+      record.provider !== normalizeProvider(provider)) return false;
+  if (!["authorizing", "exchanging", "identity_pending"].includes(record.status)) return false;
+  return Number.isFinite(record.expiresAtMillis) && record.expiresAtMillis > now;
+}
+
+function continuationUrl(record, {businessUid, provider, attemptId, encryptionKey,
+  now = Date.now()} = {}) {
+  if (!isReusableAttempt(record, {businessUid, provider, now}) || record.status !== "authorizing" ||
+      !record.authorizationEnvelope) return null;
+  const aad = `${text(businessUid, 180)}:${normalizeProvider(provider)}:${text(attemptId, 128)}`;
+  const value = decryptJson(record.authorizationEnvelope, encryptionKey, `${aad}:authorization`);
+  const url = text(value?.authorizationUrl, 4000);
+  return /^https:\/\//.test(url) ? url : null;
 }
 
 function safeIdentityCandidate(candidate = {}) {
@@ -480,6 +500,7 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
 module.exports = {
   OAUTH_ATTEMPT_TTL_MS, PROVIDERS, PROVIDER_SCOPES, digest, normalizeProvider, normalizeScopes,
   encryptJson, decryptJson, validateProviderConfig, authorizationUrl, createAttempt,
+  isReusableAttempt, continuationUrl,
   safeIdentityCandidate, assertAttempt, completeExchange, selectCandidate, callbackHtml,
   refreshTokens, readHistoricalPerformance,
 };

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -248,11 +250,30 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         _oauthProvider(provider),
       );
       final uri = Uri.tryParse(result['authorizationUrl']?.toString() ?? '');
-      if (uri == null || !await launchUrl(uri, webOnlyWindowName: '_blank')) {
-        throw StateError('Unable to open provider authorization.');
-      }
       await _load();
+      if (result['status'] == 'identity_pending') {
+        final connection = _workspace?.connections
+            .where((item) => item['pendingAttemptId'] == result['attemptId'])
+            .firstOrNull;
+        if (connection != null) await _reviewConnection(connection);
+        return;
+      }
+      if (uri == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Authorization is already in progress. Return from Google, then check and confirm.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      final popupOpened = await launchUrl(uri, webOnlyWindowName: '_blank');
       if (mounted) {
+        await _showContinuation(uri, popupOpened: popupOpened);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -266,6 +287,72 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error.message ?? 'This connection is not ready yet.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showContinuation(Uri uri, {required bool popupOpened}) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('YouTube authorization is ready'),
+        content: Text(
+          popupOpened
+              ? 'Complete Google consent in the opened tab. If it is unavailable, continue here in this tab.'
+              : 'Your browser blocked the authorization window. Continue securely in this tab.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              unawaited(launchUrl(uri, webOnlyWindowName: '_self'));
+            },
+            child: const Text('Continue with Google'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _continueConnection(Map<String, dynamic> connection) async {
+    final attemptId = connection['pendingAttemptId']?.toString() ?? '';
+    if (attemptId.isEmpty) return;
+    try {
+      final attempt = await _service.connectionAttempt(attemptId);
+      if (attempt['status'] == 'identity_pending') {
+        await _reviewConnection(connection);
+        return;
+      }
+      if (attempt['status'] == 'expired') {
+        await _beginConnection(connection['provider']?.toString() ?? '');
+        return;
+      }
+      final uri = Uri.tryParse(attempt['authorizationUrl']?.toString() ?? '');
+      if (uri == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'The existing authorization is still open. Return from Google, then check and confirm.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      await _showContinuation(uri, popupOpened: false);
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'Unable to continue authorization.'),
           ),
         );
       }
@@ -525,18 +612,28 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                       else
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: TextButton(
-                            onPressed: authorizing
-                                ? () => _reviewConnection(connection)
-                                : () => _beginConnection(
+                          child: authorizing
+                              ? Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          _continueConnection(connection),
+                                      child: const Text('Continue with Google'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          _reviewConnection(connection),
+                                      child: const Text('Check & confirm'),
+                                    ),
+                                  ],
+                                )
+                              : TextButton(
+                                  onPressed: () => _beginConnection(
                                     connection['provider']?.toString() ?? '',
                                   ),
-                            child: Text(
-                              authorizing
-                                  ? 'Check & confirm'
-                                  : 'Connect read only',
-                            ),
-                          ),
+                                  child: const Text('Connect read only'),
+                                ),
                         ),
                     ],
                   ),

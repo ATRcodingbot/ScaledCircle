@@ -393,9 +393,9 @@ exports.beginSocialOAuthConnectionV1 = onCall(
     const provider = socialOAuth.normalizeProvider(request.data?.provider);
     const environment = runtimeEnvironment();
     const config = (await providerConfigRef(provider, environment).get()).data();
-    let attempt;
+    let proposed;
     try {
-      attempt = socialOAuth.createAttempt({
+      proposed = socialOAuth.createAttempt({
         businessUid: business.uid,
         provider,
         config,
@@ -405,27 +405,47 @@ exports.beginSocialOAuthConnectionV1 = onCall(
     } catch (_) {
       throw new HttpsError("failed-precondition", "This read-only connection is not configured yet.");
     }
-    await db.collection("socialOAuthAttempts").doc(attempt.attemptId).set({
-      ...attempt.record,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, {merge: false});
-    await db.collection("socialConnections").doc(business.uid).collection("providers")
-      .doc(provider === "meta" ? "facebook" : provider).set({
+    const surface = provider === "meta" ? "facebook" : provider;
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc(surface);
+    const resolved = await db.runTransaction(async (transaction) => {
+      const connection = (await transaction.get(connectionRef)).data();
+      const pendingAttemptId = readText(connection?.pendingAttemptId, 128);
+      if (pendingAttemptId) {
+        const pendingRef = db.collection("socialOAuthAttempts").doc(pendingAttemptId);
+        const pending = (await transaction.get(pendingRef)).data();
+        if (socialOAuth.isReusableAttempt(pending, {businessUid: business.uid, provider,
+          now: Date.now()})) {
+          return {attemptId: pendingAttemptId, record: pending, reused: true,
+            authorizationUrl: socialOAuth.continuationUrl(pending, {businessUid: business.uid,
+              provider, attemptId: pendingAttemptId,
+              encryptionKey: socialOAuthEncryptionKey.value(), now: Date.now()})};
+        }
+      }
+      const attemptRef = db.collection("socialOAuthAttempts").doc(proposed.attemptId);
+      transaction.set(attemptRef, {...proposed.record,
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()},
+      {merge: false});
+      transaction.set(connectionRef, {
         schemaVersion: socialOperations.SCHEMA_VERSION,
-        provider: provider === "meta" ? "facebook" : provider,
+        provider: surface,
         status: "authorizing",
-        pendingAttemptId: attempt.attemptId,
+        pendingAttemptId: proposed.attemptId,
         capabilities: {profile: false, analytics: false, publishText: false,
           publishImage: false, publishVideo: false, schedule: false},
         environment,
         authorizationUpdatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
+      return {attemptId: proposed.attemptId, record: proposed.record, reused: false,
+        authorizationUrl: proposed.authorizationUrl};
+    });
     return {
       provider,
-      attemptId: attempt.attemptId,
-      authorizationUrl: attempt.authorizationUrl,
-      status: "authorizing",
+      attemptId: resolved.attemptId,
+      authorizationUrl: resolved.authorizationUrl,
+      continuationAvailable: Boolean(resolved.authorizationUrl),
+      reusedExistingAttempt: resolved.reused,
+      status: resolved.record.status,
       requestedScopes: socialOAuth.PROVIDER_SCOPES[provider],
       writeScopesRequested: false,
     };
@@ -433,7 +453,7 @@ exports.beginSocialOAuthConnectionV1 = onCall(
 );
 
 exports.getSocialOAuthAttemptV1 = onCall(
-  {enforceAppCheck: false, maxInstances: 4},
+  {enforceAppCheck: false, maxInstances: 4, secrets: [socialOAuthEncryptionKey]},
   async (request) => {
     const business = await requireSocialOperationsBusiness(request);
     const attemptId = readText(request.data?.attemptId, 128);
@@ -441,10 +461,18 @@ exports.getSocialOAuthAttemptV1 = onCall(
     if (!record || record.businessUid !== business.uid) {
       throw new HttpsError("not-found", "The connection attempt is unavailable.");
     }
+    const now = Date.now();
+    const active = socialOAuth.isReusableAttempt(record, {businessUid: business.uid,
+      provider: record.provider, now});
+    const continueUrl = active ? socialOAuth.continuationUrl(record, {
+      businessUid: business.uid, provider: record.provider, attemptId,
+      encryptionKey: socialOAuthEncryptionKey.value(), now}) : null;
     return {
       attemptId,
       provider: record.provider,
-      status: record.status,
+      status: active ? record.status : "expired",
+      authorizationUrl: continueUrl,
+      continuationAvailable: Boolean(continueUrl),
       candidates: Array.isArray(record.safeCandidates) ? record.safeCandidates : [],
       grantedScopes: Array.isArray(record.grantedScopes) ? record.grantedScopes : [],
       missingScopes: Array.isArray(record.missingScopes) ? record.missingScopes : [],

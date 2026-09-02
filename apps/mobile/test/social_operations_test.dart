@@ -14,6 +14,10 @@ void main() {
     );
     expect(screen, contains('Read-only connection phase'));
     expect(screen, contains('Connect read only'));
+    expect(screen, contains('Continue with Google'));
+    expect(screen, contains("webOnlyWindowName: '_self'"));
+    expect(screen, contains('YouTube authorization is ready'));
+    expect(screen, contains('Check & confirm'));
     expect(
       screen,
       contains('Publishing, bulk email delivery, and ad changes remain off'),

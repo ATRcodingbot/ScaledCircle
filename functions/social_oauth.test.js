@@ -29,7 +29,24 @@ test("attempts use hashed state, PKCE, expiry, and encrypted verifier", () => {
   assert.equal(attempt.record.expiresAtMillis, 1000 + oauth.OAUTH_ATTEMPT_TTL_MS);
   assert.equal(JSON.stringify(attempt.record).includes("verifier"), true);
   assert.equal(JSON.stringify(attempt.record).includes(attempt.state), false);
+  assert.equal(JSON.stringify(attempt.record).includes(attempt.authorizationUrl), false);
   assert.equal(new URL(attempt.authorizationUrl).searchParams.get("code_challenge_method"), "S256");
+  assert.equal(oauth.continuationUrl(attempt.record, {businessUid: "business-one", provider: "x",
+    attemptId: attempt.attemptId, encryptionKey: key, now: 1001}), attempt.authorizationUrl);
+});
+
+test("active attempts are reused while expired and cross-tenant attempts fail closed", () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "youtube",
+    config: config("youtube"), encryptionKey: key, now: 1000});
+  assert.equal(oauth.isReusableAttempt(attempt.record,
+    {businessUid: "biz", provider: "youtube", now: 2000}), true);
+  assert.equal(oauth.isReusableAttempt(attempt.record,
+    {businessUid: "other", provider: "youtube", now: 2000}), false);
+  assert.equal(oauth.isReusableAttempt(attempt.record,
+    {businessUid: "biz", provider: "youtube", now: 1000 + oauth.OAUTH_ATTEMPT_TTL_MS}), false);
+  assert.equal(oauth.continuationUrl(attempt.record, {businessUid: "biz", provider: "youtube",
+    attemptId: attempt.attemptId, encryptionKey: key,
+    now: 1000 + oauth.OAUTH_ATTEMPT_TTL_MS}), null);
 });
 
 test("encrypted credential envelopes authenticate associated context", () => {
