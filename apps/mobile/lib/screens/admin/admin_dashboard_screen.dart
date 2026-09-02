@@ -8,6 +8,7 @@ import '../../widgets/scaled_circle_brand.dart';
 import '../business/internal_beta_entitlements_screen.dart';
 import 'admin_campaign_timeline_screen.dart';
 import 'admin_attribution_screen.dart';
+import 'admin_agentic_growth_screen.dart';
 import 'admin_dashboard_card.dart';
 import 'admin_platform_health_screen.dart';
 import 'admin_role_gate.dart';
@@ -118,6 +119,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   _push(const AdminPlatformHealthScreen()),
                               onOpenSocialOperations: () =>
                                   _push(const AdminSocialOperationsScreen()),
+                              onOpenAgenticGrowth: () =>
+                                  _push(const AdminAgenticGrowthScreen()),
                               providerAuthPreflight: _providerAuthPreflight,
                               providerAuthPreflightRunning:
                                   _providerAuthPreflightRunning,
@@ -443,6 +446,7 @@ class AdminOperationsContent extends StatelessWidget {
     required this.onOpenAttribution,
     required this.onOpenConfiguration,
     this.onOpenSocialOperations,
+    this.onOpenAgenticGrowth,
     required this.providerAuthPreflight,
     required this.providerAuthPreflightRunning,
     required this.onRunProviderAuthPreflight,
@@ -471,6 +475,7 @@ class AdminOperationsContent extends StatelessWidget {
       onOpenAttribution,
       onOpenConfiguration;
   final VoidCallback? onOpenSocialOperations;
+  final VoidCallback? onOpenAgenticGrowth;
   final GeneratedMediaWifPreflight? providerAuthPreflight;
   final bool providerAuthPreflightRunning;
   final VoidCallback onRunProviderAuthPreflight;
@@ -598,6 +603,18 @@ class AdminOperationsContent extends StatelessWidget {
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: onOpenSocialOperations,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.groups_2_outlined),
+          title: const Text('AI Team — Beta'),
+          subtitle: const Text(
+            'Observation health, recommendations, and external-action safety state.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onOpenAgenticGrowth,
         ),
       ),
       const SizedBox(height: 12),

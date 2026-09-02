@@ -530,6 +530,45 @@ service cloud.firestore {
     match /socialProviderConfigs/{document=**} {
       allow read, write: if false;
     }
+    match /agentProfiles/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentPlaybooks/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentPermissions/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentRuns/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentActions/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentActionVersions/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentApprovals/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentEscalations/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentObservations/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentRecommendations/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentProviderReceipts/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentBudgets/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentHealth/{document=**} {
+      allow read, write: if false;
+    }
     // Areas and discovery preferences are separate from identity and billing.
     // Owners can read their sanitized projection; versioned writes and matching
     // flow through platform-core so clients cannot spoof role or match reasons.

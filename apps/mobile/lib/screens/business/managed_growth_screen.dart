@@ -6,6 +6,7 @@ import '../../services/artifact_download.dart';
 import '../../services/artifact_export_service.dart';
 import '../../services/managed_growth_service.dart';
 import 'business_growth_profile_wizard.dart';
+import 'agentic_growth_screen.dart';
 import 'social_approval_screen.dart';
 import 'social_operations_screen.dart';
 
@@ -644,6 +645,21 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                       _profile?.isReady == true
                           ? 'View / Edit'
                           : 'Set Up Profile',
+                    ),
+                  ),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.groups_2_outlined),
+                  title: const Text('AI Team — Beta'),
+                  subtitle: const Text(
+                    'Marketing review, draft support, research, and recommendations. External actions are off.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AgenticGrowthScreen(),
                     ),
                   ),
                 ),

@@ -20,6 +20,17 @@ for (const collection of ["socialContentPlans", "socialContentItems", "socialCon
   });
 }
 
+for (const collection of ["agentProfiles", "agentPlaybooks", "agentPermissions",
+  "agentRuns", "agentActions", "agentActionVersions", "agentApprovals",
+  "agentEscalations", "agentObservations", "agentRecommendations",
+  "agentProviderReceipts", "agentBudgets", "agentHealth"]) {
+  test(`${collection} is server-only`, () => {
+    const pattern = new RegExp(`match /${collection}/\\{document=\\*\\*\\} \\{[\\s\\S]*?` +
+      "allow read, write: if false;[\\s\\S]*?\\}");
+    assert.match(rules, pattern);
+  });
+}
+
 test("social credential values remain denied", () => {
   assert.match(rules, /match \/socialConnectionCredentials\/\{document=\*\*\}[\s\S]*?allow read, write: if false;/);
 });
