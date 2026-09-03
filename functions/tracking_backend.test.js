@@ -541,3 +541,162 @@ test("business handoff fault reserves one $50/$50 split and blocks later settlem
   assert.equal((await db.collection("financialOperations")
     .where("type", "==", "campaign_refund").get()).size, 0);
 });
+
+test("exact-location evidence is server-authoritative, tenant-scoped, and retry-safe", async () => {
+  await db.doc("campaigns/campaign").update({status: "open", campaignType: "yard_sign_installation"});
+  await db.doc("campaigns/campaign/applications/scaler").set({
+    campaignId: "campaign", businessId: "business", scalerId: "scaler",
+    scalerEmail: "scaler@test.invalid", status: "pending",
+  });
+
+  await assert.rejects(call(functions.createCampaignLocation, "other", {
+    campaignId: "campaign", locationType: "yard_sign_installation",
+    latitude: 39, longitude: -76, quantity: 1,
+  }), (error) => error.code === "permission-denied");
+
+  const created = await call(functions.createCampaignLocation, "business", {
+    campaignId: "campaign", locationType: "yard_sign_installation",
+    address: "Private test address", latitude: 39, longitude: -76,
+    instructions: "Test fixture only", quantity: 2,
+  });
+  const assigned = await call(functions.assignScalerToCampaignLocations, "business", {
+    campaignId: "campaign", applicationId: "scaler", locationIds: [created.locationId],
+  });
+  assert.equal(assigned.scalerId, "scaler");
+  assert.deepEqual(assigned.assignedLocationIds, [created.locationId]);
+
+  const [first, replay] = await Promise.all([
+    call(functions.initializeCampaignCompletion, "scaler", {campaignId: "campaign"}),
+    call(functions.initializeCampaignCompletion, "scaler", {campaignId: "campaign"}),
+  ]);
+  assert.equal(first.completionId, replay.completionId);
+  assert.equal((await db.collection("campaignCompletions").get()).size, 1);
+
+  const proof = {
+    id: "proof-one", type: "installation_photo", fileUrl: "https://storage.test/proof.jpg",
+    campaignLocationId: created.locationId, latitude: 39, longitude: -76,
+  };
+  const evidence = await call(functions.appendCampaignCompletionEvidence, "scaler", {
+    completionId: first.completionId, proof,
+  });
+  assert.equal(evidence.duplicate, false);
+  assert.equal((await call(functions.appendCampaignCompletionEvidence, "scaler", {
+    completionId: first.completionId, proof,
+  })).duplicate, true);
+  await assert.rejects(call(functions.appendCampaignCompletionEvidence, "other", {
+    completionId: first.completionId, proof: {...proof, id: "forged"},
+  }), (error) => error.code === "permission-denied");
+
+  const submissions = await Promise.all([
+    call(functions.submitCampaignCompletion, "scaler", {completionId: first.completionId}),
+    call(functions.submitCampaignCompletion, "scaler", {completionId: first.completionId}),
+  ]);
+  assert.equal(submissions.some((result) => result.alreadySubmitted === false), true);
+  assert.equal((await db.doc(`campaignCompletions/${first.completionId}`).get()).data().status, "submitted");
+  await assert.rejects(call(functions.reviewCampaignCompletion, "other", {
+    completionId: first.completionId, decision: "changes_required", feedback: "More proof",
+  }), (error) => error.code === "permission-denied");
+  const review = await call(functions.reviewCampaignCompletion, "business", {
+    completionId: first.completionId, decision: "changes_required", feedback: "Please clarify proof.",
+  });
+  assert.equal(review.status, "changes_requested");
+  assert.equal((await db.collection("walletTransactions").get()).size, 0);
+  assert.equal((await db.collection("scalerTransfers").get()).size, 0);
+});
+
+test("exact-location approval fails closed without immutable compensation authority", async () => {
+  await db.doc("campaignCompletions/exact-review").set({
+    campaignId: "campaign", businessId: "business", scalerId: "scaler",
+    completionType: "campaign", status: "submitted", proofs: [{id: "one", type: "manual_note"}],
+  });
+  await assert.rejects(call(functions.reviewCampaignCompletion, "business", {
+    completionId: "exact-review", decision: "approve", feedback: "Approved",
+  }), (error) => error.code === "failed-precondition");
+  assert.equal((await db.doc("campaignCompletions/exact-review").get()).data().status, "submitted");
+  assert.equal((await db.collection("walletTransactions").get()).size, 0);
+});
+
+test("zone completion submission records contract authority without legacy payout reference", async () => {
+  const points = [
+    {...point(1), latitude: 39.0001, longitude: -76.0001},
+    {...point(2), latitude: 39.0002, longitude: -76.0001},
+    {...point(3), latitude: 39.0003, longitude: -76.0001},
+  ];
+  await Promise.all([
+    db.doc("campaigns/campaign").update({campaignType: "door_hangers", status: "active"}),
+    db.doc("campaignZones/zone").update({
+      status: "in_progress", estimatedHomes: 3, serviceAreaPointCount: 3,
+      estimatedWalkingMeters: 100,
+      serviceArea: [
+        {latitude: 39.0, longitude: -76.001},
+        {latitude: 39.001, longitude: -76.001},
+        {latitude: 39.001, longitude: -76.0},
+        {latitude: 39.0, longitude: -76.0},
+      ],
+    }),
+    db.doc("assignmentCompensations/zone").set({
+      campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
+      baseAmountCents: 10000, bonusAmountCents: 0, currency: "usd", compensationVersion: 1,
+    }),
+    db.doc("campaignRoutes/submission-route").set({
+      campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
+      tracking: false, points,
+    }),
+    db.doc("campaignCompletions/submission-completion").set({
+      campaignId: "campaign", zoneId: "zone", zoneName: "Zone 1", businessId: "business",
+      scalerId: "scaler", routeId: "submission-route", status: "in_progress", proofs: [],
+    }),
+  ]);
+  const result = await call(functions.submitZoneCompletion, "scaler", {
+    completionId: "submission-completion", scalerNotes: "Completed test route.",
+  });
+  assert.equal(result.compensationContractId, "zone");
+  assert.equal(Number.isSafeInteger(result.calculatedTransferAmountCents), true);
+  const notification = (await db.doc("notifications/zone_completion_zone").get()).data();
+  assert.equal(notification.compensationContractId, "zone");
+  assert.equal(notification.payoutId, undefined);
+  assert.equal((await db.collection("payouts").get()).size, 0);
+});
+
+test("concurrent Business review establishes exactly one earning and no provider transfer", async () => {
+  await Promise.all([
+    db.doc("campaignZones/zone").update({
+      status: "submitted", reviewStatus: "verification_pending", verificationPassed: true,
+      completionPercentage: 100, submittedCompletionId: "earning-completion",
+      fundingPaymentId: "earning-payment", compensationContractId: "zone",
+    }),
+    db.doc("assignmentCompensations/zone").set({
+      campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
+      baseAmountCents: 10000, bonusAmountCents: 2000, currency: "usd", compensationVersion: 1,
+    }),
+    db.doc("campaignCompletions/earning-completion").set({
+      campaignId: "campaign", zoneId: "zone", businessId: "business", scalerId: "scaler",
+      status: "submitted", compensationContractId: "zone",
+    }),
+    db.doc("campaignPayments/earning-payment").set({
+      campaignId: "campaign", businessId: "business", status: "funded", currency: "usd",
+      workerAmountCents: 12000, platformFeeCents: 2400, businessChargeCents: 14400,
+      transferredWorkerAmountCents: 0, refundedWorkerAmountCents: 0,
+      reservedWorkerAmountCents: 0, settlementFrozen: false,
+    }),
+  ]);
+  const reviews = await Promise.all([
+    call(functions.finalizeZoneReview, "business", {zoneId: "zone", decision: "approve"}),
+    call(functions.finalizeZoneReview, "business", {zoneId: "zone", decision: "approve"}),
+  ]);
+  assert.equal(reviews.some((result) => result.earningRecorded === true), true);
+  assert.equal(reviews.some((result) => result.alreadyProcessed === true), true);
+  const transfers = await db.collection("scalerTransfers").get();
+  assert.equal(transfers.size, 1);
+  assert.equal(transfers.docs[0].data().externalExecutionAuthorized, false);
+  assert.equal(transfers.docs[0].data().stripeTransferId, undefined);
+  const walletTransactions = await db.collection("walletTransactions").get();
+  assert.equal(walletTransactions.size, 1);
+  const scalerLedger = await db.collection("wallets/scaler/transactions").get();
+  assert.equal(scalerLedger.size, 1);
+  assert.equal((await db.doc("wallets/scaler").get()).data().availableBalance, 120);
+  assert.equal((await db.doc("campaignPayments/earning-payment").get()).data()
+    .reservedWorkerAmountCents, 12000);
+  assert.equal((await db.doc("campaignCompletions/earning-completion").get()).data().status,
+    "approved");
+});

@@ -4,12 +4,14 @@ import '../../models/campaign/campaign.dart';
 import '../../models/campaign/campaign_completion.dart';
 import '../../models/campaign/campaign_location.dart';
 import '../../models/campaign/marketing_asset.dart';
+import '../secure_function_service.dart';
 
 class CampaignService {
   CampaignService({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  final SecureFunctionService _secureFunctions = const SecureFunctionService();
 
   CollectionReference<Map<String, dynamic>> get _campaigns =>
       _firestore.collection('campaigns');
@@ -183,18 +185,19 @@ class CampaignService {
   // ------------------------------------------------------------
 
   Future<String> createLocation({required CampaignLocation location}) async {
-    final document = location.id.isNotEmpty
-        ? _campaignLocations.doc(location.id)
-        : _campaignLocations.doc();
-
-    final data = Map<String, dynamic>.from(location.toMap());
-
-    data['createdAt'] = FieldValue.serverTimestamp();
-    data['updatedAt'] = FieldValue.serverTimestamp();
-
-    await document.set(data);
-
-    return document.id;
+    final result = await _secureFunctions.call(
+      functionName: 'createCampaignLocation',
+      data: {
+        'campaignId': location.campaignId,
+        'locationType': CampaignLocation.locationTypeValue(location.type),
+        'address': location.address,
+        'latitude': location.latitude,
+        'longitude': location.longitude,
+        'instructions': location.instructions,
+        'quantity': location.quantity,
+      },
+    );
+    return result['locationId']?.toString() ?? '';
   }
 
   Future<void> updateLocation({
@@ -205,11 +208,9 @@ class CampaignService {
       throw Exception('Location ID is required.');
     }
 
-    final data = Map<String, dynamic>.from(updates);
-
-    data['updatedAt'] = FieldValue.serverTimestamp();
-
-    await _campaignLocations.doc(locationId).update(data);
+    throw UnsupportedError(
+      'Campaign locations are immutable after creation. Use the maintained assignment and evidence workflows.',
+    );
   }
 
   Future<void> deleteLocation(String locationId) async {
@@ -217,7 +218,10 @@ class CampaignService {
       throw Exception('Location ID is required.');
     }
 
-    await _campaignLocations.doc(locationId).delete();
+    await _secureFunctions.call(
+      functionName: 'deleteCampaignLocation',
+      data: {'locationId': locationId},
+    );
   }
 
   Stream<List<CampaignLocation>> watchCampaignLocations({
@@ -350,27 +354,9 @@ class CampaignService {
     required String campaignId,
     required String scalerId,
   }) async {
-    final batch = _firestore.batch();
-
-    final applicationRef = _applications(campaignId).doc(scalerId);
-
-    final assignedRef = _campaigns
-        .doc(campaignId)
-        .collection('assignedScalers')
-        .doc(scalerId);
-
-    batch.update(applicationRef, {
-      'status': 'accepted',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    batch.set(assignedRef, {
-      'scalerId': scalerId,
-      'status': 'assigned',
-      'assignedAt': FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
+    throw StateError(
+      'Choose a zone or exact locations before assigning this Scaler.',
+    );
   }
 
   Future<void> updateApplicationStatus({
@@ -378,10 +364,13 @@ class CampaignService {
     required String scalerId,
     required String status,
   }) async {
-    await _applications(campaignId).doc(scalerId).update({
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    if (status != 'rejected') {
+      throw StateError('Application status changes require assignment authority.');
+    }
+    await _secureFunctions.call(
+      functionName: 'rejectCampaignApplication',
+      data: {'campaignId': campaignId, 'applicationId': scalerId},
+    );
   }
   // ------------------------------------------------------------
   // COMPLETION / PROOF
@@ -390,18 +379,11 @@ class CampaignService {
   Future<String> createCompletion({
     required CampaignCompletion completion,
   }) async {
-    final document = completion.id.isNotEmpty
-        ? _campaignCompletions.doc(completion.id)
-        : _campaignCompletions.doc();
-
-    final data = Map<String, dynamic>.from(completion.toMap());
-
-    data['createdAt'] = FieldValue.serverTimestamp();
-    data['updatedAt'] = FieldValue.serverTimestamp();
-
-    await document.set(data);
-
-    return document.id;
+    final result = await _secureFunctions.call(
+      functionName: 'initializeCampaignCompletion',
+      data: {'campaignId': completion.campaignId},
+    );
+    return result['completionId']?.toString() ?? '';
   }
 
   Future<void> updateCompletion({
@@ -412,11 +394,9 @@ class CampaignService {
       throw Exception('Completion ID is required.');
     }
 
-    final data = Map<String, dynamic>.from(updates);
-
-    data['updatedAt'] = FieldValue.serverTimestamp();
-
-    await _campaignCompletions.doc(completionId).update(data);
+    throw UnsupportedError(
+      'Completion state is server-authoritative. Use evidence, submission, or review operations.',
+    );
   }
 
   Future<CampaignCompletion?> getCompletion(String completionId) async {
@@ -481,33 +461,27 @@ class CampaignService {
     required String completionId,
     String? scalerNotes,
   }) async {
-    final updates = <String, dynamic>{
-      'status': 'submitted',
-      'submittedAt': FieldValue.serverTimestamp(),
-    };
-
-    if (scalerNotes != null) {
-      updates['scalerNotes'] = scalerNotes;
-    }
-
-    await updateCompletion(completionId: completionId, updates: updates);
+    await _secureFunctions.call(
+      functionName: 'submitCampaignCompletion',
+      data: {
+        'completionId': completionId,
+        'scalerNotes': scalerNotes?.trim() ?? '',
+      },
+    );
   }
 
   Future<void> approveCompletion({
     required String completionId,
     String? businessFeedback,
   }) async {
-    final updates = <String, dynamic>{
-      'status': 'approved',
-      'approvedAt': FieldValue.serverTimestamp(),
-      'completedAt': FieldValue.serverTimestamp(),
-    };
-
-    if (businessFeedback != null) {
-      updates['businessFeedback'] = businessFeedback;
-    }
-
-    await updateCompletion(completionId: completionId, updates: updates);
+    await _secureFunctions.call(
+      functionName: 'reviewCampaignCompletion',
+      data: {
+        'completionId': completionId,
+        'decision': 'approve',
+        'feedback': businessFeedback?.trim() ?? '',
+      },
+    );
   }
 
   Future<void> requestCompletionChanges({
@@ -518,12 +492,12 @@ class CampaignService {
       throw Exception('Feedback is required when requesting changes.');
     }
 
-    await updateCompletion(
-      completionId: completionId,
-      updates: {
-        'status': 'changes_requested',
-        'businessFeedback': feedback.trim(),
-        'changesRequestedAt': FieldValue.serverTimestamp(),
+    await _secureFunctions.call(
+      functionName: 'reviewCampaignCompletion',
+      data: {
+        'completionId': completionId,
+        'decision': 'changes_required',
+        'feedback': feedback.trim(),
       },
     );
   }
@@ -536,12 +510,12 @@ class CampaignService {
       throw Exception('Feedback is required when rejecting completion.');
     }
 
-    await updateCompletion(
-      completionId: completionId,
-      updates: {
-        'status': 'rejected',
-        'businessFeedback': feedback.trim(),
-        'reviewedAt': FieldValue.serverTimestamp(),
+    await _secureFunctions.call(
+      functionName: 'reviewCampaignCompletion',
+      data: {
+        'completionId': completionId,
+        'decision': 'reject',
+        'feedback': feedback.trim(),
       },
     );
   }
@@ -589,10 +563,10 @@ class CampaignService {
       );
     }
 
-    await _campaignCompletions.doc(completionId).update({
-      'proofs': FieldValue.arrayUnion([finalProof.toMap()]),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _secureFunctions.call(
+      functionName: 'appendCampaignCompletionEvidence',
+      data: {'completionId': completionId, 'proof': finalProof.toMap()},
+    );
   }
   // ------------------------------------------------------------
   // CAMPAIGN ARCHIVE / TEST MANAGEMENT
@@ -683,9 +657,8 @@ class CampaignService {
     required String completionId,
     required List<CompletionProof> proofs,
   }) async {
-    await updateCompletion(
-      completionId: completionId,
-      updates: {'proofs': proofs.map((proof) => proof.toMap()).toList()},
+    throw UnsupportedError(
+      'Completion evidence is append-only. Add a new proof instead of replacing history.',
     );
   }
 

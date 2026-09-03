@@ -33,67 +33,11 @@ class CompletionSubmissionService {
       throw Exception('A saved GPS route is required.');
     }
 
-    final routeSnapshot = await _firestore
-        .collection('campaignRoutes')
-        .doc(routeId)
-        .get();
-
-    if (!routeSnapshot.exists) {
-      throw Exception('The saved GPS route was not found.');
-    }
-
-    final routeData = routeSnapshot.data() ?? {};
-
-    if (routeData['scalerId']?.toString() != scalerId) {
-      throw Exception('This GPS route belongs to another Scaler.');
-    }
-
-    if (routeData['campaignId']?.toString() != campaignId ||
-        routeData['zoneId']?.toString() != zoneId) {
-      throw Exception('The GPS route does not match this assigned zone.');
-    }
-
-    if (routeData['tracking'] == true) {
-      throw Exception('Stop and save GPS tracking before submitting.');
-    }
-
-    final routePoints = routeData['points'];
-    final gpsPointCount = routePoints is List ? routePoints.length : 0;
-
-    if (gpsPointCount < 2) {
-      throw Exception('Record at least two GPS points before submitting.');
-    }
-
-    final routeSimulated = routeData['simulated'] == true;
-    final document = _completions.doc();
-
-    final gpsProof = CompletionProof(
-      id: routeId,
-      type: CompletionProofType.gpsRoute,
-      note: 'Saved GPS route with $gpsPointCount recorded points.',
-      capturedAt: DateTime.now(),
+    final result = await _secureFunctions.call(
+      functionName: 'initializeCampaignCompletion',
+      data: {'campaignId': campaignId, 'zoneId': zoneId, 'routeId': routeId},
     );
-
-    final completion = CampaignCompletion(
-      id: document.id,
-      campaignId: campaignId,
-      businessId: businessId,
-      scalerId: scalerId,
-      zoneId: zoneId,
-      zoneName: zoneName,
-      type: CampaignCompletionType.zone,
-      status: CampaignCompletionStatus.draft,
-      routeId: routeId,
-      gpsPointCount: gpsPointCount,
-      routeSimulated: routeSimulated,
-      proofs: [gpsProof],
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-
-    await document.set(completion.toMap());
-
-    return document.id;
+    return result['completionId']?.toString() ?? '';
   }
 
   // ------------------------------------------------------------
@@ -103,11 +47,10 @@ class CompletionSubmissionService {
   // ------------------------------------------------------------
 
   Future<void> startCompletion({required String completionId}) async {
-    await _completions.doc(completionId).update({
-      'status': 'in_progress',
-      'startedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _secureFunctions.call(
+      functionName: 'startCampaignCompletion',
+      data: {'completionId': completionId},
+    );
   }
 
   // ------------------------------------------------------------
@@ -120,10 +63,10 @@ class CompletionSubmissionService {
     required String completionId,
     required CompletionProof proof,
   }) async {
-    await _completions.doc(completionId).update({
-      'proofs': FieldValue.arrayUnion([proof.toMap()]),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _secureFunctions.call(
+      functionName: 'appendCampaignCompletionEvidence',
+      data: {'completionId': completionId, 'proof': proof.toMap()},
+    );
   }
 
   // ------------------------------------------------------------

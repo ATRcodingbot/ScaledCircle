@@ -2811,6 +2811,478 @@ exports.reportCampaignReview = onCall(
   },
 );
 
+const EXACT_LOCATION_TYPES = new Set([
+  "service_point", "yard_sign_installation", "material_pickup",
+  "material_dropoff", "dump_pickup", "dump_dropoff", "event_location",
+]);
+
+function completionAuthorityCallable(handler) {
+  return onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, handler);
+}
+const COMPLETION_PROOF_TYPES = new Set([
+  "gps_route", "checkpoint_photo", "installation_photo", "before_photo",
+  "loaded_photo", "after_photo", "receipt_photo", "event_photo", "manual_note",
+]);
+
+function exactCompletionId(campaignId, scalerId) {
+  return `exact_${campaignId}_${scalerId}`;
+}
+
+exports.createCampaignLocation = completionAuthorityCallable(async (request) => {
+  assertTrackingPayload(request.data, new Set([
+    "campaignId", "locationType", "address", "latitude", "longitude",
+    "instructions", "quantity", "scheduledAt", "windowStart", "windowEnd",
+  ]), 16384);
+  const context = await requireVerifiedUser(request, "Sign in to configure campaign locations.");
+  if (context.role !== "business" && !context.isAdmin) {
+    throw new HttpsError("permission-denied", "Only the campaign Business can add locations.");
+  }
+  const campaignId = cleanId(request.data?.campaignId);
+  const type = String(request.data?.locationType || "");
+  const latitude = Number(request.data?.latitude);
+  const longitude = Number(request.data?.longitude);
+  const quantity = Number(request.data?.quantity ?? 1);
+  if (!campaignId || !EXACT_LOCATION_TYPES.has(type) || !Number.isFinite(latitude) ||
+      latitude < -90 || latitude > 90 || !Number.isFinite(longitude) ||
+      longitude < -180 || longitude > 180 || (latitude === 0 && longitude === 0) ||
+      !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000) {
+    throw new HttpsError("invalid-argument", "The campaign location is invalid.");
+  }
+  const campaignRef = db.collection("campaigns").doc(campaignId);
+  const locationRef = db.collection("campaignLocations").doc();
+  await db.runTransaction(async (transaction) => {
+    const campaignSnapshot = await transaction.get(campaignRef);
+    if (!campaignSnapshot.exists) throw new HttpsError("not-found", "Campaign not found.");
+    const campaign = campaignSnapshot.data() || {};
+    if (!context.isAdmin && campaign.businessId !== context.uid) {
+      throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+    }
+    if (!["draft", "open"].includes(String(campaign.status || ""))) {
+      throw new HttpsError("failed-precondition", "Locations are locked after work begins.");
+    }
+    transaction.create(locationRef, {
+      campaignId, businessId: campaign.businessId, locationType: type,
+      status: "pending", address: String(request.data?.address || "").trim().slice(0, 500) || null,
+      latitude, longitude, location: new (require("firebase-admin/firestore").GeoPoint)(latitude, longitude),
+      instructions: String(request.data?.instructions || "").trim().slice(0, 2000) || null,
+      quantity, assignedScalerId: null, assignedScalerEmail: null,
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      schemaVersion: "CampaignLocationAuthorityV1",
+    });
+  });
+  return {locationId: locationRef.id};
+});
+
+exports.deleteCampaignLocation = completionAuthorityCallable(async (request) => {
+  assertTrackingPayload(request.data, new Set(["locationId"]), 4096);
+  const context = await requireVerifiedUser(request, "Sign in to remove a campaign location.");
+  const locationId = cleanId(request.data?.locationId);
+  if (!locationId) throw new HttpsError("invalid-argument", "A location is required.");
+  const ref = db.collection("campaignLocations").doc(locationId);
+  await db.runTransaction(async (transaction) => {
+    const locationSnapshot = await transaction.get(ref);
+    if (!locationSnapshot.exists) return;
+    const location = locationSnapshot.data() || {};
+    const campaignSnapshot = await transaction.get(
+      db.collection("campaigns").doc(cleanId(location.campaignId) || "missing"),
+    );
+    const campaign = campaignSnapshot.data() || {};
+    if (!context.isAdmin && campaign.businessId !== context.uid) {
+      throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+    }
+    if (location.assignedScalerId || !["pending", "cancelled"].includes(String(location.status))) {
+      throw new HttpsError("failed-precondition", "Assigned or completed locations cannot be removed.");
+    }
+    transaction.delete(ref);
+  });
+  return {locationId, deleted: true};
+});
+
+exports.assignScalerToCampaignLocations = completionAuthorityCallable(
+  async (request) => {
+    assertTrackingPayload(request.data, new Set(["campaignId", "applicationId", "locationIds"]), 16384);
+    const context = await requireVerifiedUser(request, "Sign in before assigning exact-location work.");
+    if (context.role !== "business" && !context.isAdmin) {
+      throw new HttpsError("permission-denied", "Only the campaign Business can assign this work.");
+    }
+    const campaignId = cleanId(request.data?.campaignId);
+    const applicationId = cleanId(request.data?.applicationId);
+    const locationIds = Array.isArray(request.data?.locationIds) ?
+      [...new Set(request.data.locationIds.map(cleanId).filter(Boolean))] : [];
+    if (!campaignId || !applicationId || locationIds.length < 1 || locationIds.length > 250) {
+      throw new HttpsError("invalid-argument", "Campaign, application, and locations are required.");
+    }
+    const campaignRef = db.collection("campaigns").doc(campaignId);
+    const applicationRef = campaignRef.collection("applications").doc(applicationId);
+    return db.runTransaction(async (transaction) => {
+      const [campaignSnapshot, applicationSnapshot] = await Promise.all([
+        transaction.get(campaignRef), transaction.get(applicationRef),
+      ]);
+      if (!campaignSnapshot.exists || !applicationSnapshot.exists) {
+        throw new HttpsError("not-found", "The campaign application is unavailable.");
+      }
+      const campaign = campaignSnapshot.data() || {};
+      const application = applicationSnapshot.data() || {};
+      if (!context.isAdmin && campaign.businessId !== context.uid) {
+        throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+      }
+      if (String(campaign.status || "") !== "open" || application.status !== "pending") {
+        throw new HttpsError("failed-precondition", "This application is no longer assignable.");
+      }
+      const scalerId = cleanId(application.scalerId) || applicationId;
+      if (!scalerId) throw new HttpsError("failed-precondition", "The application has no Scaler identity.");
+      const locationRefs = locationIds.map((id) => db.collection("campaignLocations").doc(id));
+      const locationSnapshots = await Promise.all(locationRefs.map((ref) => transaction.get(ref)));
+      let quantity = 0;
+      for (const snapshot of locationSnapshots) {
+        const location = snapshot.data() || {};
+        if (!snapshot.exists || location.campaignId !== campaignId || location.businessId !== campaign.businessId ||
+            location.assignedScalerId || !["pending", "assigned"].includes(String(location.status || "pending"))) {
+          throw new HttpsError("failed-precondition", "A selected location is no longer available.");
+        }
+        quantity += Math.max(1, Number(location.quantity || 1));
+      }
+      const timestamp = FieldValue.serverTimestamp();
+      for (const ref of locationRefs) transaction.update(ref, {
+        assignedScalerId: scalerId,
+        assignedScalerEmail: String(application.scalerEmail || application.email || "").trim() || null,
+        assignedApplicationId: applicationId, status: "assigned", assignedAt: timestamp, updatedAt: timestamp,
+      });
+      transaction.update(applicationRef, {
+        status: "accepted", assignmentMode: "exact_locations", assignedCampaignId: campaignId,
+        assignedLocationIds: locationIds, assignedLocationCount: locationIds.length,
+        assignedQuantity: quantity, acceptedAt: timestamp, updatedAt: timestamp,
+      });
+      return {campaignId, scalerId, assignedLocationIds: locationIds, assignedQuantity: quantity};
+    });
+  },
+);
+
+exports.rejectCampaignApplication = completionAuthorityCallable(async (request) => {
+  assertTrackingPayload(request.data, new Set(["campaignId", "applicationId"]), 4096);
+  const context = await requireVerifiedUser(request, "Sign in before reviewing this application.");
+  if (context.role !== "business" && !context.isAdmin) {
+    throw new HttpsError("permission-denied", "Only the campaign Business can review applications.");
+  }
+  const campaignId = cleanId(request.data?.campaignId);
+  const applicationId = cleanId(request.data?.applicationId);
+  if (!campaignId || !applicationId) {
+    throw new HttpsError("invalid-argument", "Campaign and application are required.");
+  }
+  const campaignRef = db.collection("campaigns").doc(campaignId);
+  const applicationRef = campaignRef.collection("applications").doc(applicationId);
+  return db.runTransaction(async (transaction) => {
+    const [campaignSnapshot, applicationSnapshot] = await Promise.all([
+      transaction.get(campaignRef), transaction.get(applicationRef),
+    ]);
+    if (!campaignSnapshot.exists || !applicationSnapshot.exists) {
+      throw new HttpsError("not-found", "The campaign application is unavailable.");
+    }
+    const campaign = campaignSnapshot.data() || {};
+    const application = applicationSnapshot.data() || {};
+    if (!context.isAdmin && campaign.businessId !== context.uid) {
+      throw new HttpsError("permission-denied", "This campaign does not belong to you.");
+    }
+    const status = String(application.status || "pending");
+    if (status === "rejected") {
+      return {campaignId, applicationId, status, idempotentReplay: true};
+    }
+    if (status !== "pending") {
+      throw new HttpsError("failed-precondition", "Assigned or terminal applications cannot be rejected.");
+    }
+    transaction.update(applicationRef, {
+      status: "rejected",
+      rejectedAt: FieldValue.serverTimestamp(),
+      rejectedBy: context.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return {campaignId, applicationId, status: "rejected", idempotentReplay: false};
+  });
+});
+
+exports.initializeCampaignCompletion = completionAuthorityCallable(
+  async (request) => {
+    assertTrackingPayload(request.data, new Set(["campaignId", "zoneId", "routeId"]), 4096);
+    const context = await requireVerifiedUser(request, "Sign in before starting completion evidence.");
+    if (context.role !== "scaler" && !context.isAdmin) {
+      throw new HttpsError("permission-denied", "Only the assigned Scaler can start completion evidence.");
+    }
+    const campaignId = cleanId(request.data?.campaignId);
+    if (!campaignId) throw new HttpsError("invalid-argument", "A campaign is required.");
+    const zoneId = cleanId(request.data?.zoneId);
+    const routeId = cleanId(request.data?.routeId);
+    if (zoneId || routeId) {
+      if (!zoneId || !routeId) {
+        throw new HttpsError("invalid-argument", "Zone and saved route are required together.");
+      }
+      const [campaignSnapshot, zoneSnapshot, routeSnapshot] = await Promise.all([
+        db.collection("campaigns").doc(campaignId).get(),
+        db.collection("campaignZones").doc(zoneId).get(),
+        db.collection("campaignRoutes").doc(routeId).get(),
+      ]);
+      if (!campaignSnapshot.exists || !zoneSnapshot.exists || !routeSnapshot.exists) {
+        throw new HttpsError("not-found", "The campaign assignment or saved route is unavailable.");
+      }
+      const campaign = campaignSnapshot.data() || {};
+      const zone = zoneSnapshot.data() || {};
+      const route = routeSnapshot.data() || {};
+      if (zone.campaignId !== campaignId || zone.businessId !== campaign.businessId ||
+          zone.assignedScalerId !== context.uid || route.campaignId !== campaignId ||
+          route.zoneId !== zoneId || route.scalerId !== context.uid || route.tracking === true ||
+          validRoutePoints(route.points).length < 2) {
+        throw new HttpsError("failed-precondition", "The saved route does not match this assignment.");
+      }
+      const completionId = `zone_${zoneId}_${context.uid}`;
+      const completionRef = db.collection("campaignCompletions").doc(completionId);
+      let created = false;
+      await db.runTransaction(async (transaction) => {
+        const existing = await transaction.get(completionRef);
+        if (existing.exists) return;
+        transaction.create(completionRef, {
+          campaignId, businessId: campaign.businessId, scalerId: context.uid,
+          scalerEmail: request.auth.token.email || null, zoneId,
+          zoneName: String(zone.zoneName || "Zone"), completionType: "zone",
+          status: "draft", routeId, gpsPointCount: validRoutePoints(route.points).length,
+          routeSimulated: route.simulated === true,
+          proofs: [{id: routeId, type: "gps_route",
+            note: `Saved GPS route with ${validRoutePoints(route.points).length} recorded points.`,
+            capturedAt: Timestamp.now()}],
+          createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+          schemaVersion: "CampaignCompletionAuthorityV1",
+        });
+        created = true;
+      });
+      return {completionId, created};
+    }
+    const assigned = await db.collection("campaignLocations")
+      .where("campaignId", "==", campaignId).where("assignedScalerId", "==", context.uid).get();
+    if (assigned.empty) throw new HttpsError("permission-denied", "No exact-location work is assigned to you.");
+    const campaignSnapshot = await db.collection("campaigns").doc(campaignId).get();
+    if (!campaignSnapshot.exists) throw new HttpsError("not-found", "Campaign not found.");
+    const campaign = campaignSnapshot.data() || {};
+    const completionId = exactCompletionId(campaignId, context.uid);
+    const completionRef = db.collection("campaignCompletions").doc(completionId);
+    let created = false;
+    await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(completionRef);
+      if (existing.exists) return;
+      transaction.create(completionRef, {
+        campaignId, businessId: campaign.businessId, scalerId: context.uid,
+        scalerEmail: request.auth.token.email || null, completionType: "campaign",
+        status: "in_progress", completedQuantity: 0, proofs: [],
+        assignedLocationIds: assigned.docs.map((doc) => doc.id).sort(),
+        startedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(), schemaVersion: "CampaignCompletionAuthorityV1",
+      });
+      created = true;
+    });
+    return {completionId, created};
+  },
+);
+
+exports.startCampaignCompletion = completionAuthorityCallable(async (request) => {
+  assertTrackingPayload(request.data, new Set(["completionId"]), 4096);
+  const context = await requireVerifiedUser(request, "Sign in before starting campaign work.");
+  const completionId = cleanId(request.data?.completionId);
+  const ref = db.collection("campaignCompletions").doc(completionId || "missing");
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new HttpsError("not-found", "Completion not found.");
+    const completion = snapshot.data() || {};
+    if (!context.isAdmin && completion.scalerId !== context.uid) {
+      throw new HttpsError("permission-denied", "This completion belongs to another Scaler.");
+    }
+    if (completion.status === "in_progress") return {completionId, alreadyStarted: true};
+    if (!["draft", "changes_requested"].includes(String(completion.status))) {
+      throw new HttpsError("failed-precondition", "This completion cannot be started.");
+    }
+    transaction.update(ref, {status: "in_progress", startedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()});
+    return {completionId, alreadyStarted: false};
+  });
+});
+
+exports.appendCampaignCompletionEvidence = completionAuthorityCallable(
+  async (request) => {
+    assertTrackingPayload(request.data, new Set(["completionId", "proof"]), 32768);
+    const context = await requireVerifiedUser(request, "Sign in before saving completion evidence.");
+    const completionId = cleanId(request.data?.completionId);
+    const raw = request.data?.proof && typeof request.data.proof === "object" ? request.data.proof : {};
+    const proofId = cleanId(raw.id);
+    const type = String(raw.type || "");
+    if (!completionId || !proofId || !COMPLETION_PROOF_TYPES.has(type)) {
+      throw new HttpsError("invalid-argument", "Valid completion evidence is required.");
+    }
+    const fileUrl = String(raw.fileUrl || "").trim().slice(0, 2048);
+    const photoTypes = new Set([
+      "checkpoint_photo", "installation_photo", "before_photo", "loaded_photo",
+      "after_photo", "receipt_photo", "event_photo",
+    ]);
+    if (photoTypes.has(type) && !/^https:\/\//i.test(fileUrl)) {
+      throw new HttpsError("invalid-argument", "Photo evidence requires a secure uploaded image URL.");
+    }
+    const completionRef = db.collection("campaignCompletions").doc(completionId);
+    return db.runTransaction(async (transaction) => {
+      const completionSnapshot = await transaction.get(completionRef);
+      if (!completionSnapshot.exists) throw new HttpsError("not-found", "Completion not found.");
+      const completion = completionSnapshot.data() || {};
+      if (!context.isAdmin && completion.scalerId !== context.uid) {
+        throw new HttpsError("permission-denied", "This completion belongs to another Scaler.");
+      }
+      if (["submitted", "approved", "rejected"].includes(String(completion.status))) {
+        throw new HttpsError("failed-precondition", "This completion is not open for evidence changes.");
+      }
+      const existing = Array.isArray(completion.proofs) ? completion.proofs : [];
+      if (existing.some((item) => cleanId(item?.id) === proofId)) {
+        return {completionId, proofId, duplicate: true};
+      }
+      const locationId = cleanId(raw.campaignLocationId);
+      let locationRef = null;
+      if (locationId) {
+        locationRef = db.collection("campaignLocations").doc(locationId);
+        const locationSnapshot = await transaction.get(locationRef);
+        const location = locationSnapshot.data() || {};
+        if (!locationSnapshot.exists || location.campaignId !== completion.campaignId ||
+            location.assignedScalerId !== completion.scalerId) {
+          throw new HttpsError("permission-denied", "The evidence location is not assigned to this Scaler.");
+        }
+      }
+      const latitude = raw.latitude == null ? null : Number(raw.latitude);
+      const longitude = raw.longitude == null ? null : Number(raw.longitude);
+      if ((latitude != null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) ||
+          (longitude != null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+        throw new HttpsError("invalid-argument", "Evidence coordinates are invalid.");
+      }
+      if (locationId && (!["installation_photo", "gps_route", "event_photo"].includes(type) ||
+          latitude == null || longitude == null)) {
+        throw new HttpsError("invalid-argument", "Location completion requires bounded GPS evidence.");
+      }
+      const proof = {
+        id: proofId, type,
+        fileUrl: fileUrl || null,
+        note: String(raw.note || "").trim().slice(0, 2000) || null,
+        campaignLocationId: locationId || null, latitude, longitude,
+        capturedAt: Timestamp.now(),
+      };
+      const timestamp = FieldValue.serverTimestamp();
+      transaction.update(completionRef, {
+        proofs: FieldValue.arrayUnion(proof), status: "in_progress", updatedAt: timestamp,
+      });
+      if (locationRef) transaction.update(locationRef, {
+        status: "completed", completedByScalerId: completion.scalerId,
+        completedLatitude: latitude, completedLongitude: longitude,
+        completedAt: timestamp, updatedAt: timestamp,
+      });
+      return {completionId, proofId, duplicate: false};
+    });
+  },
+);
+
+exports.submitCampaignCompletion = completionAuthorityCallable(async (request) => {
+  assertTrackingPayload(request.data, new Set(["completionId", "scalerNotes"]), 8192);
+  const context = await requireVerifiedUser(request, "Sign in before submitting campaign work.");
+  const completionId = cleanId(request.data?.completionId);
+  const completionRef = db.collection("campaignCompletions").doc(completionId || "missing");
+  return db.runTransaction(async (transaction) => {
+    const completionSnapshot = await transaction.get(completionRef);
+    if (!completionSnapshot.exists) throw new HttpsError("not-found", "Completion not found.");
+    const completion = completionSnapshot.data() || {};
+    if (!context.isAdmin && completion.scalerId !== context.uid) {
+      throw new HttpsError("permission-denied", "This completion belongs to another Scaler.");
+    }
+    if (completion.status === "submitted") return {completionId, alreadySubmitted: true};
+    if (!["draft", "in_progress", "changes_requested"].includes(String(completion.status))) {
+      throw new HttpsError("failed-precondition", "This completion cannot be submitted.");
+    }
+    const campaignRef = db.collection("campaigns").doc(cleanId(completion.campaignId) || "missing");
+    const campaignSnapshot = await transaction.get(campaignRef);
+    if (!campaignSnapshot.exists || campaignSnapshot.data()?.businessId !== completion.businessId) {
+      throw new HttpsError("failed-precondition", "Completion campaign authority is unavailable.");
+    }
+    const campaignType = normalizedCampaignType(campaignSnapshot.data()?.campaignType);
+    const locationQuery = db.collection("campaignLocations")
+      .where("campaignId", "==", completion.campaignId)
+      .where("assignedScalerId", "==", completion.scalerId);
+    const assigned = await transaction.get(locationQuery);
+    const proofs = Array.isArray(completion.proofs) ? completion.proofs : [];
+    if (proofs.length < 1) throw new HttpsError("failed-precondition", "Completion evidence is required.");
+    if (assigned.empty) throw new HttpsError("failed-precondition", "No assigned locations were found.");
+    const proofTypes = new Set(proofs.map((proof) => normalizedCampaignType(proof?.type)));
+    if (campaignType === "dumprun") {
+      for (const required of ["beforephoto", "loadedphoto", "receiptphoto", "afterphoto"]) {
+        if (!proofTypes.has(required)) {
+          throw new HttpsError("failed-precondition", "All four dump-run photo stages are required.");
+        }
+      }
+    } else if (assigned.docs.some((doc) => doc.data().status !== "completed")) {
+      throw new HttpsError("failed-precondition", "Complete every assigned location before submitting.");
+    }
+    if (campaignType === "yardsigninstallation") {
+      for (const location of assigned.docs) {
+        if (!proofs.some((proof) => normalizedCampaignType(proof?.type) === "installationphoto" &&
+            cleanId(proof?.campaignLocationId) === location.id && /^https:\/\//i.test(String(proof?.fileUrl || "")))) {
+          throw new HttpsError("failed-precondition", "Every yard-sign location requires installation photo proof.");
+        }
+      }
+    }
+    const completedQuantity = assigned.docs.reduce((sum, doc) => sum + Math.max(1, Number(doc.data().quantity || 1)), 0);
+    if (campaignType === "dumprun") {
+      const timestamp = FieldValue.serverTimestamp();
+      for (const location of assigned.docs) transaction.update(location.ref, {
+        status: "completed", completedByScalerId: completion.scalerId,
+        completedAt: timestamp, updatedAt: timestamp,
+      });
+    }
+    transaction.update(completionRef, {
+      status: "submitted", scalerNotes: String(request.data?.scalerNotes || "").trim().slice(0, 2000),
+      completedQuantity, submittedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+    return {completionId, alreadySubmitted: false, completedQuantity};
+  });
+});
+
+exports.reviewCampaignCompletion = completionAuthorityCallable(async (request) => {
+  assertTrackingPayload(request.data, new Set(["completionId", "decision", "feedback"]), 8192);
+  const context = await requireVerifiedUser(request, "Sign in before reviewing completed work.");
+  const completionId = cleanId(request.data?.completionId);
+  const decision = String(request.data?.decision || "");
+  const feedback = String(request.data?.feedback || "").trim().slice(0, 2000);
+  if (!completionId || !["approve", "changes_required", "reject"].includes(decision) ||
+      (decision !== "approve" && !feedback)) {
+    throw new HttpsError("invalid-argument", "A valid review decision is required.");
+  }
+  const completionRef = db.collection("campaignCompletions").doc(completionId);
+  return db.runTransaction(async (transaction) => {
+    const completionSnapshot = await transaction.get(completionRef);
+    if (!completionSnapshot.exists) throw new HttpsError("not-found", "Completion not found.");
+    const completion = completionSnapshot.data() || {};
+    if (!context.isAdmin && completion.businessId !== context.uid) {
+      throw new HttpsError("permission-denied", "Only the owning Business may review this completion.");
+    }
+    if (decision === "approve") {
+      // Legacy exact-location campaigns do not yet carry a per-assignment
+      // immutable compensation contract. Fail closed rather than invent an
+      // earning or mutate a wallet from client-supplied economics.
+      throw new HttpsError("failed-precondition",
+        "Approval requires an authoritative assignment compensation contract.");
+    }
+    if (completion.status === (decision === "reject" ? "rejected" : "changes_requested")) {
+      return {completionId, status: completion.status, alreadyProcessed: true};
+    }
+    if (completion.status !== "submitted") {
+      throw new HttpsError("failed-precondition", "This completion is not awaiting review.");
+    }
+    const status = decision === "reject" ? "rejected" : "changes_requested";
+    transaction.update(completionRef, {
+      status, businessFeedback: feedback, reviewedBy: context.uid,
+      reviewedAt: FieldValue.serverTimestamp(),
+      ...(status === "changes_requested" ? {changesRequestedAt: FieldValue.serverTimestamp()} : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return {completionId, status, alreadyProcessed: false};
+  });
+});
+
 /**
  * Submit GPS-backed zone work for business review.
  *
@@ -3036,16 +3508,16 @@ exports.submitZoneCompletion = onCall(
           zoneId,
           completionId,
           scalerId,
-          payoutId: payoutReference.id,
-          payoutAmount: payoutResult.totalPayout,
+          compensationContractId: contractReference.id,
+          calculatedTransferAmountCents: payoutResult.transferAmountCents,
           read: false,
           createdAt: timestamp,
         }, {merge: true});
 
         return {
           completionId,
-          payoutId: payoutReference.id,
-          payoutAmount: payoutResult.totalPayout,
+          compensationContractId: contractReference.id,
+          calculatedTransferAmountCents: payoutResult.transferAmountCents,
           completionPercentage: trackingResult.completionPercentage,
           alreadySubmitted: false,
         };
@@ -10709,7 +11181,31 @@ exports.finalizeZoneReview = safeStripeCallable("finalizeZoneReview", async (req
     const payout = marketplace.payoutForCompletion(
       contractSnapshot.data() || {}, completionBasisPoints, releaseOptionalBonus,
     );
+    if (payout.transferAmountCents <= 0) {
+      throw new HttpsError("failed-precondition", "This completion does not establish an earning.");
+    }
+    marketplace.assertAllocationAvailable(payment, payout.transferAmountCents);
+    const transferId = marketplace.operationId("scaler-transfer", zoneId, 1);
+    const transferRef = db.collection("scalerTransfers").doc(transferId);
+    const walletRef = db.collection("wallets").doc(zone.assignedScalerId);
+    const walletTransactionRef = walletRef.collection("transactions").doc(`earning_${zoneId}_v1`);
+    const globalWalletTransactionRef = db.collection("walletTransactions").doc(`earning_${zoneId}_v1`);
+    const [transferSnapshot, walletSnapshot, walletTransactionSnapshot,
+      globalWalletTransactionSnapshot] = await Promise.all([
+      transaction.get(transferRef), transaction.get(walletRef),
+      transaction.get(walletTransactionRef), transaction.get(globalWalletTransactionRef),
+    ]);
+    if (transferSnapshot.exists || walletTransactionSnapshot.exists ||
+        globalWalletTransactionSnapshot.exists) {
+      throw new HttpsError("failed-precondition", "The earning authority conflicts with an existing record.");
+    }
+    const earningDollars = payout.transferAmountCents / 100;
+    const currentAvailableBalance = Number(walletSnapshot.data()?.availableBalance || 0);
+    if (!Number.isFinite(currentAvailableBalance) || currentAvailableBalance < 0) {
+      throw new HttpsError("failed-precondition", "The Scaler Wallet requires support review.");
+    }
     transaction.update(zoneRef, {
+      status: "completed",
       reviewStatus: "approved", redoRequired: false,
       releaseOptionalBonus: payout.bonusAmountCents > 0,
       approvedTransferAmountCents: payout.transferAmountCents,
@@ -10719,10 +11215,41 @@ exports.finalizeZoneReview = safeStripeCallable("finalizeZoneReview", async (req
       paymentStatus: "transfer_pending", updatedAt: timestamp,
     });
     transaction.update(completionRef, {
-      reviewStatus: "approved", approvedTransferAmountCents: payout.transferAmountCents,
-      reviewedAt: timestamp, updatedAt: timestamp,
+      status: "approved", reviewStatus: "approved",
+      approvedTransferAmountCents: payout.transferAmountCents,
+      approvedAt: timestamp, completedAt: timestamp, reviewedAt: timestamp, updatedAt: timestamp,
     });
-    return {zoneId, reviewStatus: "approved", payout};
+    transaction.create(transferRef, {
+      transferOperationId: transferId, paymentId: paymentSnapshot.id,
+      campaignId: zone.campaignId, zoneId, businessId: zone.businessId,
+      scalerId: zone.assignedScalerId, currency: marketplace.CURRENCY,
+      amountCents: payout.transferAmountCents, baseAmountCents: payout.baseAmountCents,
+      bonusAmountCents: payout.bonusAmountCents, earningsVersion: 1,
+      status: marketplace.TRANSFER_STATES.pending, bankPayoutStatus: "not_observed",
+      externalExecutionAuthorized: false, createdAt: timestamp, updatedAt: timestamp,
+    });
+    transaction.update(paymentRef, {
+      reservedWorkerAmountCents: Number(payment.reservedWorkerAmountCents || 0) +
+        payout.transferAmountCents,
+      updatedAt: timestamp,
+    });
+    transaction.set(walletRef, {
+      ownerId: zone.assignedScalerId, ownerType: "scaler",
+      availableBalance: currentAvailableBalance + earningDollars,
+      updatedAt: timestamp,
+      ...(!walletSnapshot.exists ? {createdAt: timestamp, pendingBalance: 0} : {}),
+    }, {merge: true});
+    const earningRecord = {
+      type: "scaler_earnings", walletSide: "scaler", transferOperationId: transferId,
+      campaignId: zone.campaignId, zoneId, businessId: zone.businessId,
+      scalerId: zone.assignedScalerId, amount: earningDollars,
+      amountCents: payout.transferAmountCents, currency: marketplace.CURRENCY,
+      status: "available", description: "Verified campaign work earning.", createdAt: timestamp,
+    };
+    transaction.create(walletTransactionRef, earningRecord);
+    transaction.create(globalWalletTransactionRef, earningRecord);
+    return {zoneId, reviewStatus: "approved", payout,
+      transferOperationId: transferId, earningRecorded: true};
   });
 });
 

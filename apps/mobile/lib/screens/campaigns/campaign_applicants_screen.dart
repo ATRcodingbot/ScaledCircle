@@ -486,98 +486,14 @@ class CampaignApplicantsScreen extends StatelessWidget {
     }
 
     try {
-      await firestore.runTransaction((transaction) async {
-        final latestApplication = await transaction.get(application.reference);
-
-        final latestCampaign = await transaction.get(campaign.reference);
-
-        if (!latestApplication.exists) {
-          throw Exception('This application no longer exists.');
-        }
-
-        if (!latestCampaign.exists) {
-          throw Exception('This campaign no longer exists.');
-        }
-
-        final latestCampaignData =
-            latestCampaign.data() as Map<String, dynamic>? ?? {};
-        final latestCampaignStatus =
-            latestCampaignData['status']?.toString() ?? '';
-        if (latestCampaignStatus != 'open') {
-          throw Exception(
-            'This campaign is no longer accepting Scaler assignments.',
-          );
-        }
-
-        final latestApplicationData = latestApplication.data()!;
-
-        final applicationStatus =
-            latestApplicationData['status']?.toString() ?? 'pending';
-
-        if (applicationStatus != 'pending') {
-          throw Exception('This application has already been processed.');
-        }
-
-        final claimedLocationIds = <String>[];
-
-        int claimedQuantity = 0;
-
-        for (final location in locationsToAssign) {
-          final latestLocation = await transaction.get(location.reference);
-
-          if (!latestLocation.exists) {
-            throw Exception('One of the selected locations no longer exists.');
-          }
-
-          final locationData = latestLocation.data()!;
-
-          final existingScalerId = locationData['assignedScalerId']?.toString();
-
-          final locationStatus =
-              locationData['status']?.toString() ?? 'pending';
-
-          if (existingScalerId != null && existingScalerId.isNotEmpty) {
-            continue;
-          }
-
-          if (locationStatus == 'completed' || locationStatus == 'cancelled') {
-            continue;
-          }
-
-          final quantity = (locationData['quantity'] as num?)?.toInt() ?? 1;
-
-          claimedLocationIds.add(location.id);
-
-          claimedQuantity += quantity;
-
-          transaction.update(location.reference, {
-            'assignedScalerId': scalerId,
-            'assignedScalerEmail': scalerEmail,
-            'assignedApplicationId': application.id,
-            'status': 'assigned',
-            'assignedAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        if (claimedLocationIds.isEmpty) {
-          throw Exception(
-            'The selected locations were assigned by another action. '
-            'Please try again.',
-          );
-        }
-
-        transaction.update(application.reference, {
-          'status': 'accepted',
-          'assignmentMode': 'exact_locations',
-          'assignedCampaignId': campaign.id,
-          'assignedLocationIds': claimedLocationIds,
-          'assignedLocationCount': claimedLocationIds.length,
-          'assignedQuantity': claimedQuantity,
-          'acceptedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      });
+      await const SecureFunctionService().call(
+        functionName: 'assignScalerToCampaignLocations',
+        data: {
+          'campaignId': campaign.id,
+          'applicationId': application.id,
+          'locationIds': locationsToAssign.map((location) => location.id).toList(),
+        },
+      );
 
       await _refreshCampaignStaffing();
 
@@ -637,17 +553,10 @@ class CampaignApplicantsScreen extends StatelessWidget {
     }
 
     try {
-      final firestore = FirebaseFirestore.instance;
-
-      final batch = firestore.batch();
-
-      batch.update(application.reference, {
-        'status': 'rejected',
-        'rejectedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
+      await const SecureFunctionService().call(
+        functionName: 'rejectCampaignApplication',
+        data: {'campaignId': campaign.id, 'applicationId': application.id},
+      );
 
       if (!context.mounted) {
         return;

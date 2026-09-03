@@ -49,6 +49,23 @@ beforeEach(async () => {
       assignedScalerId: null, assignedScalerEmail: null, status: "unassigned",
       updatedAt: new Date(), createdAt: new Date(),
     });
+    await db.doc("campaignLocations/location-one").set({
+      campaignId: "campaign-one", businessId: "business-one",
+      assignedScalerId: "scaler-one", status: "assigned",
+      locationType: "yard_sign_installation", latitude: 39, longitude: -76,
+      quantity: 1, createdAt: new Date(), updatedAt: new Date(),
+    });
+    await db.doc("campaignLocations/location-unassigned").set({
+      campaignId: "campaign-one", businessId: "business-one",
+      assignedScalerId: null, status: "pending", locationType: "service_point",
+      latitude: 39, longitude: -76, quantity: 1,
+      createdAt: new Date(), updatedAt: new Date(),
+    });
+    await db.doc("campaignCompletions/completion-one").set({
+      campaignId: "campaign-one", businessId: "business-one",
+      scalerId: "scaler-one", status: "submitted", completionType: "campaign",
+      proofs: [], createdAt: new Date(), updatedAt: new Date(),
+    });
     await db.doc("campaignRoutes/route-one").set({
       scalerId: "scaler-one", businessId: "business-one", campaignId: "campaign-one",
       zoneId: "zone-one", routeSource: "native_background_v1", points: [],
@@ -366,6 +383,41 @@ test("assigned scaler and businesses cannot spoof protected campaign zone state"
     for (const patch of attempts) {
       await assertFails(store(uid).doc("campaignZones/zone-one").update(patch));
     }
+  }
+});
+
+test("exact campaign locations are participant-private and server-write-only", async () => {
+  await assertSucceeds(store("business-one").doc("campaignLocations/location-one").get());
+  await assertSucceeds(store("scaler-one").doc("campaignLocations/location-one").get());
+  await assertSucceeds(store("admin-one").doc("campaignLocations/location-one").get());
+  await assertFails(store("business-two").doc("campaignLocations/location-one").get());
+  await assertFails(store("scaler-two").doc("campaignLocations/location-one").get());
+  await assertFails(store("scaler-one").doc("campaignLocations/location-unassigned").get());
+  for (const uid of ["business-one", "scaler-one", "admin-one"]) {
+    await assertFails(store(uid).doc("campaignLocations/location-one").update({status: "completed"}));
+    await assertFails(store(uid).doc("campaignLocations/forged").set({
+      campaignId: "campaign-one", businessId: uid, status: "completed",
+    }));
+    await assertFails(store(uid).doc("campaignLocations/location-one").delete());
+  }
+});
+
+test("completion identity, evidence, review, and outcome are server-write-only", async () => {
+  await assertSucceeds(store("business-one").doc("campaignCompletions/completion-one").get());
+  await assertSucceeds(store("scaler-one").doc("campaignCompletions/completion-one").get());
+  await assertSucceeds(store("admin-one").doc("campaignCompletions/completion-one").get());
+  await assertFails(store("business-two").doc("campaignCompletions/completion-one").get());
+  await assertFails(store("scaler-two").doc("campaignCompletions/completion-one").get());
+  for (const uid of ["business-one", "scaler-one", "admin-one"]) {
+    const ref = store(uid).doc("campaignCompletions/completion-one");
+    await assertFails(ref.update({status: "approved"}));
+    await assertFails(ref.update({proofs: [{id: "forged"}]}));
+    await assertFails(ref.update({scalerId: uid}));
+    await assertFails(ref.delete());
+    await assertFails(store(uid).doc("campaignCompletions/forged").set({
+      campaignId: "campaign-one", businessId: "business-one", scalerId: uid,
+      status: "approved", completedQuantity: 999,
+    }));
   }
 });
 

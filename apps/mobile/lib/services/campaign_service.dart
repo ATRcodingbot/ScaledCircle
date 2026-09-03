@@ -313,62 +313,9 @@ class CampaignService {
     required String scalerId,
 
   }) async {
-
-
-    final batch =
-        _firestore.batch();
-
-
-
-    final applicationRef =
-        _firestore
-            .collection("campaigns")
-            .doc(campaignId)
-            .collection("applications")
-            .doc(scalerId);
-
-
-
-    final assignedRef =
-        _firestore
-            .collection("campaigns")
-            .doc(campaignId)
-            .collection("assignedScalers")
-            .doc(scalerId);
-
-
-
-    batch.update(
-      applicationRef,
-      {
-
-        "status":"accepted",
-
-        "updatedAt":
-            FieldValue.serverTimestamp(),
-
-      },
+    throw StateError(
+      'Choose a zone or exact locations before assigning this Scaler.',
     );
-
-
-
-    batch.set(
-      assignedRef,
-      {
-
-        "scalerId":scalerId,
-
-        "assignedAt":
-            FieldValue.serverTimestamp(),
-
-        "status":"assigned",
-
-      },
-    );
-
-
-
-    await batch.commit();
 
   }
 
@@ -387,63 +334,9 @@ class CampaignService {
     required String scalerId,
 
   }) async {
-
-
-    final batch =
-        _firestore.batch();
-
-
-
-    final campaignRef =
-        _firestore
-            .collection("campaigns")
-            .doc(campaignId);
-
-
-
-    final scalerRef =
-        campaignRef
-            .collection("assignedScalers")
-            .doc(scalerId);
-
-
-
-    batch.update(
-      campaignRef,
-      {
-
-        "status":"completed",
-
-        "completedBy":
-            scalerId,
-
-        "completedAt":
-            FieldValue.serverTimestamp(),
-
-        "reviewsUnlocked":
-            true,
-
-      },
+    throw StateError(
+      'Completion must be submitted and reviewed through the Job Room.',
     );
-
-
-
-    batch.update(
-      scalerRef,
-      {
-
-        "status":"completed",
-
-        "completedAt":
-            FieldValue.serverTimestamp(),
-
-      },
-    );
-
-
-
-    await batch.commit();
-
   }
 
 }

@@ -52,11 +52,9 @@ class CompletionPayoutService {
         'releaseOptionalBonus': releaseBonus,
       },
     );
-    final transfer = await _secureFunctions.call(
-      functionName: 'createScalerTransfer',
-      data: {'zoneId': payoutId, 'releaseOptionalBonus': releaseBonus},
-    );
-    return {...review, ...transfer};
+    // Approval establishes one canonical Wallet earning. Provider transfer and
+    // bank cash-out are deliberately separate, later-authorized operations.
+    return review;
   }
 
   Future<Map<String, dynamic>> approveGroupSettlement({

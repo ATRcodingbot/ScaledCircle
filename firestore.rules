@@ -192,12 +192,10 @@ service cloud.firestore {
           );
 
 
-        allow update:
-          if isApprovedAccount()
-          &&
-          get(
-            /databases/$(database)/documents/campaigns/$(campaignId)
-          ).data.businessId == request.auth.uid;
+        // Review/assignment changes are contractual authority and must pass
+        // through the transaction-safe campaign callables.
+        allow update, delete:
+          if false;
 
       }
 
@@ -222,15 +220,9 @@ service cloud.firestore {
           );
 
 
-        allow create, update:
-          if isApprovedAccount()
-          && get(
-            /databases/$(database)/documents/campaigns/$(campaignId)
-          ).data.businessId == request.auth.uid;
-
-
-        allow delete:
-          if isAdmin();
+        // Assignment state is maintained only by server authority.
+        allow create, update, delete:
+          if false;
 
       }
 
@@ -675,19 +667,20 @@ service cloud.firestore {
 
 
       allow read:
-        if isApprovedAccount();
+        if isApprovedAccount()
+        && (
+          isAdmin()
+          || resource.data.assignedScalerId == request.auth.uid
+          || get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.businessId == request.auth.uid
+        );
 
 
-      allow create:
-        if isApprovedAccount();
-
-
-      allow update:
-        if isApprovedAccount();
-
-
-      allow delete:
-        if isAdmin();
+      // Exact locations contain private addresses and consequential assignment
+      // state. Creation, assignment, proof completion, and removal all flow
+      // through maintained server authority.
+      allow create, update, delete: if false;
 
     }
 
@@ -701,11 +694,7 @@ service cloud.firestore {
     match /campaignCompletions/{completionId} {
 
 
-      allow create:
-        if isApprovedAccount()
-        &&
-        request.resource.data.scalerId == request.auth.uid
-        && !request.resource.data.keys().hasAny(financialCompletionFields());
+      allow create: if false;
 
 
       allow read:
@@ -715,23 +704,14 @@ service cloud.firestore {
           resource.data.scalerId == request.auth.uid
           ||
           resource.data.businessId == request.auth.uid
+          || isAdmin()
         );
 
 
-      allow update:
-        if isApprovedAccount()
-        &&
-        (
-          resource.data.scalerId == request.auth.uid
-          ||
-          resource.data.businessId == request.auth.uid
-        )
-        && !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(financialCompletionFields());
-
-
-      allow delete:
-        if isAdmin();
+      // Evidence, lifecycle transitions, review outcomes, and earnings are a
+      // single server-authoritative state machine. Clients retain scoped read
+      // access only.
+      allow update, delete: if false;
 
     }
 

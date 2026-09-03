@@ -373,24 +373,6 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
         note: location.instructions,
       );
 
-      await _firestore.collection('campaignLocations').doc(location.id).update({
-        'status': 'completed',
-        'completedByScalerId': user.uid,
-        'completedByScalerEmail': user.email,
-        'completedLatitude': position.latitude,
-        'completedLongitude': position.longitude,
-        'completedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      await _firestore
-          .collection('campaignCompletions')
-          .doc(completionId)
-          .update({
-            'status': 'in_progress',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
       if (!mounted) {
         return;
       }
@@ -469,14 +451,6 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
         longitude: position.longitude,
       );
 
-      await _firestore
-          .collection('campaignCompletions')
-          .doc(completionId)
-          .update({
-            'status': 'in_progress',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
       if (!mounted) {
         return;
       }
@@ -540,15 +514,6 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
         completionId: completionId,
         proof: proof,
       );
-
-      await _firestore.collection('campaignLocations').doc(location.id).update({
-        'status': 'completed',
-        'completedByScalerId': user.uid,
-        'completedLatitude': position.latitude,
-        'completedLongitude': position.longitude,
-        'completedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
 
       if (!mounted) {
         return;
@@ -739,19 +704,6 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
     });
 
     try {
-      int completedQuantity = 0;
-
-      for (final location in locations) {
-        if (location.status == CampaignLocationStatus.completed) {
-          completedQuantity += location.quantity;
-        }
-      }
-
-      await _campaignService.updateCompletion(
-        completionId: completionId,
-        updates: {'completedQuantity': completedQuantity},
-      );
-
       await _campaignService.submitCompletion(
         completionId: completionId,
         scalerNotes: _notesController.text.trim(),
