@@ -115,6 +115,16 @@ function responseCodeFingerprint(value) {
   return code ? crypto.createHash("sha256").update(code).digest("hex").slice(0, 16) : null;
 }
 
+function assertCampaignImportHttpRequest(request) {
+  if (request?.method !== "POST") throw new Error("campaign_import_method_not_allowed");
+  const input = request?.body;
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).length !== 0 || Object.keys(request?.query || {}).length !== 0) {
+    throw new Error("campaign_import_empty_request_required");
+  }
+  return true;
+}
+
 function resolverFailureCategory(error) {
   const code = String(error?.message || "");
   if (code === "response_code_malformed") return "malformed_code";
@@ -246,14 +256,12 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     }
   }
 
-  async function importScaledCircleDogfoodCampaign(actor) {
-    assertAttributionActor(actor);
+  async function importScaledCircleDogfoodCampaign() {
     const authority = SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT;
     if (text(runtimeProjectId, 160) !== authority.projectId) {
       throw new Error("campaign_import_wrong_environment");
     }
-    if (actor.role !== "admin" || actor.uid !== authority.ownerUid ||
-        text(adminSelfDogfoodBusinessUid, 180) !== authority.ownerUid) {
+    if (text(adminSelfDogfoodBusinessUid, 180) !== authority.ownerUid) {
       throw new Error("campaign_import_forbidden");
     }
     const campaignRef = db.collection("campaigns").doc(authority.campaignId);
@@ -579,7 +587,8 @@ module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   PUBLIC_RESPONSE_ORIGINS, RESPONSE_ASSET_EXPOSURES, publicResponseOrigin, responseOriginPolicy,
   SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT,
   assertPublicResponseOrigin, assertResponseOriginPolicy,
-  responseCodeFingerprint, resolverFailureCategory, assertAttributionActor,
+  responseCodeFingerprint, resolverFailureCategory, assertCampaignImportHttpRequest,
+  assertAttributionActor,
   opaqueCode, canonicalEnvelope, privacyFingerprint, responseActivityClass, interactionEventId,
   destinationWithResponseContext,
   safeAsset, createAttributionService};

@@ -296,6 +296,13 @@ test("attribution-core exclusively owns the zero-secret response and analytics b
   assert.deepEqual(Object.keys(attributionPackage.dependencies).sort(), [
     "firebase-admin", "firebase-functions",
   ]);
+  assert.match(attributionCore,
+    /exports\.importScaledCircleDogfoodCampaignV1\s*=\s*onRequest\(\s*\{\s*invoker:\s*"private",\s*cors:\s*false,\s*maxInstances:\s*1\s*\}/);
+  assert.doesNotMatch(attributionCore,
+    /exports\.importScaledCircleDogfoodCampaignV1\s*=\s*onCall\(/);
+  assert.match(attributionCore, /assertCampaignImportHttpRequest\(request\)/);
+  assert.doesNotMatch(attributionCore,
+    /importScaledCircleDogfoodCampaign\(actor\)/);
   for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",
     "CENSUS_API_KEY", "nodemailer"]) assert.doesNotMatch(attributionCore, new RegExp(forbidden));
   assert.match(attributionCore, /createDisabledProvider/);

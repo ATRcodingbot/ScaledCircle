@@ -11485,22 +11485,28 @@ exports.createResponseAsset = onCall(
   },
 );
 
-exports.importScaledCircleDogfoodCampaignV1 = onCall(
-  {enforceAppCheck: false, maxInstances: 1},
-  async (request) => {
-    const actor = await requireAttributionActor(request);
+exports.importScaledCircleDogfoodCampaignV1 = onRequest(
+  {invoker: "private", cors: false, maxInstances: 1},
+  async (request, response) => {
+    try { attributionFoundation.assertCampaignImportHttpRequest(request); } catch (error) {
+      if (String(error?.message || "") === "campaign_import_method_not_allowed") {
+        return response.status(405).json({error: "method_not_allowed"});
+      }
+      return response.status(400).json({error: "empty_request_required"});
+    }
     try {
-      return await attributionService.importScaledCircleDogfoodCampaign(actor);
+      const result = await attributionService.importScaledCircleDogfoodCampaign();
+      return response.status(200).json({result});
     } catch (error) {
       const code = String(error?.message || "");
       if (["campaign_import_forbidden", "campaign_import_wrong_environment"].includes(code)) {
-        throw new HttpsError("permission-denied", "This campaign import is not available.");
+        return response.status(403).json({error: "campaign_import_unavailable"});
       }
       if (["campaign_import_conflict", "campaign_import_integrity"].includes(code)) {
-        throw new HttpsError("failed-precondition",
-          "The canonical campaign import cannot be reconciled safely.");
+        return response.status(409).json({error: "campaign_import_conflict"});
       }
-      throw attributionHttpsError(error);
+      console.error("campaign_import_failed", {category: "internal_failure"});
+      return response.status(500).json({error: "campaign_import_failed"});
     }
   },
 );
