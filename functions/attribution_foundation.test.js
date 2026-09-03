@@ -117,6 +117,54 @@ test("public response origin is project-derived and fails closed", () => {
     /response_origin_unavailable/);
 });
 
+test("one-time ScaledCircle production campaign import is exact and idempotent", async () => {
+  const db = fakeFirestore();
+  const service = attribution.createAttributionService({db,
+    FieldValue: {serverTimestamp: () => "server-time"}, runtimeProjectId: "scaled-circle",
+    adminSelfDogfoodBusinessUid: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3"});
+  const actor = {uid: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3", role: "admin", isAdmin: true,
+    emailVerified: true};
+  const created = await service.importScaledCircleDogfoodCampaign(actor);
+  const replay = await service.importScaledCircleDogfoodCampaign(actor);
+  assert.equal(created.campaignId, "sc_campaign_brand_launch_md_2026_09");
+  assert.equal(created.idempotentReplay, false);
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal([...db.records.keys()].filter((key) =>
+    key === "campaigns/sc_campaign_brand_launch_md_2026_09").length, 1);
+  assert.deepEqual(db.records.get("campaigns/sc_campaign_brand_launch_md_2026_09"), {
+    schemaVersion: "SocialCampaignAttributionV1",
+    businessId: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3",
+    campaignName: "ScaledCircle Maryland brand launch — September 2026",
+    campaignType: "social_brand_launch",
+    status: "draft",
+    socialPlanId: "sc_plan_2026_09_launch_readiness_v1",
+    socialPlanVersionId: "sc_plan_2026_09_launch_readiness_v1:v1",
+    providerMutationEnabled: false,
+    financialAuthorityEnabled: false,
+    createdAt: "server-time",
+    updatedAt: "server-time",
+  });
+});
+
+test("production campaign import rejects other projects, actors, and conflicting records", async () => {
+  const actor = {uid: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3", role: "admin", isAdmin: true,
+    emailVerified: true};
+  const options = {FieldValue: {serverTimestamp: () => "server-time"},
+    adminSelfDogfoodBusinessUid: actor.uid};
+  await assert.rejects(attribution.createAttributionService({...options, db: fakeFirestore(),
+    runtimeProjectId: "scaledcircle-staging"}).importScaledCircleDogfoodCampaign(actor),
+  /campaign_import_wrong_environment/);
+  await assert.rejects(attribution.createAttributionService({...options, db: fakeFirestore(),
+    runtimeProjectId: "scaled-circle"}).importScaledCircleDogfoodCampaign(
+    {uid: "another-admin", role: "admin", isAdmin: true, emailVerified: true}),
+  /campaign_import_forbidden/);
+  const conflict = fakeFirestore({"campaigns/sc_campaign_brand_launch_md_2026_09": {
+    businessId: actor.uid, campaignName: "Different campaign"}});
+  await assert.rejects(attribution.createAttributionService({...options, db: conflict,
+    runtimeProjectId: "scaled-circle"}).importScaledCircleDogfoodCampaign(actor),
+  /campaign_import_conflict/);
+});
+
 test("public-publish origins are production-authoritative and staging remains internal", () => {
   const production = attribution.responseOriginPolicy("scaled-circle");
   assert.deepEqual(production, {

@@ -32,6 +32,16 @@ const RESPONSE_ASSET_EXPOSURES = Object.freeze({
   INTERNAL_QA: "internal_qa",
   PUBLIC_PUBLISH: "public_publish",
 });
+const SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT = Object.freeze({
+  projectId: "scaled-circle",
+  ownerUid: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3",
+  campaignId: "sc_campaign_brand_launch_md_2026_09",
+  campaignName: "ScaledCircle Maryland brand launch — September 2026",
+  campaignType: "social_brand_launch",
+  socialPlanId: "sc_plan_2026_09_launch_readiness_v1",
+  socialPlanVersionId: "sc_plan_2026_09_launch_readiness_v1:v1",
+  receiptId: "scaledcircle_social_launch_2026_09_v1",
+});
 
 function text(value, max = 240) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -204,7 +214,7 @@ function safeAsset(id, data, publicBaseUrl) {
 
 function createAttributionService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes,
   publicBaseUrl, defaultExposure = RESPONSE_ASSET_EXPOSURES.INTERNAL_QA,
-  permitsPublicPublish = false, adminSelfDogfoodBusinessUid = null}) {
+  permitsPublicPublish = false, adminSelfDogfoodBusinessUid = null, runtimeProjectId = ""}) {
   async function resolveBusinessUid(actor, requested) {
     assertAttributionActor(actor);
     const businessUid = actor.role === "business" ? actor.uid : text(requested, 160);
@@ -234,6 +244,70 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
         throw new Error("attribution_reference_forbidden");
       }
     }
+  }
+
+  async function importScaledCircleDogfoodCampaign(actor) {
+    assertAttributionActor(actor);
+    const authority = SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT;
+    if (text(runtimeProjectId, 160) !== authority.projectId) {
+      throw new Error("campaign_import_wrong_environment");
+    }
+    if (actor.role !== "admin" || actor.uid !== authority.ownerUid ||
+        text(adminSelfDogfoodBusinessUid, 180) !== authority.ownerUid) {
+      throw new Error("campaign_import_forbidden");
+    }
+    const campaignRef = db.collection("campaigns").doc(authority.campaignId);
+    const receiptRef = db.collection("campaignImportReceipts").doc(authority.receiptId);
+    return db.runTransaction(async (transaction) => {
+      const [campaignSnapshot, receiptSnapshot] = await Promise.all([
+        transaction.get(campaignRef), transaction.get(receiptRef),
+      ]);
+      const expectedCampaign = {
+        schemaVersion: "SocialCampaignAttributionV1",
+        businessId: authority.ownerUid,
+        campaignName: authority.campaignName,
+        campaignType: authority.campaignType,
+        status: "draft",
+        socialPlanId: authority.socialPlanId,
+        socialPlanVersionId: authority.socialPlanVersionId,
+        providerMutationEnabled: false,
+        financialAuthorityEnabled: false,
+      };
+      const matches = (actual, expected) => Object.entries(expected)
+        .every(([key, value]) => actual?.[key] === value);
+      if (campaignSnapshot.exists && !matches(campaignSnapshot.data(), expectedCampaign)) {
+        throw new Error("campaign_import_conflict");
+      }
+      const expectedReceipt = {
+        schemaVersion: "CanonicalCampaignImportReceiptV1",
+        importAuthority: "SCALED_CIRCLE_SELF_DOGFOOD_ONLY",
+        projectId: authority.projectId,
+        ownerUid: authority.ownerUid,
+        campaignId: authority.campaignId,
+        sourcePlanId: authority.socialPlanId,
+        sourcePlanVersionId: authority.socialPlanVersionId,
+        immutable: true,
+      };
+      if (receiptSnapshot.exists && !matches(receiptSnapshot.data(), expectedReceipt)) {
+        throw new Error("campaign_import_conflict");
+      }
+      if (!campaignSnapshot.exists && receiptSnapshot.exists) {
+        throw new Error("campaign_import_integrity");
+      }
+      if (!campaignSnapshot.exists) {
+        transaction.create(campaignRef, {...expectedCampaign,
+          createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      }
+      if (!receiptSnapshot.exists) {
+        transaction.create(receiptRef, {...expectedReceipt,
+          result: campaignSnapshot.exists ? "verified_existing" : "created",
+          createdAt: FieldValue.serverTimestamp()});
+      }
+      return {campaignId: authority.campaignId, ownerUid: authority.ownerUid,
+        campaignState: "draft", importReceiptId: authority.receiptId,
+        idempotentReplay: campaignSnapshot.exists && receiptSnapshot.exists,
+        duplicateCount: 0};
+    });
   }
 
   async function createResponseAsset(input, actor) {
@@ -496,12 +570,14 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       page: {limit, bounded: true}};
   }
 
-  return {createResponseAsset, resolveAndRecord, recordPhoneInteraction, bridgeLead, getOverview};
+  return {importScaledCircleDogfoodCampaign, createResponseAsset, resolveAndRecord,
+    recordPhoneInteraction, bridgeLead, getOverview};
 }
 
 module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   CONVERSION_MILESTONES, PAGE_LIMIT, text, millis, assertHttpsDestination,
   PUBLIC_RESPONSE_ORIGINS, RESPONSE_ASSET_EXPOSURES, publicResponseOrigin, responseOriginPolicy,
+  SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT,
   assertPublicResponseOrigin, assertResponseOriginPolicy,
   responseCodeFingerprint, resolverFailureCategory, assertAttributionActor,
   opaqueCode, canonicalEnvelope, privacyFingerprint, responseActivityClass, interactionEventId,

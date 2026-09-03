@@ -284,7 +284,8 @@ test("sales-core exclusively owns the bounded zero-secret Sales authority", () =
 });
 
 test("attribution-core exclusively owns the zero-secret response and analytics boundary", () => {
-  const names = ["createResponseAsset", "getAttributionOverview", "bridgeResponseLead",
+  const names = ["createResponseAsset", "importScaledCircleDogfoodCampaignV1",
+    "getAttributionOverview", "bridgeResponseLead",
     "resolveTrackedResponse", "getTrackingPhoneWorkspace", "getTrackingPhoneOperations"];
   assert.deepEqual(exportsIn(attributionCore).sort(), [...names].sort());
   for (const name of names) {

@@ -109,7 +109,8 @@ const salesExports = new Set(["getSalesPipeline", "mutateSalesLead", "recordSale
 const legalExports = new Set(["recordLegalConsent", "getLegalConsentStatus"]);
 const applicationExports = new Set(["applyToCampaign"]);
 const attributionExports = new Set([
-  "createResponseAsset", "getAttributionOverview", "bridgeResponseLead", "resolveTrackedResponse",
+  "createResponseAsset", "importScaledCircleDogfoodCampaignV1",
+  "getAttributionOverview", "bridgeResponseLead", "resolveTrackedResponse",
   "getTrackingPhoneWorkspace", "getTrackingPhoneOperations",
 ]);
 const landingPageExports = new Set([

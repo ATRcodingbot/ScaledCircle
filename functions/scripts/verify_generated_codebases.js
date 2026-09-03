@@ -139,7 +139,8 @@ const businessProfile = require(path.join(businessProfileRoot, "index.js"));
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(attribution).sort(), [
   "bridgeResponseLead", "createResponseAsset", "getAttributionOverview",
-  "getTrackingPhoneOperations", "getTrackingPhoneWorkspace", "resolveTrackedResponse",
+  "getTrackingPhoneOperations", "getTrackingPhoneWorkspace",
+  "importScaledCircleDogfoodCampaignV1", "resolveTrackedResponse",
 ]);
 assert.deepEqual(Object.keys(artifactEmail).sort(), ["sendArtifactDeliveryEmailJob"]);
 assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob"]);

@@ -11323,6 +11323,7 @@ const attributionService = attributionFoundation.createAttributionService({db, F
   publicBaseUrl: attributionOriginPolicy?.origin,
   defaultExposure: attributionOriginPolicy?.defaultExposure,
   permitsPublicPublish: attributionOriginPolicy?.permitsPublicPublish === true,
+  runtimeProjectId: attributionProjectId,
   adminSelfDogfoodBusinessUid: ["scaledcircle-staging", "scaled-circle"].includes(attributionProjectId) ?
     "FF1bfDuvtdNjuuC4mc7NdGtk3LC3" : null});
 const trackingPhone = require("./tracking_phone");
@@ -11479,6 +11480,26 @@ exports.createResponseAsset = onCall(
   async (request) => {
     const actor = await requireAttributionActor(request);
     try { return await attributionService.createResponseAsset(request.data, actor); } catch (error) {
+      throw attributionHttpsError(error);
+    }
+  },
+);
+
+exports.importScaledCircleDogfoodCampaignV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const actor = await requireAttributionActor(request);
+    try {
+      return await attributionService.importScaledCircleDogfoodCampaign(actor);
+    } catch (error) {
+      const code = String(error?.message || "");
+      if (["campaign_import_forbidden", "campaign_import_wrong_environment"].includes(code)) {
+        throw new HttpsError("permission-denied", "This campaign import is not available.");
+      }
+      if (["campaign_import_conflict", "campaign_import_integrity"].includes(code)) {
+        throw new HttpsError("failed-precondition",
+          "The canonical campaign import cannot be reconciled safely.");
+      }
       throw attributionHttpsError(error);
     }
   },
