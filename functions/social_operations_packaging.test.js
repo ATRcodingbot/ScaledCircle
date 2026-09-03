@@ -89,6 +89,19 @@ test("bounded X write entrypoints bind only shared encryption and X secret", () 
   }
 });
 
+test("the exact X publish job is one-time and terminal after reconciliation", () => {
+  const execute = indexSource.match(
+    /exports\.executeFirstXPublishV1 = [\s\S]*?\n\);/)[0];
+  const reconcile = indexSource.match(
+    /exports\.reconcileFirstXPublishV1 = [\s\S]*?\n\);/)[0];
+  assert.match(execute, /job\.status === "completed"/);
+  assert.match(execute, /job\.status !== "scheduled"/);
+  assert.match(execute, /Number\(job\.attemptCount \|\| 0\) !== 0/);
+  assert.match(execute, /status: "completed"/);
+  assert.match(reconcile, /status: "completed"/);
+  assert.doesNotMatch(execute + reconcile, /RRULE|recurr|daily/i);
+});
+
 test("X write reconsent remains blocked until separate Founder publication approval", () => {
   const entrypoint = indexSource.match(
     /exports\.beginFirstXPublishAuthorizationV1 = [\s\S]*?\n\);/)[0];

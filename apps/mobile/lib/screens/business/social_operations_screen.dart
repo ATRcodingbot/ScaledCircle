@@ -1105,7 +1105,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              jobStatus == 'published'
+              jobStatus == 'completed'
                   ? 'Published and reconciled'
                   : jobStatus == 'unknown_provider_outcome'
                   ? 'Provider outcome needs reconciliation'

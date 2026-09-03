@@ -920,7 +920,7 @@ exports.executeFirstXPublishV1 = onCall(
         job.executionAuthority !== "single_certified_item_only") {
       throw new HttpsError("failed-precondition", "The exact publish job is unavailable.");
     }
-    if (job.status === "published") return {publishJobId, status: "published",
+    if (job.status === "completed") return {publishJobId, status: "completed",
       providerPostId: job.providerPostId, providerPostUrl: job.providerPostUrl,
       idempotentReplay: true};
     if (job.status !== "scheduled" || Number(job.attemptCount || 0) !== 0 ||
@@ -956,7 +956,7 @@ exports.executeFirstXPublishV1 = onCall(
     }
     const claimed = await db.runTransaction(async (transaction) => {
       const current = (await transaction.get(jobRef)).data();
-      if (current?.status === "published") return false;
+      if (current?.status === "completed") return false;
       if (current?.status !== "scheduled" || Number(current?.attemptCount || 0) !== 0) {
         throw new Error("x_publish_already_claimed");
       }
@@ -965,7 +965,7 @@ exports.executeFirstXPublishV1 = onCall(
         updatedAt: FieldValue.serverTimestamp()});
       return true;
     });
-    if (!claimed) return {publishJobId, status: "published", idempotentReplay: true};
+    if (!claimed) return {publishJobId, status: "completed", idempotentReplay: true};
     try {
       const auth = await firstXCredential(business.uid, connectionData);
       const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
@@ -993,7 +993,7 @@ exports.executeFirstXPublishV1 = onCall(
         providerTextHash: created.providerTextHash, mediaAssetId: xFirstPublish.MEDIA_ID,
         mediaSha256: xFirstPublish.MEDIA_SHA256, responseAssetId: job.responseAssetId,
         status: "accepted", immutable: true, createdAt: FieldValue.serverTimestamp()});
-      batch.update(jobRef, {status: "published", providerPostId: created.providerPostId,
+      batch.update(jobRef, {status: "completed", providerPostId: created.providerPostId,
         providerPostUrl: created.providerPostUrl, providerReceiptId: receiptId,
         providerMutationCount: 2, reconciliationRequired: false,
         providerAcceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
@@ -1009,7 +1009,7 @@ exports.executeFirstXPublishV1 = onCall(
           updatedAt: FieldValue.serverTimestamp()});
       }
       await batch.commit();
-      return {publishJobId, status: "published", providerPostId: created.providerPostId,
+      return {publishJobId, status: "completed", providerPostId: created.providerPostId,
         providerPostUrl: created.providerPostUrl, providerReceiptId: receiptId,
         idempotentReplay: false, providerMutationCount: 2};
     } catch (error) {
@@ -1063,12 +1063,12 @@ exports.reconcileFirstXPublishV1 = onCall(
       contentVersion: xFirstPublish.VERSION_NUMBER, providerPostId: result.providerPostId,
       providerPostUrl: result.providerPostUrl, status: "reconciled",
       immutable: true, createdAt: FieldValue.serverTimestamp()}, {merge: false});
-    batch.update(jobRef, {status: "published", providerPostId: result.providerPostId,
+    batch.update(jobRef, {status: "completed", providerPostId: result.providerPostId,
       providerPostUrl: result.providerPostUrl, providerReceiptId: receiptId,
       reconciliationRequired: false, reconciledAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()});
     await batch.commit();
-    return {publishJobId, status: "published", providerPostId: result.providerPostId,
+    return {publishJobId, status: "completed", providerPostId: result.providerPostId,
       providerPostUrl: result.providerPostUrl, providerReceiptId: receiptId,
       reconciled: true, duplicateCreateAttempted: false};
   },

@@ -61,6 +61,7 @@ void main() {
     expect(screen, contains('Approve this exact X post?'));
     expect(screen, contains('Use this X account?'));
     expect(screen, contains('No public post has been created.'));
+    expect(screen, contains("jobStatus == 'completed'"));
     expect(screen, isNot(contains('tweet.write')));
     expect(screen, isNot(contains('media.write')));
   });
