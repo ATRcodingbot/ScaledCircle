@@ -222,7 +222,8 @@ function transformIndex(mode) {
   if (mode === "business-profile") selectedProgram(ast, businessProfileExports);
   if (!["attribution", "physical-marketing"].includes(mode)) {
     const attributionHelpers = new Set([
-      "attributionFoundation", "attributionService", "attributionHttpsError", "requireAttributionActor",
+      "attributionFoundation", "attributionOriginPolicy", "attributionService",
+      "attributionHttpsError", "requireAttributionActor",
       "trackingPhone", "trackingPhoneService", "trackingPhoneHttpsError",
       "requireTrackingPhoneActor", "trackingPhoneCall",
     ]);
