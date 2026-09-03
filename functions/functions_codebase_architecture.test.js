@@ -285,6 +285,7 @@ test("sales-core exclusively owns the bounded zero-secret Sales authority", () =
 
 test("attribution-core exclusively owns the zero-secret response and analytics boundary", () => {
   const names = ["createResponseAsset", "importScaledCircleDogfoodCampaignV1",
+    "createScaledCircleXResponseAssetV1",
     "getAttributionOverview", "bridgeResponseLead",
     "resolveTrackedResponse", "getTrackingPhoneWorkspace", "getTrackingPhoneOperations"];
   assert.deepEqual(exportsIn(attributionCore).sort(), [...names].sort());
@@ -301,6 +302,9 @@ test("attribution-core exclusively owns the zero-secret response and analytics b
   assert.doesNotMatch(attributionCore,
     /exports\.importScaledCircleDogfoodCampaignV1\s*=\s*onCall\(/);
   assert.match(attributionCore, /assertCampaignImportHttpRequest\(request\)/);
+  assert.match(attributionCore,
+    /exports\.createScaledCircleXResponseAssetV1\s*=\s*onRequest\(\s*\{\s*invoker:\s*"private",\s*cors:\s*false,\s*maxInstances:\s*1\s*\}/);
+  assert.match(attributionCore, /assertScaledCircleXResponseAssetHttpRequest\(request\)/);
   assert.doesNotMatch(attributionCore,
     /importScaledCircleDogfoodCampaign\(actor\)/);
   for (const forbidden of ["defineSecret", "STRIPE_", "SMTP_PASSWORD", "OPENAI_API_KEY",

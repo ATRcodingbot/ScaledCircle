@@ -12038,6 +12038,33 @@ exports.importScaledCircleDogfoodCampaignV1 = onRequest(
   },
 );
 
+exports.createScaledCircleXResponseAssetV1 = onRequest(
+  {invoker: "private", cors: false, maxInstances: 1},
+  async (request, response) => {
+    try { attributionFoundation.assertScaledCircleXResponseAssetHttpRequest(request); } catch (error) {
+      if (String(error?.message || "") === "x_response_asset_method_not_allowed") {
+        return response.status(405).json({error: "method_not_allowed"});
+      }
+      return response.status(400).json({error: "empty_request_required"});
+    }
+    try {
+      const result = await attributionService.createScaledCircleXResponseAsset();
+      return response.status(200).json({result});
+    } catch (error) {
+      const code = String(error?.message || "");
+      if (["x_response_asset_forbidden", "x_response_asset_wrong_environment",
+        "attribution_reference_forbidden"].includes(code)) {
+        return response.status(403).json({error: "x_response_asset_unavailable"});
+      }
+      if (["already_exists", "public_publish_origin_forbidden"].includes(code)) {
+        return response.status(409).json({error: "x_response_asset_conflict"});
+      }
+      console.error("x_response_asset_failed", {category: "internal_failure"});
+      return response.status(500).json({error: "x_response_asset_failed"});
+    }
+  },
+);
+
 exports.getTrackingPhoneWorkspace = onCall(
   {enforceAppCheck: false, maxInstances: 4},
   (request) => trackingPhoneCall(request, trackingPhoneService.workspace),

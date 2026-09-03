@@ -42,6 +42,16 @@ const SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT = Object.freeze({
   socialPlanVersionId: "sc_plan_2026_09_launch_readiness_v1:v1",
   receiptId: "scaledcircle_social_launch_2026_09_v1",
 });
+const SCALED_CIRCLE_X_RESPONSE_ASSET_V1 = Object.freeze({
+  projectId: "scaled-circle",
+  ownerUid: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3",
+  campaignId: "sc_campaign_brand_launch_md_2026_09",
+  contentItemId: "sc_x_20260903_mapping_v1",
+  contentVersionId: "sc_x_20260903_mapping_v1:v3",
+  destination: "https://scaledcircle.com/#/businesses",
+  publicOrigin: "https://scaledcircle.com",
+  requestId: "scaledcircle_x_mapping_v3_production_response_v1",
+});
 
 function text(value, max = 240) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -125,6 +135,16 @@ function assertCampaignImportHttpRequest(request) {
   return true;
 }
 
+function assertScaledCircleXResponseAssetHttpRequest(request) {
+  if (request?.method !== "POST") throw new Error("x_response_asset_method_not_allowed");
+  const input = request?.body;
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).length !== 0 || Object.keys(request?.query || {}).length !== 0) {
+    throw new Error("x_response_asset_empty_request_required");
+  }
+  return true;
+}
+
 function resolverFailureCategory(error) {
   const code = String(error?.message || "");
   if (code === "response_code_malformed") return "malformed_code";
@@ -159,6 +179,8 @@ function canonicalEnvelope(input = {}) {
     source,
     sourceDetail: text(input.sourceDetail, 160) || null,
     campaignId: text(input.campaignId, 160) || null,
+    contentItemId: text(input.contentItemId, 160) || null,
+    contentVersionId: text(input.contentVersionId, 160) || null,
     zoneId: text(input.zoneId, 160) || null,
     materialId: text(input.materialId, 160) || null,
     materialType: text(input.materialType, 60).toLowerCase() || null,
@@ -363,6 +385,26 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     }
     return {responseAssetId: ref.id, publicCode: code,
       trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`, idempotentReplay: false};
+  }
+
+  async function createScaledCircleXResponseAsset() {
+    const authority = SCALED_CIRCLE_X_RESPONSE_ASSET_V1;
+    if (text(runtimeProjectId, 160) !== authority.projectId ||
+        publicBaseUrl !== authority.publicOrigin || defaultExposure !== "public_publish" ||
+        permitsPublicPublish !== true) {
+      throw new Error("x_response_asset_wrong_environment");
+    }
+    if (text(adminSelfDogfoodBusinessUid, 180) !== authority.ownerUid) {
+      throw new Error("x_response_asset_forbidden");
+    }
+    const actor = {uid: authority.ownerUid, role: "admin", isAdmin: true,
+      emailVerified: true, user: {active: true}};
+    return createResponseAsset({businessUid: authority.ownerUid, type: "tracked_link",
+      label: "ScaledCircle X Smart Mapping v3", exposure: "public_publish",
+      requestId: authority.requestId, destination: authority.destination,
+      attribution: {source: "social", sourceDetail: "x",
+        campaignId: authority.campaignId, contentItemId: authority.contentItemId,
+        contentVersionId: authority.contentVersionId, creativeVersion: "v3"}}, actor);
   }
 
   async function resolveAndRecord({code, ip, userAgent, requestIdentity}) {
@@ -578,16 +620,18 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       page: {limit, bounded: true}};
   }
 
-  return {importScaledCircleDogfoodCampaign, createResponseAsset, resolveAndRecord,
+  return {importScaledCircleDogfoodCampaign, createResponseAsset,
+    createScaledCircleXResponseAsset, resolveAndRecord,
     recordPhoneInteraction, bridgeLead, getOverview};
 }
 
 module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   CONVERSION_MILESTONES, PAGE_LIMIT, text, millis, assertHttpsDestination,
   PUBLIC_RESPONSE_ORIGINS, RESPONSE_ASSET_EXPOSURES, publicResponseOrigin, responseOriginPolicy,
-  SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT,
+  SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT, SCALED_CIRCLE_X_RESPONSE_ASSET_V1,
   assertPublicResponseOrigin, assertResponseOriginPolicy,
   responseCodeFingerprint, resolverFailureCategory, assertCampaignImportHttpRequest,
+  assertScaledCircleXResponseAssetHttpRequest,
   assertAttributionActor,
   opaqueCode, canonicalEnvelope, privacyFingerprint, responseActivityClass, interactionEventId,
   destinationWithResponseContext,

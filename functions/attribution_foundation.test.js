@@ -171,6 +171,83 @@ test("one-time campaign import accepts only POST with an empty fixed request", (
   ]) assert.throws(() => attribution.assertCampaignImportHttpRequest(request), /campaign_import_/);
 });
 
+test("one-time X Response Asset endpoint accepts only POST with an empty fixed request", () => {
+  assert.equal(attribution.assertScaledCircleXResponseAssetHttpRequest({
+    method: "POST", body: {}, query: {},
+  }), true);
+  for (const request of [
+    {method: "GET", body: {}, query: {}},
+    {method: "POST", body: null, query: {}},
+    {method: "POST", body: [], query: {}},
+    {method: "POST", body: {destination: "https://example.com"}, query: {}},
+    {method: "POST", body: {}, query: {campaignId: "caller-selected"}},
+  ]) assert.throws(() => attribution.assertScaledCircleXResponseAssetHttpRequest(request),
+    /x_response_asset_/);
+});
+
+test("one-time production X Response Asset is exact, public, and idempotent", async () => {
+  const authority = attribution.SCALED_CIRCLE_X_RESPONSE_ASSET_V1;
+  const db = fakeFirestore({[`campaigns/${authority.campaignId}`]: {
+    businessId: authority.ownerUid, status: "draft",
+  }});
+  const service = attribution.createAttributionService({db,
+    FieldValue: {serverTimestamp: () => "server-time"},
+    randomBytes: (size) => Buffer.alloc(size, 9), runtimeProjectId: authority.projectId,
+    publicBaseUrl: authority.publicOrigin, defaultExposure: "public_publish",
+    permitsPublicPublish: true, adminSelfDogfoodBusinessUid: authority.ownerUid});
+  const created = await service.createScaledCircleXResponseAsset();
+  const replay = await service.createScaledCircleXResponseAsset();
+  assert.equal(created.idempotentReplay, false);
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal(replay.responseAssetId, created.responseAssetId);
+  assert.equal(replay.publicCode, created.publicCode);
+  assert.match(created.trackedUrl, /^https:\/\/scaledcircle\.com\/r\?code=[A-Za-z0-9_-]{24}$/);
+  const assets = [...db.records.entries()].filter(([key]) => key.startsWith("responseAssets/"));
+  assert.equal(assets.length, 1);
+  const stored = assets[0][1];
+  assert.equal(stored.businessUid, authority.ownerUid);
+  assert.equal(stored.destination, authority.destination);
+  assert.equal(stored.publicOrigin, authority.publicOrigin);
+  assert.equal(stored.exposure, "public_publish");
+  assert.equal(stored.creationRequestId, authority.requestId);
+  assert.equal(stored.attribution.source, "social");
+  assert.equal(stored.attribution.sourceDetail, "x");
+  assert.equal(stored.attribution.campaignId, authority.campaignId);
+  assert.equal(stored.attribution.contentItemId, authority.contentItemId);
+  assert.equal(stored.attribution.contentVersionId, authority.contentVersionId);
+  assert.equal(stored.attribution.creativeVersion, "v3");
+  assert.deepEqual([...db.records.keys()].filter((key) =>
+    !key.startsWith("campaigns/") && !key.startsWith("responseAssets/")), []);
+});
+
+test("one-time production X Response Asset fails closed on environment and replay conflicts", async () => {
+  const authority = attribution.SCALED_CIRCLE_X_RESPONSE_ASSET_V1;
+  const options = {FieldValue: {serverTimestamp: () => "server-time"},
+    randomBytes: (size) => Buffer.alloc(size, 10), publicBaseUrl: authority.publicOrigin,
+    defaultExposure: "public_publish", permitsPublicPublish: true,
+    adminSelfDogfoodBusinessUid: authority.ownerUid};
+  await assert.rejects(attribution.createAttributionService({...options, db: fakeFirestore(),
+    runtimeProjectId: "scaledcircle-staging"}).createScaledCircleXResponseAsset(),
+  /x_response_asset_wrong_environment/);
+  await assert.rejects(attribution.createAttributionService({...options, db: fakeFirestore(),
+    runtimeProjectId: authority.projectId, adminSelfDogfoodBusinessUid: "other"})
+    .createScaledCircleXResponseAsset(), /x_response_asset_forbidden/);
+  const missingCampaign = attribution.createAttributionService({...options, db: fakeFirestore(),
+    runtimeProjectId: authority.projectId});
+  await assert.rejects(missingCampaign.createScaledCircleXResponseAsset(),
+    /attribution_reference_forbidden/);
+  const db = fakeFirestore({[`campaigns/${authority.campaignId}`]: {
+    businessId: authority.ownerUid, status: "draft",
+  }});
+  const service = attribution.createAttributionService({...options, db,
+    runtimeProjectId: authority.projectId});
+  const created = await service.createScaledCircleXResponseAsset();
+  db.records.get(`responseAssets/${created.responseAssetId}`).destination =
+    "https://scaledcircle.com/#/tampered";
+  await assert.rejects(service.createScaledCircleXResponseAsset(), /already_exists/);
+  assert.equal([...db.records.keys()].filter((key) => key.startsWith("responseAssets/")).length, 1);
+});
+
 test("production campaign import rejects other projects, authorities, and conflicting records", async () => {
   const ownerUid = "FF1bfDuvtdNjuuC4mc7NdGtk3LC3";
   const options = {FieldValue: {serverTimestamp: () => "server-time"},

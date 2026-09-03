@@ -110,6 +110,7 @@ const legalExports = new Set(["recordLegalConsent", "getLegalConsentStatus"]);
 const applicationExports = new Set(["applyToCampaign"]);
 const attributionExports = new Set([
   "createResponseAsset", "importScaledCircleDogfoodCampaignV1",
+  "createScaledCircleXResponseAssetV1",
   "getAttributionOverview", "bridgeResponseLead", "resolveTrackedResponse",
   "getTrackingPhoneWorkspace", "getTrackingPhoneOperations",
 ]);
