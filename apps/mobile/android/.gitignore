@@ -12,3 +12,10 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# A reproducible Android build requires the standard Gradle wrapper. The
+# repository-level Flutter ignore patterns exclude these files, so explicitly
+# retain the app's wrapper while keeping local signing material ignored.
+!gradle/wrapper/gradle-wrapper.jar
+!/gradlew
+!/gradlew.bat

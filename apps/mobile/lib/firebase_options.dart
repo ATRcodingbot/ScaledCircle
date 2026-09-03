@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC7Nb3oDg8puAwxask_6kb-V4hZSqxJWKo',
-    appId: '1:1010956217112:android:3fbf4db1c555e9f9e70c6d',
+    appId: '1:1010956217112:android:e873d8470260ec09e70c6d',
     messagingSenderId: '1010956217112',
     projectId: 'scaled-circle',
     storageBucket: 'scaled-circle.firebasestorage.app',

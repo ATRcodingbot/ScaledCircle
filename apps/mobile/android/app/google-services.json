@@ -7,12 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1010956217112:android:3fbf4db1c555e9f9e70c6d",
+        "mobilesdk_app_id": "1:1010956217112:android:e873d8470260ec09e70c6d",
         "android_client_info": {
-          "package_name": "com.example.flutter_app"
+          "package_name": "com.scaledcircle.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1010956217112-gr9cc0fd8efbp1fdkp89u1agfg7gokku.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyC7Nb3oDg8puAwxask_6kb-V4hZSqxJWKo"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1010956217112-gr9cc0fd8efbp1fdkp89u1agfg7gokku.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1010956217112-0gorm7t95nvbp7sik00ie0br0u1akci5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.flutterApp"
+              }
+            }
+          ]
         }
       }
     }

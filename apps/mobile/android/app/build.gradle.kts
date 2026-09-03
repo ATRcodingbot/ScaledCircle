@@ -1,7 +1,32 @@
+import java.io.FileInputStream
+import java.util.Properties
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
+    id("com.google.gms.google-services")
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val releaseKeyPropertiesFile = rootProject.file("key.properties")
+val releaseKeyProperties = Properties()
+if (releaseKeyPropertiesFile.exists()) {
+    FileInputStream(releaseKeyPropertiesFile).use(releaseKeyProperties::load)
+}
+
+val releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+if (releaseTaskRequested && !releaseKeyPropertiesFile.exists()) {
+    throw GradleException(
+        "Release signing requires android/key.properties. " +
+            "Debug signing is never permitted for a release artifact.",
+    )
+}
+
+fun requiredSigningProperty(name: String): String =
+    releaseKeyProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: throw GradleException("Missing release signing property: $name")
 
 android {
     namespace = "com.scaledcircle.app"
@@ -21,9 +46,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseKeyPropertiesFile.exists()) {
+            create("release") {
+                keyAlias = requiredSigningProperty("keyAlias")
+                keyPassword = requiredSigningProperty("keyPassword")
+                storeFile = file(requiredSigningProperty("storeFile"))
+                storePassword = requiredSigningProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseKeyPropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }
