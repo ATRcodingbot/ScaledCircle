@@ -23,6 +23,16 @@ bool campaignZonesCanContinue(Iterable<Map<String, dynamic>> zones) {
 // launch ceilings; worker supply never shrinks the Business-selected area.
 const int productionMaximumZonesPerCampaign = 32;
 
+String _compensationMoney(Object? cents) {
+  final value = (cents as num?)?.round() ?? 0;
+  return '\$${(value / 100).toStringAsFixed(2)}';
+}
+
+String _compensationRate(Object? cents) {
+  final value = (cents as num?)?.round() ?? 0;
+  return '\$${(value / 100).toStringAsFixed(2)}/hour equivalent';
+}
+
 class _SmartZoneEntry extends StatefulWidget {
   const _SmartZoneEntry({
     required this.locked,
@@ -283,6 +293,7 @@ class CampaignZonesScreen extends StatelessWidget {
       );
       if (!context.mounted) return;
       var selectedZoneIndex = 0;
+      var useRecommendedPay = false;
       final selectedTerritory = smartZonePoints(plan['selectedTerritory']);
       final accepted = await showDialog<bool>(
         context: context,
@@ -328,6 +339,87 @@ class CampaignZonesScreen extends StatelessWidget {
                       'These are planning estimates, not guaranteed completion times. '
                       'Each recommended Zone is kept within the six-hour single-Scaler '
                       'limit and validated again before funding.',
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Scaler compensation recommendation',
+                              style: Theme.of(
+                                dialogContext,
+                              ).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Estimated workload: '
+                              '${compensation['estimatedWorkHours']} hours',
+                            ),
+                            Text(
+                              'Recommended base payout: '
+                              '${_compensationMoney(compensation['recommendedBasePayCents'])}',
+                            ),
+                            Text(
+                              'Estimated effective compensation: '
+                              '${_compensationRate(compensation['estimatedEffectiveCompensationCentsPerHour'])}',
+                            ),
+                            Text(
+                              'Optional completion incentive: +'
+                              '${_compensationMoney(compensation['suggestedCompletionBonusCents'])}',
+                            ),
+                            Text(
+                              'Optional quality incentive: +'
+                              '${_compensationMoney(compensation['suggestedQualityBonusCents'])}',
+                            ),
+                            Text(
+                              'Potential recommended payout: '
+                              '${_compensationMoney(compensation['recommendedPotentialPayoutCents'])}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Campaign compensation remains fixed-price. The hourly '
+                              'equivalent is a planning-quality estimate, not an employment '
+                              'classification or guarantee. Optional incentives are not '
+                              'applied automatically.',
+                            ),
+                            if (compensation['belowRecommendedFloor'] ==
+                                true) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                'Below ScaledCircle recommended compensation',
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    dialogContext,
+                                  ).colorScheme.error,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              OutlinedButton.icon(
+                                onPressed: () => setDialogState(
+                                  () => useRecommendedPay = !useRecommendedPay,
+                                ),
+                                icon: Icon(
+                                  useRecommendedPay
+                                      ? Icons.check_circle
+                                      : Icons.price_check_outlined,
+                                ),
+                                label: Text(
+                                  useRecommendedPay
+                                      ? 'Recommended Pay Selected'
+                                      : 'Use Recommended Pay',
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                     if (plan['requiresSplit'] == true) ...[
                       const SizedBox(height: 12),
@@ -416,9 +508,16 @@ class CampaignZonesScreen extends StatelessWidget {
       await functions.httpsCallable('applySmartZonePlan').call({
         ...request,
         'planId': plan['planId'],
+        'useRecommendedPay': useRecommendedPay,
       });
       messenger.showSnackBar(
-        const SnackBar(content: Text('Recommended Zones are ready to review.')),
+        SnackBar(
+          content: Text(
+            useRecommendedPay
+                ? 'Recommended Zones and pay are ready to review.'
+                : 'Recommended Zones are ready to review.',
+          ),
+        ),
       );
     } on FirebaseFunctionsException catch (error) {
       if (!context.mounted) return;

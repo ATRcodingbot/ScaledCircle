@@ -18,6 +18,17 @@ void main() {
       expect(source, contains('Use Recommended Zones'));
       expect(source, contains('Advanced Edit'));
       expect(source, contains('estimated total hours'));
+      expect(source, contains('Scaler compensation recommendation'));
+      expect(source, contains('Recommended base payout'));
+      expect(source, contains('Estimated effective compensation'));
+      expect(source, contains('Optional completion incentive'));
+      expect(source, contains('Optional quality incentive'));
+      expect(source, contains('Potential recommended payout'));
+      expect(source, contains('Below ScaledCircle recommended compensation'));
+      expect(source, contains('Use Recommended Pay'));
+      expect(source, contains("'useRecommendedPay': useRecommendedPay"));
+      expect(source, contains('Campaign compensation remains fixed-price'));
+      expect(source, contains('not an employment'));
       expect(source, contains('not guaranteed completion times'));
       expect(source, contains('six-hour single-Scaler'));
       expect(source, contains('limit and validated again before funding'));

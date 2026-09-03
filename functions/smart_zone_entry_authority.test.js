@@ -35,6 +35,25 @@ test("apply stores only the server-selected boundary and its provenance", () => 
   assert.doesNotMatch(contract, /serviceArea: request\.data/);
 });
 
+test("compensation guidance uses base pay before optional bonuses", () => {
+  const start = source.indexOf("function smartZonePlanArguments");
+  const end = source.indexOf("async function generateSmartZonePlan", start);
+  const contract = source.slice(start, end);
+  assert.match(contract, /workerBasePayCents: Math\.round\(Number\(input\.campaign\.basePay/);
+  assert.match(contract, /completionBonusCents: Math\.round\(Number\(input\.campaign\.bonus/);
+  assert.match(contract, /qualityBonusCents: Math\.round\(Number\(input\.campaign\.qualityBonus/);
+  assert.doesNotMatch(contract, /basePay \|\| 0\) \+\s*Number\(input\.campaign\.bonus/);
+});
+
+test("recommended pay is applied only after the Business explicitly selects it", () => {
+  const start = source.indexOf("exports.applySmartZonePlan");
+  const end = source.indexOf("analyzePropertyIntelligence", start);
+  const contract = source.slice(start, end);
+  assert.match(contract, /request\.data\?\.useRecommendedPay === true/);
+  assert.match(contract, /basePay: plan\.compensation\.recommendedBasePayCents \/ 100/);
+  assert.match(contract, /compensationRecommendationAccepted: true/);
+});
+
 test("apply converts authoritative geometry rejection into a product-safe error", () => {
   const start = source.indexOf("exports.applySmartZonePlan");
   const end = source.indexOf("analyzePropertyIntelligence", start);

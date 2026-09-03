@@ -1,7 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
-const POLICY_VERSION = "SmartZonePlanningV3";
+const POLICY_VERSION = "SmartZonePlanningV4";
 const GEOMETRY_VERSION = "serviceable_territory_v1";
 const FALLBACK_GEOMETRY_VERSION = "basic_area_estimate_v1";
 const IDEAL_MINUTES = 240;
@@ -11,6 +11,10 @@ const MAX_ZONES_PER_CAMPAIGN = 32;
 const MAX_CAMPAIGN_MINUTES = MAX_ZONES_PER_CAMPAIGN * SINGLE_SCALER_MAX_MINUTES;
 const DEFAULT_PROPERTIES_PER_HOUR = 45;
 const METERS_PER_DEGREE_LATITUDE = 111320;
+const MINIMUM_EFFECTIVE_COMPENSATION_CENTS_PER_HOUR = 2000;
+const COMPENSATION_ROUNDING_CENTS = 500;
+const COMPLETION_INCENTIVE_RATE = 0.20;
+const QUALITY_INCENTIVE_RATE = 0.10;
 
 function finite(value, name) {
   const number = Number(value);
@@ -202,10 +206,65 @@ function splitServiceablePoints(points, count) {
 }
 function planId(input) { return `smart-zone_${crypto.createHash("sha256")
   .update(JSON.stringify(input)).digest("hex").slice(0, 24)}`; }
+function roundedCompensation(value) {
+  return Math.ceil(value / COMPENSATION_ROUNDING_CENTS) * COMPENSATION_ROUNDING_CENTS;
+}
+function compensationRecommendation({estimatedMinutes, workerBasePayCents = null,
+  completionBonusCents = 0, qualityBonusCents = 0} = {}) {
+  const minutes = finite(estimatedMinutes, "estimated_minutes");
+  if (minutes <= 0) throw new Error("estimated_minutes_invalid");
+  const recommendedBasePayCents = roundedCompensation(
+    minutes / 60 * MINIMUM_EFFECTIVE_COMPENSATION_CENTS_PER_HOUR);
+  const enteredBase = Number(workerBasePayCents);
+  const validEnteredBase = Number.isSafeInteger(enteredBase) && enteredBase >= 0 ? enteredBase : null;
+  const completion = Number.isSafeInteger(Number(completionBonusCents)) &&
+    Number(completionBonusCents) >= 0 ? Number(completionBonusCents) : 0;
+  const quality = Number.isSafeInteger(Number(qualityBonusCents)) &&
+    Number(qualityBonusCents) >= 0 ? Number(qualityBonusCents) : 0;
+  const suggestedCompletionBonusCents = roundedCompensation(
+    recommendedBasePayCents * COMPLETION_INCENTIVE_RATE);
+  const suggestedQualityBonusCents = roundedCompensation(
+    recommendedBasePayCents * QUALITY_INCENTIVE_RATE);
+  const estimatedEffectiveCompensationCentsPerHour = validEnteredBase === null ? null :
+    Math.round(validEnteredBase * 60 / minutes);
+  const belowRecommendedFloor = validEnteredBase !== null &&
+    estimatedEffectiveCompensationCentsPerHour < MINIMUM_EFFECTIVE_COMPENSATION_CENTS_PER_HOUR;
+  return Object.freeze({
+    policyVersion: "ScalerCompensationQualityV1",
+    fixedPriceCampaignCompensation: true,
+    hourlyEmploymentRepresentation: false,
+    minimumEffectiveCompensationCentsPerHour:
+      MINIMUM_EFFECTIVE_COMPENSATION_CENTS_PER_HOUR,
+    estimatedWorkMinutes: Math.round(minutes),
+    estimatedWorkHours: Number((minutes / 60).toFixed(1)),
+    workerPayCents: validEnteredBase,
+    enteredBasePayCents: validEnteredBase,
+    recommendedWorkerPayCents: recommendedBasePayCents,
+    recommendedBasePayCents,
+    estimatedEffectiveCompensationCentsPerHour,
+    completionBonusCents: completion,
+    qualityBonusCents: quality,
+    suggestedCompletionBonusCents,
+    suggestedQualityBonusCents,
+    configuredPotentialPayoutCents: validEnteredBase === null ? null :
+      validEnteredBase + completion + quality,
+    recommendedPotentialPayoutCents: recommendedBasePayCents +
+      suggestedCompletionBonusCents + suggestedQualityBonusCents,
+    belowRecommendedFloor,
+    attractiveness: validEnteredBase === null ? "review_compensation" :
+      belowRecommendedFloor ? "below_scaledcircle_recommendation" : "competitive",
+    displayFlag: belowRecommendedFloor ?
+      "Below ScaledCircle recommended compensation" : null,
+    suggestions: validEnteredBase === null ? ["review_compensation"] :
+      belowRecommendedFloor ?
+        ["use_recommended_pay", "add_completion_bonus", "reduce_zone_size"] : [],
+  });
+}
 function generatePlan({anchor, selectedBoundary = null, geographicSnapshot = null,
   desiredHours = 5, propertiesPerHour = DEFAULT_PROPERTIES_PER_HOUR,
   workType = "field_distribution", label = "Recommended Area",
-  totalWorkerPayCents = null, sourceAreaDigest = null} = {}) {
+  workerBasePayCents = null, totalWorkerPayCents = null,
+  completionBonusCents = 0, qualityBonusCents = 0, sourceAreaDigest = null} = {}) {
   const normalizedAnchor = normalizeAnchor(anchor);
   const hours = clamp(finite(desiredHours, "desired_hours"), 0.5, MAX_CAMPAIGN_MINUTES / 60);
   const totalProperties = Math.max(1, Math.round(hours * propertiesPerHour));
@@ -220,15 +279,9 @@ function generatePlan({anchor, selectedBoundary = null, geographicSnapshot = nul
   const groups = geographic ? splitServiceablePoints(usable, count) : [];
   const geometries = geographic ? groups.map((items) => bufferedHull(items, normalizedAnchor)) :
     splitRectangle(boundary, count);
-  const pay = Number(totalWorkerPayCents);
-  const recommendedPay = Math.ceil(total.estimatedMinutes / 60 * 2500 / 500) * 500;
-  const compensation = Number.isSafeInteger(pay) && pay >= 0 ? {workerPayCents: pay,
-    recommendedWorkerPayCents: recommendedPay,
-    attractiveness: pay >= recommendedPay ? "competitive" : "low_acceptance_likelihood",
-    suggestions: pay >= recommendedPay ? [] :
-      ["increase_compensation", "add_completion_bonus", "reduce_zone_size"]} :
-    {workerPayCents: null, recommendedWorkerPayCents: recommendedPay,
-      attractiveness: "review_compensation", suggestions: ["review_compensation"]};
+  const compensation = compensationRecommendation({estimatedMinutes: total.estimatedMinutes,
+    workerBasePayCents: workerBasePayCents ?? totalWorkerPayCents,
+    completionBonusCents, qualityBonusCents});
   const base = Math.floor(totalProperties / count); let remainder = totalProperties % count;
   const zones = geometries.map((geometry, index) => { const estimatedProperties = base +
     (remainder-- > 0 ? 1 : 0); const workload = estimateWorkload({estimatedProperties,
@@ -240,8 +293,9 @@ function generatePlan({anchor, selectedBoundary = null, geographicSnapshot = nul
   const snapshotDigest = geographic ? crypto.createHash("sha256").update(JSON.stringify({
     points: usable, exclusions: geographicSnapshot?.exclusionPolygons || [],
     source: geographicSnapshot?.source || null})).digest("hex") : "basic_area_estimate";
+  // Compensation is a review projection, not part of the geographic plan identity. Keeping it
+  // outside the digest lets an explicit "Use Recommended Pay" acceptance replay the same plan.
   const identity = {anchor: normalizedAnchor, desiredHours: hours, propertiesPerHour, workType,
-    totalWorkerPayCents: compensation.workerPayCents,
     sourceAreaDigest: String(sourceAreaDigest || "anchor_only"), snapshotDigest,
     policyVersion: POLICY_VERSION};
   return Object.freeze({planId: planId(identity), label, anchor: normalizedAnchor,
@@ -284,7 +338,8 @@ function paymentReadiness(zone) {
 
 module.exports = {POLICY_VERSION, GEOMETRY_VERSION, FALLBACK_GEOMETRY_VERSION,
   IDEAL_MINUTES, IDEAL_TARGET_MINUTES, SINGLE_SCALER_MAX_MINUTES,
-  MAX_ZONES_PER_CAMPAIGN, MAX_CAMPAIGN_MINUTES, rectangleAround,
+  MAX_ZONES_PER_CAMPAIGN, MAX_CAMPAIGN_MINUTES,
+  MINIMUM_EFFECTIVE_COMPENSATION_CENTS_PER_HOUR, compensationRecommendation, rectangleAround,
   polygonAreaSquareMeters, validateGeometry, pointInsidePolygon, convexHull,
   estimateWorkload, recommendedScalerCount, workabilityForMinutes, splitRectangle,
   workloadBoundary,

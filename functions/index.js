@@ -4044,8 +4044,9 @@ function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
     desiredHours: desiredHours ?? 5,
     workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
       "field_distribution",
-    totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
-      Number(input.campaign.bonus || 0)) * 100),
+    workerBasePayCents: Math.round(Number(input.campaign.basePay || 0) * 100),
+    completionBonusCents: Math.round(Number(input.campaign.bonus || 0) * 100),
+    qualityBonusCents: Math.round(Number(input.campaign.qualityBonus || 0) * 100),
     label: readText(input.selectedArea?.name, 120) || "Recommended Area",
     sourceAreaDigest: input.sourceAreaDigest,
   };
@@ -4119,8 +4120,23 @@ exports.applySmartZonePlan = onCall(
         .where("campaignId", "==", input.campaignId));
       if (existing.docs.length && existing.docs.every((doc) =>
         doc.data()?.smartZonePlanId === plan.planId)) {
+        if (request.data?.useRecommendedPay === true) {
+          transaction.set(input.reference, {
+            basePay: plan.compensation.recommendedBasePayCents / 100,
+            compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
+            compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
+            compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
+            compensationMinimumEffectiveRateCentsPerHour:
+              plan.compensation.minimumEffectiveCompensationCentsPerHour,
+            compensationRecommendationAccepted: true,
+            compensationRecommendationAcceptedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, {merge: true});
+        }
         return {success: true, campaignId: input.campaignId, planId: plan.planId,
-          zoneCount: existing.docs.length, replay: true};
+          zoneCount: existing.docs.length, replay: true,
+          recommendedPayApplied: request.data?.useRecommendedPay === true,
+          recommendedBasePayCents: plan.compensation.recommendedBasePayCents};
       }
       if (existing.docs.some((doc) => {
         const zone = doc.data() || {};
@@ -4175,10 +4191,22 @@ exports.applySmartZonePlan = onCall(
       smartZonePlanId: plan.planId,
       smartZonePolicyVersion: plan.policyVersion,
       recommendedScalerCount: plan.recommendedScalerCount,
+      compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
+      compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
+      compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
+      compensationMinimumEffectiveRateCentsPerHour:
+        plan.compensation.minimumEffectiveCompensationCentsPerHour,
+      ...(request.data?.useRecommendedPay === true ? {
+        basePay: plan.compensation.recommendedBasePayCents / 100,
+        compensationRecommendationAccepted: true,
+        compensationRecommendationAcceptedAt: FieldValue.serverTimestamp(),
+      } : {}),
       updatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
       return {success: true, campaignId: input.campaignId, planId: plan.planId,
-        zoneCount: plan.zones.length, replay: false};
+        zoneCount: plan.zones.length, replay: false,
+        recommendedPayApplied: request.data?.useRecommendedPay === true,
+        recommendedBasePayCents: plan.compensation.recommendedBasePayCents};
     });
     return result;
   },

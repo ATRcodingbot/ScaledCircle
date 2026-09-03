@@ -89,6 +89,12 @@ void main() {
     expect(find.text('VALIDATED SMART ZONE DEMO'), findsOneWidget);
     expect(find.text('Walking Route'), findsOneWidget);
     expect(find.text('5 hours • serviceable geography'), findsOneWidget);
+    expect(find.text('Recommended Base'), findsOneWidget);
+    expect(find.text('\$100.00'), findsOneWidget);
+    expect(find.text('\$20.00/hour equivalent'), findsOneWidget);
+    expect(find.text('+\$20.00 optional'), findsOneWidget);
+    expect(find.text('+\$10.00 optional'), findsOneWidget);
+    expect(find.text('\$130.00'), findsOneWidget);
     expect(find.text('Review Campaign'), findsOneWidget);
   });
 

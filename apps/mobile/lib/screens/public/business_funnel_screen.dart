@@ -406,7 +406,11 @@ class _CampaignMapVisual extends StatelessWidget {
         ProductLine('Campaign target', 'Local residential target'),
         ProductLine('Zone 1', 'Mapped', color: scalerBlue),
         ProductLine('Route', 'Not yet verified'),
-        ProductLine('Scaler Pay', '\$50.00'),
+        ProductLine('Recommended Base', '\$100.00'),
+        ProductLine('Estimated Effective Pay', '\$20.00/hour equivalent'),
+        ProductLine('Completion Incentive', '+\$20.00 optional'),
+        ProductLine('Quality Incentive', '+\$10.00 optional'),
+        ProductLine('Potential Payout', '\$130.00'),
         SizedBox(height: 14),
         Text(
           'CAMPAIGN ZONES',

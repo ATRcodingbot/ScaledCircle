@@ -27,7 +27,7 @@ test("public Baltimore demo is an exact maintained planner output", () => {
     label: "Baltimore neighborhood demo",
     totalWorkerPayCents: 0,
   });
-  assert.equal(plan.policyVersion, "SmartZonePlanningV3");
+  assert.equal(plan.policyVersion, "SmartZonePlanningV4");
   assert.equal(plan.totalEstimatedProperties, 225);
   assert.equal(plan.totalEstimatedMinutes, 300);
   assert.equal(plan.recommendedScalerCount, 1);
@@ -214,11 +214,40 @@ test("manual valid Zones remain compatible after revalidation", () => {
   assert.ok(["low", "medium"].includes(workload.confidence));
 });
 
-test("compensation guidance warns without guaranteeing acceptance", () => {
+test("compensation quality uses base pay alone and preserves fixed-price authority", () => {
   const weak = smart.generatePlan({anchor, desiredHours: 5, totalWorkerPayCents: 500});
-  assert.equal(weak.compensation.attractiveness, "low_acceptance_likelihood");
+  assert.equal(weak.compensation.attractiveness, "below_scaledcircle_recommendation");
+  assert.equal(weak.compensation.displayFlag, "Below ScaledCircle recommended compensation");
+  assert.equal(weak.compensation.minimumEffectiveCompensationCentsPerHour, 2000);
+  assert.equal(weak.compensation.recommendedBasePayCents, 10000);
+  assert.equal(weak.compensation.suggestedCompletionBonusCents, 2000);
+  assert.equal(weak.compensation.suggestedQualityBonusCents, 1000);
+  assert.equal(weak.compensation.recommendedPotentialPayoutCents, 13000);
+  assert.equal(weak.compensation.fixedPriceCampaignCompensation, true);
+  assert.equal(weak.compensation.hourlyEmploymentRepresentation, false);
   assert.ok(weak.compensation.suggestions.includes("reduce_zone_size"));
   const competitive = smart.generatePlan({anchor, desiredHours: 5,
-    totalWorkerPayCents: weak.compensation.recommendedWorkerPayCents});
+    workerBasePayCents: weak.compensation.recommendedBasePayCents,
+    completionBonusCents: 2000, qualityBonusCents: 1000});
   assert.equal(competitive.compensation.attractiveness, "competitive");
+  assert.equal(competitive.compensation.estimatedEffectiveCompensationCentsPerHour, 2000);
+  assert.equal(competitive.compensation.configuredPotentialPayoutCents, 13000);
+});
+
+test("optional bonuses cannot rescue base pay below the recommendation", () => {
+  const plan = smart.generatePlan({anchor, desiredHours: 5,
+    workerBasePayCents: 5000, completionBonusCents: 5000, qualityBonusCents: 5000});
+  assert.equal(plan.compensation.estimatedEffectiveCompensationCentsPerHour, 1000);
+  assert.equal(plan.compensation.belowRecommendedFloor, true);
+  assert.equal(plan.compensation.attractiveness, "below_scaledcircle_recommendation");
+});
+
+test("accepting recommended pay preserves the geographic plan identity", () => {
+  const belowFloor = smart.generatePlan({anchor, desiredHours: 5,
+    workerBasePayCents: 5000});
+  const recommended = smart.generatePlan({anchor, desiredHours: 5,
+    workerBasePayCents: belowFloor.compensation.recommendedBasePayCents});
+  assert.equal(recommended.planId, belowFloor.planId);
+  assert.equal(belowFloor.compensation.belowRecommendedFloor, true);
+  assert.equal(recommended.compensation.belowRecommendedFloor, false);
 });
