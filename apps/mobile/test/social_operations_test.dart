@@ -49,9 +49,10 @@ void main() {
     );
     expect(screen, contains('First X publish candidate'));
     expect(screen, contains('Founder publish approval required'));
+    expect(screen, contains('Review exact post for publishing access'));
     expect(
       screen,
-      contains('Founder approval required before publishing access'),
+      contains('It only allows the next X account permission step.'),
     );
     expect(
       screen,
@@ -85,6 +86,7 @@ void main() {
       expect(service, contains('prepareFirstXPublishFoundationV1'));
       expect(service, contains('createFirstXPublishVersionV3'));
       expect(service, contains('beginFirstXPublishAuthorizationV1'));
+      expect(service, contains('recordFirstXFounderApprovalV1'));
       expect(service, contains('confirmFirstXPublishAuthorizationV1'));
       expect(service, contains('createFirstXPublishApprovalV1'));
       expect(service, contains('executeFirstXPublishV1'));

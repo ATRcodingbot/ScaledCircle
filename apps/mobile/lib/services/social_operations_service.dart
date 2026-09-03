@@ -213,6 +213,13 @@ class SocialOperationsService {
     return Map<String, dynamic>.from(result.data as Map);
   }
 
+  Future<Map<String, dynamic>> recordFirstXFounderApproval() async {
+    final result = await _functions
+        .httpsCallable('recordFirstXFounderApprovalV1')
+        .call();
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
   Future<Map<String, dynamic>> confirmFirstXPublishAuthorization({
     required String attemptId,
     required String candidateId,

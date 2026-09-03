@@ -592,6 +592,41 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     }
   }
 
+  Future<void> _recordFirstXFounderApproval() async {
+    if (_approvingFirstX) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Approve publishing access for this exact post?'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'This records Founder approval for the exact v3 copy, certified Smart Mapping media, tracked destination, and selected time. It only allows the next X account permission step. It does not publish anything.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Approve exact post'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true) return;
+    setState(() => _approvingFirstX = true);
+    try {
+      await _service.recordFirstXFounderApproval();
+      await _load();
+    } on FirebaseFunctionsException catch (error) {
+      _showFirstXError(error.message);
+    } finally {
+      if (mounted) setState(() => _approvingFirstX = false);
+    }
+  }
+
   Future<void> _reviewFirstXPublishAuthorization(String attemptId) async {
     if (attemptId.isEmpty) return;
     try {
@@ -1091,10 +1126,14 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     ),
                   ),
                 if (prepared && !founderApproved)
-                  const FilledButton.tonal(
-                    onPressed: null,
+                  FilledButton.tonal(
+                    onPressed: _approvingFirstX
+                        ? null
+                        : _recordFirstXFounderApproval,
                     child: Text(
-                      'Founder approval required before publishing access',
+                      _approvingFirstX
+                          ? 'Recording approval…'
+                          : 'Review exact post for publishing access',
                     ),
                   ),
                 if (prepared &&

@@ -68,6 +68,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "proposeScheduledSocialReplacementV1",
     "rateHistoricalSocialContentV1",
     "reconcileFirstXPublishV1",
+    "recordFirstXFounderApprovalV1",
     "reviewScheduledSocialContentV1",
     "socialOAuthCallbackV1",
     "socialOAuthMetaCallbackV1",
@@ -92,6 +93,12 @@ test("X write reconsent remains blocked until separate Founder publication appro
   const entrypoint = indexSource.match(
     /exports\.beginFirstXPublishAuthorizationV1 = [\s\S]*?\n\);/)[0];
   assert.match(entrypoint, /founderPublicationApproved !== true/);
+  assert.match(indexSource, /exports\.recordFirstXFounderApprovalV1 =/);
+  const approval = indexSource.match(
+    /exports\.recordFirstXFounderApprovalV1 = [\s\S]*?\n\);/)[0];
+  assert.match(approval, /socialExternalApprovalIntents/);
+  assert.match(approval, /externalExecutionAllowed: false/);
+  assert.match(approval, /providerMutations: 0/);
 });
 
 test("Meta OAuth codebase binds only shared encryption and the Meta secret", () => {

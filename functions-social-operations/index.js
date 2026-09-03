@@ -739,6 +739,69 @@ exports.getFirstXPublishCertificationV1 = onCall(
   },
 );
 
+exports.recordFirstXFounderApprovalV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const itemRef = db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID);
+    const versionRef = db.collection("socialContentVersions").doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const qualityRef = db.collection("socialContentQualityAssessments")
+      .doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const [item, version, quality, health] = await Promise.all([
+      itemRef.get(), versionRef.get(), qualityRef.get(),
+      db.collection("agentHealth").doc(business.uid).get(),
+    ]);
+    const versionData = version.data();
+    const responseAssetId = readText(versionData?.variants?.[0]?.responseAssetId, 180);
+    const assetSnapshot = responseAssetId ?
+      await db.collection("responseAssets").doc(responseAssetId).get() : null;
+    const asset = assetSnapshot?.data();
+    const responseAsset = asset ? {responseAssetId, ...asset, trackedUrl: firstXTrackedUrl(asset)} : null;
+    if (!item.exists || item.data()?.businessUid !== business.uid ||
+        Number(item.data()?.currentVersion) !== xFirstPublish.VERSION_NUMBER ||
+        !versionData || health.data()?.killSwitchActive !== true ||
+        health.data()?.externalActionsEnabled !== false) {
+      throw new HttpsError("failed-precondition", "The bounded publish safety state is unavailable.");
+    }
+    let approval;
+    try {
+      approval = xFirstPublish.approvalRecord({version: versionData,
+        qualityAssessment: quality.data(), responseAsset, approvedByUid: business.uid,
+        now: Date.now()});
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "The exact content approval gate did not pass.");
+    }
+    const intentRef = db.collection("socialExternalApprovalIntents").doc(approval.id);
+    const result = await db.runTransaction(async (transaction) => {
+      const [currentVersion, existingIntent] = await Promise.all([
+        transaction.get(versionRef), transaction.get(intentRef),
+      ]);
+      if (existingIntent.exists) {
+        if (existingIntent.data()?.approvalHash !== approval.record.approvalHash) {
+          throw new Error("x_founder_approval_replay_mismatch");
+        }
+        return {reused: true};
+      }
+      if (currentVersion.data()?.founderPublicationApproved === true) {
+        throw new Error("x_founder_approval_state_mismatch");
+      }
+      transaction.create(intentRef, {...approval.record,
+        status: "approved_for_permission_upgrade", externalExecutionAllowed: false,
+        providerMutationAuthorized: false, createdAt: FieldValue.serverTimestamp(),
+        approvedAt: FieldValue.serverTimestamp()});
+      transaction.update(versionRef, {founderPublicationApproved: true,
+        founderPublicationApprovalIntentId: approval.id,
+        founderPublicationApprovedAt: FieldValue.serverTimestamp()});
+      return {reused: false};
+    });
+    return {approvalIntentId: approval.id, approvalHash: approval.record.approvalHash,
+      status: "approved_for_permission_upgrade", reused: result.reused,
+      externalExecutionAllowed: false, providerMutations: 0,
+      globalAgentKillSwitchActive: true};
+  },
+);
+
 exports.createFirstXPublishApprovalV1 = onCall(
   {enforceAppCheck: false, maxInstances: 1},
   async (request) => {
