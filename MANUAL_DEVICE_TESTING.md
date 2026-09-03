@@ -4,6 +4,8 @@ Record device model, OS version, app build, account, campaign, start/end time, a
 
 ## Android
 
+Use the existing Google Play Internal Testing app `com.scaledcircle.app`. For the currently certified artifact, record `versionName 1.0.0`, `versionCode 1`, the Play install URL/account, and the installed package/version from the device before starting. Do not upload or rebuild a bundle merely to run this checklist.
+
 - [ ] Fresh install: deny location; Start Job explains the problem and does not crash or create active tracking.
 - [ ] Grant approximate-only location; verify the app handles insufficient accuracy clearly.
 - [ ] Grant required permissions; Start Job creates exactly one session and a persistent notification.
@@ -20,11 +22,15 @@ Record device model, OS version, app build, account, campaign, start/end time, a
 - [ ] Test low battery/battery saver and common OEM battery restrictions.
 - [ ] Add a checkpoint; verify camera photo, time, and nearby coordinate are associated.
 - [ ] Complete Job; verify final fix, queue flush, notification removal, native service stop, and no later points.
+- [ ] Open the Business review on the maintained client, approve exactly once, and verify one terminal completion, one earning reservation, one Wallet transaction, and no automatic provider cash-out.
+- [ ] Retry/reopen the same approval and verify the earning and Wallet effect remain exactly one.
 - [ ] Cancel Job; verify immediate notification/service removal and no later points.
 - [ ] Race Complete against Cancel and a final chunk/checkpoint in staging; verify exactly one terminal state and no late evidence.
 - [ ] After successful completion, verify acknowledged local evidence is purged; unsynchronized evidence must remain during failures.
 - [ ] Reboot during an active test session; document actual behavior and product decision.
 - [ ] Force Stop from Settings; confirm Android stops collection and document that OS-enforced behavior.
+
+For every evidence-bearing step, capture the canonical session/completion/job identifiers without copying tokens, private addresses, or unnecessary photo content into the certification report. A result is `PASS` only when the server record, device UI, and lifecycle agree; otherwise record the exact failed or unavailable evidence.
 
 ## iPhone
 

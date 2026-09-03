@@ -107,7 +107,7 @@ Android requests high-accuracy movement samples around every 20 seconds, no fast
 
 Android declares fine/coarse location, location foreground service, and notifications. It intentionally does not request `ACCESS_BACKGROUND_LOCATION`: the session starts from a visible Activity and continues through a foreground service with a persistent notification.
 
-iOS includes location usage text and `UIBackgroundModes/location`, but this repository is being developed on Windows. macOS, Xcode capability/signing, Apple build, and physical iPhone behavior are **MANUAL / NOT YET VERIFIED**. The production identifier `com.scaledcircle.app` was not applied; existing package/bundle identifiers and Firebase app registrations are unchanged.
+iOS includes location usage text, `UIBackgroundModes/location`, the production identifier `com.scaledcircle.app`, and the ScaledCircle display name. This repository is being developed on Windows, so macOS/Xcode team selection, signing, archive, TestFlight upload, and physical iPhone behavior are **MANUAL / NOT YET VERIFIED**. No push or Associated Domains capability is claimed before its production infrastructure and lifecycle are certified.
 
 ## App Check future rollout (not enabled)
 
@@ -128,7 +128,7 @@ flutter build web --release
 
 An iOS release requires macOS/Xcode and remains manual. Do not ship Android until the permanent ID, matching Firebase app, release signing, production notification icon, disclosures, and physical-device checklist are complete.
 
-See `MANUAL_DEVICE_TESTING.md` for the physical-device release gate.
+See `MANUAL_DEVICE_TESTING.md` for the physical-device release gate and `docs/ios-testflight-readiness.md` for the credential-free iOS source boundary.
 
 ## Emulator-only deterministic GPS harness
 
