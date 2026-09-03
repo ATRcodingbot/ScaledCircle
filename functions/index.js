@@ -11319,7 +11319,9 @@ const attributionFoundation = require("./attribution_foundation");
 const attributionProjectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
   process.env.GOOGLE_CLOUD_PROJECT || "";
 const attributionService = attributionFoundation.createAttributionService({db, FieldValue,
-  publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId)});
+  publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId),
+  adminSelfDogfoodBusinessUid: attributionProjectId === "scaledcircle-staging" ?
+    "FF1bfDuvtdNjuuC4mc7NdGtk3LC3" : null});
 const trackingPhone = require("./tracking_phone");
 const trackingPhoneService = trackingPhone.createTrackingPhoneService({
   db, FieldValue, provider: trackingPhone.createDisabledProvider(),

@@ -8,7 +8,11 @@ abstract interface class AttributionClient {
     required String type,
     required String destination,
     String source,
+    String? businessUid,
     String? campaignId,
+    String? requestId,
+    String? sourceDetail,
+    String? creativeVersion,
   });
 }
 
@@ -35,7 +39,11 @@ class AttributionService implements AttributionClient {
     required String type,
     required String destination,
     String source = 'tracked_link',
+    String? businessUid,
     String? campaignId,
+    String? requestId,
+    String? sourceDetail,
+    String? creativeVersion,
   }) async {
     final result = await _functions
         .httpsCallable('createResponseAsset')
@@ -43,7 +51,14 @@ class AttributionService implements AttributionClient {
           'label': label,
           'type': type,
           'destination': destination,
-          'attribution': {'source': source, 'campaignId': ?campaignId},
+          'businessUid': ?businessUid,
+          'requestId': ?requestId,
+          'attribution': {
+            'source': source,
+            'sourceDetail': ?sourceDetail,
+            'campaignId': ?campaignId,
+            'creativeVersion': ?creativeVersion,
+          },
         });
     return Map<String, dynamic>.from(result.data);
   }

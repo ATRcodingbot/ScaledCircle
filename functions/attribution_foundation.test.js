@@ -160,6 +160,28 @@ test("staging asset resolves end to end and production rendering stays isolated"
   assert.equal(production.trackedUrl, `https://scaledcircle.com/r?code=${"a".repeat(24)}`);
 });
 
+test("staging permits only the exact Admin self dogfood Business attribution bridge", async () => {
+  const uid = "FF1bfDuvtdNjuuC4mc7NdGtk3LC3";
+  const db = fakeFirestore({[`users/${uid}`]: {role: "admin"}});
+  const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
+  const service = attribution.createAttributionService({db, FieldValue, now: () => 2000,
+    randomBytes: (size) => Buffer.alloc(size, 7),
+    publicBaseUrl: attribution.publicResponseOrigin("scaledcircle-staging"),
+    adminSelfDogfoodBusinessUid: uid});
+  const actor = {uid, role: "admin", isAdmin: true, emailVerified: true,
+    user: {active: true}};
+  const created = await service.createResponseAsset({businessUid: uid, type: "tracked_link",
+    destination: "https://scaledcircle.com/#/businesses"}, actor);
+  assert.match(created.trackedUrl, /^https:\/\/scaledcircle-staging\.web\.app\/r\?code=/);
+  await assert.rejects(service.createResponseAsset({businessUid: "other", type: "tracked_link",
+    destination: "https://scaledcircle.com/#/businesses"}, actor), /business_identity_required/);
+
+  const production = attribution.createAttributionService({db, FieldValue,
+    publicBaseUrl: attribution.publicResponseOrigin("scaled-circle")});
+  await assert.rejects(production.createResponseAsset({businessUid: uid, type: "tracked_link",
+    destination: "https://scaledcircle.com/#/businesses"}, actor), /business_identity_required/);
+});
+
 test("response-asset creation is request-idempotent and conflicts fail closed", async () => {
   const db = fakeFirestore({"users/business-1": {role: "business"}});
   const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};

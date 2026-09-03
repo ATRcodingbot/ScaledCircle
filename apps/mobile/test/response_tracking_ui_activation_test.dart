@@ -264,7 +264,11 @@ class _FakeAttributionClient implements AttributionClient {
     required String type,
     required String destination,
     String source = 'tracked_link',
+    String? businessUid,
     String? campaignId,
+    String? requestId,
+    String? sourceDetail,
+    String? creativeVersion,
   }) async {
     createCalls += 1;
     lastType = type;

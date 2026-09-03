@@ -18,6 +18,9 @@ const PROVIDER_SCOPES = Object.freeze({
     "https://www.googleapis.com/auth/yt-analytics.readonly",
   ]),
 });
+const X_PUBLISH_SCOPES = Object.freeze([
+  "users.read", "tweet.read", "offline.access", "tweet.write", "media.write",
+]);
 
 function text(value, maximum = 2400) {
   return value == null ? "" : String(value).trim().slice(0, maximum);
@@ -42,8 +45,23 @@ function normalizeProvider(value) {
   return provider;
 }
 
-function normalizeScopes(provider, scopes) {
-  const required = PROVIDER_SCOPES[normalizeProvider(provider)];
+function requestedScopes(provider, scopes) {
+  const normalized = normalizeProvider(provider);
+  if (scopes == null) return [...PROVIDER_SCOPES[normalized]];
+  const proposed = [...new Set((Array.isArray(scopes) ? scopes : String(scopes).split(/[ ,]+/))
+    .map((scope) => text(scope, 180)).filter(Boolean))];
+  const readOnly = PROVIDER_SCOPES[normalized];
+  if (proposed.length === readOnly.length &&
+      proposed.every((scope) => readOnly.includes(scope))) return [...readOnly];
+  if (normalized !== "x" || proposed.length !== X_PUBLISH_SCOPES.length ||
+      proposed.some((scope) => !X_PUBLISH_SCOPES.includes(scope))) {
+    throw new Error("social_oauth_scope_set_forbidden");
+  }
+  return [...X_PUBLISH_SCOPES];
+}
+
+function normalizeScopes(provider, scopes, requiredScopes = null) {
+  const required = requestedScopes(provider, requiredScopes);
   const granted = new Set((Array.isArray(scopes) ? scopes : String(scopes || "").split(/[ ,]+/))
     .map((scope) => text(scope, 180)).filter(Boolean));
   return {
@@ -108,11 +126,11 @@ function validateProviderConfig(input = {}) {
   };
 }
 
-function authorizationUrl({provider, config, state, codeChallenge}) {
+function authorizationUrl({provider, config, state, codeChallenge, scopes: requested = null}) {
   const normalized = normalizeProvider(provider);
   const valid = validateProviderConfig({...config, provider: normalized});
   if (!valid.enabled) throw new Error("social_oauth_provider_disabled");
-  const scopes = PROVIDER_SCOPES[normalized];
+  const scopes = requestedScopes(normalized, requested);
   let url;
   if (normalized === "meta") {
     url = new URL("https://www.facebook.com/v23.0/dialog/oauth");
@@ -146,7 +164,8 @@ function authorizationUrl({provider, config, state, codeChallenge}) {
   return url.toString();
 }
 
-function createAttempt({businessUid, provider, config, encryptionKey, now = Date.now(), randomBytes}) {
+function createAttempt({businessUid, provider, config, encryptionKey, now = Date.now(), randomBytes,
+  scopes = null, purpose = "read_only_connection"}) {
   const normalized = normalizeProvider(provider);
   const valid = validateProviderConfig({...config, provider: normalized});
   if (!valid.enabled) throw new Error("social_oauth_provider_disabled");
@@ -157,7 +176,13 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
   const codeChallenge = base64url(crypto.createHash("sha256").update(verifier).digest());
   const attemptId = digest(state);
   const aad = `${uid}:${normalized}:${attemptId}`;
-  const continueUrl = authorizationUrl({provider: normalized, config: valid, state, codeChallenge});
+  const requiredScopes = requestedScopes(normalized, scopes);
+  const normalizedPurpose = text(purpose, 80);
+  if (requiredScopes.includes("tweet.write") && normalizedPurpose !== "x_first_publish_certification") {
+    throw new Error("social_oauth_scope_purpose_mismatch");
+  }
+  const continueUrl = authorizationUrl({provider: normalized, config: valid, state, codeChallenge,
+    scopes: requiredScopes});
   return {
     attemptId,
     state,
@@ -166,6 +191,8 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
       schemaVersion: "SocialOAuthAttemptV1",
       businessUid: uid,
       provider: normalized,
+      purpose: normalizedPurpose,
+      requestedScopes: requiredScopes,
       environment: valid.environment,
       status: "authorizing",
       stateDigest: attemptId,
@@ -175,7 +202,7 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
       safeCandidates: [],
       candidateEnvelope: null,
       grantedScopes: [],
-      missingScopes: [...PROVIDER_SCOPES[normalized]],
+      missingScopes: [...requiredScopes],
       createdAtMillis: now,
       expiresAtMillis: now + OAUTH_ATTEMPT_TTL_MS,
       completedAtMillis: null,
@@ -200,7 +227,9 @@ function continuationUrl(record, {businessUid, provider, attemptId, encryptionKe
   return /^https:\/\//.test(url) ? url : null;
 }
 
-function safeIdentityCandidate(candidate = {}) {
+function safeIdentityCandidate(candidate = {}, grantedScopes = []) {
+  const granted = new Set(grantedScopes);
+  const xPublish = candidate.provider === "x" && granted.has("tweet.write");
   return {
     candidateId: text(candidate.candidateId || candidate.accountId, 240),
     provider: text(candidate.provider, 30),
@@ -212,8 +241,8 @@ function safeIdentityCandidate(candidate = {}) {
     capabilities: {
       profile: candidate.capabilities?.profile === true,
       analytics: candidate.capabilities?.analytics === true,
-      publishText: false,
-      publishImage: false,
+      publishText: xPublish,
+      publishImage: xPublish && granted.has("media.write"),
       publishVideo: false,
       schedule: false,
     },
@@ -422,10 +451,12 @@ async function completeExchange({attempt, code, config, clientSecret, encryption
     result = await exchangeX({code, verifier, config, clientSecret, fetchImpl});
   } else result = await exchangeYouTube({code, verifier, config, clientSecret, fetchImpl});
   if (!result.candidates.length) throw new Error("social_oauth_no_owned_identity");
-  const scopeStatus = normalizeScopes(attempt.provider, result.scopes);
+  const scopeStatus = normalizeScopes(attempt.provider, result.scopes,
+    attempt.requestedScopes || PROVIDER_SCOPES[attempt.provider]);
   return {
     status: scopeStatus.missing.length ? "error" : "identity_pending",
-    safeCandidates: result.candidates.map(safeIdentityCandidate),
+    safeCandidates: result.candidates.map((candidate) =>
+      safeIdentityCandidate(candidate, scopeStatus.granted)),
     candidateEnvelope: encryptJson({candidates: result.candidates}, encryptionKey, aad),
     grantedScopes: scopeStatus.granted,
     missingScopes: scopeStatus.missing,
@@ -448,7 +479,7 @@ function selectCandidate({attempt, candidateId, encryptionKey, now = Date.now()}
     if (candidate[key]) secretFields[key] = candidate[key];
   }
   return {
-    safeCandidate: safeIdentityCandidate(candidate),
+    safeCandidate: safeIdentityCandidate(candidate, attempt.grantedScopes),
     credentialRecord: {
       schemaVersion: "SocialConnectionCredentialV1",
       businessUid: attempt.businessUid,
@@ -574,7 +605,8 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
 }
 
 module.exports = {
-  OAUTH_ATTEMPT_TTL_MS, PROVIDERS, PROVIDER_SCOPES, digest, normalizeProvider, normalizeScopes,
+  OAUTH_ATTEMPT_TTL_MS, PROVIDERS, PROVIDER_SCOPES, X_PUBLISH_SCOPES, digest,
+  normalizeProvider, requestedScopes, normalizeScopes,
   encryptJson, decryptJson, validateProviderConfig, authorizationUrl, createAttempt,
   isReusableAttempt, continuationUrl,
   safeIdentityCandidate, assertAttempt, completeExchange, selectCandidate, callbackHtml,

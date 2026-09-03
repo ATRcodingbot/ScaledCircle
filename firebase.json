@@ -342,19 +342,19 @@
     ],
     "rewrites": [
       {
+        "source": "/r",
+        "function": {
+          "functionId": "resolveTrackedResponse",
+          "region": "us-east1"
+        }
+      },
+      {
         "source": "/p/**",
         "function": {"functionId": "renderLandingPage", "region": "us-east1"}
       },
       {
         "source": "/landing-page-submit",
         "function": {"functionId": "submitLandingPageForm", "region": "us-east1"}
-      },
-      {
-        "source": "/r",
-        "function": {
-          "functionId": "resolveTrackedResponse",
-          "region": "us-east1"
-        }
       },
       {
         "source": "**",

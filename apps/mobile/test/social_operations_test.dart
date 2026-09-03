@@ -47,6 +47,21 @@ void main() {
       screen,
       contains('Missing provider evidence stays unavailable—not zero.'),
     );
+    expect(screen, contains('First X publish candidate'));
+    expect(screen, contains('Founder publish approval required'));
+    expect(
+      screen,
+      contains('Founder approval required before publishing access'),
+    );
+    expect(
+      screen,
+      contains('Allow ScaledCircle to publish this approved post'),
+    );
+    expect(screen, contains('Approve this exact X post?'));
+    expect(screen, contains('Use this X account?'));
+    expect(screen, contains('No public post has been created.'));
+    expect(screen, isNot(contains('tweet.write')));
+    expect(screen, isNot(contains('media.write')));
   });
 
   test(
@@ -67,6 +82,13 @@ void main() {
       expect(service, contains('reviewScheduledSocialContentV1'));
       expect(service, contains('rateHistoricalSocialContentV1'));
       expect(service, contains('ingestScaledCircleLaunchPlanV1'));
+      expect(service, contains('prepareFirstXPublishFoundationV1'));
+      expect(service, contains('createFirstXPublishVersionV3'));
+      expect(service, contains('beginFirstXPublishAuthorizationV1'));
+      expect(service, contains('confirmFirstXPublishAuthorizationV1'));
+      expect(service, contains('createFirstXPublishApprovalV1'));
+      expect(service, contains('executeFirstXPublishV1'));
+      expect(service, contains('reconcileFirstXPublishV1'));
       expect(service, contains("'managedAuthorization': false"));
       expect(service, isNot(contains('accessToken')));
       expect(service, isNot(contains('clientSecret')));

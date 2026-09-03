@@ -6,6 +6,8 @@ class SocialOperationsWorkspace {
 
   bool get managedGrowth => data['managedGrowth'] == true;
   bool get publishingEnabled => data['externalPublishingEnabled'] == true;
+  bool get firstXCertificationAvailable =>
+      data['firstXCertificationAvailable'] == true;
   List<Map<String, dynamic>> get connections => _maps(data['connections']);
   List<Map<String, dynamic>> get plans => _maps(data['plans']);
   List<Map<String, dynamic>> get emailPlans => _maps(data['emailPlans']);
@@ -17,6 +19,9 @@ class SocialOperationsWorkspace {
   Map<String, dynamic>? get internalPlanAlignment =>
       data['internalPlanAlignment'] is Map
       ? Map<String, dynamic>.from(data['internalPlanAlignment'] as Map)
+      : null;
+  Map<String, dynamic>? get firstXPublish => data['firstXPublish'] is Map
+      ? Map<String, dynamic>.from(data['firstXPublish'] as Map)
       : null;
 
   static List<Map<String, dynamic>> _maps(dynamic value) =>
@@ -175,6 +180,69 @@ class SocialOperationsService {
     final result = await _functions
         .httpsCallable('ingestScaledCircleLaunchPlanV1')
         .call();
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> prepareFirstXPublishFoundation() async {
+    final result = await _functions
+        .httpsCallable('prepareFirstXPublishFoundationV1')
+        .call();
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createFirstXPublishVersion({
+    required String responseAssetId,
+  }) async {
+    final result = await _functions
+        .httpsCallable('createFirstXPublishVersionV3')
+        .call({'responseAssetId': responseAssetId});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> firstXPublishCertification() async {
+    final result = await _functions
+        .httpsCallable('getFirstXPublishCertificationV1')
+        .call();
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> beginFirstXPublishAuthorization() async {
+    final result = await _functions
+        .httpsCallable('beginFirstXPublishAuthorizationV1')
+        .call();
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> confirmFirstXPublishAuthorization({
+    required String attemptId,
+    required String candidateId,
+  }) async {
+    final result = await _functions
+        .httpsCallable('confirmFirstXPublishAuthorizationV1')
+        .call({'attemptId': attemptId, 'candidateId': candidateId});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createFirstXPublishApproval() async {
+    final result = await _functions
+        .httpsCallable('createFirstXPublishApprovalV1')
+        .call();
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> executeFirstXPublish(String publishJobId) async {
+    final result = await _functions
+        .httpsCallable('executeFirstXPublishV1')
+        .call({'publishJobId': publishJobId});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<Map<String, dynamic>> reconcileFirstXPublish(
+    String publishJobId,
+  ) async {
+    final result = await _functions
+        .httpsCallable('reconcileFirstXPublishV1')
+        .call({'publishJobId': publishJobId});
     return Map<String, dynamic>.from(result.data as Map);
   }
 

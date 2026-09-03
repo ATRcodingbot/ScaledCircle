@@ -91,6 +91,42 @@ test("X callback exchanges with PKCE and returns only safe identity metadata", a
   assert.match(String(calls[0].options.body), /code_verifier=/);
 });
 
+test("X publish reconsent permits only the exact bounded image-post scope set", () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "x",
+    config: config("x"), encryptionKey: key, now: 1000,
+    scopes: oauth.X_PUBLISH_SCOPES, purpose: "x_first_publish_certification"});
+  const scopes = new URL(attempt.authorizationUrl).searchParams.get("scope").split(" ");
+  assert.deepEqual(new Set(scopes), new Set([
+    "users.read", "tweet.read", "offline.access", "tweet.write", "media.write",
+  ]));
+  assert.deepEqual(attempt.record.requestedScopes, oauth.X_PUBLISH_SCOPES);
+  assert.throws(() => oauth.createAttempt({businessUid: "biz", provider: "x",
+    config: config("x"), encryptionKey: key, scopes: oauth.X_PUBLISH_SCOPES}),
+  /scope_purpose_mismatch/);
+  assert.throws(() => oauth.requestedScopes("x", [...oauth.X_PUBLISH_SCOPES, "follows.write"]),
+    /scope_set_forbidden/);
+  assert.throws(() => oauth.requestedScopes("youtube", oauth.X_PUBLISH_SCOPES),
+    /scope_set_forbidden/);
+});
+
+test("X publish callback projects write capability without exposing credentials", async () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "x",
+    config: config("x"), encryptionKey: key, now: 1000,
+    scopes: oauth.X_PUBLISH_SCOPES, purpose: "x_first_publish_certification"});
+  const fetchImpl = async (url) => String(url).includes("oauth2/token") ? {
+    ok: true, json: async () => ({access_token: "access-secret", refresh_token: "refresh-secret",
+      expires_in: 7200, scope: oauth.X_PUBLISH_SCOPES.join(" ")}),
+  } : {ok: true, json: async () => ({data: {id: "2090731921177210880",
+    name: "Scaled Circle", username: "ScaledCircle"}})};
+  const completed = await oauth.completeExchange({attempt: attempt.record, code: "code",
+    config: config("x"), clientSecret: "client-secret", encryptionKey: key,
+    fetchImpl, now: 2000});
+  assert.equal(completed.safeCandidates[0].capabilities.publishText, true);
+  assert.equal(completed.safeCandidates[0].capabilities.publishImage, true);
+  assert.equal(completed.safeCandidates[0].capabilities.publishVideo, false);
+  assert.equal(JSON.stringify(completed).includes("access-secret"), false);
+});
+
 test("Meta callback returns the exact owned Page and linked professional account safely", async () => {
   const attempt = oauth.createAttempt({businessUid: "biz", provider: "meta",
     config: config("meta"), encryptionKey: key, now: 1000});

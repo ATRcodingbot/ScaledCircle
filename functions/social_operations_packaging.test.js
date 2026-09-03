@@ -44,21 +44,30 @@ test("X OAuth codebase binds only shared encryption and the X secret", () => {
   }
 });
 
-test("Social Operations exports the provider-free surface plus bounded read-only OAuth", () => {
+test("Social Operations exports provider-free surfaces plus one bounded X certification", () => {
   const names = [...indexSource.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
   assert.deepEqual(names.sort(), [
     "approveSocialContentPlanV1",
+    "beginFirstXPublishAuthorizationV1",
     "beginSocialOAuthConnectionV1",
     "configureSocialProviderV1",
+    "confirmFirstXPublishAuthorizationV1",
     "confirmSocialOAuthConnectionV1",
     "createEmailContentPlanV1",
+    "createFirstXPublishApprovalV1",
+    "createFirstXPublishVersionV2",
+    "createFirstXPublishVersionV3",
     "createSocialContentPlanV1",
+    "executeFirstXPublishV1",
+    "getFirstXPublishCertificationV1",
     "getSocialOAuthAttemptV1",
     "getSocialOperationsAdminSummary",
     "getSocialOperationsWorkspace",
     "ingestScaledCircleLaunchPlanV1",
+    "prepareFirstXPublishFoundationV1",
     "proposeScheduledSocialReplacementV1",
     "rateHistoricalSocialContentV1",
+    "reconcileFirstXPublishV1",
     "reviewScheduledSocialContentV1",
     "socialOAuthCallbackV1",
     "socialOAuthMetaCallbackV1",
@@ -67,6 +76,22 @@ test("Social Operations exports the provider-free surface plus bounded read-only
     "syncSocialReadOnlyPerformanceV1",
     "syncXSocialReadOnlyPerformanceV1",
   ]);
+});
+
+test("bounded X write entrypoints bind only shared encryption and X secret", () => {
+  const entrypoint = (name) => indexSource.match(
+    new RegExp(`exports\\.${name} = [\\s\\S]*?\\n\\);`))[0];
+  for (const name of ["executeFirstXPublishV1", "reconcileFirstXPublishV1"]) {
+    const source = entrypoint(name);
+    assert.match(source, /providerSecretBinding\("x"\)\.secret/);
+    assert.doesNotMatch(source, /META_SOCIAL_APP_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET/);
+  }
+});
+
+test("X write reconsent remains blocked until separate Founder publication approval", () => {
+  const entrypoint = indexSource.match(
+    /exports\.beginFirstXPublishAuthorizationV1 = [\s\S]*?\n\);/)[0];
+  assert.match(entrypoint, /founderPublicationApproved !== true/);
 });
 
 test("Meta OAuth codebase binds only shared encryption and the Meta secret", () => {

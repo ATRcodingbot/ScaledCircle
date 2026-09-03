@@ -9,6 +9,7 @@ const socialOperations = require("./social_operations");
 const socialOAuth = require("./social_oauth");
 const subscriptionEntitlements = require("./subscription_entitlements");
 const scaledCircleLaunchPlan = require("./scaledcircle_launch_plan");
+const xFirstPublish = require("./x_first_publish");
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -56,6 +57,20 @@ function isoValue(value) {
   if (typeof value.toDate === "function") return value.toDate().toISOString();
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function requireFirstXCertificationBusiness(business) {
+  if (runtimeEnvironment() !== "staging" || business.uid !== xFirstPublish.BUSINESS_UID ||
+      !business.isAdmin) {
+    throw new HttpsError("permission-denied", "This bounded staging certification is unavailable.");
+  }
+  return business;
+}
+
+function firstXTrackedUrl(asset) {
+  const code = readText(asset?.publicCode, 80);
+  if (!/^[A-Za-z0-9_-]{24}$/.test(code)) return null;
+  return `https://scaledcircle-staging.web.app/r?code=${encodeURIComponent(code)}`;
 }
 
 async function requireVerifiedUser(request, message) {
@@ -163,6 +178,8 @@ exports.getSocialOperationsWorkspace = onCall(
         migrationAvailable: plans.size === 0,
         canonicalBusinessId: business.uid,
       } : null,
+      firstXCertificationAvailable: runtimeEnvironment() === "staging" && business.isAdmin &&
+        business.uid === xFirstPublish.BUSINESS_UID,
     };
   },
 );
@@ -391,6 +408,606 @@ exports.ingestScaledCircleLaunchPlanV1 = onCall(
       platformVersionCount: migration.content.reduce((sum, entry) =>
         sum + entry.versionRecord.variants.length, 0), responseAssetCount: 0,
       reused: false, externalPublishingEnabled: false};
+  },
+);
+
+exports.prepareFirstXPublishFoundationV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const planRef = db.collection("socialContentPlans").doc(xFirstPublish.PLAN_ID);
+    const itemRef = db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID);
+    const versionOneRef = db.collection("socialContentVersions")
+      .doc(xFirstPublish.ORIGINAL_VERSION_DOCUMENT_ID);
+    const versionTwoRef = db.collection("socialContentVersions")
+      .doc(xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID);
+    const versionTwoQualityRef = db.collection("socialContentQualityAssessments")
+      .doc(xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID);
+    const campaignRef = db.collection("campaigns").doc(xFirstPublish.CAMPAIGN_ID);
+    const mediaRef = db.collection("socialMediaLibraries").doc(business.uid)
+      .collection("items").doc(xFirstPublish.MEDIA_ID);
+    const [plan, item, versionOne, versionTwo, versionTwoQuality, campaign, media] =
+      await Promise.all([
+        planRef.get(), itemRef.get(), versionOneRef.get(), versionTwoRef.get(),
+        versionTwoQualityRef.get(), campaignRef.get(), mediaRef.get(),
+    ]);
+    if (!plan.exists || plan.data()?.businessUid !== business.uid ||
+        plan.data()?.campaignId !== xFirstPublish.CAMPAIGN_ID ||
+        !item.exists || item.data()?.businessUid !== business.uid ||
+        item.data()?.planId !== xFirstPublish.PLAN_ID ||
+        !versionOne.exists || versionOne.data()?.businessUid !== business.uid ||
+        Number(versionOne.data()?.version) !== 1 ||
+        xFirstPublish.weightedXLength(versionOne.data()?.variants?.[0]?.copy) <= 280 ||
+        !versionTwo.exists || versionTwo.data()?.businessUid !== business.uid ||
+        Number(versionTwo.data()?.version) !== xFirstPublish.PREVIOUS_VERSION_NUMBER ||
+        versionTwo.data()?.supersedes !== xFirstPublish.ORIGINAL_VERSION_DOCUMENT_ID ||
+        !versionTwoQuality.exists || versionTwoQuality.data()?.recommendation !== "improve" ||
+        versionTwoQuality.data()?.readyToPublish === true) {
+      throw new HttpsError("failed-precondition", "The canonical v1 plan lineage is unavailable.");
+    }
+    if (Number(item.data()?.currentVersion || 0) > xFirstPublish.VERSION_NUMBER) {
+      throw new HttpsError("failed-precondition", "A newer immutable version already exists.");
+    }
+    if (campaign.exists && campaign.data()?.businessId !== business.uid) {
+      throw new HttpsError("failed-precondition", "The campaign identity is already owned elsewhere.");
+    }
+    if (media.exists && (media.data()?.businessUid !== business.uid ||
+        media.data()?.sha256 !== xFirstPublish.MEDIA_SHA256)) {
+      throw new HttpsError("failed-precondition", "The immutable media identity is already in use.");
+    }
+    const batch = db.batch();
+    if (!campaign.exists) {
+      batch.create(campaignRef, {
+        schemaVersion: "SocialCampaignAttributionV1",
+        businessId: business.uid,
+        campaignName: "ScaledCircle Maryland brand launch — September 2026",
+        campaignType: "social_brand_launch",
+        status: "draft",
+        socialPlanId: xFirstPublish.PLAN_ID,
+        providerMutationEnabled: false,
+        financialAuthorityEnabled: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    if (!media.exists) {
+      batch.create(mediaRef, {
+        schemaVersion: "SocialMediaArtifactV1",
+        businessUid: business.uid,
+        mediaId: xFirstPublish.MEDIA_ID,
+        revisionId: xFirstPublish.MEDIA_REVISION_ID,
+        status: "certified",
+        source: "real_scaledcircle_ui_capture",
+        publicUrl: xFirstPublish.MEDIA_URL,
+        sha256: xFirstPublish.MEDIA_SHA256,
+        byteLength: xFirstPublish.MEDIA_BYTES,
+        width: xFirstPublish.MEDIA_WIDTH,
+        height: xFirstPublish.MEDIA_HEIGHT,
+        contentType: "image/png",
+        privacyReview: "pass",
+        visualQualityReview: "pass",
+        containsCustomerPii: false,
+        immutable: true,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    if (!campaign.exists || !media.exists) await batch.commit();
+    return {
+      businessUid: business.uid,
+      planId: xFirstPublish.PLAN_ID,
+      campaignId: xFirstPublish.CAMPAIGN_ID,
+      contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      sourceVersion: xFirstPublish.PREVIOUS_VERSION_ID,
+      replacementVersion: xFirstPublish.VERSION_ID,
+      supersessionReason: "SOCIAL_QUALITY_IMPROVEMENT",
+      media: {mediaId: xFirstPublish.MEDIA_ID, revisionId: xFirstPublish.MEDIA_REVISION_ID,
+        sha256: xFirstPublish.MEDIA_SHA256, width: xFirstPublish.MEDIA_WIDTH,
+        height: xFirstPublish.MEDIA_HEIGHT, contentType: "image/png",
+        privacyReview: "pass", visualQualityReview: "pass"},
+      responseAssetRequest: {
+        businessUid: business.uid,
+        requestId: `${xFirstPublish.CONTENT_ITEM_ID}:${xFirstPublish.VERSION_ID}`,
+        type: "tracked_link",
+        label: "ScaledCircle X Smart Mapping — v3",
+        destination: xFirstPublish.DESTINATION_URL,
+        source: "social",
+        sourceDetail: `${xFirstPublish.CONTENT_ITEM_ID}:${xFirstPublish.VERSION_ID}`,
+        campaignId: xFirstPublish.CAMPAIGN_ID,
+        creativeVersion: xFirstPublish.VERSION_ID,
+      },
+      providerMutations: 0,
+    };
+  },
+);
+
+exports.createFirstXPublishVersionV2 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const responseAssetId = readText(request.data?.responseAssetId, 180);
+    const assetSnapshot = await db.collection("responseAssets").doc(responseAssetId).get();
+    const asset = assetSnapshot.data();
+    const trackedUrl = firstXTrackedUrl(asset);
+    if (!asset || asset.businessUid !== business.uid || asset.status !== "active" ||
+        asset.type !== "tracked_link" || asset.destination !== xFirstPublish.DESTINATION_URL ||
+        asset.attribution?.campaignId !== xFirstPublish.CAMPAIGN_ID ||
+        asset.attribution?.source !== "social" ||
+        asset.attribution?.sourceDetail !==
+          `${xFirstPublish.CONTENT_ITEM_ID}:${xFirstPublish.PREVIOUS_VERSION_ID}` ||
+        asset.attribution?.creativeVersion !== xFirstPublish.PREVIOUS_VERSION_ID || !trackedUrl) {
+      throw new HttpsError("failed-precondition", "The exact tracked response asset is unavailable.");
+    }
+    const itemRef = db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID);
+    const versionRef = db.collection("socialContentVersions")
+      .doc(xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID);
+    const proposed = xFirstPublish.versionTwoRecord({businessUid: business.uid,
+      responseAssetId, trackedUrl, now: Date.now()});
+    const result = await db.runTransaction(async (transaction) => {
+      const [itemSnapshot, existingVersion] = await Promise.all([
+        transaction.get(itemRef), transaction.get(versionRef),
+      ]);
+      const item = itemSnapshot.data();
+      if (!item || item.businessUid !== business.uid || item.planId !== xFirstPublish.PLAN_ID ||
+          Number(item.currentVersion || 0) > xFirstPublish.PREVIOUS_VERSION_NUMBER) {
+        throw new Error("x_content_item_lineage_mismatch");
+      }
+      if (existingVersion.exists) {
+        if (existingVersion.data()?.contentHash !== proposed.contentHash ||
+            existingVersion.data()?.supersedes !== xFirstPublish.ORIGINAL_VERSION_DOCUMENT_ID) {
+          throw new Error("x_existing_version_mismatch");
+        }
+        return {reused: true, record: existingVersion.data()};
+      }
+      transaction.create(versionRef, {...proposed,
+        createdAt: FieldValue.serverTimestamp()});
+      transaction.update(itemRef, {
+        currentVersion: xFirstPublish.PREVIOUS_VERSION_NUMBER,
+        currentVersionId: xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID,
+        status: "ready_for_review",
+        approvedVersion: null,
+        supersededVersion: 1,
+        supersessionReason: "X_CHARACTER_LIMIT",
+        mediaAssetId: xFirstPublish.MEDIA_ID,
+        responseAssetId,
+        scheduledFor: Timestamp.fromDate(new Date(xFirstPublish.SCHEDULED_FOR)),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return {reused: false, record: proposed};
+    });
+    return {
+      contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      versionId: xFirstPublish.PREVIOUS_VERSION_ID,
+      version: xFirstPublish.PREVIOUS_VERSION_NUMBER,
+      contentHash: result.record.contentHash,
+      supersedes: xFirstPublish.ORIGINAL_VERSION_DOCUMENT_ID,
+      supersessionReason: "X_CHARACTER_LIMIT",
+      weightedCharacters: xFirstPublish.weightedXLength(result.record.variants[0].renderedCopy),
+      responseAssetId,
+      trackedUrl,
+      mediaId: xFirstPublish.MEDIA_ID,
+      reused: result.reused,
+      providerMutations: 0,
+    };
+  },
+);
+
+exports.createFirstXPublishVersionV3 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const responseAssetId = readText(request.data?.responseAssetId, 180);
+    const assetSnapshot = await db.collection("responseAssets").doc(responseAssetId).get();
+    const asset = assetSnapshot.data();
+    const trackedUrl = firstXTrackedUrl(asset);
+    if (!asset || asset.businessUid !== business.uid || asset.status !== "active" ||
+        asset.type !== "tracked_link" || asset.destination !== xFirstPublish.DESTINATION_URL ||
+        asset.attribution?.campaignId !== xFirstPublish.CAMPAIGN_ID ||
+        asset.attribution?.source !== "social" ||
+        asset.attribution?.sourceDetail !== `${xFirstPublish.CONTENT_ITEM_ID}:${xFirstPublish.VERSION_ID}` ||
+        asset.attribution?.creativeVersion !== xFirstPublish.VERSION_ID || !trackedUrl) {
+      throw new HttpsError("failed-precondition", "The exact tracked response asset is unavailable.");
+    }
+    const itemRef = db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID);
+    const versionTwoRef = db.collection("socialContentVersions")
+      .doc(xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID);
+    const versionTwoQualityRef = db.collection("socialContentQualityAssessments")
+      .doc(xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID);
+    const versionRef = db.collection("socialContentVersions").doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const proposed = xFirstPublish.versionRecord({businessUid: business.uid,
+      responseAssetId, trackedUrl, now: Date.now()});
+    const result = await db.runTransaction(async (transaction) => {
+      const [itemSnapshot, versionTwo, versionTwoQuality, existingVersion] = await Promise.all([
+        transaction.get(itemRef), transaction.get(versionTwoRef),
+        transaction.get(versionTwoQualityRef), transaction.get(versionRef),
+      ]);
+      const item = itemSnapshot.data();
+      const currentVersion = Number(item?.currentVersion || 0);
+      if (!item || item.businessUid !== business.uid || item.planId !== xFirstPublish.PLAN_ID ||
+          currentVersion < xFirstPublish.PREVIOUS_VERSION_NUMBER ||
+          currentVersion > xFirstPublish.VERSION_NUMBER || !versionTwo.exists ||
+          versionTwo.data()?.businessUid !== business.uid ||
+          Number(versionTwo.data()?.version) !== xFirstPublish.PREVIOUS_VERSION_NUMBER ||
+          versionTwo.data()?.supersedes !== xFirstPublish.ORIGINAL_VERSION_DOCUMENT_ID ||
+          !versionTwoQuality.exists || versionTwoQuality.data()?.recommendation !== "improve" ||
+          versionTwoQuality.data()?.readyToPublish === true) {
+        throw new Error("x_content_item_quality_lineage_mismatch");
+      }
+      if (existingVersion.exists) {
+        if (existingVersion.data()?.contentHash !== proposed.contentHash ||
+            existingVersion.data()?.supersedes !== xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID) {
+          throw new Error("x_existing_version_mismatch");
+        }
+        return {reused: true, record: existingVersion.data()};
+      }
+      transaction.create(versionRef, {...proposed,
+        createdAt: FieldValue.serverTimestamp()});
+      transaction.update(itemRef, {
+        currentVersion: xFirstPublish.VERSION_NUMBER,
+        currentVersionId: xFirstPublish.VERSION_DOCUMENT_ID,
+        status: "ready_for_review",
+        approvedVersion: null,
+        supersededVersion: xFirstPublish.PREVIOUS_VERSION_NUMBER,
+        supersessionReason: "SOCIAL_QUALITY_IMPROVEMENT",
+        mediaAssetId: xFirstPublish.MEDIA_ID,
+        responseAssetId,
+        scheduledFor: Timestamp.fromDate(new Date(xFirstPublish.SCHEDULED_FOR)),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return {reused: false, record: proposed};
+    });
+    return {
+      contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      versionId: xFirstPublish.VERSION_ID,
+      version: xFirstPublish.VERSION_NUMBER,
+      contentHash: result.record.contentHash,
+      supersedes: xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID,
+      supersessionReason: "SOCIAL_QUALITY_IMPROVEMENT",
+      weightedCharacters: xFirstPublish.weightedXLength(result.record.variants[0].renderedCopy),
+      responseAssetId,
+      trackedUrl,
+      mediaId: xFirstPublish.MEDIA_ID,
+      reused: result.reused,
+      providerMutations: 0,
+    };
+  },
+);
+
+exports.getFirstXPublishCertificationV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 2},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const itemRef = db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID);
+    const versionRef = db.collection("socialContentVersions").doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const qualityRef = db.collection("socialContentQualityAssessments")
+      .doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x");
+    const [item, version, quality, connection, jobs] = await Promise.all([
+      itemRef.get(), versionRef.get(), qualityRef.get(), connectionRef.get(),
+      db.collection("socialPublishingJobs")
+        .where("businessUid", "==", business.uid).limit(20).get(),
+    ]);
+    const versionData = version.data();
+    const responseAssetId = readText(versionData?.variants?.[0]?.responseAssetId, 180);
+    const [asset, approval] = await Promise.all([
+      responseAssetId ? db.collection("responseAssets").doc(responseAssetId).get() : null,
+      versionData?.approvalId ? db.collection("socialExternalApprovals")
+        .doc(versionData.approvalId).get() : null,
+    ]);
+    const job = jobs.docs.find((doc) => doc.data()?.contentItemId === xFirstPublish.CONTENT_ITEM_ID &&
+      Number(doc.data()?.version) === xFirstPublish.VERSION_NUMBER);
+    const connectionProjection = socialOperations.connectionProjection({provider: "x",
+      ...(connection.data() || {})});
+    return {
+      contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      versionId: xFirstPublish.VERSION_ID,
+      itemStatus: item.data()?.status || "not_prepared",
+      versionStatus: versionData?.status || "not_created",
+      weightedCharacters: versionData ?
+        xFirstPublish.weightedXLength(versionData.variants?.[0]?.renderedCopy) : null,
+      media: {mediaId: xFirstPublish.MEDIA_ID, sha256: xFirstPublish.MEDIA_SHA256,
+        width: xFirstPublish.MEDIA_WIDTH, height: xFirstPublish.MEDIA_HEIGHT,
+        privacyReview: "pass", visualQualityReview: "pass"},
+      responseAsset: asset?.exists ? {responseAssetId, trackedUrl: firstXTrackedUrl(asset.data()),
+        destination: asset.data()?.destination} : null,
+      quality: quality.exists ? {score: quality.data()?.score, qualityBand: quality.data()?.qualityBand,
+        recommendation: quality.data()?.recommendation,
+        readyToPublish: quality.data()?.readyToPublish === true} : null,
+      founderPublishApprovalRequired: versionData?.founderPublicationApprovalRequired === true,
+      founderPublishApprovalRecorded: versionData?.founderPublicationApproved === true,
+      connection: {status: connectionProjection.status,
+        accountDisplayName: connectionProjection.accountDisplayName,
+        handle: connectionProjection.handle,
+        capabilities: connectionProjection.capabilities,
+        pendingAttemptId: connectionProjection.pendingAttemptId},
+      approval: approval?.exists ? {approvalId: approval.id, status: approval.data()?.status,
+        approvalHash: approval.data()?.approvalHash} : null,
+      publishJob: job ? {publishJobId: job.id, status: job.data()?.status,
+        providerPostId: job.data()?.providerPostId || null,
+        providerPostUrl: job.data()?.providerPostUrl || null,
+        scheduledFor: isoValue(job.data()?.scheduledFor) || job.data()?.scheduledFor || null,
+        attemptCount: Number(job.data()?.attemptCount || 0),
+        reconciliationRequired: job.data()?.reconciliationRequired === true} : null,
+      externalPublishingEnabled: false,
+      narrowCertificationOnly: true,
+    };
+  },
+);
+
+exports.createFirstXPublishApprovalV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const itemRef = db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID);
+    const versionRef = db.collection("socialContentVersions").doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const qualityRef = db.collection("socialContentQualityAssessments")
+      .doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x");
+    const [item, version, quality, connection, health] = await Promise.all([
+      itemRef.get(), versionRef.get(), qualityRef.get(), connectionRef.get(),
+      db.collection("agentHealth").doc(business.uid).get(),
+    ]);
+    const versionData = version.data();
+    const responseAssetId = readText(versionData?.variants?.[0]?.responseAssetId, 180);
+    const assetSnapshot = responseAssetId ?
+      await db.collection("responseAssets").doc(responseAssetId).get() : null;
+    const asset = assetSnapshot?.data();
+    const responseAsset = asset ? {responseAssetId, ...asset, trackedUrl: firstXTrackedUrl(asset)} : null;
+    try {
+      xFirstPublish.assertWriteConnection(connection.data());
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "Reconnect the exact ScaledCircle X account first.");
+    }
+    if (!item.exists || item.data()?.businessUid !== business.uid ||
+        Number(item.data()?.currentVersion) !== xFirstPublish.VERSION_NUMBER ||
+        !versionData || health.data()?.killSwitchActive !== true ||
+        health.data()?.externalActionsEnabled !== false) {
+      throw new HttpsError("failed-precondition", "The bounded publish safety state is unavailable.");
+    }
+    let approval;
+    try {
+      approval = xFirstPublish.approvalRecord({version: versionData,
+        qualityAssessment: quality.data(), responseAsset, approvedByUid: business.uid,
+        now: Date.now()});
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "The exact content approval gate did not pass.");
+    }
+    const approvedVersion = socialOperations.approveContentVersion({businessUid: business.uid,
+      record: versionData, version: xFirstPublish.VERSION_NUMBER, now: Date.now()});
+    const publishJob = socialOperations.publishJob({businessUid: business.uid,
+      contentItemId: xFirstPublish.CONTENT_ITEM_ID, versionRecord: approvedVersion,
+      provider: "x", scheduledFor: xFirstPublish.SCHEDULED_FOR,
+      connection: connection.data(), now: Date.now()});
+    const approvalRef = db.collection("socialExternalApprovals").doc(approval.id);
+    const jobRef = db.collection("socialPublishingJobs").doc(publishJob.id);
+    const result = await db.runTransaction(async (transaction) => {
+      const [existingApproval, existingJob] = await Promise.all([
+        transaction.get(approvalRef), transaction.get(jobRef),
+      ]);
+      if (existingApproval.exists || existingJob.exists) {
+        if (!existingApproval.exists || !existingJob.exists ||
+            existingApproval.data()?.approvalHash !== approval.record.approvalHash ||
+            existingJob.data()?.approvalId !== approval.id) {
+          throw new Error("x_approval_replay_mismatch");
+        }
+        return {reused: true};
+      }
+      transaction.create(approvalRef, {...approval.record,
+        approvedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp()});
+      transaction.set(versionRef, {...approvedVersion, approvalId: approval.id,
+        approvedAt: FieldValue.serverTimestamp(), createdAt: versionData.createdAt}, {merge: false});
+      transaction.update(itemRef, {status: "scheduled",
+        approvedVersion: xFirstPublish.VERSION_NUMBER, approvalId: approval.id,
+        scheduledFor: Timestamp.fromDate(new Date(xFirstPublish.SCHEDULED_FOR)),
+        updatedAt: FieldValue.serverTimestamp()});
+      transaction.create(jobRef, {...publishJob.record,
+        approvalId: approval.id, approvalHash: approval.record.approvalHash,
+        responseAssetId, mediaAssetId: xFirstPublish.MEDIA_ID,
+        mediaSha256: xFirstPublish.MEDIA_SHA256, renderedCopyHash:
+          xFirstPublish.digest(versionData.variants[0].renderedCopy),
+        executionAuthority: "single_certified_item_only",
+        globalAgentKillSwitchRemainsActive: true,
+        externalExecutionAllowed: true, providerMutationCount: 0,
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      return {reused: false};
+    });
+    return {approvalId: approval.id, approvalHash: approval.record.approvalHash,
+      publishJobId: publishJob.id, scheduledFor: xFirstPublish.SCHEDULED_FOR,
+      status: "scheduled", reused: result.reused, globalAgentKillSwitchActive: true,
+      externalExecutionScope: "one_exact_x_image_post"};
+  },
+);
+
+async function firstXCredential(businessUid, connection) {
+  const credential = (await db.collection("socialConnectionCredentials")
+    .doc(connection.credentialId).get()).data();
+  if (!credential || credential.businessUid !== businessUid || credential.provider !== "x") {
+    throw new Error("x_connection_credential_missing");
+  }
+  const account = socialOAuth.decryptJson(credential.accountEnvelope,
+    socialOAuthEncryptionKey.value(), `${businessUid}:x:${connection.credentialId}`);
+  if (account.accountId !== xFirstPublish.EXPECTED_X_ID) throw new Error("x_account_mismatch");
+  const tokenAad = `${businessUid}:x:${account.accountId}`;
+  const tokens = socialOAuth.decryptJson(credential.tokenEnvelope,
+    socialOAuthEncryptionKey.value(), tokenAad);
+  return {credential, account, tokenAad, tokens};
+}
+
+exports.executeFirstXPublishV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1, timeoutSeconds: 60,
+    secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const publishJobId = readText(request.data?.publishJobId, 180);
+    const jobRef = db.collection("socialPublishingJobs").doc(publishJobId);
+    const jobSnapshot = await jobRef.get();
+    const job = jobSnapshot.data();
+    if (!job || job.businessUid !== business.uid ||
+        job.contentItemId !== xFirstPublish.CONTENT_ITEM_ID ||
+        Number(job.version) !== xFirstPublish.VERSION_NUMBER || job.provider !== "x" ||
+        job.mediaSha256 !== xFirstPublish.MEDIA_SHA256 ||
+        job.executionAuthority !== "single_certified_item_only") {
+      throw new HttpsError("failed-precondition", "The exact publish job is unavailable.");
+    }
+    if (job.status === "published") return {publishJobId, status: "published",
+      providerPostId: job.providerPostId, providerPostUrl: job.providerPostUrl,
+      idempotentReplay: true};
+    if (job.status !== "scheduled" || Number(job.attemptCount || 0) !== 0 ||
+        new Date(job.scheduledFor).getTime() > Date.now() + 30000) {
+      throw new HttpsError("failed-precondition", "This approved post is not ready to publish.");
+    }
+    const [version, approval, asset, media, connection, health, configSnapshot] = await Promise.all([
+      db.collection("socialContentVersions").doc(xFirstPublish.VERSION_DOCUMENT_ID).get(),
+      db.collection("socialExternalApprovals").doc(job.approvalId).get(),
+      db.collection("responseAssets").doc(job.responseAssetId).get(),
+      db.collection("socialMediaLibraries").doc(business.uid).collection("items")
+        .doc(xFirstPublish.MEDIA_ID).get(),
+      db.collection("socialConnections").doc(business.uid).collection("providers").doc("x").get(),
+      db.collection("agentHealth").doc(business.uid).get(),
+      providerConfigRef("x", "staging").get(),
+    ]);
+    const connectionData = connection.data();
+    try { xFirstPublish.assertWriteConnection(connectionData); } catch (_) {
+      throw new HttpsError("failed-precondition", "The exact X publishing connection is unavailable.");
+    }
+    const trackedUrl = firstXTrackedUrl(asset.data());
+    const renderedCopy = xFirstPublish.renderPostText(trackedUrl);
+    if (!version.exists || version.data()?.approvalId !== job.approvalId ||
+        version.data()?.contentHash !== approval.data()?.contentHash ||
+        approval.data()?.approvalHash !== job.approvalHash || approval.data()?.status !== "approved" ||
+        approval.data()?.mediaSha256 !== xFirstPublish.MEDIA_SHA256 ||
+        approval.data()?.responseAssetId !== job.responseAssetId ||
+        media.data()?.sha256 !== xFirstPublish.MEDIA_SHA256 ||
+        media.data()?.privacyReview !== "pass" || media.data()?.visualQualityReview !== "pass" ||
+        health.data()?.killSwitchActive !== true || health.data()?.externalActionsEnabled !== false ||
+        xFirstPublish.digest(renderedCopy) !== job.renderedCopyHash) {
+      throw new HttpsError("failed-precondition", "The exact approval or safety binding changed.");
+    }
+    const claimed = await db.runTransaction(async (transaction) => {
+      const current = (await transaction.get(jobRef)).data();
+      if (current?.status === "published") return false;
+      if (current?.status !== "scheduled" || Number(current?.attemptCount || 0) !== 0) {
+        throw new Error("x_publish_already_claimed");
+      }
+      transaction.update(jobRef, {status: "publishing", attemptCount: 1,
+        providerCreateStartedAtMillis: Date.now(), reconciliationRequired: true,
+        updatedAt: FieldValue.serverTimestamp()});
+      return true;
+    });
+    if (!claimed) return {publishJobId, status: "published", idempotentReplay: true};
+    try {
+      const auth = await firstXCredential(business.uid, connectionData);
+      const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
+      const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
+        config, clientSecret: providerSecretBinding("x").secret.value()});
+      const mediaResponse = await fetch(xFirstPublish.MEDIA_URL, {cache: "no-store"});
+      if (!mediaResponse.ok) throw new Error("x_media_source_unavailable");
+      const mediaBytes = Buffer.from(await mediaResponse.arrayBuffer());
+      xFirstPublish.assertMedia(mediaBytes);
+      const uploaded = await xFirstPublish.uploadMedia({accessToken: tokens.accessToken,
+        bytes: mediaBytes});
+      await jobRef.update({providerMediaId: uploaded.mediaId,
+        providerMediaKey: uploaded.mediaKey, mediaUploadedAt: FieldValue.serverTimestamp(),
+        providerMutationCount: 1, updatedAt: FieldValue.serverTimestamp()});
+      const created = await xFirstPublish.createPost({accessToken: tokens.accessToken,
+        renderedCopy, mediaId: uploaded.mediaId});
+      const receiptId = `social_receipt_${xFirstPublish.digest({publishJobId,
+        providerPostId: created.providerPostId})}`;
+      const receiptRef = db.collection("socialProviderReceipts").doc(receiptId);
+      const batch = db.batch();
+      batch.create(receiptRef, {schemaVersion: "SocialProviderReceiptV1",
+        businessUid: business.uid, provider: "x", publishJobId,
+        contentItemId: xFirstPublish.CONTENT_ITEM_ID, contentVersion: xFirstPublish.VERSION_NUMBER,
+        providerPostId: created.providerPostId, providerPostUrl: created.providerPostUrl,
+        providerTextHash: created.providerTextHash, mediaAssetId: xFirstPublish.MEDIA_ID,
+        mediaSha256: xFirstPublish.MEDIA_SHA256, responseAssetId: job.responseAssetId,
+        status: "accepted", immutable: true, createdAt: FieldValue.serverTimestamp()});
+      batch.update(jobRef, {status: "published", providerPostId: created.providerPostId,
+        providerPostUrl: created.providerPostUrl, providerReceiptId: receiptId,
+        providerMutationCount: 2, reconciliationRequired: false,
+        providerAcceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      batch.update(db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID), {
+        status: "published", providerPostId: created.providerPostId,
+        publishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      if (tokens.refreshed) {
+        const stored = {...tokens}; delete stored.refreshed;
+        batch.update(db.collection("socialConnectionCredentials").doc(connectionData.credentialId), {
+          tokenEnvelope: socialOAuth.encryptJson(stored, socialOAuthEncryptionKey.value(),
+            auth.tokenAad), expiresAtMillis: tokens.expiresIn ?
+            Date.now() + tokens.expiresIn * 1000 : null,
+          updatedAt: FieldValue.serverTimestamp()});
+      }
+      await batch.commit();
+      return {publishJobId, status: "published", providerPostId: created.providerPostId,
+        providerPostUrl: created.providerPostUrl, providerReceiptId: receiptId,
+        idempotentReplay: false, providerMutationCount: 2};
+    } catch (error) {
+      await jobRef.set({status: "unknown_provider_outcome", reconciliationRequired: true,
+        safeFailure: readText(error?.message || error, 120),
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      throw new HttpsError("aborted",
+        "X returned an uncertain outcome. ScaledCircle will reconcile before any further action.");
+    }
+  },
+);
+
+exports.reconcileFirstXPublishV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1, timeoutSeconds: 30,
+    secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const publishJobId = readText(request.data?.publishJobId, 180);
+    const jobRef = db.collection("socialPublishingJobs").doc(publishJobId);
+    const job = (await jobRef.get()).data();
+    if (!job || job.businessUid !== business.uid ||
+        job.contentItemId !== xFirstPublish.CONTENT_ITEM_ID ||
+        job.status !== "unknown_provider_outcome" || Number(job.attemptCount) !== 1) {
+      throw new HttpsError("failed-precondition", "This publish job does not require reconciliation.");
+    }
+    const [connection, asset, configSnapshot] = await Promise.all([
+      db.collection("socialConnections").doc(business.uid).collection("providers").doc("x").get(),
+      db.collection("responseAssets").doc(job.responseAssetId).get(),
+      providerConfigRef("x", "staging").get(),
+    ]);
+    const connectionData = connection.data();
+    xFirstPublish.assertWriteConnection(connectionData);
+    const auth = await firstXCredential(business.uid, connectionData);
+    const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
+    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
+      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const result = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
+      renderedCopy: xFirstPublish.renderPostText(firstXTrackedUrl(asset.data())),
+      startedAt: Number(job.providerCreateStartedAtMillis || 0) - 60000,
+      endedAt: Date.now() + 60000});
+    if (result.status !== "found") return {publishJobId,
+      status: "unknown_provider_outcome", retryAuthorized: false,
+      reconciliationRequired: true};
+    const receiptId = `social_receipt_${xFirstPublish.digest({publishJobId,
+      providerPostId: result.providerPostId})}`;
+    const batch = db.batch();
+    batch.set(db.collection("socialProviderReceipts").doc(receiptId), {
+      schemaVersion: "SocialProviderReceiptV1", businessUid: business.uid,
+      provider: "x", publishJobId, contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      contentVersion: xFirstPublish.VERSION_NUMBER, providerPostId: result.providerPostId,
+      providerPostUrl: result.providerPostUrl, status: "reconciled",
+      immutable: true, createdAt: FieldValue.serverTimestamp()}, {merge: false});
+    batch.update(jobRef, {status: "published", providerPostId: result.providerPostId,
+      providerPostUrl: result.providerPostUrl, providerReceiptId: receiptId,
+      reconciliationRequired: false, reconciledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()});
+    await batch.commit();
+    return {publishJobId, status: "published", providerPostId: result.providerPostId,
+      providerPostUrl: result.providerPostUrl, providerReceiptId: receiptId,
+      reconciled: true, duplicateCreateAttempted: false};
   },
 );
 
@@ -725,6 +1342,65 @@ exports.beginSocialOAuthConnectionV1 = onCall(
   },
 );
 
+exports.beginFirstXPublishAuthorizationV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1, secrets: [socialOAuthEncryptionKey]},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const [version, quality, connection, configSnapshot] = await Promise.all([
+      db.collection("socialContentVersions").doc(xFirstPublish.VERSION_DOCUMENT_ID).get(),
+      db.collection("socialContentQualityAssessments").doc(xFirstPublish.VERSION_DOCUMENT_ID).get(),
+      db.collection("socialConnections").doc(business.uid).collection("providers").doc("x").get(),
+      providerConfigRef("x", "staging").get(),
+    ]);
+    if (!version.exists || version.data()?.businessUid !== business.uid ||
+        version.data()?.founderPublicationApproved !== true ||
+        !quality.exists || quality.data()?.readyToPublish !== true ||
+        Number(quality.data()?.score || 0) < 75 ||
+        connection.data()?.providerAccountId !== `x_user_${xFirstPublish.EXPECTED_X_ID}`) {
+      throw new HttpsError("failed-precondition",
+        "Prepare and quality-check the exact post before enabling publishing access.");
+    }
+    const proposed = socialOAuth.createAttempt({businessUid: business.uid, provider: "x",
+      config: configSnapshot.data(), encryptionKey: socialOAuthEncryptionKey.value(),
+      scopes: xFirstPublish.X_WRITE_SCOPES, purpose: "x_first_publish_certification",
+      now: Date.now()});
+    const connectionRef = connection.ref;
+    const resolved = await db.runTransaction(async (transaction) => {
+      const current = (await transaction.get(connectionRef)).data() || {};
+      const pendingAttemptId = readText(current.pendingAttemptId, 128);
+      if (pendingAttemptId) {
+        const pendingRef = db.collection("socialOAuthAttempts").doc(pendingAttemptId);
+        const pending = (await transaction.get(pendingRef)).data();
+        if (pending?.purpose === "x_first_publish_certification" &&
+            socialOAuth.isReusableAttempt(pending, {businessUid: business.uid, provider: "x",
+              now: Date.now()})) {
+          return {attemptId: pendingAttemptId, record: pending, reused: true,
+            authorizationUrl: socialOAuth.continuationUrl(pending, {businessUid: business.uid,
+              provider: "x", attemptId: pendingAttemptId,
+              encryptionKey: socialOAuthEncryptionKey.value(), now: Date.now()})};
+        }
+      }
+      const attemptRef = db.collection("socialOAuthAttempts").doc(proposed.attemptId);
+      transaction.create(attemptRef, {...proposed.record,
+        contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+        contentVersion: xFirstPublish.VERSION_NUMBER,
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      transaction.set(connectionRef, {status: "write_scope_pending",
+        pendingAttemptId: proposed.attemptId, writeScopesGranted: false,
+        externalPublishingEnabled: false, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      return {attemptId: proposed.attemptId, record: proposed.record, reused: false,
+        authorizationUrl: proposed.authorizationUrl};
+    });
+    return {provider: "x", attemptId: resolved.attemptId,
+      authorizationUrl: resolved.authorizationUrl,
+      continuationAvailable: Boolean(resolved.authorizationUrl),
+      reusedExistingAttempt: resolved.reused, status: resolved.record.status,
+      requestedCapability: "Publish this approved X post",
+      writeScopesRequested: true};
+  },
+);
+
 exports.getSocialOAuthAttemptV1 = onCall(
   {enforceAppCheck: false, maxInstances: 4, secrets: [socialOAuthEncryptionKey]},
   async (request) => {
@@ -749,8 +1425,70 @@ exports.getSocialOAuthAttemptV1 = onCall(
       candidates: Array.isArray(record.safeCandidates) ? record.safeCandidates : [],
       grantedScopes: Array.isArray(record.grantedScopes) ? record.grantedScopes : [],
       missingScopes: Array.isArray(record.missingScopes) ? record.missingScopes : [],
-      writeScopesGranted: false,
+      writeScopesGranted: record.purpose === "x_first_publish_certification" &&
+        Array.isArray(record.grantedScopes) &&
+        xFirstPublish.X_WRITE_SCOPES.every((scope) => record.grantedScopes.includes(scope)),
     };
+  },
+);
+
+exports.confirmFirstXPublishAuthorizationV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1, secrets: [socialOAuthEncryptionKey]},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const attemptId = readText(request.data?.attemptId, 128);
+    const attemptRef = db.collection("socialOAuthAttempts").doc(attemptId);
+    const attempt = (await attemptRef.get()).data();
+    if (!attempt || attempt.businessUid !== business.uid || attempt.provider !== "x" ||
+        attempt.purpose !== "x_first_publish_certification" ||
+        Number(attempt.contentVersion) !== xFirstPublish.VERSION_NUMBER ||
+        attempt.contentItemId !== xFirstPublish.CONTENT_ITEM_ID ||
+        !xFirstPublish.X_WRITE_SCOPES.every((scope) => attempt.grantedScopes?.includes(scope)) ||
+        (attempt.grantedScopes || []).some((scope) => !xFirstPublish.X_WRITE_SCOPES.includes(scope))) {
+      throw new HttpsError("failed-precondition", "The bounded X permission upgrade is unavailable.");
+    }
+    let selected;
+    try {
+      selected = socialOAuth.selectCandidate({attempt, candidateId: request.data?.candidateId,
+        encryptionKey: socialOAuthEncryptionKey.value(), now: Date.now()});
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "Review and confirm the exact X account again.");
+    }
+    const safe = selected.safeCandidate;
+    if (selected.privateAccount.accountId !== xFirstPublish.EXPECTED_X_ID ||
+        safe.accountDisplayName !== xFirstPublish.EXPECTED_X_NAME ||
+        readText(safe.handle, 180).replace(/^@/, "").toLowerCase() !==
+          xFirstPublish.EXPECTED_X_HANDLE || safe.capabilities.publishText !== true ||
+        safe.capabilities.publishImage !== true) {
+      throw new HttpsError("failed-precondition", "The returned X identity does not match ScaledCircle.");
+    }
+    const credentialId = socialOAuth.digest(`${business.uid}:x:${selected.privateAccount.accountId}`);
+    const credentialRef = db.collection("socialConnectionCredentials").doc(credentialId);
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x");
+    const batch = db.batch();
+    batch.set(credentialRef, {...selected.credentialRecord,
+      accountEnvelope: socialOAuth.encryptJson(selected.privateAccount,
+        socialOAuthEncryptionKey.value(), `${business.uid}:x:${credentialId}`),
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+    batch.set(connectionRef, {schemaVersion: socialOperations.SCHEMA_VERSION,
+      provider: "x", status: "connected_write", accountDisplayName: safe.accountDisplayName,
+      accountType: safe.accountType, handle: safe.handle, providerAccountId: safe.candidateId,
+      providerUserId: selected.privateAccount.accountId, credentialId,
+      capabilities: safe.capabilities, grantedScopes: attempt.grantedScopes,
+      writeScopesGranted: true, externalPublishingEnabled: false,
+      narrowCertificationContentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      narrowCertificationVersion: xFirstPublish.VERSION_NUMBER,
+      environment: attempt.environment, authorizationUpdatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+    batch.update(attemptRef, {status: "connected_write", selectedCandidate: safe,
+      candidateEnvelope: FieldValue.delete(), verifierEnvelope: FieldValue.delete(),
+      connectedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    await batch.commit();
+    return {provider: "x", status: "connected_write", identity: safe,
+      capability: "approval_controlled_image_post", unrelatedScopesGranted: 0,
+      globalExternalPublishingEnabled: false};
   },
 );
 
@@ -762,7 +1500,8 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
     const attemptRef = db.collection("socialOAuthAttempts").doc(attemptId);
     const attemptSnapshot = await attemptRef.get();
     const attempt = attemptSnapshot.data();
-    if (!attempt || attempt.businessUid !== business.uid) {
+    if (!attempt || attempt.businessUid !== business.uid ||
+        (attempt.purpose && attempt.purpose !== "read_only_connection")) {
       throw new HttpsError("not-found", "The connection attempt is unavailable.");
     }
     let selected;
@@ -876,7 +1615,9 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
         success: completed.status === "identity_pending",
         message: completed.status === "identity_pending" ?
           "Return to ScaledCircle to review and confirm the exact account identity." :
-          "The provider did not grant every required read-only permission.",
+          attempt.purpose === "x_first_publish_certification" ?
+            "X did not grant the exact permission needed for this approved post." :
+            "The provider did not grant every required read-only permission.",
       }));
     } catch (error) {
       console.warn("social_oauth_callback_failed", {
@@ -956,7 +1697,8 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
     const connectionRef = db.collection("socialConnections").doc(business.uid)
       .collection("providers").doc(surface);
     const connection = (await connectionRef.get()).data();
-    if (!connection || connection.status !== "connected_read_only" || !connection.credentialId) {
+    if (!connection || !["connected_read_only", "connected_write"].includes(connection.status) ||
+        !connection.credentialId) {
       throw new HttpsError("failed-precondition", "Connect this account read only first.");
     }
     const credentialRef = db.collection("socialConnectionCredentials").doc(connection.credentialId);

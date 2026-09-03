@@ -479,6 +479,9 @@ service cloud.firestore {
     match /socialProviderReceipts/{document=**} {
       allow read, write: if false;
     }
+    match /socialExternalApprovals/{document=**} {
+      allow read, write: if false;
+    }
     match /socialPerformanceSnapshots/{document=**} {
       allow read, write: if false;
     }

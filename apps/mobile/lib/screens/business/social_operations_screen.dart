@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/attribution_service.dart';
 import '../../services/social_operations_service.dart';
 
 class SocialOperationsScreen extends StatefulWidget {
@@ -15,11 +16,17 @@ class SocialOperationsScreen extends StatefulWidget {
 
 class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   final _service = SocialOperationsService();
+  final _attribution = AttributionService();
   SocialOperationsWorkspace? _workspace;
+  Map<String, dynamic>? _firstX;
   bool _loading = true;
   bool _reviewingContent = false;
   bool _ratingPosts = false;
   bool _aligningPlan = false;
+  bool _preparingFirstX = false;
+  bool _authorizingFirstX = false;
+  bool _approvingFirstX = false;
+  bool _publishingFirstX = false;
   String? _error;
 
   @override
@@ -35,7 +42,16 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     });
     try {
       final value = await _service.load();
-      if (mounted) setState(() => _workspace = value);
+      Map<String, dynamic>? firstX;
+      if (value.firstXCertificationAvailable) {
+        firstX = await _service.firstXPublishCertification();
+      }
+      if (mounted) {
+        setState(() {
+          _workspace = value;
+          _firstX = firstX;
+        });
+      }
     } on FirebaseFunctionsException catch (error) {
       if (mounted) {
         setState(
@@ -196,7 +212,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'Unable to align the existing plan.'),
+            content: Text(
+              error.message ?? 'Unable to align the existing plan.',
+            ),
           ),
         );
       }
@@ -512,6 +530,205 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     }
   }
 
+  Future<void> _prepareFirstXPublish() async {
+    if (_preparingFirstX) return;
+    setState(() => _preparingFirstX = true);
+    try {
+      final foundation = await _service.prepareFirstXPublishFoundation();
+      final request = Map<String, dynamic>.from(
+        foundation['responseAssetRequest'] as Map,
+      );
+      final asset = await _attribution.createResponseAsset(
+        businessUid: request['businessUid']?.toString(),
+        requestId: request['requestId']?.toString(),
+        label: request['label']?.toString() ?? '',
+        type: request['type']?.toString() ?? 'tracked_link',
+        destination: request['destination']?.toString() ?? '',
+        source: request['source']?.toString() ?? 'social',
+        sourceDetail: request['sourceDetail']?.toString(),
+        campaignId: request['campaignId']?.toString(),
+        creativeVersion: request['creativeVersion']?.toString(),
+      );
+      await _service.createFirstXPublishVersion(
+        responseAssetId: asset['responseAssetId']?.toString() ?? '',
+      );
+      await _service.reviewScheduledContent();
+      await _load();
+      final quality = Map<String, dynamic>.from(
+        _firstX?['quality'] as Map? ?? const {},
+      );
+      if (quality['readyToPublish'] != true ||
+          !const ['good', 'strong'].contains(quality['qualityBand'])) {
+        throw StateError('The revised post did not pass the quality gate.');
+      }
+    } on FirebaseFunctionsException catch (error) {
+      _showFirstXError(error.message);
+    } catch (error) {
+      _showFirstXError(error.toString());
+    } finally {
+      if (mounted) setState(() => _preparingFirstX = false);
+    }
+  }
+
+  Future<void> _beginFirstXPublishAuthorization() async {
+    if (_authorizingFirstX) return;
+    setState(() => _authorizingFirstX = true);
+    try {
+      final result = await _service.beginFirstXPublishAuthorization();
+      final uri = Uri.tryParse(result['authorizationUrl']?.toString() ?? '');
+      await _load();
+      if (result['status'] == 'identity_pending') {
+        await _reviewFirstXPublishAuthorization(
+          result['attemptId']?.toString() ?? '',
+        );
+      } else if (uri != null) {
+        final popupOpened = await launchUrl(uri, webOnlyWindowName: '_blank');
+        await _showContinuation(uri, provider: 'x', popupOpened: popupOpened);
+      }
+    } on FirebaseFunctionsException catch (error) {
+      _showFirstXError(error.message);
+    } finally {
+      if (mounted) setState(() => _authorizingFirstX = false);
+    }
+  }
+
+  Future<void> _reviewFirstXPublishAuthorization(String attemptId) async {
+    if (attemptId.isEmpty) return;
+    try {
+      final attempt = await _service.connectionAttempt(attemptId);
+      final candidates = (attempt['candidates'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+      if (attempt['status'] != 'identity_pending' || candidates.isEmpty) {
+        _showFirstXError(
+          'Authorization is not ready. Finish X consent, then check again.',
+        );
+        return;
+      }
+      if (!mounted) return;
+      final selected = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Use this X account?'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'This upgrade allows ScaledCircle to publish only the exact post you approve. It does not enable automatic posting.',
+                ),
+                const SizedBox(height: 12),
+                for (final candidate in candidates)
+                  Card(
+                    child: ListTile(
+                      title: Text(
+                        candidate['accountDisplayName']?.toString() ?? '',
+                      ),
+                      subtitle: Text(candidate['handle']?.toString() ?? ''),
+                      trailing: FilledButton.tonal(
+                        onPressed: () =>
+                            Navigator.pop(dialogContext, candidate),
+                        child: const Text('Use this account'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      if (selected == null) return;
+      await _service.confirmFirstXPublishAuthorization(
+        attemptId: attemptId,
+        candidateId: selected['candidateId']?.toString() ?? '',
+      );
+      await _load();
+    } on FirebaseFunctionsException catch (error) {
+      _showFirstXError(error.message);
+    }
+  }
+
+  Future<void> _createFirstXApproval() async {
+    if (_approvingFirstX) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Approve this exact X post?'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Smart Mapping helps a Maryland Business focus a local campaign street by street. Choose the neighborhoods you can serve, connect each response to the campaign, and review what happened before expanding the map.\n\nSee ScaledCircle work: https://scaledcircle.com/#/businesses\n\n#MarylandBusiness\n\nSmart Mapping media and the tracked destination are locked to this approval. Nothing else is approved.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Approve exact post'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true) return;
+    setState(() => _approvingFirstX = true);
+    try {
+      await _service.createFirstXPublishApproval();
+      await _load();
+    } on FirebaseFunctionsException catch (error) {
+      _showFirstXError(error.message);
+    } finally {
+      if (mounted) setState(() => _approvingFirstX = false);
+    }
+  }
+
+  Future<void> _executeFirstXPublish(String publishJobId) async {
+    if (_publishingFirstX) return;
+    setState(() => _publishingFirstX = true);
+    try {
+      await _service.executeFirstXPublish(publishJobId);
+      await _load();
+    } on FirebaseFunctionsException catch (error) {
+      _showFirstXError(error.message);
+      await _load();
+    } finally {
+      if (mounted) setState(() => _publishingFirstX = false);
+    }
+  }
+
+  Future<void> _reconcileFirstXPublish(String publishJobId) async {
+    if (_publishingFirstX) return;
+    setState(() => _publishingFirstX = true);
+    try {
+      await _service.reconcileFirstXPublish(publishJobId);
+      await _load();
+    } on FirebaseFunctionsException catch (error) {
+      _showFirstXError(error.message);
+    } finally {
+      if (mounted) setState(() => _publishingFirstX = false);
+    }
+  }
+
+  void _showFirstXError(String? message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message ?? 'The bounded X certification needs attention.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _syncPerformance(String provider) async {
     try {
       final result = await _service.syncReadOnlyPerformance(provider);
@@ -639,6 +856,8 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           _notice(),
           const SizedBox(height: 16),
           _section('Connections', _connections(workspace, wide)),
+          if (workspace.firstXCertificationAvailable)
+            _section('First X publish candidate', _firstXPublishCard()),
           _section('30-Day Plan', _plans(workspace)),
           _section('Content Health', _contentHealth(workspace)),
           _section("What's Working", _learning(workspace)),
@@ -688,7 +907,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     children: workspace.connections
         .map((connection) {
           final status = connection['status']?.toString() ?? 'disconnected';
-          final connected = status == 'connected_read_only';
+          final connected = const {
+            'connected_read_only',
+            'connected_write',
+          }.contains(status);
           final authorizing =
               status == 'authorizing' || status == 'identity_pending';
           return Card(
@@ -704,7 +926,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                   const Spacer(),
                   Text(
                     connected
-                        ? 'Connected · Read only'
+                        ? status == 'connected_write'
+                              ? 'Connected · Approval required before posting'
+                              : 'Connected · Read only'
                         : authorizing
                         ? 'Authorizing'
                         : 'Not connected',
@@ -769,64 +993,227 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         .toList(growable: false),
   );
 
+  Widget _firstXPublishCard() {
+    final certification = _firstX ?? const <String, dynamic>{};
+    final quality = Map<String, dynamic>.from(
+      certification['quality'] as Map? ?? const {},
+    );
+    final connection = Map<String, dynamic>.from(
+      certification['connection'] as Map? ?? const {},
+    );
+    final responseAsset = Map<String, dynamic>.from(
+      certification['responseAsset'] as Map? ?? const {},
+    );
+    final approval = Map<String, dynamic>.from(
+      certification['approval'] as Map? ?? const {},
+    );
+    final job = Map<String, dynamic>.from(
+      certification['publishJob'] as Map? ?? const {},
+    );
+    final prepared =
+        certification['versionStatus'] != null &&
+        certification['versionStatus'] != 'not_created';
+    final founderApproved =
+        certification['founderPublishApprovalRecorded'] == true;
+    final writeConnected = connection['status'] == 'connected_write';
+    final jobStatus = job['status']?.toString();
+    final attemptId = connection['pendingAttemptId']?.toString() ?? '';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Smart Mapping · X · Founder review required',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Smart Mapping helps a Maryland Business focus a local campaign street by street. Choose the neighborhoods you can serve, connect each response to the campaign, and review what happened before expanding the map.\n\nSee ScaledCircle work: scaledcircle.com/#/businesses\n\n#MarylandBusiness',
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Chip(
+                  label: Text(
+                    quality.isEmpty
+                        ? 'Quality review pending'
+                        : '${quality['score'] ?? '—'}/100 · ${quality['qualityBand'] ?? 'review'}',
+                  ),
+                ),
+                Chip(
+                  label: Text(
+                    founderApproved
+                        ? 'Founder publish approval recorded'
+                        : 'Founder publish approval required',
+                  ),
+                ),
+                Chip(
+                  label: Text(
+                    responseAsset.isEmpty
+                        ? 'Tracked destination pending'
+                        : 'Tracked destination ready',
+                  ),
+                ),
+                const Chip(label: Text('Timing confidence · Low')),
+                Chip(
+                  label: Text(
+                    writeConnected
+                        ? 'X publishing permission ready'
+                        : 'Publishing permission not granted',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              jobStatus == 'published'
+                  ? 'Published and reconciled'
+                  : jobStatus == 'unknown_provider_outcome'
+                  ? 'Provider outcome needs reconciliation'
+                  : jobStatus == 'scheduled'
+                  ? 'Approved for ${job['scheduledFor'] ?? 'the selected time'}'
+                  : 'No public post has been created.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (!prepared)
+                  FilledButton.tonal(
+                    onPressed: _preparingFirstX ? null : _prepareFirstXPublish,
+                    child: Text(
+                      _preparingFirstX ? 'Preparing…' : 'Prepare exact post',
+                    ),
+                  ),
+                if (prepared && !founderApproved)
+                  const FilledButton.tonal(
+                    onPressed: null,
+                    child: Text(
+                      'Founder approval required before publishing access',
+                    ),
+                  ),
+                if (prepared &&
+                    founderApproved &&
+                    !writeConnected &&
+                    attemptId.isEmpty)
+                  FilledButton.tonal(
+                    onPressed: _authorizingFirstX
+                        ? null
+                        : _beginFirstXPublishAuthorization,
+                    child: const Text(
+                      'Allow ScaledCircle to publish this approved post',
+                    ),
+                  ),
+                if (prepared &&
+                    founderApproved &&
+                    !writeConnected &&
+                    attemptId.isNotEmpty)
+                  FilledButton.tonal(
+                    onPressed: _authorizingFirstX
+                        ? null
+                        : () => _reviewFirstXPublishAuthorization(attemptId),
+                    child: const Text('Check & confirm X account'),
+                  ),
+                if (prepared && writeConnected && approval.isEmpty)
+                  FilledButton(
+                    onPressed: _approvingFirstX ? null : _createFirstXApproval,
+                    child: Text(
+                      _approvingFirstX ? 'Approving…' : 'Review exact approval',
+                    ),
+                  ),
+                if (jobStatus == 'scheduled')
+                  FilledButton(
+                    onPressed: _publishingFirstX
+                        ? null
+                        : () => _executeFirstXPublish(
+                            job['publishJobId']?.toString() ?? '',
+                          ),
+                    child: Text(
+                      _publishingFirstX
+                          ? 'Publishing…'
+                          : 'Publish approved X post',
+                    ),
+                  ),
+                if (jobStatus == 'unknown_provider_outcome')
+                  FilledButton.tonal(
+                    onPressed: _publishingFirstX
+                        ? null
+                        : () => _reconcileFirstXPublish(
+                            job['publishJobId']?.toString() ?? '',
+                          ),
+                    child: const Text('Reconcile provider outcome'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _plans(SocialOperationsWorkspace workspace) {
     final alignment = workspace.internalPlanAlignment;
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
       children: [
-      for (final plan in workspace.plans)
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.calendar_month_outlined),
-            title: Text(plan['goal']?.toString() ?? '30-day content plan'),
-            subtitle: Text(
-              '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',
+        for (final plan in workspace.plans)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.calendar_month_outlined),
+              title: Text(plan['goal']?.toString() ?? '30-day content plan'),
+              subtitle: Text(
+                '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',
+              ),
+              trailing: plan['status'] == 'ready_for_review'
+                  ? FilledButton.tonal(
+                      onPressed: () => _approvePlan(plan),
+                      child: const Text('Review & Approve'),
+                    )
+                  : const Chip(label: Text('APPROVED')),
             ),
-            trailing: plan['status'] == 'ready_for_review'
-                ? FilledButton.tonal(
-                    onPressed: () => _approvePlan(plan),
-                    child: const Text('Review & Approve'),
-                  )
-                : const Chip(label: Text('APPROVED')),
           ),
-        ),
-      Card(
-        child: ListTile(
-          leading: const Icon(Icons.add_circle_outline),
-          title: Text(
-            '${workspace.plans.length} saved plan${workspace.plans.length == 1 ? '' : 's'}',
-          ),
-          subtitle: const Text(
-            'Platform-specific versions remain drafts until explicitly approved.',
-          ),
-          trailing: FilledButton(
-            onPressed: _createPlan,
-            child: const Text('Start Plan'),
-          ),
-        ),
-      ),
-      if (alignment != null)
         Card(
           child: ListTile(
-            leading: const Icon(Icons.verified_outlined),
+            leading: const Icon(Icons.add_circle_outline),
             title: Text(
-              migrationAvailable
-                  ? 'Existing ScaledCircle plan is ready to align'
-                  : 'Staging plan alignment verified',
+              '${workspace.plans.length} saved plan${workspace.plans.length == 1 ? '' : 's'}',
             ),
-            subtitle: Text(
-              migrationAvailable
-                  ? 'Use the maintained plan authority to preserve the existing launch-plan lineage in this workspace.'
-                  : 'Plan ${alignment['sourcePlanId']} · Canonical Business ${alignment['canonicalBusinessId']}',
+            subtitle: const Text(
+              'Platform-specific versions remain drafts until explicitly approved.',
             ),
-            trailing: migrationAvailable
-                ? FilledButton.tonal(
-                    onPressed: _aligningPlan ? null : _alignExistingPlan,
-                    child: Text(_aligningPlan ? 'Aligning…' : 'Align Plan'),
-                  )
-                : const Chip(label: Text('ALIGNED')),
+            trailing: FilledButton(
+              onPressed: _createPlan,
+              child: const Text('Start Plan'),
+            ),
           ),
         ),
+        if (alignment != null)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.verified_outlined),
+              title: Text(
+                migrationAvailable
+                    ? 'Existing ScaledCircle plan is ready to align'
+                    : 'Staging plan alignment verified',
+              ),
+              subtitle: Text(
+                migrationAvailable
+                    ? 'Use the maintained plan authority to preserve the existing launch-plan lineage in this workspace.'
+                    : 'Plan ${alignment['sourcePlanId']} · Canonical Business ${alignment['canonicalBusinessId']}',
+              ),
+              trailing: migrationAvailable
+                  ? FilledButton.tonal(
+                      onPressed: _aligningPlan ? null : _alignExistingPlan,
+                      child: Text(_aligningPlan ? 'Aligning…' : 'Align Plan'),
+                    )
+                  : const Chip(label: Text('ALIGNED')),
+            ),
+          ),
       ],
     );
   }

@@ -166,7 +166,7 @@ function safeAsset(id, data, publicBaseUrl) {
 }
 
 function createAttributionService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes,
-  publicBaseUrl}) {
+  publicBaseUrl, adminSelfDogfoodBusinessUid = null}) {
   async function resolveBusinessUid(actor, requested) {
     assertAttributionActor(actor);
     const businessUid = actor.role === "business" ? actor.uid : text(requested, 160);
@@ -175,10 +175,11 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       throw new Error("cross_business_attribution_forbidden");
     }
     const user = await db.collection("users").doc(businessUid).get();
-    if (!user.exists || text(user.data()?.role, 40).toLowerCase() !== "business") {
-      throw new Error("business_identity_required");
-    }
-    return businessUid;
+    if (user.exists && text(user.data()?.role, 40).toLowerCase() === "business") return businessUid;
+    const adminSelfDogfood = actor.role === "admin" && actor.uid === businessUid &&
+      businessUid === text(adminSelfDogfoodBusinessUid, 180);
+    if (adminSelfDogfood) return businessUid;
+    throw new Error("business_identity_required");
   }
 
   async function validateOwnedReferences(businessUid, envelope) {
