@@ -57,6 +57,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "createFirstXPublishApprovalV1",
     "createFirstXPublishVersionV2",
     "createFirstXPublishVersionV3",
+    "createFirstXReplacementV1",
     "createSocialContentPlanV1",
     "executeFirstXPublishV1",
     "getFirstXPublishCertificationV1",
@@ -68,7 +69,10 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "proposeScheduledSocialReplacementV1",
     "rateHistoricalSocialContentV1",
     "reconcileFirstXPublishV1",
+    "reconcileFirstXRepairV1",
+    "reconcileFounderManualFirstXDeletionV1",
     "recordFirstXFounderApprovalV1",
+    "registerFirstXProductionResponseAssetV1",
     "reviewScheduledSocialContentV1",
     "socialOAuthCallbackV1",
     "socialOAuthMetaCallbackV1",
@@ -82,11 +86,37 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
 test("bounded X write entrypoints bind only shared encryption and X secret", () => {
   const entrypoint = (name) => indexSource.match(
     new RegExp(`exports\\.${name} = [\\s\\S]*?\\n\\);`))[0];
-  for (const name of ["executeFirstXPublishV1", "reconcileFirstXPublishV1"]) {
+  for (const name of ["executeFirstXPublishV1", "reconcileFirstXPublishV1",
+    "reconcileFounderManualFirstXDeletionV1", "createFirstXReplacementV1",
+    "reconcileFirstXRepairV1"]) {
     const source = entrypoint(name);
     assert.match(source, /providerSecretBinding\("x"\)\.secret/);
     assert.doesNotMatch(source, /META_SOCIAL_APP_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET/);
   }
+});
+
+test("X public-origin repair records the Founder deletion without a provider delete", () => {
+  const deletion = indexSource.match(
+    /exports\.reconcileFounderManualFirstXDeletionV1 = [\s\S]*?\n\);/)[0];
+  const replacement = indexSource.match(
+    /exports\.createFirstXReplacementV1 = [\s\S]*?\n\);/)[0];
+  const reconcileRepair = indexSource.match(
+    /exports\.reconcileFirstXRepairV1 = [\s\S]*?\n\);/)[0];
+  assert.match(deletion, /ORIGINAL_DEFECTIVE_POST_ID/);
+  assert.match(deletion, /FOUNDER_MANUAL_DELETE|ORIGINAL_DELETION_SOURCE/);
+  assert.match(deletion, /providerDeleteAttemptCount: 0/);
+  assert.match(deletion, /providerDeleteReceipt: null/);
+  assert.doesNotMatch(deletion, /method:\s*"DELETE"|deletePost\(|createPost\(/);
+  assert.match(replacement, /replacementAttemptCount/);
+  assert.match(replacement, /createReplacementPost/);
+  assert.doesNotMatch(replacement, /uploadMedia/);
+  assert.match(reconcileRepair, /unknown_replacement_outcome/);
+  assert.doesNotMatch(reconcileRepair, /createPost|createReplacementPost/);
+  assert.doesNotMatch(deletion + replacement, /RRULE|recurr|daily/i);
+  const renderer = indexSource.match(/function firstXTrackedUrl\(asset\) \{[\s\S]*?\n\}/)[0];
+  assert.match(renderer, /public_publish/);
+  assert.match(renderer, /https:\/\/scaledcircle\.com/);
+  assert.doesNotMatch(renderer, /scaledcircle-staging|\.web\.app|firebaseapp/);
 });
 
 test("the exact X publish job is one-time and terminal after reconciliation", () => {

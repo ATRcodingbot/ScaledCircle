@@ -11318,9 +11318,12 @@ async function authenticatedUserContext(request, message) {
 const attributionFoundation = require("./attribution_foundation");
 const attributionProjectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT ||
 process.env.GOOGLE_CLOUD_PROJECT || "";
+const attributionOriginPolicy = attributionFoundation.responseOriginPolicy(attributionProjectId);
 const attributionService = attributionFoundation.createAttributionService({ db, FieldValue,
-  publicBaseUrl: attributionFoundation.publicResponseOrigin(attributionProjectId),
-  adminSelfDogfoodBusinessUid: attributionProjectId === "scaledcircle-staging" ?
+  publicBaseUrl: attributionOriginPolicy?.origin,
+  defaultExposure: attributionOriginPolicy?.defaultExposure,
+  permitsPublicPublish: attributionOriginPolicy?.permitsPublicPublish === true,
+  adminSelfDogfoodBusinessUid: ["scaledcircle-staging", "scaled-circle"].includes(attributionProjectId) ?
   "FF1bfDuvtdNjuuC4mc7NdGtk3LC3" : null });
 const trackingPhone = require("./tracking_phone");
 const trackingPhoneService = trackingPhone.createTrackingPhoneService({
@@ -11343,6 +11346,7 @@ function attributionHttpsError(error) {
   }
   if (["invalid_response_destination", "invalid_attribution_source",
   "unsupported_response_asset_type", "business_identity_required",
+  "response_asset_exposure_invalid", "public_publish_origin_forbidden",
   "interaction_id_required"].includes(code)) {
     return new HttpsError("invalid-argument", "A valid attribution request is required.");
   }

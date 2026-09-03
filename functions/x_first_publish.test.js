@@ -131,3 +131,51 @@ test("reconciliation returns zero or one exact match and rejects duplicates", as
     fetchImpl: fetchImpl([{id: "one", text: renderedCopy}, {id: "two", text: renderedCopy}])}),
   /duplicate_provider_posts/);
 });
+
+test("known-post reconciliation validates exact post ownership without another create", async () => {
+  const calls = [];
+  const found = await subject.lookupPost({accessToken: "secret",
+    providerPostId: subject.ORIGINAL_DEFECTIVE_POST_ID, fetchImpl: async (url, options) => {
+      calls.push({url: String(url), method: options?.method || "GET"});
+      return {ok: true, status: 200, json: async () => ({data: {
+        id: subject.ORIGINAL_DEFECTIVE_POST_ID, author_id: subject.EXPECTED_X_ID,
+        text: "original", created_at: "2026-09-03T14:04:00Z",
+        edit_history_tweet_ids: [subject.ORIGINAL_DEFECTIVE_POST_ID],
+      }})};
+    }});
+  assert.equal(found.status, "found");
+  assert.equal(found.providerPostId, subject.ORIGINAL_DEFECTIVE_POST_ID);
+  assert.deepEqual(calls, [{url: `https://api.x.com/2/tweets/${subject.ORIGINAL_DEFECTIVE_POST_ID}?` +
+    "tweet.fields=author_id,created_at,attachments,edit_controls,edit_history_tweet_ids",
+  method: "GET"}]);
+  await assert.rejects(subject.lookupPost({accessToken: "secret", providerPostId: "123",
+    fetchImpl: async () => ({ok: true, status: 200,
+      json: async () => ({data: {id: "123", author_id: "other"}})})}),
+  /identity_mismatch/);
+});
+
+test("replacement remains one distinct create and no delete adapter is exported", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({url: String(url), method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null});
+    return {ok: true, status: 200, json: async () => ({data: {
+      id: "2095513212485529999", text: "replacement"}})};
+  };
+  assert.equal(subject.deletePost, undefined);
+  const replaced = await subject.createReplacementPost({accessToken: "secret",
+    renderedCopy: "replacement", mediaId: "media-one", fetchImpl});
+  assert.equal(replaced.providerPostId, "2095513212485529999");
+  assert.equal(calls.filter((call) => call.method === "POST").length, 1);
+  assert.equal(calls.filter((call) => call.method === "DELETE").length, 0);
+});
+
+test("ambiguous replacement create never retries", async () => {
+  let creates = 0;
+  await assert.rejects(subject.createReplacementPost({accessToken: "secret",
+    renderedCopy: "replacement", mediaId: "media-one", fetchImpl: async () => {
+      creates += 1;
+      throw new Error("network");
+    }}), /outcome_unknown/);
+  assert.equal(creates, 1);
+});

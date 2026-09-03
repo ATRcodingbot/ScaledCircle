@@ -28,6 +28,10 @@ const PUBLIC_RESPONSE_ORIGINS = Object.freeze({
   "scaledcircle-staging": "https://scaledcircle-staging.web.app",
   "demo-scaledcircle": "http://127.0.0.1:5000",
 });
+const RESPONSE_ASSET_EXPOSURES = Object.freeze({
+  INTERNAL_QA: "internal_qa",
+  PUBLIC_PUBLISH: "public_publish",
+});
 
 function text(value, max = 240) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -51,6 +55,37 @@ function assertHttpsDestination(value) {
 
 function publicResponseOrigin(projectId) {
   return PUBLIC_RESPONSE_ORIGINS[text(projectId, 160)] || null;
+}
+
+function responseOriginPolicy(projectId) {
+  const normalizedProjectId = text(projectId, 160);
+  const origin = publicResponseOrigin(normalizedProjectId);
+  if (!origin) return null;
+  return Object.freeze({
+    projectId: normalizedProjectId,
+    origin,
+    defaultExposure: normalizedProjectId === "scaled-circle" ?
+      RESPONSE_ASSET_EXPOSURES.PUBLIC_PUBLISH : RESPONSE_ASSET_EXPOSURES.INTERNAL_QA,
+    permitsPublicPublish: normalizedProjectId === "scaled-circle",
+  });
+}
+
+function assertResponseOriginPolicy({origin, exposure, permitsPublicPublish}) {
+  const normalizedOrigin = assertPublicResponseOrigin(origin);
+  const normalizedExposure = text(exposure, 40).toLowerCase();
+  if (!Object.values(RESPONSE_ASSET_EXPOSURES).includes(normalizedExposure)) {
+    throw new Error("response_asset_exposure_invalid");
+  }
+  if (normalizedExposure === RESPONSE_ASSET_EXPOSURES.PUBLIC_PUBLISH) {
+    const hostname = new URL(normalizedOrigin).hostname.toLowerCase();
+    const blocked = hostname === "localhost" || hostname === "127.0.0.1" ||
+      hostname.endsWith(".web.app") || hostname.endsWith(".firebaseapp.com") ||
+      hostname.startsWith("scaledcircle-staging.");
+    if (!permitsPublicPublish || blocked || normalizedOrigin !== "https://scaledcircle.com") {
+      throw new Error("public_publish_origin_forbidden");
+    }
+  }
+  return {origin: normalizedOrigin, exposure: normalizedExposure};
 }
 
 function assertPublicResponseOrigin(value) {
@@ -150,7 +185,7 @@ function interactionEventId(assetId, requestIdentity) {
 }
 
 function safeAsset(id, data, publicBaseUrl) {
-  const origin = assertPublicResponseOrigin(publicBaseUrl);
+  const origin = assertPublicResponseOrigin(data.publicOrigin || publicBaseUrl);
   const code = text(data.publicCode, 80);
   return {
     responseAssetId: id,
@@ -160,13 +195,16 @@ function safeAsset(id, data, publicBaseUrl) {
     destination: text(data.destination, 1000),
     trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`,
     attribution: canonicalEnvelope(data.attribution || {}),
+    exposure: text(data.exposure, 40) || null,
+    publicOrigin: origin,
     createdAt: millis(data.createdAt),
     updatedAt: millis(data.updatedAt),
   };
 }
 
 function createAttributionService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes,
-  publicBaseUrl, adminSelfDogfoodBusinessUid = null}) {
+  publicBaseUrl, defaultExposure = RESPONSE_ASSET_EXPOSURES.INTERNAL_QA,
+  permitsPublicPublish = false, adminSelfDogfoodBusinessUid = null}) {
   async function resolveBusinessUid(actor, requested) {
     assertAttributionActor(actor);
     const businessUid = actor.role === "business" ? actor.uid : text(requested, 160);
@@ -199,7 +237,10 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
   }
 
   async function createResponseAsset(input, actor) {
-    const origin = assertPublicResponseOrigin(publicBaseUrl);
+    const originPolicy = assertResponseOriginPolicy({origin: publicBaseUrl,
+      exposure: input?.exposure || defaultExposure, permitsPublicPublish});
+    const origin = originPolicy.origin;
+    const exposure = originPolicy.exposure;
     const businessUid = await resolveBusinessUid(actor, input?.businessUid);
     const type = text(input?.type, 40).toLowerCase();
     if (!ASSET_TYPES.has(type)) throw new Error("unsupported_response_asset_type");
@@ -215,6 +256,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       const data = existing.data() || {};
       if (!existing.exists || data.businessUid !== businessUid || data.creationRequestId !== creationRequestId ||
           data.type !== type || data.destination !== destination ||
+          text(data.exposure, 40) !== exposure || data.publicOrigin !== origin ||
           JSON.stringify(canonicalEnvelope(data.attribution || {})) !==
             JSON.stringify({...attribution, responseAssetId: ref.id})) return null;
       return {responseAssetId: ref.id, publicCode: data.publicCode,
@@ -228,6 +270,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     try {
       await ref.create({schemaVersion: SCHEMA_VERSION, businessUid, type, publicCode: code,
         status: "active", label: text(input?.label, 160) || null, destination,
+        exposure, publicOrigin: origin,
         attribution: {...attribution, responseAssetId: ref.id}, creationRequestId,
         createdBy: actor.uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     } catch (error) {
@@ -458,7 +501,8 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
 
 module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   CONVERSION_MILESTONES, PAGE_LIMIT, text, millis, assertHttpsDestination,
-  PUBLIC_RESPONSE_ORIGINS, publicResponseOrigin, assertPublicResponseOrigin,
+  PUBLIC_RESPONSE_ORIGINS, RESPONSE_ASSET_EXPOSURES, publicResponseOrigin, responseOriginPolicy,
+  assertPublicResponseOrigin, assertResponseOriginPolicy,
   responseCodeFingerprint, resolverFailureCategory, assertAttributionActor,
   opaqueCode, canonicalEnvelope, privacyFingerprint, responseActivityClass, interactionEventId,
   destinationWithResponseContext,

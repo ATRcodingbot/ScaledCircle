@@ -69,8 +69,10 @@ function requireFirstXCertificationBusiness(business) {
 
 function firstXTrackedUrl(asset) {
   const code = readText(asset?.publicCode, 80);
-  if (!/^[A-Za-z0-9_-]{24}$/.test(code)) return null;
-  return `https://scaledcircle-staging.web.app/r?code=${encodeURIComponent(code)}`;
+  const origin = readText(asset?.publicOrigin, 240);
+  if (!/^[A-Za-z0-9_-]{24}$/.test(code) || asset?.exposure !== "public_publish" ||
+      origin !== "https://scaledcircle.com") return null;
+  return `${origin}/r?code=${encodeURIComponent(code)}`;
 }
 
 async function requireVerifiedUser(request, message) {
@@ -687,10 +689,11 @@ exports.getFirstXPublishCertificationV1 = onCall(
       .doc(xFirstPublish.VERSION_DOCUMENT_ID);
     const connectionRef = db.collection("socialConnections").doc(business.uid)
       .collection("providers").doc("x");
-    const [item, version, quality, connection, jobs] = await Promise.all([
+    const [item, version, quality, connection, jobs, repair] = await Promise.all([
       itemRef.get(), versionRef.get(), qualityRef.get(), connectionRef.get(),
       db.collection("socialPublishingJobs")
         .where("businessUid", "==", business.uid).limit(20).get(),
+      db.collection("socialPublishedPostRepairs").doc("first_x_public_origin_repair_v1").get(),
     ]);
     const versionData = version.data();
     const responseAssetId = readText(versionData?.variants?.[0]?.responseAssetId, 180);
@@ -733,6 +736,14 @@ exports.getFirstXPublishCertificationV1 = onCall(
         scheduledFor: isoValue(job.data()?.scheduledFor) || job.data()?.scheduledFor || null,
         attemptCount: Number(job.data()?.attemptCount || 0),
         reconciliationRequired: job.data()?.reconciliationRequired === true} : null,
+      repair: repair.exists ? {repairId: repair.id, status: repair.data()?.status,
+        productionPublicUrl: repair.data()?.productionPublicUrl || null,
+        originalProviderPostId: repair.data()?.originalProviderPostId || null,
+        replacementProviderPostId: repair.data()?.replacementProviderPostId || null,
+        manualDeletionEvidenceId: repair.data()?.manualDeletionEvidenceId || null,
+        replacementReceiptId: repair.data()?.replacementReceiptId || null,
+        providerDeleteAttemptCount: Number(repair.data()?.providerDeleteAttemptCount || 0),
+        replacementAttemptCount: Number(repair.data()?.replacementAttemptCount || 0)} : null,
       externalPublishingEnabled: false,
       narrowCertificationOnly: true,
     };
@@ -1036,9 +1047,8 @@ exports.reconcileFirstXPublishV1 = onCall(
         job.status !== "unknown_provider_outcome" || Number(job.attemptCount) !== 1) {
       throw new HttpsError("failed-precondition", "This publish job does not require reconciliation.");
     }
-    const [connection, asset, configSnapshot] = await Promise.all([
+    const [connection, configSnapshot] = await Promise.all([
       db.collection("socialConnections").doc(business.uid).collection("providers").doc("x").get(),
-      db.collection("responseAssets").doc(job.responseAssetId).get(),
       providerConfigRef("x", "staging").get(),
     ]);
     const connectionData = connection.data();
@@ -1047,10 +1057,8 @@ exports.reconcileFirstXPublishV1 = onCall(
     const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
     const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
       config, clientSecret: providerSecretBinding("x").secret.value()});
-    const result = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
-      renderedCopy: xFirstPublish.renderPostText(firstXTrackedUrl(asset.data())),
-      startedAt: Number(job.providerCreateStartedAtMillis || 0) - 60000,
-      endedAt: Date.now() + 60000});
+    const result = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
+      providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID});
     if (result.status !== "found") return {publishJobId,
       status: "unknown_provider_outcome", retryAuthorized: false,
       reconciliationRequired: true};
@@ -1061,7 +1069,8 @@ exports.reconcileFirstXPublishV1 = onCall(
       schemaVersion: "SocialProviderReceiptV1", businessUid: business.uid,
       provider: "x", publishJobId, contentItemId: xFirstPublish.CONTENT_ITEM_ID,
       contentVersion: xFirstPublish.VERSION_NUMBER, providerPostId: result.providerPostId,
-      providerPostUrl: result.providerPostUrl, status: "reconciled",
+      providerPostUrl: result.providerPostUrl, providerCreatedAt: result.createdAt,
+      providerTextHash: xFirstPublish.digest(result.text), status: "reconciled_known_post",
       immutable: true, createdAt: FieldValue.serverTimestamp()}, {merge: false});
     batch.update(jobRef, {status: "completed", providerPostId: result.providerPostId,
       providerPostUrl: result.providerPostUrl, providerReceiptId: receiptId,
@@ -1071,6 +1080,266 @@ exports.reconcileFirstXPublishV1 = onCall(
     return {publishJobId, status: "completed", providerPostId: result.providerPostId,
       providerPostUrl: result.providerPostUrl, providerReceiptId: receiptId,
       reconciled: true, duplicateCreateAttempted: false};
+  },
+);
+
+const FIRST_X_REPAIR_ID = "first_x_public_origin_repair_v1";
+
+exports.registerFirstXProductionResponseAssetV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    let asset;
+    try {
+      asset = xFirstPublish.assertProductionResponseAsset(request.data || {});
+    } catch (_) {
+      throw new HttpsError("invalid-argument", "The production response link is invalid.");
+    }
+    const job = (await db.collection("socialPublishingJobs")
+      .doc(xFirstPublish.expectedJobId()).get()).data();
+    if (!job || Number(job.attemptCount) !== 1 || Number(job.providerCreateAttemptCount || 1) !== 1) {
+      throw new HttpsError("failed-precondition", "The original X publish history is invalid.");
+    }
+    const repairRef = db.collection("socialPublishedPostRepairs").doc(FIRST_X_REPAIR_ID);
+    const record = {schemaVersion: "SocialPublishedPostRepairV1", businessUid: business.uid,
+      provider: "x", contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      contentVersion: xFirstPublish.VERSION_NUMBER,
+      originalProviderPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+      originalResponseAssetId: job.responseAssetId,
+      originalRenderedUrl: xFirstPublish.DEFECTIVE_TRACKED_URL,
+      defectReason: xFirstPublish.ORIGINAL_DEFECT_REASON,
+      originalDeletionSource: xFirstPublish.ORIGINAL_DELETION_SOURCE,
+      productionResponseAssetId: asset.responseAssetId,
+      productionPublicCode: asset.publicCode, productionPublicUrl: asset.publicUrl,
+      destination: xFirstPublish.DESTINATION_URL, campaignId: xFirstPublish.CAMPAIGN_ID,
+      status: "awaiting_manual_deletion_verification", providerDeleteAttemptCount: 0,
+      replacementAttemptCount: 0,
+      providerCreateAttemptsOriginal: 1, providerCreateAttemptsReplacement: 0,
+      immutableProductionBinding: true, updatedAt: FieldValue.serverTimestamp()};
+    const result = await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(repairRef);
+      if (existing.exists) {
+        const current = existing.data();
+        if (current.productionResponseAssetId !== asset.responseAssetId ||
+            current.productionPublicUrl !== asset.publicUrl) {
+          throw new Error("x_repair_asset_replay_mismatch");
+        }
+        return {reused: true};
+      }
+      transaction.create(repairRef, {...record, createdAt: FieldValue.serverTimestamp()});
+      return {reused: false};
+    });
+    return {repairId: FIRST_X_REPAIR_ID, status: "awaiting_manual_deletion_verification", ...asset,
+      destination: xFirstPublish.DESTINATION_URL, reused: result.reused};
+  },
+);
+
+exports.reconcileFounderManualFirstXDeletionV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1, timeoutSeconds: 30,
+    secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const repairRef = db.collection("socialPublishedPostRepairs").doc(FIRST_X_REPAIR_ID);
+    const repair = (await repairRef.get()).data();
+    if (!repair || repair.businessUid !== business.uid ||
+        repair.status !== "awaiting_manual_deletion_verification" ||
+        Number(repair.providerDeleteAttemptCount || 0) !== 0 ||
+        repair.originalProviderPostId !== xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID) {
+      throw new HttpsError("failed-precondition", "The manual X deletion is not ready to verify.");
+    }
+    const connectionData = (await db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x").get()).data();
+    xFirstPublish.assertWriteConnection(connectionData);
+    const auth = await firstXCredential(business.uid, connectionData);
+    const configSnapshot = await providerConfigRef("x", "staging").get();
+    const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
+    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
+      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const lookup = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
+      providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID});
+    if (lookup.status === "found") {
+      throw new HttpsError("failed-precondition", "The Founder-deleted X post is still public.");
+    }
+    const evidenceId = `social_manual_deletion_${xFirstPublish.digest({
+      repairId: FIRST_X_REPAIR_ID, providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+      source: xFirstPublish.ORIGINAL_DELETION_SOURCE})}`;
+    const jobRef = db.collection("socialPublishingJobs").doc(xFirstPublish.expectedJobId());
+    const batch = db.batch();
+    batch.set(db.collection("socialProviderReceipts").doc(evidenceId), {
+      schemaVersion: "SocialProviderManualDeletionEvidenceV1", businessUid: business.uid,
+      provider: "x", repairId: FIRST_X_REPAIR_ID,
+      providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+      defectReason: xFirstPublish.ORIGINAL_DEFECT_REASON,
+      deletionSource: xFirstPublish.ORIGINAL_DELETION_SOURCE,
+      providerDeleteReceipt: null, providerLookupState: "not_found",
+      immutable: true, createdAt: FieldValue.serverTimestamp()}, {merge: false});
+    batch.update(repairRef, {status: "manual_deletion_confirmed",
+      manualDeletionEvidenceId: evidenceId, providerDeleteAttemptCount: 0,
+      founderManualDeletionVerifiedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()});
+    batch.update(jobRef, {status: "completed",
+      providerState: "founder_manually_deleted_defect",
+      originalProviderPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+      defectReason: xFirstPublish.ORIGINAL_DEFECT_REASON,
+      deletionSource: xFirstPublish.ORIGINAL_DELETION_SOURCE,
+      providerDeleteAttemptCount: 0, manualDeletionEvidenceId: evidenceId,
+      reconciliationRequired: false, reconciledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()});
+    await batch.commit();
+    return {repairId: FIRST_X_REPAIR_ID, status: "manual_deletion_confirmed",
+      providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+      manualDeletionEvidenceId: evidenceId, providerDeleteAttemptCount: 0,
+      providerDeleteReceipt: null, replacementAuthorized: true};
+  },
+);
+
+exports.createFirstXReplacementV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1, timeoutSeconds: 30,
+    secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const repairRef = db.collection("socialPublishedPostRepairs").doc(FIRST_X_REPAIR_ID);
+    const jobRef = db.collection("socialPublishingJobs").doc(xFirstPublish.expectedJobId());
+    const [repairSnapshot, jobSnapshot, connectionSnapshot] = await Promise.all([
+      repairRef.get(), jobRef.get(), db.collection("socialConnections").doc(business.uid)
+        .collection("providers").doc("x").get(),
+    ]);
+    const repair = repairSnapshot.data();
+    const job = jobSnapshot.data();
+    if (!repair || repair.status !== "manual_deletion_confirmed" ||
+        Number(repair.replacementAttemptCount || 0) !== 0 ||
+        !job?.providerMediaId || Number(job.attemptCount) !== 1) {
+      throw new HttpsError("failed-precondition", "The exact X replacement is not ready.");
+    }
+    const asset = xFirstPublish.assertProductionResponseAsset({
+      responseAssetId: repair.productionResponseAssetId,
+      publicCode: repair.productionPublicCode, publicUrl: repair.productionPublicUrl});
+    const renderedCopy = xFirstPublish.renderPostText(asset.publicUrl);
+    const connectionData = connectionSnapshot.data();
+    xFirstPublish.assertWriteConnection(connectionData);
+    await db.runTransaction(async (transaction) => {
+      const current = (await transaction.get(repairRef)).data();
+      if (current?.status !== "manual_deletion_confirmed" ||
+          Number(current?.replacementAttemptCount || 0) !== 0) {
+        throw new Error("x_replacement_already_claimed");
+      }
+      transaction.update(repairRef, {status: "replacement_creating", replacementAttemptCount: 1,
+        providerCreateAttemptsReplacement: 1,
+        replacementCreateStartedAtMillis: Date.now(),
+        replacementRenderedCopyHash: xFirstPublish.digest(renderedCopy),
+        updatedAt: FieldValue.serverTimestamp()});
+    });
+    try {
+      const auth = await firstXCredential(business.uid, connectionData);
+      const configSnapshot = await providerConfigRef("x", "staging").get();
+      const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
+      const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
+        config, clientSecret: providerSecretBinding("x").secret.value()});
+      const created = await xFirstPublish.createReplacementPost({accessToken: tokens.accessToken,
+        renderedCopy, mediaId: job.providerMediaId});
+      const receiptId = `social_replacement_receipt_${xFirstPublish.digest({
+        repairId: FIRST_X_REPAIR_ID, providerPostId: created.providerPostId})}`;
+      const batch = db.batch();
+      batch.set(db.collection("socialProviderReceipts").doc(receiptId), {
+        schemaVersion: "SocialProviderReplacementReceiptV1", businessUid: business.uid,
+        provider: "x", repairId: FIRST_X_REPAIR_ID,
+        providerPostId: created.providerPostId, providerPostUrl: created.providerPostUrl,
+        providerTextHash: created.providerTextHash,
+        replacesPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+        replacementOfDefect: xFirstPublish.ORIGINAL_DEFECT_REASON,
+        originalDeletionSource: xFirstPublish.ORIGINAL_DELETION_SOURCE,
+        mediaAssetId: xFirstPublish.MEDIA_ID, mediaSha256: xFirstPublish.MEDIA_SHA256,
+        responseAssetId: asset.responseAssetId, status: "accepted", immutable: true,
+        createdAt: FieldValue.serverTimestamp()}, {merge: false});
+      batch.update(repairRef, {status: "completed", replacementProviderPostId: created.providerPostId,
+        replacementProviderPostUrl: created.providerPostUrl,
+        replacementReceiptId: receiptId, completedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()});
+      batch.update(jobRef, {providerState: "deleted_replaced",
+        originalProviderPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+        replacementProviderPostId: created.providerPostId,
+        replacementProviderPostUrl: created.providerPostUrl,
+        replacementReceiptId: receiptId, replacementResponseAssetId: asset.responseAssetId,
+        replacementCreateAttemptCount: 1, updatedAt: FieldValue.serverTimestamp()});
+      batch.update(db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID), {
+        status: "published", providerState: "published_verified",
+        providerPostId: created.providerPostId, responseAssetId: asset.responseAssetId,
+        replacesPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+        updatedAt: FieldValue.serverTimestamp()});
+      await batch.commit();
+      return {repairId: FIRST_X_REPAIR_ID, status: "completed",
+        providerPostId: created.providerPostId, providerPostUrl: created.providerPostUrl,
+        providerReceiptId: receiptId, replacementCreateAttempts: 1,
+        duplicateCreateAttempted: false};
+    } catch (error) {
+      await repairRef.set({status: "unknown_replacement_outcome", reconciliationRequired: true,
+        safeFailure: readText(error?.message || error, 120),
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      throw new HttpsError("aborted", "X replacement requires reconciliation. No retry is allowed.");
+    }
+  },
+);
+
+exports.reconcileFirstXRepairV1 = onCall(
+  {enforceAppCheck: false, maxInstances: 1, timeoutSeconds: 30,
+    secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
+  async (request) => {
+    const business = requireFirstXCertificationBusiness(
+      await requireSocialOperationsBusiness(request));
+    const repairRef = db.collection("socialPublishedPostRepairs").doc(FIRST_X_REPAIR_ID);
+    const repair = (await repairRef.get()).data();
+    if (!repair || repair.status !== "unknown_replacement_outcome") {
+      throw new HttpsError("failed-precondition", "This X repair does not require reconciliation.");
+    }
+    const connectionData = (await db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x").get()).data();
+    xFirstPublish.assertWriteConnection(connectionData);
+    const auth = await firstXCredential(business.uid, connectionData);
+    const configSnapshot = await providerConfigRef("x", "staging").get();
+    const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
+    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
+      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const asset = xFirstPublish.assertProductionResponseAsset({
+      responseAssetId: repair.productionResponseAssetId,
+      publicCode: repair.productionPublicCode, publicUrl: repair.productionPublicUrl});
+    const renderedCopy = xFirstPublish.renderPostText(asset.publicUrl);
+    const result = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
+      renderedCopy, startedAt: Number(repair.replacementCreateStartedAtMillis || 0) - 60000});
+    if (result.status !== "found") return {repairId: FIRST_X_REPAIR_ID,
+      status: "unknown_replacement_outcome", retryAuthorized: false,
+      duplicateCreateAttempted: false};
+    const receiptId = `social_replacement_receipt_${xFirstPublish.digest({
+      repairId: FIRST_X_REPAIR_ID, providerPostId: result.providerPostId})}`;
+    const jobRef = db.collection("socialPublishingJobs").doc(xFirstPublish.expectedJobId());
+    const batch = db.batch();
+    batch.set(db.collection("socialProviderReceipts").doc(receiptId), {
+      schemaVersion: "SocialProviderReplacementReceiptV1", businessUid: business.uid,
+      provider: "x", repairId: FIRST_X_REPAIR_ID, providerPostId: result.providerPostId,
+      providerPostUrl: result.providerPostUrl,
+      providerTextHash: xFirstPublish.digest(renderedCopy),
+      replacesPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+      replacementOfDefect: xFirstPublish.ORIGINAL_DEFECT_REASON,
+      originalDeletionSource: xFirstPublish.ORIGINAL_DELETION_SOURCE,
+      mediaAssetId: xFirstPublish.MEDIA_ID, mediaSha256: xFirstPublish.MEDIA_SHA256,
+      responseAssetId: asset.responseAssetId, status: "reconciled", immutable: true,
+      createdAt: FieldValue.serverTimestamp()}, {merge: false});
+    batch.update(repairRef, {status: "completed", replacementProviderPostId: result.providerPostId,
+      replacementProviderPostUrl: result.providerPostUrl, replacementReceiptId: receiptId,
+      reconciledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    batch.update(jobRef, {providerState: "deleted_replaced",
+      originalProviderPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+      replacementProviderPostId: result.providerPostId,
+      replacementProviderPostUrl: result.providerPostUrl,
+      replacementReceiptId: receiptId, replacementResponseAssetId: asset.responseAssetId,
+      replacementCreateAttemptCount: 1, updatedAt: FieldValue.serverTimestamp()});
+    await batch.commit();
+    return {repairId: FIRST_X_REPAIR_ID, status: "completed",
+      providerPostId: result.providerPostId, providerPostUrl: result.providerPostUrl,
+      providerReceiptId: receiptId, replacementCreateAttempts: 1,
+      duplicateCreateAttempted: false, reconciled: true};
   },
 );
 

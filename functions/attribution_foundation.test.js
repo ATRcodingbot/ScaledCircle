@@ -117,6 +117,54 @@ test("public response origin is project-derived and fails closed", () => {
     /response_origin_unavailable/);
 });
 
+test("public-publish origins are production-authoritative and staging remains internal", () => {
+  const production = attribution.responseOriginPolicy("scaled-circle");
+  assert.deepEqual(production, {
+    projectId: "scaled-circle", origin: "https://scaledcircle.com",
+    defaultExposure: "public_publish", permitsPublicPublish: true,
+  });
+  const staging = attribution.responseOriginPolicy("scaledcircle-staging");
+  assert.equal(staging.defaultExposure, "internal_qa");
+  assert.equal(staging.permitsPublicPublish, false);
+  assert.deepEqual(attribution.assertResponseOriginPolicy({
+    origin: production.origin, exposure: "public_publish", permitsPublicPublish: true,
+  }), {origin: "https://scaledcircle.com", exposure: "public_publish"});
+  for (const origin of ["http://127.0.0.1:5000", "https://scaledcircle-staging.web.app",
+    "https://project.firebaseapp.com", "https://unknown.example"]) {
+    assert.throws(() => attribution.assertResponseOriginPolicy({origin,
+      exposure: "public_publish", permitsPublicPublish: true}), /public_publish_origin_forbidden/);
+  }
+  assert.throws(() => attribution.assertResponseOriginPolicy({
+    origin: "https://scaledcircle.com", exposure: "public_publish", permitsPublicPublish: false,
+  }), /public_publish_origin_forbidden/);
+});
+
+test("response asset origin and exposure are immutable and public staging creation fails closed", async () => {
+  const db = fakeFirestore({"users/business-1": {role: "business"}});
+  const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
+  const actor = {uid: "business-1", role: "business", emailVerified: true, user: {active: true}};
+  const staging = attribution.createAttributionService({db, FieldValue,
+    randomBytes: (size) => Buffer.alloc(size, 7),
+    publicBaseUrl: "https://scaledcircle-staging.web.app",
+    defaultExposure: "internal_qa", permitsPublicPublish: false});
+  await assert.rejects(staging.createResponseAsset({type: "tracked_link",
+    exposure: "public_publish", requestId: "public-post-v1",
+    destination: "https://scaledcircle.com/#/businesses"}, actor),
+  /public_publish_origin_forbidden/);
+  const production = attribution.createAttributionService({db, FieldValue,
+    randomBytes: (size) => Buffer.alloc(size, 8), publicBaseUrl: "https://scaledcircle.com",
+    defaultExposure: "public_publish", permitsPublicPublish: true});
+  const request = {type: "tracked_link", exposure: "public_publish",
+    requestId: "public-post-v1", destination: "https://scaledcircle.com/#/businesses"};
+  const created = await production.createResponseAsset(request, actor);
+  assert.match(created.trackedUrl, /^https:\/\/scaledcircle\.com\/r\?code=/);
+  const stored = db.records.get(`responseAssets/${created.responseAssetId}`);
+  assert.equal(stored.publicOrigin, "https://scaledcircle.com");
+  assert.equal(stored.exposure, "public_publish");
+  stored.publicOrigin = "https://scaledcircle-staging.web.app";
+  await assert.rejects(production.createResponseAsset(request, actor));
+});
+
 test("resolver diagnostics are privacy-safe and internally specific", () => {
   assert.equal(attribution.responseCodeFingerprint("abcdefghijklmnopqrstuvwx").length, 16);
   assert.equal(attribution.resolverFailureCategory(new Error("response_code_malformed")),
@@ -160,7 +208,7 @@ test("staging asset resolves end to end and production rendering stays isolated"
   assert.equal(production.trackedUrl, `https://scaledcircle.com/r?code=${"a".repeat(24)}`);
 });
 
-test("staging permits only the exact Admin self dogfood Business attribution bridge", async () => {
+test("only the exact Admin self-dogfood UID receives the configured attribution bridge", async () => {
   const uid = "FF1bfDuvtdNjuuC4mc7NdGtk3LC3";
   const db = fakeFirestore({[`users/${uid}`]: {role: "admin"}});
   const FieldValue = {serverTimestamp: () => 1234, increment: (value) => value};
@@ -176,10 +224,21 @@ test("staging permits only the exact Admin self dogfood Business attribution bri
   await assert.rejects(service.createResponseAsset({businessUid: "other", type: "tracked_link",
     destination: "https://scaledcircle.com/#/businesses"}, actor), /business_identity_required/);
 
+  const policy = attribution.responseOriginPolicy("scaled-circle");
   const production = attribution.createAttributionService({db, FieldValue,
-    publicBaseUrl: attribution.publicResponseOrigin("scaled-circle")});
-  await assert.rejects(production.createResponseAsset({businessUid: uid, type: "tracked_link",
-    destination: "https://scaledcircle.com/#/businesses"}, actor), /business_identity_required/);
+    publicBaseUrl: policy.origin, defaultExposure: policy.defaultExposure,
+    permitsPublicPublish: policy.permitsPublicPublish,
+    adminSelfDogfoodBusinessUid: uid});
+  const publicAsset = await production.createResponseAsset({businessUid: uid,
+    requestId: "scaledcircle-x-v3-production-link", type: "tracked_link",
+    exposure: "public_publish", destination: "https://scaledcircle.com/#/businesses"}, actor);
+  assert.match(publicAsset.trackedUrl, /^https:\/\/scaledcircle\.com\/r\?code=/);
+  const unrelatedAdmin = {uid: "unrelated-admin", role: "admin", isAdmin: true,
+    emailVerified: true, user: {active: true}};
+  await assert.rejects(production.createResponseAsset({businessUid: uid,
+    type: "tracked_link", exposure: "public_publish",
+    destination: "https://scaledcircle.com/#/businesses"}, unrelatedAdmin),
+  /business_identity_required/);
 });
 
 test("response-asset creation is request-idempotent and conflicts fail closed", async () => {

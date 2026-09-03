@@ -26,6 +26,25 @@ const SCHEDULED_FOR = "2026-09-03T14:00:00.000Z";
 const EXPECTED_X_ID = "2090731921177210880";
 const EXPECTED_X_HANDLE = "scaledcircle";
 const EXPECTED_X_NAME = "Scaled Circle";
+const ORIGINAL_DEFECTIVE_POST_ID = "2095513212485529898";
+const ORIGINAL_DEFECT_REASON = "PUBLIC_STAGING_ORIGIN";
+const REPLACEMENT_REASON = "PUBLIC_STAGING_ORIGIN";
+const ORIGINAL_DELETION_SOURCE = "FOUNDER_MANUAL_DELETE";
+const DEFECTIVE_TRACKED_URL = "https://scaledcircle-staging.web.app/r?code=vZN94658Lq6cEcYQ5V8IoFfC";
+const PUBLIC_RESPONSE_ORIGIN = "https://scaledcircle.com";
+
+function assertProductionResponseAsset({responseAssetId, publicCode, publicUrl}) {
+  const id = String(responseAssetId || "").trim();
+  const code = String(publicCode || "").trim();
+  if (!/^response_[a-f0-9]{40}$/.test(id) || !/^[A-Za-z0-9_-]{24}$/.test(code)) {
+    throw new Error("x_production_response_asset_invalid");
+  }
+  const expected = `${PUBLIC_RESPONSE_ORIGIN}/r?code=${encodeURIComponent(code)}`;
+  if (String(publicUrl || "").trim() !== expected) {
+    throw new Error("x_production_response_asset_invalid");
+  }
+  return {responseAssetId: id, publicCode: code, publicUrl: expected};
+}
 const V2_APPROVED_COPY = "A bigger service area isn’t automatically a better campaign. " +
   "ScaledCircle helps a Business choose exact streets and zones, connect responses to each " +
   "campaign, and learn what happened next. Built for local growth in Maryland.\n\n" +
@@ -233,6 +252,41 @@ async function createPost({fetchImpl = globalThis.fetch, accessToken, renderedCo
     providerTextHash: digest(renderedCopy)};
 }
 
+async function lookupPost({fetchImpl = globalThis.fetch, accessToken, providerPostId}) {
+  const id = String(providerPostId || "").trim();
+  if (!/^[0-9]{1,19}$/.test(id)) throw new Error("x_post_id_invalid");
+  let response;
+  try {
+    response = await fetchImpl(`https://api.x.com/2/tweets/${id}?` +
+      "tweet.fields=author_id,created_at,attachments,edit_controls,edit_history_tweet_ids", {
+      headers: {Authorization: `Bearer ${accessToken}`},
+    });
+  } catch (_) {
+    throw new Error("x_provider_outcome_unknown");
+  }
+  if (response.status === 404) return {status: "not_found", providerPostId: id};
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error("x_provider_request_rejected");
+  const post = body?.data || {};
+  if (String(post.id || "") !== id || String(post.author_id || "") !== EXPECTED_X_ID) {
+    throw new Error("x_post_identity_mismatch");
+  }
+  return {status: "found", providerPostId: id, text: String(post.text || ""),
+    createdAt: post.created_at || null, attachments: post.attachments || null,
+    editControls: post.edit_controls || null,
+    editHistoryPostIds: Array.isArray(post.edit_history_tweet_ids) ?
+      post.edit_history_tweet_ids.map(String) : [id],
+    providerPostUrl: `https://x.com/${EXPECTED_X_HANDLE}/status/${id}`};
+}
+
+async function createReplacementPost({fetchImpl = globalThis.fetch, accessToken, renderedCopy, mediaId}) {
+  const created = await createPost({fetchImpl, accessToken, renderedCopy, mediaId});
+  if (created.providerPostId === ORIGINAL_DEFECTIVE_POST_ID) {
+    throw new Error("x_replacement_post_id_invalid");
+  }
+  return created;
+}
+
 async function reconcilePost({fetchImpl = globalThis.fetch, accessToken, renderedCopy,
   startedAt, endedAt}) {
   const url = new URL(`https://api.x.com/2/users/${EXPECTED_X_ID}/tweets`);
@@ -258,7 +312,10 @@ module.exports = {BUSINESS_UID, PLAN_ID, PLAN_VERSION_ID, CAMPAIGN_ID, CONTENT_I
   MEDIA_ID, MEDIA_REVISION_ID, MEDIA_SHA256, MEDIA_URL, MEDIA_BYTES, MEDIA_WIDTH,
   MEDIA_HEIGHT, DESTINATION_URL, SCHEDULED_FOR, EXPECTED_X_ID, EXPECTED_X_HANDLE,
   EXPECTED_X_NAME, V2_APPROVED_COPY, APPROVED_COPY, V2_CTA, CTA, ALT_TEXT,
+  ORIGINAL_DEFECTIVE_POST_ID, ORIGINAL_DEFECT_REASON, REPLACEMENT_REASON,
+  ORIGINAL_DELETION_SOURCE, DEFECTIVE_TRACKED_URL, PUBLIC_RESPONSE_ORIGIN,
+  assertProductionResponseAsset,
   X_READ_SCOPES, X_WRITE_SCOPES,
   digest, weightedXLength, renderPostText, pngDimensions, assertMedia, versionRecord,
   versionTwoRecord, approvalRecord, expectedJobId, assertWriteConnection, uploadMedia, createPost,
-  reconcilePost};
+  reconcilePost, lookupPost, createReplacementPost};
