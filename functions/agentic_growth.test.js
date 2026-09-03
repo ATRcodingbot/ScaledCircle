@@ -199,3 +199,79 @@ test("canonical action and lead states stay explicit", () => {
   assert.equal(agentic.PIPELINE_STATES.includes("do_not_contact"), true);
   assert.equal(agentic.PROSPECT_FIT.includes("research_needed"), true);
 });
+
+test("prospects are tenant-owned, provenance-bound, and deterministically deduplicated", () => {
+  const input = {businessUid: "biz", prospectType: "business", source: "fixture_directory",
+    sourceRecordId: "maryland-123", displayName: "Example Contractor",
+    geography: "Columbia, Maryland", category: "local business",
+    serviceSignals: ["local marketing"], sourceEvidenceIds: ["evidence-1"],
+    contactChannels: {website: true}};
+  const first = agentic.prospectRecord(input);
+  const replay = agentic.prospectRecord({...input, displayName: "Changed display"});
+  assert.equal(first.id, replay.id);
+  assert.equal(first.record.provenanceImmutable, true);
+  assert.equal(first.record.externalDiscoveryPerformed, false);
+  assert.equal(first.record.outreachAuthorized, false);
+  assert.throws(() => agentic.prospectRecord({...input, sourceRecordId: ""}),
+    /prospect_provenance_required/);
+});
+
+test("qualification is reproducible and refuses unsupported inference", () => {
+  const profile = agentic.targetProfile({businessUid: "biz", goal: "Maryland launch",
+    geography: ["Maryland"], services: ["local marketing"],
+    targetClasses: ["local business"], now});
+  const prospect = agentic.prospectRecord({businessUid: "biz", prospectType: "business",
+    source: "fixture", sourceRecordId: "one", displayName: "Example",
+    geography: "Maryland", category: "local business",
+    serviceSignals: ["local marketing"], sourceEvidenceIds: ["source-1"]}).record;
+  assert.deepEqual(agentic.qualifyProspect({profile, prospect, now}),
+    agentic.qualifyProspect({profile, prospect, now}));
+  const unsupported = agentic.qualifyProspect({profile,
+    prospect: {...prospect, sourceEvidenceIds: []}, now});
+  assert.equal(unsupported.status, "NO_DATA");
+  assert.equal(unsupported.score, null);
+  assert.throws(() => agentic.qualifyProspect({profile,
+    prospect: {...prospect, businessUid: "other"}, now}), /prospect_tenant_mismatch/);
+});
+
+test("qualified prospects project to CRM and drafts without sending", () => {
+  const profile = agentic.targetProfile({businessUid: "biz", goal: "Maryland launch",
+    geography: ["Maryland"], services: ["local marketing"],
+    targetClasses: ["local business"], now});
+  const prospect = agentic.prospectRecord({businessUid: "biz", prospectType: "business",
+    source: "fixture", sourceRecordId: "two", displayName: "Example",
+    geography: "Maryland", category: "local business", serviceSignals: ["local marketing"],
+    sourceEvidenceIds: ["source-2"], contactChannels: {email: true, verified: true}}).record;
+  const qualification = agentic.qualifyProspect({profile, prospect, now});
+  const crm = agentic.crmProspectProjection({businessUid: "biz", prospect, qualification, now});
+  const draft = agentic.outreachDraft({businessUid: "biz", prospect, qualification, now});
+  assert.equal(crm.record.directSalesMutationEnabled, false);
+  assert.equal(crm.record.sourceProvenanceImmutable, true);
+  assert.equal(draft.record.requiresBusinessApproval, true);
+  assert.equal(draft.record.externalMessageSent, false);
+  assert.equal(draft.record.executionAuthorized, false);
+});
+
+test("do-not-contact and supervisor kill switch prevent outbound transition", () => {
+  const suppressed = agentic.prospectRecord({businessUid: "biz", prospectType: "scaler",
+    source: "fixture", sourceRecordId: "three", displayName: "Example Scaler",
+    geography: "Maryland", category: "scaler", sourceEvidenceIds: ["source-3"],
+    doNotContact: true}).record;
+  assert.throws(() => agentic.outreachDraft({businessUid: "biz", prospect: suppressed,
+    qualification: {status: "AVAILABLE", score: 90}}), /prospect_do_not_contact/);
+  assert.throws(() => agentic.transitionProspect({lifecycleState: "approved"}, "sent_future"),
+    /prospect_external_send_not_certified/);
+});
+
+test("lead metrics keep future unavailable stages as NO_DATA", () => {
+  const metrics = agentic.leadGenerationMetrics({businessUid: "biz", prospects: [
+    {businessUid: "biz", lifecycleState: "discovered"},
+    {businessUid: "biz", lifecycleState: "drafted"},
+    {businessUid: "other", lifecycleState: "converted"},
+  ]});
+  assert.equal(metrics.discovered.value, 2);
+  assert.equal(metrics.drafted.value, 1);
+  assert.deepEqual(metrics.sent, {status: "NO_DATA", value: null});
+  assert.deepEqual(metrics.converted, {status: "NO_DATA", value: null});
+  assert.equal(metrics.externalOutreachPerformed, false);
+});

@@ -27,6 +27,12 @@ const PIPELINE_STATES = Object.freeze([
 const PROSPECT_FIT = Object.freeze([
   "high_fit", "medium_fit", "research_needed", "low_fit", "excluded",
 ]);
+const PROSPECT_TYPES = Object.freeze(["business", "scaler"]);
+const PROSPECT_LIFECYCLE = Object.freeze([
+  "discovered", "qualified", "crm_created", "drafted", "approved",
+  "sent_future", "replied_future", "disqualified", "do_not_contact",
+  "handed_off", "converted",
+]);
 const CRM_STAGE_ADAPTER = Object.freeze({
   new: Object.freeze({salesStage: "prospect"}),
   qualified: Object.freeze({salesStage: "qualified"}),
@@ -358,6 +364,157 @@ function rankProspect({profile, prospect}) {
   outreachAuthorized: false};
 }
 
+function prospectRecord({businessUid, prospectType, source, sourceRecordId, displayName,
+  geography, category, serviceSignals = [], sourceEvidenceIds = [], contactChannels = {},
+  doNotContact = false, discoveredAt = Date.now()}) {
+  const type = cleanText(prospectType, 40).toLowerCase();
+  if (!PROSPECT_TYPES.includes(type)) throw new Error("unsupported_prospect_type");
+  const sourceName = cleanText(source, 80).toLowerCase();
+  const sourceId = cleanText(sourceRecordId, 240);
+  if (!sourceName || !sourceId) throw new Error("prospect_provenance_required");
+  const normalizedName = cleanText(displayName, 180);
+  const normalizedGeo = cleanText(geography, 180);
+  const normalizedCategory = cleanText(category, 120).toLowerCase();
+  if (!normalizedName || !normalizedGeo || !normalizedCategory) {
+    throw new Error("prospect_identity_incomplete");
+  }
+  const identity = {businessUid: requireBusinessUid(businessUid), prospectType: type,
+    source: sourceName, sourceRecordId: sourceId};
+  const prospectId = `prospect_${digest(identity).slice(0, 40)}`;
+  return {id: prospectId, record: {schemaVersion: SCHEMA_VERSION, ...identity,
+    prospectId, displayName: normalizedName, geography: normalizedGeo,
+    category: normalizedCategory, serviceSignals: cleanList(serviceSignals, 30, 120),
+    contactChannelPresence: {email: contactChannels.email === true,
+      phone: contactChannels.phone === true, website: contactChannels.website === true,
+      social: contactChannels.social === true},
+    verifiedContactChannel: contactChannels.verified === true,
+    sourceEvidenceIds: cleanList(sourceEvidenceIds, 50, 180),
+    provenanceImmutable: true, doNotContact: doNotContact === true,
+    lifecycleState: doNotContact === true ? "do_not_contact" : "discovered",
+    externalDiscoveryPerformed: false, outreachAuthorized: false,
+    discoveredAt, updatedAt: discoveredAt}};
+}
+
+function qualifyProspect({profile, prospect, now = Date.now()}) {
+  if (!prospect?.businessUid || prospect.businessUid !== profile?.businessUid) {
+    throw new Error("prospect_tenant_mismatch");
+  }
+  if (prospect.doNotContact === true || prospect.lifecycleState === "do_not_contact") {
+    return {status: "EXCLUDED", score: null, fit: "excluded",
+      reasonCodes: ["DO_NOT_CONTACT"], outreachAuthorized: false, evaluatedAt: now};
+  }
+  const ranked = rankProspect({profile, prospect: {
+    geography: prospect.geography, targetClass: prospect.category,
+    serviceSignals: prospect.serviceSignals,
+  }});
+  const evidenceCount = (prospect.sourceEvidenceIds || []).length;
+  if (evidenceCount < 1) return {status: "NO_DATA", score: null,
+    fit: "research_needed", reasonCodes: ["SOURCE_EVIDENCE_REQUIRED"],
+    outreachAuthorized: false, evaluatedAt: now};
+  const scoreByFit = {high_fit: 90, medium_fit: 70, research_needed: 45, low_fit: 20, excluded: null};
+  const reasonCodes = ranked.reasons.map((reason) => reason.toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, ""));
+  if (prospect.verifiedContactChannel !== true) reasonCodes.push("CONTACTABILITY_UNVERIFIED");
+  return {status: "AVAILABLE", score: scoreByFit[ranked.fit], fit: ranked.fit,
+    reasonCodes, evidenceCount, outreachAuthorized: false, evaluatedAt: now};
+}
+
+function crmProspectProjection({businessUid, prospect, qualification, now = Date.now()}) {
+  const uid = requireBusinessUid(businessUid);
+  if (prospect?.businessUid !== uid || prospect?.provenanceImmutable !== true) {
+    throw new Error("prospect_not_owned");
+  }
+  if (qualification?.status !== "AVAILABLE" ||
+      !["high_fit", "medium_fit"].includes(qualification.fit)) {
+    throw new Error("prospect_not_qualified");
+  }
+  const source = {businessUid: uid, prospectId: prospect.prospectId,
+    source: prospect.source, sourceRecordId: prospect.sourceRecordId};
+  return {id: `crm_prospect_${digest(source).slice(0, 40)}`, record: {
+    schemaVersion: SCHEMA_VERSION, ...source, prospectType: prospect.prospectType,
+    displayName: prospect.displayName, geography: prospect.geography,
+    category: prospect.category, qualificationScore: qualification.score,
+    qualificationReasonCodes: cleanList(qualification.reasonCodes, 20, 100),
+    lifecycleState: "crm_created", deterministicDedupe: true,
+    sourceProvenanceImmutable: true, directSalesMutationEnabled: false,
+    externalMutationEnabled: false, createdAt: now, updatedAt: now}};
+}
+
+function outreachDraft({businessUid, prospect, qualification, purpose, now = Date.now()}) {
+  const uid = requireBusinessUid(businessUid);
+  if (prospect?.businessUid !== uid) throw new Error("prospect_not_owned");
+  if (prospect.doNotContact === true || prospect.lifecycleState === "do_not_contact") {
+    throw new Error("prospect_do_not_contact");
+  }
+  if (qualification?.status !== "AVAILABLE" || qualification?.score == null) {
+    throw new Error("prospect_evidence_insufficient");
+  }
+  const prospectType = cleanText(prospect.prospectType, 40);
+  const introduction = prospectType === "scaler" ?
+    "ScaledCircle is preparing clearly defined local campaign opportunities for Scalers in Maryland." :
+    "ScaledCircle helps local Businesses plan focused campaigns and connect responses back to the work.";
+  const draftSource = {businessUid: uid, prospectId: prospect.prospectId,
+    purpose: cleanText(purpose, 240) || "Introduce ScaledCircle truthfully",
+    qualificationScore: qualification.score, prospectType};
+  return {id: `outreach_draft_${digest(draftSource).slice(0, 40)}`, record: {
+    schemaVersion: SCHEMA_VERSION, ...draftSource, introduction,
+    personalizationBasis: cleanList(qualification.reasonCodes, 10, 100),
+    deceptivePersonalization: false, unsupportedClaimsIncluded: false,
+    lifecycleState: "drafted", requiresBusinessApproval: true,
+    optOutRequiredBeforeSend: true, externalMessageSent: false,
+    executionAuthorized: false, createdAt: now, updatedAt: now}};
+}
+
+const PROSPECT_TRANSITIONS = Object.freeze({
+  discovered: ["qualified", "disqualified", "do_not_contact"],
+  qualified: ["crm_created", "disqualified", "do_not_contact"],
+  crm_created: ["drafted", "disqualified", "do_not_contact"],
+  drafted: ["approved", "disqualified", "do_not_contact"],
+  approved: ["sent_future", "do_not_contact"],
+  sent_future: ["replied_future", "do_not_contact"],
+  replied_future: ["qualified", "disqualified", "handed_off", "do_not_contact"],
+  handed_off: ["converted", "disqualified", "do_not_contact"],
+  disqualified: [], do_not_contact: [], converted: [],
+});
+
+function transitionProspect(prospect, nextState, {supervisorKillSwitch = true,
+  externalExecutionCertified = false, now = Date.now()} = {}) {
+  const current = cleanText(prospect?.lifecycleState, 40).toLowerCase();
+  const next = cleanText(nextState, 40).toLowerCase();
+  if (!PROSPECT_LIFECYCLE.includes(next) || !PROSPECT_TRANSITIONS[current]?.includes(next)) {
+    throw new Error("invalid_prospect_transition");
+  }
+  if (next === "sent_future" && (supervisorKillSwitch === true || externalExecutionCertified !== true)) {
+    throw new Error("prospect_external_send_not_certified");
+  }
+  return {...prospect, lifecycleState: next,
+    outreachAuthorized: next === "sent_future" && externalExecutionCertified === true,
+    updatedAt: now};
+}
+
+function leadGenerationMetrics({businessUid, prospects = []}) {
+  const uid = requireBusinessUid(businessUid);
+  const owned = prospects.filter((item) => item?.businessUid === uid);
+  const count = (states) => owned.filter((item) => states.includes(item.lifecycleState)).length;
+  const present = (states) => count(states);
+  const futureMetric = (states) => {
+    const value = present(states);
+    return value > 0 ? {status: "AVAILABLE", value} : {status: "NO_DATA", value: null};
+  };
+  return {schemaVersion: SCHEMA_VERSION, businessUid: uid,
+    discovered: {status: "AVAILABLE", value: owned.length},
+    qualified: {status: "AVAILABLE", value: count(["qualified", "crm_created", "drafted", "approved",
+      "sent_future", "replied_future", "handed_off", "converted"])},
+    crmCreated: {status: "AVAILABLE", value: count(["crm_created", "drafted", "approved",
+      "sent_future", "replied_future", "handed_off", "converted"])},
+    drafted: {status: "AVAILABLE", value: count(["drafted", "approved", "sent_future",
+      "replied_future", "handed_off", "converted"])},
+    approved: futureMetric(["approved", "sent_future", "replied_future", "handed_off", "converted"]),
+    sent: futureMetric(["sent_future", "replied_future", "handed_off", "converted"]),
+    replied: futureMetric(["replied_future", "handed_off", "converted"]),
+    converted: futureMetric(["converted"]), externalOutreachPerformed: false};
+}
+
 function growthStrategy({businessUid, evidence = [], minimumEvidence = 3, now = Date.now()}) {
   const owned = evidence.filter((item) => item?.businessUid === businessUid &&
     item.status === "available" && Number.isFinite(Number(item.value)));
@@ -447,10 +604,12 @@ function scaledCircleDogfoodWorkspace({businessUid, now = Date.now()}) {
 }
 
 module.exports = {SCHEMA_VERSION, AGENT_TYPES, AUTONOMY_MODES, ACTION_STATES, ACTION_TYPES,
-  PIPELINE_STATES, PROSPECT_FIT, CRM_STAGE_ADAPTER,
+  PIPELINE_STATES, PROSPECT_FIT, PROSPECT_TYPES, PROSPECT_LIFECYCLE, CRM_STAGE_ADAPTER,
   createAgentProfile, compilePlaybook, permissionModel,
   budgetModel, createAction, createAgentRun, auditEvent, transitionAction,
   approvalRecord, escalationRecord,
   assistantPipelineProjection, marketingManagerReview, businessAssistantDraft, targetProfile, rankProspect,
+  prospectRecord, qualifyProspect, crmProspectProjection, outreachDraft,
+  transitionProspect, leadGenerationMetrics,
   growthStrategy, supervisorDecision, businessControlCenter, adminProjection,
   scaledCircleDogfoodWorkspace};
