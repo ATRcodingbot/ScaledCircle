@@ -191,7 +191,7 @@ test("one-time production X Response Asset is exact, public, and idempotent", as
     businessId: authority.ownerUid, status: "draft",
   }});
   const service = attribution.createAttributionService({db,
-    FieldValue: {serverTimestamp: () => "server-time"},
+    FieldValue: {serverTimestamp: () => "server-time", increment: (value) => value},
     randomBytes: (size) => Buffer.alloc(size, 9), runtimeProjectId: authority.projectId,
     publicBaseUrl: authority.publicOrigin, defaultExposure: "public_publish",
     permitsPublicPublish: true, adminSelfDogfoodBusinessUid: authority.ownerUid});
@@ -218,6 +218,10 @@ test("one-time production X Response Asset is exact, public, and idempotent", as
   assert.equal(stored.attribution.creativeVersion, "v3");
   assert.deepEqual([...db.records.keys()].filter((key) =>
     !key.startsWith("campaigns/") && !key.startsWith("responseAssets/")), []);
+  const resolved = await service.resolveAndRecord({code: created.publicCode,
+    ip: "192.0.2.10", userAgent: "Certification fixture", requestIdentity: "fixture-visit"});
+  assert.equal(resolved.destination, authority.destination);
+  assert.equal(resolved.created, true);
 });
 
 test("one-time production X Response Asset fails closed on environment and replay conflicts", async () => {
