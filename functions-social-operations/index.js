@@ -914,6 +914,221 @@ async function firstXCredential(businessUid, connection) {
   return {credential, account, tokenAad, tokens};
 }
 
+function firstXProductionSuccessorRefs() {
+  const versionRef = db.collection("socialContentVersions")
+    .doc(xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID);
+  const qualityRef = db.collection("socialContentQualityAssessments")
+    .doc(xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID);
+  const mediaRef = db.collection("socialMediaLibraries").doc(xFirstPublish.BUSINESS_UID)
+    .collection("items").doc(xFirstPublish.PRODUCTION_MEDIA_ID);
+  const approvalRef = db.collection("socialExternalApprovalIntents")
+    .doc("social_approval_intent_f7eb91c8b7955f9c78899bb186a6bb38afa8ed7310173d2211ceca84dba405b7");
+  const jobRef = db.collection("socialPublishingJobs")
+    .doc("social_replacement_a69427db9c7b3a34c64cfb72b01e8196565b2c7e38e06ca9312874f7e86ffc78");
+  return {versionRef, qualityRef, mediaRef, approvalRef, jobRef};
+}
+
+function assertFirstXProductionSuccessorState({version, quality, media, approval, job,
+  requireApproved = false}) {
+  const expectedApproval = xFirstPublish.productionApprovalIntent({version,
+    qualityAssessment: quality});
+  const expectedJob = xFirstPublish.productionReplacementJob({version,
+    approvalIntent: expectedApproval});
+  const rendered = version?.variants?.[0]?.renderedCopy;
+  if (expectedApproval.id !==
+      "social_approval_intent_f7eb91c8b7955f9c78899bb186a6bb38afa8ed7310173d2211ceca84dba405b7" ||
+      expectedJob.id !==
+      "social_replacement_a69427db9c7b3a34c64cfb72b01e8196565b2c7e38e06ca9312874f7e86ffc78" ||
+      version?.variants?.[0]?.responseAssetId !== xFirstPublish.PRODUCTION_RESPONSE_ASSET_ID ||
+      rendered !== xFirstPublish.renderPostText(xFirstPublish.PRODUCTION_RESPONSE_URL) ||
+      quality?.score !== 78 || quality?.qualityBand !== "good" ||
+      quality?.recommendation !== "keep" || quality?.readyToPublish !== true ||
+      media?.mediaAssetId !== xFirstPublish.PRODUCTION_MEDIA_ID ||
+      media?.sha256 !== xFirstPublish.MEDIA_SHA256 || media?.stagingReferenceCount !== 0 ||
+      approval?.approvalHash !== expectedApproval.record.approvalHash ||
+      job?.bindingHash !== expectedJob.record.bindingHash ||
+      job?.replacesPostId !== xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID ||
+      Number(job?.attemptCount) !== 0 || Number(job?.providerCreateAttemptCount) !== 0 ||
+      job?.providerPostId != null || job?.replacementProviderPostId != null ||
+      !job?.reusedProviderMediaId) {
+    throw new Error("x_v4_exact_state_mismatch");
+  }
+  xFirstPublish.assertNoStagingReference({version, media, approval, job});
+  const expectedStatus = requireApproved ? "approved_for_execution" : "awaiting_founder_approval";
+  if (approval.status !== expectedStatus || job.status !== expectedStatus ||
+      approval.externalExecutionAllowed !== requireApproved ||
+      approval.providerMutationAuthorized !== requireApproved ||
+      job.externalExecutionAllowed !== requireApproved ||
+      (requireApproved ? job.providerMutationAuthorized !== true :
+        job.providerMutationAuthorized === true)) {
+    throw new Error("x_v4_approval_state_mismatch");
+  }
+  return {expectedApproval, expectedJob, renderedCopy: rendered};
+}
+
+exports.approveFirstXProductionSuccessorV4 = onRequest(
+  {invoker: "private", cors: false, maxInstances: 1},
+  async (request, response) => {
+    try { xFirstPublish.assertProductionSuccessorHttpRequest(request); } catch (error) {
+      return response.status(String(error?.message || "").includes("method") ? 405 : 400)
+        .json({error: "empty_post_required"});
+    }
+    if (runtimeEnvironment() !== "staging" ||
+        String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "") !==
+          "scaledcircle-staging") return response.status(403).json({error: "unavailable"});
+    const refs = firstXProductionSuccessorRefs();
+    const [version, quality, media, approval, job] = await Promise.all([
+      refs.versionRef.get(), refs.qualityRef.get(), refs.mediaRef.get(),
+      refs.approvalRef.get(), refs.jobRef.get(),
+    ]);
+    try {
+      assertFirstXProductionSuccessorState({version: version.data(), quality: quality.data(),
+        media: media.data(), approval: approval.data(), job: job.data()});
+    } catch (_) { return response.status(409).json({error: "exact_v4_gate_failed"}); }
+    await db.runTransaction(async (transaction) => {
+      const [currentApproval, currentJob, currentVersion] = await Promise.all([
+        transaction.get(refs.approvalRef), transaction.get(refs.jobRef),
+        transaction.get(refs.versionRef),
+      ]);
+      assertFirstXProductionSuccessorState({version: currentVersion.data(), quality: quality.data(),
+        media: media.data(), approval: currentApproval.data(), job: currentJob.data()});
+      transaction.update(refs.approvalRef, {status: "approved_for_execution",
+        externalExecutionAllowed: true, providerMutationAuthorized: true,
+        approvedBy: "FOUNDER_EXPLICIT_APPROVAL", approvedAt: FieldValue.serverTimestamp(),
+        approvalScope: "one_exact_x_v4_replacement"});
+      transaction.update(refs.jobRef, {status: "approved_for_execution",
+        externalExecutionAllowed: true, providerMutationAuthorized: true,
+        approvedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      transaction.update(refs.versionRef, {founderPublicationApproved: true,
+        founderPublicationApprovalIntentId: refs.approvalRef.id,
+        founderPublicationApprovedAt: FieldValue.serverTimestamp()});
+    });
+    return response.status(200).json({result: {approvalIntentId: refs.approvalRef.id,
+      publishJobId: refs.jobRef.id, version: "sc_x_20260903_mapping_v1:v4",
+      status: "approved_for_execution", externalExecutionAllowed: true,
+      providerMutationAuthorized: true, attemptCount: 0, providerPostId: null}});
+  },
+);
+
+exports.publishFirstXProductionSuccessorV4 = onRequest(
+  {invoker: "private", cors: false, maxInstances: 1, timeoutSeconds: 60,
+    secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
+  async (request, response) => {
+    try { xFirstPublish.assertProductionSuccessorHttpRequest(request); } catch (error) {
+      return response.status(String(error?.message || "").includes("method") ? 405 : 400)
+        .json({error: "empty_post_required"});
+    }
+    if (runtimeEnvironment() !== "staging" ||
+        String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "") !==
+          "scaledcircle-staging") return response.status(403).json({error: "unavailable"});
+    const refs = firstXProductionSuccessorRefs();
+    const connectionRef = db.collection("socialConnections").doc(xFirstPublish.BUSINESS_UID)
+      .collection("providers").doc("x");
+    const [version, quality, media, approval, job, connection, possibleDuplicates] =
+      await Promise.all([refs.versionRef.get(), refs.qualityRef.get(), refs.mediaRef.get(),
+        refs.approvalRef.get(), refs.jobRef.get(), connectionRef.get(),
+        db.collection("socialPublishingJobs")
+          .where("replacesPostId", "==", xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID).limit(10).get()]);
+    let gate;
+    try {
+      gate = assertFirstXProductionSuccessorState({version: version.data(), quality: quality.data(),
+        media: media.data(), approval: approval.data(), job: job.data(), requireApproved: true});
+      xFirstPublish.assertWriteConnection(connection.data());
+      if (possibleDuplicates.docs.some((doc) => doc.id !== refs.jobRef.id &&
+          (doc.data()?.providerPostId || doc.data()?.replacementProviderPostId))) {
+        throw new Error("x_v4_duplicate_replacement_exists");
+      }
+    } catch (_) { return response.status(409).json({error: "exact_v4_gate_failed"}); }
+    const auth = await firstXCredential(xFirstPublish.BUSINESS_UID, connection.data());
+    const configSnapshot = await providerConfigRef("x", "staging").get();
+    const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
+    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
+      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const original = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
+      providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID});
+    if (original.status !== "not_found") {
+      return response.status(409).json({error: "founder_deleted_post_still_exists"});
+    }
+    const existing = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
+      renderedCopy: gate.renderedCopy, startedAt: Date.now() - 7 * 24 * 60 * 60 * 1000});
+    if (existing.status === "found") {
+      return response.status(409).json({error: "replacement_already_exists"});
+    }
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(refs.jobRef);
+      if (current.data()?.status !== "approved_for_execution" ||
+          Number(current.data()?.attemptCount) !== 0 || current.data()?.providerPostId != null) {
+        throw new Error("x_v4_job_already_claimed");
+      }
+      transaction.update(refs.jobRef, {status: "creating", attemptCount: 1,
+        providerCreateAttemptCount: 1, providerMutationCount: 1,
+        createStartedAtMillis: Date.now(), updatedAt: FieldValue.serverTimestamp()});
+    });
+    try {
+      const created = await xFirstPublish.createReplacementPost({accessToken: tokens.accessToken,
+        renderedCopy: gate.renderedCopy, mediaId: job.data().reusedProviderMediaId});
+      const receiptId = `social_replacement_receipt_${xFirstPublish.digest({
+        publishJobId: refs.jobRef.id, providerPostId: created.providerPostId})}`;
+      const receiptRef = db.collection("socialProviderReceipts").doc(receiptId);
+      const batch = db.batch();
+      batch.create(receiptRef, {schemaVersion: "SocialProviderReplacementReceiptV2",
+        businessUid: xFirstPublish.BUSINESS_UID, provider: "x",
+        publishJobId: refs.jobRef.id, providerPostId: created.providerPostId,
+        providerPostUrl: created.providerPostUrl, providerTextHash: created.providerTextHash,
+        contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+        contentVersionId: "sc_x_20260903_mapping_v1:v4", version: 4,
+        mediaAssetId: xFirstPublish.PRODUCTION_MEDIA_ID,
+        mediaSha256: xFirstPublish.MEDIA_SHA256,
+        responseAssetId: xFirstPublish.PRODUCTION_RESPONSE_ASSET_ID,
+        replacesPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+        replacementReason: xFirstPublish.ORIGINAL_DEFECT_REASON,
+        originalDeletionSource: xFirstPublish.ORIGINAL_DELETION_SOURCE,
+        status: "accepted", immutable: true, createdAt: FieldValue.serverTimestamp()});
+      batch.update(refs.jobRef, {status: "completed", providerPostId: created.providerPostId,
+        providerPostUrl: created.providerPostUrl, providerReceiptId: receiptId,
+        externalExecutionAllowed: false, providerMutationAuthorized: false,
+        reconciliationRequired: false, completedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()});
+      batch.update(refs.approvalRef, {status: "consumed", externalExecutionAllowed: false,
+        providerMutationAuthorized: false, consumedByJobId: refs.jobRef.id,
+        consumedAt: FieldValue.serverTimestamp()});
+      batch.update(db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID), {
+        status: "published", currentVersion: 4,
+        currentVersionId: xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID,
+        providerState: "published_verified", providerPostId: created.providerPostId,
+        responseAssetId: xFirstPublish.PRODUCTION_RESPONSE_ASSET_ID,
+        mediaAssetId: xFirstPublish.PRODUCTION_MEDIA_ID,
+        replacesPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+        replacementReason: xFirstPublish.ORIGINAL_DEFECT_REASON,
+        updatedAt: FieldValue.serverTimestamp()});
+      await batch.commit();
+      let publicVerification = "provider_receipt_only";
+      try {
+        const verified = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
+          providerPostId: created.providerPostId});
+        if (verified.status === "found" && verified.text === gate.renderedCopy) {
+          publicVerification = "provider_readback_verified";
+          await refs.jobRef.update({publicVerification,
+            verifiedAt: FieldValue.serverTimestamp()});
+        }
+      } catch (_) { /* receipt remains authoritative; later read-only reconciliation is safe */ }
+      return response.status(200).json({result: {publishJobId: refs.jobRef.id,
+        status: "completed", providerPostId: created.providerPostId,
+        providerPostUrl: created.providerPostUrl, providerReceiptId: receiptId,
+        publicVerification, attemptCount: 1, providerCreateAttemptCount: 1,
+        duplicateReplacementCount: 0}});
+    } catch (error) {
+      await refs.jobRef.set({status: "unknown_provider_outcome", reconciliationRequired: true,
+        externalExecutionAllowed: false, providerMutationAuthorized: false,
+        safeFailure: readText(error?.message || error, 120),
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      await refs.approvalRef.set({externalExecutionAllowed: false,
+        providerMutationAuthorized: false}, {merge: true});
+      return response.status(409).json({error: "provider_outcome_requires_reconciliation"});
+    }
+  },
+);
+
 exports.executeFirstXPublishV1 = onCall(
   {enforceAppCheck: false, maxInstances: 1, timeoutSeconds: 60,
     secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},

@@ -47,6 +47,7 @@ test("X OAuth codebase binds only shared encryption and the X secret", () => {
 test("Social Operations exports provider-free surfaces plus one bounded X certification", () => {
   const names = [...indexSource.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
   assert.deepEqual(names.sort(), [
+    "approveFirstXProductionSuccessorV4",
     "approveSocialContentPlanV1",
     "beginFirstXPublishAuthorizationV1",
     "beginSocialOAuthConnectionV1",
@@ -67,6 +68,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "ingestScaledCircleLaunchPlanV1",
     "prepareFirstXPublishFoundationV1",
     "proposeScheduledSocialReplacementV1",
+    "publishFirstXProductionSuccessorV4",
     "rateHistoricalSocialContentV1",
     "reconcileFirstXPublishV1",
     "reconcileFirstXRepairV1",
@@ -81,6 +83,25 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "syncSocialReadOnlyPerformanceV1",
     "syncXSocialReadOnlyPerformanceV1",
   ]);
+});
+
+test("X v4 approval and publication are private, exact, and single-attempt", () => {
+  const approval = indexSource.match(
+    /exports\.approveFirstXProductionSuccessorV4 = [\s\S]*?\n\);/)[0];
+  const publish = indexSource.match(
+    /exports\.publishFirstXProductionSuccessorV4 = [\s\S]*?\n\);/)[0];
+  assert.match(approval, /invoker: "private"/);
+  assert.doesNotMatch(approval,
+    /providerSecretBinding|createPost|createReplacementPost|uploadMedia/);
+  assert.match(publish, /invoker: "private"/);
+  assert.match(publish, /providerSecretBinding\("x"\)/);
+  assert.match(publish, /attemptCount: 1/);
+  assert.match(publish, /providerCreateAttemptCount: 1/);
+  assert.match(publish, /reconcilePost/);
+  assert.match(publish, /lookupPost/);
+  assert.doesNotMatch(publish, /uploadMedia|method:\s*"DELETE"|deletePost/);
+  assert.doesNotMatch(approval + publish,
+    /scaledcircle-staging\.web\.app|firebaseapp\.com|localhost|127\.0\.0\.1/);
 });
 
 test("bounded X write entrypoints bind only shared encryption and X secret", () => {
