@@ -144,6 +144,7 @@ test("X write authorization supersedes an active read-only attempt before replac
   assert.match(source, /status: "superseded"/);
   assert.match(source, /supersededByAttemptId: proposed\.attemptId/);
   assert.match(source, /transaction\.update\(pendingRef/);
+  assert.match(source, /writeScopesRequested: record\.purpose === "x_first_publish_certification"/);
 });
 
 test("bounded X write entrypoints bind only shared encryption and X secret", () => {

@@ -634,6 +634,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     if (attemptId.isEmpty) return;
     try {
       final attempt = await _service.connectionAttempt(attemptId);
+      if (attempt['status'] == 'expired' ||
+          attempt['writeScopesRequested'] != true) {
+        await _beginFirstXPublishAuthorization();
+        return;
+      }
       final candidates = (attempt['candidates'] as List? ?? const [])
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))

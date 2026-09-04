@@ -2143,6 +2143,7 @@ exports.getSocialOAuthAttemptV1 = onCall(
       candidates: Array.isArray(record.safeCandidates) ? record.safeCandidates : [],
       grantedScopes: Array.isArray(record.grantedScopes) ? record.grantedScopes : [],
       missingScopes: Array.isArray(record.missingScopes) ? record.missingScopes : [],
+      writeScopesRequested: record.purpose === "x_first_publish_certification",
       writeScopesGranted: record.purpose === "x_first_publish_certification" &&
         Array.isArray(record.grantedScopes) &&
         xFirstPublish.X_WRITE_SCOPES.every((scope) => record.grantedScopes.includes(scope)),

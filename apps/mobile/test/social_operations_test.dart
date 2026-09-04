@@ -115,4 +115,13 @@ void main() {
     expect(screen, contains('SocialOperationsScreen'));
     expect(screen, contains('Connections, 30-day calendar'));
   });
+
+  test('write confirmation replaces expired or read-only OAuth attempts', () {
+    final screen = File(
+      'lib/screens/business/social_operations_screen.dart',
+    ).readAsStringSync();
+    expect(screen, contains("attempt['status'] == 'expired'"));
+    expect(screen, contains("attempt['writeScopesRequested'] != true"));
+    expect(screen, contains('await _beginFirstXPublishAuthorization();'));
+  });
 }
