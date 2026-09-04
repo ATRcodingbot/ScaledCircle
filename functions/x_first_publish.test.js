@@ -332,6 +332,18 @@ test("X receipt validation accepts only the exact production URL after provider 
   assert.equal(subject.providerTextMatchesRendered({providerText:
     shortened.replace("https://t.co/AbC123", "https://example.com/wrong"),
   renderedCopy: rendered, entities: null}), false);
+  const withMedia = `${shortened} https://t.co/Media123`;
+  const exactEntities = {urls: [
+    {url: "https://t.co/AbC123", expanded_url: subject.PRODUCTION_RESPONSE_URL},
+    {url: "https://t.co/Media123",
+      expanded_url: "https://x.com/ScaledCircle/status/2095896483010662816/photo/1"},
+  ]};
+  assert.equal(subject.providerTextMatchesRendered({providerText: withMedia,
+    renderedCopy: rendered, entities: exactEntities}), true);
+  assert.equal(subject.providerMediaEntityCount(exactEntities), 1);
+  assert.equal(subject.providerTextMatchesRendered({providerText: withMedia,
+    renderedCopy: rendered, entities: {urls: [exactEntities.urls[0],
+      {url: "https://t.co/Media123", expanded_url: "https://example.com/photo/1"}]}}), false);
   assert.equal(subject.providerTextMatchesRendered({providerText: shortened, renderedCopy: rendered,
     entities: {urls: [{url: "https://t.co/AbC123",
       expanded_url: "https://scaledcircle-staging.web.app/r?code=wrong"}]}}), false);

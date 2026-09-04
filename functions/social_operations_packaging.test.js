@@ -168,7 +168,7 @@ test("v4 unknown outcome reconciliation is read-only at X and closes the exact j
   assert.match(source, /reconcilePost/);
   assert.match(source, /exactObservedPostId = "2095896483010662816"/);
   assert.match(source, /providerTextMatchesRendered/);
-  assert.match(source, /mediaKeys\.length === 1/);
+  assert.match(source, /mediaKeys\.length === 1 \|\| mediaEntityCount === 1/);
   assert.match(source, /status: "completed"/);
   assert.match(source, /providerCreateAttemptCount: 1/);
   assert.match(source, /providerMutationCount: 0/);

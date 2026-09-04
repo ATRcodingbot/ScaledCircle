@@ -438,9 +438,12 @@ function providerTextMatchesRendered({providerText, renderedCopy, entities} = {}
   for (const entity of urls) {
     const shortened = String(entity?.url || "");
     const destination = String(entity?.expanded_url || "");
-    if (!/^https:\/\/t\.co\/[A-Za-z0-9]+$/.test(shortened) ||
-        destination !== PRODUCTION_RESPONSE_URL) continue;
-    expanded = expanded.split(shortened).join(destination);
+    if (!/^https:\/\/t\.co\/[A-Za-z0-9]+$/.test(shortened)) continue;
+    if (destination === PRODUCTION_RESPONSE_URL) {
+      expanded = expanded.split(shortened).join(destination);
+    } else if (isExpectedProviderMediaUrl(destination)) {
+      expanded = expanded.split(shortened).join("").trimEnd();
+    }
   }
   if (expanded === rendered) return true;
   if (urls.length) return false;
@@ -450,6 +453,16 @@ function providerTextMatchesRendered({providerText, renderedCopy, entities} = {}
   return provider.startsWith(before) && provider.endsWith(after) &&
     /^https:\/\/t\.co\/[A-Za-z0-9]+$/.test(
       provider.slice(before.length, provider.length - after.length));
+}
+
+function isExpectedProviderMediaUrl(value) {
+  return new RegExp(`^https://(?:x|twitter)\\.com/${EXPECTED_X_HANDLE}/status/[0-9]+/photo/1$`, "i")
+    .test(String(value || ""));
+}
+
+function providerMediaEntityCount(entities) {
+  return (Array.isArray(entities?.urls) ? entities.urls : [])
+    .filter((entity) => isExpectedProviderMediaUrl(entity?.expanded_url)).length;
 }
 
 function exactResourceNotFound(errors, id) {
@@ -558,4 +571,4 @@ module.exports = {BUSINESS_UID, PLAN_ID, PLAN_VERSION_ID, CAMPAIGN_ID, CONTENT_I
   versionTwoRecord, approvalRecord, expectedJobId, assertWriteConnection,
   assertHistoricalDeletionEvidence, authorizeHistoricalReplacement, uploadMedia, createPost,
   reconcilePost, lookupPost, inspectHistoricalPost, createReplacementPost,
-  providerTextMatchesRendered};
+  providerTextMatchesRendered, providerMediaEntityCount};

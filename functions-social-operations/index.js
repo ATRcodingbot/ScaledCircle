@@ -1352,13 +1352,15 @@ exports.reconcileFirstXProductionSuccessorV4 = onRequest(
         providerPostId: exactObservedPostId});
       const mediaKeys = Array.isArray(observed.attachments?.media_keys) ?
         observed.attachments.media_keys : [];
+      const mediaEntityCount = xFirstPublish.providerMediaEntityCount(observed.entities);
       const textMatches = xFirstPublish.providerTextMatchesRendered({providerText: observed.text,
         renderedCopy, entities: observed.entities});
       Object.assign(safeDiagnostics, {observedStatus: observed.status,
         observedIdMatches: observed.providerPostId === exactObservedPostId,
-        mediaAttachmentCount: mediaKeys.length, textMatches,
+        mediaAttachmentCount: mediaKeys.length, mediaEntityCount, textMatches,
         entityUrlCount: Array.isArray(observed.entities?.urls) ? observed.entities.urls.length : 0});
-      if (observed.status === "found" && mediaKeys.length === 1 && textMatches) {
+      if (observed.status === "found" &&
+          (mediaKeys.length === 1 || mediaEntityCount === 1) && textMatches) {
         reconciled = {status: "found", providerPostId: exactObservedPostId,
           providerPostUrl: observed.providerPostUrl, createdAt: observed.createdAt};
       }
