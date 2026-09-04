@@ -308,6 +308,30 @@ test("replacement remains one distinct create and no delete adapter is exported"
   assert.equal(calls.filter((call) => call.method === "DELETE").length, 0);
 });
 
+test("X receipt validation accepts only the exact production URL after provider shortening", () => {
+  const rendered = subject.renderPostText(subject.PRODUCTION_RESPONSE_URL);
+  const shortened = rendered.replace(subject.PRODUCTION_RESPONSE_URL, "https://t.co/AbC123");
+  assert.equal(subject.providerTextMatchesRendered({providerText: shortened, renderedCopy: rendered,
+    entities: {urls: [{url: "https://t.co/AbC123",
+      expanded_url: subject.PRODUCTION_RESPONSE_URL}]}}), true);
+  assert.equal(subject.providerTextMatchesRendered({providerText: shortened, renderedCopy: rendered,
+    entities: {urls: [{url: "https://t.co/AbC123",
+      expanded_url: "https://scaledcircle-staging.web.app/r?code=wrong"}]}}), false);
+});
+
+test("reconciliation finds the single exact post through X URL entity expansion", async () => {
+  const rendered = subject.renderPostText(subject.PRODUCTION_RESPONSE_URL);
+  const result = await subject.reconcilePost({accessToken: "secret", renderedCopy: rendered,
+    startedAt: 1000, fetchImpl: async () => ({ok: true, status: 200, json: async () => ({data: [{
+      id: "2095896483010662816", created_at: "2026-09-04T15:30:00.000Z",
+      text: rendered.replace(subject.PRODUCTION_RESPONSE_URL, "https://t.co/AbC123"),
+      entities: {urls: [{url: "https://t.co/AbC123",
+        expanded_url: subject.PRODUCTION_RESPONSE_URL}]},
+    }]})})});
+  assert.equal(result.status, "found");
+  assert.equal(result.providerPostId, "2095896483010662816");
+});
+
 test("ambiguous replacement create never retries", async () => {
   let creates = 0;
   await assert.rejects(subject.createReplacementPost({accessToken: "secret",

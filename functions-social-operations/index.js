@@ -1294,6 +1294,115 @@ exports.publishFirstXProductionSuccessorV4 = onRequest(
   },
 );
 
+exports.reconcileFirstXProductionSuccessorV4 = onRequest(
+  {invoker: "private", cors: false, maxInstances: 1, timeoutSeconds: 60,
+    secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
+  async (request, response) => {
+    try { xFirstPublish.assertProductionSuccessorHttpRequest(request); } catch (error) {
+      return response.status(String(error?.message || "").includes("method") ? 405 : 400)
+        .json({error: "empty_post_required"});
+    }
+    if (runtimeEnvironment() !== "staging" ||
+        String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "") !==
+          "scaledcircle-staging") return response.status(403).json({error: "unavailable"});
+    const refs = firstXProductionSuccessorRefs();
+    const connectionRef = db.collection("socialConnections").doc(xFirstPublish.BUSINESS_UID)
+      .collection("providers").doc("x");
+    const [version, quality, media, approval, job, connection, possibleDuplicates] =
+      await Promise.all([refs.versionRef.get(), refs.qualityRef.get(), refs.mediaRef.get(),
+        refs.approvalRef.get(), refs.jobRef.get(), connectionRef.get(),
+        db.collection("socialPublishingJobs")
+          .where("replacesPostId", "==", xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID).limit(10).get()]);
+    const jobData = job.data() || {};
+    try {
+      assertFirstXProductionSuccessorState({version: version.data(), quality: quality.data(),
+        media: media.data(), approval: {...approval.data(), status: "approved_for_execution",
+          externalExecutionAllowed: true, providerMutationAuthorized: true},
+        job: {...jobData, status: "approved_for_execution", attemptCount: 0,
+          providerCreateAttemptCount: 0, providerPostId: null, replacementProviderPostId: null,
+          externalExecutionAllowed: true, providerMutationAuthorized: true}, requireApproved: true});
+      xFirstPublish.assertWriteConnection(connection.data());
+      if (jobData.status !== "unknown_provider_outcome" ||
+          Number(jobData.attemptCount) !== 1 || Number(jobData.providerCreateAttemptCount) !== 1 ||
+          jobData.providerPostId != null || jobData.replacementProviderPostId != null ||
+          jobData.reconciliationRequired !== true || jobData.safeFailure !== "x_post_receipt_mismatch" ||
+          jobData.externalExecutionAllowed !== false || jobData.providerMutationAuthorized !== false) {
+        throw new Error("x_v4_reconciliation_state_mismatch");
+      }
+      if (possibleDuplicates.docs.some((doc) => doc.id !== refs.jobRef.id &&
+          (doc.data()?.providerPostId || doc.data()?.replacementProviderPostId))) {
+        throw new Error("x_v4_duplicate_replacement_exists");
+      }
+    } catch (_) { return response.status(409).json({error: "exact_v4_reconciliation_gate_failed"}); }
+    const configSnapshot = await providerConfigRef("x", "staging").get();
+    const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
+    const tokens = (await refreshStoredXCredential({businessUid: xFirstPublish.BUSINESS_UID,
+      connectionRef, connection: connection.data(), config,
+      clientSecret: providerSecretBinding("x").secret.value()})).tokens;
+    const renderedCopy = version.data()?.variants?.[0]?.renderedCopy;
+    const reconciled = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
+      renderedCopy, startedAt: Number(jobData.createStartedAtMillis || 0) - 60000,
+      endedAt: Date.now() + 60000});
+    if (reconciled.status !== "found") return response.status(409).json({result: {
+      status: "unknown_provider_outcome", retryAuthorized: false, providerMutationCount: 0}});
+    const receiptId = `social_replacement_receipt_${xFirstPublish.digest({
+      publishJobId: refs.jobRef.id, providerPostId: reconciled.providerPostId})}`;
+    const receiptRef = db.collection("socialProviderReceipts").doc(receiptId);
+    try {
+      await db.runTransaction(async (transaction) => {
+        const [currentJob, currentReceipt] = await Promise.all([
+          transaction.get(refs.jobRef), transaction.get(receiptRef),
+        ]);
+        const current = currentJob.data() || {};
+        if (currentReceipt.exists || current.status !== "unknown_provider_outcome" ||
+            Number(current.attemptCount) !== 1 || Number(current.providerCreateAttemptCount) !== 1 ||
+            current.providerPostId != null || current.reconciliationRequired !== true) {
+          throw new Error("x_v4_reconciliation_conflict");
+        }
+        transaction.create(receiptRef, {schemaVersion: "SocialProviderReplacementReceiptV2",
+          businessUid: xFirstPublish.BUSINESS_UID, provider: "x",
+          publishJobId: refs.jobRef.id, providerPostId: reconciled.providerPostId,
+          providerPostUrl: reconciled.providerPostUrl,
+          providerTextHash: xFirstPublish.digest(renderedCopy),
+          contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+          contentVersionId: "sc_x_20260903_mapping_v1:v4", version: 4,
+          mediaAssetId: xFirstPublish.PRODUCTION_MEDIA_ID,
+          mediaSha256: xFirstPublish.MEDIA_SHA256,
+          responseAssetId: xFirstPublish.PRODUCTION_RESPONSE_ASSET_ID,
+          replacesPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+          replacementReason: xFirstPublish.ORIGINAL_DEFECT_REASON,
+          originalDeletionSource: xFirstPublish.ORIGINAL_DELETION_SOURCE,
+          status: "reconciled", immutable: true, createdAt: FieldValue.serverTimestamp()});
+        transaction.update(refs.jobRef, {status: "completed",
+          providerPostId: reconciled.providerPostId, providerPostUrl: reconciled.providerPostUrl,
+          providerReceiptId: receiptId, externalExecutionAllowed: false,
+          providerMutationAuthorized: false, reconciliationRequired: false,
+          publicVerification: "provider_readback_reconciled",
+          reconciledAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()});
+        transaction.update(refs.approvalRef, {status: "consumed", externalExecutionAllowed: false,
+          providerMutationAuthorized: false, consumedByJobId: refs.jobRef.id,
+          consumedAt: FieldValue.serverTimestamp()});
+        transaction.update(db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID), {
+          status: "published", currentVersion: 4,
+          currentVersionId: xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID,
+          providerState: "published_verified", providerPostId: reconciled.providerPostId,
+          responseAssetId: xFirstPublish.PRODUCTION_RESPONSE_ASSET_ID,
+          mediaAssetId: xFirstPublish.PRODUCTION_MEDIA_ID,
+          replacesPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID,
+          replacementReason: xFirstPublish.ORIGINAL_DEFECT_REASON,
+          updatedAt: FieldValue.serverTimestamp()});
+      });
+    } catch (_) { return response.status(409).json({error: "x_v4_reconciliation_conflict"}); }
+    return response.status(200).json({result: {publishJobId: refs.jobRef.id,
+      status: "completed", providerPostId: reconciled.providerPostId,
+      providerPostUrl: reconciled.providerPostUrl, providerReceiptId: receiptId,
+      publicVerification: "provider_readback_reconciled", attemptCount: 1,
+      providerCreateAttemptCount: 1, providerMutationCount: 0,
+      duplicateReplacementCount: 0, reconciled: true}});
+  },
+);
+
 exports.executeFirstXPublishV1 = onCall(
   {enforceAppCheck: false, maxInstances: 1, timeoutSeconds: 60,
     secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},

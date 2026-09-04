@@ -422,9 +422,27 @@ async function createPost({fetchImpl = globalThis.fetch, accessToken, renderedCo
     body: JSON.stringify({text: renderedCopy, media: {media_ids: [String(mediaId)]}}),
   }, "post_create");
   const providerPostId = String(body?.data?.id || "").trim();
-  if (!providerPostId || body?.data?.text !== renderedCopy) throw new Error("x_post_receipt_mismatch");
+  if (!providerPostId || !providerTextMatchesRendered({providerText: body?.data?.text,
+    renderedCopy, entities: body?.data?.entities})) throw new Error("x_post_receipt_mismatch");
   return {providerPostId, providerPostUrl: `https://x.com/${EXPECTED_X_HANDLE}/status/${providerPostId}`,
     providerTextHash: digest(renderedCopy)};
+}
+
+function providerTextMatchesRendered({providerText, renderedCopy, entities} = {}) {
+  const provider = String(providerText || "");
+  const rendered = String(renderedCopy || "");
+  if (!provider || !rendered) return false;
+  if (provider === rendered) return true;
+  const urls = Array.isArray(entities?.urls) ? entities.urls : [];
+  let expanded = provider;
+  for (const entity of urls) {
+    const shortened = String(entity?.url || "");
+    const destination = String(entity?.expanded_url || "");
+    if (!/^https:\/\/t\.co\/[A-Za-z0-9]+$/.test(shortened) ||
+        destination !== PRODUCTION_RESPONSE_URL) continue;
+    expanded = expanded.split(shortened).join(destination);
+  }
+  return expanded === rendered;
 }
 
 function exactResourceNotFound(errors, id) {
@@ -495,13 +513,15 @@ async function reconcilePost({fetchImpl = globalThis.fetch, accessToken, rendere
   const url = new URL(`https://api.x.com/2/users/${EXPECTED_X_ID}/tweets`);
   url.searchParams.set("max_results", "10");
   url.searchParams.set("exclude", "retweets,replies");
-  url.searchParams.set("tweet.fields", "created_at,attachments");
+  url.searchParams.set("tweet.fields", "created_at,attachments,entities");
   if (startedAt) url.searchParams.set("start_time", new Date(startedAt).toISOString());
   if (endedAt) url.searchParams.set("end_time", new Date(endedAt).toISOString());
   const body = await providerJson(fetchImpl, url, {
     headers: {Authorization: `Bearer ${accessToken}`},
   }, "post_reconciliation");
-  const matches = (body.data || []).filter((post) => post.text === renderedCopy);
+  const matches = (body.data || []).filter((post) => providerTextMatchesRendered({
+    providerText: post.text, renderedCopy, entities: post.entities,
+  }));
   if (matches.length > 1) throw new Error("x_duplicate_provider_posts_detected");
   if (!matches.length) return {status: "not_found", providerPostId: null};
   return {status: "found", providerPostId: String(matches[0].id),
@@ -529,4 +549,5 @@ module.exports = {BUSINESS_UID, PLAN_ID, PLAN_VERSION_ID, CAMPAIGN_ID, CONTENT_I
   productionReplacementJob, assertNoStagingReference, assertProductionSuccessorHttpRequest,
   versionTwoRecord, approvalRecord, expectedJobId, assertWriteConnection,
   assertHistoricalDeletionEvidence, authorizeHistoricalReplacement, uploadMedia, createPost,
-  reconcilePost, lookupPost, inspectHistoricalPost, createReplacementPost};
+  reconcilePost, lookupPost, inspectHistoricalPost, createReplacementPost,
+  providerTextMatchesRendered};

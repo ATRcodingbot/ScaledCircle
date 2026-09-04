@@ -70,6 +70,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "proposeScheduledSocialReplacementV1",
     "publishFirstXProductionSuccessorV4",
     "rateHistoricalSocialContentV1",
+    "reconcileFirstXProductionSuccessorV4",
     "reconcileFirstXPublishV1",
     "reconcileFirstXRepairV1",
     "reconcileFounderManualFirstXDeletionV1",
@@ -157,6 +158,18 @@ test("bounded X write entrypoints bind only shared encryption and X secret", () 
     assert.match(source, /providerSecretBinding\("x"\)\.secret/);
     assert.doesNotMatch(source, /META_SOCIAL_APP_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET/);
   }
+});
+
+test("v4 unknown outcome reconciliation is read-only at X and closes the exact job", () => {
+  const source = indexSource.match(
+    /exports\.reconcileFirstXProductionSuccessorV4 = [\s\S]*?\n\);/)[0];
+  assert.match(source, /status: "unknown_provider_outcome"/);
+  assert.match(source, /safeFailure !== "x_post_receipt_mismatch"/);
+  assert.match(source, /reconcilePost/);
+  assert.match(source, /status: "completed"/);
+  assert.match(source, /providerCreateAttemptCount: 1/);
+  assert.match(source, /providerMutationCount: 0/);
+  assert.doesNotMatch(source, /createPost|createReplacementPost|method:\s*"DELETE"/);
 });
 
 test("X public-origin repair records the Founder deletion without a provider delete", () => {
