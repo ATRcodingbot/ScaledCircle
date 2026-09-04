@@ -6,8 +6,54 @@ const oauth = require("../functions-social-operations/social_oauth");
 
 const key = Buffer.alloc(32, 7).toString("base64");
 const config = (provider) => ({provider, clientId: `${provider}-client`,
-  redirectUri: "https://us-east1-scaledcircle-staging.cloudfunctions.net/socialOAuthCallbackV1",
+  redirectUri: oauth.callbackUrl({provider, environment: "staging"}),
   environment: "staging", enabled: true, appName: "ScaledCircle Social Operations — Production"});
+
+test("OAuth callback URLs are provider-specific and environment-exact", () => {
+  assert.equal(oauth.callbackUrl({provider: "x", environment: "staging"}),
+    "https://us-east1-scaledcircle-staging.cloudfunctions.net/socialOAuthXCallbackV1");
+  assert.equal(oauth.callbackUrl({provider: "x", environment: "production"}),
+    "https://us-east1-scaled-circle.cloudfunctions.net/socialOAuthXCallbackV1");
+  assert.equal(oauth.callbackUrl({provider: "meta", environment: "production"}),
+    "https://us-east1-scaled-circle.cloudfunctions.net/socialOAuthMetaCallbackV1");
+  assert.equal(oauth.callbackUrl({provider: "youtube", environment: "production"}),
+    "https://us-east1-scaled-circle.cloudfunctions.net/socialOAuthCallbackV1");
+  assert.throws(() => oauth.callbackUrl({provider: "x", environment: ""}),
+    /environment_invalid/);
+});
+
+test("provider configuration rejects cross-environment and cross-provider callbacks", () => {
+  assert.equal(oauth.validateProviderConfig(config("x")).environment, "staging");
+  const production = {...config("x"), environment: "production",
+    redirectUri: oauth.callbackUrl({provider: "x", environment: "production"})};
+  assert.equal(oauth.validateProviderConfig(production).redirectUri,
+    "https://us-east1-scaled-circle.cloudfunctions.net/socialOAuthXCallbackV1");
+  assert.throws(() => oauth.validateProviderConfig({...config("x"), environment: "production"}),
+    /redirect_uri_mismatch/);
+  assert.throws(() => oauth.validateProviderConfig({...config("x"),
+    redirectUri: oauth.callbackUrl({provider: "meta", environment: "staging"})}),
+  /redirect_uri_mismatch/);
+  assert.throws(() => oauth.validateProviderConfig({...config("x"),
+    redirectUri: "https://localhost/socialOAuthXCallbackV1"}), /redirect_uri_mismatch/);
+});
+
+test("callback attempt validation rejects expiry, provider mismatch, and PKCE context damage", async () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "x",
+    config: config("x"), encryptionKey: key, now: 1000});
+  assert.throws(() => oauth.assertAttempt(attempt.record, {provider: "meta", now: 2000}),
+    /provider_mismatch/);
+  assert.throws(() => oauth.assertAttempt(attempt.record, {provider: "x",
+    now: 1000 + oauth.OAUTH_ATTEMPT_TTL_MS}), /attempt_expired/);
+  const damaged = {...attempt.record, verifierEnvelope: {
+    ...attempt.record.verifierEnvelope, tag: Buffer.alloc(16, 9).toString("base64url"),
+  }};
+  let providerCalls = 0;
+  await assert.rejects(oauth.completeExchange({attempt: damaged, code: "code",
+    config: config("x"), clientSecret: "client-secret", encryptionKey: key,
+    fetchImpl: async () => { providerCalls += 1; throw new Error("unexpected_provider_call"); },
+    now: 2000}));
+  assert.equal(providerCalls, 0);
+});
 
 test("OAuth URLs request only the certified read-only scopes", () => {
   for (const provider of oauth.PROVIDERS) {

@@ -21,6 +21,15 @@ const PROVIDER_SCOPES = Object.freeze({
 const X_PUBLISH_SCOPES = Object.freeze([
   "users.read", "tweet.read", "offline.access", "tweet.write", "media.write",
 ]);
+const OAUTH_CALLBACK_EXPORTS = Object.freeze({
+  meta: "socialOAuthMetaCallbackV1",
+  x: "socialOAuthXCallbackV1",
+  youtube: "socialOAuthCallbackV1",
+});
+const OAUTH_PROJECTS = Object.freeze({
+  production: "scaled-circle",
+  staging: "scaledcircle-staging",
+});
 const CREDENTIAL_REFRESH_LEASE_TTL_MS = 2 * 60 * 1000;
 
 function text(value, maximum = 2400) {
@@ -180,6 +189,15 @@ function decryptJson(envelope, encryptionKey, aad = "social-oauth-v1") {
   return JSON.parse(plaintext.toString("utf8"));
 }
 
+function callbackUrl({provider, environment}) {
+  const normalizedProvider = normalizeProvider(provider);
+  const normalizedEnvironment = text(environment, 40).toLowerCase();
+  const project = OAUTH_PROJECTS[normalizedEnvironment];
+  if (!project) throw new Error("social_oauth_environment_invalid");
+  return `https://us-east1-${project}.cloudfunctions.net/` +
+    OAUTH_CALLBACK_EXPORTS[normalizedProvider];
+}
+
 function validateProviderConfig(input = {}) {
   const provider = normalizeProvider(input.provider);
   const clientId = text(input.clientId, 500);
@@ -187,6 +205,9 @@ function validateProviderConfig(input = {}) {
   const environment = text(input.environment, 40).toLowerCase();
   if (!clientId || !/^https:\/\//.test(redirectUri)) throw new Error("social_oauth_config_missing");
   if (!["staging", "production"].includes(environment)) throw new Error("social_oauth_environment_invalid");
+  if (redirectUri !== callbackUrl({provider, environment})) {
+    throw new Error("social_oauth_redirect_uri_mismatch");
+  }
   return {
     provider,
     clientId,
@@ -701,6 +722,7 @@ module.exports = {
   credentialGeneration, connectionRevision, beginCredentialRefresh,
   completeCredentialRefresh, failCredentialRefresh,
   encryptJson, decryptJson, validateProviderConfig, authorizationUrl, createAttempt,
+  callbackUrl,
   isReusableAttempt, continuationUrl,
   safeIdentityCandidate, assertAttempt, completeExchange, selectCandidate, callbackHtml,
   refreshTokens, readProviderIdentity, readHistoricalPerformance,

@@ -86,6 +86,19 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
   ]);
 });
 
+test("OAuth callbacks validate exact provider routing and cannot publish", () => {
+  const handler = indexSource.match(
+    /function socialOAuthCallbackHandler[\s\S]*?\n\}/)[0];
+  assert.match(handler, /requireRuntimeProvider\(expectedProvider, attempt\.provider\)/);
+  assert.match(handler, /socialOAuth\.assertAttempt/);
+  assert.match(handler, /socialOAuth\.completeExchange/);
+  assert.doesNotMatch(handler,
+    /createPost|createReplacementPost|uploadMedia|providerCreateAttemptCount|externalExecutionAllowed/);
+  const xCallback = indexSource.match(
+    /exports\.socialOAuthXCallbackV1 = [\s\S]*?\n\);/)[0];
+  assert.match(xCallback, /socialOAuthCallbackHandler\("x"/);
+});
+
 test("X v4 approval and publication are private, exact, and single-attempt", () => {
   const approval = indexSource.match(
     /exports\.approveFirstXProductionSuccessorV4 = [\s\S]*?\n\);/)[0];
