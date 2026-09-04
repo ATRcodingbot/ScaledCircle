@@ -442,7 +442,14 @@ function providerTextMatchesRendered({providerText, renderedCopy, entities} = {}
         destination !== PRODUCTION_RESPONSE_URL) continue;
     expanded = expanded.split(shortened).join(destination);
   }
-  return expanded === rendered;
+  if (expanded === rendered) return true;
+  if (urls.length) return false;
+  const pieces = rendered.split(PRODUCTION_RESPONSE_URL);
+  if (pieces.length !== 2) return false;
+  const [before, after] = pieces;
+  return provider.startsWith(before) && provider.endsWith(after) &&
+    /^https:\/\/t\.co\/[A-Za-z0-9]+$/.test(
+      provider.slice(before.length, provider.length - after.length));
 }
 
 function exactResourceNotFound(errors, id) {

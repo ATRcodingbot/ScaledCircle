@@ -327,6 +327,11 @@ test("X receipt validation accepts only the exact production URL after provider 
   assert.equal(subject.providerTextMatchesRendered({providerText: shortened, renderedCopy: rendered,
     entities: {urls: [{url: "https://t.co/AbC123",
       expanded_url: subject.PRODUCTION_RESPONSE_URL}]}}), true);
+  assert.equal(subject.providerTextMatchesRendered({providerText: shortened,
+    renderedCopy: rendered, entities: null}), true);
+  assert.equal(subject.providerTextMatchesRendered({providerText:
+    shortened.replace("https://t.co/AbC123", "https://example.com/wrong"),
+  renderedCopy: rendered, entities: null}), false);
   assert.equal(subject.providerTextMatchesRendered({providerText: shortened, renderedCopy: rendered,
     entities: {urls: [{url: "https://t.co/AbC123",
       expanded_url: "https://scaledcircle-staging.web.app/r?code=wrong"}]}}), false);
