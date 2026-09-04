@@ -636,7 +636,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       final attempt = await _service.connectionAttempt(attemptId);
       if (attempt['status'] == 'expired' ||
           attempt['writeScopesRequested'] != true) {
-        await _beginFirstXPublishAuthorization();
+        await _load();
+        _showFirstXError(
+          'This X authorization attempt expired. Choose Start fresh X authorization.',
+        );
         return;
       }
       final candidates = (attempt['candidates'] as List? ?? const [])
@@ -1163,7 +1166,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                         : _beginFirstXPublishAuthorization,
                     child: Text(
                       connectionNeedsAttention
-                          ? 'Reconnect X'
+                          ? 'Start fresh X authorization'
                           : 'Allow ScaledCircle to publish this approved post',
                     ),
                   ),

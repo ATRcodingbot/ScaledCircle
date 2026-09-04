@@ -122,6 +122,19 @@ void main() {
     ).readAsStringSync();
     expect(screen, contains("attempt['status'] == 'expired'"));
     expect(screen, contains("attempt['writeScopesRequested'] != true"));
-    expect(screen, contains('await _beginFirstXPublishAuthorization();'));
+    expect(screen, contains('This X authorization attempt expired.'));
+    expect(screen, contains('Start fresh X authorization'));
+  });
+
+  test('expired X callback preserves history and clears only matching pending attempt', () {
+    final source = File(
+      '../../../functions-social-operations/index.js',
+    ).readAsStringSync();
+    expect(source, contains('"attempt_expired" : "connection_failed"'));
+    expect(source, contains('connection.pendingAttemptId === attemptId'));
+    expect(source, contains('lastFailedAttemptId: attemptId'));
+    expect(source, contains('pendingAttemptId: FieldValue.delete()'));
+    expect(source, contains('status: "reauth_required"'));
+    expect(source, contains('lastAuthorizationFailure: "attempt_expired"'));
   });
 }

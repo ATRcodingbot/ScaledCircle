@@ -2124,7 +2124,30 @@ exports.getSocialOAuthAttemptV1 = onCall(
   async (request) => {
     const business = await requireSocialOperationsBusiness(request);
     const attemptId = readText(request.data?.attemptId, 128);
-    const record = (await db.collection("socialOAuthAttempts").doc(attemptId).get()).data();
+    const attemptRef = db.collection("socialOAuthAttempts").doc(attemptId);
+    const record = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(attemptRef);
+      const current = snapshot.data();
+      const now = Date.now();
+      if (current?.businessUid === business.uid && current.provider === "x" &&
+          !socialOAuth.isReusableAttempt(current, {businessUid: business.uid,
+            provider: "x", now})) {
+        const connectionRef = db.collection("socialConnections").doc(business.uid)
+          .collection("providers").doc("x");
+        const connection = (await transaction.get(connectionRef)).data() || {};
+        if (connection.pendingAttemptId === attemptId) {
+          transaction.set(connectionRef, {
+            status: "reauth_required",
+            tokenHealth: "needs_attention",
+            pendingAttemptId: FieldValue.delete(),
+            lastFailedAttemptId: attemptId,
+            lastAuthorizationFailure: "attempt_expired",
+            updatedAt: FieldValue.serverTimestamp(),
+          }, {merge: true});
+        }
+      }
+      return current;
+    });
     if (!record || record.businessUid !== business.uid) {
       throw new HttpsError("not-found", "The connection attempt is unavailable.");
     }
@@ -2360,9 +2383,12 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
             "The provider did not grant every required read-only permission.",
       }));
     } catch (error) {
+      const failure = readText(error?.message || error, 120);
+      const safeFailure = failure === "social_oauth_attempt_expired" ?
+        "attempt_expired" : "connection_failed";
       console.warn("social_oauth_callback_failed", {
         provider: expectedProvider,
-        failure: readText(error?.message || error, 120),
+        failure,
         providerStatus: Number(error?.providerStatus || 0) || null,
         providerCode: readText(error?.providerCode, 100) || null,
         providerSubcode: readText(error?.providerSubcode, 100) || null,
@@ -2382,15 +2408,37 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
       if (state && !exchangeAlreadyInProgress) {
         await db.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(attemptRef);
-          if (["authorizing", "exchanging"].includes(snapshot.data()?.status)) {
-            transaction.set(attemptRef, {status: "error", safeFailure: "connection_failed",
+          const current = snapshot.data();
+          let connectionRef = null;
+          let connection = null;
+          if (current?.businessUid && current?.provider === "x") {
+            connectionRef = db.collection("socialConnections").doc(current.businessUid)
+              .collection("providers").doc("x");
+            connection = (await transaction.get(connectionRef)).data() || {};
+          }
+          if (["authorizing", "exchanging"].includes(current?.status)) {
+            transaction.set(attemptRef, {status: "error", safeFailure,
               updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+          }
+          if (safeFailure === "attempt_expired" && connectionRef &&
+              connection.pendingAttemptId === attemptId) {
+            transaction.set(connectionRef, {
+              status: "reauth_required",
+              tokenHealth: "needs_attention",
+              pendingAttemptId: FieldValue.delete(),
+              lastFailedAttemptId: attemptId,
+              lastAuthorizationFailure: safeFailure,
+              updatedAt: FieldValue.serverTimestamp(),
+            }, {merge: true});
           }
         }).catch(() => {});
       }
       response.status(400).type("html").send(socialOAuth.callbackHtml({
         success: false,
-        message: "The read-only authorization could not be completed. No account was connected.",
+        message: safeFailure === "attempt_expired" ?
+          "This X authorization attempt expired before ScaledCircle could complete it. " +
+            "Return to ScaledCircle and choose Start fresh X authorization." :
+          "The read-only authorization could not be completed. No account was connected.",
       }));
     }
   };
