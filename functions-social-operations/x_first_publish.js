@@ -36,6 +36,8 @@ const ORIGINAL_DEFECTIVE_POST_ID = "2095513212485529898";
 const ORIGINAL_DEFECT_REASON = "PUBLIC_STAGING_ORIGIN";
 const REPLACEMENT_REASON = "PUBLIC_STAGING_ORIGIN";
 const ORIGINAL_DELETION_SOURCE = "FOUNDER_MANUAL_DELETE";
+const ORIGINAL_HISTORICAL_JOB_ID =
+  "social_publish_fdaf8f3b1947856651800a5db7bfbc444ee35f605aaddd0db3103f07b946fb0f";
 const DEFECTIVE_TRACKED_URL = "https://scaledcircle-staging.web.app/r?code=vZN94658Lq6cEcYQ5V8IoFfC";
 const PUBLIC_RESPONSE_ORIGIN = "https://scaledcircle.com";
 const PRODUCTION_RESPONSE_ASSET_ID = "response_bcfcc63ef31d8eb467edfd209b9b5e9caf94f0ac";
@@ -320,6 +322,64 @@ function assertWriteConnection(connection = {}) {
   return connection;
 }
 
+function assertHistoricalDeletionEvidence({originalJob = {}, originalApproval = {},
+  replacementJob = {}, version = {}, connection = {}} = {}) {
+  assertWriteConnection(connection);
+  if (originalJob.id !== ORIGINAL_HISTORICAL_JOB_ID ||
+      originalJob.businessUid !== BUSINESS_UID || originalJob.provider !== "x" ||
+      originalJob.contentItemId !== CONTENT_ITEM_ID || Number(originalJob.version) !== 3 ||
+      Number(originalJob.attemptCount) !== 1 || Number(originalJob.providerMutationCount) !== 1 ||
+      !originalJob.providerCreateStartedAtMillis || !originalJob.providerMediaId ||
+      originalJob.mediaSha256 !== MEDIA_SHA256 || originalJob.status !== "unknown_provider_outcome" ||
+      originalApproval.id !== originalJob.approvalId ||
+      originalApproval.businessUid !== BUSINESS_UID || originalApproval.provider !== "x" ||
+      Number(originalApproval.version) !== 3 || originalApproval.status !== "approved" ||
+      originalApproval.expectedProviderAccountId !== EXPECTED_X_ID ||
+      replacementJob.sourceHistoricalJobId !== ORIGINAL_HISTORICAL_JOB_ID ||
+      replacementJob.replacesPostId !== ORIGINAL_DEFECTIVE_POST_ID ||
+      replacementJob.replacementReason !== ORIGINAL_DEFECT_REASON ||
+      replacementJob.originalDeletionSource !== ORIGINAL_DELETION_SOURCE ||
+      replacementJob.action !== "replacement" ||
+      replacementJob.immutablePreparationBinding !== true ||
+      replacementJob.duplicatePreventionRequired !== true ||
+      Number(replacementJob.attemptCount) !== 0 ||
+      Number(replacementJob.providerCreateAttemptCount) !== 0 ||
+      replacementJob.providerPostId != null || replacementJob.replacementProviderPostId != null ||
+      version.versionId !== PRODUCTION_VERSION_ID || Number(version.version) !== 4 ||
+      version.supersedes !== VERSION_DOCUMENT_ID ||
+      version.supersessionReason !== PRODUCTION_SUCCESSOR_REASON || version.immutable !== true) {
+    throw new Error("x_historical_deletion_evidence_mismatch");
+  }
+  return {originalProviderPostId: ORIGINAL_DEFECTIVE_POST_ID,
+    originalJobId: ORIGINAL_HISTORICAL_JOB_ID, deletionSource: ORIGINAL_DELETION_SOURCE,
+    expectedProviderAccountId: EXPECTED_X_ID};
+}
+
+function authorizeHistoricalReplacement({inspection = {}, historicalEvidence = {}} = {}) {
+  if (historicalEvidence.originalProviderPostId !== ORIGINAL_DEFECTIVE_POST_ID ||
+      historicalEvidence.originalJobId !== ORIGINAL_HISTORICAL_JOB_ID ||
+      historicalEvidence.deletionSource !== ORIGINAL_DELETION_SOURCE ||
+      historicalEvidence.expectedProviderAccountId !== EXPECTED_X_ID) {
+    throw new Error("x_historical_deletion_evidence_mismatch");
+  }
+  if (inspection.status === "identity_mismatch") {
+    throw new Error("x_post_identity_mismatch");
+  }
+  if (inspection.status === "found") {
+    return {authorized: false, reason: "founder_deleted_post_still_exists",
+      providerClassification: inspection.classification};
+  }
+  if (inspection.status === "not_found") {
+    return {authorized: true, authority: "provider_not_found_plus_immutable_history",
+      providerClassification: inspection.classification};
+  }
+  if (inspection.status === "unavailable_unknown") {
+    return {authorized: true, authority: "immutable_history_only",
+      providerClassification: inspection.classification};
+  }
+  throw new Error("x_original_provider_state_invalid");
+}
+
 async function providerJson(fetchImpl, url, options, stage) {
   let response;
   try { response = await fetchImpl(url, options); } catch (error) {
@@ -367,7 +427,17 @@ async function createPost({fetchImpl = globalThis.fetch, accessToken, renderedCo
     providerTextHash: digest(renderedCopy)};
 }
 
-async function lookupPost({fetchImpl = globalThis.fetch, accessToken, providerPostId}) {
+function exactResourceNotFound(errors, id) {
+  return Array.isArray(errors) && errors.some((error) => {
+    const type = String(error?.type || "").toLowerCase();
+    const title = String(error?.title || "").toLowerCase();
+    const resourceId = String(error?.resource_id || error?.value || "");
+    return resourceId === id && (type.includes("resource-not-found") ||
+      title === "not found error");
+  });
+}
+
+async function inspectHistoricalPost({fetchImpl = globalThis.fetch, accessToken, providerPostId}) {
   const id = String(providerPostId || "").trim();
   if (!/^[0-9]{1,19}$/.test(id)) throw new Error("x_post_id_invalid");
   let response;
@@ -377,21 +447,39 @@ async function lookupPost({fetchImpl = globalThis.fetch, accessToken, providerPo
       headers: {Authorization: `Bearer ${accessToken}`},
     });
   } catch (_) {
-    throw new Error("x_provider_outcome_unknown");
+    return {status: "unavailable_unknown", providerPostId: id,
+      classification: "provider_transport_unavailable"};
   }
-  if (response.status === 404) return {status: "not_found", providerPostId: id};
+  if (response.status === 404) return {status: "not_found", providerPostId: id,
+    classification: "http_404"};
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error("x_provider_request_rejected");
-  const post = body?.data || {};
+  if (exactResourceNotFound(body?.errors, id) && !body?.data) {
+    return {status: "not_found", providerPostId: id,
+      classification: "resource_not_found_envelope"};
+  }
+  if (!response.ok) return {status: "unavailable_unknown", providerPostId: id,
+    classification: `http_${Number(response.status || 0) || "unknown"}`};
+  const post = body?.data;
+  if (!post) return {status: "unavailable_unknown", providerPostId: id,
+    classification: "success_without_post_or_exact_not_found"};
   if (String(post.id || "") !== id || String(post.author_id || "") !== EXPECTED_X_ID) {
-    throw new Error("x_post_identity_mismatch");
+    return {status: "identity_mismatch", providerPostId: id,
+      classification: String(post.id || "") !== id ? "post_id_mismatch" : "author_mismatch"};
   }
   return {status: "found", providerPostId: id, text: String(post.text || ""),
+    classification: "live_exact_match",
     createdAt: post.created_at || null, attachments: post.attachments || null,
     editControls: post.edit_controls || null,
     editHistoryPostIds: Array.isArray(post.edit_history_tweet_ids) ?
       post.edit_history_tweet_ids.map(String) : [id],
     providerPostUrl: `https://x.com/${EXPECTED_X_HANDLE}/status/${id}`};
+}
+
+async function lookupPost({fetchImpl = globalThis.fetch, accessToken, providerPostId}) {
+  const result = await inspectHistoricalPost({fetchImpl, accessToken, providerPostId});
+  if (result.status === "identity_mismatch") throw new Error("x_post_identity_mismatch");
+  if (result.status === "unavailable_unknown") throw new Error("x_provider_request_rejected");
+  return result;
 }
 
 async function createReplacementPost({fetchImpl = globalThis.fetch, accessToken, renderedCopy, mediaId}) {
@@ -431,12 +519,14 @@ module.exports = {BUSINESS_UID, PLAN_ID, PLAN_VERSION_ID, CAMPAIGN_ID, CONTENT_I
   DESTINATION_URL, SCHEDULED_FOR, EXPECTED_X_ID, EXPECTED_X_HANDLE,
   EXPECTED_X_NAME, V2_APPROVED_COPY, APPROVED_COPY, V2_CTA, CTA, ALT_TEXT,
   ORIGINAL_DEFECTIVE_POST_ID, ORIGINAL_DEFECT_REASON, REPLACEMENT_REASON,
-  ORIGINAL_DELETION_SOURCE, DEFECTIVE_TRACKED_URL, PUBLIC_RESPONSE_ORIGIN,
+  ORIGINAL_DELETION_SOURCE, ORIGINAL_HISTORICAL_JOB_ID,
+  DEFECTIVE_TRACKED_URL, PUBLIC_RESPONSE_ORIGIN,
   PRODUCTION_RESPONSE_ASSET_ID, PRODUCTION_RESPONSE_CODE, PRODUCTION_RESPONSE_URL,
   assertProductionResponseAsset,
   X_READ_SCOPES, X_WRITE_SCOPES,
   digest, weightedXLength, renderPostText, pngDimensions, assertMedia, versionRecord,
   versionFourRecord, productionMediaRecord, productionApprovalIntent,
   productionReplacementJob, assertNoStagingReference, assertProductionSuccessorHttpRequest,
-  versionTwoRecord, approvalRecord, expectedJobId, assertWriteConnection, uploadMedia, createPost,
-  reconcilePost, lookupPost, createReplacementPost};
+  versionTwoRecord, approvalRecord, expectedJobId, assertWriteConnection,
+  assertHistoricalDeletionEvidence, authorizeHistoricalReplacement, uploadMedia, createPost,
+  reconcilePost, lookupPost, inspectHistoricalPost, createReplacementPost};

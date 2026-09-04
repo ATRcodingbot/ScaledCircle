@@ -98,7 +98,12 @@ test("X v4 approval and publication are private, exact, and single-attempt", () 
   assert.match(publish, /attemptCount: 1/);
   assert.match(publish, /providerCreateAttemptCount: 1/);
   assert.match(publish, /reconcilePost/);
-  assert.match(publish, /lookupPost/);
+  assert.match(publish, /inspectHistoricalPost/);
+  assert.match(publish, /assertHistoricalDeletionEvidence/);
+  assert.match(publish, /mode === "preflight"/);
+  assert.match(publish, /historicalDeletionEvidenceAccepted: true/);
+  assert.match(publish, /providerMutationCount: 0/);
+  assert.ok(publish.indexOf('mode === "preflight"') < publish.indexOf('status: "creating"'));
   assert.doesNotMatch(publish, /uploadMedia|method:\s*"DELETE"|deletePost/);
   assert.doesNotMatch(approval + publish,
     /scaledcircle-staging\.web\.app|firebaseapp\.com|localhost|127\.0\.0\.1/);

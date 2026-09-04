@@ -925,7 +925,23 @@ function firstXProductionSuccessorRefs() {
     .doc("social_approval_intent_f7eb91c8b7955f9c78899bb186a6bb38afa8ed7310173d2211ceca84dba405b7");
   const jobRef = db.collection("socialPublishingJobs")
     .doc("social_replacement_a69427db9c7b3a34c64cfb72b01e8196565b2c7e38e06ca9312874f7e86ffc78");
-  return {versionRef, qualityRef, mediaRef, approvalRef, jobRef};
+  const originalJobRef = db.collection("socialPublishingJobs")
+    .doc(xFirstPublish.ORIGINAL_HISTORICAL_JOB_ID);
+  const originalApprovalRef = db.collection("socialExternalApprovals")
+    .doc("social_approval_e280103ba4c99550880d934d4f50506cdc757b0c17db63a668997fb792084164");
+  return {versionRef, qualityRef, mediaRef, approvalRef, jobRef,
+    originalJobRef, originalApprovalRef};
+}
+
+function firstXProductionSuccessorPublishMode(request) {
+  if (request.method !== "POST") throw new Error("method_not_allowed");
+  const url = String(request.originalUrl || request.url || "");
+  if (url.includes("?")) throw new Error("empty_request_required");
+  const body = request.body && typeof request.body === "object" ? request.body : {};
+  const keys = Object.keys(body);
+  if (!keys.length) return "execute";
+  if (keys.length === 1 && body.mode === "preflight") return "preflight";
+  throw new Error("empty_request_required");
 }
 
 function assertFirstXProductionSuccessorState({version, quality, media, approval, job,
@@ -1014,9 +1030,10 @@ exports.publishFirstXProductionSuccessorV4 = onRequest(
   {invoker: "private", cors: false, maxInstances: 1, timeoutSeconds: 60,
     secrets: [socialOAuthEncryptionKey, providerSecretBinding("x").secret]},
   async (request, response) => {
-    try { xFirstPublish.assertProductionSuccessorHttpRequest(request); } catch (error) {
+    let mode;
+    try { mode = firstXProductionSuccessorPublishMode(request); } catch (error) {
       return response.status(String(error?.message || "").includes("method") ? 405 : 400)
-        .json({error: "empty_post_required"});
+        .json({error: "empty_or_fixed_preflight_post_required"});
     }
     if (runtimeEnvironment() !== "staging" ||
         String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "") !==
@@ -1024,16 +1041,23 @@ exports.publishFirstXProductionSuccessorV4 = onRequest(
     const refs = firstXProductionSuccessorRefs();
     const connectionRef = db.collection("socialConnections").doc(xFirstPublish.BUSINESS_UID)
       .collection("providers").doc("x");
-    const [version, quality, media, approval, job, connection, possibleDuplicates] =
+    const [version, quality, media, approval, job, connection, originalJob,
+      originalApproval, possibleDuplicates] =
       await Promise.all([refs.versionRef.get(), refs.qualityRef.get(), refs.mediaRef.get(),
         refs.approvalRef.get(), refs.jobRef.get(), connectionRef.get(),
+        refs.originalJobRef.get(), refs.originalApprovalRef.get(),
         db.collection("socialPublishingJobs")
           .where("replacesPostId", "==", xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID).limit(10).get()]);
     let gate;
+    let historicalEvidence;
     try {
       gate = assertFirstXProductionSuccessorState({version: version.data(), quality: quality.data(),
         media: media.data(), approval: approval.data(), job: job.data(), requireApproved: true});
       xFirstPublish.assertWriteConnection(connection.data());
+      historicalEvidence = xFirstPublish.assertHistoricalDeletionEvidence({
+        originalJob: {id: originalJob.id, ...originalJob.data()},
+        originalApproval: {id: originalApproval.id, ...originalApproval.data()},
+        replacementJob: job.data(), version: version.data(), connection: connection.data()});
       if (possibleDuplicates.docs.some((doc) => doc.id !== refs.jobRef.id &&
           (doc.data()?.providerPostId || doc.data()?.replacementProviderPostId))) {
         throw new Error("x_v4_duplicate_replacement_exists");
@@ -1044,15 +1068,34 @@ exports.publishFirstXProductionSuccessorV4 = onRequest(
     const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
     const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
       config, clientSecret: providerSecretBinding("x").secret.value()});
-    const original = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
+    const original = await xFirstPublish.inspectHistoricalPost({accessToken: tokens.accessToken,
       providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID});
-    if (original.status !== "not_found") {
+    let historicalAuthority;
+    try {
+      historicalAuthority = xFirstPublish.authorizeHistoricalReplacement({
+        inspection: original, historicalEvidence});
+    } catch (_) {
+      return response.status(409).json({error: "original_post_identity_conflict",
+        classification: original.classification});
+    }
+    if (!historicalAuthority.authorized) {
       return response.status(409).json({error: "founder_deleted_post_still_exists"});
     }
     const existing = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
       renderedCopy: gate.renderedCopy, startedAt: Date.now() - 7 * 24 * 60 * 60 * 1000});
     if (existing.status === "found") {
       return response.status(409).json({error: "replacement_already_exists"});
+    }
+    if (mode === "preflight") {
+      return response.status(200).json({result: {status: "ready_for_founder_approval",
+        providerMutationCount: 0, originalProviderState: original.status,
+        originalProviderClassification: original.classification,
+        historicalAuthority: historicalAuthority.authority,
+        historicalDeletionEvidenceAccepted: true,
+        originalProviderPostId: historicalEvidence.originalProviderPostId,
+        expectedProviderAccountId: historicalEvidence.expectedProviderAccountId,
+        version: "sc_x_20260903_mapping_v1:v4", attemptCount: 0,
+        providerCreateAttemptCount: 0, duplicateReplacementCount: 0}});
     }
     await db.runTransaction(async (transaction) => {
       const current = await transaction.get(refs.jobRef);

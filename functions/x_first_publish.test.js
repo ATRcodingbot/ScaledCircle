@@ -219,6 +219,79 @@ test("known-post reconciliation validates exact post ownership without another c
   /identity_mismatch/);
 });
 
+test("historical lookup distinguishes exact deleted envelopes from identity conflicts", async () => {
+  const deleted = await subject.inspectHistoricalPost({accessToken: "secret",
+    providerPostId: subject.ORIGINAL_DEFECTIVE_POST_ID, fetchImpl: async () => ({
+      ok: true, status: 200, json: async () => ({errors: [{
+        value: subject.ORIGINAL_DEFECTIVE_POST_ID,
+        title: "Not Found Error",
+        type: "https://api.twitter.com/2/problems/resource-not-found",
+      }]})})});
+  assert.deepEqual(deleted, {status: "not_found",
+    providerPostId: subject.ORIGINAL_DEFECTIVE_POST_ID,
+    classification: "resource_not_found_envelope"});
+  const mismatch = await subject.inspectHistoricalPost({accessToken: "secret",
+    providerPostId: subject.ORIGINAL_DEFECTIVE_POST_ID, fetchImpl: async () => ({
+      ok: true, status: 200, json: async () => ({data: {
+        id: subject.ORIGINAL_DEFECTIVE_POST_ID, author_id: "other",
+      }})})});
+  assert.equal(mismatch.status, "identity_mismatch");
+  assert.equal(mismatch.classification, "author_mismatch");
+  const unknown = await subject.inspectHistoricalPost({accessToken: "secret",
+    providerPostId: subject.ORIGINAL_DEFECTIVE_POST_ID, fetchImpl: async () => ({
+      ok: true, status: 200, json: async () => ({errors: [{title: "Unknown"}]})})});
+  assert.equal(unknown.status, "unavailable_unknown");
+});
+
+test("deleted-original authority requires immutable history and the current exact account", () => {
+  const connection = {status: "connected_write", writeScopesGranted: true,
+    accountDisplayName: subject.EXPECTED_X_NAME, handle: `@${subject.EXPECTED_X_HANDLE}`,
+    providerUserId: subject.EXPECTED_X_ID, grantedScopes: [...subject.X_WRITE_SCOPES],
+    capabilities: {publishText: true, publishImage: true}};
+  const version = subject.versionFourRecord({now: 2000});
+  const originalApproval = {id: "approval-v3", businessUid: subject.BUSINESS_UID,
+    provider: "x", version: 3, status: "approved",
+    expectedProviderAccountId: subject.EXPECTED_X_ID};
+  const originalJob = {id: subject.ORIGINAL_HISTORICAL_JOB_ID,
+    businessUid: subject.BUSINESS_UID, provider: "x", contentItemId: subject.CONTENT_ITEM_ID,
+    version: 3, attemptCount: 1, providerMutationCount: 1,
+    providerCreateStartedAtMillis: 1000, providerMediaId: "media-provider-id",
+    mediaSha256: subject.MEDIA_SHA256, status: "unknown_provider_outcome",
+    approvalId: originalApproval.id};
+  const replacementJob = {sourceHistoricalJobId: subject.ORIGINAL_HISTORICAL_JOB_ID,
+    replacesPostId: subject.ORIGINAL_DEFECTIVE_POST_ID,
+    replacementReason: subject.ORIGINAL_DEFECT_REASON,
+    originalDeletionSource: subject.ORIGINAL_DELETION_SOURCE, action: "replacement",
+    immutablePreparationBinding: true, duplicatePreventionRequired: true,
+    attemptCount: 0, providerCreateAttemptCount: 0, providerPostId: null,
+    replacementProviderPostId: null};
+  const evidence = subject.assertHistoricalDeletionEvidence({originalJob, originalApproval,
+    replacementJob, version, connection});
+  assert.equal(evidence.originalProviderPostId, subject.ORIGINAL_DEFECTIVE_POST_ID);
+  assert.equal(subject.authorizeHistoricalReplacement({inspection: {status: "not_found",
+    classification: "resource_not_found_envelope"}, historicalEvidence: evidence}).authorized, true);
+  assert.equal(subject.authorizeHistoricalReplacement({inspection: {status: "unavailable_unknown",
+    classification: "provider_transport_unavailable"}, historicalEvidence: evidence}).authority,
+  "immutable_history_only");
+  assert.equal(subject.authorizeHistoricalReplacement({inspection: {status: "found",
+    classification: "live_exact_match"}, historicalEvidence: evidence}).authorized, false);
+  assert.throws(() => subject.authorizeHistoricalReplacement({inspection: {
+    status: "identity_mismatch", classification: "author_mismatch"},
+  historicalEvidence: evidence}), /identity_mismatch/);
+  assert.throws(() => subject.assertHistoricalDeletionEvidence({originalJob, originalApproval,
+    replacementJob: {...replacementJob, originalDeletionSource: null}, version, connection}),
+  /historical_deletion_evidence_mismatch/);
+  assert.throws(() => subject.assertHistoricalDeletionEvidence({originalJob, originalApproval,
+    replacementJob, version, connection: {...connection, providerUserId: "other"}}),
+  /connection_mismatch/);
+  assert.throws(() => subject.assertHistoricalDeletionEvidence({
+    originalJob: {...originalJob, id: "conflict"}, originalApproval,
+    replacementJob, version, connection}), /historical_deletion_evidence_mismatch/);
+  assert.throws(() => subject.assertHistoricalDeletionEvidence({originalJob, originalApproval,
+    replacementJob: {...replacementJob, providerCreateAttemptCount: 1}, version, connection}),
+  /historical_deletion_evidence_mismatch/);
+});
+
 test("replacement remains one distinct create and no delete adapter is exported", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
