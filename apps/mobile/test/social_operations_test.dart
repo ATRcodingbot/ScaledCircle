@@ -45,6 +45,12 @@ void main() {
     expect(screen, contains('Staging plan alignment verified'));
     expect(screen, contains('Align Plan'));
     expect(screen, contains('Rate past posts'));
+    expect(
+      screen,
+      contains(
+        'The server may downgrade connection health after a failed refresh.',
+      ),
+    );
     expect(screen, contains('NO AUTO-DELETE'));
     expect(
       screen,

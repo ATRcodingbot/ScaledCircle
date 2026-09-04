@@ -355,6 +355,36 @@ function connectionProjection(input = {}) {
     authorizationUpdatedAt: input.authorizationUpdatedAt || null};
 }
 
+const X_READ_SCOPES = Object.freeze(["users.read", "tweet.read"]);
+const X_WRITE_SCOPES = Object.freeze(["tweet.write", "media.write"]);
+
+function xConnectionCapabilities(input = {}, {expectedProviderUserId = null} = {}) {
+  const status = text(input.status, 60).toLowerCase();
+  const scopes = new Set(list(input.grantedScopes, 20, 180));
+  const providerUserId = text(input.providerUserId, 240) || null;
+  const providerAccountId = text(input.providerAccountId, 240) || null;
+  const connected = ["connected_read_only", "connected_write"].includes(status);
+  const unhealthy = ["reauth_required", "expired", "revoked", "error",
+    "attention_required"].includes(status) ||
+    ["needs_attention", "revoked", "expired", "error"].includes(
+      text(input.tokenHealth, 60).toLowerCase());
+  const identityPresent = text(input.provider, 40).toLowerCase() === "x" &&
+    Boolean(providerUserId || providerAccountId);
+  const identityMatches = identityPresent && (!expectedProviderUserId ||
+    providerUserId === text(expectedProviderUserId, 240));
+  const hasReadScopes = X_READ_SCOPES.every((scope) => scopes.has(scope));
+  const hasWriteScopes = X_WRITE_SCOPES.every((scope) => scopes.has(scope));
+  const canReadInsights = connected && !unhealthy && identityMatches && hasReadScopes;
+  const canWrite = canReadInsights && status === "connected_write" && hasWriteScopes &&
+    input.writeScopesGranted === true;
+  const canRefresh = canReadInsights && scopes.has("offline.access") &&
+    !["needs_attention", "revoked", "expired", "error"].includes(
+      text(input.tokenHealth, 60).toLowerCase());
+  return {canReadInsights, canWrite, canRefresh, connected, healthy: connected && !unhealthy,
+    identityMatches, hasReadScopes, hasWriteScopes,
+    separateReadConnectionRequired: false};
+}
+
 function platformVariant(input = {}) {
   const provider = text(input.provider, 40).toLowerCase();
   if (!PROVIDERS.includes(provider)) throw new Error("unsupported_social_provider");
@@ -569,7 +599,8 @@ module.exports = {SCHEMA_VERSION, PLAN_VERSION, CONTENT_VERSION, PERFORMANCE_VER
   REPLACEMENT_PROPOSAL_VERSION, AUTOMATION_MODES, PUBLISH_STATUSES,
   QUALITY_RECOMMENDATIONS, POST_ACTIONS, QUALITY_DIMENSIONS,
   normalizePlanId, validateAutomationMode, optimizationPolicy,
-  connectionProjection, platformVariant, createContentPlan, contentItemVersion, approvePlan,
+  connectionProjection, xConnectionCapabilities, platformVariant, createContentPlan,
+  contentItemVersion, approvePlan,
   approveContentVersion, publishJob, transitionPublishJob, normalizePerformance,
   weeklyLearning, createEmailContentPlan, adAccountHealth, repetitionAssessment,
   discoveryRecommendation, bestTimeRecommendation, postCapabilityProjection,

@@ -143,6 +143,42 @@ test("mock adapters cover every organic provider without external traffic", () =
   assert.equal(Object.values(adapters).every((adapter) => adapter.calls.length === 0), true);
 });
 
+test("X read and write capabilities compose without a second connection", () => {
+  const identity = {provider: "x", providerUserId: "2090731921177210880",
+    providerAccountId: "x_user_2090731921177210880", tokenHealth: "healthy"};
+  const readOnly = social.xConnectionCapabilities({...identity,
+    status: "connected_read_only", grantedScopes: ["users.read", "tweet.read",
+      "offline.access"], writeScopesGranted: false});
+  assert.equal(readOnly.canReadInsights, true);
+  assert.equal(readOnly.canWrite, false);
+  assert.equal(readOnly.separateReadConnectionRequired, false);
+
+  const write = social.xConnectionCapabilities({...identity, status: "connected_write",
+    grantedScopes: ["users.read", "tweet.read", "offline.access", "tweet.write",
+      "media.write"], writeScopesGranted: true},
+  {expectedProviderUserId: "2090731921177210880"});
+  assert.equal(write.canReadInsights, true);
+  assert.equal(write.canWrite, true);
+  assert.equal(write.canRefresh, true);
+  assert.equal(write.separateReadConnectionRequired, false);
+});
+
+test("X insight capability fails closed for missing read scope, identity, or health", () => {
+  const base = {provider: "x", status: "connected_write", tokenHealth: "healthy",
+    providerUserId: "2090731921177210880", providerAccountId: "x_user_2090731921177210880",
+    grantedScopes: ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"],
+    writeScopesGranted: true};
+  assert.equal(social.xConnectionCapabilities({...base,
+    grantedScopes: base.grantedScopes.filter((scope) => scope !== "tweet.read")})
+    .canReadInsights, false);
+  assert.equal(social.xConnectionCapabilities(base,
+    {expectedProviderUserId: "different-user"}).canReadInsights, false);
+  assert.equal(social.xConnectionCapabilities({...base, status: "reauth_required",
+    tokenHealth: "needs_attention"}).canReadInsights, false);
+  assert.equal(social.xConnectionCapabilities({...base, provider: "facebook"})
+    .canReadInsights, false);
+});
+
 test("quality optimization policy never auto-deletes published content", () => {
   const manual = social.optimizationPolicy({mode: "manual", planId: "scale"});
   assert.equal(manual.unpublishedMinorOptimizationEnabled, false);

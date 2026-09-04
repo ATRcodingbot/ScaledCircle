@@ -781,6 +781,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         );
       }
     } on FirebaseFunctionsException catch (error) {
+      // The server may downgrade connection health after a failed refresh.
+      // Reload before presenting the error so the card never remains falsely connected.
+      await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

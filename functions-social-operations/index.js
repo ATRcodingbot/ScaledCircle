@@ -2430,9 +2430,16 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
     const connectionRef = db.collection("socialConnections").doc(business.uid)
       .collection("providers").doc(surface);
     const connection = (await connectionRef.get()).data();
-    if (!connection || !["connected_read_only", "connected_write"].includes(connection.status) ||
-        !connection.credentialId) {
-      throw new HttpsError("failed-precondition", "Connect this account read only first.");
+    const xCapabilities = provider === "x" ?
+      socialOperations.xConnectionCapabilities(connection || {}) : null;
+    const readConnectionReady = provider === "x" ? xCapabilities.canReadInsights :
+      Boolean(connection && ["connected_read_only", "connected_write"].includes(connection.status));
+    if (!readConnectionReady || !connection?.credentialId) {
+      const reconnectRequired = provider === "x" && connection &&
+        (!xCapabilities.healthy || connection.tokenHealth === "needs_attention");
+      throw new HttpsError("failed-precondition", reconnectRequired ?
+        "Reconnect X to restore read-only insights." :
+        "Connect this account read only first.");
     }
     const credentialRef = db.collection("socialConnectionCredentials").doc(connection.credentialId);
     const credentialSnapshot = await credentialRef.get();
