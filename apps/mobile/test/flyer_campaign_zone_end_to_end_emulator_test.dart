@@ -2,9 +2,10 @@
 //
 // This deliberately crosses the actual catalog and Firebase boundary because
 // an earlier isolated widget test passed while the real catalog route failed.
-// Run through Firebase emulators with:
-//   flutter test --platform chrome --dart-define=APP_ENV=local
-//     --dart-define=RUN_FIREBASE_EMULATOR_INTEGRATION=true
+// Run through Firebase Auth and Firestore emulators with:
+//   pwsh tool/run_flyer_campaign_zone_e2e.ps1
+// The runner stages and cleans the installed SDK's CanvasKit files because
+// Flutter 3.44's Windows test server does not match their normalized paths.
 
 import 'dart:convert';
 
@@ -22,10 +23,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 
+import 'support/firebase_web_emulator_bootstrap.dart';
+
 const _run = bool.fromEnvironment('RUN_FIREBASE_EMULATOR_INTEGRATION');
 const _project = 'demo-scaledcircle';
 const _host = '127.0.0.1';
-
 Map<String, dynamic> _firestoreValue(Object? value) {
   if (value == null) return {'nullValue': null};
   if (value is bool) return {'booleanValue': value};
@@ -52,18 +54,22 @@ Map<String, dynamic> _firestoreValue(Object? value) {
 }
 
 Future<void> _adminSeed(String path, Map<String, dynamic> data) async {
-  final response = await http.patch(
-    Uri.parse(
-      'http://$_host:8080/v1/projects/$_project/databases/(default)/documents/$path',
-    ),
-    headers: const {
-      'Authorization': 'Bearer owner',
-      'Content-Type': 'application/json',
-    },
-    body: jsonEncode({
-      'fields': data.map((key, value) => MapEntry(key, _firestoreValue(value))),
-    }),
-  );
+  final response = await http
+      .patch(
+        Uri.parse(
+          'http://$_host:8080/v1/projects/$_project/databases/(default)/documents/$path',
+        ),
+        headers: const {
+          'Authorization': 'Bearer owner',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'fields': data.map(
+            (key, value) => MapEntry(key, _firestoreValue(value)),
+          ),
+        }),
+      )
+      .timeout(const Duration(seconds: 10));
   if (response.statusCode < 200 || response.statusCode >= 300) {
     throw StateError('Fixture write failed (${response.statusCode}).');
   }
@@ -162,18 +168,45 @@ Future<void> _acceptPicker(WidgetTester tester, String label) async {
   await _pumpUi(tester);
 }
 
+Route<dynamic> _integrationRoute(RouteSettings settings) {
+  final location = Uri.parse(settings.name ?? '/');
+  if (location.pathSegments.length == 2 &&
+      location.pathSegments.first == 'campaign') {
+    final campaignId = Uri.decodeComponent(location.pathSegments.last);
+    return MaterialPageRoute<void>(
+      settings: settings,
+      builder: (_) => FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        future: FirebaseFirestore.instance
+            .collection('campaigns')
+            .doc(campaignId)
+            .get(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          return CampaignDetailsScreen(campaign: snapshot.data!);
+        },
+      ),
+    );
+  }
+  throw StateError('Unexpected integration route: ${settings.name}');
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
     if (!_run) return;
+    registerWebPluginsForIntegrationTest();
+    configureWebAuthEmulator(appName: '[DEFAULT]', host: _host, port: 9099);
     debugPrint('campaign-zone-emulator: initializing Firebase');
     final app = await Firebase.initializeApp(
       options: LocalFirebaseOptions.currentPlatform,
     ).timeout(const Duration(seconds: 20));
     debugPrint('campaign-zone-emulator: Firebase initialized');
     expect(app.options.projectId, _project);
-    await FirebaseAuth.instance.useAuthEmulator(_host, 9099);
     FirebaseFirestore.instance.useFirestoreEmulator(_host, 8080);
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: false,
@@ -189,12 +222,21 @@ void main() {
   testWidgets(
     'catalog flyer campaign persists a zone and unlocks review through emulators',
     (tester) async {
+      final testErrorHandler = FlutterError.onError;
+      FlutterError.onError = (details) {
+        debugPrint(
+          'campaign-zone-emulator: asynchronous framework exception: '
+          '${details.exceptionAsString()}\n${details.stack}',
+        );
+        testErrorHandler?.call(details);
+      };
       final suffix = DateTime.now().microsecondsSinceEpoch;
       final credential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: 'zone-business-$suffix@example.test',
             password: 'LocalTest123!',
-          );
+          )
+          .timeout(const Duration(seconds: 20));
       final uid = credential.user!.uid;
       await _adminSeed('users/$uid', {
         'role': 'business',
@@ -227,7 +269,12 @@ void main() {
       });
       await _checkpoint('fixtures-seeded');
 
-      await tester.pumpWidget(const MaterialApp(home: CreateCampaignScreen()));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: const CreateCampaignScreen(),
+          onGenerateRoute: _integrationRoute,
+        ),
+      );
       await _pumpUi(tester);
       await _checkpoint('catalog-visible');
 
@@ -283,19 +330,34 @@ void main() {
       await _checkpoint('after-cta:$routeTexts');
 
       expect(find.byType(CampaignZonesScreen), findsOneWidget);
+      await _checkpoint('campaign-query-started');
       final campaigns = await FirebaseFirestore.instance
           .collection('campaigns')
           .where('businessId', isEqualTo: uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 10));
+      await _checkpoint('campaign-query-complete:${campaigns.docs.length}');
       expect(campaigns.docs, hasLength(1));
       final campaignId = campaigns.docs.single.id;
+      await _checkpoint('campaign-identity:$campaignId');
       expect(find.text('Choose where this campaign will run'), findsOneWidget);
-      final continueButton = tester.widget<ElevatedButton>(
-        find.widgetWithText(ElevatedButton, 'Continue to Review & Launch'),
+      final continueFinder = find.widgetWithText(
+        ElevatedButton,
+        'Continue to Review & Launch',
       );
+      await _checkpoint(
+        'zones-state:choose=${find.text('Choose where this campaign will run').evaluate().length}:continue=${continueFinder.evaluate().length}',
+      );
+      final continueButton = tester.widget<ElevatedButton>(continueFinder);
+      await _checkpoint('continue-enabled:${continueButton.onPressed != null}');
       expect(continueButton.onPressed, isNull);
 
-      await tester.tap(find.text('Choose Target Area'));
+      final chooseTarget = find.text('Advanced Edit');
+      await _checkpoint(
+        'choose-target-count:${chooseTarget.evaluate().length}',
+      );
+      await _scrollTo(tester, chooseTarget);
+      await tester.tap(chooseTarget);
       await _pumpUntil(tester, find.byType(CampaignAreaScreen));
       await _checkpoint('map-route-visible');
       expect(find.byType(CampaignAreaScreen), findsOneWidget);
@@ -305,7 +367,7 @@ void main() {
       for (final fraction in const [
         Offset(0.35, 0.25),
         Offset(0.65, 0.25),
-        Offset(0.50, 0.40),
+        Offset(0.50, 0.12),
       ]) {
         await tester.tapAt(
           Offset(
@@ -317,10 +379,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
       await _checkpoint('map-points-entered');
-      final saveZoneButton = find.widgetWithText(
-        ElevatedButton,
-        'Save Campaign Zone',
-      );
+      final saveZoneButton = find.widgetWithText(ElevatedButton, 'Save Zone');
       await _scrollTo(tester, saveZoneButton);
       await _checkpoint('zone-save-visible');
       final saveAction = tester
@@ -338,10 +397,13 @@ void main() {
       await _checkpoint('zone-save-returned');
 
       expect(find.byType(CampaignZonesScreen), findsOneWidget);
+      await _checkpoint('zone-query-started:$campaignId');
       final zones = await FirebaseFirestore.instance
           .collection('campaignZones')
           .where('campaignId', isEqualTo: campaignId)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 10));
+      await _checkpoint('zone-query-complete:${zones.docs.length}');
       expect(zones.docs, hasLength(1));
       final zone = zones.docs.single.data();
       expect(zone['businessId'], uid);
@@ -352,8 +414,13 @@ void main() {
       expect(zone['assignedScalerEmail'], isNull);
       expect(zone['paymentStatus'], isNull);
       expect(zone['settlementStatus'], isNull);
+      await _checkpoint('zone-authority-fields-valid');
 
       await _pumpUi(tester);
+      await _scrollTo(tester, find.text('Zones'));
+      await _checkpoint(
+        'zone-summary:one=${find.text('1').evaluate().length}:zones=${find.text('Zones').evaluate().length}:mapped=${find.text('Mapped').evaluate().length}:assigned=${find.text('Assigned').evaluate().length}:zone1=${find.text('Zone 1').evaluate().length}',
+      );
       expect(find.text('1'), findsWidgets);
       expect(find.text('Zones'), findsOneWidget);
       expect(find.text('Mapped'), findsOneWidget);
@@ -365,40 +432,50 @@ void main() {
       expect(enabledContinue.onPressed, isNotNull);
       await _checkpoint('stream-refreshed');
 
-      await tester.tap(
-        find.widgetWithText(ElevatedButton, 'Continue to Review & Launch'),
-      );
+      await _scrollTo(tester, continueFinder);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(continueFinder);
+      await tester.pump();
       await _pumpUntil(tester, find.byType(CampaignDetailsScreen));
       expect(find.byType(CampaignDetailsScreen), findsOneWidget);
       await _checkpoint('review-route-visible');
-      expect(
-        (await FirebaseFirestore.instance
-                .collection('campaigns')
-                .where('businessId', isEqualTo: uid)
-                .get())
-            .docs,
-        hasLength(1),
+      final reviewRouteException = tester.takeException();
+      if (reviewRouteException != null) {
+        debugPrint(
+          'campaign-zone-emulator: captured review route exception: '
+          '$reviewRouteException',
+        );
+        throw StateError(
+          'Campaign review route raised an asynchronous exception: '
+          '$reviewRouteException',
+        );
+      }
+      debugPrint('campaign-zone-emulator: querying review campaign');
+      final finalCampaigns = await FirebaseFirestore.instance
+          .collection('campaigns')
+          .where('businessId', isEqualTo: uid)
+          .get();
+      debugPrint(
+        'campaign-zone-emulator: review campaign count ${finalCampaigns.docs.length}',
       );
-      expect(
-        (await FirebaseFirestore.instance
-                .collection('campaignZones')
-                .where('campaignId', isEqualTo: campaignId)
-                .get())
-            .docs,
-        hasLength(1),
+      expect(finalCampaigns.docs, hasLength(1));
+      debugPrint('campaign-zone-emulator: querying review zone');
+      final finalZones = await FirebaseFirestore.instance
+          .collection('campaignZones')
+          .where('campaignId', isEqualTo: campaignId)
+          .get();
+      debugPrint(
+        'campaign-zone-emulator: review zone count ${finalZones.docs.length}',
       );
+      expect(finalZones.docs, hasLength(1));
 
-      final alternateApp = await Firebase.initializeApp(
-        name: 'alternate-$suffix',
-        options: LocalFirebaseOptions.currentPlatform,
-      );
-      final alternateAuth = FirebaseAuth.instanceFor(app: alternateApp);
-      await alternateAuth.useAuthEmulator(_host, 9099);
-      final alternateCredential = await alternateAuth
+      await FirebaseAuth.instance.signOut();
+      final alternateCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: 'zone-other-$suffix@example.test',
             password: 'LocalTest123!',
-          );
+          )
+          .timeout(const Duration(seconds: 20));
       final alternateUid = alternateCredential.user!.uid;
       await _adminSeed('users/$alternateUid', {
         'role': 'business',
@@ -406,10 +483,8 @@ void main() {
         'active': true,
         'betaAccess': 'approved',
       });
-      final alternateStore = FirebaseFirestore.instanceFor(app: alternateApp);
-      alternateStore.useFirestoreEmulator(_host, 8080);
       await expectLater(
-        alternateStore.collection('campaignZones').add({
+        FirebaseFirestore.instance.collection('campaignZones').add({
           ...zone,
           'businessId': alternateUid,
           'createdAt': FieldValue.serverTimestamp(),
@@ -419,7 +494,6 @@ void main() {
         throwsA(isA<FirebaseException>()),
       );
       await _checkpoint('ownership-denial-proven');
-      await alternateApp.delete();
     },
     skip: !_run,
     timeout: const Timeout(Duration(minutes: 3)),
