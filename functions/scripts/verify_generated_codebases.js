@@ -14,6 +14,7 @@ const campaignFundingRoot = path.join(root, "functions-campaign-funding");
 const assignmentRoot = path.join(root, "functions-assignment");
 const discoveryRoot = path.join(root, "functions-discovery");
 const jobRoomRoot = path.join(root, "functions-job-room");
+const completionRoot = path.join(root, "functions-completion");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const adminOpsRoot = path.join(root, "functions-admin-ops");
 const salesRoot = path.join(root, "functions-sales");
@@ -87,6 +88,7 @@ for (const dependency of ["firebase-functions", "firebase-admin"]) {
   resolveFrom(dependency, assignmentRoot);
   resolveFrom(dependency, discoveryRoot);
   resolveFrom(dependency, jobRoomRoot);
+  resolveFrom(dependency, completionRoot);
   resolveFrom(dependency, adminOpsRoot);
   resolveFrom(dependency, salesRoot);
   resolveFrom(dependency, legalRoot);
@@ -122,6 +124,7 @@ const campaignFunding = require(path.join(campaignFundingRoot, "index.js"));
 const assignment = require(path.join(assignmentRoot, "index.js"));
 const discovery = require(path.join(discoveryRoot, "index.js"));
 const jobRoom = require(path.join(jobRoomRoot, "index.js"));
+const completion = require(path.join(completionRoot, "index.js"));
 for (const [name, value] of Object.entries(priorPaymentEnvironment)) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
@@ -136,6 +139,13 @@ const landingPage = require(path.join(landingPageRoot, "index.js"));
 const creativeMedia = require(path.join(creativeMediaRoot, "index.js"));
 const physicalMarketing = require(path.join(physicalMarketingRoot, "index.js"));
 const businessProfile = require(path.join(businessProfileRoot, "index.js"));
+assert.deepEqual(Object.keys(completion).sort(), [
+  "appendCampaignCompletionEvidence", "assignScalerToCampaignLocations",
+  "createCampaignLocation", "deleteCampaignLocation", "finalizeZoneReview",
+  "initializeCampaignCompletion", "rejectCampaignApplication",
+  "reviewCampaignCompletion", "startCampaignCompletion",
+  "submitCampaignCompletion", "submitZoneCompletion",
+]);
 assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
 assert.deepEqual(Object.keys(attribution).sort(), [
   "bridgeResponseLead", "createResponseAsset", "getAttributionOverview",
@@ -342,4 +352,4 @@ for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer"
   assert.doesNotMatch(legalLock, new RegExp(forbiddenPackage));
 }
 
-console.log(`Verified ${expectedExports.length} platform-core exports plus isolated business-profile-core, assignment-core, discovery-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core exports.`);
+console.log(`Verified ${expectedExports.length} platform-core exports plus isolated business-profile-core, assignment-core, discovery-core, job-room-core, completion-authority-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core exports.`);
