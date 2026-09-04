@@ -68,6 +68,11 @@ const jobRoomPackage = JSON.parse(fs.readFileSync(
   path.join(root, "functions-job-room", "package.json"), "utf8"));
 const jobRoomLock = fs.readFileSync(
   path.join(root, "functions-job-room", "package-lock.json"), "utf8");
+const completion = fs.readFileSync(path.join(root, "functions-completion", "index.js"), "utf8");
+const completionPackage = JSON.parse(fs.readFileSync(
+  path.join(root, "functions-completion", "package.json"), "utf8"));
+const completionLock = fs.readFileSync(
+  path.join(root, "functions-completion", "package-lock.json"), "utf8");
 const transactionalEmail = fs.readFileSync(
   path.join(root, "functions-transactional-email", "index.js"), "utf8");
 const transactionalEmailPackage = JSON.parse(fs.readFileSync(
@@ -242,6 +247,32 @@ test("job-room-core exclusively owns the secret-free Job Room read authority", (
   }
   assert.equal(firebaseConfig.functions.find((entry) =>
     entry.codebase === "job-room-core")?.source, "functions-job-room");
+});
+
+test("completion-authority-core exclusively owns completion and earning-establishment authority", () => {
+  const names = [
+    "createCampaignLocation", "deleteCampaignLocation",
+    "assignScalerToCampaignLocations", "rejectCampaignApplication",
+    "initializeCampaignCompletion", "startCampaignCompletion",
+    "appendCampaignCompletionEvidence", "submitCampaignCompletion",
+    "reviewCampaignCompletion", "submitZoneCompletion", "finalizeZoneReview",
+  ];
+  assert.deepEqual(exportsIn(completion).sort(), [...names].sort());
+  for (const name of names) assert.doesNotMatch(legacy, new RegExp(`exports\\.${name}\\s*=`));
+  assert.deepEqual(Object.keys(completionPackage.dependencies).sort(), [
+    "firebase-admin", "firebase-functions",
+  ]);
+  for (const forbidden of [
+    "defineSecret", "STRIPE_SECRET_KEY", "STRIPE_TEST_SECRET_KEY", "STRIPE_LIVE_SECRET_KEY",
+    "SMTP_PASSWORD", "OPENAI_API_KEY", "CENSUS_API_KEY", "nodemailer",
+    "stripeClient().transfers.create",
+  ]) assert.doesNotMatch(completion, new RegExp(forbidden.replace(/[().]/g, "\\$&")));
+  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+    assert.doesNotMatch(completionLock, new RegExp(forbiddenPackage));
+  }
+  assert.match(completion, /externalExecutionAuthorized:\s*false/);
+  assert.equal(firebaseConfig.functions.find((entry) =>
+    entry.codebase === "completion-authority-core")?.source, "functions-completion");
 });
 
 test("admin-ops-core exclusively owns the secret-free operational read boundary", () => {

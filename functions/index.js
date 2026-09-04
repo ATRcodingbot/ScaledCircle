@@ -10142,6 +10142,14 @@ const CAMPAIGN_QUOTE_FUNCTION_OPTIONS = {
   memory: "256MiB",
 };
 
+const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
+  enforceAppCheck: false,
+  maxInstances: 10,
+  concurrency: 20,
+  timeoutSeconds: 60,
+  memory: "256MiB",
+};
+
 function safeCampaignQuoteCallable(name, handler) {
   return onCall(CAMPAIGN_QUOTE_FUNCTION_OPTIONS, async (request) => {
     try {
@@ -10166,6 +10174,20 @@ function safeStripeCallable(name, handler) {
         error: error instanceof Error ? error.message : String(error),
       });
       throw new HttpsError("internal", "The financial operation could not be completed.");
+    }
+  });
+}
+
+function safeMarketplaceAuthorityCallable(name, handler) {
+  return onCall(MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS, async (request) => {
+    try {
+      return await handler(request);
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      logger.error(`${name} failed.`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new HttpsError("internal", "The marketplace authority could not complete.");
     }
   });
 }
@@ -11086,7 +11108,8 @@ exports.createScalerTransfer = safeStripeCallable("createScalerTransfer", async 
   return executeQueuedScalerTransfer(queued.transferId);
 });
 
-exports.finalizeZoneReview = safeStripeCallable("finalizeZoneReview", async (request) => {
+exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
+  "finalizeZoneReview", async (request) => {
   const context = await requireVerifiedUser(request, "Sign in to review completed work.");
   const zoneId = cleanId(request.data?.zoneId);
   const decision = String(request.data?.decision || "");
@@ -11251,7 +11274,8 @@ exports.finalizeZoneReview = safeStripeCallable("finalizeZoneReview", async (req
     return {zoneId, reviewStatus: "approved", payout,
       transferOperationId: transferId, earningRecorded: true};
   });
-});
+  },
+);
 
 exports.requestCampaignCancellationRefund = safeStripeCallable(
   "requestCampaignCancellationRefund",

@@ -65,7 +65,9 @@ test("application and assignment contract records are server-write-only", () => 
 
 test("exact-location approval fails closed instead of inventing earnings", () => {
   const backend = read("functions/index.js");
-  const review = backend.match(/exports\.reviewCampaignCompletion[\s\S]*?\/\*\*\n \* Submit GPS-backed/)?.[0] || "";
+  const review = backend.match(
+    /exports\.reviewCampaignCompletion[\s\S]*?exports\.submitZoneCompletion/,
+  )?.[0] || "";
   assert.match(review, /authoritative assignment compensation contract/);
   assert.doesNotMatch(review, /wallets|walletTransactions|scalerTransfers/);
 });

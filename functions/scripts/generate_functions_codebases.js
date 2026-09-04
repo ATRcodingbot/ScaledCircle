@@ -17,6 +17,7 @@ const campaignFundingRoot = path.join(root, "functions-campaign-funding");
 const assignmentRoot = path.join(root, "functions-assignment");
 const discoveryRoot = path.join(root, "functions-discovery");
 const jobRoomRoot = path.join(root, "functions-job-room");
+const completionRoot = path.join(root, "functions-completion");
 const transactionalEmailRoot = path.join(root, "functions-transactional-email");
 const adminOpsRoot = path.join(root, "functions-admin-ops");
 const salesRoot = path.join(root, "functions-sales");
@@ -96,6 +97,13 @@ const discoveryExports = new Set([
   "applySmartZonePlan",
 ]);
 const jobRoomExports = new Set(["getJobRoom"]);
+const completionExports = new Set([
+  "createCampaignLocation", "deleteCampaignLocation",
+  "assignScalerToCampaignLocations", "rejectCampaignApplication",
+  "initializeCampaignCompletion", "startCampaignCompletion",
+  "appendCampaignCompletionEvidence", "submitCampaignCompletion",
+  "reviewCampaignCompletion", "submitZoneCompletion", "finalizeZoneReview",
+]);
 const transactionalEmailExports = new Set([
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
   "retryTransactionalEmailJob",
@@ -212,6 +220,7 @@ function transformIndex(mode) {
   if (mode === "assignment") selectedProgram(ast, assignmentExports);
   if (mode === "discovery") selectedProgram(ast, discoveryExports);
   if (mode === "job-room") selectedProgram(ast, jobRoomExports);
+  if (mode === "completion") selectedProgram(ast, completionExports);
   if (mode === "transactional-email") selectedProgram(ast, transactionalEmailExports);
   if (mode === "admin-ops") selectedProgram(ast, adminOpsExports);
   if (mode === "sales") selectedProgram(ast, salesExports);
@@ -277,6 +286,7 @@ function transformIndex(mode) {
       ...assignmentExports,
       ...discoveryExports,
       ...jobRoomExports,
+      ...completionExports,
       ...transactionalEmailExports,
       ...adminOpsExports,
       ...salesExports,
@@ -299,6 +309,7 @@ function transformIndex(mode) {
       (mode === "assignment" && !assignmentExports.has(name)) ||
       (mode === "discovery" && !discoveryExports.has(name)) ||
       (mode === "job-room" && !jobRoomExports.has(name)) ||
+      (mode === "completion" && !completionExports.has(name)) ||
       (mode === "transactional-email" && !transactionalEmailExports.has(name)) ||
       (mode === "admin-ops" && !adminOpsExports.has(name)) ||
       (mode === "sales" && !salesExports.has(name)) ||
@@ -393,6 +404,10 @@ function copyPackage(destination, mode) {
         !["marketplace_finance.js", "marketplace_operations.js", "operational_layer.js",
           "group_assignment.js", "campaign_funding_quote.js",
           "multi_scaler_rollout.js", "tracking_security.js"].includes(name)) continue;
+    if (mode === "completion" && name.endsWith(".js") &&
+        !["marketplace_finance.js", "marketplace_operations.js", "operational_layer.js",
+          "group_assignment.js", "campaign_funding_quote.js",
+          "multi_scaler_rollout.js", "tracking_security.js", "legal_consent.js"].includes(name)) continue;
     if (mode === "transactional-email" && name.endsWith(".js") &&
         name !== "transactional_email.js") continue;
     if (mode === "admin-ops" && name.endsWith(".js") &&
@@ -445,6 +460,8 @@ function writePackageManifest(mode, destination) {
       : mode === "discovery"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "job-room"
+        ? ["firebase-admin", "firebase-functions"]
+      : mode === "completion"
         ? ["firebase-admin", "firebase-functions"]
       : mode === "transactional-email"
         ? ["firebase-admin", "firebase-functions", "nodemailer"]
@@ -535,6 +552,7 @@ for (const [mode, destination] of [
   ["assignment", assignmentRoot],
   ["discovery", discoveryRoot],
   ["job-room", jobRoomRoot],
+  ["completion", completionRoot],
   ["transactional-email", transactionalEmailRoot],
   ["admin-ops", adminOpsRoot],
   ["sales", salesRoot],
@@ -564,4 +582,4 @@ for (const [mode, destination] of [
 fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
   path.join(campaignFundingRoot, "legal_consent.js"));
 
-console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, physical-marketing-core, business-profile-core, job-room-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
+console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, physical-marketing-core, business-profile-core, job-room-core, completion-authority-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
