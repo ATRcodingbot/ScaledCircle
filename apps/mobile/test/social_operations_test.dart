@@ -15,7 +15,10 @@ void main() {
     expect(screen, contains('Read-only connection phase'));
     expect(screen, contains('Connect Facebook & Instagram'));
     expect(screen, contains("return 'Connect \${_providerLabel(provider)}'"));
-    expect(screen, contains("return 'Reconnect'"));
+    expect(screen, contains("return 'Reconnect \${_providerLabel(provider)}'"));
+    expect(screen, contains("'reauth_required'"));
+    expect(screen, contains("? 'Reconnect X'"));
+    expect(screen, contains("? 'Needs attention'"));
     expect(screen, contains('Use this account?'));
     expect(screen, contains("'Continue with \$providerLabel'"));
     expect(screen, contains("webOnlyWindowName: '_self'"));

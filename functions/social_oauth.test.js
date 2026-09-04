@@ -127,6 +127,68 @@ test("X publish callback projects write capability without exposing credentials"
   assert.equal(JSON.stringify(completed).includes("access-secret"), false);
 });
 
+test("initial X confirmation creates a generation-tracked encrypted credential", () => {
+  const attempt = oauth.createAttempt({businessUid: "biz", provider: "x",
+    config: config("x"), encryptionKey: key, now: 1000,
+    scopes: oauth.X_PUBLISH_SCOPES, purpose: "x_first_publish_certification"});
+  const aad = `biz:x:${attempt.attemptId}`;
+  const record = {...attempt.record, status: "identity_pending",
+    grantedScopes: [...oauth.X_PUBLISH_SCOPES], missingScopes: [],
+    candidateEnvelope: oauth.encryptJson({candidates: [{candidateId: "x_user_123",
+      provider: "x", accountId: "123", accountDisplayName: "Scaled Circle",
+      accountType: "x_user", handle: "ScaledCircle", accessToken: "access-one",
+      refreshToken: "refresh-one", expiresIn: 7200,
+      capabilities: {profile: true, analytics: true, publishText: true,
+        publishImage: true, publishVideo: false, schedule: false}}]}, key, aad)};
+  const selected = oauth.selectCandidate({attempt: record,
+    candidateId: "x_user_123", encryptionKey: key, now: 2000});
+  assert.equal(selected.credentialRecord.schemaVersion, "SocialConnectionCredentialV2");
+  assert.equal(selected.credentialRecord.rotationGeneration, 1);
+  assert.equal(selected.credentialRecord.connectionRevision, 1);
+  assert.equal(selected.credentialRecord.tokenHealth, "healthy");
+  assert.equal(JSON.stringify(selected.credentialRecord).includes("refresh-one"), false);
+});
+
+test("X refresh returns the rotated token and preserves the exact bounded scopes", async () => {
+  const refreshed = await oauth.refreshTokens({provider: "x",
+    tokens: {accessToken: "old-access", refreshToken: "old-refresh"},
+    config: config("x"), clientSecret: "client-secret",
+    fetchImpl: async () => ({ok: true, json: async () => ({access_token: "new-access",
+      refresh_token: "new-refresh", expires_in: 7200,
+      scope: oauth.X_PUBLISH_SCOPES.join(" ")})})});
+  assert.equal(refreshed.accessToken, "new-access");
+  assert.equal(refreshed.refreshToken, "new-refresh");
+  assert.deepEqual(new Set(refreshed.grantedScopes), new Set(oauth.X_PUBLISH_SCOPES));
+  assert.deepEqual(oauth.exactScopeSet(refreshed.grantedScopes, oauth.X_PUBLISH_SCOPES).sort(),
+    [...oauth.X_PUBLISH_SCOPES].sort());
+});
+
+test("credential refresh generations reject stale or concurrent writers", () => {
+  const credential = {rotationGeneration: 4, refreshState: "healthy"};
+  const claim = oauth.beginCredentialRefresh({credential, leaseId: "lease-new", now: 1000});
+  assert.equal(claim.expectedGeneration, 4);
+  const claimed = {...credential, ...claim.update};
+  assert.throws(() => oauth.beginCredentialRefresh({credential: claimed,
+    leaseId: "lease-other", now: 1001}), /refresh_in_progress/);
+  const completed = oauth.completeCredentialRefresh({credential: claimed,
+    leaseId: "lease-new", expectedGeneration: 4, now: 2000, expiresIn: 7200});
+  assert.equal(completed.rotationGeneration, 5);
+  assert.equal(completed.tokenHealth, "healthy");
+  assert.throws(() => oauth.completeCredentialRefresh({credential: {...claimed,
+    rotationGeneration: 5}, leaseId: "lease-new", expectedGeneration: 4, now: 2000}),
+  /stale_refresh_generation/);
+});
+
+test("failed refresh records attention state without credential material", () => {
+  const claimed = {rotationGeneration: 2, refreshState: "refreshing",
+    refreshLeaseId: "lease", refreshLeaseGeneration: 2};
+  const failed = oauth.failCredentialRefresh({credential: claimed,
+    leaseId: "lease", expectedGeneration: 2, now: 3000});
+  assert.deepEqual(failed, {refreshState: "needs_attention", tokenHealth: "needs_attention",
+    lastRefreshFailureAtMillis: 3000});
+  assert.equal(Object.hasOwn(failed, "tokenEnvelope"), false);
+});
+
 test("Meta callback returns the exact owned Page and linked professional account safely", async () => {
   const attempt = oauth.createAttempt({businessUid: "biz", provider: "meta",
     config: config("meta"), encryptionKey: key, now: 1000});

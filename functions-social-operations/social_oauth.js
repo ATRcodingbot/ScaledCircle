@@ -21,6 +21,7 @@ const PROVIDER_SCOPES = Object.freeze({
 const X_PUBLISH_SCOPES = Object.freeze([
   "users.read", "tweet.read", "offline.access", "tweet.write", "media.write",
 ]);
+const CREDENTIAL_REFRESH_LEASE_TTL_MS = 2 * 60 * 1000;
 
 function text(value, maximum = 2400) {
   return value == null ? "" : String(value).trim().slice(0, maximum);
@@ -69,6 +70,77 @@ function normalizeScopes(provider, scopes, requiredScopes = null) {
     required: [...required],
     missing: required.filter((scope) => !granted.has(scope)),
   };
+}
+
+function exactScopeSet(scopes, expected) {
+  const actual = [...new Set((Array.isArray(scopes) ? scopes : String(scopes || "").split(/[ ,]+/))
+    .map((scope) => text(scope, 180)).filter(Boolean))].sort();
+  const required = [...new Set((expected || []).map((scope) => text(scope, 180)).filter(Boolean))]
+    .sort();
+  if (actual.length !== required.length || actual.some((scope, index) => scope !== required[index])) {
+    throw new Error("social_oauth_scope_mismatch");
+  }
+  return actual;
+}
+
+function credentialGeneration(credential = {}) {
+  const generation = Number(credential.rotationGeneration || 1);
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    throw new Error("social_oauth_credential_generation_invalid");
+  }
+  return generation;
+}
+
+function connectionRevision(connection = {}) {
+  const revision = Number(connection.connectionRevision || 0);
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw new Error("social_oauth_connection_revision_invalid");
+  }
+  return revision;
+}
+
+function beginCredentialRefresh({credential, leaseId, now = Date.now(),
+  leaseTtlMillis = CREDENTIAL_REFRESH_LEASE_TTL_MS}) {
+  const safeLeaseId = text(leaseId, 180);
+  if (!safeLeaseId) throw new Error("social_oauth_refresh_lease_invalid");
+  const generation = credentialGeneration(credential);
+  const started = Number(credential.refreshStartedAtMillis || 0);
+  if (credential.refreshState === "refreshing" && started > 0 &&
+      started + leaseTtlMillis > now) {
+    throw new Error("social_oauth_refresh_in_progress");
+  }
+  return {expectedGeneration: generation, update: {
+    refreshState: "refreshing", refreshLeaseId: safeLeaseId,
+    refreshStartedAtMillis: now, refreshLeaseGeneration: generation,
+    tokenHealth: "refreshing",
+  }};
+}
+
+function completeCredentialRefresh({credential, leaseId, expectedGeneration,
+  now = Date.now(), expiresIn = null}) {
+  const generation = credentialGeneration(credential);
+  if (generation !== Number(expectedGeneration) ||
+      credential.refreshLeaseId !== text(leaseId, 180) ||
+      Number(credential.refreshLeaseGeneration) !== generation) {
+    throw new Error("social_oauth_stale_refresh_generation");
+  }
+  return {
+    rotationGeneration: generation + 1,
+    refreshState: "healthy",
+    tokenHealth: "healthy",
+    refreshedAtMillis: now,
+    expiresAtMillis: Number(expiresIn || 0) > 0 ? now + Number(expiresIn) * 1000 : null,
+  };
+}
+
+function failCredentialRefresh({credential, leaseId, expectedGeneration, now = Date.now()}) {
+  const generation = credentialGeneration(credential);
+  if (generation !== Number(expectedGeneration) ||
+      credential.refreshLeaseId !== text(leaseId, 180)) {
+    throw new Error("social_oauth_stale_refresh_generation");
+  }
+  return {refreshState: "needs_attention", tokenHealth: "needs_attention",
+    lastRefreshFailureAtMillis: now};
 }
 
 function keyBytes(value) {
@@ -481,13 +553,17 @@ function selectCandidate({attempt, candidateId, encryptionKey, now = Date.now()}
   return {
     safeCandidate: safeIdentityCandidate(candidate, attempt.grantedScopes),
     credentialRecord: {
-      schemaVersion: "SocialConnectionCredentialV1",
+      schemaVersion: "SocialConnectionCredentialV2",
       businessUid: attempt.businessUid,
       provider: attempt.provider,
       providerAccountIdHash: digest(candidate.accountId),
       tokenEnvelope: encryptJson(secretFields, encryptionKey, credentialAad),
       grantedScopes: [...attempt.grantedScopes],
       expiresAtMillis: candidate.expiresIn ? now + candidate.expiresIn * 1000 : null,
+      rotationGeneration: 1,
+      connectionRevision: 1,
+      refreshState: "healthy",
+      tokenHealth: "healthy",
       createdAtMillis: now,
       updatedAtMillis: now,
     },
@@ -535,8 +611,22 @@ async function refreshTokens({provider, tokens, config, clientSecret, fetchImpl 
     accessToken: text(refreshed.access_token, 10000),
     refreshToken: text(refreshed.refresh_token, 10000) || tokens.refreshToken,
     expiresIn: Number(refreshed.expires_in || 0) || null,
+    grantedScopes: refreshed.scope == null ? null :
+      String(refreshed.scope).split(/[ ,]+/).map((scope) => text(scope, 180)).filter(Boolean),
     refreshed: true,
   };
+}
+
+async function readProviderIdentity({provider, tokens, fetchImpl = globalThis.fetch}) {
+  const normalized = normalizeProvider(provider);
+  if (normalized !== "x") throw new Error("social_oauth_identity_check_unsupported");
+  const body = await fetchJson(fetchImpl, "https://api.x.com/2/users/me?user.fields=id,name,username", {
+    headers: {Authorization: `Bearer ${tokens.accessToken}`},
+  });
+  const accountId = text(body.data?.id, 180);
+  if (!accountId) throw new Error("social_oauth_identity_missing");
+  return {accountId, accountDisplayName: text(body.data?.name, 180),
+    handle: text(body.data?.username, 180)};
 }
 
 function utcDate(daysAgo = 0, now = Date.now()) {
@@ -605,10 +695,13 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
 }
 
 module.exports = {
-  OAUTH_ATTEMPT_TTL_MS, PROVIDERS, PROVIDER_SCOPES, X_PUBLISH_SCOPES, digest,
-  normalizeProvider, requestedScopes, normalizeScopes,
+  OAUTH_ATTEMPT_TTL_MS, CREDENTIAL_REFRESH_LEASE_TTL_MS,
+  PROVIDERS, PROVIDER_SCOPES, X_PUBLISH_SCOPES, digest,
+  normalizeProvider, requestedScopes, normalizeScopes, exactScopeSet,
+  credentialGeneration, connectionRevision, beginCredentialRefresh,
+  completeCredentialRefresh, failCredentialRefresh,
   encryptJson, decryptJson, validateProviderConfig, authorizationUrl, createAttempt,
   isReusableAttempt, continuationUrl,
   safeIdentityCandidate, assertAttempt, completeExchange, selectCandidate, callbackHtml,
-  refreshTokens, readHistoricalPerformance,
+  refreshTokens, readProviderIdentity, readHistoricalPerformance,
 };

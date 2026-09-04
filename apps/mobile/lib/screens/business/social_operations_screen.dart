@@ -295,6 +295,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
 
   bool _connectionNeedsReconnect(String status) => const {
     'expired',
+    'reauth_required',
     'reauthorization_required',
     'revoked',
     'token_expired',
@@ -302,8 +303,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
 
   String _connectLabel(Map<String, dynamic> connection) {
     final status = connection['status']?.toString() ?? 'disconnected';
-    if (_connectionNeedsReconnect(status)) return 'Reconnect';
     final provider = connection['provider']?.toString() ?? '';
+    if (_connectionNeedsReconnect(status)) {
+      return 'Reconnect ${_providerLabel(provider)}';
+    }
     if (_oauthProvider(provider) == 'meta') {
       return 'Connect Facebook & Instagram';
     }
@@ -948,6 +951,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           }.contains(status);
           final authorizing =
               status == 'authorizing' || status == 'identity_pending';
+          final needsAttention = _connectionNeedsReconnect(status);
           return Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -966,6 +970,8 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                               : 'Connected · Read only'
                         : authorizing
                         ? 'Authorizing'
+                        : needsAttention
+                        ? 'Needs attention'
                         : 'Not connected',
                   ),
                   if (connected)
@@ -1051,6 +1057,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     final founderApproved =
         certification['founderPublishApprovalRecorded'] == true;
     final writeConnected = connection['status'] == 'connected_write';
+    final connectionNeedsAttention = _connectionNeedsReconnect(
+      connection['status']?.toString() ?? '',
+    );
     final jobStatus = job['status']?.toString();
     final attemptId = connection['pendingAttemptId']?.toString() ?? '';
     return Card(
@@ -1144,8 +1153,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     onPressed: _authorizingFirstX
                         ? null
                         : _beginFirstXPublishAuthorization,
-                    child: const Text(
-                      'Allow ScaledCircle to publish this approved post',
+                    child: Text(
+                      connectionNeedsAttention
+                          ? 'Reconnect X'
+                          : 'Allow ScaledCircle to publish this approved post',
                     ),
                   ),
                 if (prepared &&

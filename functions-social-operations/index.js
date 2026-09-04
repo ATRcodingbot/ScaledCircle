@@ -899,19 +899,141 @@ exports.createFirstXPublishApprovalV1 = onCall(
   },
 );
 
-async function firstXCredential(businessUid, connection) {
-  const credential = (await db.collection("socialConnectionCredentials")
-    .doc(connection.credentialId).get()).data();
-  if (!credential || credential.businessUid !== businessUid || credential.provider !== "x") {
+function safeRefreshFailure(error) {
+  if (error?.providerCode === "invalid_request") return "invalid_refresh_credential";
+  if (String(error?.message || "").includes("refresh_token_missing")) {
+    return "refresh_credential_missing";
+  }
+  if (String(error?.message || "").includes("scope_mismatch")) return "scope_mismatch";
+  if (String(error?.message || "").includes("account_mismatch")) return "account_mismatch";
+  return "provider_refresh_failed";
+}
+
+async function refreshStoredXCredential({businessUid, connectionRef, connection, config,
+  clientSecret, now = Date.now()}) {
+  if (!connection?.credentialId || connection.provider !== "x") {
     throw new Error("x_connection_credential_missing");
   }
-  const account = socialOAuth.decryptJson(credential.accountEnvelope,
+  const credentialRef = db.collection("socialConnectionCredentials").doc(connection.credentialId);
+  const leaseId = db.collection("socialCredentialRefreshLeases").doc().id;
+  const claimed = await db.runTransaction(async (transaction) => {
+    const [credentialSnapshot, connectionSnapshot] = await Promise.all([
+      transaction.get(credentialRef), transaction.get(connectionRef),
+    ]);
+    const currentCredential = credentialSnapshot.data();
+    const currentConnection = connectionSnapshot.data();
+    if (!currentCredential || currentCredential.businessUid !== businessUid ||
+        currentCredential.provider !== "x" ||
+        currentConnection?.credentialId !== credentialRef.id ||
+        currentConnection?.providerUserId !== xFirstPublish.EXPECTED_X_ID) {
+      throw new Error("x_connection_credential_missing");
+    }
+    const claim = socialOAuth.beginCredentialRefresh({credential: currentCredential,
+      leaseId, now});
+    transaction.update(credentialRef, {...claim.update, updatedAt: FieldValue.serverTimestamp()});
+    transaction.set(connectionRef, {tokenHealth: "refreshing",
+      updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    return {credential: currentCredential, connection: currentConnection,
+      expectedGeneration: claim.expectedGeneration};
+  });
+  const account = socialOAuth.decryptJson(claimed.credential.accountEnvelope,
     socialOAuthEncryptionKey.value(), `${businessUid}:x:${connection.credentialId}`);
   if (account.accountId !== xFirstPublish.EXPECTED_X_ID) throw new Error("x_account_mismatch");
   const tokenAad = `${businessUid}:x:${account.accountId}`;
-  const tokens = socialOAuth.decryptJson(credential.tokenEnvelope,
+  const storedTokens = socialOAuth.decryptJson(claimed.credential.tokenEnvelope,
     socialOAuthEncryptionKey.value(), tokenAad);
-  return {credential, account, tokenAad, tokens};
+  let tokens;
+  let rotationPersisted = false;
+  let persistedGeneration = null;
+  try {
+    const expectedScopes = socialOAuth.exactScopeSet(claimed.connection.grantedScopes,
+      xFirstPublish.X_WRITE_SCOPES);
+    tokens = await socialOAuth.refreshTokens({provider: "x", tokens: storedTokens,
+      config, clientSecret});
+    let scopeMismatch = false;
+    if (tokens.grantedScopes) {
+      try { socialOAuth.exactScopeSet(tokens.grantedScopes, expectedScopes); } catch (_) {
+        scopeMismatch = true;
+      }
+    }
+    const secretFields = {...tokens};
+    delete secretFields.refreshed;
+    delete secretFields.grantedScopes;
+    const completedAt = Date.now();
+    persistedGeneration = await db.runTransaction(async (transaction) => {
+      const [credentialSnapshot, connectionSnapshot] = await Promise.all([
+        transaction.get(credentialRef), transaction.get(connectionRef),
+      ]);
+      const currentCredential = credentialSnapshot.data();
+      const currentConnection = connectionSnapshot.data();
+      const completed = socialOAuth.completeCredentialRefresh({credential: currentCredential,
+        leaseId, expectedGeneration: claimed.expectedGeneration, now: completedAt,
+        expiresIn: tokens.expiresIn});
+      const nextConnectionRevision = socialOAuth.connectionRevision(currentConnection) + 1;
+      transaction.update(credentialRef, {...completed,
+        schemaVersion: "SocialConnectionCredentialV2",
+        connectionRevision: nextConnectionRevision,
+        tokenHealth: "validating",
+        tokenEnvelope: socialOAuth.encryptJson(secretFields,
+          socialOAuthEncryptionKey.value(), tokenAad),
+        grantedScopes: expectedScopes,
+        refreshLeaseId: FieldValue.delete(), refreshLeaseGeneration: FieldValue.delete(),
+        refreshStartedAtMillis: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()});
+      transaction.set(connectionRef, {status: "connected_write", tokenHealth: "validating",
+        credentialRotationGeneration: completed.rotationGeneration,
+        connectionRevision: nextConnectionRevision, grantedScopes: expectedScopes,
+        lastCredentialRefreshAtMillis: completedAt,
+        updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      return completed.rotationGeneration;
+    });
+    rotationPersisted = true;
+    if (scopeMismatch) throw new Error("social_oauth_scope_mismatch");
+    const identity = await socialOAuth.readProviderIdentity({provider: "x", tokens});
+    if (identity.accountId !== xFirstPublish.EXPECTED_X_ID) {
+      throw new Error("x_account_mismatch");
+    }
+    await db.runTransaction(async (transaction) => {
+      const credentialSnapshot = await transaction.get(credentialRef);
+      if (socialOAuth.credentialGeneration(credentialSnapshot.data()) !== persistedGeneration) {
+        throw new Error("social_oauth_stale_refresh_generation");
+      }
+      transaction.update(credentialRef, {tokenHealth: "healthy",
+        refreshState: "healthy", updatedAt: FieldValue.serverTimestamp()});
+      transaction.set(connectionRef, {status: "connected_write", tokenHealth: "healthy",
+        lastIdentityVerifiedAtMillis: Date.now(), updatedAt: FieldValue.serverTimestamp()},
+      {merge: true});
+    });
+    return {account, identity, tokens, rotationGeneration: persistedGeneration};
+  } catch (error) {
+    await db.runTransaction(async (transaction) => {
+      const [credentialSnapshot, connectionSnapshot] = await Promise.all([
+        transaction.get(credentialRef), transaction.get(connectionRef),
+      ]);
+      const currentCredential = credentialSnapshot.data();
+      const currentConnection = connectionSnapshot.data();
+      if (!rotationPersisted && currentCredential?.refreshLeaseId === leaseId) {
+        const failed = socialOAuth.failCredentialRefresh({credential: currentCredential,
+          leaseId, expectedGeneration: claimed.expectedGeneration, now: Date.now()});
+        transaction.update(credentialRef, {...failed,
+          refreshLeaseId: FieldValue.delete(), refreshLeaseGeneration: FieldValue.delete(),
+          refreshStartedAtMillis: FieldValue.delete(),
+          lastRefreshFailure: safeRefreshFailure(error), updatedAt: FieldValue.serverTimestamp()});
+        transaction.set(connectionRef, {status: "reauth_required", tokenHealth: "needs_attention",
+          connectionRevision: socialOAuth.connectionRevision(currentConnection) + 1,
+          lastRefreshFailure: safeRefreshFailure(error),
+          updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      } else if (rotationPersisted &&
+          socialOAuth.credentialGeneration(currentCredential) === persistedGeneration) {
+        transaction.update(credentialRef, {tokenHealth: "needs_attention",
+          lastRefreshFailure: safeRefreshFailure(error), updatedAt: FieldValue.serverTimestamp()});
+        transaction.set(connectionRef, {status: "reauth_required", tokenHealth: "needs_attention",
+          connectionRevision: socialOAuth.connectionRevision(currentConnection) + 1,
+          lastRefreshFailure: safeRefreshFailure(error), updatedAt: FieldValue.serverTimestamp()},
+        {merge: true});
+      }
+    }).catch(() => {});
+    throw error;
+  }
 }
 
 function firstXProductionSuccessorRefs() {
@@ -1063,11 +1185,11 @@ exports.publishFirstXProductionSuccessorV4 = onRequest(
         throw new Error("x_v4_duplicate_replacement_exists");
       }
     } catch (_) { return response.status(409).json({error: "exact_v4_gate_failed"}); }
-    const auth = await firstXCredential(xFirstPublish.BUSINESS_UID, connection.data());
     const configSnapshot = await providerConfigRef("x", "staging").get();
     const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
-    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
-      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const tokens = (await refreshStoredXCredential({businessUid: xFirstPublish.BUSINESS_UID,
+      connectionRef, connection: connection.data(), config,
+      clientSecret: providerSecretBinding("x").secret.value()})).tokens;
     const original = await xFirstPublish.inspectHistoricalPost({accessToken: tokens.accessToken,
       providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID});
     let historicalAuthority;
@@ -1236,10 +1358,10 @@ exports.executeFirstXPublishV1 = onCall(
     });
     if (!claimed) return {publishJobId, status: "completed", idempotentReplay: true};
     try {
-      const auth = await firstXCredential(business.uid, connectionData);
       const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
-      const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
-        config, clientSecret: providerSecretBinding("x").secret.value()});
+      const tokens = (await refreshStoredXCredential({businessUid: business.uid,
+        connectionRef: connection.ref, connection: connectionData, config,
+        clientSecret: providerSecretBinding("x").secret.value()})).tokens;
       const mediaResponse = await fetch(xFirstPublish.MEDIA_URL, {cache: "no-store"});
       if (!mediaResponse.ok) throw new Error("x_media_source_unavailable");
       const mediaBytes = Buffer.from(await mediaResponse.arrayBuffer());
@@ -1269,14 +1391,6 @@ exports.executeFirstXPublishV1 = onCall(
       batch.update(db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID), {
         status: "published", providerPostId: created.providerPostId,
         publishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
-      if (tokens.refreshed) {
-        const stored = {...tokens}; delete stored.refreshed;
-        batch.update(db.collection("socialConnectionCredentials").doc(connectionData.credentialId), {
-          tokenEnvelope: socialOAuth.encryptJson(stored, socialOAuthEncryptionKey.value(),
-            auth.tokenAad), expiresAtMillis: tokens.expiresIn ?
-            Date.now() + tokens.expiresIn * 1000 : null,
-          updatedAt: FieldValue.serverTimestamp()});
-      }
       await batch.commit();
       return {publishJobId, status: "completed", providerPostId: created.providerPostId,
         providerPostUrl: created.providerPostUrl, providerReceiptId: receiptId,
@@ -1311,10 +1425,12 @@ exports.reconcileFirstXPublishV1 = onCall(
     ]);
     const connectionData = connection.data();
     xFirstPublish.assertWriteConnection(connectionData);
-    const auth = await firstXCredential(business.uid, connectionData);
     const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
-    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
-      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x");
+    const tokens = (await refreshStoredXCredential({businessUid: business.uid,
+      connectionRef, connection: connectionData, config,
+      clientSecret: providerSecretBinding("x").secret.value()})).tokens;
     const result = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
       providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID});
     if (result.status !== "found") return {publishJobId,
@@ -1410,11 +1526,13 @@ exports.reconcileFounderManualFirstXDeletionV1 = onCall(
     const connectionData = (await db.collection("socialConnections").doc(business.uid)
       .collection("providers").doc("x").get()).data();
     xFirstPublish.assertWriteConnection(connectionData);
-    const auth = await firstXCredential(business.uid, connectionData);
     const configSnapshot = await providerConfigRef("x", "staging").get();
     const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
-    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
-      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x");
+    const tokens = (await refreshStoredXCredential({businessUid: business.uid,
+      connectionRef, connection: connectionData, config,
+      clientSecret: providerSecretBinding("x").secret.value()})).tokens;
     const lookup = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
       providerPostId: xFirstPublish.ORIGINAL_DEFECTIVE_POST_ID});
     if (lookup.status === "found") {
@@ -1491,11 +1609,13 @@ exports.createFirstXReplacementV1 = onCall(
         updatedAt: FieldValue.serverTimestamp()});
     });
     try {
-      const auth = await firstXCredential(business.uid, connectionData);
       const configSnapshot = await providerConfigRef("x", "staging").get();
       const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
-      const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
-        config, clientSecret: providerSecretBinding("x").secret.value()});
+      const connectionRef = db.collection("socialConnections").doc(business.uid)
+        .collection("providers").doc("x");
+      const tokens = (await refreshStoredXCredential({businessUid: business.uid,
+        connectionRef, connection: connectionData, config,
+        clientSecret: providerSecretBinding("x").secret.value()})).tokens;
       const created = await xFirstPublish.createReplacementPost({accessToken: tokens.accessToken,
         renderedCopy, mediaId: job.providerMediaId});
       const receiptId = `social_replacement_receipt_${xFirstPublish.digest({
@@ -1555,11 +1675,13 @@ exports.reconcileFirstXRepairV1 = onCall(
     const connectionData = (await db.collection("socialConnections").doc(business.uid)
       .collection("providers").doc("x").get()).data();
     xFirstPublish.assertWriteConnection(connectionData);
-    const auth = await firstXCredential(business.uid, connectionData);
     const configSnapshot = await providerConfigRef("x", "staging").get();
     const config = socialOAuth.validateProviderConfig({...configSnapshot.data(), provider: "x"});
-    const tokens = await socialOAuth.refreshTokens({provider: "x", tokens: auth.tokens,
-      config, clientSecret: providerSecretBinding("x").secret.value()});
+    const connectionRef = db.collection("socialConnections").doc(business.uid)
+      .collection("providers").doc("x");
+    const tokens = (await refreshStoredXCredential({businessUid: business.uid,
+      connectionRef, connection: connectionData, config,
+      clientSecret: providerSecretBinding("x").secret.value()})).tokens;
     const asset = xFirstPublish.assertProductionResponseAsset({
       responseAssetId: repair.productionResponseAssetId,
       publicCode: repair.productionPublicCode, publicUrl: repair.productionPublicUrl});
@@ -2057,25 +2179,46 @@ exports.confirmFirstXPublishAuthorizationV1 = onCall(
     const credentialRef = db.collection("socialConnectionCredentials").doc(credentialId);
     const connectionRef = db.collection("socialConnections").doc(business.uid)
       .collection("providers").doc("x");
-    const batch = db.batch();
-    batch.set(credentialRef, {...selected.credentialRecord,
-      accountEnvelope: socialOAuth.encryptJson(selected.privateAccount,
-        socialOAuthEncryptionKey.value(), `${business.uid}:x:${credentialId}`),
-      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: false});
-    batch.set(connectionRef, {schemaVersion: socialOperations.SCHEMA_VERSION,
-      provider: "x", status: "connected_write", accountDisplayName: safe.accountDisplayName,
-      accountType: safe.accountType, handle: safe.handle, providerAccountId: safe.candidateId,
-      providerUserId: selected.privateAccount.accountId, credentialId,
-      capabilities: safe.capabilities, grantedScopes: attempt.grantedScopes,
-      writeScopesGranted: true, externalPublishingEnabled: false,
-      narrowCertificationContentItemId: xFirstPublish.CONTENT_ITEM_ID,
-      narrowCertificationVersion: xFirstPublish.VERSION_NUMBER,
-      environment: attempt.environment, authorizationUpdatedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp()}, {merge: false});
-    batch.update(attemptRef, {status: "connected_write", selectedCandidate: safe,
-      candidateEnvelope: FieldValue.delete(), verifierEnvelope: FieldValue.delete(),
-      connectedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
-    await batch.commit();
+    await db.runTransaction(async (transaction) => {
+      const [currentAttemptSnapshot, currentConnectionSnapshot, currentCredentialSnapshot] =
+        await Promise.all([transaction.get(attemptRef), transaction.get(connectionRef),
+          transaction.get(credentialRef)]);
+      const currentAttempt = currentAttemptSnapshot.data();
+      const currentConnection = currentConnectionSnapshot.data() || {};
+      const currentCredential = currentCredentialSnapshot.data() || {};
+      if (currentConnection.pendingAttemptId !== attemptId ||
+          currentAttempt?.status !== "identity_pending" ||
+          currentAttempt.businessUid !== business.uid || currentAttempt.provider !== "x" ||
+          Number(currentAttempt.expiresAtMillis || 0) <= Date.now()) {
+        throw new Error("social_oauth_stale_connection_attempt");
+      }
+      socialOAuth.exactScopeSet(currentAttempt.grantedScopes, xFirstPublish.X_WRITE_SCOPES);
+      const nextRevision = socialOAuth.connectionRevision(currentConnection) + 1;
+      const nextGeneration = currentCredentialSnapshot.exists ?
+        socialOAuth.credentialGeneration(currentCredential) + 1 : 1;
+      transaction.set(credentialRef, {...selected.credentialRecord,
+        rotationGeneration: nextGeneration, connectionRevision: nextRevision,
+        accountEnvelope: socialOAuth.encryptJson(selected.privateAccount,
+          socialOAuthEncryptionKey.value(), `${business.uid}:x:${credentialId}`),
+        createdAt: currentCredential.createdAt || FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+      transaction.set(connectionRef, {schemaVersion: socialOperations.SCHEMA_VERSION,
+        provider: "x", status: "connected_write", tokenHealth: "healthy",
+        connectionRevision: nextRevision, credentialRotationGeneration: nextGeneration,
+        accountDisplayName: safe.accountDisplayName,
+        accountType: safe.accountType, handle: safe.handle, providerAccountId: safe.candidateId,
+        providerUserId: selected.privateAccount.accountId, credentialId,
+        capabilities: safe.capabilities, grantedScopes: currentAttempt.grantedScopes,
+        writeScopesGranted: true, externalPublishingEnabled: false,
+        narrowCertificationContentItemId: xFirstPublish.CONTENT_ITEM_ID,
+        narrowCertificationVersion: xFirstPublish.VERSION_NUMBER,
+        environment: currentAttempt.environment,
+        authorizationUpdatedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+      transaction.update(attemptRef, {status: "connected_write", selectedCandidate: safe,
+        candidateEnvelope: FieldValue.delete(), verifierEnvelope: FieldValue.delete(),
+        connectedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    });
     return {provider: "x", status: "connected_write", identity: safe,
       capability: "approval_controlled_image_post", unrelatedScopesGranted: 0,
       globalExternalPublishingEnabled: false};
@@ -2298,13 +2441,23 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
       throw new HttpsError("permission-denied", "The connection credential is unavailable.");
     }
     try {
-      const account = socialOAuth.decryptJson(credential.accountEnvelope,
-        socialOAuthEncryptionKey.value(), `${business.uid}:${provider}:${connection.credentialId}`);
-      const tokenAad = `${business.uid}:${provider}:${account.accountId}`;
-      let tokens = socialOAuth.decryptJson(credential.tokenEnvelope,
-        socialOAuthEncryptionKey.value(), tokenAad);
-      tokens = await socialOAuth.refreshTokens({provider, tokens, config,
-        clientSecret: providerSecretParameter.value()});
+      let account;
+      let tokens;
+      let tokenAad;
+      if (provider === "x") {
+        const refreshed = await refreshStoredXCredential({businessUid: business.uid,
+          connectionRef, connection, config, clientSecret: providerSecretParameter.value()});
+        account = refreshed.account;
+        tokens = refreshed.tokens;
+      } else {
+        account = socialOAuth.decryptJson(credential.accountEnvelope,
+          socialOAuthEncryptionKey.value(), `${business.uid}:${provider}:${connection.credentialId}`);
+        tokenAad = `${business.uid}:${provider}:${account.accountId}`;
+        tokens = socialOAuth.decryptJson(credential.tokenEnvelope,
+          socialOAuthEncryptionKey.value(), tokenAad);
+        tokens = await socialOAuth.refreshTokens({provider, tokens, config,
+          clientSecret: providerSecretParameter.value()});
+      }
       const snapshots = await socialOAuth.readHistoricalPerformance({
         provider, surface, tokens, account, now: Date.now(),
       });
@@ -2328,9 +2481,10 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
           createdAt: FieldValue.serverTimestamp(),
         }, {merge: false});
       }
-      if (tokens.refreshed) {
+      if (provider !== "x" && tokens.refreshed) {
         const secretFields = {...tokens};
         delete secretFields.refreshed;
+        delete secretFields.grantedScopes;
         batch.update(credentialRef, {
           tokenEnvelope: socialOAuth.encryptJson(secretFields,
             socialOAuthEncryptionKey.value(), tokenAad),

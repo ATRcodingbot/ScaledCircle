@@ -107,6 +107,33 @@ test("X v4 approval and publication are private, exact, and single-attempt", () 
   assert.doesNotMatch(publish, /uploadMedia|method:\s*"DELETE"|deletePost/);
   assert.doesNotMatch(approval + publish,
     /scaledcircle-staging\.web\.app|firebaseapp\.com|localhost|127\.0\.0\.1/);
+  assert.match(publish, /refreshStoredXCredential/);
+  assert.doesNotMatch(publish, /socialOAuth\.refreshTokens/);
+});
+
+test("maintained X refresh persists rotation before provider reads and rejects stale writers", () => {
+  const helper = indexSource.match(
+    /async function refreshStoredXCredential[\s\S]*?\nfunction firstXProductionSuccessorRefs/)[0];
+  assert.match(helper, /beginCredentialRefresh/);
+  assert.match(helper, /completeCredentialRefresh/);
+  assert.match(helper, /rotationGeneration/);
+  assert.match(helper, /connectionRevision/);
+  assert.match(helper, /refreshLeaseId/);
+  assert.match(helper, /readProviderIdentity/);
+  assert.ok(helper.indexOf("tokenEnvelope:") < helper.indexOf("readProviderIdentity"));
+  assert.match(helper, /status: "reauth_required"/);
+  assert.doesNotMatch(helper, /createPost|createReplacementPost|uploadMedia|method:\s*"DELETE"/);
+});
+
+test("X reconnect is generation-safe and an expired attempt cannot replace a healthy connection", () => {
+  const confirm = indexSource.match(
+    /exports\.confirmFirstXPublishAuthorizationV1 = [\s\S]*?\n\);/)[0];
+  assert.match(confirm, /currentConnection\.pendingAttemptId !== attemptId/);
+  assert.match(confirm, /currentAttempt\?\.status !== "identity_pending"/);
+  assert.match(confirm, /currentAttempt\.expiresAtMillis/);
+  assert.match(confirm, /credentialGeneration\(currentCredential\) \+ 1/);
+  assert.match(confirm, /connectionRevision\(currentConnection\) \+ 1/);
+  assert.match(confirm, /tokenHealth: "healthy"/);
 });
 
 test("bounded X write entrypoints bind only shared encryption and X secret", () => {
