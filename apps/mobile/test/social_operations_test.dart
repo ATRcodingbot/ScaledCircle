@@ -17,8 +17,12 @@ void main() {
     expect(screen, contains("return 'Connect \${_providerLabel(provider)}'"));
     expect(screen, contains("return 'Reconnect \${_providerLabel(provider)}'"));
     expect(screen, contains("'reauth_required'"));
-    expect(screen, contains("? 'Reconnect X'"));
     expect(screen, contains("? 'Needs attention'"));
+    expect(screen, contains('final connectionNeedsAttention'));
+    expect(screen, contains('attemptId.isEmpty'));
+    expect(screen, contains("? 'Start fresh X authorization'"));
+    expect(screen, contains('attemptId.isNotEmpty'));
+    expect(screen, contains("child: const Text('Check & confirm X account')"));
     expect(screen, contains('Use this account?'));
     expect(screen, contains("'Continue with \$providerLabel'"));
     expect(screen, contains("webOnlyWindowName: '_self'"));
@@ -128,7 +132,7 @@ void main() {
 
   test('expired X callback preserves history and clears only matching pending attempt', () {
     final source = File(
-      '../../../functions-social-operations/index.js',
+      '../../functions-social-operations/index.js',
     ).readAsStringSync();
     expect(source, contains('"attempt_expired" : "connection_failed"'));
     expect(source, contains('connection.pendingAttemptId === attemptId'));

@@ -12,6 +12,7 @@ void main() {
   final dashboard = File(
     'lib/screens/business/business_dashboard.dart',
   ).readAsStringSync();
+  final server = File('../../functions/index.js').readAsStringSync();
 
   test(
     'eligible Business sees explicit cancel and original-method refund copy',
@@ -40,10 +41,21 @@ void main() {
   );
 
   test(
-    'assignment transaction rechecks marketplace authority after cancel lock',
+    'assignment delegates cancellation-sensitive checks to server authority',
     () {
-      expect(applicants, contains("latestCampaignStatus != 'open'"));
-      expect(applicants, contains('no longer accepting Scaler assignments'));
+      expect(applicants, contains("'assignScalerToZone'"));
+      expect(
+        applicants,
+        contains("functionName: 'assignScalerToCampaignLocations'"),
+      );
+      expect(applicants, isNot(contains('runTransaction')));
+      expect(applicants, isNot(contains("latestCampaignStatus != 'open'")));
+      expect(
+        server,
+        contains('This campaign is no longer accepting Scaler assignments.'),
+      );
+      expect(server, contains('exports.assignScalerToZone'));
+      expect(server, contains('exports.assignScalerToCampaignLocations'));
     },
   );
 
