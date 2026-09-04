@@ -2092,6 +2092,12 @@ exports.beginFirstXPublishAuthorizationV1 = onCall(
               provider: "x", attemptId: pendingAttemptId,
               encryptionKey: socialOAuthEncryptionKey.value(), now: Date.now()})};
         }
+        if (socialOAuth.isReusableAttempt(pending, {businessUid: business.uid, provider: "x",
+          now: Date.now()})) {
+          transaction.update(pendingRef, {status: "superseded",
+            supersededByAttemptId: proposed.attemptId,
+            updatedAt: FieldValue.serverTimestamp()});
+        }
       }
       const attemptRef = db.collection("socialOAuthAttempts").doc(proposed.attemptId);
       transaction.create(attemptRef, {...proposed.record,

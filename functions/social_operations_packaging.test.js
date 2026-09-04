@@ -136,6 +136,16 @@ test("X reconnect is generation-safe and an expired attempt cannot replace a hea
   assert.match(confirm, /tokenHealth: "healthy"/);
 });
 
+test("X write authorization supersedes an active read-only attempt before replacement", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "functions-social-operations", "index.js"),
+    "utf8",
+  );
+  assert.match(source, /status: "superseded"/);
+  assert.match(source, /supersededByAttemptId: proposed\.attemptId/);
+  assert.match(source, /transaction\.update\(pendingRef/);
+});
+
 test("bounded X write entrypoints bind only shared encryption and X secret", () => {
   const entrypoint = (name) => indexSource.match(
     new RegExp(`exports\\.${name} = [\\s\\S]*?\\n\\);`))[0];
