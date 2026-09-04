@@ -1343,21 +1343,29 @@ exports.reconcileFirstXProductionSuccessorV4 = onRequest(
     let reconciled = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
       renderedCopy, startedAt: Number(jobData.createStartedAtMillis || 0) - 60000,
       endedAt: Date.now() + 60000});
+    const safeDiagnostics = {recentStatus: reconciled.status, observedStatus: null,
+      observedIdMatches: false, mediaAttachmentCount: 0, textMatches: false,
+      entityUrlCount: 0};
     if (reconciled.status !== "found") {
       const exactObservedPostId = "2095896483010662816";
       const observed = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
         providerPostId: exactObservedPostId});
       const mediaKeys = Array.isArray(observed.attachments?.media_keys) ?
         observed.attachments.media_keys : [];
-      if (observed.status === "found" && mediaKeys.length === 1 &&
-          xFirstPublish.providerTextMatchesRendered({providerText: observed.text,
-            renderedCopy, entities: observed.entities})) {
+      const textMatches = xFirstPublish.providerTextMatchesRendered({providerText: observed.text,
+        renderedCopy, entities: observed.entities});
+      Object.assign(safeDiagnostics, {observedStatus: observed.status,
+        observedIdMatches: observed.providerPostId === exactObservedPostId,
+        mediaAttachmentCount: mediaKeys.length, textMatches,
+        entityUrlCount: Array.isArray(observed.entities?.urls) ? observed.entities.urls.length : 0});
+      if (observed.status === "found" && mediaKeys.length === 1 && textMatches) {
         reconciled = {status: "found", providerPostId: exactObservedPostId,
           providerPostUrl: observed.providerPostUrl, createdAt: observed.createdAt};
       }
     }
     if (reconciled.status !== "found") return response.status(409).json({result: {
-      status: "unknown_provider_outcome", retryAuthorized: false, providerMutationCount: 0}});
+      status: "unknown_provider_outcome", retryAuthorized: false, providerMutationCount: 0,
+      safeDiagnostics}});
     const receiptId = `social_replacement_receipt_${xFirstPublish.digest({
       publishJobId: refs.jobRef.id, providerPostId: reconciled.providerPostId})}`;
     const receiptRef = db.collection("socialProviderReceipts").doc(receiptId);
