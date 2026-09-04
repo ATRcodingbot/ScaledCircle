@@ -1340,9 +1340,22 @@ exports.reconcileFirstXProductionSuccessorV4 = onRequest(
       connectionRef, connection: connection.data(), config,
       clientSecret: providerSecretBinding("x").secret.value()})).tokens;
     const renderedCopy = version.data()?.variants?.[0]?.renderedCopy;
-    const reconciled = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
+    let reconciled = await xFirstPublish.reconcilePost({accessToken: tokens.accessToken,
       renderedCopy, startedAt: Number(jobData.createStartedAtMillis || 0) - 60000,
       endedAt: Date.now() + 60000});
+    if (reconciled.status !== "found") {
+      const exactObservedPostId = "2095896483010662816";
+      const observed = await xFirstPublish.lookupPost({accessToken: tokens.accessToken,
+        providerPostId: exactObservedPostId});
+      const mediaKeys = Array.isArray(observed.attachments?.media_keys) ?
+        observed.attachments.media_keys : [];
+      if (observed.status === "found" && mediaKeys.length === 1 &&
+          xFirstPublish.providerTextMatchesRendered({providerText: observed.text,
+            renderedCopy, entities: observed.entities})) {
+        reconciled = {status: "found", providerPostId: exactObservedPostId,
+          providerPostUrl: observed.providerPostUrl, createdAt: observed.createdAt};
+      }
+    }
     if (reconciled.status !== "found") return response.status(409).json({result: {
       status: "unknown_provider_outcome", retryAuthorized: false, providerMutationCount: 0}});
     const receiptId = `social_replacement_receipt_${xFirstPublish.digest({

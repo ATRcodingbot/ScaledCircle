@@ -461,7 +461,7 @@ async function inspectHistoricalPost({fetchImpl = globalThis.fetch, accessToken,
   let response;
   try {
     response = await fetchImpl(`https://api.x.com/2/tweets/${id}?` +
-      "tweet.fields=author_id,created_at,attachments,edit_controls,edit_history_tweet_ids", {
+      "tweet.fields=author_id,created_at,attachments,edit_controls,edit_history_tweet_ids,entities", {
       headers: {Authorization: `Bearer ${accessToken}`},
     });
   } catch (_) {
@@ -487,6 +487,7 @@ async function inspectHistoricalPost({fetchImpl = globalThis.fetch, accessToken,
   return {status: "found", providerPostId: id, text: String(post.text || ""),
     classification: "live_exact_match",
     createdAt: post.created_at || null, attachments: post.attachments || null,
+    entities: post.entities || null,
     editControls: post.edit_controls || null,
     editHistoryPostIds: Array.isArray(post.edit_history_tweet_ids) ?
       post.edit_history_tweet_ids.map(String) : [id],

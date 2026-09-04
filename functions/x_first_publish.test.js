@@ -211,12 +211,25 @@ test("known-post reconciliation validates exact post ownership without another c
   assert.equal(found.status, "found");
   assert.equal(found.providerPostId, subject.ORIGINAL_DEFECTIVE_POST_ID);
   assert.deepEqual(calls, [{url: `https://api.x.com/2/tweets/${subject.ORIGINAL_DEFECTIVE_POST_ID}?` +
-    "tweet.fields=author_id,created_at,attachments,edit_controls,edit_history_tweet_ids",
+    "tweet.fields=author_id,created_at,attachments,edit_controls,edit_history_tweet_ids,entities",
   method: "GET"}]);
   await assert.rejects(subject.lookupPost({accessToken: "secret", providerPostId: "123",
     fetchImpl: async () => ({ok: true, status: 200,
       json: async () => ({data: {id: "123", author_id: "other"}})})}),
   /identity_mismatch/);
+});
+
+test("known-post lookup preserves X entities for exact shortened-link reconciliation", async () => {
+  const result = await subject.lookupPost({accessToken: "secret",
+    providerPostId: "2095896483010662816", fetchImpl: async () => ({ok: true, status: 200,
+      json: async () => ({data: {id: "2095896483010662816",
+        author_id: subject.EXPECTED_X_ID, text: "copy https://t.co/AbC123",
+        attachments: {media_keys: ["media-one"]},
+        entities: {urls: [{url: "https://t.co/AbC123",
+          expanded_url: subject.PRODUCTION_RESPONSE_URL}]}}})})});
+  assert.equal(result.status, "found");
+  assert.equal(result.entities.urls[0].expanded_url, subject.PRODUCTION_RESPONSE_URL);
+  assert.deepEqual(result.attachments.media_keys, ["media-one"]);
 });
 
 test("historical lookup distinguishes exact deleted envelopes from identity conflicts", async () => {
