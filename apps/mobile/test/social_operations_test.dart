@@ -137,4 +137,13 @@ void main() {
     expect(source, contains('status: "reauth_required"'));
     expect(source, contains('lastAuthorizationFailure: "attempt_expired"'));
   });
+
+  test('Social Operations has a protected direct recovery route', () {
+    final routes = File('lib/navigation/app_routes.dart').readAsStringSync();
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(routes, contains("'/business/social-operations'"));
+    expect(main, contains('AppRoutes.businessSocialOperations'));
+    expect(main, contains('ProtectedRouteAudience.business'));
+    expect(main, contains('const SocialOperationsScreen()'));
+  });
 }
