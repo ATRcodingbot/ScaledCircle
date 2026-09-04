@@ -20,6 +20,94 @@ void main() {
     expect(source, isNot(contains("Date/time: \${logistics['scheduledAt']}")));
   });
 
+  test('Business Job Room exposes authoritative completion review state', () {
+    final review = File(
+      'lib/screens/business/completion/completion_review_screen.dart',
+    ).readAsStringSync();
+    expect(source, contains("'COMPLETION & REVIEW'"));
+    expect(source, contains("data['completions']"));
+    expect(source, contains("Text('Scaler: \$scaler')"));
+    expect(source, contains("'Review Completion'"));
+    expect(source, contains('exactly one Wallet earning'));
+    expect(
+      source,
+      contains('No earning until authoritative Business approval.'),
+    );
+    expect(review, contains('CompletionPayoutService().approvePayout'));
+    expect(review, contains('CompletionPayoutService().requestRedo'));
+    expect(review, isNot(contains("collection('campaignCompletions').doc")));
+  });
+
+  test('completion labels and review action remain truthful', () {
+    expect(
+      jobRoomCompletionStatusLabel(
+        status: 'submitted',
+        reviewStatus: 'verification_pending',
+      ),
+      'Awaiting Business review',
+    );
+    expect(
+      jobRoomCompletionStatusLabel(
+        status: 'submitted',
+        reviewStatus: 'redo_required',
+      ),
+      'Changes required',
+    );
+    expect(
+      jobRoomCompletionStatusLabel(
+        status: 'approved',
+        reviewStatus: 'approved',
+      ),
+      'Approved',
+    );
+    expect(
+      jobRoomCompletionStatusLabel(status: 'rejected', reviewStatus: null),
+      'Rejected / support review',
+    );
+    expect(
+      jobRoomReviewActionVisible(
+        viewerRole: 'business',
+        status: 'submitted',
+        reviewStatus: 'verification_pending',
+      ),
+      isTrue,
+    );
+    expect(
+      jobRoomReviewActionVisible(
+        viewerRole: 'scaler',
+        status: 'submitted',
+        reviewStatus: 'verification_pending',
+      ),
+      isFalse,
+    );
+    expect(
+      jobRoomReviewActionVisible(
+        viewerRole: 'business',
+        status: 'approved',
+        reviewStatus: 'approved',
+      ),
+      isFalse,
+    );
+  });
+
+  test('earning outcome appears only after authoritative ledger evidence', () {
+    expect(
+      jobRoomEarningOutcome({
+        'status': 'submitted',
+        'reviewStatus': 'verification_pending',
+      }),
+      'No earning until authoritative Business approval.',
+    );
+    expect(
+      jobRoomEarningOutcome({
+        'status': 'approved',
+        'reviewStatus': 'approved',
+        'earning': {'type': 'scaler_earnings', 'amountCents': 10000},
+      }),
+      r'Authoritative Wallet earning: $100.00',
+    );
+  });
+
   test('readiness cannot forge operational evidence', () {
     expect(source, contains('This is not attendance or proof of work.'));
     expect(source, contains('does not record GPS attendance'));

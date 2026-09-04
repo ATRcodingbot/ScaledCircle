@@ -83,3 +83,16 @@ test("Business approval records an earning without executing a provider transfer
   assert.doesNotMatch(service, /functionName: 'createScalerTransfer'/);
   assert.match(service, /Provider transfer and[\s\S]*bank cash-out are deliberately separate/);
 });
+
+test("private Job Room projects completion and authoritative earning evidence", () => {
+  const backend = read("functions/index.js");
+  const room = backend.match(/exports\.getJobRoom[\s\S]*?exports\.sendJobMessage/)?.[0] || "";
+  assert.match(room, /operations\.isJobRoomMember/);
+  assert.match(room, /collection\("campaignCompletions"\)/);
+  assert.match(room, /where\("zoneId", "==", zoneId\)/);
+  assert.match(room, /collection\("walletTransactions"\)/);
+  assert.match(room, /doc\(`earning_\$\{zoneId\}_v1`\)/);
+  assert.match(room, /completion\.scalerId === context\.uid/);
+  assert.match(room, /messages, events, completions/);
+  assert.doesNotMatch(room, /transaction\.(?:create|set|update|delete)/);
+});

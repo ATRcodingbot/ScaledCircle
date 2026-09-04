@@ -8248,6 +8248,49 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
       businessConfirmed: snapshot?.data()?.businessConfirmedAt != null,
       scalerConfirmed: snapshot?.data()?.scalerConfirmedAt != null,
     })) : [];
+  const completionSnapshots = await db.collection("campaignCompletions")
+    .where("zoneId", "==", zoneId).limit(20).get();
+  const earningSnapshot = await db.collection("walletTransactions")
+    .doc(`earning_${zoneId}_v1`).get();
+  const earning = earningSnapshot.exists ? earningSnapshot.data() || {} : null;
+  const completions = completionSnapshots.docs
+    .map((doc) => ({id: doc.id, ...doc.data()}))
+    .filter((completion) => context.isAdmin || context.uid === room.businessId ||
+      completion.scalerId === context.uid)
+    .sort((left, right) => Number(right.submittedAt?.toMillis?.() ||
+      right.updatedAt?.toMillis?.() || 0) - Number(left.submittedAt?.toMillis?.() ||
+      left.updatedAt?.toMillis?.() || 0))
+    .map((completion) => ({
+      id: completion.id,
+      campaignId: completion.campaignId || null,
+      zoneId: completion.zoneId || null,
+      scalerId: completion.scalerId || null,
+      scalerEmail: completion.scalerEmail || null,
+      status: completion.status || null,
+      reviewStatus: completion.reviewStatus || zone.reviewStatus || null,
+      reviewFeedback: completion.reviewFeedback || zone.reviewFeedback || null,
+      scalerNotes: completion.scalerNotes || null,
+      proofCount: Array.isArray(completion.proofs) ? completion.proofs.length : 0,
+      proofTypes: Array.isArray(completion.proofs) ?
+        [...new Set(completion.proofs.map((proof) => proof?.type).filter(Boolean))] : [],
+      gpsPointCount: Number(completion.gpsPointCount || zone.submittedRoutePointCount || 0),
+      calculatedTransferAmountCents:
+        Number(completion.calculatedTransferAmountCents ||
+          zone.calculatedTransferAmountCents || 0),
+      approvedTransferAmountCents:
+        Number(completion.approvedTransferAmountCents ||
+          zone.approvedTransferAmountCents || 0),
+      submittedAt: completion.submittedAt || null,
+      reviewedAt: completion.reviewedAt || zone.reviewedAt || null,
+      approvedAt: completion.approvedAt || null,
+      earning: earning && earning.scalerId === completion.scalerId ? {
+        id: earningSnapshot.id,
+        status: earning.status || null,
+        amountCents: Number(earning.amountCents || 0),
+        currency: earning.currency || "usd",
+        type: earning.type || null,
+      } : null,
+    }));
   const groupReadiness = operations.readinessStatus({
     assignedCount, requiredCount, acknowledgedCount,
     coordinationConfigured: room.coordination?.configured === true,
@@ -8279,7 +8322,7 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     },
     groupMaterialStatuses,
     materialLogisticsChange,
-    messages, events,
+    messages, events, completions,
     startEligibility: {...gate, workWindow},
   };
 });

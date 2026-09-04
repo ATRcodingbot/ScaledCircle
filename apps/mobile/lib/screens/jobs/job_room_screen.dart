@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/job_room_service.dart';
+import '../business/completion/completion_review_screen.dart';
 
 String materialHandoffStatusLabel({
   required String? status,
@@ -40,6 +41,62 @@ bool materialReceiptActionVisible({
       'failed_third_party',
       'support_review',
     ].contains(status);
+
+String jobRoomCompletionStatusLabel({
+  required String? status,
+  required String? reviewStatus,
+}) {
+  if (status == 'approved' || reviewStatus == 'approved') {
+    return 'Approved';
+  }
+  if (status == 'rejected' || reviewStatus == 'disputed') {
+    return 'Rejected / support review';
+  }
+  if (status == 'changes_requested' || reviewStatus == 'redo_required') {
+    return 'Changes required';
+  }
+  if (status == 'submitted' || reviewStatus == 'verification_pending') {
+    return 'Awaiting Business review';
+  }
+  if (status == 'in_progress') return 'Work in progress';
+  return 'Evidence not submitted';
+}
+
+bool jobRoomReviewActionVisible({
+  required String? viewerRole,
+  required String? status,
+  required String? reviewStatus,
+}) =>
+    (viewerRole == 'business' || viewerRole == 'admin') &&
+    status == 'submitted' &&
+    (reviewStatus == null || reviewStatus == 'verification_pending');
+
+String jobRoomEvidenceSummary(Map<String, dynamic> completion) {
+  final proofCount = (completion['proofCount'] as num?)?.toInt() ?? 0;
+  final gpsPoints = (completion['gpsPointCount'] as num?)?.toInt() ?? 0;
+  final evidence = <String>[
+    '$proofCount proof item${proofCount == 1 ? '' : 's'}',
+    if (gpsPoints > 0) '$gpsPoints GPS points',
+  ];
+  return evidence.join(' · ');
+}
+
+String jobRoomEarningOutcome(Map<String, dynamic> completion) {
+  final earning = Map<String, dynamic>.from(
+    completion['earning'] as Map? ?? const {},
+  );
+  final amountCents = (earning['amountCents'] as num?)?.toInt() ?? 0;
+  if (earning['type'] == 'scaler_earnings' && amountCents > 0) {
+    return 'Authoritative Wallet earning: '
+        '\$${(amountCents / 100).toStringAsFixed(2)}';
+  }
+  final status = completion['status']?.toString();
+  final reviewStatus = completion['reviewStatus']?.toString();
+  if (status == 'approved' || reviewStatus == 'approved') {
+    return 'Approved; Wallet earning is being reconciled.';
+  }
+  return 'No earning until authoritative Business approval.';
+}
 
 class JobRoomScreen extends StatefulWidget {
   const JobRoomScreen({super.key, required this.zoneId});
@@ -139,6 +196,25 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
     });
   }
 
+  Future<void> _openCompletionReview(Map<String, dynamic> completion) async {
+    final completionId = completion['id']?.toString() ?? '';
+    final campaignId = completion['campaignId']?.toString() ?? '';
+    final scalerId = completion['scalerId']?.toString() ?? '';
+    if (completionId.isEmpty || campaignId.isEmpty || scalerId.isEmpty) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => CompletionReviewScreen(
+          completionId: completionId,
+          campaignId: campaignId,
+          scalerId: scalerId,
+          zoneId: widget.zoneId,
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
   Future<void> _pickSchedule() async {
     final day = await showDatePicker(
       context: context,
@@ -178,9 +254,9 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
       );
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Material plan saved.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Material plan saved.')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -242,7 +318,9 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("We couldn't send this message. Try again.")),
+        const SnackBar(
+          content: Text("We couldn't send this message. Try again."),
+        ),
       );
     } finally {
       if (mounted) setState(() => _sendingMessage = false);
@@ -471,6 +549,11 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
         (item) => Map<String, dynamic>.from(item as Map),
       ),
     );
+    final completions = List<Map<String, dynamic>>.from(
+      (data['completions'] as List? ?? []).map(
+        (item) => Map<String, dynamic>.from(item as Map),
+      ),
+    );
     final scalerCount =
         (room['scalerIds'] as List?)?.length ??
         (room['scalerId'] == null ? 0 : 1);
@@ -498,6 +581,69 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
             Text('Work window: ${campaign['workWindowSummary']}'),
           if (campaign['deadline'] != null)
             Text('Campaign deadline: ${_formatDate(campaign['deadline'])}'),
+          const Divider(height: 28),
+          const Text(
+            'COMPLETION & REVIEW',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          if (completions.isEmpty)
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.assignment_outlined),
+                title: Text('No completion submitted'),
+                subtitle: Text(
+                  'Evidence and Business review status will appear here after the assigned Scaler submits work.',
+                ),
+              ),
+            )
+          else
+            ...completions.map((completion) {
+              final status = completion['status']?.toString();
+              final reviewStatus = completion['reviewStatus']?.toString();
+              final scaler =
+                  completion['scalerEmail']?.toString().isNotEmpty == true
+                  ? completion['scalerEmail'].toString()
+                  : completion['scalerId']?.toString() ?? 'Assigned Scaler';
+              final feedback = completion['reviewFeedback']?.toString();
+              final canReview = jobRoomReviewActionVisible(
+                viewerRole: viewerRole,
+                status: status,
+                reviewStatus: reviewStatus,
+              );
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        jobRoomCompletionStatusLabel(
+                          status: status,
+                          reviewStatus: reviewStatus,
+                        ),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text('Scaler: $scaler'),
+                      Text('Evidence: ${jobRoomEvidenceSummary(completion)}'),
+                      Text(jobRoomEarningOutcome(completion)),
+                      if (feedback != null && feedback.trim().isNotEmpty)
+                        Text('Business review: $feedback'),
+                      if (canReview) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Approving uses the immutable assignment compensation to establish exactly one Wallet earning. Cash-out remains separate.',
+                        ),
+                        FilledButton.icon(
+                          onPressed: () => _openCompletionReview(completion),
+                          icon: const Icon(Icons.fact_check_outlined),
+                          label: const Text('Review Completion'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }),
           const Divider(height: 28),
           const Text(
             'MATERIALS',
