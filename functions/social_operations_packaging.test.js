@@ -8,8 +8,6 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const packageRoot = path.join(root, "functions-social-operations");
 const indexSource = fs.readFileSync(path.join(packageRoot, "index.js"), "utf8");
-const xFirstPublishSource = fs.readFileSync(
-  path.join(packageRoot, "x_first_publish.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 
@@ -67,7 +65,6 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "getSocialOperationsAdminSummary",
     "getSocialOperationsWorkspace",
     "ingestScaledCircleLaunchPlanV1",
-    "prepareFirstXProductionSuccessorV4",
     "prepareFirstXPublishFoundationV1",
     "proposeScheduledSocialReplacementV1",
     "rateHistoricalSocialContentV1",
@@ -120,18 +117,6 @@ test("X public-origin repair records the Founder deletion without a provider del
   assert.match(renderer, /public_publish/);
   assert.match(renderer, /https:\/\/scaledcircle\.com/);
   assert.doesNotMatch(renderer, /scaledcircle-staging|\.web\.app|firebaseapp/);
-});
-
-test("X v4 preparation is private, provider-free, and approval-blocked", () => {
-  const preparation = indexSource.match(
-    /exports\.prepareFirstXProductionSuccessorV4 = [\s\S]*?\n\);/)[0];
-  assert.match(preparation, /invoker: "private"/);
-  assert.match(preparation, /approvalStatus: approvalIntent\.record\.status/);
-  assert.match(xFirstPublishSource, /status: "awaiting_founder_approval"/);
-  assert.match(preparation, /providerMutations: 0/);
-  assert.match(preparation, /attemptCount: 0/);
-  assert.doesNotMatch(preparation, /providerSecretBinding|createPost|createReplacementPost|uploadMedia|fetch\(/);
-  assert.doesNotMatch(preparation, /scaledcircle-staging\.web\.app|firebaseapp\.com|localhost/);
 });
 
 test("the exact X publish job is one-time and terminal after reconciliation", () => {
