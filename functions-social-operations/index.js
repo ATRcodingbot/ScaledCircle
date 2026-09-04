@@ -678,6 +678,133 @@ exports.createFirstXPublishVersionV3 = onCall(
   },
 );
 
+exports.prepareFirstXProductionSuccessorV4 = onRequest(
+  {invoker: "private", cors: false, maxInstances: 1},
+  async (request, response) => {
+    try { xFirstPublish.assertProductionSuccessorHttpRequest(request); } catch (error) {
+      if (String(error?.message || "") === "x_v4_method_not_allowed") {
+        return response.status(405).json({error: "method_not_allowed"});
+      }
+      return response.status(400).json({error: "empty_request_required"});
+    }
+    if (runtimeEnvironment() !== "staging" ||
+        String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "") !==
+          "scaledcircle-staging") {
+      return response.status(403).json({error: "x_v4_preparation_unavailable"});
+    }
+    const itemRef = db.collection("socialContentItems").doc(xFirstPublish.CONTENT_ITEM_ID);
+    const versionThreeRef = db.collection("socialContentVersions")
+      .doc(xFirstPublish.VERSION_DOCUMENT_ID);
+    const versionTwoRef = db.collection("socialContentVersions")
+      .doc(xFirstPublish.PREVIOUS_VERSION_DOCUMENT_ID);
+    const versionRef = db.collection("socialContentVersions")
+      .doc(xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID);
+    const qualityRef = db.collection("socialContentQualityAssessments")
+      .doc(xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID);
+    const mediaRef = db.collection("socialMediaLibraries").doc(xFirstPublish.BUSINESS_UID)
+      .collection("items").doc(xFirstPublish.PRODUCTION_MEDIA_ID);
+    const oldMediaRef = db.collection("socialMediaLibraries").doc(xFirstPublish.BUSINESS_UID)
+      .collection("items").doc(xFirstPublish.MEDIA_ID);
+    const originalJobQuery = await db.collection("socialPublishingJobs")
+      .where("contentItemId", "==", xFirstPublish.CONTENT_ITEM_ID).limit(10).get();
+    const originalJob = originalJobQuery.docs.find((doc) =>
+      Number(doc.data()?.version) === xFirstPublish.VERSION_NUMBER);
+    const repair = await db.collection("socialPublishedPostRepairs")
+      .doc(FIRST_X_REPAIR_ID).get();
+    if (!originalJob || repair.exists || originalJob.data()?.status !== "unknown_provider_outcome" ||
+        Number(originalJob.data()?.attemptCount) !== 1 || !originalJob.data()?.providerMediaId ||
+        originalJob.data()?.replacementProviderPostId) {
+      return response.status(409).json({error: "x_v4_history_conflict"});
+    }
+    const [item, versionThree, versionTwo, oldMedia, versionQuality] = await Promise.all([
+      itemRef.get(), versionThreeRef.get(), versionTwoRef.get(), oldMediaRef.get(),
+      db.collection("socialContentQualityAssessments").doc(xFirstPublish.VERSION_DOCUMENT_ID).get(),
+    ]);
+    const v3 = versionThree.data();
+    if (!item.exists || item.data()?.businessUid !== xFirstPublish.BUSINESS_UID ||
+        !versionThree.exists || v3?.businessUid !== xFirstPublish.BUSINESS_UID ||
+        Number(v3?.version) !== xFirstPublish.VERSION_NUMBER ||
+        v3?.variants?.[0]?.copy !== xFirstPublish.APPROVED_COPY ||
+        !versionTwo.exists || !oldMedia.exists ||
+        oldMedia.data()?.sha256 !== xFirstPublish.MEDIA_SHA256 ||
+        versionQuality.data()?.readyToPublish !== true) {
+      return response.status(409).json({error: "x_v4_source_integrity_conflict"});
+    }
+    const now = Date.now();
+    const version = xFirstPublish.versionFourRecord({now});
+    const quality = socialOperations.assessScheduledContent({
+      businessUid: xFirstPublish.BUSINESS_UID, contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      versionRecord: version,
+      businessContext: {businessName: "Scaled Circle", services: ["Smart Mapping"],
+        geography: ["Maryland"]},
+      recentVariants: v3?.variants || [], performanceEvidence: [], now,
+    });
+    const media = xFirstPublish.productionMediaRecord();
+    const approvalIntent = xFirstPublish.productionApprovalIntent({version,
+      qualityAssessment: quality});
+    const publishJob = xFirstPublish.productionReplacementJob({version, approvalIntent});
+    const approvalRef = db.collection("socialExternalApprovalIntents").doc(approvalIntent.id);
+    const jobRef = db.collection("socialPublishingJobs").doc(publishJob.id);
+    const preparationHash = xFirstPublish.digest({version: version.contentHash,
+      quality: quality.immutableSourceHash, media: media.bindingHash,
+      approval: approvalIntent.record.approvalHash, job: publishJob.record.bindingHash});
+    const result = await db.runTransaction(async (transaction) => {
+      const [existingVersion, existingQuality, existingMedia, existingApproval, existingJob] =
+        await Promise.all([transaction.get(versionRef), transaction.get(qualityRef),
+          transaction.get(mediaRef), transaction.get(approvalRef), transaction.get(jobRef)]);
+      const existing = [existingVersion, existingQuality, existingMedia, existingApproval, existingJob];
+      if (existing.some((snapshot) => snapshot.exists)) {
+        if (!existing.every((snapshot) => snapshot.exists) ||
+            existingVersion.data()?.contentHash !== version.contentHash ||
+            existingMedia.data()?.bindingHash !== media.bindingHash ||
+            existingApproval.data()?.approvalHash !== approvalIntent.record.approvalHash ||
+            existingJob.data()?.bindingHash !== publishJob.record.bindingHash ||
+            existingQuality.data()?.preparationHash !== preparationHash) {
+          throw new Error("x_v4_replay_conflict");
+        }
+        return {reused: true};
+      }
+      transaction.create(versionRef, {...version, createdAt: FieldValue.serverTimestamp()});
+      transaction.create(qualityRef, {...quality, preparationHash,
+        performanceEvidenceStatus: "no_data", repetitionScope:
+          "includes_immutable_v3_predecessor",
+        createdAt: FieldValue.serverTimestamp()});
+      transaction.create(mediaRef, {...media, createdAt: FieldValue.serverTimestamp()});
+      transaction.create(approvalRef, {...approvalIntent.record,
+        createdAt: FieldValue.serverTimestamp()});
+      transaction.create(jobRef, {...publishJob.record,
+        sourceHistoricalJobId: originalJob.id,
+        reusedProviderMediaId: originalJob.data().providerMediaId,
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      transaction.update(itemRef, {currentVersion: xFirstPublish.PRODUCTION_VERSION_NUMBER,
+        currentVersionId: xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID,
+        status: "ready_for_review", approvedVersion: null,
+        supersededVersion: xFirstPublish.VERSION_NUMBER,
+        supersessionReason: xFirstPublish.PRODUCTION_SUCCESSOR_REASON,
+        mediaAssetId: xFirstPublish.PRODUCTION_MEDIA_ID,
+        responseAssetId: xFirstPublish.PRODUCTION_RESPONSE_ASSET_ID,
+        scheduledFor: null, updatedAt: FieldValue.serverTimestamp()});
+      return {reused: false};
+    });
+    return response.status(200).json({result: {
+      contentItemId: xFirstPublish.CONTENT_ITEM_ID,
+      versionId: xFirstPublish.PRODUCTION_VERSION_ID,
+      versionDocumentId: xFirstPublish.PRODUCTION_VERSION_DOCUMENT_ID,
+      predecessor: xFirstPublish.VERSION_DOCUMENT_ID,
+      reason: xFirstPublish.PRODUCTION_SUCCESSOR_REASON,
+      responseAssetId: xFirstPublish.PRODUCTION_RESPONSE_ASSET_ID,
+      trackedUrl: xFirstPublish.PRODUCTION_RESPONSE_URL,
+      mediaId: xFirstPublish.PRODUCTION_MEDIA_ID, mediaSha256: xFirstPublish.MEDIA_SHA256,
+      quality: {score: quality.score, qualityBand: quality.qualityBand,
+        recommendation: quality.recommendation, readyToPublish: quality.readyToPublish},
+      approvalIntentId: approvalIntent.id, approvalStatus: approvalIntent.record.status,
+      publishJobId: publishJob.id, publishJobStatus: publishJob.record.status,
+      attemptCount: 0, providerPostId: null, providerMutations: 0,
+      reused: result.reused,
+    }});
+  },
+);
+
 exports.getFirstXPublishCertificationV1 = onCall(
   {enforceAppCheck: false, maxInstances: 2},
   async (request) => {

@@ -37,6 +37,71 @@ test("X v3 is one compliant immutable quality revision that supersedes v2", () =
   assert.equal(version.immutable, true);
 });
 
+test("X v4 is an immutable production-attribution successor without staging lineage", () => {
+  const v3 = subject.versionRecord({responseAssetId: "asset-three", trackedUrl, now: 1000});
+  const v4 = subject.versionFourRecord({now: 2000});
+  assert.equal(v4.version, 4);
+  assert.equal(v4.supersedes, subject.VERSION_DOCUMENT_ID);
+  assert.equal(v4.supersessionReason, "PRODUCTION_ATTRIBUTION_SUCCESSOR");
+  assert.equal(v4.variants[0].copy, v3.variants[0].copy);
+  assert.equal(v4.variants[0].responseAssetId, subject.PRODUCTION_RESPONSE_ASSET_ID);
+  assert.equal(v4.variants[0].renderedCopy.includes(subject.PRODUCTION_RESPONSE_URL), true);
+  assert.equal(/scaledcircle-staging|\.web\.app|firebaseapp\.com|localhost/i
+    .test(JSON.stringify(v4)), false);
+  assert.equal(v4.immutable, true);
+  assert.equal(v4.founderPublicationApproved, false);
+});
+
+test("X v4 reuses certified bytes through immutable production-safe media metadata", () => {
+  const media = subject.productionMediaRecord();
+  assert.equal(media.sourceMediaAssetId, subject.MEDIA_ID);
+  assert.equal(media.sha256, subject.MEDIA_SHA256);
+  assert.equal(media.byteIdentityPreserved, true);
+  assert.equal(media.publicDeliveryUrl, null);
+  assert.equal(media.stagingReferenceCount, 0);
+  assert.equal(/scaledcircle-staging|\.web\.app|firebaseapp\.com|localhost/i
+    .test(JSON.stringify(media)), false);
+});
+
+test("X v4 requires a fresh quality gate, pending approval, and clean replacement job", () => {
+  const v4 = subject.versionFourRecord({now: 2000});
+  const v3 = subject.versionRecord({responseAssetId: "asset-three", trackedUrl, now: 900});
+  const quality = socialOperations.assessScheduledContent({businessUid: subject.BUSINESS_UID,
+    contentItemId: subject.CONTENT_ITEM_ID, versionRecord: v4,
+    businessContext: {businessName: "Scaled Circle", services: ["Smart Mapping"],
+      geography: ["Maryland"]}, recentVariants: v3.variants, performanceEvidence: [], now: 2100});
+  assert.equal(quality.score, 78);
+  assert.equal(quality.qualityBand, "good");
+  assert.equal(quality.recommendation, "keep");
+  assert.equal(quality.readyToPublish, true);
+  const intent = subject.productionApprovalIntent({version: v4, qualityAssessment: quality});
+  assert.equal(intent.record.status, "awaiting_founder_approval");
+  assert.equal(intent.record.externalExecutionAllowed, false);
+  const job = subject.productionReplacementJob({version: v4, approvalIntent: intent});
+  assert.equal(job.record.status, "awaiting_founder_approval");
+  assert.equal(job.record.attemptCount, 0);
+  assert.equal(job.record.providerCreateAttemptCount, 0);
+  assert.equal(job.record.providerPostId, null);
+  assert.equal(job.record.replacesPostId, subject.ORIGINAL_DEFECTIVE_POST_ID);
+  assert.equal(job.id, subject.productionReplacementJob({version: v4,
+    approvalIntent: intent}).id);
+  assert.equal(/scaledcircle-staging|\.web\.app|firebaseapp\.com|localhost/i
+    .test(JSON.stringify(job)), false);
+  assert.throws(() => subject.productionApprovalIntent({version: v4,
+    qualityAssessment: {...quality, readyToPublish: false}}), /approval_intent_gate/);
+});
+
+test("X v4 preparation endpoint accepts only POST with an empty body", () => {
+  assert.equal(subject.assertProductionSuccessorHttpRequest({method: "POST", url: "/", body: {}}),
+    true);
+  assert.throws(() => subject.assertProductionSuccessorHttpRequest({method: "GET", body: {}}),
+    /method_not_allowed/);
+  assert.throws(() => subject.assertProductionSuccessorHttpRequest({method: "POST", url: "/?x=1",
+    body: {}}), /empty_request_required/);
+  assert.throws(() => subject.assertProductionSuccessorHttpRequest({method: "POST", url: "/",
+    body: {businessUid: "other"}}), /empty_request_required/);
+});
+
 test("the unchanged quality authority marks the exact v3 ready without performance guesses", () => {
   const version = subject.versionRecord({responseAssetId: "asset-three", trackedUrl, now: 1000});
   const v2 = subject.versionTwoRecord({responseAssetId: "asset-two", trackedUrl, now: 900});

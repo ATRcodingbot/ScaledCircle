@@ -10,6 +10,10 @@ const CONTENT_ITEM_ID = "sc_x_20260903_mapping_v1";
 const VERSION_ID = "v3";
 const VERSION_NUMBER = 3;
 const VERSION_DOCUMENT_ID = `${CONTENT_ITEM_ID}_v3`;
+const PRODUCTION_VERSION_ID = "v4";
+const PRODUCTION_VERSION_NUMBER = 4;
+const PRODUCTION_VERSION_DOCUMENT_ID = `${CONTENT_ITEM_ID}_v4`;
+const PRODUCTION_SUCCESSOR_REASON = "PRODUCTION_ATTRIBUTION_SUCCESSOR";
 const ORIGINAL_VERSION_DOCUMENT_ID = `${CONTENT_ITEM_ID}_v1`;
 const PREVIOUS_VERSION_ID = "v2";
 const PREVIOUS_VERSION_NUMBER = 2;
@@ -21,6 +25,8 @@ const MEDIA_URL = "https://scaledcircle-staging.web.app/social/scaledcircle-smar
 const MEDIA_BYTES = 577663;
 const MEDIA_WIDTH = 1200;
 const MEDIA_HEIGHT = 675;
+const PRODUCTION_MEDIA_ID = `${MEDIA_ID}_production_v1`;
+const PRODUCTION_MEDIA_REVISION_ID = `${PRODUCTION_MEDIA_ID}:${MEDIA_SHA256.slice(0, 16)}`;
 const DESTINATION_URL = "https://scaledcircle.com/#/businesses";
 const SCHEDULED_FOR = "2026-09-03T14:00:00.000Z";
 const EXPECTED_X_ID = "2090731921177210880";
@@ -32,6 +38,9 @@ const REPLACEMENT_REASON = "PUBLIC_STAGING_ORIGIN";
 const ORIGINAL_DELETION_SOURCE = "FOUNDER_MANUAL_DELETE";
 const DEFECTIVE_TRACKED_URL = "https://scaledcircle-staging.web.app/r?code=vZN94658Lq6cEcYQ5V8IoFfC";
 const PUBLIC_RESPONSE_ORIGIN = "https://scaledcircle.com";
+const PRODUCTION_RESPONSE_ASSET_ID = "response_bcfcc63ef31d8eb467edfd209b9b5e9caf94f0ac";
+const PRODUCTION_RESPONSE_CODE = "P2AF8bOxfGyqZ_uYDwPtjkr3";
+const PRODUCTION_RESPONSE_URL = `${PUBLIC_RESPONSE_ORIGIN}/r?code=${PRODUCTION_RESPONSE_CODE}`;
 
 function assertProductionResponseAsset({responseAssetId, publicCode, publicUrl}) {
   const id = String(responseAssetId || "").trim();
@@ -123,6 +132,112 @@ function versionRecord({businessUid = BUSINESS_UID, responseAssetId, trackedUrl,
     supersedes: PREVIOUS_VERSION_DOCUMENT_ID, supersessionReason: "SOCIAL_QUALITY_IMPROVEMENT",
     founderPublicationApprovalRequired: true, founderPublicationApproved: false,
     immutable: true};
+}
+
+function versionFourRecord({businessUid = BUSINESS_UID, now = Date.now()} = {}) {
+  if (businessUid !== BUSINESS_UID) throw new Error("x_certification_business_mismatch");
+  const snapshot = {businessUid, planId: PLAN_ID, itemKey: CONTENT_ITEM_ID,
+    version: PRODUCTION_VERSION_NUMBER, scheduledFor: null,
+    goal: "Establish the problem ScaledCircle solves",
+    pillar: "Measurable local marketing",
+    variants: [{provider: "x", format: "post", copy: APPROVED_COPY,
+      renderedCopy: renderPostText(PRODUCTION_RESPONSE_URL), mediaAssetId: PRODUCTION_MEDIA_ID,
+      mediaRevisionId: PRODUCTION_MEDIA_REVISION_ID,
+      mediaRequirement: "Certified privacy-safe capture of the real ScaledCircle Smart Mapping UI",
+      altText: ALT_TEXT, callToAction: CTA, destinationUrl: DESTINATION_URL,
+      hashtags: ["#MarylandBusiness"], responseAssetId: PRODUCTION_RESPONSE_ASSET_ID,
+      responseAssetRequirement: "Production campaign-and-version-specific tracked link is bound."}],
+  };
+  const record = {schemaVersion: "SocialContentItemVersionV1", ...snapshot,
+    versionId: PRODUCTION_VERSION_ID, planVersionId: PLAN_VERSION_ID, campaignId: CAMPAIGN_ID,
+    status: "ready_for_review", originalStatus: "ready_for_review",
+    contentHash: digest(snapshot), approvedAt: null, createdAtMillis: now,
+    supersedes: VERSION_DOCUMENT_ID, supersessionReason: PRODUCTION_SUCCESSOR_REASON,
+    supersessionDetail: "v3 remained immutably bound to staging-origin attribution and could not " +
+      "truthfully be published as the corrected production replacement.",
+    founderPublicationApprovalRequired: true, founderPublicationApproved: false,
+    immutable: true};
+  assertNoStagingReference(record);
+  return record;
+}
+
+function productionMediaRecord({businessUid = BUSINESS_UID} = {}) {
+  if (businessUid !== BUSINESS_UID) throw new Error("x_certification_business_mismatch");
+  const record = {schemaVersion: "SocialMediaItemV1", businessUid,
+    mediaAssetId: PRODUCTION_MEDIA_ID, mediaRevisionId: PRODUCTION_MEDIA_REVISION_ID,
+    sourceMediaAssetId: MEDIA_ID, sourceMediaRevisionId: MEDIA_REVISION_ID,
+    sha256: MEDIA_SHA256, bytes: MEDIA_BYTES, width: MEDIA_WIDTH, height: MEDIA_HEIGHT,
+    mimeType: "image/png", byteIdentityPreserved: true,
+    storageAuthority: "immutable_hash_reuse", publicDeliveryUrl: null,
+    privacyReview: "pass", visualQualityReview: "pass", productionOriginSafe: true,
+    stagingReferenceCount: 0, immutable: true};
+  assertNoStagingReference(record);
+  return {...record, bindingHash: digest(record)};
+}
+
+function productionApprovalIntent({version, qualityAssessment} = {}) {
+  if (!version || version.version !== PRODUCTION_VERSION_NUMBER ||
+      version.contentHash !== versionFourRecord({now: version.createdAtMillis}).contentHash ||
+      !qualityAssessment || qualityAssessment.contentVersion !== PRODUCTION_VERSION_NUMBER ||
+      qualityAssessment.readyToPublish !== true || qualityAssessment.recommendation !== "keep") {
+    throw new Error("x_v4_approval_intent_gate_failed");
+  }
+  const identity = {businessUid: BUSINESS_UID, provider: "x", contentItemId: CONTENT_ITEM_ID,
+    version: PRODUCTION_VERSION_NUMBER, contentHash: version.contentHash,
+    mediaId: PRODUCTION_MEDIA_ID, mediaSha256: MEDIA_SHA256,
+    responseAssetId: PRODUCTION_RESPONSE_ASSET_ID,
+    trackedUrl: PRODUCTION_RESPONSE_URL, action: "replacement",
+    replacesPostId: ORIGINAL_DEFECTIVE_POST_ID};
+  const id = `social_approval_intent_${digest(identity)}`;
+  return {id, record: {schemaVersion: "SocialExternalApprovalIntentV1", ...identity,
+    approvalHash: digest(identity), status: "awaiting_founder_approval",
+    approvalClass: "single_social_replacement", externalExecutionAllowed: false,
+    providerMutationAuthorized: false, wildcardApproval: false,
+    founderActionRequired: true, immutable: true}};
+}
+
+function productionReplacementJob({version, approvalIntent} = {}) {
+  if (!version || version.version !== PRODUCTION_VERSION_NUMBER ||
+      !approvalIntent || approvalIntent.record?.status !== "awaiting_founder_approval") {
+    throw new Error("x_v4_job_gate_failed");
+  }
+  const identity = {businessUid: BUSINESS_UID, provider: "x", contentItemId: CONTENT_ITEM_ID,
+    version: PRODUCTION_VERSION_NUMBER, contentHash: version.contentHash,
+    responseAssetId: PRODUCTION_RESPONSE_ASSET_ID, mediaAssetId: PRODUCTION_MEDIA_ID,
+    mediaSha256: MEDIA_SHA256, action: "replacement",
+    replacesPostId: ORIGINAL_DEFECTIVE_POST_ID,
+    replacementReason: REPLACEMENT_REASON, approvalIntentId: approvalIntent.id};
+  const id = `social_replacement_${digest(identity)}`;
+  const record = {schemaVersion: "SocialPublishJobV1", ...identity,
+    idempotencyKey: id, status: "awaiting_founder_approval", scheduledFor: null,
+    attemptCount: 0, providerCreateAttemptCount: 0, providerPostId: null,
+    providerPostUrl: null, providerReceiptId: null,
+    originalDeletionSource: ORIGINAL_DELETION_SOURCE,
+    executionAuthority: "single_certified_replacement_only",
+    externalExecutionAllowed: false, providerMutationCount: 0,
+    reconciliationRequired: false, duplicatePreventionRequired: true,
+    immutablePreparationBinding: true};
+  assertNoStagingReference(record);
+  return {id, record: {...record, bindingHash: digest(record)}};
+}
+
+function assertNoStagingReference(value) {
+  if (/scaledcircle-staging|\.web\.app|firebaseapp\.com|localhost|127\.0\.0\.1/i
+    .test(JSON.stringify(value))) throw new Error("x_v4_staging_reference_forbidden");
+  return value;
+}
+
+function assertProductionSuccessorHttpRequest(request) {
+  if (String(request?.method || "").toUpperCase() !== "POST") {
+    throw new Error("x_v4_method_not_allowed");
+  }
+  if (String(request?.originalUrl || request?.url || "").includes("?")) {
+    throw new Error("x_v4_empty_request_required");
+  }
+  const body = request?.body;
+  if (body == null || typeof body !== "object" || Array.isArray(body) ||
+      Object.keys(body).length !== 0) throw new Error("x_v4_empty_request_required");
+  return true;
 }
 
 function versionTwoRecord({businessUid = BUSINESS_UID, responseAssetId, trackedUrl,
@@ -308,14 +423,20 @@ async function reconcilePost({fetchImpl = globalThis.fetch, accessToken, rendere
 
 module.exports = {BUSINESS_UID, PLAN_ID, PLAN_VERSION_ID, CAMPAIGN_ID, CONTENT_ITEM_ID,
   VERSION_ID, VERSION_NUMBER, VERSION_DOCUMENT_ID, ORIGINAL_VERSION_DOCUMENT_ID,
+  PRODUCTION_VERSION_ID, PRODUCTION_VERSION_NUMBER, PRODUCTION_VERSION_DOCUMENT_ID,
+  PRODUCTION_SUCCESSOR_REASON,
   PREVIOUS_VERSION_ID, PREVIOUS_VERSION_NUMBER, PREVIOUS_VERSION_DOCUMENT_ID,
   MEDIA_ID, MEDIA_REVISION_ID, MEDIA_SHA256, MEDIA_URL, MEDIA_BYTES, MEDIA_WIDTH,
-  MEDIA_HEIGHT, DESTINATION_URL, SCHEDULED_FOR, EXPECTED_X_ID, EXPECTED_X_HANDLE,
+  MEDIA_HEIGHT, PRODUCTION_MEDIA_ID, PRODUCTION_MEDIA_REVISION_ID,
+  DESTINATION_URL, SCHEDULED_FOR, EXPECTED_X_ID, EXPECTED_X_HANDLE,
   EXPECTED_X_NAME, V2_APPROVED_COPY, APPROVED_COPY, V2_CTA, CTA, ALT_TEXT,
   ORIGINAL_DEFECTIVE_POST_ID, ORIGINAL_DEFECT_REASON, REPLACEMENT_REASON,
   ORIGINAL_DELETION_SOURCE, DEFECTIVE_TRACKED_URL, PUBLIC_RESPONSE_ORIGIN,
+  PRODUCTION_RESPONSE_ASSET_ID, PRODUCTION_RESPONSE_CODE, PRODUCTION_RESPONSE_URL,
   assertProductionResponseAsset,
   X_READ_SCOPES, X_WRITE_SCOPES,
   digest, weightedXLength, renderPostText, pngDimensions, assertMedia, versionRecord,
+  versionFourRecord, productionMediaRecord, productionApprovalIntent,
+  productionReplacementJob, assertNoStagingReference, assertProductionSuccessorHttpRequest,
   versionTwoRecord, approvalRecord, expectedJobId, assertWriteConnection, uploadMedia, createPost,
   reconcilePost, lookupPost, createReplacementPost};
