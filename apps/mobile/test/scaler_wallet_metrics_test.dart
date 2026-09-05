@@ -15,7 +15,7 @@ void main() {
                   child: SizedBox(
                     width: width,
                     child: const ScalerWalletMetrics(
-                      testAvailable: 5,
+                      testUnreservedBalance: 5,
                       pendingEarnings: 0,
                       recordedEarnings: 88.51,
                     ),
@@ -27,19 +27,20 @@ void main() {
         );
         expect(find.byType(Card), findsNWidgets(3));
         for (final text in [
-          'Available',
+          'TEST balance',
           'Pending',
           'Total Recorded',
           '\$5.00',
           '\$0.00',
           '\$88.51',
-          'TEST funds only',
+          'Unreserved TEST funds',
         ]) {
           expect(find.text(text), findsOneWidget);
         }
         expect(find.text('\$93.51'), findsNothing);
+        expect(find.text('Available'), findsNothing);
         expect(tester.takeException(), isNull);
-        final available = tester.getTopLeft(find.text('Available'));
+        final available = tester.getTopLeft(find.text('TEST balance'));
         final pending = tester.getTopLeft(find.text('Pending'));
         expect(pending.dy > available.dy, width < 480);
       },
@@ -58,7 +59,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Available'), findsNothing);
+      expect(find.text('TEST balance'), findsNothing);
       expect(find.text('\$88.51'), findsOneWidget);
     },
   );

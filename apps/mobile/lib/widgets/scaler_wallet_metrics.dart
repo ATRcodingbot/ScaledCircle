@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
-/// Display-only projections: TEST availability never contributes to earnings.
+/// Display-only projections: Unreserved TEST funds are not an assertion of cash-out eligibility.
 class ScalerWalletMetrics extends StatelessWidget {
   const ScalerWalletMetrics({
     super.key,
-    this.testAvailable,
+    this.testUnreservedBalance,
     required this.pendingEarnings,
     required this.recordedEarnings,
   });
-  final double? testAvailable;
+  final double? testUnreservedBalance;
   final double pendingEarnings;
   final double recordedEarnings;
 
@@ -16,12 +16,12 @@ class ScalerWalletMetrics extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final cards = <Widget>[
-        if (testAvailable != null)
+        if (testUnreservedBalance != null)
           _metric(
             Icons.payments_outlined,
-            'Available',
-            testAvailable!,
-            'TEST funds only',
+            'TEST balance',
+            testUnreservedBalance!,
+            'Unreserved TEST funds',
           ),
         _metric(
           Icons.hourglass_top_outlined,

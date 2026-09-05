@@ -61,13 +61,13 @@ class ScalerWalletScreen extends StatelessWidget {
 
           final walletData = walletSnapshot.data?.data() ?? <String, dynamic>{};
 
-          final availableBalance =
+          final verifiedEarnings =
               (walletData['availableBalance'] as num?)?.toDouble() ?? 0.0;
 
           final pendingBalance =
               (walletData['pendingBalance'] as num?)?.toDouble() ?? 0.0;
 
-          final totalBalance = availableBalance + pendingBalance;
+          final totalBalance = verifiedEarnings + pendingBalance;
           final testAvailableCents =
               walletData['cashoutAvailableCents'] as num?;
 
@@ -107,7 +107,7 @@ class ScalerWalletScreen extends StatelessWidget {
                         const SizedBox(height: 8),
 
                         Text(
-                          '\$${availableBalance.toStringAsFixed(2)}',
+                          '\$${verifiedEarnings.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.bold,
@@ -117,7 +117,7 @@ class ScalerWalletScreen extends StatelessWidget {
                         const SizedBox(height: 8),
 
                         const Text(
-                          'Approved work earnings recorded in your ScaledCircle Wallet. Cash-out is not yet available.',
+                          'Approved campaign earnings recorded in your ScaledCircle Wallet.',
                         ),
                       ],
                     ),
@@ -127,7 +127,7 @@ class ScalerWalletScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               ScalerWalletMetrics(
-                testAvailable:
+                testUnreservedBalance:
                     ScalerCashoutService.enabled &&
                         walletData['cashoutMode'] == 'test' &&
                         testAvailableCents != null

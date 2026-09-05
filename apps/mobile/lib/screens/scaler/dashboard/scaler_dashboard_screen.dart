@@ -99,9 +99,10 @@ class ScalerDashboardScreen extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data() ?? <String, dynamic>{};
-        final available = (data['availableBalance'] as num?)?.toDouble() ?? 0.0;
+        final verifiedEarnings =
+            (data['availableBalance'] as num?)?.toDouble() ?? 0.0;
         final pending = (data['pendingBalance'] as num?)?.toDouble() ?? 0.0;
-        final total = available + pending;
+        final totalRecorded = verifiedEarnings + pending;
 
         return Container(
           padding: const EdgeInsets.all(22),
@@ -139,7 +140,7 @@ class ScalerDashboardScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Approved work and pending payments',
+                          'Recorded campaign earnings. See Wallet for payout status.',
                           style: TextStyle(color: AppColors.textSecondary),
                         ),
                       ],
@@ -168,9 +169,13 @@ class ScalerDashboardScreen extends StatelessWidget {
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 520;
                     final metrics = [
-                      _earningMetric('Available', available, emphasize: true),
+                      _earningMetric(
+                        'Verified Earnings',
+                        verifiedEarnings,
+                        emphasize: true,
+                      ),
                       _earningMetric('Pending', pending),
-                      _earningMetric('Total earned', total),
+                      _earningMetric('Total Recorded', totalRecorded),
                     ];
 
                     return compact
@@ -471,7 +476,8 @@ class ScalerDashboardScreen extends StatelessWidget {
                       context: context,
                       icon: Icons.account_balance_wallet_outlined,
                       title: 'Wallet',
-                      subtitle: 'View verified work earnings. Cash-out is not yet available.',
+                      subtitle:
+                          'View verified work earnings. Cash-out is not yet available.',
                       accent: AppColors.primary,
                       onTap: () {
                         Navigator.push(
