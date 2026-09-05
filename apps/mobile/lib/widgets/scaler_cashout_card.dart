@@ -126,7 +126,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
     final label = switch (status) {
       'pending' => 'Cash-out processing',
       'completed' => 'Completed',
-      'failed' => 'Cash-out failed',
+      'failed' => 'Cash-out failed. Funds returned to your balance.',
       'needs_attention' =>
         op is Map && op['payoutFailed'] == true
             ? 'Cash-out failed. Funds remain reserved.'

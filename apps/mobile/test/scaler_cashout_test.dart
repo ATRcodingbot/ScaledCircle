@@ -163,7 +163,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        find.text(state == 'completed' ? 'Completed' : 'Cash-out failed'),
+        find.text(
+          state == 'completed'
+              ? 'Completed'
+              : 'Cash-out failed. Funds returned to your balance.',
+        ),
         findsOneWidget,
       );
       expect(find.textContaining('acct_'), findsNothing);
@@ -231,7 +235,7 @@ void main() {
             state == 'pending'
                 ? 'Cash-out processing'
                 : state == 'failed'
-                ? 'Cash-out failed'
+                ? 'Cash-out failed. Funds returned to your balance.'
                 : 'Cash-out awaiting confirmation',
           ),
           findsOneWidget,
