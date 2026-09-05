@@ -13,6 +13,10 @@ abstract class ScalerCashoutService {
     bool retry = false,
   });
 
+  static String attentionMessage(String mode) =>
+      'Payouts need attention. Refresh and try again.'
+      '${mode == 'live' ? ' If the problem continues, contact support@scaledcircle.com.' : ''}';
+
   static bool get enabled =>
       const bool.fromEnvironment('ENABLE_TEST_CASHOUT') &&
       (AppEnvironmentConfig.isLocal || AppEnvironmentConfig.isStaging);

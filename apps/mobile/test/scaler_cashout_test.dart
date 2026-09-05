@@ -7,6 +7,7 @@ class FakeCashout implements ScalerCashoutService {
   Map<String, dynamic> data = {
     'mode': 'test',
     'status': 'ready',
+    'executionEnabled': true,
     'availableCents': 1000,
   };
   final List<String> ids = [];
@@ -72,6 +73,8 @@ void main() {
       await tester.enterText(find.byType(TextField), '5');
       await tester.tap(find.text('Cash out'));
       await tester.pumpAndSettle();
+      expect(find.text('Payouts ready'), findsOneWidget);
+      expect(find.textContaining('Payouts need attention'), findsNothing);
       service.loseResponse = false;
       await tester.tap(find.text('Cash out'));
       await tester.pumpAndSettle();
@@ -115,6 +118,7 @@ void main() {
         ..data = {
           'mode': 'test',
           'status': 'ready',
+          'executionEnabled': true,
           'availableCents': 500,
           'operation': {'operationId': 'fixture', 'status': state},
         };
@@ -133,4 +137,45 @@ void main() {
       expect(find.textContaining('acct_'), findsNothing);
     }
   });
+  testWidgets(
+    'healthy account with paused execution stays ready without attention warning',
+    (tester) async {
+      final service = FakeCashout()..data['executionEnabled'] = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ScalerCashoutCard(service: service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Payouts ready'), findsOneWidget);
+      expect(
+        find.text('TEST cash-out is paused for certification.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Payouts need attention'), findsNothing);
+      expect(find.text('Available: \$10.00'), findsOneWidget);
+      expect(find.text('Cash out'), findsNothing);
+      service.data['executionEnabled'] = true;
+      await tester.tap(find.text('Refresh'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cash out'), findsOneWidget);
+      expect(
+        find.text('TEST cash-out is paused for certification.'),
+        findsNothing,
+      );
+    },
+  );
+  test(
+    'LIVE account attention includes support without enabling LIVE execution',
+    () {
+      expect(
+        ScalerCashoutService.attentionMessage('live'),
+        contains('contact support@scaledcircle.com'),
+      );
+      expect(
+        ScalerCashoutService.attentionMessage('test'),
+        isNot(contains('contact support')),
+      );
+    },
+  );
 }

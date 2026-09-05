@@ -2,7 +2,7 @@
 const crypto = require("node:crypto");
 const cashout = require("./scaler_cashout");
 
-function createEndpoints({db, stripe, provider, service, runtime, now = Date.now}) {
+function createEndpoints({db, stripe, provider, service, runtime, executionEnabled = () => runtime().enabled, now = Date.now}) {
   const guard = (uid) => {
     cashout.assertTestRuntime(runtime());
     if (runtime().scalerUid && runtime().scalerUid !== uid) throw new Error("cashout_account_mismatch");
@@ -15,15 +15,16 @@ function createEndpoints({db, stripe, provider, service, runtime, now = Date.now
     const funds = balance?.ownerId === uid && balance.mode === "test" && balance.source === "bounded_test_fixture" ?
       {availableCents: balance.availableCents, pendingCents: balance.pendingCents, paidCents: balance.paidCents} :
       {availableCents: 0, pendingCents: 0, paidCents: 0};
+    const execution = {executionEnabled: executionEnabled() === true};
     let operation = null;
     if (balance?.activeOperationId) {
       const op = await db.collection("financialOperations").doc(balance.activeOperationId).get();
       if (op.data()?.ownerId === uid && op.data()?.mode === "test") operation = cashout.projection(op.data());
     }
-    if (!record?.stripeAccountId) return {mode: "test", status: "not_setup", ...funds, operation};
+    if (!record?.stripeAccountId) return {mode: "test", status: "not_setup", ...execution, ...funds, operation};
     cashout.assertAccount(record, uid);
     return {mode: "test", ...cashout.eligibility(await provider.getAccount(record.stripeAccountId), record.stripeAccountId),
-      ...funds, operation};
+      ...execution, ...funds, operation};
   }
   return {status, async setup(uid, email) {
     guard(uid);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/scaler_cashout_service.dart';
@@ -42,11 +43,17 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
     });
     try {
       await action();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => _error = 'Payouts need attention. Refresh and try again.',
-        );
+        setState(() {
+          final closed =
+              error is FirebaseFunctionsException &&
+              error.details is Map &&
+              error.details['reason'] == 'test_window_closed';
+          _error = closed
+              ? 'TEST certification window is closed. Cash-out execution is paused.'
+              : 'Could not complete this request. Refresh to check its status.';
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -56,10 +63,15 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
   Future<void> _load() => _work(() async {
     final data = await _service.status();
     final op = data['operation'];
-    if (op is Map && op['status'] == 'pending') {
+    if (data['executionEnabled'] == true &&
+        op is Map &&
+        op['status'] == 'pending') {
       await _service.reconcile(op['operationId'] as String);
     }
-    final refreshed = op is Map && op['status'] == 'pending'
+    final refreshed =
+        data['executionEnabled'] == true &&
+            op is Map &&
+            op['status'] == 'pending'
         ? await _service.status()
         : data;
     if (mounted) setState(() => _data = refreshed);
@@ -108,6 +120,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
   @override
   Widget build(BuildContext context) {
     final ready = _data?['status'] == 'ready';
+    final executionEnabled = _data?['executionEnabled'] == true;
     final op = _data?['operation'];
     final status = op is Map ? op['status'] : null;
     final available =
@@ -116,7 +129,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
       'pending' => 'Pending',
       'completed' => 'Completed',
       'failed' => 'Failed',
-      'needs_attention' => 'Needs attention',
+      'needs_attention' => 'Cash-out needs attention',
       _ => null,
     };
     return Card(
@@ -131,7 +144,17 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
             ),
             const Text('Test funds only. No real bank deposit.'),
             if (_data != null)
-              Text(ready ? 'Payouts ready' : 'Needs attention'),
+              Text(
+                ready
+                    ? 'Payouts ready'
+                    : _data?['status'] == 'not_setup'
+                    ? 'Set up payouts to get started.'
+                    : ScalerCashoutService.attentionMessage(
+                        _data?['mode'] as String? ?? 'test',
+                      ),
+              ),
+            if (_data != null && !executionEnabled)
+              const Text('TEST cash-out is paused for certification.'),
             Text('Available: \$${available.toStringAsFixed(2)}'),
             if (label != null) Text(label),
             if (_error != null) Text(_error!),
@@ -142,6 +165,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
                 child: const Text('Set up payouts'),
               ),
             if (ready &&
+                executionEnabled &&
                 status != 'pending' &&
                 status != 'needs_attention') ...[
               TextField(
@@ -159,7 +183,8 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
                 child: const Text('Cash out'),
               ),
             ],
-            if (status == 'pending' || status == 'needs_attention')
+            if (executionEnabled &&
+                (status == 'pending' || status == 'needs_attention'))
               TextButton(
                 onPressed: _busy
                     ? null

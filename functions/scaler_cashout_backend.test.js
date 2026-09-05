@@ -162,6 +162,11 @@ test("signed webhook replay reconciles exactly once without provider mutation", 
 test("onboarding reuses bound account, fails wrong mode and returns a hosted URL only", async () => {
   const endpoints = createEndpoints({db, stripe: mock.stripe, provider, service, runtime});
   assert.equal((await endpoints.status(uid)).ready, true);
+  assert.equal((await endpoints.status(uid)).executionEnabled, true);
+  const paused = createEndpoints({db, stripe: mock.stripe, provider, service, runtime, executionEnabled: () => false});
+  const pausedStatus = await paused.status(uid);
+  assert.equal(pausedStatus.ready, true); assert.equal(pausedStatus.executionEnabled, false);
+  assert.equal(pausedStatus.availableCents, 1000);
   const result = await endpoints.setup(uid, "scaler@example.invalid");
   assert.equal(result.url, "https://connect.stripe.com/setup/fixture");
   assert.equal(result.stripeAccountId, undefined);

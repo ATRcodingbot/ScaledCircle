@@ -11607,7 +11607,7 @@ function cashoutServices(setupOnly = false) {
   const provider = cashoutStripe.createStripeProvider({stripe, runtime});
   const service = cashout.createService({store, provider, runtime: cashoutRuntime});
   const endpoints = require("./scaler_cashout_endpoints").createEndpoints({
-    db, stripe, provider, service, runtime});
+    db, stripe, provider, service, runtime, executionEnabled: () => cashoutRuntime().enabled});
   return {stripe, store, provider, service, endpoints};
 }
 
@@ -11616,7 +11616,7 @@ function safeCashoutCallable(handler, setupOnly = false) {
     secrets: [STRIPE_CASHOUT_TEST_API_KEY]}, async (request) => {
     if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in as a Scaler.");
     try { cashout.assertTestRuntime(cashoutRuntime(setupOnly)); }
-    catch (_) { throw new HttpsError("failed-precondition", "Test payouts are not enabled."); }
+    catch (_) { throw new HttpsError("failed-precondition", "Test payouts are not enabled.", {reason: "test_window_closed"}); }
     const context = await requireFinancialRole(request, "scaler", "Sign in as a Scaler.");
     if (context.role !== "scaler" || context.user?.disabled === true) {
       throw new HttpsError("permission-denied", "Sign in as an active Scaler.");
