@@ -198,4 +198,3 @@ test("terminal failure cannot be reclaimed or execute a second financial mutatio
   assert.equal(calls, 1);
   assert.equal((await store.get(input.operationId)).attempt, 1);
 });
-
