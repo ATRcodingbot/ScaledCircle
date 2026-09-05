@@ -2071,7 +2071,7 @@ exports.getSocialOperationsAdminSummary = onCall(
         appName: doc.data().appName || null,
         enabled: doc.data().enabled === true,
         historicalSyncEnabled: doc.data().historicalSyncEnabled === true,
-        writeScopesEnabled: false,
+        writeScopesEnabled: doc.data().writeScopesEnabled === true,
         externalPublishingEnabled: false,
       })),
       performanceSnapshotCount: snapshots.data().count,

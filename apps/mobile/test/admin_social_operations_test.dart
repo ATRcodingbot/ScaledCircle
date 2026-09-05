@@ -9,8 +9,10 @@ void main() {
     ).readAsStringSync();
     expect(screen, contains('Social connection operational health'));
     expect(screen, contains('Token:'));
-    expect(screen, contains('Configure read-only provider'));
-    expect(screen, contains('Write scopes: Off'));
+    expect(screen, contains('Configure provider connection'));
+    expect(screen, contains("AppEnvironmentConfig.functionsBaseUrl"));
+    expect(screen, contains('socialOAuthXCallbackV1'));
+    expect(screen, contains("config['writeScopesEnabled'] == true"));
     expect(screen, contains('External publishing'));
     expect(screen, contains('Ad mutations'));
     expect(screen, contains('Bulk email delivery'));

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_operations_service.dart';
+import '../../config/app_environment.dart';
 
 class AdminSocialOperationsScreen extends StatefulWidget {
   const AdminSocialOperationsScreen({super.key});
@@ -17,20 +18,26 @@ class _AdminSocialOperationsScreenState
 
   void _refresh() => setState(() => _summary = _service.loadSocialOperations());
 
+  String _callbackFor(String provider) {
+    final functionName = switch (provider) {
+      'x' => 'socialOAuthXCallbackV1',
+      'meta' => 'socialOAuthMetaCallbackV1',
+      _ => 'socialOAuthCallbackV1',
+    };
+    return '${AppEnvironmentConfig.functionsBaseUrl}/$functionName';
+  }
+
   Future<void> _configureProvider() async {
     final clientId = TextEditingController();
-    final redirectUri = TextEditingController(
-      text:
-          'https://us-east1-scaledcircle-staging.cloudfunctions.net/socialOAuthCallbackV1',
-    );
     var provider = 'meta';
+    final redirectUri = TextEditingController(text: _callbackFor(provider));
     var enabled = false;
     var historicalSyncEnabled = false;
     final save = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
-          title: const Text('Configure read-only provider'),
+          title: const Text('Configure provider connection'),
           content: SizedBox(
             width: 560,
             child: Column(
@@ -47,8 +54,10 @@ class _AdminSocialOperationsScreenState
                     DropdownMenuItem(value: 'x', child: Text('X')),
                     DropdownMenuItem(value: 'youtube', child: Text('YouTube')),
                   ],
-                  onChanged: (value) =>
-                      setModalState(() => provider = value ?? 'meta'),
+                  onChanged: (value) => setModalState(() {
+                    provider = value ?? 'meta';
+                    redirectUri.text = _callbackFor(provider);
+                  }),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -68,8 +77,12 @@ class _AdminSocialOperationsScreenState
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Allow read-only connection'),
-                  subtitle: const Text('Publishing scopes remain unavailable.'),
+                  title: const Text('Enable provider connection'),
+                  subtitle: Text(
+                    provider == 'x'
+                        ? 'X publishing remains separately approval-controlled.'
+                        : 'Publishing authority remains separately controlled.',
+                  ),
                   value: enabled,
                   onChanged: (value) => setModalState(() => enabled = value),
                 ),
@@ -137,7 +150,7 @@ class _AdminSocialOperationsScreenState
       actions: [
         IconButton(
           onPressed: _configureProvider,
-          tooltip: 'Configure read-only provider',
+          tooltip: 'Configure provider connection',
           icon: const Icon(Icons.settings_outlined),
         ),
         IconButton(
@@ -192,7 +205,7 @@ class _AdminSocialOperationsScreenState
                   subtitle: Text(
                     'Connection: ${config['enabled'] == true ? 'Enabled' : 'Off'} · '
                     'Historical sync: ${config['historicalSyncEnabled'] == true ? 'Enabled' : 'Off'} · '
-                    'Write scopes: Off',
+                    'Write scopes: ${config['writeScopesEnabled'] == true ? 'Enabled' : 'Off'}',
                   ),
                 ),
               ),

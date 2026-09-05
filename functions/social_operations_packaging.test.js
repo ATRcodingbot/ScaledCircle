@@ -193,6 +193,10 @@ test("production X connection authority is exact-scope, confirmation-gated, and 
   assert.match(confirm, /externalPublishingEnabled: false/);
   assert.doesNotMatch(configure + begin + inspect + confirm,
     /createPost|createReplacementPost|uploadMedia|method:\s*"DELETE"/);
+  const summary = indexSource.match(
+    /exports\.getSocialOperationsAdminSummary = [\s\S]*?\n\);/)[0];
+  assert.match(summary, /writeScopesEnabled: doc\.data\(\)\.writeScopesEnabled === true/);
+  assert.match(summary, /externalPublishingEnabled: false/);
 });
 
 test("bounded X write entrypoints bind only shared encryption and X secret", () => {
