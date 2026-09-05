@@ -454,13 +454,14 @@ async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
       throw new Error("social_oauth_meta_restricted_identity_mismatch");
     }
     const igUrl = new URL(`${graphBase}/${encodeURIComponent(p.instagramId)}`);
-    igUrl.searchParams.set("fields", "id,username,name,account_type");
-    igUrl.searchParams.set("access_token", page.access_token);
+    igUrl.searchParams.set("fields", "id,username,name");
+    igUrl.searchParams.set("access_token", token.access_token);
     const ig = await fetchJson(fetchImpl, igUrl, {}, {providerStage: "meta_instagram_identity"});
     const candidate = {provider: "meta", candidateId: `meta_page_${page.id}`,
       accountId: page.id, accountDisplayName: page.name, accountType: "facebook_page",
       linkedAccountId: ig.id, linkedAccountDisplayName: ig.name || ig.username,
-      linkedHandle: ig.username, linkedAccountType: ig.account_type,
+      linkedHandle: ig.username, linkedAccountType: "instagram_professional",
+      professionalIdentityEvidence: "page_instagram_business_account_and_ig_user",
       pageAccessToken: page.access_token, userAccessToken: token.access_token,
       expiresIn: Number(token.expires_in || 0) || null,
       capabilities: metaConnection.capabilities(explicitScopes, "facebook")};

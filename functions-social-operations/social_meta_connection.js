@@ -29,7 +29,8 @@ function identity(candidate, p) {
   if (candidate?.provider !== "meta" || candidate.accountId !== p.pageId ||
       candidate.accountDisplayName !== p.pageName || candidate.linkedAccountId !== p.instagramId ||
       candidate.linkedHandle !== p.instagramUsername ||
-      !["BUSINESS", "MEDIA_CREATOR"].includes(candidate.linkedAccountType) ||
+      candidate.linkedAccountType !== "instagram_professional" ||
+      candidate.professionalIdentityEvidence !== "page_instagram_business_account_and_ig_user" ||
       !candidate.pageAccessToken || !candidate.userAccessToken) {
     throw new Error("social_oauth_meta_restricted_identity_mismatch");
   }

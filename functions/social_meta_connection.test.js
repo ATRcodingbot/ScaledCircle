@@ -39,7 +39,7 @@ test("Meta capabilities derive from scopes and never authorize scheduling", () =
   assert.equal(policy.capabilities(oauth.META_PUBLISH_SCOPES, "instagram").schedule, false);
 });
 test("Meta exchange verifies live linkage and professional identity using GET only without leaking tokens", async () => {
-  for (const defect of [null, "link", "type", "handle", "token", "extra_scope"]) {
+  for (const defect of [null, "link", "ig_id", "handle", "token", "extra_scope"]) {
     const attempt = oauth.createAttempt({businessUid: p.businessUid, provider: "meta", config,
       encryptionKey: key, now: 1000, scopes: oauth.META_PUBLISH_SCOPES, purpose: "meta_connection_authority"});
     let calls = 0;
@@ -48,13 +48,17 @@ test("Meta exchange verifies live linkage and professional identity using GET on
         .map(permission => ({permission, status: "granted"}))},
       {id: p.pageId, name: p.pageName, access_token: defect === "token" ? null : "page-fixture",
         instagram_business_account: {id: defect === "link" ? "789" : p.instagramId}},
-      {id: p.instagramId, username: defect === "handle" ? "other" : p.instagramUsername,
-        account_type: defect === "type" ? "PERSONAL" : "BUSINESS"}];
+      {id: defect === "ig_id" ? "789" : p.instagramId,
+        username: defect === "handle" ? "other" : p.instagramUsername}];
     const run = oauth.completeExchange({attempt: attempt.record, code: "fixture-code", config,
       clientSecret: "fixture-secret", encryptionKey: key, now: 1100,
       fetchImpl: async (url, init) => {
         assert.equal(init?.method || "GET", "GET");
         assert.equal(new URL(url).hostname, "graph.facebook.com");
+        if (new URL(url).pathname.endsWith("/456")) {
+          assert.equal(new URL(url).searchParams.get("fields"), "id,username,name");
+          assert.equal(new URL(url).searchParams.get("access_token"), "long-fixture");
+        }
         return {ok: true, json: async () => responses[calls++]};
       }});
     if (defect) {await assert.rejects(run); continue;}
