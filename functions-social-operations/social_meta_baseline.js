@@ -50,6 +50,13 @@ async function collect({surface, account, tokens, fetchImpl = globalThis.fetch, 
           type: typeof body.error?.type === "string" && /^[A-Za-z_]{1,80}$/.test(body.error.type) ? body.error.type : null,
           providerMessage: message});
       }
+      // Latest Page posts are optional. Their separate read-content permission
+      // must not discard successful Page insights or broaden the OAuth scope.
+      if (!ig && path === `/${id}/posts` && response.status === 400 && code === 10 &&
+          body.error?.type === "OAuthException" &&
+          /pages_read_user_content|Page Public Content Access/.test(body.error.message || "")) {
+        return {errorCode: code, unavailableReason: "optional_post_read_permission_not_granted"};
+      }
       if ([190, 10, 200].includes(code) || response.status === 401 || response.status === 403 || response.status === 429) {
         throw Error(`meta_baseline_authority_or_rate_limit_${code || response.status}`);
       }
@@ -86,6 +93,7 @@ async function collect({surface, account, tokens, fetchImpl = globalThis.fetch, 
     comments: measure(ig ? row.comments_count : row.comments?.summary?.total_count, `${row.id}:comments`),
     shares: measure(ig ? null : row.shares?.count, `${row.id}:shares`)})) : [];
   result.latestStatus = Array.isArray(latest.data) ? (latest.data.length ? "OBSERVED" : "NO_DATA") : "UNAVAILABLE";
+  if (!ig && latest.unavailableReason) result.latestUnavailableReason = latest.unavailableReason;
   result.metrics[ig ? "mediaCount" : "postCount"] = ig ? measure(identity.media_count, `/${id}:media_count`) :
     measure(null, `/${id}/posts`, "bounded_sample_is_not_lifetime_count");
   return result;

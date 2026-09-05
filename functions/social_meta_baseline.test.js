@@ -57,3 +57,31 @@ test("Instagram error handling emits no Facebook diagnostics",async()=>{
     fetchImpl:async()=>({ok:false,status:403,json:async()=>({error:{code:200}})})}));
   assert.equal(diagnostics,0);
 });
+
+test("Facebook posts code 10 preserves Page metrics without requesting another permission",async()=>{
+  const calls=[];
+  const result=await collect({surface:"facebook",account,tokens,fetchImpl:async(url,options)=>{
+    calls.push(url.pathname); assert.equal(options.method,"GET");
+    if(url.pathname.endsWith("/posts")) return {ok:false,status:400,json:async()=>({error:{
+      code:10,type:"OAuthException",message:"(#10) This endpoint requires the 'pages_read_user_content' permission or the 'Page Public Content Access' feature."}})};
+    const body=url.pathname.endsWith("/insights") ? {data:[{name:url.searchParams.get("metric"),period:"day",
+      values:[{value:7,end_time:"2026-09-05T07:00:00Z"}]}]} :
+      {id:"123",followers_count:5,instagram_business_account:{id:"456"}};
+    return {ok:true,json:async()=>body};
+  }});
+  assert.equal(result.metrics.followers.value,5);
+  for(const key of ["page_media_view","page_post_engagements","page_views_total"]) assert.equal(result.metrics[key].value,7);
+  assert.equal(result.latestStatus,"UNAVAILABLE");
+  assert.equal(result.latestUnavailableReason,"optional_post_read_permission_not_granted");
+  assert.deepEqual(result.latest,[]); assert.equal(result.metrics.postCount.value,null);
+  assert.equal(calls.length,5);
+});
+
+test("Facebook optional posts exception never suppresses expired tokens or rate limits",async()=>{
+  for(const [status,code] of [[400,190],[429,10],[403,10]]) {
+    await assert.rejects(collect({surface:"facebook",account,tokens,fetchImpl:async url=>{
+      if(url.pathname.endsWith("/posts"))return {ok:false,status,json:async()=>({error:{code,type:"OAuthException",message:"pages_read_user_content"}})};
+      return {ok:true,json:async()=>url.pathname.endsWith("/insights")?{data:[]}:{id:"123",instagram_business_account:{id:"456"}}};
+    }}),/authority_or_rate_limit/);
+  }
+});
