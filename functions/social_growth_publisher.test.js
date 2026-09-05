@@ -24,8 +24,9 @@ test("normal Supervisor requires explicit tenant, environment, bounded job, mode
   }
   assert.throws(() => environment("unknown-production-project"));
 });
-test("capabilities derive from verified scopes, while invalid schedules fail closed", () => {
+test("publication requires certified write state in addition to scopes; invalid schedules fail closed", () => {
   const value = input(); value.connection.status = "connected_read_only";
-  assert.equal(gate(value), "ready");
+  assert.equal(gate(value), "reconnect");
+  value.connection.status = "connected_write";
   value.job.scheduledFor = "invalid"; assert.equal(gate(value), "schedule_invalid");
 });

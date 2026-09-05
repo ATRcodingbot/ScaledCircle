@@ -91,6 +91,7 @@ function publicationGate({job, connection, supervisor, authority, now = Date.now
   if (authority?.externalPublishingEnabled !== true || authority?.reviewed !== true ||
       authority.businessUid !== job.businessUid || authority.mode !== "approval_required") return "authority_pending";
   if (job.provider !== "x") return "provider_not_certified";
+  if (connection?.status !== "connected_write" || connection?.tokenHealth !== "healthy") return "reconnect";
   if (!authority.providerUserId || connection?.businessUid !== job.businessUid ||
       !social.xConnectionCapabilities(connection, {expectedProviderUserId: authority.providerUserId}).canWrite) return "reconnect";
   const expected = ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"].sort();
