@@ -29,6 +29,8 @@ const {
   serializedBytes,
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
+const cashout = require("./scaler_cashout");
+const cashoutStripe = require("./scaler_cashout_stripe");
 const campaignFundingQuote = require("./campaign_funding_quote");
 const discoveryPreferences = require("./discovery_preferences");
 const marketplaceWorkTypes = require("./marketplace_work_types");
@@ -485,6 +487,9 @@ const CENSUS_API_KEY = defineSecret("CENSUS_API_KEY");
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
+// Dedicated TEST endpoint signing secret; provision only during supervised setup.
+const STRIPE_CASHOUT_TEST_WEBHOOK_SECRET = defineSecret("STRIPE_CASHOUT_TEST_WEBHOOK_SECRET");
+const STRIPE_CASHOUT_TEST_CONNECT_WEBHOOK_SECRET = defineSecret("STRIPE_CASHOUT_TEST_CONNECT_WEBHOOK_SECRET");
 const STRIPE_THIN_WEBHOOK_SECRET = defineSecret("STRIPE_THIN_WEBHOOK_SECRET");
 const STRIPE_STARTER_PRICE_ID = defineSecret("STRIPE_STARTER_PRICE_ID");
 const STRIPE_GROWTH_PRICE_ID = defineSecret("STRIPE_GROWTH_PRICE_ID");
@@ -11578,6 +11583,64 @@ exports.executeQueuedScalerTransfers = onSchedule(
     }
   },
 );
+
+function cashoutRuntime() {
+  return {environment: process.env.SCALEDCIRCLE_ENV,
+    projectId: process.env.GCLOUD_PROJECT && process.env.GOOGLE_CLOUD_PROJECT &&
+      process.env.GCLOUD_PROJECT !== process.env.GOOGLE_CLOUD_PROJECT ? "mismatch" :
+      process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+    enabled: process.env.SCALEDCIRCLE_CASHOUT_TEST_ENABLED === "true",
+    secretKey: STRIPE_SECRET_KEY.value()};
+}
+
+function cashoutServices() {
+  cashout.assertTestRuntime(cashoutRuntime());
+  const stripe = new Stripe(STRIPE_SECRET_KEY.value(), {timeout: 10000, maxNetworkRetries: 0});
+  const store = cashout.createStore(db);
+  const provider = cashoutStripe.createStripeProvider({stripe, runtime: cashoutRuntime});
+  const service = cashout.createService({store, provider, runtime: cashoutRuntime});
+  const endpoints = require("./scaler_cashout_endpoints").createEndpoints({
+    db, stripe, provider, service, runtime: cashoutRuntime});
+  return {stripe, store, provider, service, endpoints};
+}
+
+function safeCashoutCallable(handler) {
+  return onCall({region: "us-east1", timeoutSeconds: 60, maxInstances: 2,
+    secrets: [STRIPE_SECRET_KEY]}, async (request) => {
+    cashout.assertTestRuntime(cashoutRuntime());
+    const context = await requireFinancialRole(request, "scaler", "Sign in as a Scaler.");
+    try { return await handler(cashoutServices(), context.uid, request); }
+    catch (_) { throw new HttpsError("failed-precondition", "Payouts need attention. Refresh your Wallet and try again."); }
+  });
+}
+
+exports.getScalerCashoutV1 = safeCashoutCallable(({endpoints}, uid) => endpoints.status(uid));
+exports.setupScalerPayoutsV1 = safeCashoutCallable(({endpoints}, uid, request) =>
+  endpoints.setup(uid, request.auth.token.email));
+exports.requestScalerCashoutV1 = safeCashoutCallable(({endpoints}, uid, request) =>
+  endpoints.request(uid, request.data));
+exports.reconcileScalerCashoutV1 = safeCashoutCallable(({service}, uid, request) => {
+  const data = request.data || {};
+  if (Object.keys(data).some((key) => !["operationId", "retry"].includes(key)) ||
+      !/^cashout_[a-f0-9]{64}$/.test(data.operationId || "") ||
+      (data.retry != null && typeof data.retry !== "boolean")) throw new Error("cashout_request_invalid");
+  return service.run(data.operationId, uid, {readOnly: data.retry !== true, retryPayout: data.retry === true});
+});
+function cashoutTestWebhook(signingSecret, endpointScope) {
+  return onRequest({region: "us-east1", timeoutSeconds: 60,
+    maxInstances: 2, secrets: [STRIPE_SECRET_KEY, signingSecret]}, async (request, response) => {
+    if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
+    try {
+      const services = cashoutServices();
+      const result = await cashoutStripe.handleWebhook({...services, runtime: cashoutRuntime,
+        secret: signingSecret.value(), endpointScope, rawBody: request.rawBody,
+        signature: request.headers["stripe-signature"]});
+      return response.status(200).json(result);
+    } catch (_) { return response.status(400).send("Cash-out event could not be reconciled."); }
+  });
+}
+exports.scalerCashoutTestWebhookV1 = cashoutTestWebhook(STRIPE_CASHOUT_TEST_WEBHOOK_SECRET, "platform");
+exports.scalerCashoutTestConnectWebhookV1 = cashoutTestWebhook(STRIPE_CASHOUT_TEST_CONNECT_WEBHOOK_SECRET, "connected");
 
 exports._marketplaceTest = {
   ...marketplace,
