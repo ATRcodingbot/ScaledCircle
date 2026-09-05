@@ -488,6 +488,7 @@ const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 // Dedicated TEST endpoint signing secret; provision only during supervised setup.
+const STRIPE_CASHOUT_TEST_API_KEY = defineSecret("STRIPE_TEST_SECRET_KEY");
 const STRIPE_CASHOUT_TEST_WEBHOOK_SECRET = defineSecret("STRIPE_CASHOUT_TEST_WEBHOOK_SECRET");
 const STRIPE_CASHOUT_TEST_CONNECT_WEBHOOK_SECRET = defineSecret("STRIPE_CASHOUT_TEST_CONNECT_WEBHOOK_SECRET");
 const STRIPE_THIN_WEBHOOK_SECRET = defineSecret("STRIPE_THIN_WEBHOOK_SECRET");
@@ -11590,12 +11591,12 @@ function cashoutRuntime() {
       process.env.GCLOUD_PROJECT !== process.env.GOOGLE_CLOUD_PROJECT ? "mismatch" :
       process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
     enabled: process.env.SCALEDCIRCLE_CASHOUT_TEST_ENABLED === "true",
-    secretKey: STRIPE_SECRET_KEY.value()};
+    secretKey: STRIPE_CASHOUT_TEST_API_KEY.value()};
 }
 
 function cashoutServices() {
   cashout.assertTestRuntime(cashoutRuntime());
-  const stripe = new Stripe(STRIPE_SECRET_KEY.value(), {timeout: 10000, maxNetworkRetries: 0});
+  const stripe = new Stripe(STRIPE_CASHOUT_TEST_API_KEY.value(), {timeout: 10000, maxNetworkRetries: 0});
   const store = cashout.createStore(db);
   const provider = cashoutStripe.createStripeProvider({stripe, runtime: cashoutRuntime});
   const service = cashout.createService({store, provider, runtime: cashoutRuntime});
@@ -11606,9 +11607,14 @@ function cashoutServices() {
 
 function safeCashoutCallable(handler) {
   return onCall({region: "us-east1", timeoutSeconds: 60, maxInstances: 2,
-    secrets: [STRIPE_SECRET_KEY]}, async (request) => {
-    cashout.assertTestRuntime(cashoutRuntime());
+    secrets: [STRIPE_CASHOUT_TEST_API_KEY]}, async (request) => {
+    if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in as a Scaler.");
+    try { cashout.assertTestRuntime(cashoutRuntime()); }
+    catch (_) { throw new HttpsError("failed-precondition", "Test payouts are not enabled."); }
     const context = await requireFinancialRole(request, "scaler", "Sign in as a Scaler.");
+    if (context.role !== "scaler" || context.user?.disabled === true) {
+      throw new HttpsError("permission-denied", "Sign in as an active Scaler.");
+    }
     try { return await handler(cashoutServices(), context.uid, request); }
     catch (_) { throw new HttpsError("failed-precondition", "Payouts need attention. Refresh your Wallet and try again."); }
   });
@@ -11628,7 +11634,7 @@ exports.reconcileScalerCashoutV1 = safeCashoutCallable(({service}, uid, request)
 });
 function cashoutTestWebhook(signingSecret, endpointScope) {
   return onRequest({region: "us-east1", timeoutSeconds: 60,
-    maxInstances: 2, secrets: [STRIPE_SECRET_KEY, signingSecret]}, async (request, response) => {
+    maxInstances: 2, secrets: [STRIPE_CASHOUT_TEST_API_KEY, signingSecret]}, async (request, response) => {
     if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
     try {
       const services = cashoutServices();
