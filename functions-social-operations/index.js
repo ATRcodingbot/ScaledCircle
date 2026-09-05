@@ -954,13 +954,13 @@ async function refreshStoredXCredential({businessUid, connectionRef, connection,
   let persistedGeneration = null;
   try {
     account = socialOAuth.decryptJson(claimed.credential.accountEnvelope,
-    socialOAuthEncryptionKey.value(), `${businessUid}:x:${connection.credentialId}`);
+      socialOAuthEncryptionKey.value(), `${businessUid}:x:${connection.credentialId}`);
     if (account.accountId !== expectedProviderUserId) throw new Error("x_account_mismatch");
     tokenAad = `${businessUid}:x:${account.accountId}`;
     const storedTokens = socialOAuth.decryptJson(claimed.credential.tokenEnvelope,
-    socialOAuthEncryptionKey.value(), tokenAad);
+      socialOAuthEncryptionKey.value(), tokenAad);
     const expectedScopes = socialOAuth.exactScopeSet(claimed.connection.grantedScopes,
-      xFirstPublish.X_WRITE_SCOPES);
+      ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"]);
     tokens = await socialOAuth.refreshTokens({provider: "x", tokens: storedTokens,
       config, clientSecret});
     let scopeMismatch = false;
@@ -992,7 +992,7 @@ async function refreshStoredXCredential({businessUid, connectionRef, connection,
         connectionRevision: nextConnectionRevision,
         tokenHealth: "validating",
         tokenEnvelope: socialOAuth.encryptJson(secretFields,
-          socialOAuthEncryptionKey.value(), tokenAad),
+            socialOAuthEncryptionKey.value(), tokenAad),
         grantedScopes: expectedScopes,
         refreshLeaseId: FieldValue.delete(), refreshLeaseGeneration: FieldValue.delete(),
         refreshStartedAtMillis: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()});
