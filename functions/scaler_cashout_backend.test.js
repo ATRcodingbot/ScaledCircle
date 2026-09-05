@@ -36,6 +36,56 @@ beforeEach(async () => {
 });
 after(async () => { await db.terminate(); await deleteApp(app); });
 
+test("bounded certification accepts one five-dollar operation and denies another after settlement", async () => {
+  const previousOperationId = `cashout_${"a".repeat(64)}`;
+  await db.doc(`scalerCashoutBalances/${uid}`).update({activeOperationId: previousOperationId});
+  const bounded = core.createService({store, provider, runtime: () => ({...runtime(),
+    certificationLimit: {previousOperationId, amountCents: 500}}), now: () => clock});
+  await assert.rejects(bounded.request(uid, {...request, amountCents: 501}, record()), /cashout_certification_limit/);
+  const result = await bounded.request(uid, request, record());
+  [...mock.payouts.values()][0].status = "paid";
+  await bounded.run(result.operationId, uid, {readOnly: true});
+  await bounded.request(uid, request, record());
+  await assert.rejects(bounded.request(uid, {...request, requestId: "fixture_request_0002"}, record()), /cashout_certification_limit/);
+  assert.equal(mock.transfers.size, 1); assert.equal(mock.payouts.size, 1);
+  assert.equal((await balance()).paidCents, 500);
+});
+
+test("delayed connected availability retains one transfer/reservation and creates payout only after sufficient balance", async () => {
+  mock.controls.available = [{currency: "usd", amount: 0}];
+  const result = await service.request(uid, request, record());
+  const key = result.operationId;
+  assert.equal(result.status, "pending");
+  assert.equal((await store.get(key, uid)).state, "balance_pending");
+  mock.controls.available[0].amount = 499;
+  await service.run(key, uid);
+  await service.run(key, uid, {readOnly: true});
+  assert.equal(mock.calls.filter(x => x.type === "transfer").length, 1);
+  assert.equal(mock.payouts.size, 0);
+  assert.equal((await balance()).pendingCents, 500);
+  mock.controls.available[0].amount = 500;
+  await service.run(key, uid, {readOnly: true});
+  assert.equal(mock.payouts.size, 0); // Observation never authorizes payout creation.
+  await service.run(key, uid);
+  await service.run(key, uid);
+  assert.equal(mock.calls.filter(x => x.type === "payout").length, 1);
+  assert.equal(mock.calls.filter(x => x.type === "transfer").length, 1);
+  assert.equal((await db.collection("financialOperations").get()).size, 1);
+  assert.equal((await balance()).availableCents, 500);
+  assert.equal((await balance()).paidCents, 0);
+});
+
+test("ambiguous connected balance fails closed without releasing or duplicating transferred funds", async () => {
+  mock.controls.available = undefined;
+  const result = await service.request(uid, request, record());
+  assert.equal(result.status, "needs_attention");
+  await service.run(result.operationId, uid);
+  assert.equal(mock.transfers.size, 1);
+  assert.equal(mock.payouts.size, 0);
+  assert.equal((await balance()).pendingCents, 500);
+  assert.equal((await balance()).paidCents, 0);
+});
+
 test("concurrent duplicate cash-outs reserve once, transfer once, and settle one Wallet operation", async () => {
   const responses = await Promise.all(Array.from({length: 6}, () => service.request(uid, request, record())));
   const key = responses[0].operationId;

@@ -73,6 +73,13 @@ function createStripeProvider({stripe, runtime}) {
     async createPayout(op) {
       guard();
       if (!eligibility(await getAccount(op.accountId), op.accountId).ready) fail("cashout_not_ready");
+      // A transfer receipt alone does not establish payout-available funds.
+      // Re-read the exact connected balance immediately before payout creation.
+      const balance = await stripe.balance.retrieve({}, options(op));
+      if (balance.livemode !== false || !Array.isArray(balance.available)) fail("cashout_balance_unconfirmed");
+      const amounts = balance.available.filter((entry) => entry.currency === op.currency);
+      if (amounts.length !== 1 || !Number.isSafeInteger(amounts[0].amount)) fail("cashout_balance_unconfirmed");
+      if (amounts[0].amount < op.amountCents) return null;
       return stripe.payouts.create({amount: op.amountCents, currency: op.currency,
         method: "standard", metadata: {cashoutId: op.id, mode: "test", attempt: String(op.payoutAttempt)}},
       {...options(op), idempotencyKey: `${op.id}:payout:${op.payoutAttempt}`});

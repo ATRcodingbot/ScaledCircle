@@ -190,6 +190,15 @@ void main() {
       );
       expect(find.textContaining('Payouts need attention'), findsNothing);
       expect(find.text('Cash out'), findsNothing);
+      expect(find.text('Manage payouts'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Manage payouts'),
+            )
+            .onPressed,
+        isNotNull,
+      );
       service.data['executionEnabled'] = true;
       await tester.tap(find.text('Refresh'));
       await tester.pumpAndSettle();

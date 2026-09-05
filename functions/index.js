@@ -11595,6 +11595,10 @@ function cashoutRuntime(setupOnly = false) {
     scalerUid,
     reconcileOnly: process.env.SCALEDCIRCLE_CASHOUT_TEST_RECONCILE_ONLY === "true",
     operationId: process.env.SCALEDCIRCLE_CASHOUT_TEST_OPERATION_ID || "",
+    certificationLimit: process.env.SCALEDCIRCLE_CASHOUT_TEST_PREVIOUS_OPERATION_ID ? {
+      previousOperationId: process.env.SCALEDCIRCLE_CASHOUT_TEST_PREVIOUS_OPERATION_ID,
+      amountCents: Number(process.env.SCALEDCIRCLE_CASHOUT_TEST_AMOUNT_CENTS),
+    } : null,
     enabled: (setupOnly ? process.env.SCALEDCIRCLE_CASHOUT_TEST_SETUP_ENABLED === "true" :
       process.env.SCALEDCIRCLE_CASHOUT_TEST_ENABLED === "true") &&
       /^[A-Za-z0-9_-]{1,128}$/.test(scalerUid) && Number.isFinite(expiresAt) && Date.now() < expiresAt,

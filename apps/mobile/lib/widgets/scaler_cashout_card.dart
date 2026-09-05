@@ -159,11 +159,10 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
             if (label != null) Text(label),
             if (_error != null) Text(_error!),
             if (_busy) const LinearProgressIndicator(),
-            if (!ready)
-              TextButton(
-                onPressed: _busy ? null : _setup,
-                child: const Text('Set up payouts'),
-              ),
+            TextButton(
+              onPressed: _busy ? null : _setup,
+              child: Text(ready ? 'Manage payouts' : 'Set up payouts'),
+            ),
             if (ready &&
                 executionEnabled &&
                 status != 'pending' &&

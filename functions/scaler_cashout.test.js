@@ -7,6 +7,24 @@ const core = require("./scaler_cashout");
 const adapter = require("./scaler_cashout_stripe");
 const {runtime, account, mockStripe} = require("./test_fixtures/cashout");
 
+test("payout availability requires an unambiguous TEST currency balance on the connected account", async () => {
+  const mock = mockStripe();
+  const provider = adapter.createStripeProvider({stripe: mock.stripe, runtime});
+  const op = {id: "cashout_fixture", accountId: "acct_fixture", amountCents: 500, currency: "usd", payoutAttempt: 1};
+  for (const available of [undefined, [], [{currency: "eur", amount: 500}],
+    [{currency: "usd", amount: 500.1}], [{currency: "usd", amount: "500"}],
+    [{currency: "usd", amount: 500}, {currency: "usd", amount: 500}]]) {
+    mock.controls.available = available;
+    await assert.rejects(provider.createPayout(op), /cashout_balance_unconfirmed/);
+  }
+  mock.stripe.balance.retrieve = async (_, options) => {
+    assert.equal(options.stripeAccount, op.accountId);
+    throw new Error("balance response lost");
+  };
+  await assert.rejects(provider.createPayout(op));
+  assert.equal(mock.payouts.size, 0);
+});
+
 test("existing payout reconciliation sends connected account as SDK request options", async () => {
   const stripe = new Stripe("sk_test_offlinefixture");
   const observed = [];

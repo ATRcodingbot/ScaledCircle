@@ -94,7 +94,7 @@ function createStore(db, now = Date.now) {
       }
       return op;
     },
-    async request(uid, requestId, amountCents, accountId) {
+    async request(uid, requestId, amountCents, accountId, limit = null) {
       if (!/^[A-Za-z0-9_-]{16,80}$/.test(requestId || "") || cents(amountCents) === 0 || amountCents > 10000) {
         fail("cashout_request_invalid");
       }
@@ -115,6 +115,9 @@ function createStore(db, now = Date.now) {
         const balance = (await tx.get(balanceRef(uid))).data();
         const walletData = (await tx.get(db.collection("wallets").doc(uid))).data();
         checkBalance(balance, uid);
+        if (limit && (amountCents !== limit.amountCents || balance.activeOperationId !== limit.previousOperationId)) {
+          fail("cashout_certification_limit");
+        }
         if (walletData?.ownerId !== uid || walletData.ownerType !== "scaler") fail("cashout_wallet_mismatch");
         if (balance.settlementFrozen !== false || walletData.settlementFrozen === true) fail("cashout_settlement_held");
         if (balance.pendingCents > 0) fail("cashout_already_pending");
@@ -248,6 +251,10 @@ function createService({store, provider, runtime, now = Date.now}) {
         if (now() - (op.payoutStartedAt || now()) > 20 * 60 * 60 * 1000) fail("cashout_reconciliation_required");
         await save({state: "payout_pending", payoutStartedAt: op.payoutStartedAt || now()});
         payout = await provider.createPayout(op);
+        if (!payout) {
+          await save({state: "balance_pending", payoutStartedAt: null, leaseUntil: 0});
+          return projection(op);
+        }
       }
       if (payout) {
         provider.verifyPayout(payout, op);
@@ -271,7 +278,10 @@ function createService({store, provider, runtime, now = Date.now}) {
     assertAccount(account, uid);
     const current = await provider.getAccount(account.stripeAccountId);
     if (!eligibility(current, account.stripeAccountId).ready) fail("cashout_not_ready");
-    const op = await store.request(uid, data.requestId, data.amountCents, account.stripeAccountId);
+    const limit = runtime().certificationLimit;
+    if (limit && (!/^cashout_[a-f0-9]{64}$/.test(limit.previousOperationId || "") ||
+        limit.amountCents !== 500)) fail("cashout_certification_limit");
+    const op = await store.request(uid, data.requestId, data.amountCents, account.stripeAccountId, limit);
     return run(op.id, uid);
   }};
 }

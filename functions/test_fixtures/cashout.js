@@ -6,8 +6,9 @@ const account = () => ({id: "acct_fixture", livemode: false, payouts_enabled: tr
   requirements: {currently_due: [], past_due: []}, settings: {payouts: {schedule: {interval: "manual"}}}});
 function mockStripe() {
   const transfers = new Map(); const payouts = new Map(); const calls = [];
-  const controls = {account: account(), transferFailure: null, payoutFailure: null, payoutStatus: "pending"};
-  const stripe = {balance: {retrieve: async () => ({livemode: false})}, accounts: {retrieve: async () => controls.account,
+  const controls = {account: account(), transferFailure: null, payoutFailure: null, payoutStatus: "pending",
+    available: [{currency: "usd", amount: 10000}]};
+  const stripe = {balance: {retrieve: async () => ({livemode: false, available: controls.available})}, accounts: {retrieve: async () => controls.account,
     create: async (data, options) => {calls.push({type: "account", data, options}); return controls.account;}},
   accountLinks: {create: async (data) => {calls.push({type: "link", data}); return {url: "https://connect.stripe.com/setup/fixture"};}},
   transfers: {
