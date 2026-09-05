@@ -9,7 +9,7 @@ const {createAdapter}=require("./social_meta_transport");
 
 // Same immutable growth jobs/approvals, with a separate provider allowance so
 // preparing Meta cannot replace the active X week. No allowance is auto-enabled.
-function createPublisher({db,project,credentials,fetchImpl,now=Date.now}) {
+function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false}) {
  const environment=project==="scaled-circle"?"production":project==="scaledcircle-staging"?"staging":null;
  if(!environment)throw Error("meta_runtime_unavailable");
  const stateRef=uid=>db.doc(`socialPublishingAuthorities/${uid}/providers/meta`);
@@ -53,6 +53,18 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now}) {
  }
  const store=steps.createStepStore(db,{now,authorize:context});
  return {
+  async inspect(jobId) {
+   const job=(await db.doc(`socialGrowthJobs/${jobId}`).get()).data();
+   if(!job||job.id!==jobId)throw Error("meta_job_missing");
+   const ctx=await context(null,job,"activate");
+   const plan=meta.prepare({job,...ctx});
+   const state=(await stateRef(job.businessUid).get()).data();
+   return {jobId,provider:job.provider,bindingHash:job.bindingHash,
+    scheduledFor:job.scheduledFor,providerBoundary:"validated_request_not_sent",
+    deploymentAllowsCreates:providerCreatesEnabled===true,
+    allowanceEnabled:state?.externalPublishingEnabled===true&&state?.killSwitchActive===false,
+    maximumEffects:plan.maximumEffects,providerCreates:0};
+  },
   async prepare(uid) {
    return db.runTransaction(async tx=>{
     const ref=stateRef(uid),prior=await tx.get(ref);
@@ -63,6 +75,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now}) {
    });
   },
   async activate(uid,approvalId) {
+   if(!providerCreatesEnabled)throw Error("meta_deployment_creates_disabled");
    return db.runTransaction(async tx=>{
     const ref=stateRef(uid),state=(await tx.get(ref)).data();
     const approved=(await tx.get(db.doc(`socialGrowthApprovals/${approvalId}`))).data();
@@ -85,6 +98,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now}) {
    return {paused:true};
   },
   async execute(jobId,{reconcileOnly=false}={}) {
+   if(!reconcileOnly&&!providerCreatesEnabled)throw Error("meta_deployment_creates_disabled");
    const ref=db.doc(`socialGrowthJobs/${jobId}`),snapshot=await ref.get(),job=snapshot.data();
    if(!job||job.id!==jobId)throw Error("meta_job_missing");
    if(["published","canceled"].includes(job.status))return {status:job.status};
@@ -92,12 +106,13 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now}) {
    const adapter=createAdapter({job,...ctx,now,fetchImpl,
     credentials:()=>credentials(job,ctx.connection),
     authorizeCreate:async()=>{
-     if(reconcileOnly)throw Error("meta_reconciliation_cannot_create");
+     if(reconcileOnly||!providerCreatesEnabled)throw Error("meta_reconciliation_cannot_create");
      const current=(await ref.get()).data();
      if(current?.bindingHash!==job.bindingHash)throw Error("meta_job_changed");
      const live=await context(null,current,"create");
      if(live.connection.credentialId!==ctx.connection.credentialId||
-      live.connection.connectionRevision!==ctx.connection.connectionRevision)throw Error("meta_credential_changed");
+      live.connection.connectionRevision!==ctx.connection.connectionRevision||
+      live.connection.credentialRotationGeneration!==ctx.connection.credentialRotationGeneration)throw Error("meta_credential_changed");
     }});
    if(!reconcileOnly)await adapter.verifyAssets();
    const scopedStore=reconcileOnly?{...store,begin:async step=>{
@@ -108,11 +123,15 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now}) {
    if(result.status!=="received")return result;
    await db.runTransaction(async tx=>{
     const current=(await tx.get(ref)).data();
-    await context(tx,current,"reconcile");
+    const finalContext=await context(tx,current,"reconcile");
     if(current.status==="published")return;
     if(current.bindingHash!==job.bindingHash)throw Error("meta_job_changed");
-    tx.create(ref.collection("receipts").doc("publication"),{providerPostId:result.receipt.id,
-     contentHash:job.binding.contentHash,provider:job.provider,observedAt:now()});
+    const receipt={providerPostId:result.receipt.id,
+     contentHash:job.binding.contentHash,provider:job.provider,observedAt:now()};
+    const measurementJobs=require("./social_meta_measurements").plan(
+     {...current,status:"published",providerPostId:receipt.providerPostId},receipt,finalContext.approval);
+    tx.create(ref.collection("receipts").doc("publication"),receipt);
+    for(const measurement of measurementJobs)tx.create(db.doc(`socialMetaMeasurementJobs/${measurement.id}`),measurement);
     tx.update(ref,{status:"published",providerPostId:result.receipt.id,completedAt:now()});
    });
    return {status:"published",providerPostId:result.receipt.id};

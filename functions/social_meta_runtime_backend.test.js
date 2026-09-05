@@ -26,17 +26,35 @@ test("persistent Meta week remains paused until exact approval; concurrent jobs 
   db.doc(`socialConnections/${uid}/providers/facebook`).set({environment:"production",status:"connected_write",tokenHealth:"healthy",
    providerUserId:"123",linkedPageId:"123",grantedScopes:scopes,credentialId:"fixture",connectionRevision:1}),
   db.doc(`agentHealth/${uid}`).set({killSwitchActive:false})]);
- const runtime=createPublisher({db,project:"scaled-circle",now:()=>clock,
+ const runtime=createPublisher({db,project:"scaled-circle",now:()=>clock,providerCreatesEnabled:true,
   credentials:async()=>({businessUid:uid,providerUserId:"123",accessToken:"mock-only"}),
   fetchImpl:async(_url,options)=>{if(options.method==="POST")creates++;
    return {ok:true,json:async()=>options.method==="POST"?{id:"123_789"}:{id:"123_789",from:{id:"123"},message:"Approved Page copy."}};}});
  await runtime.prepare(uid);
+ const disabled=createPublisher({db,project:"scaled-circle",now:()=>clock,
+  credentials:async()=>{throw Error("certification_must_not_load_tokens");},fetchImpl:async()=>{throw Error("certification_must_not_call_provider");}});
+ const inspected=await require("../functions-social-operations/social_meta_scheduler").run({db,publisher:disabled,businessUid:uid});
+ assert.equal(inspected.results.length,1);assert.equal(inspected.results[0].status,"gated");
+ assert.equal(inspected.results[0].providerBoundary,"validated_request_not_sent");
+ await assert.rejects(disabled.activate(uid,approval.id),/deployment_creates_disabled/);
+ await assert.rejects(disabled.execute(job.id),/deployment_creates_disabled/);
+ assert.equal((await jobRef.collection("providerSteps").get()).size,0);
  await assert.rejects(runtime.execute(job.id),/supervisor_paused/);assert.equal(creates,0);
  await runtime.activate(uid,approval.id);clock=at;
  await Promise.all([runtime.execute(job.id),runtime.execute(job.id)]);
  assert.equal(creates,1);assert.equal((await jobRef.get()).data().status,"published");
  assert.equal((await jobRef.collection("receipts").get()).size,1);
+ assert.equal((await db.collection("socialMetaMeasurementJobs").where("publicationJobId","==",job.id).get()).size,2);
  await runtime.execute(job.id);assert.equal(creates,1);
+ clock+=86400001;let reads=0;
+ const collector=require("../functions-social-operations/social_meta_measurements").createCollector({db,now:()=>clock,
+  readEvidence:async()=>{reads++;return {provider:"facebook",providerAccountId:"123",providerPostId:"123_789",scope:"post",
+   metrics:[{name:"comments",status:"OBSERVED",value:0,period:"lifetime"}]};}});
+ const measurements=(await db.collection("socialMetaMeasurementJobs").where("publicationJobId","==",job.id).get()).docs;
+ const due=measurements.find(x=>x.data().hoursAfterPublication===24);
+ await Promise.all([collector(due.id),collector(due.id)]);await collector(due.id);
+ assert.equal(reads,1);assert.equal(creates,1);
+ assert.equal((await db.doc(`socialMetaMeasurementSnapshots/${due.id}`).get()).data().contentVersionId,job.versionId);
  await runtime.pause(uid);
  assert.equal((await db.doc(`socialPublishingAuthorities/${uid}/providers/meta`).get()).data().externalPublishingEnabled,false);
 });

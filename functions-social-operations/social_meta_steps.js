@@ -22,6 +22,16 @@ async function execute({job, revision, account, approval, store, adapter}) {
       verify: receipt => adapter.verify({kind, request, account, receipt})});
   }
   if (plan.request) return step("post", plan.request.path.endsWith("/feed") ? "text" : "photo", plan.request);
+  // Once final publication started, never traverse containers again: a
+  // successfully published container need not remain FINISHED. Reconstruct the
+  // exact final request from the durable parent receipt and reconcile it first.
+  const final = store.existing ? await store.existing(job, "publish") : null;
+  if (final) {
+    const source = await store.existing(job, plan.container ? "image" : "parent");
+    if (!source?.receipt?.id) throw new Error("meta_publish_parent_receipt_missing");
+    return step("publish", "publish", {method:"POST", path:plan.publish.path,
+      body:{creation_id:source.receipt.id}});
+  }
   let container;
   if (plan.container) {
     const result = await step("image", "child", plan.container);

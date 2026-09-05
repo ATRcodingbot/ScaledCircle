@@ -94,7 +94,10 @@ function createAdapter({job, revision, account, approval, credentials, authorize
         (ig || row.from?.id===account.providerUserId) &&
         Date.parse(row.timestamp || row.created_time)>=start-1000 &&
         Date.parse(row.timestamp || row.created_time)<=Math.min(now(),start+120000));
-      return matches.length===1?{id:matches[0].id,status:"PUBLISHED"}:null;
+      // Matching copy/time is diagnostic evidence, not proof that this request
+      // created that post. A human or another client could publish identical copy.
+      // Preserve the unknown step; never fabricate a receipt or repeat a POST.
+      return null;
     },
   };
 }

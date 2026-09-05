@@ -11,6 +11,19 @@ const indexSource = fs.readFileSync(path.join(packageRoot, "index.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 
+test("Meta certification bundle has no activation surface and only read-only consumers bind encryption",()=>{
+ const {execFileSync}=require("node:child_process");
+ execFileSync(process.execPath,[path.join(__dirname,"scripts/build_meta_growth_runtime.js")]);
+ const output=path.join(root,".firebase/meta-growth-runtime");
+ const source=fs.readFileSync(path.join(output,"index.js"),"utf8");
+ assert.match(source,/providerCreatesEnabled: false/);
+ assert.doesNotMatch(source,/META_SOCIAL_APP_SECRET|X_SOCIAL_CLIENT_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET/);
+ const endpoints=JSON.parse(execFileSync(process.execPath,["-e",`const e=require(${JSON.stringify(output)}); console.log(JSON.stringify(Object.fromEntries(Object.entries(e).map(([k,v])=>[k,v.__endpoint?.secretEnvironmentVariables||[]]))));`],{encoding:"utf8"}));
+ assert.deepEqual(Object.keys(endpoints).sort(),["inspectMetaGrowthRuntimeV1","reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1","runMetaGrowthPublisherV1"]);
+ for(const [name,secrets] of Object.entries(endpoints))assert.deepEqual(secrets.map(s=>s.key),
+  ["reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1"].includes(name)?["SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY"]:[]);
+});
+
 test("normal growth deployment is reproducible and contains only its seven exports and two secrets", () => {
   const {execFileSync} = require("node:child_process");
   execFileSync(process.execPath, [path.join(__dirname, "scripts/build_social_growth_runtime.js")]);
@@ -87,6 +100,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "getSocialOperationsAdminSummary",
     "getSocialOperationsWorkspace",
     "ingestScaledCircleLaunchPlanV1",
+    "inspectMetaGrowthRuntimeV1",
     "prepareFirstXPublishFoundationV1",
     "proposeScheduledSocialReplacementV1",
     "publishFirstXProductionSuccessorV4",
@@ -95,10 +109,13 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "reconcileFirstXPublishV1",
     "reconcileFirstXRepairV1",
     "reconcileFounderManualFirstXDeletionV1",
+    "reconcileMetaGrowthPublicationV1",
     "reconcileSocialGrowthPublicationV1",
     "recordFirstXFounderApprovalV1",
     "registerFirstXProductionResponseAssetV1",
     "reviewScheduledSocialContentV1",
+    "runMetaGrowthMeasurementsV1",
+    "runMetaGrowthPublisherV1",
     "runSocialGrowthMeasurementsV1",
     "runSocialGrowthPublisherV1",
     "setSocialGrowthPublishingStateV1",

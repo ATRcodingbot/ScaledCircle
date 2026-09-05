@@ -3114,6 +3114,76 @@ exports.reconcileSocialGrowthPublicationV1 = onCall({enforceAppCheck: false, max
   catch (_) { throw new HttpsError("failed-precondition", "Publication review needs attention."); }
 });
 
+// Meta certification is independently gated; changing an X allowance cannot
+// enable Meta. This release deliberately has no Meta activation export.
+function normalMetaPublisher() {
+  return require("./social_meta_runtime").createPublisher({db,project:process.env.GCLOUD_PROJECT,
+    providerCreatesEnabled:false,credentials:loadMetaPublisherCredential});
+}
+async function loadMetaPublisherCredential(job,expected) {
+      const ref=db.doc(`socialConnections/${job.businessUid}/providers/${job.provider}`);
+      const current=(await ref.get()).data();
+      if(current?.credentialId!==expected.credentialId || current?.connectionRevision!==expected.connectionRevision ||
+          current?.credentialRotationGeneration!==expected.credentialRotationGeneration ||
+          current?.providerUserId!==expected.providerUserId || current?.tokenHealth!=="healthy")throw Error("meta_credential_changed");
+      const credential=(await db.doc(`socialConnectionCredentials/${current.credentialId}`).get()).data();
+      if(credential?.businessUid!==job.businessUid || credential?.provider!=="meta" ||
+          credential?.rotationGeneration!==current.credentialRotationGeneration ||
+          credential?.connectionRevision!==current.connectionRevision)throw Error("meta_credential_changed");
+      const account=socialOAuth.decryptJson(credential.accountEnvelope,socialOAuthEncryptionKey.value(),
+        `${job.businessUid}:meta:${current.credentialId}`);
+      if(account.accountId!==current.linkedPageId ||
+          (job.provider==="instagram"?account.linkedAccountId:account.accountId)!==current.providerUserId)throw Error("meta_credential_identity_mismatch");
+      const tokens=socialOAuth.decryptJson(credential.tokenEnvelope,socialOAuthEncryptionKey.value(),
+        `${job.businessUid}:meta:${account.accountId}`);
+      return {businessUid:job.businessUid,providerUserId:current.providerUserId,linkedPageId:current.linkedPageId,
+        accessToken:job.provider==="facebook"?tokens.pageAccessToken:tokens.userAccessToken};
+}
+async function inspectMetaScheduler(businessUid) {
+  const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
+  metaConnection.authorize(config,businessUid);
+  return require("./social_meta_scheduler").run({db,publisher:normalMetaPublisher(),businessUid});
+}
+exports.inspectMetaGrowthRuntimeV1=growthPlanningCallable(async businessUid=>inspectMetaScheduler(businessUid));
+exports.reconcileMetaGrowthPublicationV1=onCall({enforceAppCheck:false,maxInstances:2,
+  secrets:[socialOAuthEncryptionKey]},async request=>{
+  const business=await requireSocialOperationsBusiness(request);
+  const id=request.data?.jobId;
+  if(!/^social_growth_job_[a-f0-9]{64}$/.test(id||""))throw new HttpsError("invalid-argument","Choose a publication.");
+  const job=(await db.doc(`socialGrowthJobs/${id}`).get()).data();
+  if(job?.businessUid!==business.uid||!["facebook","instagram"].includes(job.provider))throw new HttpsError("permission-denied","Publication unavailable.");
+  try {return await normalMetaPublisher().execute(id,{reconcileOnly:true});}
+  catch(_){throw new HttpsError("failed-precondition","Publication review needs attention.");}
+});
+exports.runMetaGrowthPublisherV1=onSchedule({schedule:"every 5 minutes",timeZone:"UTC",
+  maxInstances:1,timeoutSeconds:120,retryCount:0},async()=>{
+  const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
+  if(!config?.metaDogfood?.businessUid)return;
+  const inspection=await inspectMetaScheduler(config.metaDogfood.businessUid);
+  require("firebase-functions/logger").info("meta_scheduler_certification",{
+    discoveredJobs:inspection.results.length,results:inspection.results,
+    deploymentAllowsCreates:false,providerCreates:0});
+});
+
+exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",timeZone:"UTC",
+  maxInstances:1,timeoutSeconds:120,retryCount:0,secrets:[socialOAuthEncryptionKey]},async()=>{
+  const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
+  if(!config?.metaDogfood?.businessUid)return;
+  metaConnection.authorize(config,config.metaDogfood.businessUid);
+  if(!config.historicalSyncEnabled)return;
+  const collector=require("./social_meta_measurements").createCollector({db,readEvidence:async(job,receipt,approval)=>{
+    if(job.businessUid!==config.metaDogfood.businessUid)throw Error("meta_measurement_owner_mismatch");
+    const connection=(await db.doc(`socialConnections/${job.businessUid}/providers/${job.provider}`).get()).data();
+    if(connection?.environment!==runtimeEnvironment()||connection?.providerUserId!==approval.providerAccounts?.[job.provider]?.providerUserId||
+        connection?.linkedPageId!==config.metaDogfood.pageId||connection?.status!=="connected_write")throw Error("meta_measurement_identity_mismatch");
+    socialOAuth.exactScopeSet(connection.grantedScopes,socialOAuth.META_PUBLISH_SCOPES);
+    const session=await loadMetaPublisherCredential(job,connection);
+    return require("./social_meta_post_insights").collect({job,receipt,approval,session});
+  }});
+  const pending=await db.collection("socialMetaMeasurementJobs").where("status","in",["pending","reading"]).limit(50).get();
+  for(const snapshot of pending.docs)if(snapshot.data().businessUid===config.metaDogfood.businessUid)await collector(snapshot.id);
+});
+
 const socialGrowthMeasurements = require("./social_growth_measurements");
 exports.runSocialGrowthMeasurementsV1 = onSchedule({schedule: "every 15 minutes", timeZone: "UTC",
   maxInstances: 1, timeoutSeconds: 300, retryCount: 0,

@@ -31,6 +31,11 @@ function createStepStore(db, {authorize, now = Date.now} = {}) {
     await authorize(tx, job, action);
   }
   return {
+    async existing(job, key) {
+      const snapshot = await parent({jobId: job.id}).collection("providerSteps")
+        .doc(hash({jobId: job.id, key})).get();
+      return snapshot.data() || null;
+    },
     async begin(step) {
       validate(step);
       return db.runTransaction(async tx => {
