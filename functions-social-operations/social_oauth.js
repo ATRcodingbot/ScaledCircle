@@ -21,6 +21,9 @@ const PROVIDER_SCOPES = Object.freeze({
 const X_PUBLISH_SCOPES = Object.freeze([
   "users.read", "tweet.read", "offline.access", "tweet.write", "media.write",
 ]);
+const META_PUBLISH_SCOPES = Object.freeze([
+  ...PROVIDER_SCOPES.meta, "pages_manage_posts", "instagram_content_publish",
+]);
 const OAUTH_CALLBACK_EXPORTS = Object.freeze({
   meta: "socialOAuthMetaCallbackV1",
   x: "socialOAuthXCallbackV1",
@@ -63,11 +66,13 @@ function requestedScopes(provider, scopes) {
   const readOnly = PROVIDER_SCOPES[normalized];
   if (proposed.length === readOnly.length &&
       proposed.every((scope) => readOnly.includes(scope))) return [...readOnly];
-  if (normalized !== "x" || proposed.length !== X_PUBLISH_SCOPES.length ||
-      proposed.some((scope) => !X_PUBLISH_SCOPES.includes(scope))) {
+  const publishScopes = normalized === "x" ? X_PUBLISH_SCOPES :
+    normalized === "meta" ? META_PUBLISH_SCOPES : [];
+  if (!publishScopes.length || proposed.length !== publishScopes.length ||
+      proposed.some((scope) => !publishScopes.includes(scope))) {
     throw new Error("social_oauth_scope_set_forbidden");
   }
-  return [...X_PUBLISH_SCOPES];
+  return [...publishScopes];
 }
 
 function normalizeScopes(provider, scopes, requiredScopes = null) {
@@ -276,6 +281,10 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
   const aad = `${uid}:${normalized}:${attemptId}`;
   const requiredScopes = requestedScopes(normalized, scopes);
   const normalizedPurpose = text(purpose, 80);
+  if (normalized === "meta" && requiredScopes.includes("pages_manage_posts") &&
+      normalizedPurpose !== "meta_connection_authority") {
+    throw new Error("social_oauth_scope_purpose_mismatch");
+  }
   if (requiredScopes.includes("tweet.write") &&
       !["x_first_publish_certification", "x_connection_authority"].includes(normalizedPurpose)) {
     throw new Error("social_oauth_scope_purpose_mismatch");
@@ -731,7 +740,7 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
 
 module.exports = {
   OAUTH_ATTEMPT_TTL_MS, CREDENTIAL_REFRESH_LEASE_TTL_MS,
-  PROVIDERS, PROVIDER_SCOPES, X_PUBLISH_SCOPES, digest,
+  PROVIDERS, PROVIDER_SCOPES, X_PUBLISH_SCOPES, META_PUBLISH_SCOPES, digest,
   normalizeProvider, requestedScopes, normalizeScopes, exactScopeSet,
   credentialGeneration, connectionRevision, beginCredentialRefresh,
   completeCredentialRefresh, failCredentialRefresh,

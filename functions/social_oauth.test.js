@@ -221,6 +221,38 @@ test("production X connection authority requests the exact five scopes without p
   /scope_set_forbidden/);
 });
 
+test("Meta connection scope candidate permits only the bounded seven scopes and explicit purpose", () => {
+  const production = {...config("meta"), environment: "production",
+    redirectUri: oauth.callbackUrl({provider: "meta", environment: "production"})};
+  const args = {businessUid: "fixture-business", provider: "meta", config: production,
+    encryptionKey: key, now: 1000, scopes: oauth.META_PUBLISH_SCOPES,
+    purpose: "meta_connection_authority"};
+  const attempt = oauth.createAttempt(args);
+  const url = new URL(attempt.authorizationUrl);
+  assert.deepEqual(url.searchParams.get("scope").split(","), oauth.META_PUBLISH_SCOPES);
+  assert.equal(url.searchParams.get("redirect_uri"), production.redirectUri);
+  assert.equal(attempt.record.purpose, "meta_connection_authority");
+  assert.equal(attempt.record.environment, "production");
+  assert.equal(attempt.record.status, "authorizing");
+  for (const scope of ["ads_read", "ads_management", "business_management",
+    "instagram_manage_messages", "pages_manage_metadata", "leads_retrieval"]) {
+    assert.throws(() => oauth.createAttempt({...args,
+      scopes: [...oauth.META_PUBLISH_SCOPES, scope]}), /scope_set_forbidden/);
+  }
+  assert.throws(() => oauth.createAttempt({...args,
+    scopes: oauth.META_PUBLISH_SCOPES.slice(0, -1)}), /scope_set_forbidden/);
+  for (const purpose of ["read_only_connection", "x_connection_authority", ""]) {
+    assert.throws(() => oauth.createAttempt({...args, purpose}), /scope_purpose_mismatch/);
+  }
+  assert.deepEqual(oauth.requestedScopes("meta"), oauth.PROVIDER_SCOPES.meta);
+  // This preparatory scope contract must not activate the deployed runtime or publication.
+  const inactive = oauth.validateProviderConfig({...production, writeScopesEnabled: true});
+  assert.equal(inactive.writeScopesEnabled, false);
+  assert.equal(inactive.externalPublishingEnabled, false);
+  assert.throws(() => oauth.validateProviderConfig({...production,
+    externalPublishingEnabled: true}), /external_publishing_forbidden/);
+});
+
 test("initial X confirmation creates a generation-tracked encrypted credential", () => {
   const attempt = oauth.createAttempt({businessUid: "biz", provider: "x",
     config: config("x"), encryptionKey: key, now: 1000,
