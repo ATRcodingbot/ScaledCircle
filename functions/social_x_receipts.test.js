@@ -31,3 +31,9 @@ test("pagination and duplicate matches block reconciliation; no match grants no 
 test("historical identical copy outside this send window cannot complete a new job", () => {
   assert.throws(() => receipts.verify({post: {...post(), created_at: "2029-01-01T12:00:00Z"}, ...expected}));
 });
+test("an expanded destination prefix cannot masquerade as the full approved clickable URL", () => {
+  const altered = post();
+  altered.entities.urls[0].expanded_url = "https://example.com/r?code=";
+  altered.text = "Read https://t.co/abcapproved https://t.co/photo";
+  assert.equal(receipts.matchingText({post: altered, ...expected}), false);
+});

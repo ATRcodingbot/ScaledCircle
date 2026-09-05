@@ -6,6 +6,7 @@ function matchingText({post, approvedText, expectedHandle}) {
   if (typeof post?.text !== "string" || typeof approvedText !== "string" || !approvedText ||
       !/^[A-Za-z0-9_]{1,15}$/.test(expectedHandle || "") || !/^\d{1,20}$/.test(post.id || "")) return false;
   let expanded = post.text;
+  const approvedUrls = new Set(approvedText.match(/https:\/\/[^\s<>()]+/g) || []);
   const seen = new Set();
   for (const entity of post.entities?.urls || []) {
     if (!/^https:\/\/t\.co\/[A-Za-z0-9]+$/.test(entity.url || "")) return false;
@@ -21,7 +22,7 @@ function matchingText({post, approvedText, expectedHandle}) {
     } else {
       // Expansion must reproduce the exact approved destination, including its
       // query. No t.co-shaped wildcard or unrelated redirect is accepted.
-      if (!approvedText.includes(destination) || !expanded.includes(entity.url)) return false;
+      if (!approvedUrls.has(destination) || !expanded.includes(entity.url)) return false;
       expanded = expanded.split(entity.url).join(destination);
     }
   }
