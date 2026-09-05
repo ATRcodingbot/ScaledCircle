@@ -32,28 +32,36 @@ abstract final class AppEnvironmentConfig {
     ),
   };
 
-  static String get diagnosticsLabel => switch (environment) {
-    AppEnvironment.local => 'LOCAL / TEST',
-    AppEnvironment.staging => 'STAGING • TEST PAYMENTS',
-    AppEnvironment.production => 'PRODUCTION',
-  };
-  static String get firebaseProjectId => switch (environment) {
-    AppEnvironment.local => 'demo-scaledcircle',
-    AppEnvironment.staging => 'scaledcircle-staging',
-    AppEnvironment.production => 'scaled-circle',
-  };
-  static String get functionsRegion => 'us-east1';
-  static Uri get publicBaseUrl => switch (environment) {
-    AppEnvironment.local => Uri.parse('http://127.0.0.1:5000'),
-    AppEnvironment.staging => Uri.parse('https://scaledcircle-staging.web.app'),
-    AppEnvironment.production => Uri.parse('https://scaledcircle.com'),
-  };
+  // Keep environment branches directly tied to compile-time constants. This
+  // lets release compilers remove credentials and origins for other targets.
+  static String get diagnosticsLabel {
+    if (isProduction) return 'PRODUCTION';
+    if (isStaging) return 'STAGING • TEST PAYMENTS';
+    if (isLocal) return 'LOCAL / TEST';
+    return environment.name; // Preserves the fail-closed invalid APP_ENV path.
+  }
 
-  static FirebaseOptions get firebaseOptions => switch (environment) {
-    AppEnvironment.local => LocalFirebaseOptions.currentPlatform,
-    AppEnvironment.staging => StagingFirebaseOptions.currentPlatform,
-    AppEnvironment.production => DefaultFirebaseOptions.currentPlatform,
-  };
+  static String get firebaseProjectId {
+    if (isProduction) return 'scaled-circle';
+    if (isStaging) return 'scaledcircle-staging';
+    if (isLocal) return 'demo-scaledcircle';
+    return environment.name;
+  }
+
+  static String get functionsRegion => 'us-east1';
+  static Uri get publicBaseUrl {
+    if (isProduction) return Uri.parse('https://scaledcircle.com');
+    if (isStaging) return Uri.parse('https://scaledcircle-staging.web.app');
+    if (isLocal) return Uri.parse('http://127.0.0.1:5000');
+    throw StateError('Invalid APP_ENV: ${environment.name}');
+  }
+
+  static FirebaseOptions get firebaseOptions {
+    if (isProduction) return DefaultFirebaseOptions.currentPlatform;
+    if (isStaging) return StagingFirebaseOptions.currentPlatform;
+    if (isLocal) return LocalFirebaseOptions.currentPlatform;
+    throw StateError('Invalid APP_ENV: ${environment.name}');
+  }
 
   static String get emulatorHost {
     if (!isLocal) {
@@ -77,6 +85,30 @@ abstract final class AppEnvironmentConfig {
     return Uri.parse(
       'https://$functionsRegion-$firebaseProjectId.cloudfunctions.net',
     );
+  }
+
+  static Uri socialOAuthCallback(String provider) {
+    final functionName = switch (provider) {
+      'x' => 'socialOAuthXCallbackV1',
+      'meta' => 'socialOAuthMetaCallbackV1',
+      _ => 'socialOAuthCallbackV1',
+    };
+    if (isProduction) {
+      return Uri.parse(
+        'https://us-east1-scaled-circle.cloudfunctions.net/$functionName',
+      );
+    }
+    if (isStaging) {
+      return Uri.parse(
+        'https://us-east1-scaledcircle-staging.cloudfunctions.net/$functionName',
+      );
+    }
+    if (isLocal) {
+      return functionsBaseUrl.replace(
+        path: '${functionsBaseUrl.path}/$functionName',
+      );
+    }
+    throw StateError('Invalid APP_ENV: ${environment.name}');
   }
 
   static void verifyInitializedProject(FirebaseApp app) {

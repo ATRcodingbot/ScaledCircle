@@ -19,12 +19,7 @@ class _AdminSocialOperationsScreenState
   void _refresh() => setState(() => _summary = _service.loadSocialOperations());
 
   String _callbackFor(String provider) {
-    final functionName = switch (provider) {
-      'x' => 'socialOAuthXCallbackV1',
-      'meta' => 'socialOAuthMetaCallbackV1',
-      _ => 'socialOAuthCallbackV1',
-    };
-    return '${AppEnvironmentConfig.functionsBaseUrl}/$functionName';
+    return AppEnvironmentConfig.socialOAuthCallback(provider).toString();
   }
 
   Future<void> _configureProvider() async {
