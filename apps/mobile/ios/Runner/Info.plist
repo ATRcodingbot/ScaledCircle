@@ -16,6 +16,10 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>ScaledCircle</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ScaledCircle uses the camera when you choose to capture a photo for job evidence.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ScaledCircle lets you choose photos to upload as job evidence or Business brand assets.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>ScaledCircle records your route only after you start an assigned job and stops when you complete or stop that job.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
