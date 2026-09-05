@@ -11637,6 +11637,15 @@ function cashoutTestWebhook(signingSecret, endpointScope) {
     maxInstances: 2, secrets: [STRIPE_CASHOUT_TEST_API_KEY, signingSecret]}, async (request, response) => {
     if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
     try {
+      const runtime = cashoutRuntime();
+      cashout.assertTestRuntime({...runtime, enabled: true});
+      const stripe = new Stripe(runtime.secretKey, {timeout: 10000, maxNetworkRetries: 0});
+      cashoutStripe.verifyWebhookEvent({stripe, runtime: () => runtime,
+        secret: signingSecret.value(), endpointScope, rawBody: request.rawBody,
+        signature: request.headers["stripe-signature"]});
+      // Retry valid deliveries after activation; never acknowledge and discard
+      // a financial event merely because cash-out execution is paused.
+      if (!runtime.enabled) return response.status(503).send("Test cash-out processing is paused.");
       const services = cashoutServices();
       const result = await cashoutStripe.handleWebhook({...services, runtime: cashoutRuntime,
         secret: signingSecret.value(), endpointScope, rawBody: request.rawBody,

@@ -55,3 +55,44 @@ test("deployed callable authority denies admin, disabled, wrong mode and unauthe
     assert.equal(providerConstructed, 0);
   }
 });
+
+test("paused deployed webhook authenticates signatures and mode without database or provider processing", async () => {
+  execFileSync(process.execPath, [script, "--with-webhooks"]);
+  const Stripe = require("stripe");
+  const secret = "whsec_offlinefixture";
+  const exported = {};
+  let providerRequests = 0;
+  class OfflineStripe extends Stripe {
+    constructor(key, options) {
+      super(key, options);
+      this._requestSender._request = () => { providerRequests++; throw new Error("Network forbidden"); };
+    }
+  }
+  const fakeRequire = name => {
+    if (name === "firebase-functions/v2") return {setGlobalOptions() {}};
+    if (name === "firebase-functions/v2/https") return {onCall: (_, fn) => fn, onRequest: (_, fn) => fn, HttpsError: Error};
+    if (name === "firebase-functions/params") return {defineSecret: key => ({value: () => key === "STRIPE_TEST_SECRET_KEY" ? "sk_test_offlinefixture" : secret})};
+    if (name === "firebase-admin/app") return {initializeApp() {}};
+    if (name === "firebase-admin/firestore") return {getFirestore: () => ({collection() { throw new Error("Database forbidden"); }})};
+    if (name === "stripe") return OfflineStripe;
+    if (name === "./scaler_cashout") return require("./scaler_cashout");
+    if (name === "./scaler_cashout_stripe") return require("./scaler_cashout_stripe");
+    throw new Error("Unexpected dependency " + name);
+  };
+  vm.runInNewContext(fs.readFileSync(entry, "utf8"), {exports: exported, require: fakeRequire,
+    process: {env: {SCALEDCIRCLE_ENV: "staging", GCLOUD_PROJECT: "scaledcircle-staging", SCALEDCIRCLE_CASHOUT_TEST_ENABLED: "false"}}});
+  for (const name of ["scalerCashoutTestWebhookV1", "scalerCashoutTestConnectWebhookV1"]) {
+    for (const scenario of ["valid", "bad_signature", "live", "wrong_scope"]) {
+      const connected = name.includes("Connect");
+      const event = {id: "evt_fixture", livemode: scenario === "live", type: connected ? "payout.paid" : "transfer.created", data: {object: {}}};
+      if (connected !== (scenario === "wrong_scope")) event.account = "acct_fixture";
+      const payload = JSON.stringify(event);
+      const signature = scenario === "bad_signature" ? "invalid" : Stripe.webhooks.generateTestHeaderString({payload, secret});
+      let status;
+      const response = {status(code) { status = code; return this; }, send() {}, json() { throw new Error("Unexpected success"); }};
+      await exported[name]({method: "POST", rawBody: Buffer.from(payload), headers: {"stripe-signature": signature}}, response);
+      assert.equal(status, scenario === "valid" ? 503 : 400, name + ":" + scenario);
+    }
+  }
+  assert.equal(providerRequests, 0);
+});

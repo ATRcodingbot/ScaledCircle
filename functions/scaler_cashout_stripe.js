@@ -76,13 +76,21 @@ function createStripeProvider({stripe, runtime}) {
   };
 }
 
-async function handleWebhook({stripe, store, service, runtime, secret, rawBody, signature, endpointScope}) {
-  assertTestRuntime(runtime());
+function verifyWebhookEvent({stripe, runtime, secret, rawBody, signature, endpointScope}) {
+  // Authentication remains available while execution is paused. Preserve every
+  // environment/key guard; only the financial execution flag is irrelevant here.
+  assertTestRuntime({...runtime(), enabled: true});
   if (!/^whsec_[A-Za-z0-9]+$/.test(secret || "")) fail("cashout_webhook_not_configured");
   const event = stripe.webhooks.constructEvent(rawBody, signature, secret);
   if (event.livemode !== false) fail("cashout_webhook_mode_mismatch");
   if ((endpointScope === "platform" && event.account) ||
       (endpointScope === "connected" && !event.account)) fail("cashout_webhook_scope_mismatch");
+  return event;
+}
+
+async function handleWebhook({stripe, store, service, runtime, secret, rawBody, signature, endpointScope}) {
+  const event = verifyWebhookEvent({stripe, runtime, secret, rawBody, signature, endpointScope});
+  assertTestRuntime(runtime());
   if (!["transfer.created", "transfer.reversed", "payout.created", "payout.updated",
     "payout.paid", "payout.failed", "payout.canceled"].includes(event.type)) return {ignored: true};
   const key = event.data?.object?.metadata?.cashoutId;
@@ -94,4 +102,4 @@ async function handleWebhook({stripe, store, service, runtime, secret, rawBody, 
   return store.event(event.id, () => service.run(key, op.ownerId, {readOnly: true}));
 }
 
-module.exports = {createStripeProvider, handleWebhook, verifyTransfer, verifyPayout};
+module.exports = {createStripeProvider, handleWebhook, verifyWebhookEvent, verifyTransfer, verifyPayout};
