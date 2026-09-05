@@ -325,10 +325,24 @@ function optimizationPolicy({mode, planId, managedAuthorization = false}) {
     providerMutationsEnabled: false};
 }
 
+// Provider-neutral health; adapter scope policies remain separate.
+function connectionHealth(input = {}) {
+  const status = text(input.status, 60).toLowerCase();
+  const tokenHealth = text(input.tokenHealth, 60).toLowerCase();
+  const connected = ["connected_read_only", "connected_write"].includes(status);
+  const requiresReconnect = ["reauth_required", "reauthorization_required", "expired",
+    "token_expired", "revoked", "error", "attention_required"].includes(status) ||
+    ["needs_attention", "revoked", "expired", "error"].includes(tokenHealth);
+  // Empty health supports legacy projections; an explicit unknown health fails closed.
+  const healthy = connected && !requiresReconnect && ["", "healthy"].includes(tokenHealth);
+  return {connected, healthy, requiresReconnect};
+}
+
 function connectionProjection(input = {}) {
   const provider = text(input.provider, 40).toLowerCase();
   if (!PROVIDERS.includes(provider)) throw new Error("unsupported_social_provider");
-  const status = ["disconnected", "not_connected", "authorizing", "identity_pending",
+  const health = connectionHealth(input);
+  const status = health.requiresReconnect ? "attention_required" : ["disconnected", "not_connected", "authorizing", "identity_pending",
     "connected_read_only", "connected_write", "reauth_required", "expired", "revoked",
     "error", "attention_required", "write_scope_pending"]
     .includes(input.status) ? input.status : "disconnected";
@@ -341,15 +355,14 @@ function connectionProjection(input = {}) {
     grantedScopes: list(input.grantedScopes, 20, 180),
     writeScopesGranted: status === "connected_write" && input.writeScopesGranted === true,
     readOnly: status === "connected_read_only",
-    requiresReconnect: ["reauth_required", "expired", "revoked", "error",
-      "attention_required"].includes(status),
+    requiresReconnect: health.requiresReconnect,
     capabilities: {
-      profile: input.capabilities?.profile === true,
-      publishText: input.capabilities?.publishText === true,
-      publishImage: input.capabilities?.publishImage === true,
-      publishVideo: input.capabilities?.publishVideo === true,
-      schedule: input.capabilities?.schedule === true,
-      analytics: input.capabilities?.analytics === true,
+      profile: health.healthy && input.capabilities?.profile === true,
+      publishText: health.healthy && input.capabilities?.publishText === true,
+      publishImage: health.healthy && input.capabilities?.publishImage === true,
+      publishVideo: health.healthy && input.capabilities?.publishVideo === true,
+      schedule: health.healthy && input.capabilities?.schedule === true,
+      analytics: health.healthy && input.capabilities?.analytics === true,
     },
     // Tokens, provider secrets, and raw credential records never enter this projection.
     authorizationUpdatedAt: input.authorizationUpdatedAt || null};
@@ -364,7 +377,7 @@ function xConnectionCapabilities(input = {}, {expectedProviderUserId = null} = {
   const providerUserId = text(input.providerUserId, 240) || null;
   const providerAccountId = text(input.providerAccountId, 240) || null;
   const connected = ["connected_read_only", "connected_write"].includes(status);
-  const unhealthy = ["reauth_required", "expired", "revoked", "error",
+  const unhealthy = !connectionHealth(input).healthy || ["reauth_required", "expired", "revoked", "error",
     "attention_required"].includes(status) ||
     ["needs_attention", "revoked", "expired", "error"].includes(
       text(input.tokenHealth, 60).toLowerCase());
@@ -375,7 +388,7 @@ function xConnectionCapabilities(input = {}, {expectedProviderUserId = null} = {
   const hasReadScopes = X_READ_SCOPES.every((scope) => scopes.has(scope));
   const hasWriteScopes = X_WRITE_SCOPES.every((scope) => scopes.has(scope));
   const canReadInsights = connected && !unhealthy && identityMatches && hasReadScopes;
-  const canWrite = canReadInsights && status === "connected_write" && hasWriteScopes &&
+  const canWrite = canReadInsights && hasWriteScopes &&
     input.writeScopesGranted === true;
   const canRefresh = canReadInsights && scopes.has("offline.access") &&
     !["needs_attention", "revoked", "expired", "error"].includes(
@@ -474,7 +487,8 @@ function publishJob({businessUid, contentItemId, versionRecord, provider,
   }
   const normalizedProvider = text(provider, 40).toLowerCase();
   const projection = connectionProjection(connection || {provider: normalizedProvider});
-  if (projection.status !== "connected_write" || projection.requiresReconnect ||
+  if (projection.provider !== normalizedProvider ||
+      projection.status !== "connected_write" || projection.requiresReconnect ||
       !(projection.capabilities.publishText || projection.capabilities.publishImage ||
         projection.capabilities.publishVideo)) throw new Error("social_connection_required");
   const scheduled = new Date(scheduledFor);
@@ -491,6 +505,32 @@ function publishJob({businessUid, contentItemId, versionRecord, provider,
 
 function transitionPublishJob({record, nextStatus, providerEvidence = null, now = Date.now()}) {
   if (!PUBLISH_STATUSES.includes(nextStatus)) throw new Error("invalid_social_publish_status");
+  if (!record || !PUBLISH_STATUSES.includes(record.status)) {
+    throw new Error("invalid_social_publish_record");
+  }
+  if (["published", "canceled"].includes(record.status)) {
+    if (nextStatus === record.status && (!providerEvidence ||
+        providerEvidence.providerPostId === record.providerPostId)) return {...record};
+    throw new Error("social_publish_terminal");
+  }
+  // An ambiguous send may already exist at the provider. Never authorize a retry
+  // through a label change; only an adapter's matching receipt can close it.
+  if (["unknown_provider_outcome", "partial_failure"].includes(record.status) &&
+      ![record.status, "published"].includes(nextStatus)) {
+    throw new Error("social_reconciliation_required");
+  }
+  const allowed = {
+    draft: ["ready_for_review", "canceled"],
+    ready_for_review: ["approved", "canceled"],
+    approved: ["scheduled", "canceled"],
+    scheduled: ["publishing", "canceled"],
+    publishing: ["published", "unknown_provider_outcome", "partial_failure", "failed"],
+    failed: ["canceled"],
+    unknown_provider_outcome: ["published"], partial_failure: ["published"],
+  };
+  if (nextStatus !== record.status && !allowed[record.status]?.includes(nextStatus)) {
+    throw new Error("invalid_social_publish_transition");
+  }
   if (nextStatus === "published" && (!providerEvidence || !text(providerEvidence.providerPostId, 240))) {
     throw new Error("social_provider_evidence_required");
   }
@@ -599,7 +639,7 @@ module.exports = {SCHEMA_VERSION, PLAN_VERSION, CONTENT_VERSION, PERFORMANCE_VER
   REPLACEMENT_PROPOSAL_VERSION, AUTOMATION_MODES, PUBLISH_STATUSES,
   QUALITY_RECOMMENDATIONS, POST_ACTIONS, QUALITY_DIMENSIONS,
   normalizePlanId, validateAutomationMode, optimizationPolicy,
-  connectionProjection, xConnectionCapabilities, platformVariant, createContentPlan,
+  connectionHealth, connectionProjection, xConnectionCapabilities, platformVariant, createContentPlan,
   contentItemVersion, approvePlan,
   approveContentVersion, publishJob, transitionPublishJob, normalizePerformance,
   weeklyLearning, createEmailContentPlan, adAccountHealth, repetitionAssessment,

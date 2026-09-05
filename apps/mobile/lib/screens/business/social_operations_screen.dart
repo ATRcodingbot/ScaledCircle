@@ -299,6 +299,8 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     'reauthorization_required',
     'revoked',
     'token_expired',
+    'attention_required',
+    'error',
   }.contains(status);
 
   String _connectLabel(Map<String, dynamic> connection) {

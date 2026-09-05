@@ -178,6 +178,32 @@ function publishJob({businessUid, contentItemId, versionRecord, provider,
 
 function transitionPublishJob({record, nextStatus, providerEvidence = null, now = Date.now()}) {
   if (!PUBLISH_STATUSES.includes(nextStatus)) throw new Error("invalid_social_publish_status");
+  if (!record || !PUBLISH_STATUSES.includes(record.status)) {
+    throw new Error("invalid_social_publish_record");
+  }
+  if (["published", "canceled"].includes(record.status)) {
+    if (nextStatus === record.status && (!providerEvidence ||
+        providerEvidence.providerPostId === record.providerPostId)) return {...record};
+    throw new Error("social_publish_terminal");
+  }
+  // An ambiguous send may already exist at the provider. Never authorize a retry
+  // through a label change; only an adapter's matching receipt can close it.
+  if (["unknown_provider_outcome", "partial_failure"].includes(record.status) &&
+      ![record.status, "published"].includes(nextStatus)) {
+    throw new Error("social_reconciliation_required");
+  }
+  const allowed = {
+    draft: ["ready_for_review", "canceled"],
+    ready_for_review: ["approved", "canceled"],
+    approved: ["scheduled", "canceled"],
+    scheduled: ["publishing", "canceled"],
+    publishing: ["published", "unknown_provider_outcome", "partial_failure", "failed"],
+    failed: ["canceled"],
+    unknown_provider_outcome: ["published"], partial_failure: ["published"],
+  };
+  if (nextStatus !== record.status && !allowed[record.status]?.includes(nextStatus)) {
+    throw new Error("invalid_social_publish_transition");
+  }
   if (nextStatus === "published" && (!providerEvidence || !text(providerEvidence.providerPostId, 240))) {
     throw new Error("social_provider_evidence_required");
   }

@@ -10,6 +10,49 @@ const baseItem = {itemKey: "education_1", scheduledFor: "2030-01-02T14:00:00Z",
     {provider: "facebook", copy: "A useful explanation.", callToAction: "Learn more"},
     {provider: "x", copy: "One useful product insight."}]};
 
+test("ambiguous and terminal jobs cannot be relabeled for duplicate sending", () => {
+  for (const status of ["unknown_provider_outcome", "partial_failure", "published", "canceled"]) {
+    for (const nextStatus of ["scheduled", "publishing", "failed"]) {
+      assert.throws(() => social.transitionPublishJob({record: {status}, nextStatus}));
+    }
+  }
+  const record = {status: "unknown_provider_outcome", businessUid: "biz", version: 7,
+    id: "same-approved-job", approvedVersion: 7};
+  const reconciled = social.transitionPublishJob({record, nextStatus: "published",
+    providerEvidence: {providerPostId: "receipt-123"}});
+  assert.equal(reconciled.id, record.id);
+  assert.equal(reconciled.approvedVersion, 7);
+  assert.equal(record.status, "unknown_provider_outcome");
+  assert.deepEqual(social.transitionPublishJob({record: reconciled,
+    nextStatus: "published", providerEvidence: {providerPostId: "receipt-123"}}), reconciled);
+});
+
+test("provider-neutral attention suppresses stale capabilities without changing approved work", () => {
+  for (const provider of social.PROVIDERS) {
+    const raw = {provider, status: "connected_write", tokenHealth: "expired",
+      capabilities: {profile: true, analytics: true, publishImage: true},
+      approvedVersion: 4, jobId: "unchanged-job"};
+    const before = structuredClone(raw);
+    const projected = social.connectionProjection(raw);
+    assert.equal(projected.status, "attention_required");
+    assert.equal(projected.requiresReconnect, true);
+    assert.equal(Object.values(projected.capabilities).some(Boolean), false);
+    assert.deepEqual(raw, before);
+  }
+});
+
+test("X capability uses verified scopes rather than a read/write label alone", () => {
+  const connection = {provider: "x", providerUserId: "expected", status: "connected_read_only",
+    tokenHealth: "healthy", writeScopesGranted: true,
+    grantedScopes: ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"]};
+  assert.equal(social.xConnectionCapabilities(connection).canWrite, true);
+  assert.equal(social.xConnectionCapabilities({...connection, writeScopesGranted: false}).canWrite, false);
+  assert.equal(social.xConnectionCapabilities(connection, {expectedProviderUserId: "other"}).canWrite, false);
+  for (const tokenHealth of ["refreshing", "validating", "unknown", "expired"]) {
+    assert.equal(social.xConnectionCapabilities({...connection, tokenHealth}).canReadInsights, false);
+  }
+});
+
 test("automation modes preserve customer control", () => {
   assert.equal(social.validateAutomationMode({mode: "manual", planId: "scale"}), "manual");
   assert.equal(social.validateAutomationMode({mode: "approve_plan", planId: "scale"}), "approve_plan");
