@@ -1877,6 +1877,10 @@ function stripeClient() {
     throw new HttpsError("failed-precondition", "Stripe environment is invalid.");
   }
   const liveKey = key.startsWith("sk_live_");
+  const testKey = key.startsWith("sk_test_");
+  if (!liveKey && !testKey) {
+    throw new HttpsError("failed-precondition", "Stripe credential mode is invalid.");
+  }
   if (environment !== "production" && liveKey) {
     throw new HttpsError(
       "failed-precondition",
@@ -1901,6 +1905,7 @@ function scaledCircleEnvironment() {
 }
 
 function publicAppBaseUrl() {
+  if (scaledCircleEnvironment() === "staging") return "https://scaledcircle-staging.web.app";
   if (scaledCircleEnvironment() === "local") {
     return String(process.env.PUBLIC_APP_BASE_URL || "http://127.0.0.1:5000")
       .replace(/\/$/, "");
@@ -10504,6 +10509,7 @@ exports.createScalerConnectedAccount = safeStripeCallable(
     const accountRef = db.collection("stripeConnectedAccounts").doc(context.uid);
     const existing = await accountRef.get();
     if (existing.exists && existing.data()?.stripeAccountId) {
+      assertScalerAccountBinding(existing.data(), context.uid);
       return {...existing.data(), created: false};
     }
     const stripe = stripeClient();
@@ -10513,7 +10519,9 @@ exports.createScalerConnectedAccount = safeStripeCallable(
       trustedInput: {authenticatedScalerId: context.uid},
       reconcile: async () => {
         const current = await accountRef.get();
-        return current.data()?.stripeAccountId ? {account: current.data()} : null;
+        if (!current.data()?.stripeAccountId) return null;
+        assertScalerAccountBinding(current.data(), context.uid);
+        return {account: current.data()};
       },
       execute: async () => {
         const authUser = await getAuth().getUser(context.uid);
@@ -10537,12 +10545,21 @@ exports.createScalerConnectedAccount = safeStripeCallable(
   },
 );
 
+function assertScalerAccountBinding(record, scalerId) {
+  const expectedMode = scaledCircleEnvironment() === "production" ? "live" : "test";
+  if (!record || record.scalerId !== scalerId || record.mode !== expectedMode ||
+      !/^acct_[A-Za-z0-9]+$/.test(record.stripeAccountId || "")) {
+    throw new HttpsError("failed-precondition", "Payout account requires verification.");
+  }
+}
+
 async function retrieveScalerAccount(stripe, scalerId) {
   const ref = db.collection("stripeConnectedAccounts").doc(scalerId);
   const snapshot = await ref.get();
   if (!snapshot.exists || !snapshot.data()?.stripeAccountId) {
     throw new HttpsError("failed-precondition", "Create a Stripe payout account first.");
   }
+  assertScalerAccountBinding(snapshot.data(), scalerId);
   const account = await stripe.v2.core.accounts.retrieve(
     snapshot.data().stripeAccountId,
     {include: ["configuration.recipient", "identity", "requirements"]},
@@ -10575,6 +10592,7 @@ exports.createScalerOnboardingLink = safeStripeCallable(
     if (!stored.exists || !stored.data()?.stripeAccountId) {
       throw new HttpsError("failed-precondition", "Create a Stripe payout account first.");
     }
+    assertScalerAccountBinding(stored.data(), context.uid);
     const link = await stripe.v2.core.accountLinks.create({
       account: stored.data().stripeAccountId,
       use_case: {

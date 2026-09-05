@@ -1,5 +1,12 @@
 "use strict";
 
+// This suite deletes fixture collections. Refuse cloud fallback before SDK setup.
+if (!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || "") ||
+    [process.env.GCLOUD_PROJECT, process.env.GOOGLE_CLOUD_PROJECT]
+      .some((value) => value && value !== "demo-scaledcircle")) {
+  throw new Error("checkout_backend_tests_require_local_demo_firestore_emulator");
+}
+
 const assert = require("node:assert/strict");
 const {after, beforeEach, test} = require("node:test");
 const fftFactory = require("firebase-functions-test");

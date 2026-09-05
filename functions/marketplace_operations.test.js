@@ -183,3 +183,19 @@ test("financial invariants reject non-integer, negative, excess, and frozen sett
     ...base, settlementFrozen: true, requestedSettlementCents: 1,
   }), /settlement_frozen/);
 });
+
+test("terminal failure cannot be reclaimed or execute a second financial mutation", async () => {
+  const store = createMemoryOperationStore();
+  let calls = 0;
+  const input = {store, operationId: "terminal-test", kind: "transfer",
+    trustedInput: {amountCents: 100}, waitAttempts: 1, waitMs: 0,
+    execute: async () => {
+      calls += 1;
+      throw Object.assign(new Error("declined"), {retryable: false});
+    }};
+  await assert.rejects(runFinancialOperation(input), /declined/);
+  await assert.rejects(runFinancialOperation(input), /failed_terminal/);
+  assert.equal(calls, 1);
+  assert.equal((await store.get(input.operationId)).attempt, 1);
+});
+

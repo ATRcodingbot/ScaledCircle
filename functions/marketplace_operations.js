@@ -97,7 +97,9 @@ function createMemoryOperationStore() {
         if (current?.status === "succeeded") {
           return {status: "succeeded", execute: false, result: current.result};
         }
-        if (current?.status === "processing") return {status: "processing", execute: false};
+        if (["processing", "failed_terminal"].includes(current?.status)) {
+          return {status: current.status, execute: false};
+        }
         const attempt = Number(current?.attempt || 0) + 1;
         records.set(input.operationId, {...current, ...input, status: "processing", attempt});
         return {status: "processing", execute: true, attempt};
