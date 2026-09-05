@@ -9,12 +9,13 @@ const {initializeApp, deleteApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
 const growth = require("../functions-social-operations/social_growth_cycle");
 const {createPublisher} = require("../functions-social-operations/social_growth_publisher");
+const measurements = require("../functions-social-operations/social_growth_measurements");
 const app = initializeApp({projectId: "demo-scaledcircle"}, "growth-cycle-tests");
 const db = getFirestore(app);
 const now = Date.parse("2030-01-01T00:00:00Z");
 let clock, store, record, approvalInput;
 beforeEach(async () => {
-  for (const name of ["socialPublishingAuthorities", "socialConnections", "users", "agentHealth", "socialGrowthCycles", "socialGrowthApprovals", "socialGrowthJobs", "socialContentVersions", "socialContentQualityAssessments"]) {
+  for (const name of ["socialGrowthMeasurementJobs", "socialGrowthMeasurementSnapshots", "socialPublishingAuthorities", "socialConnections", "users", "agentHealth", "socialGrowthCycles", "socialGrowthApprovals", "socialGrowthJobs", "socialContentVersions", "socialContentQualityAssessments"]) {
     const snapshots = await db.collection(name).get();
     for (const snapshot of snapshots.docs) await db.recursiveDelete(snapshot.ref);
   }
@@ -150,4 +151,37 @@ test("normal activated publisher creates once under concurrency and stores one v
   assert.equal((await db.doc(`socialGrowthJobs/${jobId}`).collection("receipts").get()).size, 1);
   assert.equal((await db.doc(`socialGrowthJobs/${jobId}/receipts/publication`).get()).data().providerPostUrl,
     "https://x.com/fixture/status/456");
+});
+
+test("cloud measurements persist once under concurrency and bound failed read retries without fake snapshots", async () => {
+  const versions = [];
+  for (let n = 1; n <= 3; n++) {
+    const id = `measure_${n}_v1`, version = {...(await db.doc("socialContentVersions/fixture_v1").get()).data(),
+      scheduledFor: `2030-01-0${n+1}T12:00:00Z`};
+    versions.push({id, record: version});
+    await db.doc(`socialContentVersions/${id}`).set(version);
+    await db.doc(`socialContentQualityAssessments/${id}`).set({businessUid: "fixture", readyToPublish: true, immutableSourceHash: "content"});
+  }
+  const cycle = growth.cycle({businessUid: "fixture", planId: "measure_plan", versions,
+    providerAccounts: {x: {providerUserId: "123", handle: "fixture"}}, strategy: {themes: ["education"], objectives: ["Observe"]},
+    startsAt: "2030-01-01", endsAt: "2030-01-31", timeZone: "UTC", now});
+  await store.save(cycle);
+  const result = await store.approve({...approvalInput, cycleId: cycle.id, expectedDigest: cycle.digest, versionIds: versions.map(v => v.id)});
+  const approved = (await db.doc(`socialGrowthApprovals/${result.approvalId}`).get()).data();
+  const planned = measurements.plan(approved);
+  for (const job of planned) await db.doc(`socialGrowthMeasurementJobs/${job.id}`).set(job);
+  await db.doc("socialConnections/fixture/providers/x").set({provider: "x", providerUserId: "123", status: "connected_write",
+    tokenHealth: "healthy", writeScopesGranted: true, grantedScopes: ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"]});
+  let reads = 0, fail = false;
+  const collect = measurements.createCollector({db, now: () => clock, credentials: async () => ({accessToken: "fixture-only"}),
+    fetchImpl: async () => { reads++; if (fail) throw new Error("offline");
+      return {ok: true, json: async () => ({data: {id: "123", username: "fixture", public_metrics: {followers_count: 0, tweet_count: 3}}})}; }});
+  await Promise.all([1, 2, 3].map(() => collect(planned[0].id)));
+  await collect(planned[0].id); assert.equal(reads, 1);
+  assert.equal((await db.collection("socialGrowthMeasurementSnapshots").get()).size, 1);
+  fail = true; clock = Date.parse(planned[1].scheduledFor);
+  await collect(planned[1].id); await collect(planned[1].id); assert.equal(reads, 2);
+  clock += 30 * 60000; await collect(planned[1].id); await collect(planned[1].id); assert.equal(reads, 3);
+  assert.equal((await db.doc(`socialGrowthMeasurementJobs/${planned[1].id}`).get()).data().status, "failed");
+  assert.equal((await db.collection("socialGrowthMeasurementSnapshots").get()).size, 1);
 });

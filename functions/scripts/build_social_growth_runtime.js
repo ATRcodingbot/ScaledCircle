@@ -13,7 +13,7 @@ const root = path.resolve(__dirname, "../..");
 const source = path.join(root, "functions-social-operations");
 const output = path.join(root, ".firebase/social-growth-runtime");
 const names = ["createSocialGrowthCycleV1", "approveSocialGrowthWeekV1", "getSocialGrowthCycleV1",
-  "setSocialGrowthPublishingStateV1", "runSocialGrowthPublisherV1", "reconcileSocialGrowthPublicationV1"];
+  "setSocialGrowthPublishingStateV1", "runSocialGrowthPublisherV1", "reconcileSocialGrowthPublicationV1", "runSocialGrowthMeasurementsV1"];
 const original = fs.readFileSync(path.join(source, "index.js"), "utf8");
 const ast = parser.parse(original, {sourceType: "script"});
 let program;

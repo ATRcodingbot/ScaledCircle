@@ -2975,3 +2975,27 @@ exports.reconcileSocialGrowthPublicationV1 = onCall({enforceAppCheck: false, max
   try { const result = await normalSocialPublisher().execute(id); return {status: result.status}; }
   catch (_) { throw new HttpsError("failed-precondition", "Publication review needs attention."); }
 });
+
+const socialGrowthMeasurements = require("./social_growth_measurements");
+exports.runSocialGrowthMeasurementsV1 = onSchedule({schedule: "every 15 minutes", timeZone: "UTC",
+  maxInstances: 1, timeoutSeconds: 300, retryCount: 0,
+  secrets: [socialOAuthEncryptionKey, xSocialClientSecret]}, async () => {
+  const project = process.env.GCLOUD_PROJECT;
+  socialGrowthPublisher.environment(project);
+  const collector = socialGrowthMeasurements.createCollector({db, credentials: async (job, identity) => {
+    const connectionRef = db.doc(`socialConnections/${job.businessUid}/providers/x`);
+    const connection = (await connectionRef.get()).data();
+    if (connection?.environment !== runtimeEnvironment() || connection?.providerUserId !== identity.providerUserId ||
+        connection?.handle !== identity.handle) throw new Error("measurement_identity_mismatch");
+    const config = socialOAuth.validateProviderConfig({...(await providerConfigRef("x").get()).data(), provider: "x"});
+    if (!config.enabled || !config.historicalSyncEnabled || config.environment !== runtimeEnvironment() ||
+        (runtimeEnvironment() === "production" && config.clientId !== PRODUCTION_X_PROVIDER_CONFIG.clientId)) throw new Error("measurement_config_invalid");
+    const refreshed = await refreshStoredXCredential({businessUid: job.businessUid, connectionRef, connection,
+      config, expectedProviderUserId: identity.providerUserId, clientSecret: xSocialClientSecret.value()});
+    return {accessToken: refreshed.tokens.accessToken};
+  }});
+  const pending = await db.collection("socialGrowthMeasurementJobs").where("status", "in", ["pending", "reading"]).limit(100).get();
+  for (const snapshot of pending.docs) {
+    if (Date.parse(snapshot.data().scheduledFor) <= Date.now()) await collector(snapshot.id);
+  }
+});

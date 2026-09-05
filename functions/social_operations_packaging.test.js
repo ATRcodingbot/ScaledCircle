@@ -11,7 +11,7 @@ const indexSource = fs.readFileSync(path.join(packageRoot, "index.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 
-test("normal growth deployment is reproducible and contains only its six exports and two secrets", () => {
+test("normal growth deployment is reproducible and contains only its seven exports and two secrets", () => {
   const {execFileSync} = require("node:child_process");
   execFileSync(process.execPath, [path.join(__dirname, "scripts/build_social_growth_runtime.js")]);
   const output = path.join(__dirname, "..", ".firebase/social-growth-runtime");
@@ -19,12 +19,12 @@ test("normal growth deployment is reproducible and contains only its six exports
   execFileSync(process.execPath, [path.join(__dirname, "scripts/build_social_growth_runtime.js")]);
   assert.equal(fs.readFileSync(path.join(output, "index.js"), "utf8"), first);
   assert.doesNotMatch(first, /META_SOCIAL_APP_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET|x_first_publish/);
-  assert.equal([...first.matchAll(/exports\.[A-Za-z0-9_]+\s*=/g)].length, 6);
+  assert.equal([...first.matchAll(/exports\.[A-Za-z0-9_]+\s*=/g)].length, 7);
   assert.equal([...first.matchAll(/defineSecret\(/g)].length, 2);
   const loaded = JSON.parse(execFileSync(process.execPath, ["-e", `const e=require(${JSON.stringify(output)}); console.log(JSON.stringify(Object.fromEntries(Object.entries(e).map(([k,v])=>[k,v.__endpoint?.secretEnvironmentVariables||[]]))));`], {encoding: "utf8"}));
   for (const [name, secrets] of Object.entries(loaded)) {
     assert.deepEqual(secrets.map(value => value.key).sort(),
-      ["runSocialGrowthPublisherV1", "reconcileSocialGrowthPublicationV1"].includes(name) ?
+      ["runSocialGrowthPublisherV1", "reconcileSocialGrowthPublicationV1", "runSocialGrowthMeasurementsV1"].includes(name) ?
         ["SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY", "X_SOCIAL_CLIENT_SECRET"] : []);
   }
 });
@@ -99,6 +99,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "recordFirstXFounderApprovalV1",
     "registerFirstXProductionResponseAssetV1",
     "reviewScheduledSocialContentV1",
+    "runSocialGrowthMeasurementsV1",
     "runSocialGrowthPublisherV1",
     "setSocialGrowthPublishingStateV1",
     "socialOAuthCallbackV1",
