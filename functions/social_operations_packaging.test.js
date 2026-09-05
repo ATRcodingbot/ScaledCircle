@@ -180,6 +180,9 @@ test("production X connection authority is exact-scope, confirmation-gated, and 
   assert.match(begin, /config\?\.writeScopesEnabled === true/);
   assert.match(begin, /socialOAuth\.X_PUBLISH_SCOPES/);
   assert.match(begin, /purpose: requestWriteScopes \? "x_connection_authority"/);
+  assert.match(begin, /event: "social_oauth_begin_rejected"/);
+  assert.match(begin, /safeSocialOAuthFailureCode\(error\)/);
+  assert.doesNotMatch(begin, /console\.error\([^\n]*encryptionKey\.value/);
   assert.match(begin, /pending\.purpose === proposed\.record\.purpose/);
   assert.match(begin, /socialOAuth\.exactScopeSet\(pending\.requestedScopes/);
   assert.match(begin, /status: "superseded"/);

@@ -59,6 +59,11 @@ function readText(value, maximumLength = 500) {
   return typeof value === "string" ? value.trim().slice(0, maximumLength) : "";
 }
 
+function safeSocialOAuthFailureCode(error) {
+  const code = readText(error?.message, 120);
+  return /^social_oauth_[a-z0-9_]+$/.test(code) ? code : "social_oauth_setup_failed";
+}
+
 function isoValue(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate().toISOString();
@@ -2165,7 +2170,9 @@ exports.beginSocialOAuthConnectionV1 = onCall(
         purpose: requestWriteScopes ? "x_connection_authority" : "read_only_connection",
         now: Date.now(),
       });
-    } catch (_) {
+    } catch (error) {
+      console.error(JSON.stringify({event: "social_oauth_begin_rejected",
+        code: safeSocialOAuthFailureCode(error), provider, environment}));
       throw new HttpsError("failed-precondition", "This read-only connection is not configured yet.");
     }
     const surface = provider === "meta" ? "facebook" : provider;
