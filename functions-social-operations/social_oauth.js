@@ -672,8 +672,11 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
     return (body.data || []).map((item) => ({providerObjectId: text(item.id, 180),
       observedAtMillis: now, periodStart: null, periodEnd: null,
       metrics: {views: item.public_metrics?.impression_count ?? null,
-        engagements: ["like_count", "retweet_count", "reply_count", "quote_count"]
-          .reduce((sum, key) => sum + Number(item.public_metrics?.[key] || 0), 0)},
+        impressions: item.public_metrics?.impression_count ?? null,
+        engagements: ["like_count", "retweet_count", "reply_count", "quote_count"].every((key) =>
+          Number.isSafeInteger(item.public_metrics?.[key]) && item.public_metrics[key] >= 0) ?
+          ["like_count", "retweet_count", "reply_count", "quote_count"]
+            .reduce((sum, key) => sum + item.public_metrics[key], 0) : null},
       unavailable: ["reach", "saves", "clicks", "leads", "conversions"]}));
   }
   if (normalized === "youtube") {

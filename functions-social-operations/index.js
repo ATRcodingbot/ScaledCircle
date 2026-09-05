@@ -2850,3 +2850,47 @@ exports.syncMetaSocialReadOnlyPerformanceV1 = onCall(
     providerSecretBinding("meta").secret]},
   syncSocialReadOnlyPerformanceHandler("meta", providerSecretBinding("meta").secret),
 );
+
+// Candidate planning endpoints. No provider transport or scheduled publisher is
+// registered until persistent publication authority has been reviewed.
+const socialGrowthCycle = require("./social_growth_cycle");
+function growthPlanningCallable(handler) {
+  return onCall({enforceAppCheck: false, maxInstances: 2}, async (request) => {
+    const business = await requireSocialOperationsBusiness(request);
+    if (process.env.GCLOUD_PROJECT !== "scaledcircle-staging") {
+      throw new HttpsError("failed-precondition", "Growth cycle planning is awaiting release review.");
+    }
+    try { return await handler(business.uid, request.data || {}); }
+    catch (_) { throw new HttpsError("failed-precondition", "Review the latest content and cycle before continuing."); }
+  });
+}
+exports.createSocialGrowthCycleV1 = growthPlanningCallable(async (businessUid, data) => {
+  if (!Array.isArray(data.versionIds) || !data.versionIds.length || data.versionIds.length > 60 ||
+      data.versionIds.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,220}$/.test(id))) {
+    throw new Error("growth_selection_invalid");
+  }
+  const plan = await db.collection("socialContentPlans").doc(data.planId).get();
+  if (plan.data()?.businessUid !== businessUid) throw new Error("growth_plan_not_owned");
+  const versions = await Promise.all(data.versionIds.map(async (id) => {
+    const snapshot = await db.collection("socialContentVersions").doc(id).get();
+    if (snapshot.data()?.planId !== data.planId) throw new Error("growth_plan_mismatch");
+    return {id, record: snapshot.data()};
+  }));
+  const record = socialGrowthCycle.cycle({businessUid, planId: data.planId, versions,
+    strategy: data.strategy, startsAt: data.startsAt, endsAt: data.endsAt, timeZone: data.timeZone,
+    mode: "approval_required"});
+  const saved = await socialGrowthCycle.createStore(db).save(record);
+  return {cycleId: saved.id, digest: saved.digest, externalPublishingEnabled: false};
+});
+exports.approveSocialGrowthWeekV1 = growthPlanningCallable(async (businessUid, data) => {
+  if (!/^growth_cycle_[a-f0-9]{64}$/.test(data.cycleId || "")) throw new Error("growth_cycle_invalid");
+  return socialGrowthCycle.createStore(db).approve({businessUid, cycleId: data.cycleId,
+    expectedDigest: data.expectedDigest, versionIds: data.versionIds,
+    windowStart: data.windowStart, windowEnd: data.windowEnd});
+});
+exports.getSocialGrowthCycleV1 = growthPlanningCallable(async (businessUid, data) => {
+  if (!/^growth_cycle_[a-f0-9]{64}$/.test(data.cycleId || "")) throw new Error("growth_cycle_invalid");
+  const snapshot = await db.collection("socialGrowthCycles").doc(data.cycleId).get();
+  if (snapshot.data()?.businessUid !== businessUid) throw new Error("growth_cycle_not_owned");
+  return {cycle: snapshot.data(), externalPublishingEnabled: false};
+});

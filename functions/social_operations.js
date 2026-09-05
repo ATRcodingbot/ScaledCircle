@@ -236,7 +236,14 @@ function normalizePerformance({businessUid, provider, contentItemId, observedAt,
 }
 
 function weeklyLearning({businessUid, snapshots = [], minimumSample = 3, now = Date.now()}) {
-  const owned = snapshots.filter((item) => item?.businessUid === businessUid);
+  const latest = new Map();
+  for (const item of snapshots.filter((value) => value?.businessUid === businessUid && value.contentItemId &&
+    Object.values(value.metrics || {}).some((metric) => metric?.status === "available" &&
+      typeof metric.value === "number" && Number.isFinite(metric.value) && metric.value >= 0))) {
+    const key = `${item.provider}:${item.contentItemId}`;
+    if (!latest.has(key) || Date.parse(item.observedAt) > Date.parse(latest.get(key).observedAt)) latest.set(key, item);
+  }
+  const owned = [...latest.values()];
   if (owned.length < minimumSample) return {schemaVersion: LEARNING_VERSION, businessUid,
     status: "insufficient_evidence", sampleSize: owned.length,
     summary: "More published-content evidence is needed before ScaledCircle recommends changes.",
@@ -248,9 +255,9 @@ function weeklyLearning({businessUid, snapshots = [], minimumSample = 3, now = D
   const strongest = scored[0];
   return {schemaVersion: LEARNING_VERSION, businessUid, status: "evidence_available",
     sampleSize: owned.length, strongestContentItemId: strongest.item.contentItemId,
-    summary: "The strongest observed item earned the most combined engagement and attributable response.",
+    summary: "This item has the highest observed score in this sample; this is not a strategy winner or proof of causation.",
     recommendations: ["Create one follow-up variation on the strongest evidenced topic.",
-      "Reduce frequency for topics that repeatedly receive no attributable response."], createdAt: now};
+      "Collect a comparable next-week sample before changing cadence or declaring a winning strategy."], createdAt: now};
 }
 
 function createEmailContentPlan({businessUid, businessName, goal, entries, startsOn,

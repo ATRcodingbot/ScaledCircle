@@ -49,6 +49,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
   assert.deepEqual(names.sort(), [
     "approveFirstXProductionSuccessorV4",
     "approveSocialContentPlanV1",
+    "approveSocialGrowthWeekV1",
     "beginFirstXPublishAuthorizationV1",
     "beginSocialOAuthConnectionV1",
     "configureSocialProviderV1",
@@ -60,8 +61,10 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "createFirstXPublishVersionV3",
     "createFirstXReplacementV1",
     "createSocialContentPlanV1",
+    "createSocialGrowthCycleV1",
     "executeFirstXPublishV1",
     "getFirstXPublishCertificationV1",
+    "getSocialGrowthCycleV1",
     "getSocialOAuthAttemptV1",
     "getSocialOperationsAdminSummary",
     "getSocialOperationsWorkspace",
