@@ -8,6 +8,7 @@ const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const socialOperations = require("./social_operations");
 const socialOAuth = require("./social_oauth");
+const metaConnection = require("./social_meta_connection");
 const subscriptionEntitlements = require("./subscription_entitlements");
 const scaledCircleLaunchPlan = require("./scaledcircle_launch_plan");
 const xFirstPublish = require("./x_first_publish");
@@ -2170,7 +2171,9 @@ exports.beginSocialOAuthConnectionV1 = onCall(
     const provider = socialOAuth.normalizeProvider(request.data?.provider);
     const environment = runtimeEnvironment();
     const config = (await providerConfigRef(provider, environment).get()).data();
-    const requestWriteScopes = provider === "x" && config?.writeScopesEnabled === true;
+    const metaWrite = provider === "meta" && config?.writeScopesEnabled === true;
+    if (metaWrite) metaConnection.authorize(config, business.uid);
+    const requestWriteScopes = (provider === "x" || metaWrite) && config?.writeScopesEnabled === true;
     let proposed;
     try {
       proposed = socialOAuth.createAttempt({
@@ -2178,8 +2181,10 @@ exports.beginSocialOAuthConnectionV1 = onCall(
         provider,
         config,
         encryptionKey: socialOAuthEncryptionKey.value(),
-        scopes: requestWriteScopes ? socialOAuth.X_PUBLISH_SCOPES : null,
-        purpose: requestWriteScopes ? "x_connection_authority" : "read_only_connection",
+        scopes: metaWrite ? socialOAuth.META_PUBLISH_SCOPES :
+          requestWriteScopes ? socialOAuth.X_PUBLISH_SCOPES : null,
+        purpose: metaWrite ? "meta_connection_authority" :
+          requestWriteScopes ? "x_connection_authority" : "read_only_connection",
         now: Date.now(),
       });
     } catch (error) {
@@ -2359,12 +2364,13 @@ exports.getSocialOAuthAttemptV1 = onCall(
       candidates: Array.isArray(record.safeCandidates) ? record.safeCandidates : [],
       grantedScopes: Array.isArray(record.grantedScopes) ? record.grantedScopes : [],
       missingScopes: Array.isArray(record.missingScopes) ? record.missingScopes : [],
-      writeScopesRequested: ["x_first_publish_certification", "x_connection_authority"]
+      writeScopesRequested: ["x_first_publish_certification", "x_connection_authority", "meta_connection_authority"]
         .includes(record.purpose),
-      writeScopesGranted: ["x_first_publish_certification", "x_connection_authority"]
+      writeScopesGranted: ["x_first_publish_certification", "x_connection_authority", "meta_connection_authority"]
         .includes(record.purpose) &&
         Array.isArray(record.grantedScopes) &&
-        xFirstPublish.X_WRITE_SCOPES.every((scope) => record.grantedScopes.includes(scope)),
+        (record.provider === "meta" ? socialOAuth.META_PUBLISH_SCOPES : xFirstPublish.X_WRITE_SCOPES)
+          .every((scope) => record.grantedScopes.includes(scope)),
     };
   },
 );
@@ -2460,14 +2466,15 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
     const attempt = attemptSnapshot.data();
     const writeConnection = attempt?.provider === "x" &&
       attempt?.purpose === "x_connection_authority";
+    const metaWrite = attempt?.provider === "meta" && attempt?.purpose === "meta_connection_authority";
     if (!attempt || attempt.businessUid !== business.uid ||
-        (attempt.purpose && !["read_only_connection", "x_connection_authority"]
+        (attempt.purpose && !["read_only_connection", "x_connection_authority", "meta_connection_authority"]
           .includes(attempt.purpose))) {
       throw new HttpsError("not-found", "The connection attempt is unavailable.");
     }
     try {
-      socialOAuth.exactScopeSet(attempt.grantedScopes, writeConnection ?
-        socialOAuth.X_PUBLISH_SCOPES : socialOAuth.PROVIDER_SCOPES[attempt.provider]);
+      socialOAuth.exactScopeSet(attempt.grantedScopes, metaWrite ? socialOAuth.META_PUBLISH_SCOPES :
+        writeConnection ? socialOAuth.X_PUBLISH_SCOPES : socialOAuth.PROVIDER_SCOPES[attempt.provider]);
     } catch (_) {
       throw new HttpsError("failed-precondition", "The provider did not grant the exact requested permissions.");
     }
@@ -2486,6 +2493,56 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
       `${business.uid}:${attempt.provider}:${selected.privateAccount.accountId}`);
     const connectionRoot = db.collection("socialConnections").doc(business.uid)
       .collection("providers");
+    if (metaWrite) {
+      const credentialRef = db.collection("socialConnectionCredentials").doc(credentialId);
+      const facebookRef = connectionRoot.doc("facebook");
+      const instagramRef = connectionRoot.doc("instagram");
+      await db.runTransaction(async (transaction) => {
+        const [a, f, i, c, p] = await Promise.all([transaction.get(attemptRef),
+          transaction.get(facebookRef), transaction.get(instagramRef), transaction.get(credentialRef),
+          transaction.get(providerConfigRef("meta", runtimeEnvironment()))]);
+        const current = a.data();
+        metaConnection.confirmation({attempt: current, attemptId, businessUid: business.uid,
+          environment: runtimeEnvironment(), config: p.data(), facebook: f.data(),
+          instagram: i.data(), now: Date.now()});
+        socialOAuth.exactScopeSet(current.grantedScopes, socialOAuth.META_PUBLISH_SCOPES);
+        // Select again from the transaction's current encrypted attempt, never a stale pre-read.
+        const chosen = socialOAuth.selectCandidate({attempt: current,
+          candidateId: request.data?.candidateId, encryptionKey: socialOAuthEncryptionKey.value(),
+          now: Date.now()});
+        const revision = Math.max(socialOAuth.connectionRevision(f.data()),
+          socialOAuth.connectionRevision(i.data())) + 1;
+        const generation = c.exists ? socialOAuth.credentialGeneration(c.data()) + 1 : 1;
+        transaction.set(credentialRef, {...chosen.credentialRecord,
+          rotationGeneration: generation, connectionRevision: revision,
+          accountEnvelope: socialOAuth.encryptJson(chosen.privateAccount,
+            socialOAuthEncryptionKey.value(), `${business.uid}:meta:${credentialId}`),
+          createdAt: c.data()?.createdAt || FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+        for (const [surface, ref, id, name, handle] of [
+          ["facebook", facebookRef, current.metaDogfood.pageId, current.metaDogfood.pageName, null],
+          ["instagram", instagramRef, current.metaDogfood.instagramId,
+            chosen.safeCandidate.linkedAccountDisplayName, current.metaDogfood.instagramUsername],
+        ]) {
+          transaction.set(ref, {schemaVersion: socialOperations.SCHEMA_VERSION,
+            provider: surface, status: "connected_write", tokenHealth: "healthy",
+            providerUserId: id, providerAccountId: id, accountDisplayName: name,
+            accountType: surface === "facebook" ? "facebook_page" : "instagram_professional",
+            handle, credentialId, connectionRevision: revision, credentialRotationGeneration: generation,
+            grantedScopes: current.grantedScopes, writeScopesGranted: true,
+            capabilities: metaConnection.capabilities(current.grantedScopes, surface),
+            linkedPageId: current.metaDogfood.pageId,
+            externalPublishingEnabled: false, environment: current.environment,
+            authorizationUpdatedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+        }
+        transaction.update(attemptRef, {status: "connected_write", selectedCandidate: chosen.safeCandidate,
+          candidateEnvelope: FieldValue.delete(), verifierEnvelope: FieldValue.delete(),
+          connectedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      });
+      return {provider: "meta", status: "connected_write", identity: selected.safeCandidate,
+        writeScopesGranted: true, externalPublishingEnabled: false};
+    }
     if (writeConnection) {
       const credentialRef = db.collection("socialConnectionCredentials").doc(credentialId);
       const connectionRef = connectionRoot.doc("x");
@@ -2639,10 +2696,21 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
         encryptionKey: socialOAuthEncryptionKey.value(),
         now: Date.now(),
       });
-      await attemptRef.update({
-        ...completed,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      if (attempt.purpose === "meta_connection_authority") {
+        await db.runTransaction(async (transaction) => {
+          const [latest, connection] = await Promise.all([transaction.get(attemptRef),
+            transaction.get(db.collection("socialConnections").doc(attempt.businessUid)
+              .collection("providers").doc("facebook"))]);
+          if (latest.data()?.status !== "exchanging" ||
+              latest.data()?.expiresAtMillis <= Date.now() ||
+              connection.data()?.pendingAttemptId !== attemptId) {
+            throw new Error("social_oauth_stale_connection_attempt");
+          }
+          transaction.update(attemptRef, {...completed, updatedAt: FieldValue.serverTimestamp()});
+        });
+      } else {
+        await attemptRef.update({...completed, updatedAt: FieldValue.serverTimestamp()});
+      }
       response.status(200).type("html").send(socialOAuth.callbackHtml({
         success: completed.status === "identity_pending",
         message: completed.status === "identity_pending" ?

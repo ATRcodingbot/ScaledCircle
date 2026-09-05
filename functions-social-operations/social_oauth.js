@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const metaConnection = require("./social_meta_connection");
 
 const OAUTH_ATTEMPT_TTL_MS = 10 * 60 * 1000;
 const PROVIDERS = Object.freeze(["meta", "x", "youtube"]);
@@ -223,7 +224,10 @@ function validateProviderConfig(input = {}) {
     environment,
     enabled: input.enabled === true,
     historicalSyncEnabled: input.historicalSyncEnabled === true,
-    writeScopesEnabled: provider === "x" && input.writeScopesEnabled === true,
+    writeScopesEnabled: (provider === "x" || (provider === "meta" &&
+      Boolean(input.metaDogfood))) && input.writeScopesEnabled === true,
+    ...(provider === "meta" && input.metaDogfood ?
+      {metaDogfood: metaConnection.policy({...input, provider, environment})} : {}),
     externalPublishingEnabled: false,
     appName: text(input.appName, 180) || null,
   };
@@ -281,6 +285,8 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
   const aad = `${uid}:${normalized}:${attemptId}`;
   const requiredScopes = requestedScopes(normalized, scopes);
   const normalizedPurpose = text(purpose, 80);
+  const metaDogfood = normalized === "meta" && requiredScopes.includes("pages_manage_posts") ?
+    metaConnection.authorize(valid, uid) : null;
   if (normalized === "meta" && requiredScopes.includes("pages_manage_posts") &&
       normalizedPurpose !== "meta_connection_authority") {
     throw new Error("social_oauth_scope_purpose_mismatch");
@@ -300,6 +306,7 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
       businessUid: uid,
       provider: normalized,
       purpose: normalizedPurpose,
+      ...(metaDogfood ? {metaDogfood} : {}),
       requestedScopes: requiredScopes,
       environment: valid.environment,
       status: "authorizing",
@@ -338,6 +345,8 @@ function continuationUrl(record, {businessUid, provider, attemptId, encryptionKe
 function safeIdentityCandidate(candidate = {}, grantedScopes = []) {
   const granted = new Set(grantedScopes);
   const xPublish = candidate.provider === "x" && granted.has("tweet.write");
+  const metaPublish = candidate.provider === "meta" && granted.has("pages_manage_posts") &&
+    granted.has("pages_read_engagement");
   return {
     candidateId: text(candidate.candidateId || candidate.accountId, 240),
     provider: text(candidate.provider, 30),
@@ -346,11 +355,12 @@ function safeIdentityCandidate(candidate = {}, grantedScopes = []) {
     handle: text(candidate.handle, 180) || null,
     linkedAccountDisplayName: text(candidate.linkedAccountDisplayName, 180) || null,
     linkedHandle: text(candidate.linkedHandle, 180) || null,
+    ...(candidate.linkedAccountType ? {linkedAccountType: candidate.linkedAccountType} : {}),
     capabilities: {
       profile: candidate.capabilities?.profile === true,
       analytics: candidate.capabilities?.analytics === true,
-      publishText: xPublish,
-      publishImage: xPublish && granted.has("media.write"),
+      publishText: xPublish || metaPublish,
+      publishImage: (xPublish && granted.has("media.write")) || metaPublish,
       publishVideo: false,
       schedule: false,
     },
@@ -430,6 +440,33 @@ async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
   const grantedScopes = (permissions.data || [])
     .filter((permission) => permission.status === "granted")
     .map((permission) => text(permission.permission, 180)).filter(Boolean);
+  if (config.metaDogfood) {
+    // public_profile is Meta's implicit login grant, not publishing authority.
+    const explicitScopes = grantedScopes.filter((scope) => scope !== "public_profile");
+    exactScopeSet(explicitScopes, META_PUBLISH_SCOPES);
+    const p = config.metaDogfood;
+    const pageUrl = new URL(`${graphBase}/${encodeURIComponent(p.pageId)}`);
+    pageUrl.searchParams.set("fields", "id,name,access_token,instagram_business_account{id}");
+    pageUrl.searchParams.set("access_token", token.access_token);
+    const page = await fetchJson(fetchImpl, pageUrl, {}, {providerStage: "meta_page_identity"});
+    if (page.id !== p.pageId || page.name !== p.pageName || !page.access_token ||
+        page.instagram_business_account?.id !== p.instagramId) {
+      throw new Error("social_oauth_meta_restricted_identity_mismatch");
+    }
+    const igUrl = new URL(`${graphBase}/${encodeURIComponent(p.instagramId)}`);
+    igUrl.searchParams.set("fields", "id,username,name,account_type");
+    igUrl.searchParams.set("access_token", page.access_token);
+    const ig = await fetchJson(fetchImpl, igUrl, {}, {providerStage: "meta_instagram_identity"});
+    const candidate = {provider: "meta", candidateId: `meta_page_${page.id}`,
+      accountId: page.id, accountDisplayName: page.name, accountType: "facebook_page",
+      linkedAccountId: ig.id, linkedAccountDisplayName: ig.name || ig.username,
+      linkedHandle: ig.username, linkedAccountType: ig.account_type,
+      pageAccessToken: page.access_token, userAccessToken: token.access_token,
+      expiresIn: Number(token.expires_in || 0) || null,
+      capabilities: metaConnection.capabilities(explicitScopes, "facebook")};
+    metaConnection.identity(candidate, p);
+    return {candidates: [candidate], scopes: explicitScopes};
+  }
   const accountFields = "id,name,access_token,tasks";
   const pageIdentityFields = "id,name,instagram_business_account{id,username,name}";
   const accountUrl = new URL(`${graphBase}/me/accounts`);
@@ -551,6 +588,14 @@ async function exchangeYouTube({code, verifier, config, clientSecret, fetchImpl}
 async function completeExchange({attempt, code, config, clientSecret, encryptionKey,
   fetchImpl = globalThis.fetch, now = Date.now()}) {
   assertAttempt(attempt, {provider: config.provider, now});
+  if (attempt.purpose === "meta_connection_authority") {
+    if (!attempt.metaDogfood || attempt.environment !== config.environment) {
+      throw new Error("social_oauth_meta_restricted_identity_mismatch");
+    }
+    metaConnection.authorize(config, attempt.businessUid, attempt.metaDogfood);
+  } else if (attempt.provider === "meta" && config.metaDogfood) {
+    throw new Error("social_oauth_scope_purpose_mismatch");
+  }
   const aad = `${attempt.businessUid}:${attempt.provider}:${attempt.stateDigest}`;
   const verifier = decryptJson(attempt.verifierEnvelope, encryptionKey, aad).verifier;
   let result;
@@ -581,6 +626,10 @@ function selectCandidate({attempt, candidateId, encryptionKey, now = Date.now()}
   const candidates = decryptJson(attempt.candidateEnvelope, encryptionKey, aad).candidates || [];
   const candidate = candidates.find((item) => item.candidateId === text(candidateId, 240));
   if (!candidate) throw new Error("social_oauth_identity_not_found");
+  if (attempt.purpose === "meta_connection_authority") {
+    exactScopeSet(attempt.grantedScopes, META_PUBLISH_SCOPES);
+    metaConnection.identity(candidate, attempt.metaDogfood);
+  }
   const credentialAad = `${attempt.businessUid}:${attempt.provider}:${candidate.accountId}`;
   const secretFields = {};
   for (const key of ["accessToken", "refreshToken", "userAccessToken", "pageAccessToken"] ) {

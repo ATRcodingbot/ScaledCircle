@@ -223,6 +223,8 @@ test("production X connection authority requests the exact five scopes without p
 
 test("Meta connection scope candidate permits only the bounded seven scopes and explicit purpose", () => {
   const production = {...config("meta"), environment: "production",
+    writeScopesEnabled: true, metaDogfood: {businessUid: "fixture-business", pageId: "123",
+      pageName: "Fixture Page", instagramId: "456", instagramUsername: "fixture"},
     redirectUri: oauth.callbackUrl({provider: "meta", environment: "production"})};
   const args = {businessUid: "fixture-business", provider: "meta", config: production,
     encryptionKey: key, now: 1000, scopes: oauth.META_PUBLISH_SCOPES,
@@ -246,7 +248,7 @@ test("Meta connection scope candidate permits only the bounded seven scopes and 
   }
   assert.deepEqual(oauth.requestedScopes("meta"), oauth.PROVIDER_SCOPES.meta);
   // This preparatory scope contract must not activate the deployed runtime or publication.
-  const inactive = oauth.validateProviderConfig({...production, writeScopesEnabled: true});
+  const inactive = oauth.validateProviderConfig({...production, metaDogfood: undefined});
   assert.equal(inactive.writeScopesEnabled, false);
   assert.equal(inactive.externalPublishingEnabled, false);
   assert.throws(() => oauth.validateProviderConfig({...production,
