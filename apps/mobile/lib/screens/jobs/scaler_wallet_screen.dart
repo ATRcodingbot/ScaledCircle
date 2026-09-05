@@ -248,7 +248,7 @@ class ScalerWalletScreen extends StatelessWidget {
     final description =
         data['description']?.toString() ?? _transactionDescription(type);
 
-    final createdAt = data['createdAt'];
+    final createdAt = data['createdAt'] ?? data['createdAtMillis'];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -324,8 +324,9 @@ class ScalerWalletScreen extends StatelessWidget {
   }
 
   String _formatTimestamp(dynamic value) {
+    if (value is int) value = Timestamp.fromMillisecondsSinceEpoch(value);
     if (value is! Timestamp) {
-      return 'Processing';
+      return 'Date unavailable';
     }
 
     final date = value.toDate();
