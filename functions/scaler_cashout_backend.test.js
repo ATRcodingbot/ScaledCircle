@@ -36,6 +36,51 @@ beforeEach(async () => {
 });
 after(async () => { await db.terminate(); await deleteApp(app); });
 
+test("created lifecycle events retry busy leases, then acknowledge paid state without ledger or audit rewrites", async () => {
+  const result = await service.request(uid, request, record());
+  const key = result.operationId;
+  const stripe = new Stripe("sk_test_offlinefixture");
+  const secret = "whsec_offlinefixture";
+  const transfer = [...mock.transfers.values()][0];
+  const payout = [...mock.payouts.values()][0];
+  const events = [
+    {id: "evt_transfercreated", type: "transfer.created", livemode: false, data: {object: transfer}},
+    {id: "evt_payoutcreated", type: "payout.created", account: "acct_fixture", livemode: false, data: {object: {...payout, status: "pending"}}},
+    {id: "evt_payoutpaid", type: "payout.paid", account: "acct_fixture", livemode: false, data: {object: {...payout, status: "paid"}}},
+  ];
+  const send = async (event, wrongSignature = false) => {
+    const payload = JSON.stringify(event);
+    return handleWebhook({stripe, store, service, runtime, secret, rawBody: Buffer.from(payload),
+      signature: wrongSignature ? "bad" : stripe.webhooks.generateTestHeaderString({payload, secret}),
+      endpointScope: event.type.startsWith("transfer.") ? "platform" : "connected"});
+  };
+  const claim = await store.claim(key, uid);
+  for (const event of events.slice(0, 2)) {
+    await assert.rejects(send(event), /cashout_operation_busy/);
+    assert.equal((await db.doc(`scalerCashoutEvents/${event.id}`).get()).data().done, false);
+  }
+  await store.save(claim, {leaseUntil: 0});
+  payout.status = "paid";
+  await send(events[2]);
+  const before = await store.get(key, uid);
+  const auditCount = (await db.collection(`financialOperations/${key}/audit`).get()).size;
+  for (const event of events) {
+    await send(event);
+    assert.deepEqual(await send(event), {duplicate: true});
+  }
+  await assert.rejects(send(events[0], true));
+  await assert.rejects(send({...events[1], account: "acct_wrong"}));
+  await assert.rejects(send({...events[0], livemode: true}));
+  await assert.rejects(send({...events[0], data: {object: {metadata: {cashoutId: `cashout_${"f".repeat(64)}`}}}}));
+  assert.deepEqual(await store.get(key, uid), before);
+  assert.equal((await db.collection(`financialOperations/${key}/audit`).get()).size, auditCount);
+  assert.equal((await balance()).availableCents, 500);
+  assert.equal((await balance()).pendingCents, 0);
+  assert.equal((await balance()).paidCents, 500);
+  assert.equal((await db.doc(`wallets/${uid}`).get()).data().availableBalance, 123);
+  assert.equal(mock.transfers.size, 1); assert.equal(mock.payouts.size, 1);
+});
+
 test("bounded certification accepts one five-dollar operation and denies another after settlement", async () => {
   const previousOperationId = `cashout_${"a".repeat(64)}`;
   await db.doc(`scalerCashoutBalances/${uid}`).update({activeOperationId: previousOperationId});

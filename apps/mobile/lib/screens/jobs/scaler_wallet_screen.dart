@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/scaler_cashout_service.dart';
 import '../../config/app_environment.dart';
 import '../../models/scaler_earnings_summary.dart';
+import '../../models/scaler_cashout_activity.dart';
 import '../../widgets/scaler_cashout_card.dart';
 import '../../widgets/scaler_wallet_metrics.dart';
 
@@ -246,7 +247,9 @@ class ScalerWalletScreen extends StatelessWidget {
     final type = data['type']?.toString() ?? 'transaction';
 
     final description =
-        data['description']?.toString() ?? _transactionDescription(type);
+        scalerCashoutActivityLabel(data) ??
+        data['description']?.toString() ??
+        _transactionDescription(type);
 
     final createdAt = data['createdAt'] ?? data['createdAtMillis'];
 

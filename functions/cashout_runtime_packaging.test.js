@@ -72,6 +72,7 @@ test("paused deployed webhook authenticates signatures and mode without database
     }
   }
   const fakeRequire = name => {
+    if (name === "firebase-functions/logger") return {warn() {}};
     if (name === "firebase-functions/v2") return {setGlobalOptions() {}};
     if (name === "firebase-functions/v2/https") return {onCall: (_, fn) => fn, onRequest: (_, fn) => fn, HttpsError: Error};
     if (name === "firebase-functions/params") return {defineSecret: key => ({value: () => key === "STRIPE_TEST_SECRET_KEY" ? "sk_test_offlinefixture" : secret})};

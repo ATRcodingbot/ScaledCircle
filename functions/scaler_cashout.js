@@ -145,7 +145,8 @@ function createStore(db, now = Date.now) {
         const walletData = (await tx.get(db.collection("wallets").doc(uid))).data();
         if (walletData?.ownerId !== uid || walletData.ownerType !== "scaler") fail("cashout_wallet_mismatch");
         if (!readOnly && (balance.settlementFrozen !== false || walletData.settlementFrozen === true)) fail("cashout_settlement_held");
-        if (["failed", "reversed"].includes(op.state) || op.leaseUntil > now()) return null;
+        if (["failed", "reversed"].includes(op.state) ||
+            (op.state === "completed" && op.settled === true) || op.leaseUntil > now()) return null;
         const claimed = {...op, version: op.version + 1, leaseUntil: now() + 120000};
         tx.set(opRef(key), claimed); audit(tx, claimed, "claimed");
         return claimed;

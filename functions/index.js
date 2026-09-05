@@ -11605,13 +11605,13 @@ function cashoutRuntime(setupOnly = false) {
     secretKey: STRIPE_CASHOUT_TEST_API_KEY.value()};
 }
 
-function cashoutServices(setupOnly = false) {
-  const runtime = () => cashoutRuntime(setupOnly);
+function cashoutServices(setupOnly = false, runtimeOverride = null) {
+  const runtime = runtimeOverride || (() => cashoutRuntime(setupOnly));
   cashout.assertTestRuntime(runtime());
   const stripe = new Stripe(STRIPE_CASHOUT_TEST_API_KEY.value(), {timeout: 10000, maxNetworkRetries: 0});
   const store = cashout.createStore(db);
   const provider = cashoutStripe.createStripeProvider({stripe, runtime});
-  const service = cashout.createService({store, provider, runtime: cashoutRuntime});
+  const service = cashout.createService({store, provider, runtime: runtimeOverride || cashoutRuntime});
   const endpoints = require("./scaler_cashout_endpoints").createEndpoints({
     db, stripe, provider, service, runtime, executionEnabled: () => cashoutRuntime().enabled});
   return {stripe, store, provider, service, endpoints};
@@ -11652,7 +11652,17 @@ function cashoutTestWebhook(signingSecret, endpointScope) {
     maxInstances: 2, secrets: [STRIPE_CASHOUT_TEST_API_KEY, signingSecret]}, async (request, response) => {
     if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
     try {
-      const runtime = cashoutRuntime();
+      const webhookRuntime = () => {
+        const base = cashoutRuntime();
+        // Dedicated observation window never enables financial callables.
+        const observation = process.env.SCALEDCIRCLE_CASHOUT_TEST_WEBHOOK_ONLY === "true" &&
+          /^cashout_[a-f0-9]{64}$/.test(base.operationId) &&
+          /^[A-Za-z0-9_-]{1,128}$/.test(base.scalerUid) &&
+          Date.now() < Date.parse(process.env.SCALEDCIRCLE_CASHOUT_TEST_EXPIRES_AT || "");
+        return {...base, enabled: base.enabled || observation,
+          reconcileOnly: observation || base.reconcileOnly};
+      };
+      const runtime = webhookRuntime();
       cashout.assertTestRuntime({...runtime, enabled: true});
       const stripe = new Stripe(runtime.secretKey, {timeout: 10000, maxNetworkRetries: 0});
       cashoutStripe.verifyWebhookEvent({stripe, runtime: () => runtime,
@@ -11661,12 +11671,17 @@ function cashoutTestWebhook(signingSecret, endpointScope) {
       // Retry valid deliveries after activation; never acknowledge and discard
       // a financial event merely because cash-out execution is paused.
       if (!runtime.enabled) return response.status(503).send("Test cash-out processing is paused.");
-      const services = cashoutServices();
-      const result = await cashoutStripe.handleWebhook({...services, runtime: cashoutRuntime,
+      const services = cashoutServices(false, webhookRuntime);
+      const result = await cashoutStripe.handleWebhook({...services, runtime: webhookRuntime,
         secret: signingSecret.value(), endpointScope, rawBody: request.rawBody,
         signature: request.headers["stripe-signature"]});
       return response.status(200).json(result);
-    } catch (_) { return response.status(400).send("Cash-out event could not be reconciled."); }
+    } catch (error) {
+      const code = /^cashout_[a-z_]+$/.test(error?.code || "") ? error.code : "cashout_event_reconciliation_failed";
+      logger.warn("Cash-out webhook reconciliation rejected", {code, endpointScope});
+      return response.status(code === "cashout_operation_busy" || code === "cashout_stale_claim" ? 503 : 400)
+        .send("Cash-out event could not be reconciled.");
+    }
   });
 }
 exports.scalerCashoutTestWebhookV1 = cashoutTestWebhook(STRIPE_CASHOUT_TEST_WEBHOOK_SECRET, "platform");
