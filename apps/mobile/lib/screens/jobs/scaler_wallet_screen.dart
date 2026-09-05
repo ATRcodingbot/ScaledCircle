@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/scaler_cashout_service.dart';
 import '../../widgets/scaler_cashout_card.dart';
+import '../../widgets/scaler_wallet_metrics.dart';
 
 class ScalerWalletScreen extends StatelessWidget {
   const ScalerWalletScreen({super.key});
@@ -67,6 +68,8 @@ class ScalerWalletScreen extends StatelessWidget {
               (walletData['pendingBalance'] as num?)?.toDouble() ?? 0.0;
 
           final totalBalance = availableBalance + pendingBalance;
+          final testAvailableCents =
+              walletData['cashoutAvailableCents'] as num?;
 
           return ListView(
             padding: const EdgeInsets.all(20),
@@ -86,62 +89,52 @@ class ScalerWalletScreen extends StatelessWidget {
 
               if (ScalerCashoutService.enabled) const ScalerCashoutCard(),
 
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(22),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Verified Earnings',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+              if (!ScalerCashoutService.enabled)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(22),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Verified Earnings',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
 
-                      const SizedBox(height: 8),
+                        const SizedBox(height: 8),
 
-                      Text(
-                        '\$${availableBalance.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
+                        Text(
+                          '\$${availableBalance.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
 
-                      const SizedBox(height: 8),
+                        const SizedBox(height: 8),
 
-                      const Text(
-                        'Approved work earnings recorded in your ScaledCircle Wallet. Cash-out is not yet available.',
-                      ),
-                    ],
+                        const Text(
+                          'Approved work earnings recorded in your ScaledCircle Wallet. Cash-out is not yet available.',
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
               const SizedBox(height: 12),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: _balanceCard(
-                      icon: Icons.hourglass_top_outlined,
-                      title: 'Pending',
-                      amount: pendingBalance,
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  Expanded(
-                    child: _balanceCard(
-                      icon: Icons.account_balance_wallet_outlined,
-                      title: 'Total Recorded',
-                      amount: totalBalance,
-                    ),
-                  ),
-                ],
+              ScalerWalletMetrics(
+                testAvailable:
+                    ScalerCashoutService.enabled &&
+                        walletData['cashoutMode'] == 'test' &&
+                        testAvailableCents != null
+                    ? testAvailableCents.toDouble() / 100
+                    : null,
+                pendingEarnings: pendingBalance,
+                recordedEarnings: totalBalance,
               ),
 
               const SizedBox(height: 30),
@@ -241,34 +234,6 @@ class ScalerWalletScreen extends StatelessWidget {
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _balanceCard({
-    required IconData icon,
-    required String title,
-    required double amount,
-  }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, size: 28),
-
-            const SizedBox(height: 8),
-
-            Text(
-              '\$${amount.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-
-            const SizedBox(height: 4),
-
-            Text(title, textAlign: TextAlign.center),
-          ],
-        ),
       ),
     );
   }

@@ -123,13 +123,11 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
     final executionEnabled = _data?['executionEnabled'] == true;
     final op = _data?['operation'];
     final status = op is Map ? op['status'] : null;
-    final available =
-        ((_data?['availableCents'] as num?)?.toDouble() ?? 0) / 100;
     final label = switch (status) {
-      'pending' => 'Pending',
+      'pending' => 'Cash-out processing',
       'completed' => 'Completed',
-      'failed' => 'Failed',
-      'needs_attention' => 'Cash-out needs attention',
+      'failed' => 'Cash-out failed',
+      'needs_attention' => 'Cash-out awaiting confirmation',
       _ => null,
     };
     return Card(
@@ -155,7 +153,6 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
               ),
             if (_data != null && !executionEnabled)
               const Text('TEST cash-out is paused for certification.'),
-            Text('Available: \$${available.toStringAsFixed(2)}'),
             if (label != null) Text(label),
             if (_error != null) Text(_error!),
             if (_busy) const LinearProgressIndicator(),

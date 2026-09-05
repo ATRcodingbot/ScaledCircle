@@ -79,7 +79,7 @@ void main() {
       await tester.tap(find.text('Cash out'));
       await tester.pumpAndSettle();
       expect(service.ids[0], service.ids[1]);
-      expect(find.text('Pending'), findsOneWidget);
+      expect(find.text('Cash-out processing'), findsOneWidget);
       expect(find.text('Cash out'), findsNothing);
     },
   );
@@ -131,7 +131,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        find.text(state == 'completed' ? 'Completed' : 'Failed'),
+        find.text(state == 'completed' ? 'Completed' : 'Cash-out failed'),
         findsOneWidget,
       );
       expect(find.textContaining('acct_'), findsNothing);
@@ -153,7 +153,6 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('Payouts need attention'), findsNothing);
-      expect(find.text('Available: \$10.00'), findsOneWidget);
       expect(find.text('Cash out'), findsNothing);
       service.data['executionEnabled'] = true;
       await tester.tap(find.text('Refresh'));
@@ -176,6 +175,36 @@ void main() {
         ScalerCashoutService.attentionMessage('test'),
         isNot(contains('contact support')),
       );
+    },
+  );
+  testWidgets(
+    'operation progress never labels the healthy payout account unhealthy',
+    (tester) async {
+      for (final state in ['pending', 'needs_attention', 'failed']) {
+        final service = FakeCashout()
+          ..data['operation'] = {'operationId': 'fixture', 'status': state};
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ScalerCashoutCard(key: ValueKey(state), service: service),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Payouts ready'), findsOneWidget);
+        expect(find.text('Needs attention'), findsNothing);
+        expect(find.textContaining('Payouts need attention'), findsNothing);
+        expect(
+          find.text(
+            state == 'pending'
+                ? 'Cash-out processing'
+                : state == 'failed'
+                ? 'Cash-out failed'
+                : 'Cash-out awaiting confirmation',
+          ),
+          findsOneWidget,
+        );
+      }
     },
   );
 }
