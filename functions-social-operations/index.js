@@ -3007,6 +3007,26 @@ exports.createSocialGrowthCycleV1 = growthPlanningCallable(async (businessUid, d
     if (!connection?.providerUserId || !connection?.handle) throw new Error("growth_account_required");
     providerAccounts.x = {providerUserId: connection.providerUserId, handle: connection.handle};
   }
+  const metaSurfaces = ["facebook", "instagram"].filter(surface =>
+    versions.some(version => version.record.variants?.some(variant => variant.provider === surface)));
+  if (metaSurfaces.length) {
+    const config = (await providerConfigRef("meta", runtimeEnvironment()).get()).data();
+    metaConnection.authorize(config, businessUid);
+    for (const surface of metaSurfaces) {
+      const connection = (await db.doc(`socialConnections/${businessUid}/providers/${surface}`).get()).data();
+      socialOAuth.exactScopeSet(connection?.grantedScopes, socialOAuth.META_PUBLISH_SCOPES);
+      const expectedId = surface === "facebook" ? config.metaDogfood.pageId : config.metaDogfood.instagramId;
+      if (connection?.environment !== runtimeEnvironment() || connection.tokenHealth !== "healthy" ||
+          connection.status !== "connected_write" || connection.providerUserId !== expectedId ||
+          connection.linkedPageId !== config.metaDogfood.pageId ||
+          (surface === "instagram" && connection.handle !== config.metaDogfood.instagramUsername)) {
+        throw new Error("growth_identity_mismatch");
+      }
+      providerAccounts[surface] = {providerUserId: connection.providerUserId,
+        linkedPageId: connection.linkedPageId,
+        ...(surface === "instagram" ? {handle: connection.handle} : {})};
+    }
+  }
   const record = socialGrowthCycle.cycle({businessUid, planId: data.planId, versions, providerAccounts,
     strategy: data.strategy, startsAt: data.startsAt, endsAt: data.endsAt, timeZone: data.timeZone,
     mode: "approval_required"});

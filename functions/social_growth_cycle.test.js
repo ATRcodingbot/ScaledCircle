@@ -14,6 +14,18 @@ const input = () => ({businessUid: "biz", planId: "plan", startsAt: "2030-01-01T
 const approve = (record, patch = {}) => growth.approval({record, businessUid: "biz", expectedDigest: record.digest,
   versionIds: ["item_v1"], windowStart: record.startsAt, windowEnd: "2030-01-08T00:00:00Z", now, ...patch});
 
+test("Meta weekly identity binds a Page without inventing a handle and binds Instagram linkage", () => {
+  const providerAccounts = {facebook: {providerUserId:"123"},
+    instagram:{providerUserId:"456",handle:"brand",linkedPageId:"123"}};
+  const record = growth.cycle({...input(),providerAccounts});
+  assert.deepEqual(approve(record).providerAccounts,providerAccounts);
+  const changed = growth.cycle({...input(),providerAccounts:{...providerAccounts,
+    instagram:{...providerAccounts.instagram,linkedPageId:"789"}}});
+  assert.notEqual(changed.digest,record.digest);
+  assert.throws(()=>growth.cycle({...input(),providerAccounts:{instagram:{providerUserId:"456",handle:"brand"}}}),/account_invalid/);
+  assert.throws(()=>growth.cycle({...input(),providerAccounts:{facebook:{providerUserId:"not-a-page"}}}),/account_invalid/);
+});
+
 test("cycle binds exact content, media, CTA and schedule and preserves four modes", () => {
   assert.deepEqual(growth.MODES, ["observe", "draft", "approval_required", "bounded_managed"]);
   const original = growth.cycle(input());

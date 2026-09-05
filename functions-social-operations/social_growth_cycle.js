@@ -44,7 +44,11 @@ function cycle({businessUid, planId, strategy, versions, startsAt, endsAt, provi
   if (new Set(items.map((item) => item.versionId)).size !== items.length ||
       items.some((item) => item.scheduledFor < start || item.scheduledFor >= end)) fail("growth_content_window_invalid");
   for (const [provider, account] of Object.entries(providerAccounts)) {
-    if (!social.PROVIDERS.includes(provider) || !account?.providerUserId || !account?.handle) fail("growth_account_invalid");
+    const meta = ["facebook", "instagram"].includes(provider);
+    if (!social.PROVIDERS.includes(provider) || !account?.providerUserId ||
+        (meta && !/^\d+$/.test(account.providerUserId)) ||
+        (provider !== "facebook" && !account?.handle) ||
+        (provider === "instagram" && !/^\d+$/.test(account.linkedPageId || ""))) fail("growth_account_invalid");
   }
   const canonical = {businessUid, planId, startsAt: start, endsAt: end, timeZone, mode, providerAccounts,
     strategy: {themes: strategy.themes, objectives: strategy.objectives,
