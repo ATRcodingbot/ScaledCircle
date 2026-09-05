@@ -2937,7 +2937,20 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
         metricCollectionHealth: snapshots.length ? "healthy" : "no_data",
         externalPublishingEnabled: false,
       };
-    } catch (_) {
+    } catch (error) {
+      if (provider === "meta" && config.metaDogfood) {
+        // Missing metrics, throttling or a stale sync never invalidate a newer connection.
+        await db.runTransaction(async tx => {
+          const current = (await tx.get(connectionRef)).data();
+          if (current?.credentialId !== connection.credentialId ||
+              current?.connectionRevision !== connection.connectionRevision) return;
+          tx.update(connectionRef, {metricCollectionHealth: "error",
+            ...(error.message === "meta_baseline_authority_or_rate_limit_190" ?
+              {status: "reauth_required", tokenHealth: "needs_attention"} : {}),
+            updatedAt: FieldValue.serverTimestamp()});
+        });
+        throw new HttpsError("unavailable", "Insights are temporarily unavailable. Try again later.");
+      }
       await connectionRef.set({status: "reauth_required", metricCollectionHealth: "error",
         updatedAt: FieldValue.serverTimestamp()}, {merge: true});
       throw new HttpsError("unavailable", "The read-only performance sync needs attention.");
