@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://scaledcircle.com/</loc>
-    <lastmod>2026-08-10</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://scaledcircle.com/i</loc>
-    <lastmod>2026-08-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
+  <url><loc>https://scaledcircle.com/</loc></url>
+  <url><loc>https://scaledcircle.com/businesses</loc></url>
+  <url><loc>https://scaledcircle.com/scalers</loc></url>
+  <url><loc>https://scaledcircle.com/how-it-works</loc></url>
+  <url><loc>https://scaledcircle.com/pricing</loc></url>
+  <url><loc>https://scaledcircle.com/i</loc></url>
 </urlset>
