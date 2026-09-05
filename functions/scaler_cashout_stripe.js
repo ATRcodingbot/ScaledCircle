@@ -28,14 +28,18 @@ function createStripeProvider({stripe, runtime}) {
   }
   async function getAccount(accountId) {
     guard();
-    const account = await stripe.accounts.retrieve(accountId);
-    // Accounts v1 does not expose livemode. Verify the connected balance in the
-    // same credential/account context instead of inventing an account field.
+    const account = await stripe.v2.core.accounts.retrieve(accountId,
+      {include: ["configuration.recipient", "requirements"]});
     const balance = await stripe.balance.retrieve({}, {stripeAccount: accountId});
-    if (account.id !== accountId || balance.livemode !== false || account.livemode === true) fail("cashout_account_mismatch");
-    return {id: account.id, livemode: balance.livemode, payouts_enabled: account.payouts_enabled,
-      details_submitted: account.details_submitted, capabilities: account.capabilities,
-      requirements: account.requirements, settings: {payouts: {schedule: account.settings?.payouts?.schedule}}};
+    const settings = await stripe.balanceSettings.retrieve({}, {stripeAccount: accountId});
+    if (account.id !== accountId || account.livemode !== false || balance.livemode !== false) fail("cashout_account_mismatch");
+    const capabilities = account.configuration?.recipient?.capabilities?.stripe_balance;
+    return {id: account.id, livemode: false, accountApi: "accounts_v2",
+      transfersStatus: capabilities?.stripe_transfers?.status,
+      payoutsStatus: capabilities?.payouts?.status,
+      requirementsIncluded: account.requirements != null,
+      deadlineStatus: account.requirements?.summary?.minimum_deadline?.status,
+      payoutSchedule: settings.payments?.payouts?.schedule?.interval};
   }
   return {
     getAccount, verifyTransfer, verifyPayout,

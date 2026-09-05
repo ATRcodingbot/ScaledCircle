@@ -25,6 +25,12 @@ function assertAccount(record, uid) {
 
 function eligibility(account, expectedId) {
   if (account?.id !== expectedId || account.livemode !== false) fail("cashout_account_mismatch");
+  if (account.accountApi === "accounts_v2") {
+    const ready = account.transfersStatus === "active" && account.payoutsStatus === "active" &&
+      account.requirementsIncluded === true && !["currently_due", "past_due"].includes(account.deadlineStatus) &&
+      account.payoutSchedule === "manual";
+    return {ready, status: ready ? "ready" : "needs_attention"};
+  }
   const ready = account.capabilities?.transfers === "active" && account.payouts_enabled === true &&
     account.details_submitted === true && !account.requirements?.disabled_reason &&
     (account.requirements?.currently_due || []).length === 0 &&

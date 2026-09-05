@@ -50,6 +50,7 @@ test("deployed callable authority denies admin, disabled, wrong mode and unauthe
       process: {env: {SCALEDCIRCLE_ENV: "staging", GCLOUD_PROJECT: "scaledcircle-staging",
         SCALEDCIRCLE_CASHOUT_TEST_SCALER_UID: scenario === "missing_fixture" ? "" : scenario === "wrong_fixture" ? "other" : "fixture",
         SCALEDCIRCLE_CASHOUT_TEST_EXPIRES_AT: new Date(Date.now() + (scenario === "expired" ? -60000 : 60000)).toISOString(),
+        SCALEDCIRCLE_CASHOUT_TEST_SETUP_ENABLED: scenario === "off" ? "false" : "true",
         SCALEDCIRCLE_CASHOUT_TEST_ENABLED: scenario === "off" ? "false" : "true"}}});
     const request = scenario === "unauthenticated" ? {} : {auth: {uid: "fixture", token: {email_verified: scenario !== "unverified"}}};
     for (const callable of Object.values(exported)) await assert.rejects(callable(request), error =>
@@ -97,4 +98,34 @@ test("paused deployed webhook authenticates signatures and mode without database
     }
   }
   assert.equal(providerRequests, 0);
+});
+
+
+test("setup-only window allows status/onboarding but denies both financial callables", async () => {
+  execFileSync(process.execPath, [script]);
+  const exported = {}; let setupCalls = 0;
+  class HttpsError extends Error { constructor(code, message) {super(message); this.code = code;} }
+  const fakeRequire = name => {
+    if (name === "firebase-functions/v2") return {setGlobalOptions() {}};
+    if (name === "firebase-functions/v2/https") return {onCall: (_, fn) => fn, HttpsError};
+    if (name === "firebase-functions/params") return {defineSecret: () => ({value: () => "sk_test_fixture"})};
+    if (name === "firebase-admin/app") return {initializeApp() {}};
+    if (name === "firebase-admin/firestore") return {getFirestore: () => ({collection: () => ({doc: () => ({get: async () => ({data: () => ({role: "scaler"})})})})})};
+    if (name === "stripe") return class {};
+    if (name === "./scaler_cashout") return {...require("./scaler_cashout"), createStore: () => ({}), createService: () => ({})};
+    if (name === "./scaler_cashout_stripe") return {createStripeProvider: () => ({})};
+    if (name === "./scaler_cashout_endpoints") return {createEndpoints: () => ({status: () => "status", setup: () => {setupCalls++; return "setup";}})};
+    throw new Error("Unexpected dependency " + name);
+  };
+  vm.runInNewContext(fs.readFileSync(entry, "utf8"), {exports: exported, require: fakeRequire,
+    process: {env: {SCALEDCIRCLE_ENV: "staging", GCLOUD_PROJECT: "scaledcircle-staging",
+      SCALEDCIRCLE_CASHOUT_TEST_SCALER_UID: "fixture", SCALEDCIRCLE_CASHOUT_TEST_SETUP_ENABLED: "true",
+      SCALEDCIRCLE_CASHOUT_TEST_ENABLED: "false", SCALEDCIRCLE_CASHOUT_TEST_EXPIRES_AT: new Date(Date.now() + 60000).toISOString()}}});
+  const request = {auth: {uid: "fixture", token: {email_verified: true}}};
+  assert.equal(await exported.getScalerCashoutV1(request), "status");
+  assert.equal(await exported.setupScalerPayoutsV1(request), "setup");
+  for (const n of ["requestScalerCashoutV1", "reconcileScalerCashoutV1"]) {
+    await assert.rejects(exported[n](request), e => e.code === "failed-precondition");
+  }
+  assert.equal(setupCalls, 1);
 });

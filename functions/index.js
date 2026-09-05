@@ -11585,7 +11585,7 @@ exports.executeQueuedScalerTransfers = onSchedule(
   },
 );
 
-function cashoutRuntime() {
+function cashoutRuntime(setupOnly = false) {
   const scalerUid = process.env.SCALEDCIRCLE_CASHOUT_TEST_SCALER_UID || "";
   const expiresAt = Date.parse(process.env.SCALEDCIRCLE_CASHOUT_TEST_EXPIRES_AT || "");
   return {environment: process.env.SCALEDCIRCLE_ENV,
@@ -11593,27 +11593,29 @@ function cashoutRuntime() {
       process.env.GCLOUD_PROJECT !== process.env.GOOGLE_CLOUD_PROJECT ? "mismatch" :
       process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
     scalerUid,
-    enabled: process.env.SCALEDCIRCLE_CASHOUT_TEST_ENABLED === "true" &&
+    enabled: (setupOnly ? process.env.SCALEDCIRCLE_CASHOUT_TEST_SETUP_ENABLED === "true" :
+      process.env.SCALEDCIRCLE_CASHOUT_TEST_ENABLED === "true") &&
       /^[A-Za-z0-9_-]{1,128}$/.test(scalerUid) && Number.isFinite(expiresAt) && Date.now() < expiresAt,
     secretKey: STRIPE_CASHOUT_TEST_API_KEY.value()};
 }
 
-function cashoutServices() {
-  cashout.assertTestRuntime(cashoutRuntime());
+function cashoutServices(setupOnly = false) {
+  const runtime = () => cashoutRuntime(setupOnly);
+  cashout.assertTestRuntime(runtime());
   const stripe = new Stripe(STRIPE_CASHOUT_TEST_API_KEY.value(), {timeout: 10000, maxNetworkRetries: 0});
   const store = cashout.createStore(db);
-  const provider = cashoutStripe.createStripeProvider({stripe, runtime: cashoutRuntime});
+  const provider = cashoutStripe.createStripeProvider({stripe, runtime});
   const service = cashout.createService({store, provider, runtime: cashoutRuntime});
   const endpoints = require("./scaler_cashout_endpoints").createEndpoints({
-    db, stripe, provider, service, runtime: cashoutRuntime});
+    db, stripe, provider, service, runtime});
   return {stripe, store, provider, service, endpoints};
 }
 
-function safeCashoutCallable(handler) {
+function safeCashoutCallable(handler, setupOnly = false) {
   return onCall({region: "us-east1", timeoutSeconds: 60, maxInstances: 2,
     secrets: [STRIPE_CASHOUT_TEST_API_KEY]}, async (request) => {
     if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in as a Scaler.");
-    try { cashout.assertTestRuntime(cashoutRuntime()); }
+    try { cashout.assertTestRuntime(cashoutRuntime(setupOnly)); }
     catch (_) { throw new HttpsError("failed-precondition", "Test payouts are not enabled."); }
     const context = await requireFinancialRole(request, "scaler", "Sign in as a Scaler.");
     if (context.role !== "scaler" || context.user?.disabled === true) {
@@ -11622,14 +11624,14 @@ function safeCashoutCallable(handler) {
     if (context.uid !== cashoutRuntime().scalerUid) {
       throw new HttpsError("permission-denied", "This TEST session belongs to a different Scaler.");
     }
-    try { return await handler(cashoutServices(), context.uid, request); }
+    try { return await handler(cashoutServices(setupOnly), context.uid, request); }
     catch (_) { throw new HttpsError("failed-precondition", "Payouts need attention. Refresh your Wallet and try again."); }
   });
 }
 
-exports.getScalerCashoutV1 = safeCashoutCallable(({endpoints}, uid) => endpoints.status(uid));
+exports.getScalerCashoutV1 = safeCashoutCallable(({endpoints}, uid) => endpoints.status(uid), true);
 exports.setupScalerPayoutsV1 = safeCashoutCallable(({endpoints}, uid, request) =>
-  endpoints.setup(uid, request.auth.token.email));
+  endpoints.setup(uid, request.auth.token.email), true);
 exports.requestScalerCashoutV1 = safeCashoutCallable(({endpoints}, uid, request) =>
   endpoints.request(uid, request.data));
 exports.reconcileScalerCashoutV1 = safeCashoutCallable(({service}, uid, request) => {

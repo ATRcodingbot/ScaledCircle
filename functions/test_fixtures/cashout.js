@@ -34,6 +34,30 @@ function mockStripe() {
       return payouts.get(options.idempotencyKey);
     },
   }};
-  return {stripe, controls, calls, transfers, payouts};
+  const accounts = new Map();
+  const v2Account = () => ({id: controls.account.id, livemode: controls.account.livemode,
+    configuration: {recipient: {capabilities: {stripe_balance: {
+      stripe_transfers: {status: controls.account.capabilities?.transfers},
+      payouts: {status: controls.account.payouts_enabled && controls.account.details_submitted ? "active" : "pending"}}}}},
+    requirements: {summary: {minimum_deadline: controls.account.requirements?.currently_due?.length ? {status: "currently_due"} : null}}});
+  stripe.v2 = {core: {accounts: {
+    retrieve: async () => v2Account(),
+    create: async (data, options) => {
+      calls.push({type: "account", data, options});
+      if (controls.accountFailure === "before") throw new Error("account_create_failed");
+      if (!accounts.has(options.idempotencyKey)) accounts.set(options.idempotencyKey, {...v2Account(), metadata: data.metadata});
+      if (controls.accountFailure === "lost") {controls.accountFailure = null; throw new Error("account_response_lost");}
+      return accounts.get(options.idempotencyKey);
+    }}, accountLinks: {create: async data => {
+      calls.push({type: "link", data});
+      if (controls.linkFailure) throw new Error("link_failed");
+      return {url: controls.linkUrl || "https://connect.stripe.com/setup/fixture"};
+    }}}};
+  stripe.balanceSettings = {
+    retrieve: async () => ({payments: {payouts: {schedule: controls.account.settings?.payouts?.schedule}}}),
+    update: async (data, options) => {calls.push({type: "settings", data, options}); return {payments: data.payments};}};
+  stripe.accounts.create = async () => {throw new Error("Accounts v1 creation forbidden");};
+  stripe.accountLinks.create = async () => {throw new Error("Account Links v1 forbidden");};
+  return {stripe, controls, calls, transfers, payouts, accounts};
 }
 module.exports = {runtime, account, mockStripe};

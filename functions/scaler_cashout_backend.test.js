@@ -18,7 +18,7 @@ const uid = "cashout-scaler";
 const request = {requestId: "fixture_request_0001", amountCents: 500};
 let store; let mock; let service; let provider;
 let clock;
-const record = () => ({scalerId: uid, mode: "test", stripeAccountId: "acct_fixture"});
+const record = () => ({scalerId: uid, mode: "test", accountApi: "accounts_v2", stripeAccountId: "acct_fixture"});
 const balance = async () => (await db.doc(`scalerCashoutBalances/${uid}`).get()).data();
 beforeEach(async () => {
   for (const name of ["financialOperations", "scalerCashoutBalances", "scalerCashoutTestFunding", "scalerCashoutEvents", "wallets", "stripeConnectedAccounts", "users"]) {
@@ -209,7 +209,73 @@ test("new onboarding binds only provider-verified TEST account and reuses it on 
   assert.equal(bound.stripeAccountId, "acct_fixture");
   const creates = mock.calls.filter((call) => call.type === "account");
   assert.equal(creates.length, 1);
-  assert.equal(creates[0].data.settings.payouts.schedule.interval, "manual");
-  assert.match(creates[0].options.idempotencyKey, /^cashout-test-account:/);
+  assert.deepEqual(creates[0].data.configuration, {recipient: {capabilities: {stripe_balance: {stripe_transfers: {requested: true}}}}});
+  assert.equal(mock.calls.find(x => x.type === "settings").data.payments.payouts.schedule.interval, "manual");
+  assert.equal(bound.accountApi, "accounts_v2");
+  assert.match(creates[0].options.idempotencyKey, /^cashout-test-account-v2:/);
   assert.equal(bound.external_accounts, undefined);
+});
+
+
+test("v2 concurrent setup and lost response reuse one deterministic account without economic effects", async () => {
+  await db.doc(`stripeConnectedAccounts/${uid}`).delete();
+  const endpoints = createEndpoints({db, stripe: mock.stripe, provider, service, runtime});
+  mock.controls.accountFailure = "lost";
+  await assert.rejects(endpoints.setup(uid, "scaler@example.invalid"));
+  await Promise.all(Array.from({length: 4}, () => endpoints.setup(uid, "scaler@example.invalid")));
+  assert.equal(mock.accounts.size, 1);
+  assert.equal(new Set(mock.calls.filter(x => x.type === "account").map(x => x.options.idempotencyKey)).size, 1);
+  assert.equal((await balance()).availableCents, 1000);
+  assert.equal(mock.transfers.size, 0); assert.equal(mock.payouts.size, 0);
+  assert.equal((await db.collection("financialOperations").get()).size, 0);
+});
+
+test("v2 account failure preserves claim; link failure preserves bound identity for retry", async () => {
+  await db.doc(`stripeConnectedAccounts/${uid}`).delete();
+  const endpoints = createEndpoints({db, stripe: mock.stripe, provider, service, runtime});
+  mock.controls.accountFailure = "before";
+  await assert.rejects(endpoints.setup(uid, "scaler@example.invalid"));
+  assert.equal(mock.accounts.size, 0);
+  assert.equal(mock.calls.filter(x => x.type === "link").length, 0);
+  mock.controls.accountFailure = null; mock.controls.linkFailure = true;
+  await assert.rejects(endpoints.setup(uid, "scaler@example.invalid"));
+  assert.equal((await db.doc(`stripeConnectedAccounts/${uid}`).get()).data().stripeAccountId, "acct_fixture");
+  mock.controls.linkFailure = false;
+  await endpoints.setup(uid, "scaler@example.invalid");
+  assert.equal(mock.accounts.size, 1);
+});
+
+test("v2 hosted onboarding pins configuration and return origins and refuses malicious links", async () => {
+  const staging = () => ({...runtime(), environment: "staging", projectId: "scaledcircle-staging", scalerUid: uid});
+  const endpoints = createEndpoints({db, stripe: mock.stripe, provider, service, runtime: staging});
+  await endpoints.setup(uid, "scaler@example.invalid");
+  const data = mock.calls.find(x => x.type === "link").data;
+  assert.equal(data.account, "acct_fixture");
+  assert.deepEqual(data.use_case.account_onboarding.configurations, ["recipient"]);
+  assert.equal(data.use_case.account_onboarding.return_url, "https://scaledcircle-staging.web.app/?connect=return#/scaler");
+  assert.equal(data.use_case.account_onboarding.refresh_url, "https://scaledcircle-staging.web.app/?connect=refresh#/scaler");
+  mock.controls.linkUrl = "https://connect.stripe.com.attacker.invalid/setup";
+  await assert.rejects(endpoints.setup(uid, "scaler@example.invalid"), /onboarding_url_invalid/);
+});
+
+test("setup refuses wrong Scaler, LIVE runtime and historical accounts without provider mutation", async () => {
+  const endpoints = createEndpoints({db, stripe: mock.stripe, provider, service, runtime: () => ({...runtime(), scalerUid: "other"})});
+  await assert.rejects(endpoints.setup(uid, "scaler@example.invalid"));
+  const live = createEndpoints({db, stripe: mock.stripe, provider, service, runtime: () => ({...runtime(), secretKey: "sk_live_fixture"})});
+  await assert.rejects(live.setup(uid, "scaler@example.invalid"));
+  await db.doc(`stripeConnectedAccounts/${uid}`).update({accountApi: "accounts_v1"});
+  const normal = createEndpoints({db, stripe: mock.stripe, provider, service, runtime});
+  await assert.rejects(normal.setup(uid, "scaler@example.invalid"), /historical/);
+  assert.equal(mock.calls.length, 0);
+});
+
+test("v2 account response with wrong owner or LIVE mode never persists an account or creates a link", async () => {
+  for (const patch of [{livemode: true}, {metadata: {scalerId: "other", mode: "test"}}]) {
+    await db.doc(`stripeConnectedAccounts/${uid}`).delete();
+    mock.stripe.v2.core.accounts.create = async () => ({id: "acct_fixture", livemode: false, metadata: {scalerId: uid, mode: "test"}, ...patch});
+    const endpoints = createEndpoints({db, stripe: mock.stripe, provider, service, runtime});
+    await assert.rejects(endpoints.setup(uid, "scaler@example.invalid"), /account_mismatch/);
+    assert.equal((await db.doc(`stripeConnectedAccounts/${uid}`).get()).data().stripeAccountId, undefined);
+  }
+  assert.equal(mock.calls.length, 0);
 });

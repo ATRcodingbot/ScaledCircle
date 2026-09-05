@@ -73,11 +73,24 @@ test("Business completion approval does not call the cash-out bridge or Stripe",
   assert.match(review, /externalExecutionAuthorized: false/);
 });
 
-test("v1 account lacking livemode uses connected balance mode evidence and rejects LIVE balances", async () => {
-  const mock = mockStripe(); delete mock.controls.account.livemode;
+test("v2 account and connected balance both require TEST mode", async () => {
+  const mock = mockStripe();
   const provider = adapter.createStripeProvider({stripe: mock.stripe, runtime});
   assert.equal((await provider.getAccount("acct_fixture")).livemode, false);
   mock.stripe.balance.retrieve = async () => ({livemode: true});
   await assert.rejects(provider.getAccount("acct_fixture"));
   assert.equal(mock.calls.length, 0);
+});
+
+
+test("v2 readiness uses included recipient capabilities, requirements and manual balance settings", async () => {
+  const mock = mockStripe(); const provider = adapter.createStripeProvider({stripe: mock.stripe, runtime});
+  const account = await provider.getAccount("acct_fixture");
+  assert.equal(core.eligibility(account, account.id).ready, true);
+  for (const patch of [{transfersStatus: "pending"}, {payoutsStatus: "restricted"}, {requirementsIncluded: false},
+    {deadlineStatus: "currently_due"}, {deadlineStatus: "past_due"}, {payoutSchedule: "daily"}]) {
+    assert.equal(core.eligibility({...account, ...patch}, account.id).ready, false);
+  }
+  mock.controls.account.livemode = true;
+  await assert.rejects(provider.getAccount("acct_fixture"), /account_mismatch/);
 });
