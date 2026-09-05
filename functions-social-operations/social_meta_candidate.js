@@ -3,6 +3,7 @@
 // Offline adapter preparation for the existing growth cycle. No transport or
 // production export: a request description is never publication authority.
 const {hash, jobs} = require("./social_growth_cycle");
+const {isDeepStrictEqual} = require("node:util");
 const fail = (code) => { throw new Error(code); };
 const numericId = (value) => typeof value === "string" && /^\d+$/.test(value);
 
@@ -36,7 +37,10 @@ function prepare({job, revision, account, approval}) {
   if (approval?.businessUid !== job.businessUid || approval?.approvedByUid !== job.businessUid ||
       approval.revokedAt != null || approvedAccount?.providerUserId !== account.providerUserId ||
       (job.provider === "instagram" && approvedAccount?.linkedPageId !== account.linkedPageId) ||
-      !jobs(approval).some((expected) => expected.id === job.id && hash(expected) === hash(job))) fail("meta_approval_mismatch");
+      !jobs(approval).some((expected) =>
+        ["id", "businessUid", "provider", "versionId", "approvalId", "bindingHash", "scheduledFor"]
+          .every(key => expected[key] === job[key]) &&
+        isDeepStrictEqual(expected.binding, job.binding))) fail("meta_approval_mismatch");
   const variant = job.binding?.variants?.find((item) => item.provider === job.provider);
   if (job.provider === "facebook" && !variant?.mediaAssetId && !variant?.mediaRevisionId && !revision) {
     if (!variant?.copy || !["text", "feed"].includes(variant.format)) fail("meta_copy_invalid");
