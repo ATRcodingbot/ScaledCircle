@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../services/scaler_cashout_service.dart';
+import '../../widgets/scaler_cashout_card.dart';
 
 class ScalerWalletScreen extends StatelessWidget {
   const ScalerWalletScreen({super.key});
@@ -81,6 +83,8 @@ class ScalerWalletScreen extends StatelessWidget {
               ),
 
               const SizedBox(height: 24),
+
+              if (ScalerCashoutService.enabled) const ScalerCashoutCard(),
 
               Card(
                 child: Padding(
