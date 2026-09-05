@@ -11,7 +11,7 @@ function mediaRevision({businessUid, assetId, provider, images, productionOrigin
   const origin = new URL(productionOrigin);
   if (origin.protocol !== "https:" || origin.origin !== productionOrigin ||
       /staging|web\.app|firebaseapp\.com|localhost|127\.0\.0\.1/i.test(origin.hostname)) fail("meta_media_origin");
-  if (!Array.isArray(images) || images.length !== (provider === "facebook" ? 1 : 4)) fail("meta_media_count");
+  if (!Array.isArray(images) || images.length < 1 || images.length > (provider === "facebook" ? 1 : 10)) fail("meta_media_count");
   const files = images.map((image) => {
     if (!/^[a-f0-9]{64}$/.test(image.sha256) || !Number.isSafeInteger(image.bytes) || image.bytes <= 0 ||
         image.bytes > 8 * 1024 * 1024 || !Number.isSafeInteger(image.width) || !Number.isSafeInteger(image.height) ||
@@ -38,6 +38,12 @@ function prepare({job, revision, account, approval}) {
       (job.provider === "instagram" && approvedAccount?.linkedPageId !== account.linkedPageId) ||
       !jobs(approval).some((expected) => expected.id === job.id && hash(expected) === hash(job))) fail("meta_approval_mismatch");
   const variant = job.binding?.variants?.find((item) => item.provider === job.provider);
+  if (job.provider === "facebook" && !variant?.mediaAssetId && !variant?.mediaRevisionId && !revision) {
+    if (!variant?.copy || !["text", "feed"].includes(variant.format)) fail("meta_copy_invalid");
+    return {jobId: job.id, provider: "facebook", request: {method: "POST", path: `/${account.providerUserId}/feed`,
+      body: {message: variant.copy}}, requiredScopes: ["pages_manage_posts", "pages_read_engagement"],
+    requiredPageTask: "CREATE_CONTENT", maximumEffects: {textPosts: 1, containers: 0}, executionEnabled: false};
+  }
   const canonical = mediaRevision({...revision, productionOrigin: new URL(revision.images[0].url).origin});
   if (canonical.id !== revision.id || revision.businessUid !== job.businessUid || revision.provider !== job.provider ||
       variant?.mediaRevisionId !== revision.id || variant.mediaAssetId !== revision.assetId) fail("meta_media_binding");
@@ -50,6 +56,12 @@ function prepare({job, revision, account, approval}) {
     requiredScopes: ["pages_manage_posts", "pages_read_engagement"], requiredPageTask: "CREATE_CONTENT",
     maximumEffects: {photoPosts: 1, containers: 0}, executionEnabled: false};
   if (!numericId(account.linkedPageId)) fail("meta_linked_page_required");
+  if (revision.images.length === 1) return {jobId: job.id, provider: "instagram", linkedPageId: account.linkedPageId,
+    container: {stepId: `${job.id}:image`, method: "POST", path: `/${accountId}/media`,
+      body: {image_url: revision.images[0].url, caption: variant.copy}},
+    publish: {stepId: `${job.id}:publish`, path: `/${accountId}/media_publish`, creationIdFrom: "durable_finished_image_receipt"},
+    requiredScopes: ["instagram_basic", "instagram_content_publish", "pages_read_engagement"],
+    maximumEffects: {imagePosts: 1, containers: 1}, executionEnabled: false};
   return {jobId: job.id, provider: job.provider, linkedPageId: account.linkedPageId,
     children: revision.images.map((image, index) => ({stepId: `${job.id}:child:${index}`,
       method: "POST", path: `/${accountId}/media`, body: {image_url: image.url, is_carousel_item: true}})),
@@ -58,7 +70,7 @@ function prepare({job, revision, account, approval}) {
     publish: {stepId: `${job.id}:publish`, path: `/${accountId}/media_publish`,
       creationIdFrom: "durable_finished_parent_receipt"},
     requiredScopes: ["instagram_basic", "instagram_content_publish", "pages_read_engagement"],
-    maximumEffects: {carouselPosts: 1, containers: 5}, executionEnabled: false};
+    maximumEffects: {carouselPosts: 1, containers: revision.images.length + 1}, executionEnabled: false};
 }
 
 // Resumption must use recorded step receipts; timeout is not permission to create

@@ -43,3 +43,17 @@ test("Instagram partial/unknown outcomes do not create another container", () =>
   assert.equal(meta.nextStep({providerId: "123", status: "EXPIRED"}), "needs_attention");
   assert.equal(meta.nextStep({providerId: "123", status: "IN_PROGRESS"}), "poll");
 });
+
+test("shared jobs support Facebook text and Instagram single image without carousel side effects", () => {
+  const textJob = job(revision());
+  Object.assign(textJob.binding.variants[0], {format: "text", mediaAssetId: null, mediaRevisionId: null});
+  const text = meta.prepare({job: textJob, account, approval: approval(textJob)});
+  assert.deepEqual(text.request.body, {message: "Explore our work. Link in bio."});
+  assert.equal(text.request.path, "/123/feed");
+  const original = revision("instagram");
+  const single = meta.mediaRevision({...original, productionOrigin: "https://scaledcircle.com", images: original.images.slice(0, 1)});
+  const j = job(single), image = meta.prepare({job: j, revision: single, account, approval: approval(j)});
+  assert.equal(image.maximumEffects.containers, 1);
+  assert.equal(image.children, undefined);
+  assert.equal(image.container.body.caption, j.binding.variants[0].copy);
+});
