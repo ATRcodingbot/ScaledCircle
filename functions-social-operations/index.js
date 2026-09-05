@@ -20,6 +20,13 @@ const metaSocialAppSecret = defineSecret("META_SOCIAL_APP_SECRET");
 const youtubeSocialClientSecret = defineSecret("YOUTUBE_SOCIAL_CLIENT_SECRET");
 const xSocialClientSecret = defineSecret("X_SOCIAL_CLIENT_SECRET");
 
+const PRODUCTION_X_PROVIDER_CONFIG = Object.freeze({
+  provider: "x",
+  clientId: "SVE2bE9DelpBSU1ZT1I4ejJRNXc6MTpjaQ",
+  redirectUri: "https://us-east1-scaled-circle.cloudfunctions.net/socialOAuthXCallbackV1",
+  appName: "ScaledCircle Social Operations — Production",
+});
+
 function runtimeEnvironment() {
   return String(process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "")
     .toLowerCase().includes("staging") ? "staging" : "production";
@@ -2088,17 +2095,34 @@ exports.configureSocialProviderV1 = onCall(
     const environment = runtimeEnvironment();
     let config;
     try {
-      config = socialOAuth.validateProviderConfig({
-        provider: request.data?.provider,
-        clientId: request.data?.clientId,
-        redirectUri: request.data?.redirectUri,
-        environment,
-        enabled: request.data?.enabled === true,
-        historicalSyncEnabled: request.data?.historicalSyncEnabled === true,
-        writeScopesEnabled: request.data?.writeScopesEnabled === true,
-        externalPublishingEnabled: false,
-        appName: request.data?.appName,
-      });
+      if (environment === "production") {
+        const exactRequest = request.data?.provider === PRODUCTION_X_PROVIDER_CONFIG.provider &&
+          request.data?.clientId === PRODUCTION_X_PROVIDER_CONFIG.clientId &&
+          request.data?.redirectUri === PRODUCTION_X_PROVIDER_CONFIG.redirectUri &&
+          request.data?.appName === PRODUCTION_X_PROVIDER_CONFIG.appName &&
+          request.data?.enabled === true && request.data?.historicalSyncEnabled === true;
+        if (!exactRequest) throw new Error("production_x_provider_config_mismatch");
+        config = socialOAuth.validateProviderConfig({
+          ...PRODUCTION_X_PROVIDER_CONFIG,
+          environment,
+          enabled: true,
+          historicalSyncEnabled: true,
+          writeScopesEnabled: true,
+          externalPublishingEnabled: false,
+        });
+      } else {
+        config = socialOAuth.validateProviderConfig({
+          provider: request.data?.provider,
+          clientId: request.data?.clientId,
+          redirectUri: request.data?.redirectUri,
+          environment,
+          enabled: request.data?.enabled === true,
+          historicalSyncEnabled: request.data?.historicalSyncEnabled === true,
+          writeScopesEnabled: request.data?.writeScopesEnabled === true,
+          externalPublishingEnabled: false,
+          appName: request.data?.appName,
+        });
+      }
     } catch (_) {
       throw new HttpsError("invalid-argument", "Review the provider configuration and try again.");
     }

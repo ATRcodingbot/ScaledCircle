@@ -170,6 +170,11 @@ test("production X connection authority is exact-scope, confirmation-gated, and 
     /exports\.getSocialOAuthAttemptV1 = [\s\S]*?\n\);/)[0];
   const confirm = indexSource.match(
     /exports\.confirmSocialOAuthConnectionV1 = [\s\S]*?\n\);/)[0];
+  assert.match(indexSource, /const PRODUCTION_X_PROVIDER_CONFIG = Object\.freeze/);
+  assert.match(configure, /environment === "production"/);
+  assert.match(configure, /production_x_provider_config_mismatch/);
+  assert.match(configure, /\.\.\.PRODUCTION_X_PROVIDER_CONFIG/);
+  assert.match(configure, /writeScopesEnabled: true/);
   assert.match(configure, /writeScopesEnabled: config\.writeScopesEnabled/);
   assert.match(configure, /externalPublishingEnabled: false/);
   assert.match(begin, /config\?\.writeScopesEnabled === true/);
