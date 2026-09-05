@@ -1,0 +1,62 @@
+{
+  "sourceWorktree": "ScaledCircle-meta-first-publish",
+  "sourceBranch": "codex/meta-first-publish-prep",
+  "sourceHead": "aa6b448",
+  "hostingVerified": false,
+  "media": [
+    {
+      "file": "scaledcircle-smart-mapping-facebook-v2.png",
+      "sha256": "2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d",
+      "bytes": 421804,
+      "dimensions": [
+        1200,
+        630
+      ],
+      "proposedProductionPath": "/social/2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png"
+    },
+    {
+      "file": "scaledcircle-smart-mapping-instagram-v2-01.png",
+      "sha256": "03cc20fc29c05617d64629f2a2c82261f102ef0538d942a79bab1466963b372d",
+      "bytes": 113364,
+      "dimensions": [
+        1080,
+        1350
+      ],
+      "proposedProductionPath": "/social/03cc20fc29c05617d64629f2a2c82261f102ef0538d942a79bab1466963b372d.png"
+    },
+    {
+      "file": "scaledcircle-smart-mapping-instagram-v2-02.png",
+      "sha256": "89dd614943d6f4791b88ca46bb08fd733607b8a020ab459f35e6aa065c6776bb",
+      "bytes": 1059422,
+      "dimensions": [
+        1080,
+        1350
+      ],
+      "proposedProductionPath": "/social/89dd614943d6f4791b88ca46bb08fd733607b8a020ab459f35e6aa065c6776bb.png"
+    },
+    {
+      "file": "scaledcircle-smart-mapping-instagram-v2-03.png",
+      "sha256": "25446281c5407d0a869ad98bff71fb1baa502eb5de48636e6bb71dc053edcd67",
+      "bytes": 126521,
+      "dimensions": [
+        1080,
+        1350
+      ],
+      "proposedProductionPath": "/social/25446281c5407d0a869ad98bff71fb1baa502eb5de48636e6bb71dc053edcd67.png"
+    },
+    {
+      "file": "scaledcircle-smart-mapping-instagram-v2-04.png",
+      "sha256": "cab20afb4256bc1ec00756c0f349bb56a4f20963ecf98ac636d6f4e61d0300d1",
+      "bytes": 118149,
+      "dimensions": [
+        1080,
+        1350
+      ],
+      "proposedProductionPath": "/social/cab20afb4256bc1ec00756c0f349bb56a4f20963ecf98ac636d6f4e61d0300d1.png"
+    }
+  ],
+  "instagramAggregate": {
+    "sha256": "f910338c14f94300efea6fc8e6b337a2d8685f9133c042e5c1978d08d6f55fa9",
+    "encoding": "SHA256(UTF8(lowercase ordered file SHA256 joined by |))"
+  }
+}
