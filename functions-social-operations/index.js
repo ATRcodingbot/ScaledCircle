@@ -2859,6 +2859,38 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
         tokens = await socialOAuth.refreshTokens({provider, tokens, config,
           clientSecret: providerSecretParameter.value()});
       }
+      if (provider === "meta" && config.metaDogfood) {
+        metaConnection.authorize(config, business.uid);
+        if (account.accountId !== config.metaDogfood.pageId ||
+            account.linkedAccountId !== config.metaDogfood.instagramId) throw new Error("meta_baseline_identity_mismatch");
+        socialOAuth.exactScopeSet(connection.grantedScopes, socialOAuth.META_PUBLISH_SCOPES);
+        if (connection.tokenHealth !== "healthy" || connection.environment !== environment ||
+            connection.providerUserId !== (surface === "facebook" ? config.metaDogfood.pageId : config.metaDogfood.instagramId)) {
+          throw new Error("meta_baseline_connection_mismatch");
+        }
+        const baseline = await require("./social_meta_baseline").collect({surface,
+          account: {...account, linkedHandle: config.metaDogfood.instagramUsername,
+            pageName: config.metaDogfood.pageName}, tokens});
+        const snapshotRef = db.collection("socialPerformanceSnapshots").doc(
+          `meta_baseline_${socialOAuth.digest({businessUid: business.uid, baseline})}`);
+        await db.runTransaction(async (tx) => {
+          const [currentConnection, currentCredential, currentConfig] = await Promise.all([
+            tx.get(connectionRef), tx.get(credentialRef), tx.get(providerConfigRef(provider, environment))]);
+          metaConnection.authorize(currentConfig.data(), business.uid, config.metaDogfood);
+          if (currentConfig.data()?.historicalSyncEnabled !== true ||
+              currentConnection.data()?.credentialId !== connection.credentialId ||
+              currentConnection.data()?.connectionRevision !== connection.connectionRevision ||
+              currentCredential.data()?.rotationGeneration !== credential.rotationGeneration) {
+            throw new Error("meta_baseline_stale_credential");
+          }
+          tx.create(snapshotRef, {...baseline, businessUid: business.uid, environment,
+            connectionRevision: connection.connectionRevision, createdAt: FieldValue.serverTimestamp()});
+          tx.update(connectionRef, {lastSyncAt: FieldValue.serverTimestamp(),
+            metricCollectionHealth: "partial", updatedAt: FieldValue.serverTimestamp()});
+        });
+        return {provider: surface, baseline, importedSnapshotCount: 1,
+          metricCollectionHealth: "partial", externalPublishingEnabled: false};
+      }
       const snapshots = await socialOAuth.readHistoricalPerformance({
         provider, surface, tokens, account, now: Date.now(),
       });
