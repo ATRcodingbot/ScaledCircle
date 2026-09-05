@@ -28,7 +28,7 @@ def inspect(path, version, build):
             if info.get(key) != value:
                 raise ValueError('Application metadata mismatch: ' + key)
         for key, value in {'PROJECT_ID': 'scaled-circle', 'BUNDLE_ID': 'com.scaledcircle.app',
-                           'GOOGLE_APP_ID': '1:1010956217112:ios:0c1a12a1424128b9e70c6d'}.items():
+                           'GOOGLE_APP_ID': '1:1010956217112:ios:91c890b1ca2018a4e70c6d'}.items():
             if config.get(key) != value:
                 raise ValueError('Firebase configuration mismatch: ' + key)
         for key in ['NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription',

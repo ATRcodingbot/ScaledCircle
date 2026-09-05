@@ -16,7 +16,7 @@ class IpaGateTest(unittest.TestCase):
         if bad == 'permission':
             del info['NSCameraUsageDescription']
         config = dict(PROJECT_ID='scaled-circle', BUNDLE_ID='com.scaledcircle.app',
-                      GOOGLE_APP_ID='1:1010956217112:ios:0c1a12a1424128b9e70c6d')
+                      GOOGLE_APP_ID='1:1010956217112:ios:91c890b1ca2018a4e70c6d')
         if bad == 'firebase':
             config['PROJECT_ID'] = 'wrong'
         with zipfile.ZipFile(path, 'w') as archive:
