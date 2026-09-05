@@ -700,7 +700,12 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
       unavailable: ["reach", "clicks", "saves", "leads", "conversions"]}];
   }
   const pageToken = tokens.pageAccessToken || tokens.userAccessToken;
-  const instagram = surface === "instagram" && account.linkedAccountId;
+  if (!["facebook", "instagram"].includes(surface) ||
+      !/^\d+$/.test(String(account.accountId || "")) ||
+      (surface === "instagram" && !/^\d+$/.test(String(account.linkedAccountId || "")))) {
+    throw new Error("social_oauth_meta_insights_identity_missing");
+  }
+  const instagram = surface === "instagram";
   const targetId = instagram ? account.linkedAccountId : account.accountId;
   const url = new URL(`https://graph.facebook.com/v23.0/${encodeURIComponent(targetId)}/insights`);
   url.searchParams.set("metric", instagram ? "views,reach,profile_views" :
@@ -712,7 +717,7 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
   if (!providerMetrics.length) return [];
   const metric = Object.fromEntries(providerMetrics.map((item) => {
     const raw = item.values?.at(-1)?.value;
-    const value = raw == null || !Number.isFinite(Number(raw)) ? null : Number(raw);
+    const value = typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : null;
     return [item.name, value];
   }));
   return [{providerObjectId: text(targetId, 180), observedAtMillis: now,

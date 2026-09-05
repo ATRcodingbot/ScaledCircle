@@ -4,6 +4,31 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const oauth = require("../functions-social-operations/social_oauth");
 
+test("Meta insights never substitute Page metrics for a missing Instagram identity", async () => {
+  let requests = 0;
+  for (const account of [{accountId: "123"}, {accountId: "123", linkedAccountId: "invalid"},
+    {accountId: "invalid", linkedAccountId: "456"}]) {
+    await assert.rejects(oauth.readHistoricalPerformance({provider: "meta", surface: "instagram",
+      tokens: {pageAccessToken: "offline"}, account, fetchImpl: async () => {requests++;}}),
+    /social_oauth_meta_insights_identity_missing/);
+  }
+  assert.equal(requests, 0);
+});
+
+test("Meta insights preserve real zero and reject malformed counters without cross-channel substitution", async () => {
+  for (const raw of [null, "", false, {}, [], -1, "12", 0, 12]) {
+    const rows = await oauth.readHistoricalPerformance({provider: "meta", surface: "instagram",
+      tokens: {pageAccessToken: "offline"}, account: {accountId: "123", linkedAccountId: "456"},
+      fetchImpl: async url => {
+        assert.equal(new URL(url).pathname, "/v23.0/456/insights");
+        return {ok: true, json: async () => ({data: [{name: "views", values: [{value: raw}]}]})};
+      }});
+    assert.equal(rows[0].providerObjectId, "456");
+    assert.equal(rows[0].metrics.views, typeof raw === "number" && raw >= 0 ? raw : null);
+    assert.equal(rows[0].metrics.reach, null);
+  }
+});
+
 const key = Buffer.alloc(32, 7).toString("base64");
 const config = (provider) => ({provider, clientId: `${provider}-client`,
   redirectUri: oauth.callbackUrl({provider, environment: "staging"}),
@@ -429,7 +454,7 @@ test("YouTube watch minutes normalize to canonical watch seconds", async () => {
 test("Instagram reach remains available when returned by the provider", async () => {
   const snapshots = await oauth.readHistoricalPerformance({provider: "meta",
     surface: "instagram", tokens: {pageAccessToken: "token"},
-    account: {accountId: "page", linkedAccountId: "instagram"},
+    account: {accountId: "123", linkedAccountId: "456"},
     fetchImpl: async () => ({ok: true, json: async () => ({data: [
       {name: "views", values: [{value: 40}]},
       {name: "reach", values: [{value: 30}]},
@@ -441,12 +466,12 @@ test("Instagram reach remains available when returned by the provider", async ()
 
 test("missing Meta provider evidence remains unavailable instead of becoming zero", async () => {
   const snapshots = await oauth.readHistoricalPerformance({provider: "meta",
-    surface: "facebook", tokens: {pageAccessToken: "token"}, account: {accountId: "page"},
+    surface: "facebook", tokens: {pageAccessToken: "token"}, account: {accountId: "123"},
     fetchImpl: async () => ({ok: true, json: async () => ({data: []})})});
   assert.deepEqual(snapshots, []);
 
   const partial = await oauth.readHistoricalPerformance({provider: "meta",
-    surface: "facebook", tokens: {pageAccessToken: "token"}, account: {accountId: "page"},
+    surface: "facebook", tokens: {pageAccessToken: "token"}, account: {accountId: "123"},
     fetchImpl: async () => ({ok: true, json: async () => ({data: [
       {name: "page_impressions", values: [{value: 0}]},
     ]})})});

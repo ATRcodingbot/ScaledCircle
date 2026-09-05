@@ -23,11 +23,21 @@ Asset workflow, not measured engagement. No bytes changed. Confirm provider imag
 format support before hosting; if conversion is needed, it is a new derivative
 hash/version requiring approval, never silently substitute for these PNGs.
 
-Proposed hosting is a hash-addressed production image path for each card. No live
-hosting claim, upload or container creation. Verify direct public image response,
-hash, MIME, dimensions and lack of staging redirects before any Meta request.
+The ordered production derivatives are JPEG, 1080x1350, with these exact hashes:
 
-Caption links are not a clickable feed attribution path. Proposed wording only
+1. `41e6977b5cb7a4a04b47f6892a838a14e47890a0eb525009506ca9280ca39d4b`
+2. `36a6bcbcae69cc9e296e9bb784cbe5e790d622d1501980f09f98a8737deec06b`
+3. `68bc79bc60f57ea266172374e23bae20b60c7d0a4ef255ed013314bd5009feab`
+4. `783e3bb9a5209ebdc9ecb05e88dcf016933f42cc2e4e86bfde5c2dff5463c160`
+
+Each URL is `https://scaledcircle.com/social/<full-sha256>.jpg`. Anonymous GETs
+on September 5, 2026 returned HTTP 200, image/jpeg and matching SHA256 for all four,
+without redirects. The reproducible derivative tooling preserves original order
+and lineage. Derivative hashes, not original PNG hashes, must bind publication
+approval. Hosting approval does not authorize containers or publication.
+
+Default CTA: “Link in bio.” Caption links are not a clickable feed attribution path.
+No inline tracked link is required. Proposed expanded wording only
 after bio verification: “Visit the link in our bio to explore ScaledCircle for
 Businesses.” A direct Business-page bio supports destination traffic at most;
 it does not establish this carousel's conversions. A future dedicated approved
@@ -46,6 +56,9 @@ Partial container success is not publication success. Reconnect preserves that j
 identity mismatch fails closed. Reconcile unknown parent/publish outcome before
 retry and retain expiry/cleanup metadata without publishing again automatically.
 
-Open: current canonical copy/version, hosting/format, current identity,
-bio and grants. Separate Founder approval required only after those are resolved.
-Provider mutations, media uploads, containers and posts in this pass: 0.
+Open: current canonical copy/version, current identity, bio, grants, persistent
+publisher certification and insights baseline. Prepare a fresh bounded weekly
+approval with exact ordered media, immutable versions, schedule and maximum
+creates. Prior quality scores and expired schedules do not authorize a new week.
+Timing remains INITIAL_EXPERIMENT / LOW_CONFIDENCE until measurements support it.
+No Meta containers or posts are authorized by this packet.
