@@ -51,16 +51,17 @@ test("signature and event mode/account verification precede webhook processing",
   const service = {run: async (_, __, options) => {assert.equal(options.readOnly, true); return {};}};
   const base = {id: "evt_fixture", type: "payout.paid", livemode: false, account: "acct_fixture",
     data: {object: {metadata: {cashoutId: key}}}};
-  async function send(event, invalidSignature = false, endpointScope = "connected") {
+  async function send(event, invalidSignature = false, endpointScope = "connected", scalerUid = "owner") {
     const payload = JSON.stringify(event);
     const signature = stripe.webhooks.generateTestHeaderString({payload, secret});
-    return adapter.handleWebhook({stripe, store, service, runtime, secret,
+    return adapter.handleWebhook({stripe, store, service, runtime: () => ({...runtime(), scalerUid}), secret,
       rawBody: Buffer.from(payload), endpointScope, signature: invalidSignature ? "invalid" : signature});
   }
   await assert.rejects(send(base, true));
   await assert.rejects(send(base, false, "platform"));
   await assert.rejects(send({...base, livemode: true}));
   await assert.rejects(send({...base, account: "acct_other"}));
+  await assert.rejects(send(base, false, "connected", "other_scaler"));
   assert.equal(processed, 0);
   await send(base); assert.equal(processed, 1);
 });

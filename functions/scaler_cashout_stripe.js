@@ -96,6 +96,7 @@ async function handleWebhook({stripe, store, service, runtime, secret, rawBody, 
   const key = event.data?.object?.metadata?.cashoutId;
   if (!/^cashout_[a-f0-9]{64}$/.test(key || "")) return {ignored: true};
   const op = await store.lookup(key);
+  if (runtime().scalerUid && op.ownerId !== runtime().scalerUid) fail("cashout_webhook_owner_mismatch");
   if (op.mode !== "test" || op.kind !== "scaler_cashout_v1" ||
       (event.type.startsWith("payout.") && event.account !== op.accountId) ||
       (event.type.startsWith("transfer.") && event.account)) fail("cashout_webhook_account_mismatch");

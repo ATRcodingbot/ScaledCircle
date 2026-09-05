@@ -11586,11 +11586,15 @@ exports.executeQueuedScalerTransfers = onSchedule(
 );
 
 function cashoutRuntime() {
+  const scalerUid = process.env.SCALEDCIRCLE_CASHOUT_TEST_SCALER_UID || "";
+  const expiresAt = Date.parse(process.env.SCALEDCIRCLE_CASHOUT_TEST_EXPIRES_AT || "");
   return {environment: process.env.SCALEDCIRCLE_ENV,
     projectId: process.env.GCLOUD_PROJECT && process.env.GOOGLE_CLOUD_PROJECT &&
       process.env.GCLOUD_PROJECT !== process.env.GOOGLE_CLOUD_PROJECT ? "mismatch" :
       process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
-    enabled: process.env.SCALEDCIRCLE_CASHOUT_TEST_ENABLED === "true",
+    scalerUid,
+    enabled: process.env.SCALEDCIRCLE_CASHOUT_TEST_ENABLED === "true" &&
+      /^[A-Za-z0-9_-]{1,128}$/.test(scalerUid) && Number.isFinite(expiresAt) && Date.now() < expiresAt,
     secretKey: STRIPE_CASHOUT_TEST_API_KEY.value()};
 }
 
@@ -11614,6 +11618,9 @@ function safeCashoutCallable(handler) {
     const context = await requireFinancialRole(request, "scaler", "Sign in as a Scaler.");
     if (context.role !== "scaler" || context.user?.disabled === true) {
       throw new HttpsError("permission-denied", "Sign in as an active Scaler.");
+    }
+    if (context.uid !== cashoutRuntime().scalerUid) {
+      throw new HttpsError("permission-denied", "This TEST session belongs to a different Scaler.");
     }
     try { return await handler(cashoutServices(), context.uid, request); }
     catch (_) { throw new HttpsError("failed-precondition", "Payouts need attention. Refresh your Wallet and try again."); }

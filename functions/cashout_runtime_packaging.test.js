@@ -30,7 +30,7 @@ test("cash-out deployment selects only TEST dependencies and exact four/six expo
 
 test("deployed callable authority denies admin, disabled, wrong mode and unauthenticated before provider construction", async () => {
   execFileSync(process.execPath, [script]);
-  for (const scenario of ["admin", "disabled", "business", "unverified", "unauthenticated", "live", "off"]) {
+  for (const scenario of ["admin", "disabled", "business", "unverified", "unauthenticated", "live", "off", "expired", "wrong_fixture", "missing_fixture"]) {
     let providerConstructed = 0;
     class HttpsError extends Error { constructor(code, message) { super(message); this.code = code; } }
     const exported = {};
@@ -48,6 +48,8 @@ test("deployed callable authority denies admin, disabled, wrong mode and unauthe
     };
     vm.runInNewContext(fs.readFileSync(entry, "utf8"), {exports: exported, require: fakeRequire,
       process: {env: {SCALEDCIRCLE_ENV: "staging", GCLOUD_PROJECT: "scaledcircle-staging",
+        SCALEDCIRCLE_CASHOUT_TEST_SCALER_UID: scenario === "missing_fixture" ? "" : scenario === "wrong_fixture" ? "other" : "fixture",
+        SCALEDCIRCLE_CASHOUT_TEST_EXPIRES_AT: new Date(Date.now() + (scenario === "expired" ? -60000 : 60000)).toISOString(),
         SCALEDCIRCLE_CASHOUT_TEST_ENABLED: scenario === "off" ? "false" : "true"}}});
     const request = scenario === "unauthenticated" ? {} : {auth: {uid: "fixture", token: {email_verified: scenario !== "unverified"}}};
     for (const callable of Object.values(exported)) await assert.rejects(callable(request), error =>
