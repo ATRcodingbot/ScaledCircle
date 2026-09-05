@@ -80,6 +80,20 @@ test("provider identity verification failure never stores a successful receipt",
   clock += 120001;
   await run(); assert.equal(creates, 1); assert.equal(reconciles, 1);
 });
+
+test("pending container ID survives readiness failure without becoming a receipt or another create", async () => {
+  assert.equal((await run({verify: async () => { throw new Error("not_ready"); }})).status,"needs_attention");
+  const ref = jobRef.collection("providerSteps").doc(step.id);
+  const waiting = (await ref.get()).data();
+  assert.equal(waiting.observedProviderId, receipt.id);
+  assert.equal(waiting.receipt, undefined);
+  clock += 120001;
+  assert.equal((await run({reconcile: async record => {
+    assert.equal(record.observedProviderId,receipt.id); reconciles++; return receipt;
+  }})).status,"received");
+  assert.equal(creates,1); assert.equal(reconciles,1);
+  assert.equal((await ref.collection("receipts").get()).size,1);
+});
 test("stored receipt is reverified and cannot authorize use of an expired container", async () => {
   await run();
   await assert.rejects(run({verify: async () => { throw new Error("expired"); }}), /expired/);

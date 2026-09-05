@@ -40,10 +40,24 @@ function createStepStore(db, {authorize, now = Date.now} = {}) {
         if (prior?.receipt) return {mode: "received", record: prior};
         if (prior?.leaseUntil > now()) return {mode: "busy"};
         const next = {...step, startedAt: prior?.startedAt ?? now(), generation: (prior?.generation || 0) + 1,
+          ...(prior?.observedProviderId ? {observedProviderId: prior.observedProviderId} : {}),
           leaseUntil: now() + 120000, state: "unknown"};
         tx.set(ref(step), next);
         tx.create(ref(step).collection("audit").doc(String(next.generation)), {action: prior ? "reconcile_claim" : "send_claim", at: now()});
         return {mode: prior ? "reconcile" : "create", record: next};
+      });
+    },
+    async remember(claim, id) {
+      validate(claim);
+      if (!/^\d+(?:_\d+)?$/.test(id || "")) fail("provider_step_receipt_invalid");
+      return db.runTransaction(async tx => {
+        const prior = (await tx.get(ref(claim))).data();
+        await currentJob(tx, claim, "reconcile");
+        if (!prior || prior.generation !== claim.generation || prior.receipt ||
+            prior.requestHash !== claim.requestHash ||
+            (prior.observedProviderId && prior.observedProviderId !== id)) fail("provider_step_stale");
+        // An observed ID is not an ownership/readiness receipt and cannot advance a step.
+        tx.update(ref(claim), {observedProviderId: id});
       });
     },
     async finish(claim, receipt) {
@@ -76,6 +90,7 @@ async function executeStep({store, step, create, reconcile, verify}) {
   try {
     const receipt = claim.mode === "create" ? await create() : await reconcile(claim.record);
     if (!receipt) return {status: "needs_attention"};
+    if (store.remember) await store.remember(claim.record, receipt.id);
     await verify(receipt);
     return {status: "received", receipt: await store.finish(claim.record, receipt)};
   } catch (_) {
