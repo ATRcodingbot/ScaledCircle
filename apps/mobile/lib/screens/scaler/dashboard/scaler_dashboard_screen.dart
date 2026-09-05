@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
+import '../../../models/scaler_earnings_summary.dart';
+import '../../../config/app_environment.dart';
 import '../../../widgets/reputation_card.dart';
 import '../../../widgets/scaled_circle_brand.dart';
 import '../../../widgets/authenticated_sign_out_button.dart';
@@ -99,113 +101,148 @@ class ScalerDashboardScreen extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data() ?? <String, dynamic>{};
-        final verifiedEarnings =
-            (data['availableBalance'] as num?)?.toDouble() ?? 0.0;
         final pending = (data['pendingBalance'] as num?)?.toDouble() ?? 0.0;
-        final totalRecorded = verifiedEarnings + pending;
 
-        return Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('wallets')
+              .doc(userId)
+              .collection('transactions')
+              .snapshots(),
+          builder: (context, earningsSnapshot) {
+            final monthTotal =
+                earningsSnapshot.hasData && !earningsSnapshot.hasError
+                ? ScalerEarningsSummary.recordedThisMonth(
+                    earningsSnapshot.data!.docs.map((record) => record.data()),
+                    DateTime.now(),
+                    testEnvironment: !AppEnvironmentConfig.isProduction,
+                  )
+                : null;
+
+            return Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      color: AppColors.primary,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.account_balance_wallet_outlined,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Your earnings',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text(
+                              AppEnvironmentConfig.isProduction
+                                  ? 'Recorded campaign earnings. See Wallet for payout status.'
+                                  : 'TEST / STAGING only. No real money.',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ScalerWalletScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text('View wallet'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Your earnings',
-                          style: TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w800,
+                  const SizedBox(height: 20),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const LinearProgressIndicator()
+                  else if (snapshot.hasError)
+                    const Text('Wallet totals are temporarily unavailable.')
+                  else
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = constraints.maxWidth < 520;
+                        final metrics = [
+                          _earningMetric(
+                            'Available',
+                            ScalerEarningsSummary.displayAvailable(
+                              data,
+                              testEnvironment:
+                                  !AppEnvironmentConfig.isProduction,
+                            ),
+                            emphasize: true,
                           ),
-                        ),
-                        Text(
-                          'Recorded campaign earnings. See Wallet for payout status.',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ],
+                          _earningMetric('Pending', pending),
+                          _earningMetric('This Month', monthTotal),
+                        ];
+
+                        return compact
+                            ? Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: metrics
+                                    .map(
+                                      (metric) => SizedBox(
+                                        width: (constraints.maxWidth - 12) / 2,
+                                        child: metric,
+                                      ),
+                                    )
+                                    .toList(),
+                              )
+                            : Row(
+                                children: metrics
+                                    .map((metric) => Expanded(child: metric))
+                                    .toList(),
+                              );
+                      },
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ScalerWalletScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text('View wallet'),
+                  const SizedBox(height: 8),
+                  Text(
+                    earningsSnapshot.hasError
+                        ? 'Monthly earnings are temporarily unavailable.'
+                        : 'This Month uses UTC calendar dates.',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              if (snapshot.connectionState == ConnectionState.waiting)
-                const LinearProgressIndicator()
-              else if (snapshot.hasError)
-                const Text('Wallet totals are temporarily unavailable.')
-              else
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 520;
-                    final metrics = [
-                      _earningMetric(
-                        'Verified Earnings',
-                        verifiedEarnings,
-                        emphasize: true,
-                      ),
-                      _earningMetric('Pending', pending),
-                      _earningMetric('Total Recorded', totalRecorded),
-                    ];
-
-                    return compact
-                        ? Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: metrics
-                                .map(
-                                  (metric) => SizedBox(
-                                    width: (constraints.maxWidth - 12) / 2,
-                                    child: metric,
-                                  ),
-                                )
-                                .toList(),
-                          )
-                        : Row(
-                            children: metrics
-                                .map((metric) => Expanded(child: metric))
-                                .toList(),
-                          );
-                  },
-                ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _earningMetric(String label, double amount, {bool emphasize = false}) {
+  Widget _earningMetric(
+    String label,
+    double? amount, {
+    bool emphasize = false,
+  }) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
@@ -221,7 +258,7 @@ class ScalerDashboardScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '\$${amount.toStringAsFixed(2)}',
+            amount == null ? '--' : '\$${amount.toStringAsFixed(2)}',
             style: TextStyle(
               color: emphasize ? AppColors.primary : AppColors.textPrimary,
               fontSize: emphasize ? 25 : 21,

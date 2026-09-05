@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/scaler_cashout_service.dart';
+import '../../config/app_environment.dart';
+import '../../models/scaler_earnings_summary.dart';
 import '../../widgets/scaler_cashout_card.dart';
 import '../../widgets/scaler_wallet_metrics.dart';
 
@@ -68,8 +70,6 @@ class ScalerWalletScreen extends StatelessWidget {
               (walletData['pendingBalance'] as num?)?.toDouble() ?? 0.0;
 
           final totalBalance = verifiedEarnings + pendingBalance;
-          final testAvailableCents =
-              walletData['cashoutAvailableCents'] as num?;
 
           return ListView(
             padding: const EdgeInsets.all(20),
@@ -82,7 +82,9 @@ class ScalerWalletScreen extends StatelessWidget {
               const SizedBox(height: 8),
 
               const Text(
-                'Track earnings from completed Scaled Circle campaigns.',
+                AppEnvironmentConfig.isProduction
+                    ? 'Track earnings from completed Scaled Circle campaigns.'
+                    : 'TEST / STAGING funds. Available includes campaign and payout-test balances; it is not a cash-out limit. No real money.',
               ),
 
               const SizedBox(height: 24),
@@ -127,11 +129,11 @@ class ScalerWalletScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               ScalerWalletMetrics(
-                testUnreservedBalance:
-                    ScalerCashoutService.enabled &&
-                        walletData['cashoutMode'] == 'test' &&
-                        testAvailableCents != null
-                    ? testAvailableCents.toDouble() / 100
+                testDisplayAvailable: !AppEnvironmentConfig.isProduction
+                    ? ScalerEarningsSummary.displayAvailable(
+                        walletData,
+                        testEnvironment: true,
+                      )
                     : null,
                 pendingEarnings: pendingBalance,
                 recordedEarnings: totalBalance,
