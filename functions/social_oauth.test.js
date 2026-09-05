@@ -35,6 +35,12 @@ test("provider configuration rejects cross-environment and cross-provider callba
   /redirect_uri_mismatch/);
   assert.throws(() => oauth.validateProviderConfig({...config("x"),
     redirectUri: "https://localhost/socialOAuthXCallbackV1"}), /redirect_uri_mismatch/);
+  const productionWrite = oauth.validateProviderConfig({...production,
+    writeScopesEnabled: true, externalPublishingEnabled: false});
+  assert.equal(productionWrite.writeScopesEnabled, true);
+  assert.equal(productionWrite.externalPublishingEnabled, false);
+  assert.throws(() => oauth.validateProviderConfig({...production,
+    externalPublishingEnabled: true}), /external_publishing_forbidden/);
 });
 
 test("callback attempt validation rejects expiry, provider mismatch, and PKCE context damage", async () => {
@@ -171,6 +177,23 @@ test("X publish callback projects write capability without exposing credentials"
   assert.equal(completed.safeCandidates[0].capabilities.publishImage, true);
   assert.equal(completed.safeCandidates[0].capabilities.publishVideo, false);
   assert.equal(JSON.stringify(completed).includes("access-secret"), false);
+});
+
+test("production X connection authority requests the exact five scopes without publishing", () => {
+  const production = {...config("x"), environment: "production",
+    redirectUri: oauth.callbackUrl({provider: "x", environment: "production"}),
+    writeScopesEnabled: true, externalPublishingEnabled: false};
+  const attempt = oauth.createAttempt({businessUid: "production-business", provider: "x",
+    config: production, encryptionKey: key, now: 1000,
+    scopes: oauth.X_PUBLISH_SCOPES, purpose: "x_connection_authority"});
+  assert.equal(attempt.record.environment, "production");
+  assert.equal(attempt.record.purpose, "x_connection_authority");
+  assert.deepEqual(new Set(attempt.record.requestedScopes), new Set(oauth.X_PUBLISH_SCOPES));
+  assert.equal(production.externalPublishingEnabled, false);
+  assert.throws(() => oauth.createAttempt({businessUid: "production-business", provider: "x",
+    config: production, encryptionKey: key, now: 1000,
+    scopes: [...oauth.X_PUBLISH_SCOPES, "follows.write"], purpose: "x_connection_authority"}),
+  /scope_set_forbidden/);
 });
 
 test("initial X confirmation creates a generation-tracked encrypted credential", () => {

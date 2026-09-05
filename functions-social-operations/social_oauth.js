@@ -208,6 +208,9 @@ function validateProviderConfig(input = {}) {
   if (redirectUri !== callbackUrl({provider, environment})) {
     throw new Error("social_oauth_redirect_uri_mismatch");
   }
+  if (input.externalPublishingEnabled === true) {
+    throw new Error("social_oauth_external_publishing_forbidden");
+  }
   return {
     provider,
     clientId,
@@ -215,6 +218,8 @@ function validateProviderConfig(input = {}) {
     environment,
     enabled: input.enabled === true,
     historicalSyncEnabled: input.historicalSyncEnabled === true,
+    writeScopesEnabled: provider === "x" && input.writeScopesEnabled === true,
+    externalPublishingEnabled: false,
     appName: text(input.appName, 180) || null,
   };
 }
@@ -271,7 +276,8 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
   const aad = `${uid}:${normalized}:${attemptId}`;
   const requiredScopes = requestedScopes(normalized, scopes);
   const normalizedPurpose = text(purpose, 80);
-  if (requiredScopes.includes("tweet.write") && normalizedPurpose !== "x_first_publish_certification") {
+  if (requiredScopes.includes("tweet.write") &&
+      !["x_first_publish_certification", "x_connection_authority"].includes(normalizedPurpose)) {
     throw new Error("social_oauth_scope_purpose_mismatch");
   }
   const continueUrl = authorizationUrl({provider: normalized, config: valid, state, codeChallenge,

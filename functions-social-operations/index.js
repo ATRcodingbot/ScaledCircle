@@ -2095,6 +2095,8 @@ exports.configureSocialProviderV1 = onCall(
         environment,
         enabled: request.data?.enabled === true,
         historicalSyncEnabled: request.data?.historicalSyncEnabled === true,
+        writeScopesEnabled: request.data?.writeScopesEnabled === true,
+        externalPublishingEnabled: false,
         appName: request.data?.appName,
       });
     } catch (_) {
@@ -2103,7 +2105,7 @@ exports.configureSocialProviderV1 = onCall(
     await providerConfigRef(config.provider, environment).set({
       schemaVersion: "SocialProviderConfigV1",
       ...config,
-      writeScopesEnabled: false,
+      writeScopesEnabled: config.writeScopesEnabled,
       externalPublishingEnabled: false,
       configuredByUid: context.uid,
       updatedAt: FieldValue.serverTimestamp(),
@@ -2114,7 +2116,7 @@ exports.configureSocialProviderV1 = onCall(
       enabled: config.enabled,
       historicalSyncEnabled: config.historicalSyncEnabled,
       redirectUri: config.redirectUri,
-      writeScopesEnabled: false,
+      writeScopesEnabled: config.writeScopesEnabled,
       externalPublishingEnabled: false,
     };
   },
@@ -2127,6 +2129,7 @@ exports.beginSocialOAuthConnectionV1 = onCall(
     const provider = socialOAuth.normalizeProvider(request.data?.provider);
     const environment = runtimeEnvironment();
     const config = (await providerConfigRef(provider, environment).get()).data();
+    const requestWriteScopes = provider === "x" && config?.writeScopesEnabled === true;
     let proposed;
     try {
       proposed = socialOAuth.createAttempt({
@@ -2134,6 +2137,8 @@ exports.beginSocialOAuthConnectionV1 = onCall(
         provider,
         config,
         encryptionKey: socialOAuthEncryptionKey.value(),
+        scopes: requestWriteScopes ? socialOAuth.X_PUBLISH_SCOPES : null,
+        purpose: requestWriteScopes ? "x_connection_authority" : "read_only_connection",
         now: Date.now(),
       });
     } catch (_) {
@@ -2148,12 +2153,25 @@ exports.beginSocialOAuthConnectionV1 = onCall(
       if (pendingAttemptId) {
         const pendingRef = db.collection("socialOAuthAttempts").doc(pendingAttemptId);
         const pending = (await transaction.get(pendingRef)).data();
-        if (socialOAuth.isReusableAttempt(pending, {businessUid: business.uid, provider,
-          now: Date.now()})) {
+        const reusable = socialOAuth.isReusableAttempt(pending,
+          {businessUid: business.uid, provider, now: Date.now()});
+        let exactPurposeAndScopes = false;
+        if (reusable && pending.purpose === proposed.record.purpose) {
+          try {
+            socialOAuth.exactScopeSet(pending.requestedScopes, proposed.record.requestedScopes);
+            exactPurposeAndScopes = true;
+          } catch (_) {}
+        }
+        if (exactPurposeAndScopes) {
           return {attemptId: pendingAttemptId, record: pending, reused: true,
             authorizationUrl: socialOAuth.continuationUrl(pending, {businessUid: business.uid,
               provider, attemptId: pendingAttemptId,
               encryptionKey: socialOAuthEncryptionKey.value(), now: Date.now()})};
+        }
+        if (reusable) {
+          transaction.update(pendingRef, {status: "superseded",
+            supersededByAttemptId: proposed.attemptId,
+            updatedAt: FieldValue.serverTimestamp()});
         }
       }
       const attemptRef = db.collection("socialOAuthAttempts").doc(proposed.attemptId);
@@ -2180,8 +2198,8 @@ exports.beginSocialOAuthConnectionV1 = onCall(
       continuationAvailable: Boolean(resolved.authorizationUrl),
       reusedExistingAttempt: resolved.reused,
       status: resolved.record.status,
-      requestedScopes: socialOAuth.PROVIDER_SCOPES[provider],
-      writeScopesRequested: false,
+      requestedScopes: resolved.record.requestedScopes,
+      writeScopesRequested: requestWriteScopes,
     };
   },
 );
@@ -2298,8 +2316,10 @@ exports.getSocialOAuthAttemptV1 = onCall(
       candidates: Array.isArray(record.safeCandidates) ? record.safeCandidates : [],
       grantedScopes: Array.isArray(record.grantedScopes) ? record.grantedScopes : [],
       missingScopes: Array.isArray(record.missingScopes) ? record.missingScopes : [],
-      writeScopesRequested: record.purpose === "x_first_publish_certification",
-      writeScopesGranted: record.purpose === "x_first_publish_certification" &&
+      writeScopesRequested: ["x_first_publish_certification", "x_connection_authority"]
+        .includes(record.purpose),
+      writeScopesGranted: ["x_first_publish_certification", "x_connection_authority"]
+        .includes(record.purpose) &&
         Array.isArray(record.grantedScopes) &&
         xFirstPublish.X_WRITE_SCOPES.every((scope) => record.grantedScopes.includes(scope)),
     };
@@ -2395,9 +2415,18 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
     const attemptRef = db.collection("socialOAuthAttempts").doc(attemptId);
     const attemptSnapshot = await attemptRef.get();
     const attempt = attemptSnapshot.data();
+    const writeConnection = attempt?.provider === "x" &&
+      attempt?.purpose === "x_connection_authority";
     if (!attempt || attempt.businessUid !== business.uid ||
-        (attempt.purpose && attempt.purpose !== "read_only_connection")) {
+        (attempt.purpose && !["read_only_connection", "x_connection_authority"]
+          .includes(attempt.purpose))) {
       throw new HttpsError("not-found", "The connection attempt is unavailable.");
+    }
+    try {
+      socialOAuth.exactScopeSet(attempt.grantedScopes, writeConnection ?
+        socialOAuth.X_PUBLISH_SCOPES : socialOAuth.PROVIDER_SCOPES[attempt.provider]);
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "The provider did not grant the exact requested permissions.");
     }
     let selected;
     try {
@@ -2414,6 +2443,71 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
       `${business.uid}:${attempt.provider}:${selected.privateAccount.accountId}`);
     const connectionRoot = db.collection("socialConnections").doc(business.uid)
       .collection("providers");
+    if (writeConnection) {
+      const credentialRef = db.collection("socialConnectionCredentials").doc(credentialId);
+      const connectionRef = connectionRoot.doc("x");
+      await db.runTransaction(async (transaction) => {
+        const [currentAttemptSnapshot, currentConnectionSnapshot, currentCredentialSnapshot] =
+          await Promise.all([transaction.get(attemptRef), transaction.get(connectionRef),
+            transaction.get(credentialRef)]);
+        const currentAttempt = currentAttemptSnapshot.data();
+        const currentConnection = currentConnectionSnapshot.data() || {};
+        const currentCredential = currentCredentialSnapshot.data() || {};
+        if (currentConnection.pendingAttemptId !== attemptId ||
+            currentAttempt?.status !== "identity_pending" ||
+            currentAttempt.businessUid !== business.uid || currentAttempt.provider !== "x" ||
+            currentAttempt.purpose !== "x_connection_authority" ||
+            Number(currentAttempt.expiresAtMillis || 0) <= Date.now()) {
+          throw new Error("social_oauth_stale_connection_attempt");
+        }
+        socialOAuth.exactScopeSet(currentAttempt.grantedScopes, socialOAuth.X_PUBLISH_SCOPES);
+        const nextRevision = socialOAuth.connectionRevision(currentConnection) + 1;
+        const nextGeneration = currentCredentialSnapshot.exists ?
+          socialOAuth.credentialGeneration(currentCredential) + 1 : 1;
+        transaction.set(credentialRef, {...selected.credentialRecord,
+          rotationGeneration: nextGeneration, connectionRevision: nextRevision,
+          accountEnvelope: socialOAuth.encryptJson(selected.privateAccount,
+            socialOAuthEncryptionKey.value(), `${business.uid}:x:${credentialId}`),
+          createdAt: currentCredential.createdAt || FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()}, {merge: false});
+        transaction.set(connectionRef, {
+          schemaVersion: socialOperations.SCHEMA_VERSION,
+          provider: "x",
+          status: "connected_write",
+          tokenHealth: "healthy",
+          connectionRevision: nextRevision,
+          credentialRotationGeneration: nextGeneration,
+          accountDisplayName: selected.safeCandidate.accountDisplayName,
+          accountType: selected.safeCandidate.accountType,
+          handle: selected.safeCandidate.handle,
+          providerAccountId: selected.safeCandidate.candidateId,
+          providerUserId: selected.privateAccount.accountId,
+          credentialId,
+          capabilities: selected.safeCandidate.capabilities,
+          grantedScopes: currentAttempt.grantedScopes,
+          writeScopesGranted: true,
+          externalPublishingEnabled: false,
+          environment: currentAttempt.environment,
+          authorizationUpdatedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: false});
+        transaction.update(attemptRef, {
+          status: "connected_write",
+          selectedCandidate: selected.safeCandidate,
+          candidateEnvelope: FieldValue.delete(),
+          verifierEnvelope: FieldValue.delete(),
+          connectedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+      return {
+        provider: "x",
+        status: "connected_write",
+        identity: selected.safeCandidate,
+        writeScopesGranted: true,
+        externalPublishingEnabled: false,
+      };
+    }
     const batch = db.batch();
     batch.set(db.collection("socialConnectionCredentials").doc(credentialId), {
       ...selected.credentialRecord,
@@ -2512,6 +2606,8 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
           "Return to ScaledCircle to review and confirm the exact account identity." :
           attempt.purpose === "x_first_publish_certification" ?
             "X did not grant the exact permission needed for this approved post." :
+          attempt.purpose === "x_connection_authority" ?
+            "X did not grant the exact permissions required for this connection." :
             "The provider did not grant every required read-only permission.",
       }));
     } catch (error) {

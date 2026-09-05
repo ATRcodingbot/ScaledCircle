@@ -158,7 +158,36 @@ test("X write authorization supersedes an active read-only attempt before replac
   assert.match(source, /status: "superseded"/);
   assert.match(source, /supersededByAttemptId: proposed\.attemptId/);
   assert.match(source, /transaction\.update\(pendingRef/);
-  assert.match(source, /writeScopesRequested: record\.purpose === "x_first_publish_certification"/);
+  assert.match(source, /"x_first_publish_certification", "x_connection_authority"/);
+});
+
+test("production X connection authority is exact-scope, confirmation-gated, and non-publishing", () => {
+  const configure = indexSource.match(
+    /exports\.configureSocialProviderV1 = [\s\S]*?\n\);/)[0];
+  const begin = indexSource.match(
+    /exports\.beginSocialOAuthConnectionV1 = [\s\S]*?\n\);/)[0];
+  const inspect = indexSource.match(
+    /exports\.getSocialOAuthAttemptV1 = [\s\S]*?\n\);/)[0];
+  const confirm = indexSource.match(
+    /exports\.confirmSocialOAuthConnectionV1 = [\s\S]*?\n\);/)[0];
+  assert.match(configure, /writeScopesEnabled: config\.writeScopesEnabled/);
+  assert.match(configure, /externalPublishingEnabled: false/);
+  assert.match(begin, /config\?\.writeScopesEnabled === true/);
+  assert.match(begin, /socialOAuth\.X_PUBLISH_SCOPES/);
+  assert.match(begin, /purpose: requestWriteScopes \? "x_connection_authority"/);
+  assert.match(begin, /pending\.purpose === proposed\.record\.purpose/);
+  assert.match(begin, /socialOAuth\.exactScopeSet\(pending\.requestedScopes/);
+  assert.match(begin, /status: "superseded"/);
+  assert.match(begin, /requestedScopes: resolved\.record\.requestedScopes/);
+  assert.match(inspect, /status: "reauth_required"/);
+  assert.match(inspect, /pendingAttemptId: FieldValue\.delete\(\)/);
+  assert.match(confirm, /socialOAuth\.exactScopeSet/);
+  assert.match(confirm, /currentConnection\.pendingAttemptId !== attemptId/);
+  assert.match(confirm, /credentialGeneration\(currentCredential\) \+ 1/);
+  assert.match(confirm, /status: "connected_write"/);
+  assert.match(confirm, /externalPublishingEnabled: false/);
+  assert.doesNotMatch(configure + begin + inspect + confirm,
+    /createPost|createReplacementPost|uploadMedia|method:\s*"DELETE"/);
 });
 
 test("bounded X write entrypoints bind only shared encryption and X secret", () => {
