@@ -25,7 +25,7 @@ function contentBinding({id, record}, businessUid) {
   return {...binding, bindingHash: hash(binding)};
 }
 
-function cycle({businessUid, planId, strategy, versions, startsAt, endsAt,
+function cycle({businessUid, planId, strategy, versions, startsAt, endsAt, providerAccounts = {},
   timeZone, mode = "approval_required", now = Date.now()}) {
   if (!businessUid || !planId || !MODES.includes(mode)) fail("growth_context_invalid");
   new Intl.DateTimeFormat("en", {timeZone}).format();
@@ -43,7 +43,10 @@ function cycle({businessUid, planId, strategy, versions, startsAt, endsAt,
     .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor) || a.versionId.localeCompare(b.versionId));
   if (new Set(items.map((item) => item.versionId)).size !== items.length ||
       items.some((item) => item.scheduledFor < start || item.scheduledFor >= end)) fail("growth_content_window_invalid");
-  const canonical = {businessUid, planId, startsAt: start, endsAt: end, timeZone, mode,
+  for (const [provider, account] of Object.entries(providerAccounts)) {
+    if (!social.PROVIDERS.includes(provider) || !account?.providerUserId || !account?.handle) fail("growth_account_invalid");
+  }
+  const canonical = {businessUid, planId, startsAt: start, endsAt: end, timeZone, mode, providerAccounts,
     strategy: {themes: strategy.themes, objectives: strategy.objectives,
       audience: strategy.audience || null, channelMix: strategy.channelMix || [],
       timingConfidence: "NO_DATA"}, items};
@@ -65,7 +68,8 @@ function approval({record, businessUid, expectedDigest, versionIds, windowStart,
   if (items.some((item) => !item || item.scheduledFor < start || item.scheduledFor >= end ||
       Date.parse(item.scheduledFor) <= now)) fail("growth_selection_invalid");
   const binding = {cycleId: record.id, cycleDigest: record.digest, businessUid,
-    windowStart: start, windowEnd: end, items: items.sort((a, b) => a.versionId.localeCompare(b.versionId))};
+    windowStart: start, windowEnd: end, providerAccounts: record.providerAccounts || {},
+    items: items.sort((a, b) => a.versionId.localeCompare(b.versionId))};
   return {id: `growth_approval_${hash(binding)}`, ...binding, approvedByUid: businessUid,
     approvedAt: now, approvalClass: items.length === 1 ? "single_post" : "bounded_week",
     externalPublishingEnabled: false};
@@ -91,6 +95,7 @@ function publicationGate({job, connection, supervisor, authority, now = Date.now
       !social.xConnectionCapabilities(connection, {expectedProviderUserId: authority.providerUserId}).canWrite) return "reconnect";
   const expected = ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"].sort();
   if (JSON.stringify([...new Set(connection.grantedScopes || [])].sort()) !== JSON.stringify(expected)) return "scope_mismatch";
+  if (!Number.isFinite(Date.parse(job.scheduledFor)) || !Number.isFinite(now)) return "schedule_invalid";
   if (Date.parse(job.scheduledFor) > now) return "not_due";
   if (now - Date.parse(job.scheduledFor) > 15 * 60000) return "schedule_expired";
   return "ready";
@@ -123,6 +128,9 @@ async function executeCandidate({store, adapter, jobId, context}) {
   const latestGate = publicationGate({job: claimed, ...await context(claimed)});
   if (latestGate !== "ready") return store.attention(claimed, latestGate);
   await adapter.verifyApprovedAssets(claimed);
+  // Asset verification can involve slow I/O. Recheck after it, not only before.
+  const sendGate = publicationGate({job: claimed, ...await context(claimed)});
+  if (sendGate !== "ready") return store.attention(claimed, sendGate);
   const started = await store.markSendStarted(claimed);
   try {
     const receipt = await adapter.create(started);
@@ -131,13 +139,33 @@ async function executeCandidate({store, adapter, jobId, context}) {
   } catch (_) { return store.attention(started, "unknown_provider_outcome"); }
 }
 
-function createStore(db, now = Date.now) {
+function createStore(db, now = Date.now, beforeSend = null) {
   const ref = (id) => db.collection("socialGrowthCycles").doc(id);
   const jobRef = (id) => db.collection("socialGrowthJobs").doc(id);
+  async function checkApproval(tx, current) {
+    const approved = (await tx.get(db.collection("socialGrowthApprovals").doc(current.approvalId))).data();
+    if (!approved || approved.revokedAt != null || approved.businessUid !== current.businessUid ||
+        approved.approvedByUid !== current.businessUid ||
+        !Array.isArray(approved.items) || !approved.items.some((item) =>
+          item.versionId === current.versionId && item.bindingHash === current.bindingHash &&
+          hash(item) === hash(current.binding))) fail("growth_approval_required");
+    const canonical = (await tx.get(db.collection("socialContentVersions").doc(current.versionId))).data();
+    if (contentBinding({id: current.versionId, record: canonical}, current.businessUid).bindingHash !== current.bindingHash) {
+      fail("growth_content_changed");
+    }
+    const quality = (await tx.get(db.collection("socialContentQualityAssessments").doc(current.versionId))).data();
+    if (quality?.businessUid !== current.businessUid || quality.readyToPublish !== true ||
+        quality.immutableSourceHash !== current.binding.contentHash) fail("growth_quality_review_required");
+  }
   async function update(claim, patch, receipt = null) {
     return db.runTransaction(async (tx) => {
       const current = (await tx.get(jobRef(claim.id))).data();
       if (!current || current.generation !== claim.generation || current.status === "published") fail("growth_stale_claim");
+      if (patch.sendStarted === true) {
+        if (current.sendStarted || current.leaseUntil <= now()) fail("growth_stale_claim");
+        await checkApproval(tx, current);
+        if (beforeSend) await beforeSend(tx, current);
+      }
       const updated = {...current, ...patch, generation: current.generation + 1};
       if (receipt) {
         if (!receipt.providerPostId || !receipt.providerPostUrl || !receipt.contentHash) fail("growth_receipt_invalid");
@@ -157,9 +185,9 @@ function createStore(db, now = Date.now) {
       return db.runTransaction(async (tx) => {
         const current = (await tx.get(jobRef(id))).data();
         if (!current || ["published", "canceled"].includes(current.status) || current.leaseUntil > now()) return null;
-        const approved = (await tx.get(db.collection("socialGrowthApprovals").doc(current.approvalId))).data();
-        if (approved?.businessUid !== current.businessUid ||
-            !approved.items.some((item) => item.versionId === current.versionId && item.bindingHash === current.bindingHash)) fail("growth_approval_required");
+        // Once a send starts, revocation must not prevent read-only receipt
+        // recovery. It still never grants permission for a second create.
+        if (!current.sendStarted) await checkApproval(tx, current);
         const next = {...current, generation: (current.generation || 0) + 1, leaseUntil: now() + 120000};
         tx.set(jobRef(id), next);
         tx.create(jobRef(id).collection("audit").doc(String(next.generation)), {
@@ -167,7 +195,7 @@ function createStore(db, now = Date.now) {
         return next;
       });
     },
-    markSendStarted(claim) { return update(claim, {sendStarted: true, status: "unknown_provider_outcome"}); },
+    markSendStarted(claim) { return update(claim, {sendStarted: true, sendStartedAt: now(), status: "unknown_provider_outcome"}); },
     attention(claim, status) { return update(claim, {status, leaseUntil: 0}); },
     complete(claim, receipt) { return update(claim, {status: "published", leaseUntil: 0}, receipt); },
     async save(record) {

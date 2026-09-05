@@ -8,12 +8,13 @@ const assert = require("node:assert/strict");
 const {initializeApp, deleteApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
 const growth = require("../functions-social-operations/social_growth_cycle");
+const {createPublisher} = require("../functions-social-operations/social_growth_publisher");
 const app = initializeApp({projectId: "demo-scaledcircle"}, "growth-cycle-tests");
 const db = getFirestore(app);
 const now = Date.parse("2030-01-01T00:00:00Z");
 let clock, store, record, approvalInput;
 beforeEach(async () => {
-  for (const name of ["socialGrowthCycles", "socialGrowthApprovals", "socialGrowthJobs", "socialContentVersions", "socialContentQualityAssessments"]) {
+  for (const name of ["socialPublishingAuthorities", "socialConnections", "users", "agentHealth", "socialGrowthCycles", "socialGrowthApprovals", "socialGrowthJobs", "socialContentVersions", "socialContentQualityAssessments"]) {
     const snapshots = await db.collection(name).get();
     for (const snapshot of snapshots.docs) await db.recursiveDelete(snapshot.ref);
   }
@@ -22,7 +23,7 @@ beforeEach(async () => {
     scheduledFor: "2030-01-02T12:00:00Z", variants: [{provider: "x", copy: "Exact approved copy"}]};
   await db.doc("socialContentVersions/fixture_v1").set(version);
   await db.doc("socialContentQualityAssessments/fixture_v1").set({businessUid: "fixture", readyToPublish: true, immutableSourceHash: "content"});
-  record = growth.cycle({businessUid: "fixture", planId: "fixture_plan", strategy: {themes: ["education"], objectives: ["Measure visits"]},
+  record = growth.cycle({businessUid: "fixture", planId: "fixture_plan", providerAccounts: {x: {providerUserId: "123", handle: "fixture"}}, strategy: {themes: ["education"], objectives: ["Measure visits"]},
     versions: [{id: "fixture_v1", record: version}], startsAt: "2030-01-01", endsAt: "2030-01-31", timeZone: "America/New_York", now});
   await store.save(record);
   approvalInput = {cycleId: record.id, businessUid: "fixture", expectedDigest: record.digest,
@@ -74,4 +75,46 @@ test("quality assessment must approve the exact source version before weekly app
   await db.doc("socialContentQualityAssessments/fixture_v1").update({immutableSourceHash: "stale"});
   await assert.rejects(store.approve(approvalInput), /quality_review/);
   assert.equal((await db.collection("socialGrowthJobs").get()).size, 0);
+});
+
+test("revocation, changed source, or withdrawn quality after claim blocks the final send transaction", async () => {
+  const {jobIds: [jobId], approvalId} = await store.approve(approvalInput);
+  const claim = await store.claim(jobId);
+  await db.doc(`socialGrowthApprovals/${approvalId}`).update({revokedAt: clock});
+  await assert.rejects(store.markSendStarted(claim), /approval_required/);
+  await db.doc(`socialGrowthApprovals/${approvalId}`).update({revokedAt: null});
+  await db.doc("socialContentVersions/fixture_v1").update({variants: [{provider: "x", copy: "Changed after claim"}]});
+  await assert.rejects(store.markSendStarted(claim), /content_changed/);
+  assert.equal((await store.get(jobId)).sendStarted, undefined);
+});
+
+test("revocation after an ambiguous create preserves read-only receipt reconciliation", async () => {
+  const {jobIds: [jobId], approvalId} = await store.approve(approvalInput);
+  const claim = await store.claim(jobId); const started = await store.markSendStarted(claim);
+  await store.attention(started, "unknown_provider_outcome");
+  await db.doc(`socialGrowthApprovals/${approvalId}`).update({revokedAt: clock});
+  assert.equal((await store.claim(jobId)).sendStarted, true);
+});
+
+test("normal persistent publisher stays paused until bounded activation and rechecks kill switch after provider identity read", async () => {
+  const {approvalId, jobIds: [jobId]} = await store.approve(approvalInput);
+  await db.doc("users/fixture").set({role: "admin"});
+  await db.doc("socialConnections/fixture/providers/x").set({environment: "production", provider: "x",
+    providerUserId: "123", handle: "fixture", status: "connected_write", tokenHealth: "healthy", writeScopesGranted: true,
+    grantedScopes: ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"]});
+  let creates = 0;
+  const publisher = createPublisher({db, project: "scaled-circle", now: () => clock,
+    credentials: async () => ({accessToken: "fixture-only", providerUserId: "123", handle: "fixture"}),
+    fetchImpl: async (_, options) => {
+      if (options.method === "POST") creates++;
+      await publisher.pause("fixture");
+      return {ok: true, json: async () => ({data: {id: "123", username: "fixture"}})};
+    }});
+  assert.deepEqual(await publisher.prepare("fixture"), {prepared: true, paused: true});
+  assert.equal((await publisher.execute(jobId)).status, "supervisor_paused");
+  await assert.rejects(publisher.activate({businessUid: "other", approvalId}));
+  await publisher.activate({businessUid: "fixture", approvalId});
+  clock = Date.parse("2030-01-02T12:00:00Z");
+  assert.equal((await publisher.execute(jobId)).status, "supervisor_paused");
+  assert.equal(creates, 0); assert.equal((await store.get(jobId)).sendStarted, undefined);
 });

@@ -4,6 +4,7 @@ const {getApps, initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const socialOperations = require("./social_operations");
 const socialOAuth = require("./social_oauth");
@@ -922,8 +923,8 @@ function safeRefreshFailure(error) {
 }
 
 async function refreshStoredXCredential({businessUid, connectionRef, connection, config,
-  clientSecret, now = Date.now()}) {
-  if (!connection?.credentialId || connection.provider !== "x") {
+  clientSecret, expectedProviderUserId = connection?.providerUserId, now = Date.now()}) {
+  if (!expectedProviderUserId || !connection?.credentialId || connection.provider !== "x") {
     throw new Error("x_connection_credential_missing");
   }
   const credentialRef = db.collection("socialConnectionCredentials").doc(connection.credentialId);
@@ -937,7 +938,7 @@ async function refreshStoredXCredential({businessUid, connectionRef, connection,
     if (!currentCredential || currentCredential.businessUid !== businessUid ||
         currentCredential.provider !== "x" ||
         currentConnection?.credentialId !== credentialRef.id ||
-        currentConnection?.providerUserId !== xFirstPublish.EXPECTED_X_ID) {
+        currentConnection?.providerUserId !== expectedProviderUserId) {
       throw new Error("x_connection_credential_missing");
     }
     const claim = socialOAuth.beginCredentialRefresh({credential: currentCredential,
@@ -948,16 +949,16 @@ async function refreshStoredXCredential({businessUid, connectionRef, connection,
     return {credential: currentCredential, connection: currentConnection,
       expectedGeneration: claim.expectedGeneration};
   });
-  const account = socialOAuth.decryptJson(claimed.credential.accountEnvelope,
-    socialOAuthEncryptionKey.value(), `${businessUid}:x:${connection.credentialId}`);
-  if (account.accountId !== xFirstPublish.EXPECTED_X_ID) throw new Error("x_account_mismatch");
-  const tokenAad = `${businessUid}:x:${account.accountId}`;
-  const storedTokens = socialOAuth.decryptJson(claimed.credential.tokenEnvelope,
-    socialOAuthEncryptionKey.value(), tokenAad);
-  let tokens;
+  let tokens, account, tokenAad;
   let rotationPersisted = false;
   let persistedGeneration = null;
   try {
+    account = socialOAuth.decryptJson(claimed.credential.accountEnvelope,
+    socialOAuthEncryptionKey.value(), `${businessUid}:x:${connection.credentialId}`);
+    if (account.accountId !== expectedProviderUserId) throw new Error("x_account_mismatch");
+    tokenAad = `${businessUid}:x:${account.accountId}`;
+    const storedTokens = socialOAuth.decryptJson(claimed.credential.tokenEnvelope,
+    socialOAuthEncryptionKey.value(), tokenAad);
     const expectedScopes = socialOAuth.exactScopeSet(claimed.connection.grantedScopes,
       xFirstPublish.X_WRITE_SCOPES);
     tokens = await socialOAuth.refreshTokens({provider: "x", tokens: storedTokens,
@@ -978,6 +979,10 @@ async function refreshStoredXCredential({businessUid, connectionRef, connection,
       ]);
       const currentCredential = credentialSnapshot.data();
       const currentConnection = connectionSnapshot.data();
+      if (currentConnection?.credentialId !== credentialRef.id ||
+          currentConnection?.providerUserId !== expectedProviderUserId) {
+        throw new Error("social_oauth_stale_refresh_generation");
+      }
       const completed = socialOAuth.completeCredentialRefresh({credential: currentCredential,
         leaseId, expectedGeneration: claimed.expectedGeneration, now: completedAt,
         expiresIn: tokens.expiresIn});
@@ -1001,11 +1006,16 @@ async function refreshStoredXCredential({businessUid, connectionRef, connection,
     rotationPersisted = true;
     if (scopeMismatch) throw new Error("social_oauth_scope_mismatch");
     const identity = await socialOAuth.readProviderIdentity({provider: "x", tokens});
-    if (identity.accountId !== xFirstPublish.EXPECTED_X_ID) {
+    if (identity.accountId !== expectedProviderUserId) {
       throw new Error("x_account_mismatch");
     }
     await db.runTransaction(async (transaction) => {
-      const credentialSnapshot = await transaction.get(credentialRef);
+      const [credentialSnapshot, connectionSnapshot] = await Promise.all([
+        transaction.get(credentialRef), transaction.get(connectionRef)]);
+      if (connectionSnapshot.data()?.credentialId !== credentialRef.id ||
+          connectionSnapshot.data()?.providerUserId !== expectedProviderUserId) {
+        throw new Error("social_oauth_stale_refresh_generation");
+      }
       if (socialOAuth.credentialGeneration(credentialSnapshot.data()) !== persistedGeneration) {
         throw new Error("social_oauth_stale_refresh_generation");
       }
@@ -1023,6 +1033,8 @@ async function refreshStoredXCredential({businessUid, connectionRef, connection,
       ]);
       const currentCredential = credentialSnapshot.data();
       const currentConnection = connectionSnapshot.data();
+      if (currentConnection?.credentialId !== credentialRef.id ||
+          currentConnection?.providerUserId !== expectedProviderUserId) return;
       if (!rotationPersisted && currentCredential?.refreshLeaseId === leaseId) {
         const failed = socialOAuth.failCredentialRefresh({credential: currentCredential,
           leaseId, expectedGeneration: claimed.expectedGeneration, now: Date.now()});
@@ -2851,13 +2863,13 @@ exports.syncMetaSocialReadOnlyPerformanceV1 = onCall(
   syncSocialReadOnlyPerformanceHandler("meta", providerSecretBinding("meta").secret),
 );
 
-// Candidate planning endpoints. No provider transport or scheduled publisher is
-// registered until persistent publication authority has been reviewed.
+// Owner-scoped planning and exact immutable weekly approval. Publishing needs
+// a separate, explicitly activated bounded Social Supervisor allowance.
 const socialGrowthCycle = require("./social_growth_cycle");
 function growthPlanningCallable(handler) {
   return onCall({enforceAppCheck: false, maxInstances: 2}, async (request) => {
     const business = await requireSocialOperationsBusiness(request);
-    if (process.env.GCLOUD_PROJECT !== "scaledcircle-staging") {
+    if (!["scaledcircle-staging", "scaled-circle"].includes(process.env.GCLOUD_PROJECT)) {
       throw new HttpsError("failed-precondition", "Growth cycle planning is awaiting release review.");
     }
     try { return await handler(business.uid, request.data || {}); }
@@ -2876,7 +2888,13 @@ exports.createSocialGrowthCycleV1 = growthPlanningCallable(async (businessUid, d
     if (snapshot.data()?.planId !== data.planId) throw new Error("growth_plan_mismatch");
     return {id, record: snapshot.data()};
   }));
-  const record = socialGrowthCycle.cycle({businessUid, planId: data.planId, versions,
+  const providerAccounts = {};
+  if (versions.some(version => version.record.variants?.some(variant => variant.provider === "x"))) {
+    const connection = (await db.doc(`socialConnections/${businessUid}/providers/x`).get()).data();
+    if (!connection?.providerUserId || !connection?.handle) throw new Error("growth_account_required");
+    providerAccounts.x = {providerUserId: connection.providerUserId, handle: connection.handle};
+  }
+  const record = socialGrowthCycle.cycle({businessUid, planId: data.planId, versions, providerAccounts,
     strategy: data.strategy, startsAt: data.startsAt, endsAt: data.endsAt, timeZone: data.timeZone,
     mode: "approval_required"});
   const saved = await socialGrowthCycle.createStore(db).save(record);
@@ -2893,4 +2911,67 @@ exports.getSocialGrowthCycleV1 = growthPlanningCallable(async (businessUid, data
   const snapshot = await db.collection("socialGrowthCycles").doc(data.cycleId).get();
   if (snapshot.data()?.businessUid !== businessUid) throw new Error("growth_cycle_not_owned");
   return {cycle: snapshot.data(), externalPublishingEnabled: false};
+});
+
+const socialGrowthPublisher = require("./social_growth_publisher");
+function normalSocialPublisher() {
+  return socialGrowthPublisher.createPublisher({db, project: process.env.GCLOUD_PROJECT,
+    credentials: async (job, authority) => {
+      const connectionRef = db.doc(`socialConnections/${job.businessUid}/providers/x`);
+      const connection = (await connectionRef.get()).data();
+      if (connection?.providerUserId !== authority.providerUserId || connection?.handle !== authority.handle) {
+        throw new Error("growth_identity_mismatch");
+      }
+      const config = socialOAuth.validateProviderConfig({...(await providerConfigRef("x").get()).data(), provider: "x"});
+      if (runtimeEnvironment() === "production" && (config.clientId !== PRODUCTION_X_PROVIDER_CONFIG.clientId ||
+          config.redirectUri !== PRODUCTION_X_PROVIDER_CONFIG.redirectUri)) throw new Error("growth_environment_mismatch");
+      const refreshed = await refreshStoredXCredential({businessUid: job.businessUid, connectionRef,
+        connection, config, expectedProviderUserId: authority.providerUserId, clientSecret: xSocialClientSecret.value()});
+      return {accessToken: refreshed.tokens.accessToken, providerUserId: authority.providerUserId, handle: authority.handle};
+    }});
+}
+
+// Preparing/pausing has no provider effects. Activation requires an existing
+// exact owner approval; it does not approve or regenerate any content.
+exports.setSocialGrowthPublishingStateV1 = growthPlanningCallable(async (businessUid, data) => {
+  const publisher = normalSocialPublisher();
+  if (data.action === "prepare") return publisher.prepare(businessUid);
+  if (data.action === "pause") return publisher.pause(businessUid);
+  if (data.action === "activate") return publisher.activate({businessUid, approvalId: data.approvalId});
+  throw new Error("growth_action_invalid");
+});
+
+exports.runSocialGrowthPublisherV1 = onSchedule({schedule: "every 1 minutes", timeZone: "UTC",
+  maxInstances: 1, timeoutSeconds: 540, retryCount: 0,
+  secrets: [socialOAuthEncryptionKey, xSocialClientSecret]}, async () => {
+  const publisher = normalSocialPublisher();
+  // This small bounded release handles only explicitly activated weekly plans.
+  // No job discovery can create a publication outside its Supervisor allowance.
+  const states = await db.collection("socialPublishingAuthorities")
+    .where("externalPublishingEnabled", "==", true).limit(100).get();
+  for (const snapshot of states.docs) {
+    const state = snapshot.data();
+    if (!Array.isArray(state.jobIds) || state.jobIds.length > 3 || state.businessUid !== snapshot.id) continue;
+    for (const id of state.jobIds) {
+      if (!/^social_growth_job_[a-f0-9]{64}$/.test(id)) continue;
+      const job = (await db.doc(`socialGrowthJobs/${id}`).get()).data();
+      // Unknown outcomes are held for explicit read-only reconciliation; the
+      // minute scheduler must not repeatedly spend provider read quota.
+      if (!job || job.sendStarted || ["published", "canceled"].includes(job.status) ||
+          Date.parse(job.scheduledFor) > Date.now()) continue;
+      try { await publisher.execute(id); }
+      catch (_) { console.warn("social_growth_job_held"); }
+    }
+  }
+});
+
+exports.reconcileSocialGrowthPublicationV1 = onCall({enforceAppCheck: false, maxInstances: 2,
+  secrets: [socialOAuthEncryptionKey, xSocialClientSecret]}, async request => {
+  const business = await requireSocialOperationsBusiness(request);
+  const id = request.data?.jobId;
+  if (!/^social_growth_job_[a-f0-9]{64}$/.test(id || "")) throw new HttpsError("invalid-argument", "Choose a publication.");
+  const job = (await db.doc(`socialGrowthJobs/${id}`).get()).data();
+  if (job?.businessUid !== business.uid || job.sendStarted !== true) throw new HttpsError("failed-precondition", "This publication is unavailable for review.");
+  try { const result = await normalSocialPublisher().execute(id); return {status: result.status}; }
+  catch (_) { throw new HttpsError("failed-precondition", "Publication review needs attention."); }
 });
