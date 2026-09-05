@@ -2870,7 +2870,8 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
         }
         const baseline = await require("./social_meta_baseline").collect({surface,
           account: {...account, linkedHandle: config.metaDogfood.instagramUsername,
-            pageName: config.metaDogfood.pageName}, tokens});
+            pageName: config.metaDogfood.pageName}, tokens,
+          diagnostic: surface === "facebook" ? entry => require("firebase-functions/logger").warn("Facebook baseline Graph failure", entry) : undefined});
         const snapshotRef = db.collection("socialPerformanceSnapshots").doc(
           `meta_baseline_${socialOAuth.digest({businessUid: business.uid, baseline})}`);
         await db.runTransaction(async (tx) => {
@@ -2939,6 +2940,10 @@ function syncSocialReadOnlyPerformanceHandler(expectedProvider, providerSecretPa
       };
     } catch (error) {
       if (provider === "meta" && config.metaDogfood) {
+        if (surface === "facebook") require("firebase-functions/logger").warn("Facebook baseline execution failed", {
+          provider: surface, pageId: config.metaDogfood.pageId,
+          reason: /^meta_baseline_[a-z_0-9]+$/.test(error.message || "") ? error.message : "execution_error",
+        });
         // Missing metrics, throttling or a stale sync never invalidate a newer connection.
         await db.runTransaction(async tx => {
           const current = (await tx.get(connectionRef)).data();

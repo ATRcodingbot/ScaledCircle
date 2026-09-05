@@ -37,3 +37,23 @@ test("Wrong provider identity stops before baseline metric requests",async()=>{
 test("Authorization failure is not disguised as an empty successful baseline",async()=>{
   await assert.rejects(collect({surface:"facebook",account,tokens,fetchImpl:async()=>({ok:false,status:403,json:async()=>({error:{code:200}})})}),/authority_or_rate_limit/);
 });
+
+test("Facebook diagnostics preserve Graph classification while redacting credentials",async()=>{
+  const diagnostics=[];
+  await assert.rejects(collect({surface:"facebook",account,tokens,diagnostic:entry=>diagnostics.push(entry),
+    fetchImpl:async()=>({ok:false,status:403,json:async()=>({error:{code:200,error_subcode:123,
+      type:"OAuthException",message:"Denied fixture-page fixture-user https://graph.facebook.com/?access_token=hidden"}})})}),/authority_or_rate_limit/);
+  assert.equal(diagnostics.length,1);
+  assert.equal(diagnostics[0].httpStatus,403);assert.equal(diagnostics[0].code,200);
+  assert.equal(diagnostics[0].subcode,123);assert.equal(diagnostics[0].type,"OAuthException");
+  assert.equal(diagnostics[0].path,"/123");
+  assert.ok(!JSON.stringify(diagnostics).includes("fixture-"));
+  assert.ok(!JSON.stringify(diagnostics).includes("hidden"));
+});
+
+test("Instagram error handling emits no Facebook diagnostics",async()=>{
+  let diagnostics=0;
+  await assert.rejects(collect({surface:"instagram",account,tokens,diagnostic:()=>diagnostics++,
+    fetchImpl:async()=>({ok:false,status:403,json:async()=>({error:{code:200}})})}));
+  assert.equal(diagnostics,0);
+});

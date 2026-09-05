@@ -18,7 +18,7 @@ function insight(body, metric, source) {
   return {...measure(item.values.at(-1).value, source), period: item.period || null,
     providerEndTime: item.values.at(-1).end_time || null};
 }
-async function collect({surface, account, tokens, fetchImpl = globalThis.fetch, now = Date.now()}) {
+async function collect({surface, account, tokens, fetchImpl = globalThis.fetch, now = Date.now(), diagnostic = () => {}}) {
   const ig = surface === "instagram";
   if (!["facebook", "instagram"].includes(surface) || !/^\d+$/.test(account?.accountId || "") ||
       (ig && !/^\d+$/.test(account.linkedAccountId || ""))) throw Error("meta_baseline_identity_required");
@@ -36,6 +36,20 @@ async function collect({surface, account, tokens, fetchImpl = globalThis.fetch, 
     const body = await response.json();
     if (!response.ok || body.error) {
       const code = count(body.error?.code);
+      if (!ig) {
+        let message = typeof body.error?.message === "string" ? body.error.message : "Provider response unavailable";
+        for (const secret of Object.values(tokens).filter(value => typeof value === "string" && value.length)) {
+          message = message.split(secret).join("[REDACTED]");
+        }
+        message = message.replace(/https?:\/\/\S+/gi, "[URL REDACTED]")
+          .replace(/(?:Bearer\s+|access_token[=:]\s*)[^\s,;]+/gi, "[REDACTED]")
+          .replace(/\bEA[A-Za-z0-9_-]{20,}\b/g, "[REDACTED]").slice(0, 600);
+        diagnostic({event: "facebook_baseline_graph_error", providerAccountId: id,
+          path, apiVersion: VERSION, metric: params.metric || null,
+          httpStatus: response.status, code, subcode: count(body.error?.error_subcode),
+          type: typeof body.error?.type === "string" && /^[A-Za-z_]{1,80}$/.test(body.error.type) ? body.error.type : null,
+          providerMessage: message});
+      }
       if ([190, 10, 200].includes(code) || response.status === 401 || response.status === 403 || response.status === 429) {
         throw Error(`meta_baseline_authority_or_rate_limit_${code || response.status}`);
       }
