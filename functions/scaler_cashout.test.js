@@ -7,6 +7,20 @@ const core = require("./scaler_cashout");
 const adapter = require("./scaler_cashout_stripe");
 const {runtime, account, mockStripe} = require("./test_fixtures/cashout");
 
+test("existing payout reconciliation sends connected account as SDK request options", async () => {
+  const stripe = new Stripe("sk_test_offlinefixture");
+  const observed = [];
+  stripe.payouts._makeRequest = async (method, path, params, options) => {
+    observed.push({method, path, params, options});
+    return {id: "po_fixture", status: "failed"};
+  };
+  const provider = adapter.createStripeProvider({stripe, runtime});
+  const receipt = await provider.findPayout({payoutId: "po_fixture", accountId: "acct_fixture"});
+  assert.equal(receipt.status, "failed");
+  assert.deepEqual(observed, [{method: "GET", path: "/v1/payouts/po_fixture",
+    params: {}, options: {stripeAccount: "acct_fixture"}}]);
+});
+
 test("TEST runtime refuses live keys, unknown modes, production projects and disabled enablement", () => {
   core.assertTestRuntime(runtime());
   for (const patch of [{secretKey: "sk_live_offlinefixture"}, {secretKey: "pk_test_fixture"},

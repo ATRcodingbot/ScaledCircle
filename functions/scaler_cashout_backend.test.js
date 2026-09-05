@@ -98,6 +98,36 @@ test("ambiguous transfer and payout recover by receipt before retry", async () =
   assert.equal((await balance()).availableCents, 500);
 });
 
+test("failed payout reconciliation preserves one reservation and ignores stale success webhook payloads", async () => {
+  mock.controls.payoutStatus = "failed";
+  const result = await service.request(uid, request, record());
+  const payout = [...mock.payouts.values()][0]; payout.failure_code = "insufficient_funds";
+  const stale = await store.claim(result.operationId, uid);
+  clock += 130000;
+  await service.run(result.operationId, uid, {readOnly: true});
+  await assert.rejects(store.save(stale, {state: "completed"}, "paid"), /stale_claim/);
+  const sdk = new Stripe("sk_test_offlinefixture"), secret = "whsec_offlinefixture";
+  const payload = JSON.stringify({id: "evt_failedfixture", type: "payout.paid", livemode: false,
+    account: "acct_fixture", data: {object: {status: "paid", metadata: {cashoutId: result.operationId}}}});
+  const signature = sdk.webhooks.generateTestHeaderString({payload, secret});
+  const call = () => handleWebhook({stripe:sdk, store, service, runtime, secret, rawBody:Buffer.from(payload), signature});
+  const count = mock.calls.length;
+  await call(); assert.equal((await call()).duplicate, true);
+  const op = await store.get(result.operationId, uid);
+  assert.equal(op.state, "payout_failed"); assert.equal(op.payoutFailureCode, "insufficient_funds");
+  assert.equal(op.payoutId, payout.id); assert.equal(op.transferId, [...mock.transfers.values()][0].id);
+  assert.equal(mock.calls.length, count); assert.equal(mock.transfers.size, 1); assert.equal(mock.payouts.size, 1);
+  assert.equal((await db.collection("financialOperations").get()).size, 1);
+  assert.equal((await balance()).availableCents, 500); assert.equal((await balance()).pendingCents, 500);
+  assert.equal((await balance()).paidCents, 0);
+  await assert.rejects(service.request(uid, {...request, requestId:"fixture_request_0002"}, record()), /already_pending/);
+  const restricted = core.createService({store,provider,runtime:()=>({...runtime(),reconcileOnly:true,operationId:op.id}),now:()=>clock});
+  await assert.rejects(restricted.run(op.id,uid,{retryPayout:true}), /reconciliation_only/);
+  await assert.rejects(restricted.run("cashout_other",uid,{readOnly:true}), /reconciliation_only/);
+  await restricted.run(op.id,uid,{readOnly:true});
+  assert.equal(mock.calls.length,count);
+});
+
 test("failed payout retry creates only a new payout attempt; no second transfer or deduction", async () => {
   mock.controls.payoutStatus = "failed";
   const result = await service.request(uid, request, record());

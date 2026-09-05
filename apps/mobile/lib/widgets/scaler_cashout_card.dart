@@ -127,7 +127,10 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
       'pending' => 'Cash-out processing',
       'completed' => 'Completed',
       'failed' => 'Cash-out failed',
-      'needs_attention' => 'Cash-out awaiting confirmation',
+      'needs_attention' =>
+        op is Map && op['payoutFailed'] == true
+            ? 'Cash-out failed. Funds remain reserved.'
+            : 'Cash-out awaiting confirmation',
       _ => null,
     };
     return Card(
@@ -188,12 +191,12 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
                     : () => _work(() async {
                         await _service.reconcile(
                           (op as Map)['operationId'] as String,
-                          retry: true,
+                          retry: false,
                         );
                         final data = await _service.status();
                         if (mounted) setState(() => _data = data);
                       }),
-                child: const Text('Try again'),
+                child: const Text('Check status'),
               ),
             TextButton(
               onPressed: _busy ? null : _load,

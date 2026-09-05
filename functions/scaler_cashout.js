@@ -41,6 +41,7 @@ function eligibility(account, expectedId) {
 
 function projection(op) {
   return {operationId: op.id, amountCents: op.amountCents, mode: op.mode,
+    payoutFailed: op.state === "payout_failed",
     status: op.state === "completed" ? "completed" :
       ["failed", "reversed"].includes(op.state) ? "failed" :
         op.state === "payout_failed" || op.state === "attention" ? "needs_attention" : "pending"};
@@ -202,6 +203,8 @@ function createService({store, provider, runtime, now = Date.now}) {
   const guard = () => assertTestRuntime(runtime());
   async function run(key, uid, {readOnly = false, retryPayout = false} = {}) {
     guard();
+    if (runtime().reconcileOnly === true && (!readOnly || retryPayout ||
+        key !== runtime().operationId)) fail("cashout_reconciliation_only");
     let op = await store.claim(key, uid, readOnly);
     if (!op) {
       const current = await store.get(key, uid);
@@ -238,7 +241,7 @@ function createService({store, provider, runtime, now = Date.now}) {
       }
       if (payout && ["failed", "canceled"].includes(payout.status) && retryPayout && !readOnly && op.settled !== true) {
         if (op.payoutAttempt >= 3) fail("cashout_retry_limit");
-        await save({payoutId: null, payoutAttempt: op.payoutAttempt + 1, payoutStartedAt: null});
+          await save({payoutId: null, payoutAttempt: op.payoutAttempt + 1, payoutStartedAt: null, payoutFailureCode: null});
         payout = null;
       }
       if (!payout && !readOnly && op.settled !== true) {
@@ -250,7 +253,8 @@ function createService({store, provider, runtime, now = Date.now}) {
         provider.verifyPayout(payout, op);
         const state = payout.status === "paid" ? "completed" :
           ["failed", "canceled"].includes(payout.status) ? "payout_failed" : "payout_pending";
-        await save({state, payoutId: payout.id, leaseUntil: 0},
+          await save({state, payoutId: payout.id, leaseUntil: 0,
+            payoutFailureCode: state === "payout_failed" ? payout.failure_code || "unspecified" : null},
           state === "completed" && op.settled !== true ? "paid" : "none");
       } else await save({leaseUntil: 0});
       return projection(op);

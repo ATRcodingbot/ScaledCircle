@@ -13,6 +13,7 @@ class FakeCashout implements ScalerCashoutService {
   final List<String> ids = [];
   int requests = 0;
   bool loseResponse = false;
+  final List<bool> reconciliationRetries = [];
   String url = 'https://connect.stripe.com/setup/fixture';
   @override
   Future<Map<String, dynamic>> status() async => data;
@@ -37,10 +38,41 @@ class FakeCashout implements ScalerCashoutService {
   Future<Map<String, dynamic>> reconcile(
     String operationId, {
     bool retry = false,
-  }) async => {'mode': 'test'};
+  }) async {
+    reconciliationRetries.add(retry);
+    return {'mode': 'test'};
+  }
 }
 
 void main() {
+  testWidgets(
+    'failed payout stays reserved and checking status never retries provider creation',
+    (tester) async {
+      final service = FakeCashout()
+        ..data['operation'] = {
+          'operationId': 'fixture',
+          'status': 'needs_attention',
+          'payoutFailed': true,
+        };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ScalerCashoutCard(service: service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Cash-out failed. Funds remain reserved.'),
+        findsOneWidget,
+      );
+      expect(find.text('Payouts ready'), findsOneWidget);
+      expect(find.textContaining('Payouts need attention'), findsNothing);
+      expect(find.text('Cash out'), findsNothing);
+      await tester.tap(find.text('Check status'));
+      await tester.pumpAndSettle();
+      expect(service.reconciliationRetries, [false]);
+      expect(service.requests, 0);
+    },
+  );
   test('amount uses integer cents and rejects invalid or excessive values', () {
     expect(ScalerCashoutService.parseCents('5.01'), 501);
     for (final value in ['0', '-1', '1.001', '1e2', '100.01', 'NaN']) {

@@ -65,7 +65,7 @@ function createStripeProvider({stripe, runtime}) {
     },
     async findPayout(op) {
       guard();
-      if (op.payoutId) return stripe.payouts.retrieve(op.payoutId, options(op));
+      if (op.payoutId) return stripe.payouts.retrieve(op.payoutId, {}, options(op));
       return unique(await stripe.payouts.list({limit: 100,
         created: {gte: Math.floor(op.createdAt / 1000) - 60}}, options(op)),
       (item) => item.metadata?.cashoutId === op.id && item.metadata?.attempt === String(op.payoutAttempt));
