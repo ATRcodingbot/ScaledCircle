@@ -26,6 +26,10 @@ class IpaGateTest(unittest.TestCase):
                              b'https://us-east1-scaled-circle.cloudfunctions.net/socialOAuthXCallbackV1')
             if bad == 'staging':
                 archive.writestr('Symbols/extra', 'scaledcircle-staging'.encode('utf-16le'))
+            if bad == 'path':
+                archive.writestr('../outside', 'invalid')
+            if bad == 'duplicate':
+                archive.writestr('Payload/Runner.app/Info.plist', plistlib.dumps(info))
 
     def test_gate_rejects_contamination_and_mismatches(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -34,7 +38,7 @@ class IpaGateTest(unittest.TestCase):
             self.assertEqual(inspect(path, '1.0.0', '1')['content_gate'], 'PASS')
             with self.assertRaises(ValueError):
                 inspect(path, '1.0.0', '2')
-            for bad in ['permission', 'firebase', 'staging']:
+            for bad in ['permission', 'firebase', 'staging', 'path', 'duplicate']:
                 self.fixture(path, bad)
                 with self.assertRaises(ValueError):
                     inspect(path, '1.0.0', '1')

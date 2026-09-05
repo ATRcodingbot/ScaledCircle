@@ -10,6 +10,10 @@ import zipfile
 def inspect(path, version, build):
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError('Ambiguous duplicate archive entries')
+        if any(n.startswith('/') or '..' in n.split('/') for n in names):
+            raise ValueError('Unsafe archive entry path')
         roots = [n[:-10] for n in names if n.startswith('Payload/')
                  and n.count('/') == 2 and n.endswith('.app/Info.plist')]
         if len(roots) != 1:
