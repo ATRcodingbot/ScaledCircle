@@ -118,3 +118,36 @@ test("normal persistent publisher stays paused until bounded activation and rech
   assert.equal((await publisher.execute(jobId)).status, "supervisor_paused");
   assert.equal(creates, 0); assert.equal((await store.get(jobId)).sendStarted, undefined);
 });
+
+test("normal activated publisher creates once under concurrency and stores one verified receipt", async () => {
+  const {approvalId, jobIds: [jobId]} = await store.approve(approvalInput);
+  await db.doc("users/fixture").set({role: "admin"});
+  const connectionRef = db.doc("socialConnections/fixture/providers/x");
+  await connectionRef.set({environment: "production", provider: "x", providerUserId: "999", handle: "fixture",
+    status: "connected_write", tokenHealth: "healthy", writeScopesGranted: true,
+    grantedScopes: ["users.read", "tweet.read", "offline.access", "tweet.write", "media.write"]});
+  let creates = 0;
+  const publisher = createPublisher({db, project: "scaled-circle", now: () => clock,
+    credentials: async () => ({accessToken: "fixture-only", providerUserId: "123", handle: "fixture"}),
+    fetchImpl: async (url, options) => {
+      if (url.includes("users/me")) return {ok: true, json: async () => ({data: {id: "123", username: "fixture"}})};
+      if (options.method === "POST") {
+        creates++; assert.deepEqual(JSON.parse(options.body), {text: "Exact approved copy"});
+        return {ok: true, json: async () => ({data: {id: "456"}})};
+      }
+      return {ok: true, json: async () => ({data: {id: "456", author_id: "123",
+        text: "Exact approved copy", created_at: "2030-01-02T12:00:00Z"}})};
+    }});
+  await publisher.prepare("fixture");
+  await assert.rejects(publisher.activate({businessUid: "fixture", approvalId}), /identity_mismatch/);
+  await connectionRef.update({providerUserId: "123"});
+  await publisher.activate({businessUid: "fixture", approvalId});
+  clock = Date.parse("2030-01-02T12:00:00Z");
+  await Promise.all([1, 2, 3].map(() => publisher.execute(jobId)));
+  await publisher.execute(jobId);
+  assert.equal(creates, 1);
+  assert.equal((await store.get(jobId)).status, "published");
+  assert.equal((await db.doc(`socialGrowthJobs/${jobId}`).collection("receipts").get()).size, 1);
+  assert.equal((await db.doc(`socialGrowthJobs/${jobId}/receipts/publication`).get()).data().providerPostUrl,
+    "https://x.com/fixture/status/456");
+});
