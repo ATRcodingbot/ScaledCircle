@@ -25,6 +25,17 @@ before(async () => {
 });
 after(async () => environment?.cleanup());
 const db = (uid) => environment.authenticatedContext(uid, {email_verified: true}).firestore();
+
+test('Scaler Privacy inspection is owner-only, exact-version and read-only',async()=>{
+ const path='legalConsents/scaler_privacy_privacy-2026-08-v1';
+ await assertSucceeds(db('scaler').doc(path).get());
+ await assertFails(db('other').doc(path).get());
+ await assertFails(db('business').doc('legalConsents/business_privacy_privacy-2026-08-v1').get());
+ await assertFails(db('scaler').doc('legalConsents/scaler_privacy_unknown').get());
+ await assertFails(db('scaler').collection('legalConsents').get());
+ await assertFails(db('scaler').doc(path).set({uid:'scaler',agreementType:'privacy'}));
+ await assertFails(environment.unauthenticatedContext().firestore().doc(path).get());
+});
 test("intended actors can read QA; unrelated Scaler cannot get or list it", async () => {
   await assertSucceeds(db("scaler").doc(`campaigns/${qaId}`).get());
   await assertSucceeds(db("business").doc(`campaigns/${qaId}`).get());

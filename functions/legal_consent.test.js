@@ -62,3 +62,17 @@ test("current consent status requires exact versions and reports structured miss
       error.missing[0].version === AGREEMENTS.terms,
   );
 });
+
+test('Privacy-only acknowledgment preserves existing Terms and Scaler Work records',async()=>{
+ const records=new Map([['scaler_terms_'+AGREEMENTS.terms,{acceptedAt:'OLD_TERMS'}],
+  ['scaler_scaler_work_'+AGREEMENTS.scaler_work,{acceptedAt:'OLD_WORK'}]]);
+ const db={collection:()=>({doc:id=>({id})}),runTransaction:async work=>work({
+  get:async ref=>({exists:records.has(ref.id),data:()=>records.get(ref.id)}),
+  create:(ref,value)=>records.set(ref.id,value)})};
+ const service=createLegalConsentService({db,FieldValue:{serverTimestamp:()=> 'SERVER_NOW'}});
+ await service.accept({uid:'scaler',role:'scaler',data:{agreementTypes:['privacy'],source:'authenticated_legal'}});
+ assert.equal(records.size,3);
+ assert.deepEqual(records.get('scaler_terms_'+AGREEMENTS.terms),{acceptedAt:'OLD_TERMS'});
+ assert.deepEqual(records.get('scaler_scaler_work_'+AGREEMENTS.scaler_work),{acceptedAt:'OLD_WORK'});
+ assert.equal(records.get('scaler_privacy_'+AGREEMENTS.privacy).acceptedAt,'SERVER_NOW');
+});

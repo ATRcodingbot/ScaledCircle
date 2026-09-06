@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'screens/auth/staging_privacy_screen.dart';
 
 import 'config/app_environment.dart';
 import 'bootstrap/ios_startup_gate.dart';
@@ -143,6 +144,9 @@ class ScaledCircleApp extends StatelessWidget {
         settings: settings,
         builder: (_) => const ScalerFunnelScreen(),
       );
+    }
+    if (route?.path == stagingPrivacyRoute) {
+      return MaterialPageRoute(settings: settings, builder: (_) => const StagingPrivacyScreen());
     }
     if (LegalDocumentKind.fromPath(route?.path) case final legalKind?) {
       return MaterialPageRoute(

@@ -3,6 +3,14 @@ rules_version = '2';
 service cloud.firestore {
 
   match /databases/{database}/documents {
+    // Existing Scalers can inspect only their current Privacy acknowledgment.
+    // Creation remains exclusively owned by recordLegalConsent.
+    match /legalConsents/{id} {
+      allow get: if isSignedIn()
+        && id == request.auth.uid + '_privacy_privacy-2026-08-v1'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler';
+      allow list, write: if false;
+    }
     // Staging-only reserved physical-certification namespace. Authority is
     // provisioned by trusted tooling; clients cannot create or edit it.
     match /internalCertificationAuthorities/{id} {
