@@ -19,7 +19,7 @@ test("Meta certification bundle has no activation surface and only read-only con
  assert.match(source,/providerCreatesEnabled: false/);
  assert.doesNotMatch(source,/META_SOCIAL_APP_SECRET|X_SOCIAL_CLIENT_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET/);
  const endpoints=JSON.parse(execFileSync(process.execPath,["-e",`const e=require(${JSON.stringify(output)}); console.log(JSON.stringify(Object.fromEntries(Object.entries(e).map(([k,v])=>[k,v.__endpoint?.secretEnvironmentVariables||[]]))));`],{encoding:"utf8"}));
- assert.deepEqual(Object.keys(endpoints).sort(),["inspectMetaGrowthRuntimeV1","reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1","runMetaGrowthPublisherV1"]);
+ assert.deepEqual(Object.keys(endpoints).sort(),["inspectMetaGrowthRuntimeV1","reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1","runMetaGrowthPublisherV1","setMetaGrowthPublishingStateV1"]);
  for(const [name,secrets] of Object.entries(endpoints))assert.deepEqual(secrets.map(s=>s.key),
   ["reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1"].includes(name)?["SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY"]:[]);
 });
@@ -118,6 +118,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "runMetaGrowthPublisherV1",
     "runSocialGrowthMeasurementsV1",
     "runSocialGrowthPublisherV1",
+    "setMetaGrowthPublishingStateV1",
     "setSocialGrowthPublishingStateV1",
     "socialOAuthCallbackV1",
     "socialOAuthMetaCallbackV1",

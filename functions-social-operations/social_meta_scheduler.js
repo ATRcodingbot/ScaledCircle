@@ -18,9 +18,16 @@ async function run({db, publisher, businessUid, now=Date.now()}) {
         if(Date.parse(job.scheduledFor)>now) {results.push({jobId:job.id,status:"scheduled"});continue;}
         // Hold ambiguous prior attempts for deliberate reconciliation rather
         // than spending provider quota every minute or guessing a retry.
-        if((await snapshot.ref.collection("providerSteps").limit(1).get()).size) {
+        const prior=await snapshot.ref.collection("providerSteps").limit(20).get();
+        const records=prior.docs.map(item=>item.data());
+        if(records.some(step=>!step.receipt && (!step.observedProviderId || step.generation>=3))) {
           results.push({jobId:job.id,status:"reconciliation_required"});continue;
         }
+        if(records.some(step=>!step.receipt && step.leaseUntil>now)) {
+          results.push({jobId:job.id,status:"waiting_for_readiness"});continue;
+        }
+        // Known IDs are reconciled by executeStep before any subsequent step.
+        // Three durable generations bound polling; unknown IDs never resend.
         const result=await publisher.execute(job.id);
         results.push({jobId:job.id,status:result.status});
       } catch (_) {

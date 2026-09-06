@@ -3145,6 +3145,16 @@ async function inspectMetaScheduler(businessUid) {
   return require("./social_meta_scheduler").run({db,publisher:normalMetaPublisher(),businessUid});
 }
 exports.inspectMetaGrowthRuntimeV1=growthPlanningCallable(async businessUid=>inspectMetaScheduler(businessUid));
+exports.setMetaGrowthPublishingStateV1=growthPlanningCallable(async(businessUid,data)=>{
+  const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
+  metaConnection.authorize(config,businessUid);
+  if(!["facebook","instagram"].includes(data.provider))throw Error("meta_provider_required");
+  const publisher=normalMetaPublisher();
+  if(data.action==="prepare")return publisher.prepare(businessUid,data.provider);
+  if(data.action==="pause")return publisher.pause(businessUid,data.provider);
+  // A caller cannot turn the certification release into a publishing release.
+  throw Error("meta_deployment_creates_disabled");
+});
 exports.reconcileMetaGrowthPublicationV1=onCall({enforceAppCheck:false,maxInstances:2,
   secrets:[socialOAuthEncryptionKey]},async request=>{
   const business=await requireSocialOperationsBusiness(request);

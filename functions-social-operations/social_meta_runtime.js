@@ -12,14 +12,17 @@ const {createAdapter}=require("./social_meta_transport");
 function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false}) {
  const environment=project==="scaled-circle"?"production":project==="scaledcircle-staging"?"staging":null;
  if(!environment)throw Error("meta_runtime_unavailable");
- const stateRef=uid=>db.doc(`socialPublishingAuthorities/${uid}/providers/meta`);
+ const stateRef=(uid,provider)=>{
+  if(!["facebook","instagram"].includes(provider))throw Error("meta_provider_required");
+  return db.doc(`socialPublishingAuthorities/${uid}/providers/${provider}`);
+ };
  async function context(tx,job,action) {
   if(!["facebook","instagram"].includes(job.provider))throw Error("meta_provider_required");
   const read=ref=>tx?tx.get(ref):ref.get();
   const variant=job.binding?.variants?.find(v=>v.provider===job.provider);
   const refs=[db.doc(`socialGrowthApprovals/${job.approvalId}`),
    db.doc(`socialConnections/${job.businessUid}/providers/${job.provider}`),
-   db.doc(`socialProviderConfigs/${environment}_meta`),stateRef(job.businessUid),
+   db.doc(`socialProviderConfigs/${environment}_meta`),stateRef(job.businessUid,job.provider),
    db.doc(`agentHealth/${job.businessUid}`),db.doc(`socialContentVersions/${job.versionId}`),
    db.doc(`socialContentQualityAssessments/${job.versionId}`)];
   const [a,c,p,s,h,v,q]=(await Promise.all(refs.map(read))).map(x=>x.data());
@@ -36,9 +39,9 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    if(a.revokedAt!=null||h?.killSwitchActive===true)throw Error("meta_supervisor_paused");
    if(action==="create") {
    if(a.revokedAt!=null||s?.schemaVersion!=="MetaPublisherAllowanceV1"||s.businessUid!==job.businessUid||
-    s.environment!==environment||s.approvalId!==job.approvalId||s.mode!=="approval_required"||
+    s.environment!==environment||s.provider!==job.provider||s.approvalId!==job.approvalId||s.mode!=="approval_required"||
     s.externalPublishingEnabled!==true||s.killSwitchActive!==false||h?.killSwitchActive===true||
-    !Array.isArray(s.jobIds)||s.jobIds.length>6||!s.jobIds.includes(job.id))throw Error("meta_supervisor_paused");
+    !Array.isArray(s.jobIds)||s.jobIds.length>3||!s.jobIds.includes(job.id))throw Error("meta_supervisor_paused");
    if(!Number.isFinite(Date.parse(job.scheduledFor))||now()<Date.parse(job.scheduledFor)||
     now()>Date.parse(job.scheduledFor)+15*60000)throw Error("meta_schedule_closed");
    }
@@ -58,31 +61,31 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    if(!job||job.id!==jobId)throw Error("meta_job_missing");
    const ctx=await context(null,job,"activate");
    const plan=meta.prepare({job,...ctx});
-   const state=(await stateRef(job.businessUid).get()).data();
+   const state=(await stateRef(job.businessUid,job.provider).get()).data();
    return {jobId,provider:job.provider,bindingHash:job.bindingHash,
     scheduledFor:job.scheduledFor,providerBoundary:"validated_request_not_sent",
     deploymentAllowsCreates:providerCreatesEnabled===true,
     allowanceEnabled:state?.externalPublishingEnabled===true&&state?.killSwitchActive===false,
     maximumEffects:plan.maximumEffects,providerCreates:0};
   },
-  async prepare(uid) {
+  async prepare(uid,provider) {
    return db.runTransaction(async tx=>{
-    const ref=stateRef(uid),prior=await tx.get(ref);
+    const ref=stateRef(uid,provider),prior=await tx.get(ref);
     if(prior.exists)return {prepared:true,enabled:prior.data().externalPublishingEnabled===true};
-    tx.create(ref,{schemaVersion:"MetaPublisherAllowanceV1",businessUid:uid,environment,
+    tx.create(ref,{schemaVersion:"MetaPublisherAllowanceV1",businessUid:uid,provider,environment,
      mode:"approval_required",externalPublishingEnabled:false,killSwitchActive:true,jobIds:[],approvalId:null});
     return {prepared:true,enabled:false};
    });
   },
-  async activate(uid,approvalId) {
+  async activate(uid,approvalId,provider) {
    if(!providerCreatesEnabled)throw Error("meta_deployment_creates_disabled");
    return db.runTransaction(async tx=>{
-    const ref=stateRef(uid),state=(await tx.get(ref)).data();
+    const ref=stateRef(uid,provider),state=(await tx.get(ref)).data();
     const approved=(await tx.get(db.doc(`socialGrowthApprovals/${approvalId}`))).data();
-    if(state?.businessUid!==uid||state.schemaVersion!=="MetaPublisherAllowanceV1"||
+    if(state?.businessUid!==uid||state.provider!==provider||state.schemaVersion!=="MetaPublisherAllowanceV1"||
      !approved||approved.businessUid!==uid||approved.approvedByUid!==uid||approved.revokedAt!=null)throw Error("meta_approval_required");
     const planned=growth.jobs(approved);
-    if(!planned.length||planned.length>6||planned.some(job=>!["facebook","instagram"].includes(job.provider)||Date.parse(job.scheduledFor)<=now()))throw Error("meta_week_invalid");
+    if(!planned.length||planned.length>3||planned.some(job=>job.provider!==provider||Date.parse(job.scheduledFor)<=now()))throw Error("meta_week_invalid");
     for(const job of planned) {
      const current=(await tx.get(db.doc(`socialGrowthJobs/${job.id}`))).data();
      if(!current||current.approvalId!==approvalId||current.bindingHash!==job.bindingHash||current.status!=="approved")throw Error("meta_job_conflict");
@@ -93,8 +96,13 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
     return {approvalId,maximumPosts:planned.length};
    });
   },
-  async pause(uid) {
-   await stateRef(uid).update({externalPublishingEnabled:false,killSwitchActive:true});
+  async pause(uid,provider) {
+   await db.runTransaction(async tx=>{
+    const ref=stateRef(uid,provider),current=(await tx.get(ref)).data();
+    if(current?.businessUid!==uid||current.provider!==provider)throw Error("meta_provider_required");
+    tx.update(ref,{externalPublishingEnabled:false,killSwitchActive:true});
+    tx.create(ref.collection("audit").doc(),{action:"paused",businessUid:uid,provider,at:now()});
+   });
    return {paused:true};
   },
   async execute(jobId,{reconcileOnly=false}={}) {
