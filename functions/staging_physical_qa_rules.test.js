@@ -50,6 +50,13 @@ test("ordinary and authorized QA descriptive edits remain allowed", async () => 
   await assertSucceeds(db("business").doc(`campaigns/${qaId}`).update({description: "QA edit"}));
 });
 
+test('QA compensation, lifecycle and binding commitments cannot be edited by clients',async()=>{
+ for(const field of ['basePay','bonus','workerBudget','status','certificationContract','geometryHash','certificationPurpose'])
+  await assertFails(db('business').doc(`campaigns/${qaId}`).update({[field]:'changed'}));
+ await assertFails(db('business').doc('internalCertificationGeometry/dual_mobile_v1').set({geometry:[]}));
+ await assertFails(db('scaler').doc('internalCertificationGeometry/dual_mobile_v1').get());
+});
+
 
 test("ordinary Business and assigned-zone queries retain access", async () => {
   await assertSucceeds(db("business").collection("campaigns").where("businessId", "==", "business").get());

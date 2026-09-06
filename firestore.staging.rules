@@ -13,7 +13,9 @@ service cloud.firestore {
 
     function physicalQaProtectedFields() {
       return financialCampaignFields().concat(['certificationFixture', 'certificationAuthorityId',
-        'certificationScalerUid', 'certificationBusinessUid']);
+        'certificationScalerUid', 'certificationBusinessUid', 'certificationContract',
+        'certificationBindingDigest', 'certificationPurpose', 'geometryHash', 'geometryVersion',
+        'requiredTestFundingCents']);
     }
 
     function physicalQaActor(campaignId) {
@@ -195,6 +197,10 @@ service cloud.firestore {
       allow update:
         if physicalQaCampaignRead(campaignId) && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
+        && (!(campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1'])
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'businessId', 'basePay', 'bonus', 'qualityBonus', 'workerBudget', 'status', 'isTestCampaign',
+            'environment', 'scalersNeeded', 'zoneCount']))
         && !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(physicalQaProtectedFields());
 

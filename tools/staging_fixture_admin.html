@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Staging QA fixture administration</title>
+<style>body{font:18px system-ui;max-width:680px;margin:50px auto;padding:20px}label,input,button{display:block;margin:16px 0}input,button{font:inherit;padding:10px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style>
+<h1>Staging QA fixture administration</h1>
+<p>Creates the two approved unfunded mobile QA shells. No Checkout, assignment, tracking or Wallet action.</p>
+<form id="login"><label>Email<input id="email" type="email" autocomplete="username" required></label>
+<label>Password<input id="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>
+<p id="identity"></p><button id="create" disabled>Create two approved QA shells</button><pre id="result" role="status"></pre>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js';
+import {getAuth,signInWithEmailAndPassword,setPersistence,inMemoryPersistence,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js';
+import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/12.17.0/firebase-functions.js';
+const config=await (await fetch('./staging-config.json')).json();
+if(config.projectId!=='scaledcircle-staging'||!['127.0.0.1','localhost'].includes(location.hostname))throw Error('Staging local administration only');
+const app=initializeApp(config),auth=getAuth(app);
+await setPersistence(auth,inMemoryPersistence);
+const login=document.querySelector('#login'),result=document.querySelector('#result'),create=document.querySelector('#create');
+onAuthStateChanged(auth,user=>{document.querySelector('#identity').textContent=user?`Signed in: ${user.email}`:'';create.disabled=!user;login.hidden=!!user;});
+login.addEventListener('submit',async e=>{e.preventDefault();result.textContent='Signing in…';
+ try{await signInWithEmailAndPassword(auth,document.querySelector('#email').value,document.querySelector('#password').value);result.textContent='Ready for server Admin eligibility checks.';}
+ catch(e){result.textContent=`Sign-in failed (${e.code||'unavailable'}).`;}
+ finally{document.querySelector('#password').value='';}});
+create.addEventListener('click',async()=>{create.disabled=true;result.textContent='Checking eligibility and creating shells…';
+ try{const response=await httpsCallable(getFunctions(app,'us-east1'),'createStagingDualMobileQaFixturesV1')({});result.textContent=JSON.stringify(response.data,null,2);}
+ catch(e){result.textContent=`${e.code||'unavailable'}: ${e.message||'Inspect records before retry.'}`;}
+ // Deliberately no automatic retry or automatic second invocation.
+});
+</script></html>
