@@ -29,7 +29,7 @@ test("carousel scheduler resumes partial readiness after reconnect; concurrent w
   db.doc("socialProviderConfigs/production_meta").set({provider:"meta",environment:"production",enabled:true,writeScopesEnabled:true,externalPublishingEnabled:false,metaDogfood:{businessUid:uid,pageId:account.linkedPageId,pageName:"Scaled Circle",instagramId:account.providerUserId,instagramUsername:account.handle}})]);
  const bodies=[],generations=[];
  const runtime=createPublisher({db,project:"scaled-circle",providerCreatesEnabled:true,now:()=>clock,
-  credentials:async(_job,current)=>{generations.push(current.connectionRevision);return {...account,accessToken:"fixture-only"};},
+  credentials:async(_job,current)=>{generations.push(current.connectionRevision);return {...account,tokenType:"PAGE",linkedPageId:account.linkedPageId||account.providerUserId,accessToken:"fixture-only"};},
   fetchImpl:async(url,options)=>{
    const u=new URL(url);
    if(u.origin==="https://scaledcircle.com"){const i=revision.images.findIndex(image=>image.url===u.href);return {ok:true,headers:new Map([["content-type","image/jpeg"]]),arrayBuffer:async()=>files[i]};}

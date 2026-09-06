@@ -27,7 +27,7 @@ test("persistent Meta week remains paused until exact approval; concurrent jobs 
    providerUserId:"123",linkedPageId:"123",grantedScopes:scopes,credentialId:"fixture",connectionRevision:1}),
   db.doc(`agentHealth/${uid}`).set({killSwitchActive:false})]);
  const runtime=createPublisher({db,project:"scaled-circle",now:()=>clock,providerCreatesEnabled:true,enabledProviders:["facebook"],
-  credentials:async()=>({businessUid:uid,providerUserId:"123",accessToken:"mock-only"}),
+  credentials:async()=>({businessUid:uid,providerUserId:"123",tokenType:"PAGE",linkedPageId:"123",accessToken:"mock-only"}),
   fetchImpl:async(_url,options)=>{if(options.method==="POST")creates++;
    return {ok:true,json:async()=>options.method==="POST"?{id:"123_789"}:{id:"123_789",from:{id:"123"},message:"Approved Page copy."}};}});
  await runtime.prepare(uid,"facebook");

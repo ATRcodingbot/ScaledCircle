@@ -18,6 +18,7 @@ function fixture() {
   const store = createStore({db, authorize: async () => {if (denied) throw Error("story_paused");}});
   const fetchImpl = async (url, options) => {
     if (url === revision.url) return new Response(bytes, {headers: {"content-type": "image/jpeg"}});
+    assert.equal(options.headers.Authorization,"Bearer page-fixture");
     assert.match(url, /^https:\/\/graph.facebook.com\/v26.0\//);
     if (options.method === "POST") {
       creates++; const body = JSON.parse(options.body);
@@ -30,10 +31,11 @@ function fixture() {
     if (url.includes("/700?")) return Response.json({id: "700", status_code: ready ? "FINISHED" : "IN_PROGRESS"});
     assert.ok(url.includes("/123/stories?")); return Response.json({data: [{id: "800", media_product_type: "STORY"}]});
   };
+  const root = require("./fixtures/meta_page_credential")({businessUid:"owner",pageId:"456",igId:"123"});
   const args = {job, revision, account, store, fetchImpl, deploymentEnabled: true, now: () => Date.parse(job.scheduledFor),
     authorize: async () => {if (denied) throw Error("story_paused");},
-    credentials: async () => ({owner: "owner", accountId: "123", linkedPageId: "456", accessToken: "mock", tokenType: "USER", scopes: account.scopes})};
-  return {args, records, count: () => creates, setReady: v => ready = v, deny: () => denied = true, lose: v => lose = v};
+    credentials: root.resolve};
+  return {args, root, records, count: () => creates, setReady: v => ready = v, deny: () => denied = true, lose: v => lose = v};
 }
 test("Story descriptor uses Facebook Login STORIES container, no caption/sticker/feed request", () => {
   const f = fixture(), d = describe(f.args);
@@ -98,11 +100,13 @@ test("independent Story authority rejects feed approvals, pause and immutable ch
   await assert.rejects(auth(null, {...job, mediaHash: "wrong"}, "create"));
 });
 
-test('quota exhaustion and unknown quota never publish; undocumented credential role fails closed',async()=>{
+test('quota exhaustion, unknown quota and USER execution credentials fail closed',async()=>{
  for(const data of [{data:[{quota_usage:50,config:{quota_total:50,quota_duration:86400}}]},{data:[]}]){
   const f=fixture(),original=f.args.fetchImpl;f.args.fetchImpl=(u,o)=>u.includes('/content_publishing_limit?')?Promise.resolve(Response.json(data)):original(u,o);
   assert.match((await createTransport(f.args).run()).state,/HOLD_/);assert.equal(f.count(),1);
   assert.match((await createTransport(f.args).run()).state,/HOLD_/);assert.equal(f.count(),1);
  }
- const f=fixture();delete f.args.account.roleOrigin;await assert.rejects(createTransport(f.args).run(),/role_permission_unverified/);assert.equal(f.count(),0);
+ const f=fixture();const old=f.args.credentials;f.args.credentials=async()=>({...await old(),tokenType:'USER'});await assert.rejects(createTransport(f.args).run(),/credential_identity_changed/);assert.equal(f.count(),0);
 });
+
+test("Story canonical context derives PAGE for create, readiness and publish",async()=>{const f=fixture();const result=await createTransport({...f.args,pageCredentialContext:f.root.context}).run();assert.equal(result.state,"PUBLISHED");assert.equal(f.count(),2);assert.ok(f.root.calls.length>=6);});

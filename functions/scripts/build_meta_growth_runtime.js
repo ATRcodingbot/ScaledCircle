@@ -12,7 +12,7 @@ const generate = require("@babel/generator").default;
 const root = path.resolve(__dirname, "../..");
 const source = path.join(root, "functions-social-operations");
 const output = path.join(root, ".firebase/meta-growth-runtime");
-const names = ["approveMetaGrowthWeekV1","inspectMetaGrowthRuntimeV1", "prepareMetaGrowthWeekV1", "runMetaGrowthPublisherV1", "runMetaGrowthMeasurementsV1", "reconcileMetaGrowthPublicationV1", "setMetaGrowthPublishingStateV1"];
+const names = ["inspectMetaPageExecutionCredentialV1","approveMetaGrowthWeekV1","inspectMetaGrowthRuntimeV1", "prepareMetaGrowthWeekV1", "runMetaGrowthPublisherV1", "runMetaGrowthMeasurementsV1", "reconcileMetaGrowthPublicationV1", "setMetaGrowthPublishingStateV1"];
 const original = fs.readFileSync(path.join(source, "index.js"), "utf8");
 const ast = parser.parse(original, {sourceType: "script"});
 let program;

@@ -4,6 +4,7 @@
 // export. The server supplies Story-only authority and a durable claim store.
 const {isDeepStrictEqual} = require("node:util");
 const model = require("./social_story_model");
+const pageCredential = require("../functions-social-operations/social_meta_page_credential");
 const numeric = v => typeof v === "string" && /^\d+$/.test(v);
 const requiredScopes = ["instagram_basic", "instagram_content_publish", "pages_read_engagement"];
 function describe({job, revision, account}) {
@@ -20,7 +21,8 @@ function describe({job, revision, account}) {
 }
 
 function createTransport({job, revision, account, credentials, authorize, store, fetchImpl,
-  deploymentEnabled = false, now = Date.now}) {
+  deploymentEnabled = false, now = Date.now, pageCredentialContext}) {
+  if(pageCredentialContext) credentials = () => pageCredential.resolveMetaPageExecutionCredential(pageCredentialContext);
   const plan = describe({job, revision, account});
   if (typeof credentials !== "function" || typeof authorize !== "function" || typeof fetchImpl !== "function" ||
       !["claim", "remember", "complete", "get"].every(m => typeof store?.[m] === "function")) throw Error("story_runtime_dependencies_required");
@@ -28,13 +30,13 @@ function createTransport({job, revision, account, credentials, authorize, store,
     if (path !== `/${account.id}/content_publishing_limit?fields=quota_usage,config` && !/^\/\d+(?:\/(?:media|media_publish|stories))?(?:\?fields=id,(?:status_code|media_product_type&limit=100))?$/.test(path)) throw Error("story_path_denied");
     const c = await credentials();
     if (c.owner !== job.owner || c.accountId !== account.id || c.linkedPageId !== account.linkedPageId ||
-        !c.accessToken || c.tokenType !== "USER" || !requiredScopes.every(s => c.scopes?.includes(s))) throw Error("story_credential_identity_changed");
+        !c.accessToken || c.tokenType !== "PAGE" || !requiredScopes.every(s => c.scopes?.includes(s))) throw Error("story_credential_identity_changed");
+    pageCredential.requirePageCredential(c,account.linkedPageId);
     if (body) {
-      if (!["direct", "business_manager"].includes(account.roleOrigin) ||
-          account.roleOrigin === "business_manager" && !["ads_read", "ads_management"].some(s => c.scopes.includes(s))) throw Error("story_role_permission_unverified");
       if (!deploymentEnabled) throw Error("story_deployment_disabled");
       await authorize(job, "create");
     }
+    if(c.assertCurrent) await c.assertCurrent();
     const response = await fetchImpl(`https://graph.facebook.com/v26.0${path}`, {
       method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(20000),
       headers: {Authorization: `Bearer ${c.accessToken}`, "Content-Type": "application/json"},

@@ -16,9 +16,11 @@ function createAdapter({job, revision, account, approval, credentials, authorize
     const session = await credentials();
     if (session.providerUserId !== account.providerUserId || session.businessUid !== job.businessUid ||
         !session.accessToken || (ig && session.linkedPageId !== account.linkedPageId)) throw Error("meta_transport_identity_mismatch");
+    require("./social_meta_page_credential").requirePageCredential(session,ig?account.linkedPageId:account.providerUserId);
     const url = new URL(`https://graph.facebook.com/v26.0${path}`);
     for (const [key,value] of Object.entries(params)) url.searchParams.set(key,String(value));
     if (method === "POST") await authorizeCreate();
+    if(session.assertCurrent) await session.assertCurrent();
     const response = await fetchImpl(url, {method, redirect:"error", signal:AbortSignal.timeout(20000),
       headers:{Authorization:`Bearer ${session.accessToken}`,"Content-Type":"application/json"},
       ...(body ? {body:JSON.stringify(body)} : {})});

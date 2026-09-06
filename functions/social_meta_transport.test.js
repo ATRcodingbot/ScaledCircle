@@ -9,7 +9,7 @@ function fixture(fetchImpl,authorizeCreate=async()=>{}){
    variants:[{provider:"facebook",format:"text",copy:"Approved Page copy."}]}]};
  const job=growth.jobs(approval)[0];
  const adapter=createAdapter({job,account,approval,fetchImpl,authorizeCreate,
-  credentials:async()=>({...account,accessToken:"fixture-token"}),now:()=>2000});
+  credentials:async()=>({...account,tokenType:"PAGE",linkedPageId:account.linkedPageId||account.providerUserId,accessToken:"fixture-token"}),now:()=>2000});
  const request={method:"POST",path:"/123/feed",body:{message:"Approved Page copy."}};
  return {adapter,request};
 }

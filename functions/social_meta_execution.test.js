@@ -20,7 +20,7 @@ function fixture(count=1,provider="instagram") {
  const fetchImpl=async(url,options)=>{
   const u=new URL(url);calls.push({path:u.pathname,method:options.method,body:options.body&&JSON.parse(options.body)});
   if(u.origin==="https://scaledcircle.com") {const i=revision.images.findIndex(v=>v.url===u.href);return {ok:true,headers:new Map([["content-type","image/jpeg"]]),arrayBuffer:async()=>control.badMedia?Buffer.from("wrong"):files[i]};}
-  assert.equal(u.origin,"https://graph.facebook.com");assert.equal(u.searchParams.has("access_token"),false);
+  assert.equal(u.origin,"https://graph.facebook.com");assert.equal(options.headers.Authorization,provider==="instagram"?"Bearer page-fixture":"Bearer fixture-only");assert.equal(u.searchParams.has("access_token"),false);
   if(options.method==="POST") {
    const id=String(100+calls.filter(c=>c.method==="POST").length);
    if(u.pathname.endsWith("/media_publish")) {if(control.lostPublish)throw Error("lost");return {ok:true,json:async()=>({id:"999"})};}
@@ -31,8 +31,9 @@ function fixture(count=1,provider="instagram") {
   if(provider==="facebook")return {ok:true,json:async()=>({id:`${account.providerUserId}_999`,from:{id:control.wrongOwner?"1":account.providerUserId},message:"Local stories. Link in bio."})};
   const id=u.pathname.split("/").at(-1);return {ok:true,json:async()=>({id,status_code:control.expired?"EXPIRED":control.ready?"FINISHED":"IN_PROGRESS"})};
  };
+ const root=provider==="instagram"?require("./fixtures/meta_page_credential")({businessUid:account.businessUid,pageId:account.linkedPageId,igId:account.providerUserId}):null;
  const adapter=createAdapter({job,account,approval,revision,fetchImpl,now:()=>2000,
-  authorizeCreate:async()=>{if(control.paused)throw Error("paused");},credentials:async()=>({...account,accessToken:"fixture-only"})});
+  authorizeCreate:async()=>{if(control.paused)throw Error("paused");},credentials:root?root.resolve:async()=>({...account,tokenType:"PAGE",linkedPageId:account.linkedPageId||account.providerUserId,accessToken:"fixture-only"})});
  return {control,calls,records,revision,adapter,run:()=>execute({job,account,approval,revision,store,adapter})};
 }
 test("Instagram single-image uses exact account, readiness, final publish and reusable receipt",async()=>{

@@ -3127,6 +3127,8 @@ function scheduledMetaFeedPublisher() {
     providerCreatesEnabled:process.env.GCLOUD_PROJECT==="scaled-circle",enabledProviders:["facebook","instagram"],credentials:loadMetaPublisherCredential});
 }
 async function loadMetaPublisherCredential(job,expected) {
+      if(job.provider==="instagram") return require("./social_meta_page_credential").resolveMetaPageExecutionCredential({
+        db,decryptJson:socialOAuth.decryptJson,encryptionKey:()=>socialOAuthEncryptionKey.value(),businessUid:job.businessUid,expected});
       const ref=db.doc(`socialConnections/${job.businessUid}/providers/${job.provider}`);
       const current=(await ref.get()).data();
       if(current?.credentialId!==expected.credentialId || current?.connectionRevision!==expected.connectionRevision ||
@@ -3142,14 +3144,38 @@ async function loadMetaPublisherCredential(job,expected) {
           (job.provider==="instagram"?account.linkedAccountId:account.accountId)!==current.providerUserId)throw Error("meta_credential_identity_mismatch");
       const tokens=socialOAuth.decryptJson(credential.tokenEnvelope,socialOAuthEncryptionKey.value(),
         `${job.businessUid}:meta:${account.accountId}`);
-      return {businessUid:job.businessUid,providerUserId:current.providerUserId,linkedPageId:current.linkedPageId,
-        accessToken:job.provider==="facebook"?tokens.pageAccessToken:tokens.userAccessToken};
+      const session={businessUid:job.businessUid,providerUserId:current.providerUserId,linkedPageId:current.linkedPageId,tokenType:"PAGE"};
+      Object.defineProperty(session,"accessToken",{value:tokens.pageAccessToken,enumerable:false});return session;
 }
 async function inspectMetaScheduler(businessUid,executeDue=false) {
   const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
   metaConnection.authorize(config,businessUid);
   return require("./social_meta_scheduler").run({db,publisher:scheduledMetaFeedPublisher(),businessUid,inspectOnly:!executeDue});
 }
+// IAM-private, GET-only credential rehearsal. No provider POST or persistence.
+exports.inspectMetaPageExecutionCredentialV1=onRequest({invoker:"private",cors:false,maxInstances:1,timeoutSeconds:120,
+  secrets:[socialOAuthEncryptionKey]},async(request,response)=>{
+  if(request.method!=="GET")return response.status(405).json({error:"read_only"});
+  try{
+    const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
+    const uid=config?.metaDogfood?.businessUid;metaConnection.authorize(config,uid);
+    const connection=(await db.doc(`socialConnections/${uid}/providers/instagram`).get()).data();
+    if(connection.providerUserId!==config.metaDogfood.instagramId||connection.linkedPageId!==config.metaDogfood.pageId)throw Error("meta_identity_changed");
+    const session=await loadMetaPublisherCredential({businessUid:uid,provider:"instagram"},connection);
+    const allowance=(await db.doc(`socialPublishingAuthorities/${uid}/providers/instagram`).get()).data();
+    if(allowance?.jobIds?.length!==3)throw Error("meta_jobs_changed");
+    const jobs=[];for(const id of allowance.jobIds){
+      const inspection=await normalMetaPublisher().inspect(id);
+      const receipts=(await db.doc(`socialGrowthJobs/${id}`).collection("receipts").get()).size;
+      const steps=(await db.doc(`socialGrowthJobs/${id}`).collection("providerSteps").get()).size;
+      jobs.push({...inspection,receipts,providerSteps:steps});
+    }
+    await session.assertCurrent();
+    return response.json({tokenType:session.tokenType,pageId:session.pageId,instagramId:session.providerUserId,
+      connectionRevision:session.connectionRevision,generation:session.credentialRotationGeneration,
+      paused:allowance.killSwitchActive===true&&allowance.externalPublishingEnabled===false,jobs,providerCreates:0});
+  }catch{return response.status(409).json({error:"meta_page_credential_certification_failed_closed"});}
+});
 exports.inspectMetaGrowthRuntimeV1=growthPlanningCallable(async businessUid=>inspectMetaScheduler(businessUid));
 exports.approveMetaGrowthWeekV1=growthPlanningCallable(async(businessUid,data)=>{
   metaConnection.authorize((await providerConfigRef("meta","production").get()).data(),businessUid);
