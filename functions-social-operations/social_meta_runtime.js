@@ -59,6 +59,8 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   async inspect(jobId) {
    const job=(await db.doc(`socialGrowthJobs/${jobId}`).get()).data();
    if(!job||job.id!==jobId)throw Error("meta_job_missing");
+   if(job.status==="ready_for_review"&&job.approvalId===null&&job.preparedCycleId)
+    return require("./social_meta_preparation").inspect({db,job});
    const ctx=await context(null,job,"activate");
    const plan=meta.prepare({job,...ctx});
    const state=(await stateRef(job.businessUid,job.provider).get()).data();

@@ -41,6 +41,14 @@ function prepare({job, revision, account, approval}) {
         ["id", "businessUid", "provider", "versionId", "approvalId", "bindingHash", "scheduledFor"]
           .every(key => expected[key] === job[key]) &&
         isDeepStrictEqual(expected.binding, job.binding))) fail("meta_approval_mismatch");
+  return describe({job,revision,account});
+}
+
+// Read-only request preparation is not an approval. The live adapter continues
+// to enter through prepare(), which requires a real owner approval.
+function describe({job,revision,account}) {
+  if(!job || !["facebook","instagram"].includes(job.provider) ||
+      !numericId(account?.providerUserId)||account.businessUid!==job.businessUid)fail("meta_account_mismatch");
   const variant = job.binding?.variants?.find((item) => item.provider === job.provider);
   if (job.provider === "facebook" && !variant?.mediaAssetId && !variant?.mediaRevisionId && !revision) {
     if (!variant?.copy || !["text", "feed"].includes(variant.format)) fail("meta_copy_invalid");
@@ -87,4 +95,4 @@ function nextStep(record) {
   return "not_started";
 }
 
-module.exports = {mediaRevision, prepare, nextStep};
+module.exports = {mediaRevision, prepare, describe, nextStep};

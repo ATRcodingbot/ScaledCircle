@@ -3145,6 +3145,54 @@ async function inspectMetaScheduler(businessUid) {
   return require("./social_meta_scheduler").run({db,publisher:normalMetaPublisher(),businessUid});
 }
 exports.inspectMetaGrowthRuntimeV1=growthPlanningCallable(async businessUid=>inspectMetaScheduler(businessUid));
+exports.approveMetaGrowthWeekV1=growthPlanningCallable(async(businessUid,data)=>{
+  metaConnection.authorize((await providerConfigRef("meta","production").get()).data(),businessUid);
+  if(!/^growth_cycle_[a-f0-9]{64}$/.test(data.cycleId||""))throw Error("meta_cycle_invalid");
+  return require("./social_meta_preparation").createApprovalStore({db})({businessUid,cycleId:data.cycleId,
+    expectedDigest:data.expectedDigest,versionIds:data.versionIds,windowStart:data.windowStart,windowEnd:data.windowEnd});
+});
+// IAM-private preparation/rehearsal only. The owner is fixed by the restricted
+// production Meta configuration, never selected by the request. No secrets or
+// approval creation are available through this administrative endpoint.
+exports.prepareMetaGrowthWeekV1=onRequest({invoker:"private",cors:false,maxInstances:1,timeoutSeconds:120},async(request,response)=>{
+  if(request.method!=="POST")return response.status(405).json({error:"post_required"});
+  if(process.env.GCLOUD_PROJECT!=="scaled-circle")return response.status(403).json({error:"production_meta_only"});
+  try {
+    const preparation=require("./social_meta_preparation");
+    if(request.body?.action==="prepare")return response.json({result:await preparation.createPreparer({db})(request.body.input)});
+    const config=(await providerConfigRef("meta","production").get()).data(),uid=config?.metaDogfood?.businessUid;
+    metaConnection.authorize(config,uid);
+    const provider=request.body?.provider;
+    if(!["facebook","instagram"].includes(provider))throw Error("meta_provider_required");
+    const other=provider==="facebook"?"instagram":"facebook",otherRef=db.doc(`socialPublishingAuthorities/${uid}/providers/${other}`);
+    if(request.body.action==="pause"){
+      const before=(await otherRef.get()).data()||null;
+      await normalMetaPublisher().pause(uid,provider);
+      return response.json({result:{paused:provider,otherChannelUnchanged:require("node:util").isDeepStrictEqual(before,(await otherRef.get()).data()||null),providerCreates:0}});
+    }
+    if(request.body.action!=="rehearse")throw Error("meta_prepare_action_invalid");
+    const state=(await db.doc(`socialPublishingAuthorities/${uid}/providers/${provider}`).get()).data();
+    if(!Array.isArray(state?.jobIds)||state.jobIds.length!==3)throw Error("meta_prepared_jobs_required");
+    const results=[];
+    for(const id of state.jobIds){
+      const job=(await db.doc(`socialGrowthJobs/${id}`).get()).data();
+      const actual=await preparation.inspect({db,job});
+      const denied=async fn=>{try{await fn();return false;}catch(_){return true;}};
+      const stopped=await preparation.inspect({db,job,healthOverride:{killSwitchActive:true}});
+      results.push({...actual,wrongVersionDenied:await denied(()=>preparation.inspect({db,job:{...job,versionId:job.versionId+"_wrong"}})),
+        wrongIdentityDenied:await denied(()=>preparation.inspect({db,job:{...job,businessUid:"not_the_owner"}})),
+        wrongApprovalDenied:await denied(()=>preparation.inspect({db,job:{...job,approvalId:"not_an_approval"}})),
+        publishingDisabledDenied:await denied(()=>normalMetaPublisher().execute(id)),
+        supervisorStopHeld:stopped.supervisorStopped===true,
+        simulatedCases:["wrongVersion","wrongIdentity","wrongApproval","supervisorStop"],
+        receiptCount:(await db.doc(`socialGrowthJobs/${id}`).collection("receipts").get()).size});
+    }
+    return response.json({result:{provider,results,providerCreates:0,approvalsCreated:0}});
+  }catch(error){
+    const code=/^meta_[a-z_]+$/.test(error.message||"")?error.message:"meta_prepare_review_required";
+    return response.status(409).json({error:code});
+  }
+});
 exports.setMetaGrowthPublishingStateV1=growthPlanningCallable(async(businessUid,data)=>{
   const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
   metaConnection.authorize(config,businessUid);

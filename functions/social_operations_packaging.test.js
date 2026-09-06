@@ -19,7 +19,7 @@ test("Meta certification bundle has no activation surface and only read-only con
  assert.match(source,/providerCreatesEnabled: false/);
  assert.doesNotMatch(source,/META_SOCIAL_APP_SECRET|X_SOCIAL_CLIENT_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET/);
  const endpoints=JSON.parse(execFileSync(process.execPath,["-e",`const e=require(${JSON.stringify(output)}); console.log(JSON.stringify(Object.fromEntries(Object.entries(e).map(([k,v])=>[k,v.__endpoint?.secretEnvironmentVariables||[]]))));`],{encoding:"utf8"}));
- assert.deepEqual(Object.keys(endpoints).sort(),["inspectMetaGrowthRuntimeV1","reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1","runMetaGrowthPublisherV1","setMetaGrowthPublishingStateV1"]);
+ assert.deepEqual(Object.keys(endpoints).sort(),["approveMetaGrowthWeekV1","inspectMetaGrowthRuntimeV1","prepareMetaGrowthWeekV1","reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1","runMetaGrowthPublisherV1","setMetaGrowthPublishingStateV1"]);
  for(const [name,secrets] of Object.entries(endpoints))assert.deepEqual(secrets.map(s=>s.key),
   ["reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1"].includes(name)?["SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY"]:[]);
 });
@@ -79,6 +79,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
   const names = [...indexSource.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
   assert.deepEqual(names.sort(), [
     "approveFirstXProductionSuccessorV4",
+    "approveMetaGrowthWeekV1",
     "approveSocialContentPlanV1",
     "approveSocialGrowthWeekV1",
     "beginFirstXPublishAuthorizationV1",
@@ -102,6 +103,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "ingestScaledCircleLaunchPlanV1",
     "inspectMetaGrowthRuntimeV1",
     "prepareFirstXPublishFoundationV1",
+    "prepareMetaGrowthWeekV1",
     "proposeScheduledSocialReplacementV1",
     "publishFirstXProductionSuccessorV4",
     "rateHistoricalSocialContentV1",
