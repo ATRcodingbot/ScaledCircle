@@ -50,7 +50,13 @@ def inspect(path, version, build, environment='production'):
                      'http://127.0.0.1:5000', 'http://127.0.0.1:5001']
         required = ['https://us-east1-scaled-circle.cloudfunctions.net/', 'socialOAuthXCallbackV1']
         if environment == 'staging':
-            forbidden = ['scaled-circle', '1010956217112', 'demo-scaledcircle',
+            # The runtime rejection guard deliberately names the forbidden
+            # production project. Reject production configuration/origins,
+            # not that defensive diagnostic. The packaged plist is checked
+            # against the exact staging identity above.
+            forbidden = ['1010956217112', 'scaled-circle.firebaseapp.com',
+                         'scaled-circle.appspot.com', 'scaled-circle.firebasestorage.app',
+                         'us-east1-scaled-circle.cloudfunctions.net', 'demo-scaledcircle',
                          '10.0.2.2', 'http://127.0.0.1:5000', 'http://127.0.0.1:5001']
             required = ['https://us-east1-scaledcircle-staging.cloudfunctions.net/',
                         'socialOAuthXCallbackV1']

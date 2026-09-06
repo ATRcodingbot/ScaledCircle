@@ -31,6 +31,12 @@ class IpaGateTest(unittest.TestCase):
                              (host + 'socialOAuthXCallbackV1').encode())
             if bad == 'production_marker':
                 archive.writestr('Payload/Runner.app/extra', b'1010956217112')
+            if bad == 'rejection_guard':
+                archive.writestr('Payload/Runner.app/guard',
+                                 b'Non-production APP_ENV must never connect to scaled-circle.')
+            if bad == 'production_origin':
+                archive.writestr('Payload/Runner.app/extra',
+                                 b'https://us-east1-scaled-circle.cloudfunctions.net/')
             if bad == 'staging':
                 archive.writestr('Symbols/extra', 'scaledcircle-staging'.encode('utf-16le'))
             if bad == 'path':
@@ -60,6 +66,15 @@ class IpaGateTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 inspect(path, '1.0.0', '1')
             self.fixture(path)
+            with self.assertRaises(ValueError):
+                inspect(path, '1.0.0', '1', 'staging')
+
+    def test_staging_rejection_guard_is_not_a_production_configuration(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'fixture.ipa'
+            self.fixture(path, bad='rejection_guard', environment='staging')
+            self.assertEqual(inspect(path, '1.0.0', '1', 'staging')['content_gate'], 'PASS')
+            self.fixture(path, bad='production_origin', environment='staging')
             with self.assertRaises(ValueError):
                 inspect(path, '1.0.0', '1', 'staging')
             self.fixture(path, bad='production_marker', environment='staging')
