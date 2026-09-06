@@ -30,6 +30,8 @@ class IpaGateTest(unittest.TestCase):
                 archive.writestr('../outside', 'invalid')
             if bad == 'duplicate':
                 archive.writestr('Payload/Runner.app/Info.plist', plistlib.dumps(info))
+            if bad == 'nested_firebase':
+                archive.writestr('Payload/Runner.app/extra/GoogleService-Info.plist', plistlib.dumps(config))
 
     def test_gate_rejects_contamination_and_mismatches(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -38,7 +40,7 @@ class IpaGateTest(unittest.TestCase):
             self.assertEqual(inspect(path, '1.0.0', '1')['content_gate'], 'PASS')
             with self.assertRaises(ValueError):
                 inspect(path, '1.0.0', '2')
-            for bad in ['permission', 'firebase', 'staging', 'path', 'duplicate']:
+            for bad in ['permission', 'firebase', 'staging', 'path', 'duplicate', 'nested_firebase']:
                 self.fixture(path, bad)
                 with self.assertRaises(ValueError):
                     inspect(path, '1.0.0', '1')

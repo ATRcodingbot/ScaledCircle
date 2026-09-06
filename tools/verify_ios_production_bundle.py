@@ -19,6 +19,10 @@ def inspect(path, version, build):
         if len(roots) != 1:
             raise ValueError('Expected one top-level iOS application')
         root = roots[0]
+        firebase_configs = [n for n in names if n.startswith(root)
+                            and n.endswith('/GoogleService-Info.plist')]
+        if firebase_configs != [root + 'GoogleService-Info.plist']:
+            raise ValueError('Expected exactly one Firebase plist at application bundle root')
         info = plistlib.loads(archive.read(root + 'Info.plist'))
         config = plistlib.loads(archive.read(root + 'GoogleService-Info.plist'))
         expected = {'CFBundleIdentifier': 'com.scaledcircle.app',

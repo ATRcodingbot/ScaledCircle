@@ -8,15 +8,21 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    NSLog("ScaledCircle startup: native_launch_reached")
+    let configurationURL = Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist")
+    NSLog("ScaledCircle startup: firebase_plist_present=%@", configurationURL == nil ? "false" : "true")
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    NSLog("ScaledCircle startup: implicit_engine_initialized")
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    NSLog("ScaledCircle startup: generated_plugins_registered")
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ActiveJobTrackingBridge") {
       ActiveJobTrackingBridge(messenger: registrar.messenger()).register()
     }
     ActiveJobLocationManager.shared.restoreIfNeeded()
+    NSLog("ScaledCircle startup: native_bootstrap_completed")
   }
 }
 

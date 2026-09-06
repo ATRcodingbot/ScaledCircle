@@ -3,10 +3,12 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 import 'config/app_environment.dart';
+import 'bootstrap/ios_startup_gate.dart';
 import 'config/firebase_auth_emulator_session.dart';
 import 'navigation/app_routes.dart';
 import 'navigation/app_router.dart';
@@ -38,6 +40,17 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    debugPrint('ScaledCircle startup: flutter_main_reached');
+    runApp(
+      IosStartupGate(
+        initialize: _initializeIos,
+        child: const ScaledCircleApp(),
+      ),
+    );
+    return;
+  }
+
   final app = await Firebase.initializeApp(
     options: AppEnvironmentConfig.firebaseOptions,
   );
@@ -47,6 +60,22 @@ Future<void> main() async {
   }
 
   runApp(const ScaledCircleApp());
+}
+
+Future<void> _initializeIos() async {
+  debugPrint('ScaledCircle startup: environment_validation_started');
+  final options = AppEnvironmentConfig.firebaseOptions;
+  debugPrint('ScaledCircle startup: firebase_initialization_started');
+  final app = Firebase.apps.any((app) => app.name == '[DEFAULT]')
+      ? Firebase.app()
+      : await Firebase.initializeApp(options: options);
+  AppEnvironmentConfig.verifyInitializedProject(app);
+  if (AppEnvironmentConfig.isLocal) await _connectToFirebaseEmulators();
+  debugPrint('ScaledCircle startup: firebase_initialization_completed');
+  debugPrint('ScaledCircle startup: auth_bootstrap_started');
+  // Auth restoration stays in the existing route gates; do not wait for network.
+  FirebaseAuth.instance;
+  debugPrint('ScaledCircle startup: auth_client_initialized');
 }
 
 // ignore: unused_element
@@ -327,6 +356,9 @@ class ScaledCircleApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      debugPrint('ScaledCircle startup: router_initialized');
+    }
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Scaled Circle',
