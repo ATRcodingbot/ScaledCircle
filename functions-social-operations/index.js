@@ -3120,6 +3120,12 @@ function normalMetaPublisher() {
   return require("./social_meta_runtime").createPublisher({db,project:process.env.GCLOUD_PROJECT,
     providerCreatesEnabled:false,credentials:loadMetaPublisherCredential});
 }
+// Only the scheduled Facebook path can reach provider creates. Inspection is
+// always read-only, and Instagram remains disabled at the deployment boundary.
+function scheduledFacebookPublisher() {
+  return require("./social_meta_runtime").createPublisher({db,project:process.env.GCLOUD_PROJECT,
+    providerCreatesEnabled:process.env.GCLOUD_PROJECT==="scaled-circle",enabledProviders:["facebook"],credentials:loadMetaPublisherCredential});
+}
 async function loadMetaPublisherCredential(job,expected) {
       const ref=db.doc(`socialConnections/${job.businessUid}/providers/${job.provider}`);
       const current=(await ref.get()).data();
@@ -3139,10 +3145,10 @@ async function loadMetaPublisherCredential(job,expected) {
       return {businessUid:job.businessUid,providerUserId:current.providerUserId,linkedPageId:current.linkedPageId,
         accessToken:job.provider==="facebook"?tokens.pageAccessToken:tokens.userAccessToken};
 }
-async function inspectMetaScheduler(businessUid) {
+async function inspectMetaScheduler(businessUid,executeDue=false) {
   const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
   metaConnection.authorize(config,businessUid);
-  return require("./social_meta_scheduler").run({db,publisher:normalMetaPublisher(),businessUid});
+  return require("./social_meta_scheduler").run({db,publisher:scheduledFacebookPublisher(),businessUid,inspectOnly:!executeDue});
 }
 exports.inspectMetaGrowthRuntimeV1=growthPlanningCallable(async businessUid=>inspectMetaScheduler(businessUid));
 exports.approveMetaGrowthWeekV1=growthPlanningCallable(async(businessUid,data)=>{
@@ -3214,13 +3220,13 @@ exports.reconcileMetaGrowthPublicationV1=onCall({enforceAppCheck:false,maxInstan
   catch(_){throw new HttpsError("failed-precondition","Publication review needs attention.");}
 });
 exports.runMetaGrowthPublisherV1=onSchedule({schedule:"every 5 minutes",timeZone:"UTC",
-  maxInstances:1,timeoutSeconds:120,retryCount:0},async()=>{
+  maxInstances:1,timeoutSeconds:120,retryCount:0,secrets:[socialOAuthEncryptionKey]},async()=>{
   const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
   if(!config?.metaDogfood?.businessUid)return;
-  const inspection=await inspectMetaScheduler(config.metaDogfood.businessUid);
+  const inspection=await inspectMetaScheduler(config.metaDogfood.businessUid,true);
   require("firebase-functions/logger").info("meta_scheduler_certification",{
     discoveredJobs:inspection.results.length,results:inspection.results,
-    deploymentAllowsCreates:false,providerCreates:0});
+    enabledProviders:["facebook"]});
 });
 
 exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",timeZone:"UTC",

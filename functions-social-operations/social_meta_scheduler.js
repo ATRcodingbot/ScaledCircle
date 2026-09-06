@@ -2,7 +2,7 @@
 
 // Shares canonical growth jobs with X, but never reads or changes X allowances.
 // Certification discovers/evaluates real jobs without creating synthetic approvals.
-async function run({db, publisher, businessUid, now=Date.now()}) {
+async function run({db, publisher, businessUid, now=Date.now(),inspectOnly=false}) {
   const results=[];
   for (const provider of ["facebook","instagram"]) {
     const snapshots=await db.collection("socialGrowthJobs").where("provider","==",provider).limit(100).get();
@@ -15,7 +15,8 @@ async function run({db, publisher, businessUid, now=Date.now()}) {
         if (!inspection.deploymentAllowsCreates || !inspection.allowanceEnabled) {
           results.push({...inspection,status:"gated"}); continue;
         }
-        if(Date.parse(job.scheduledFor)>now) {results.push({jobId:job.id,status:"scheduled"});continue;}
+        if(Date.parse(job.scheduledFor)>now) {results.push({...inspection,jobId:job.id,status:"scheduled"});continue;}
+        if(inspectOnly){results.push({...inspection,jobId:job.id,status:"awaiting_scheduler"});continue;}
         // Hold ambiguous prior attempts for deliberate reconciliation rather
         // than spending provider quota every minute or guessing a retry.
         const prior=await snapshot.ref.collection("providerSteps").limit(20).get();

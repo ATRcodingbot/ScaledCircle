@@ -11,17 +11,19 @@ const indexSource = fs.readFileSync(path.join(packageRoot, "index.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 
-test("Meta certification bundle has no activation surface and only read-only consumers bind encryption",()=>{
+test("Meta bundle has no public activation surface and only Facebook scheduler gains create capability",()=>{
  const {execFileSync}=require("node:child_process");
  execFileSync(process.execPath,[path.join(__dirname,"scripts/build_meta_growth_runtime.js")]);
  const output=path.join(root,".firebase/meta-growth-runtime");
  const source=fs.readFileSync(path.join(output,"index.js"),"utf8");
  assert.match(source,/providerCreatesEnabled: false/);
+ assert.match(source,/enabledProviders: \["facebook"\]/);
+ assert.match(source,/inspectOnly: !executeDue/);
  assert.doesNotMatch(source,/META_SOCIAL_APP_SECRET|X_SOCIAL_CLIENT_SECRET|YOUTUBE_SOCIAL_CLIENT_SECRET/);
  const endpoints=JSON.parse(execFileSync(process.execPath,["-e",`const e=require(${JSON.stringify(output)}); console.log(JSON.stringify(Object.fromEntries(Object.entries(e).map(([k,v])=>[k,v.__endpoint?.secretEnvironmentVariables||[]]))));`],{encoding:"utf8"}));
  assert.deepEqual(Object.keys(endpoints).sort(),["approveMetaGrowthWeekV1","inspectMetaGrowthRuntimeV1","prepareMetaGrowthWeekV1","reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1","runMetaGrowthPublisherV1","setMetaGrowthPublishingStateV1"]);
  for(const [name,secrets] of Object.entries(endpoints))assert.deepEqual(secrets.map(s=>s.key),
-  ["reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1"].includes(name)?["SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY"]:[]);
+  ["reconcileMetaGrowthPublicationV1","runMetaGrowthMeasurementsV1","runMetaGrowthPublisherV1"].includes(name)?["SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY"]:[]);
 });
 
 test("normal growth deployment is reproducible and contains only its seven exports and two secrets", () => {

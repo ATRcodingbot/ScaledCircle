@@ -6,10 +6,12 @@ const oauth=require("./social_oauth");
 const steps=require("./social_provider_steps");
 const {execute}=require("./social_meta_steps");
 const {createAdapter}=require("./social_meta_transport");
+const {isDeepStrictEqual}=require("node:util");
 
 // Same immutable growth jobs/approvals, with a separate provider allowance so
 // preparing Meta cannot replace the active X week. No allowance is auto-enabled.
-function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false}) {
+function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false,enabledProviders=["facebook","instagram"]}) {
+ const canCreate=provider=>providerCreatesEnabled===true&&enabledProviders.includes(provider);
  const environment=project==="scaled-circle"?"production":project==="scaledcircle-staging"?"staging":null;
  if(!environment)throw Error("meta_runtime_unavailable");
  const stateRef=(uid,provider)=>{
@@ -28,7 +30,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   const [a,c,p,s,h,v,q]=(await Promise.all(refs.map(read))).map(x=>x.data());
   connectionPolicy.authorize(p,job.businessUid);
   if(!a || a.businessUid!==job.businessUid || a.approvedByUid!==job.businessUid ||
-   !growth.jobs(a).some(x=>x.id===job.id&&x.bindingHash===job.bindingHash&&growth.hash(x.binding)===growth.hash(job.binding)))throw Error("meta_approval_mismatch");
+   !growth.jobs(a).some(x=>x.id===job.id&&x.bindingHash===job.bindingHash&&isDeepStrictEqual(x.binding,job.binding)))throw Error("meta_approval_mismatch");
   const identity=a.providerAccounts?.[job.provider];
   if(c?.environment!==environment||c.tokenHealth!=="healthy"||c.status!=="connected_write"||
    c.providerUserId!==identity?.providerUserId||c.linkedPageId!==p.metaDogfood.pageId||
@@ -38,6 +40,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   if(action!=="reconcile") {
    if(a.revokedAt!=null||h?.killSwitchActive===true)throw Error("meta_supervisor_paused");
    if(action==="create") {
+   if(!canCreate(job.provider))throw Error("meta_deployment_creates_disabled");
    if(a.revokedAt!=null||s?.schemaVersion!=="MetaPublisherAllowanceV1"||s.businessUid!==job.businessUid||
     s.environment!==environment||s.provider!==job.provider||s.approvalId!==job.approvalId||s.mode!=="approval_required"||
     s.externalPublishingEnabled!==true||s.killSwitchActive!==false||h?.killSwitchActive===true||
@@ -66,7 +69,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    const state=(await stateRef(job.businessUid,job.provider).get()).data();
    return {jobId,provider:job.provider,bindingHash:job.bindingHash,
     scheduledFor:job.scheduledFor,providerBoundary:"validated_request_not_sent",
-    deploymentAllowsCreates:providerCreatesEnabled===true,
+    deploymentAllowsCreates:canCreate(job.provider),
     allowanceEnabled:state?.externalPublishingEnabled===true&&state?.killSwitchActive===false,
     maximumEffects:plan.maximumEffects,providerCreates:0};
   },
@@ -80,7 +83,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    });
   },
   async activate(uid,approvalId,provider) {
-   if(!providerCreatesEnabled)throw Error("meta_deployment_creates_disabled");
+   if(!canCreate(provider))throw Error("meta_deployment_creates_disabled");
    return db.runTransaction(async tx=>{
     const ref=stateRef(uid,provider),state=(await tx.get(ref)).data();
     const approved=(await tx.get(db.doc(`socialGrowthApprovals/${approvalId}`))).data();
@@ -111,6 +114,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    if(!reconcileOnly&&!providerCreatesEnabled)throw Error("meta_deployment_creates_disabled");
    const ref=db.doc(`socialGrowthJobs/${jobId}`),snapshot=await ref.get(),job=snapshot.data();
    if(!job||job.id!==jobId)throw Error("meta_job_missing");
+   if(!reconcileOnly&&!canCreate(job.provider))throw Error("meta_deployment_creates_disabled");
    if(["published","canceled"].includes(job.status))return {status:job.status};
    const ctx=await context(null,job,reconcileOnly?"reconcile":"create");
    const adapter=createAdapter({job,...ctx,now,fetchImpl,
