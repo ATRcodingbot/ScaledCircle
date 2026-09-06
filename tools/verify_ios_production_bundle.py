@@ -7,7 +7,12 @@ from pathlib import Path
 import zipfile
 
 
-def inspect(path, version, build):
+def inspect(path, version, build, environment='production'):
+    if environment not in ('production', 'staging'):
+        raise ValueError('Explicit production or staging environment required')
+    project = 'scaled-circle' if environment == 'production' else 'scaledcircle-staging'
+    app_id = ('1:1010956217112:ios:91c890b1ca2018a4e70c6d' if environment == 'production'
+              else '1:998249478055:ios:e3e282258d5750db352882')
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         if len(names) != len(set(names)):
@@ -31,8 +36,8 @@ def inspect(path, version, build):
         for key, value in expected.items():
             if info.get(key) != value:
                 raise ValueError('Application metadata mismatch: ' + key)
-        for key, value in {'PROJECT_ID': 'scaled-circle', 'BUNDLE_ID': 'com.scaledcircle.app',
-                           'GOOGLE_APP_ID': '1:1010956217112:ios:91c890b1ca2018a4e70c6d'}.items():
+        for key, value in {'PROJECT_ID': project, 'BUNDLE_ID': 'com.scaledcircle.app',
+                           'GOOGLE_APP_ID': app_id}.items():
             if config.get(key) != value:
                 raise ValueError('Firebase configuration mismatch: ' + key)
         for key in ['NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription',
@@ -44,6 +49,11 @@ def inspect(path, version, build):
         forbidden = ['scaledcircle-staging', 'demo-scaledcircle', '10.0.2.2',
                      'http://127.0.0.1:5000', 'http://127.0.0.1:5001']
         required = ['https://us-east1-scaled-circle.cloudfunctions.net/', 'socialOAuthXCallbackV1']
+        if environment == 'staging':
+            forbidden = ['scaled-circle', '1010956217112', 'demo-scaledcircle',
+                         '10.0.2.2', 'http://127.0.0.1:5000', 'http://127.0.0.1:5001']
+            required = ['https://us-east1-scaledcircle-staging.cloudfunctions.net/',
+                        'socialOAuthXCallbackV1']
         found = set()
         generic = set()
         for name in names:
@@ -57,7 +67,7 @@ def inspect(path, version, build):
                 generic.add(name)
         if found != set(required):
             raise ValueError('Production callback evidence missing from application binary')
-    return {'sha256': hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+    return {'environment': environment, 'sha256': hashlib.sha256(Path(path).read_bytes()).hexdigest(),
             'content_gate': 'PASS', 'signature_gate': 'NOT_VERIFIED_REQUIRES_MACOS',
             'generic_loopback_entries_require_review': sorted(generic)}
 
@@ -67,5 +77,6 @@ if __name__ == '__main__':
     parser.add_argument('ipa', type=Path)
     parser.add_argument('--version', required=True)
     parser.add_argument('--build', required=True)
+    parser.add_argument('--environment', choices=['production', 'staging'], default='production')
     args = parser.parse_args()
-    print(json.dumps(inspect(args.ipa, args.version, args.build), indent=2))
+    print(json.dumps(inspect(args.ipa, args.version, args.build, args.environment), indent=2))
