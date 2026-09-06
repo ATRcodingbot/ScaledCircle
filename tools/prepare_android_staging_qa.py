@@ -26,7 +26,9 @@ def main():
     if target.exists():
         raise ValueError('Use the existing isolated checkout or review it; no automatic overwrite')
     original = (source / 'android/app/google-services.json').read_bytes()
-    shutil.copytree(source, target, ignore=shutil.ignore_patterns('build', '.dart_tool', '.gradle', '.git', '.idea', '*.log'))
+    shutil.copytree(source, target, ignore=shutil.ignore_patterns(
+        'build', '.dart_tool', '.gradle', '.git', '.idea', '*.log',
+        'google-services.json', '.lib', 'ios', 'macos', 'linux', 'windows'))
     (target / 'android/app/google-services.json').write_text(json.dumps(config, indent=2))
     assert (source / 'android/app/google-services.json').read_bytes() == original
     print('Prepared ignored staging checkout; production Android configuration unchanged.')
