@@ -3120,11 +3120,11 @@ function normalMetaPublisher() {
   return require("./social_meta_runtime").createPublisher({db,project:process.env.GCLOUD_PROJECT,
     providerCreatesEnabled:false,credentials:loadMetaPublisherCredential});
 }
-// Only the scheduled Facebook path can reach provider creates. Inspection is
-// always read-only, and Instagram remains disabled at the deployment boundary.
-function scheduledFacebookPublisher() {
+// Only the scheduled feed path can reach provider creates. Inspection is
+// always read-only; each provider requires its own exact approved allowance.
+function scheduledMetaFeedPublisher() {
   return require("./social_meta_runtime").createPublisher({db,project:process.env.GCLOUD_PROJECT,
-    providerCreatesEnabled:process.env.GCLOUD_PROJECT==="scaled-circle",enabledProviders:["facebook"],credentials:loadMetaPublisherCredential});
+    providerCreatesEnabled:process.env.GCLOUD_PROJECT==="scaled-circle",enabledProviders:["facebook","instagram"],credentials:loadMetaPublisherCredential});
 }
 async function loadMetaPublisherCredential(job,expected) {
       const ref=db.doc(`socialConnections/${job.businessUid}/providers/${job.provider}`);
@@ -3148,7 +3148,7 @@ async function loadMetaPublisherCredential(job,expected) {
 async function inspectMetaScheduler(businessUid,executeDue=false) {
   const config=(await providerConfigRef("meta",runtimeEnvironment()).get()).data();
   metaConnection.authorize(config,businessUid);
-  return require("./social_meta_scheduler").run({db,publisher:scheduledFacebookPublisher(),businessUid,inspectOnly:!executeDue});
+  return require("./social_meta_scheduler").run({db,publisher:scheduledMetaFeedPublisher(),businessUid,inspectOnly:!executeDue});
 }
 exports.inspectMetaGrowthRuntimeV1=growthPlanningCallable(async businessUid=>inspectMetaScheduler(businessUid));
 exports.approveMetaGrowthWeekV1=growthPlanningCallable(async(businessUid,data)=>{
@@ -3226,7 +3226,7 @@ exports.runMetaGrowthPublisherV1=onSchedule({schedule:"every 5 minutes",timeZone
   const inspection=await inspectMetaScheduler(config.metaDogfood.businessUid,true);
   require("firebase-functions/logger").info("meta_scheduler_certification",{
     discoveredJobs:inspection.results.length,results:inspection.results,
-    enabledProviders:["facebook"]});
+    enabledProviders:["facebook","instagram"]});
 });
 
 exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",timeZone:"UTC",
