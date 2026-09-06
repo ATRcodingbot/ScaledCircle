@@ -52,9 +52,9 @@ async function ownedCampaign(request) {
   const campaignId = cleanId(request.data?.campaignId);
   if (!campaignId) throw new HttpsError("invalid-argument", "A campaign is required.");
   if (stagingPhysicalQa.reserved(campaignId)) {
-    const authority = (await db.doc(stagingPhysicalQa.AUTHORITY_PATH).get()).data();
+    const authority = (await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get()).data();
     try { stagingPhysicalQa.assertAccess({projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
-      authority, uid: request.auth.uid}); }
+      authority, uid: request.auth.uid, campaignId}); }
     catch (_) { throw new HttpsError("permission-denied", "This internal certification job is unavailable."); }
   }
   const ref = db.collection("campaigns").doc(campaignId);

@@ -14,9 +14,16 @@ void main() {
     expect(options.messagingSenderId, '998249478055');
   });
 
+  test('Android uses its dedicated staging registration', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final options = StagingFirebaseOptions.currentPlatform;
+    expect(options.appId, '1:998249478055:android:afe7b04c80155aa6352882');
+    expect(options.projectId, 'scaledcircle-staging');
+    expect(options.messagingSenderId, '998249478055');
+  });
+
   test('unregistered native staging platforms still fail closed', () {
     for (final platform in [
-      TargetPlatform.android,
       TargetPlatform.macOS,
       TargetPlatform.windows,
       TargetPlatform.linux,

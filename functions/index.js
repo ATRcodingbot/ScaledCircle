@@ -2830,7 +2830,7 @@ const EXACT_LOCATION_TYPES = new Set([
 
 async function assertPhysicalQaRequest(request) {
   if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
-  const authority = await db.doc(stagingPhysicalQa.AUTHORITY_PATH).get();
+  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
   try {
     stagingPhysicalQa.assertAccess({
       projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,

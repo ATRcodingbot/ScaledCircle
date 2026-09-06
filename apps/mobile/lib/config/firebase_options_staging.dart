@@ -4,14 +4,15 @@ import 'package:flutter/foundation.dart'
 
 /// Firebase client configuration for the isolated hosted staging project.
 ///
-/// Web and the explicitly registered iOS app are supported. Other native
+/// Web and the explicitly registered iOS/Android apps are supported. Other native
 /// platforms continue to fail closed.
 abstract final class StagingFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) return web;
     if (defaultTargetPlatform == TargetPlatform.iOS) return ios;
+    if (defaultTargetPlatform == TargetPlatform.android) return android;
     throw UnsupportedError(
-      'ScaledCircle staging Firebase is configured for web and iOS only. '
+      'ScaledCircle staging Firebase is configured for web, iOS, and Android only. '
       'No staging options exist for $defaultTargetPlatform.',
     );
   }
@@ -32,5 +33,13 @@ abstract final class StagingFirebaseOptions {
     projectId: 'scaledcircle-staging',
     storageBucket: 'scaledcircle-staging.firebasestorage.app',
     iosBundleId: 'com.scaledcircle.app',
+  );
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyBGVRUtMjgQIBohQBFUS2-DytztuI7Weh4',
+    appId: '1:998249478055:android:afe7b04c80155aa6352882',
+    messagingSenderId: '998249478055',
+    projectId: 'scaledcircle-staging',
+    storageBucket: 'scaledcircle-staging.firebasestorage.app',
   );
 }

@@ -74,3 +74,14 @@ test("QA assignment uses the real compensation and tracking authority", async ()
   assert.equal((await db.collection("assignmentCompensations").get()).size, 1);
   assert.equal((await db.collection("walletTransactions").get()).size, 0);
 });
+
+test('second QA fixture denies both cross-application directions before writes',async()=>{
+ const android=qa.FIXTURES[1];
+ await db.doc('users/android').set({role:'scaler',active:true});
+ await db.doc(qa.authorityPath(android.campaignId)).set({projectId:'scaledcircle-staging',immutable:true,certificationFixture:true,...android,businessUid:'business',scalerUid:'android'});
+ await db.doc(`campaigns/${android.campaignId}`).set({businessId:'business',status:'open'});
+ for(const [uid,campaignId]of [['scaler',android.campaignId],['android',qa.CAMPAIGN_ID],['other',android.campaignId]]){
+  await assert.rejects(call('applyToCampaign',uid,{campaignId}),e=>e.code==='permission-denied');
+  assert.equal((await db.doc(`campaigns/${campaignId}/applications/${uid}`).get()).exists,false);
+ }
+});
