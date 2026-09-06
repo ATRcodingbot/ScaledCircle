@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/tracking_models.dart';
+import '../../models/canvassing_photo_policy.dart';
 import '../../services/active_job_tracking_service.dart';
 import '../../services/native_tracking_bridge.dart';
 import '../scaler/completion/submit_completion_screen.dart';
@@ -36,6 +37,9 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
   Timer? _syncTimer;
   bool _working = false;
   String _syncMessage = 'Checking secure device queue…';
+  bool get _photoFree => prohibitsResidentialPhotos(
+    _campaignData['campaignType'] ?? _campaignData['type'],
+  );
 
   Map<String, dynamic> get _campaignData =>
       Map<String, dynamic>.from(widget.campaign.data() as Map);
@@ -179,34 +183,45 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
       if (location == null) {
         throw Exception('Unable to capture a checkpoint GPS fix.');
       }
-      final photo = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        imageQuality: 82,
-      );
-      if (photo == null) return;
-      final user = FirebaseAuth.instance.currentUser;
+      String? storagePath;
       final sessionId = _state.sessionId;
-      if (user == null || sessionId == null) {
-        throw Exception('Tracking session ended.');
+      if (sessionId == null) throw Exception('Tracking session ended.');
+      if (!_photoFree) {
+        final photo = await ImagePicker().pickImage(
+          source: ImageSource.camera,
+          imageQuality: 82,
+        );
+        if (photo == null) return;
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          throw Exception('Tracking session ended.');
+        }
+        final reference = FirebaseStorage.instance
+            .ref('tracking_checkpoints')
+            .child(user.uid)
+            .child(sessionId)
+            .child('${DateTime.now().toUtc().millisecondsSinceEpoch}.jpg');
+        await reference.putData(
+          await photo.readAsBytes(),
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        storagePath = reference.fullPath;
       }
-      final reference = FirebaseStorage.instance
-          .ref('tracking_checkpoints')
-          .child(user.uid)
-          .child(sessionId)
-          .child('${DateTime.now().toUtc().millisecondsSinceEpoch}.jpg');
-      await reference.putData(
-        await photo.readAsBytes(),
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
       await _tracking.registerCheckpoint(
         sessionId: sessionId,
-        storagePath: reference.fullPath,
+        storagePath: storagePath,
         location: location,
       );
       await _sync();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Checkpoint photo and GPS saved.')),
+          SnackBar(
+            content: Text(
+              _photoFree
+                  ? 'GPS checkpoint saved. No property photo needed.'
+                  : 'Checkpoint photo and GPS saved.',
+            ),
+          ),
         );
       }
     } catch (error) {
@@ -409,8 +424,10 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: _working ? null : _addCheckpoint,
-              icon: const Icon(Icons.add_a_photo),
-              label: const Text('Add checkpoint/photo'),
+              icon: Icon(_photoFree ? Icons.location_on : Icons.add_a_photo),
+              label: Text(
+                _photoFree ? 'Add GPS checkpoint' : 'Add checkpoint/photo',
+              ),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

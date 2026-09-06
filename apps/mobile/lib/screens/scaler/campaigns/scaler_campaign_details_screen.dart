@@ -832,11 +832,12 @@ class _ScalerCampaignDetailsScreenState
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
-                  _check("Before Photo", campaign.beforePhotoRequired),
+                  if (campaign.beforePhotoRequired)
+                    _check("Before Photo", true),
 
                   const SizedBox(height: 12),
 
-                  _check("After Photo", campaign.afterPhotoRequired),
+                  if (campaign.afterPhotoRequired) _check("After Photo", true),
 
                   const SizedBox(height: 12),
 

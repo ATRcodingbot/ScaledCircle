@@ -542,6 +542,31 @@ test("business handoff fault reserves one $50/$50 split and blocks later settlem
     .where("type", "==", "campaign_refund").get()).size, 0);
 });
 
+test("canvassing checkpoint uses genuine location without image and rejects photo submission", async () => {
+  await db.doc('campaigns/campaign').update({type: 'neighborhoodCanvassing'});
+  const {sessionId} = await start();
+  const location = {...point(1), timestampMs: Date.now()};
+  const result = await call(functions.registerTrackingCheckpoint, 'scaler', {sessionId, location});
+  const record = (await db.doc(`trackingSessions/${sessionId}/checkpoints/${result.checkpointId}`).get()).data();
+  assert.equal(record.storagePath, '');
+  assert.equal(record.scalerId, 'scaler');
+  assert.ok(record.receivedAt);
+  await assert.rejects(call(functions.registerTrackingCheckpoint, 'scaler', {sessionId, location,
+    storagePath: `tracking_checkpoints/scaler/${sessionId}/house.jpg`}), e => e.code === 'invalid-argument');
+  await assert.rejects(call(functions.registerTrackingCheckpoint, 'other', {sessionId, location}),
+    e => e.code === 'permission-denied');
+  await assert.rejects(call(functions.registerTrackingCheckpoint, 'scaler', {sessionId, location: {}}),
+    e => e.code === 'invalid-argument');
+  assert.equal((await db.doc(`trackingSessions/${sessionId}`).get()).data().checkpointCount, 1);
+});
+
+test("non-canvassing checkpoint retains image requirement", async () => {
+  await db.doc('campaigns/campaign').update({type: 'yardCleanup'});
+  const {sessionId} = await start();
+  await assert.rejects(call(functions.registerTrackingCheckpoint, 'scaler', {sessionId,
+    location: {...point(1), timestampMs: Date.now()}}), e => e.code === 'invalid-argument');
+});
+
 test("exact-location evidence is server-authoritative, tenant-scoped, and retry-safe", async () => {
   await db.doc("campaigns/campaign").update({status: "open", campaignType: "yard_sign_installation"});
   await db.doc("campaigns/campaign/applications/scaler").set({

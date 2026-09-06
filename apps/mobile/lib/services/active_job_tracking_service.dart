@@ -304,14 +304,14 @@ class ActiveJobTrackingService {
 
   Future<void> registerCheckpoint({
     required String sessionId,
-    required String storagePath,
+    String? storagePath,
     required TrackingLocationSample location,
   }) async {
     await const SecureFunctionService().call(
       functionName: 'registerTrackingCheckpoint',
       data: {
         'sessionId': sessionId,
-        'storagePath': storagePath,
+        'storagePath': ?storagePath,
         'location': location.toUploadMap(),
       },
     );

@@ -10117,30 +10117,51 @@ exports.registerTrackingCheckpoint = trackingCallable(
   );
   const sessionId = String(request.data?.sessionId || "").trim();
   const storagePath = String(request.data?.storagePath || "").trim();
+  if (!sessionId) throw new HttpsError("invalid-argument", "A tracking session is required.");
+  const sessionRef = db.collection("trackingSessions").doc(sessionId);
+  const initialSession = (await sessionRef.get()).data();
+  if (!initialSession || initialSession.scalerId !== context.uid || initialSession.status !== "active") {
+    throw new HttpsError("permission-denied", "This active tracking session is not yours.");
+  }
+  const campaignRef = db.collection("campaigns").doc(initialSession.campaignId);
+  const campaign = (await campaignRef.get()).data();
+  if (!campaign) throw new HttpsError("failed-precondition", "Campaign unavailable.");
+  const photoFree = require("./canvassing_photo_policy").prohibitsResidentialPhotos(campaign);
+  if (photoFree && storagePath) {
+    throw new HttpsError("invalid-argument", "Canvassing checkpoints use GPS without property photos.");
+  }
+  let photoMetadata = {};
+  let contentType = "";
+  let photoSize = 0;
+  if (!photoFree) {
   const expectedPrefix = `tracking_checkpoints/${context.uid}/${sessionId}/`;
   if (!sessionId || !storagePath.startsWith(expectedPrefix) ||
       storagePath.length <= expectedPrefix.length || storagePath.includes("..")) {
     throw new HttpsError("invalid-argument", "Checkpoint photo is required.");
   }
-  let photoMetadata;
   try {
     [photoMetadata] = await getStorage().bucket().file(storagePath).getMetadata();
   } catch (error) {
     logger.warn("Checkpoint object lookup failed", {sessionId, storagePath, error: String(error)});
     throw new HttpsError("failed-precondition", "The checkpoint photo is unavailable.");
   }
-  const contentType = String(photoMetadata.contentType || "").toLowerCase();
-  const photoSize = Number(photoMetadata.size || 0);
+  contentType = String(photoMetadata.contentType || "").toLowerCase();
+  photoSize = Number(photoMetadata.size || 0);
   if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(contentType) ||
       !Number.isFinite(photoSize) || photoSize < 1 ||
       photoSize > TRACKING_LIMITS.maxPhotoBytes) {
     throw new HttpsError("invalid-argument", "The checkpoint photo is not an allowed image.");
   }
-  const sessionRef = db.collection("trackingSessions").doc(sessionId);
+  }
   const checkpointRef = sessionRef.collection("checkpoints").doc();
   await db.runTransaction(async (transaction) => {
     const sessionSnapshot = await transaction.get(sessionRef);
     const session = sessionSnapshot.data();
+    const currentCampaign = (await transaction.get(campaignRef)).data();
+    if (!currentCampaign || session?.campaignId !== initialSession.campaignId ||
+        require("./canvassing_photo_policy").prohibitsResidentialPhotos(currentCampaign) !== photoFree) {
+      throw new HttpsError("failed-precondition", "Checkpoint policy changed. Refresh and try again.");
+    }
     if (!sessionSnapshot.exists || !session || session.scalerId !== context.uid) {
       throw new HttpsError("permission-denied", "This active tracking session is not yours.");
     }

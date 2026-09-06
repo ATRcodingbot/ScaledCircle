@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'canvassing_photo_policy.dart';
 
 class CampaignModel {
   final String id;
@@ -105,7 +106,7 @@ class CampaignModel {
 
       businessEmail: data["businessEmail"],
 
-      campaignType: data["campaignType"] ?? "",
+      campaignType: data["campaignType"] ?? data['type'] ?? "",
 
       campaignName: data["campaignName"] ?? "",
 
@@ -140,9 +141,12 @@ class CampaignModel {
       ),
 
       beforePhotoRequired:
-          data["verification"]?["beforePhotoRequired"] ?? false,
+          !prohibitsResidentialPhotos(data['campaignType'] ?? data['type']) &&
+          (data["verification"]?["beforePhotoRequired"] ?? false),
 
-      afterPhotoRequired: data["verification"]?["afterPhotoRequired"] ?? false,
+      afterPhotoRequired:
+          !prohibitsResidentialPhotos(data['campaignType'] ?? data['type']) &&
+          (data["verification"]?["afterPhotoRequired"] ?? false),
 
       businessApprovalRequired:
           data["verification"]?["businessApprovalRequired"] ?? false,
