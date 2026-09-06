@@ -38,7 +38,7 @@ async function prepare(db, candidate) {
 }
 
 function decision({plan, job, media, version, health, authority, approval}) {
-  const expected = model.draftJobs(plan).find(j => j.id === job?.id);
+  const expected = model.draftJobs({...plan, executionEnabled: false}).find(j => j.id === job?.id);
   if (!expected || bindingKeys.some(k => expected[k] !== job[k]) ||
       !equal(version, plan.items.find(i => i.versionId === job.versionId)) ||
       !media || model.media(media).id !== job.mediaRevisionId || media.sha256 !== job.mediaHash) throw Error("story_binding_changed");
@@ -47,7 +47,7 @@ function decision({plan, job, media, version, health, authority, approval}) {
   // No provided approval can activate this review-only deployment.
   if (health?.killSwitchActive !== false) holds.push("GLOBAL_STOP");
   if (authority?.surface !== "story" || authority.owner !== job.owner || authority.provider !== "instagram" ||
-      authority.planDigest !== plan.digest || !equal(authority.jobIds, model.draftJobs(plan).map(j => j.id)) ||
+      authority.planDigest !== plan.digest || !equal(authority.jobIds, model.draftJobs({...plan, executionEnabled: false}).map(j => j.id)) ||
       authority.killSwitchActive !== false) holds.push("STORY_PAUSED");
   if (authority?.publishingEnabled !== true) holds.push("PUBLISHING_DISABLED");
   holds.push("DEPLOYMENT_CREATE_DISABLED");
@@ -57,7 +57,7 @@ function decision({plan, job, media, version, health, authority, approval}) {
 async function inspect(db, planId) {
   const read = async p => (await db.doc(p).get()).data();
   const plan = await read(`socialStoryPlans/${planId}`);
-  const expected = model.draftJobs(plan);
+  const expected = model.draftJobs({...plan, executionEnabled: false});
   const [health, authority] = await Promise.all([read(`agentHealth/${plan.owner}`), read(model.paths(plan.owner, "instagram").authority)]);
   const rows = [], rehearsal = [];
   for (const e of expected) {

@@ -133,7 +133,7 @@ function createStore({db, authorize}) {
   };
 }
 function createAuthority({db, plan, account}) {
-  const expected = model.draftJobs(plan);
+  const expected = model.draftJobs({...plan, executionEnabled: false});
   if (plan.provider !== "instagram" || account.id !== plan.accountId || account.owner !== plan.owner || account.type !== "BUSINESS") throw Error("story_authority_identity_invalid");
   return async (tx, job, action) => {
     const read = async path => (await (tx ? tx.get(db.doc(path)) : db.doc(path).get())).data();
