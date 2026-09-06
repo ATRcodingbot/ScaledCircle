@@ -5,8 +5,11 @@ const crypto = require("node:crypto");
 const SUPPORT_EMAIL = "support@scaledcircle.com";
 const SUPPORT_NAME = "ScaledCircle Support";
 const LOGO_URL = "https://scaledcircle.com/icons/Icon-192.png";
-const VERIFY_ROUTE = "https://scaledcircle.com/#/verify-email";
-const PROFILE_ROUTE = "https://scaledcircle.com/#/complete-scaler-profile";
+// Select account-action destinations from the deployed project, never caller input.
+const ACCOUNT_ORIGIN = (process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === "scaledcircle-staging" ?
+  "https://scaledcircle-staging.web.app" : "https://scaledcircle.com";
+const VERIFY_ROUTE = `${ACCOUNT_ORIGIN}/#/verify-email`;
+const PROFILE_ROUTE = `${ACCOUNT_ORIGIN}/#/complete-scaler-profile`;
 const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
 const PUBLIC_ROLES = new Set(["business", "scaler"]);
 const DISCOVERY_SOURCES = new Set([

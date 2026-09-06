@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const email = require("./transactional_email");
 const legacy = require("./signup_notifications");
+const {execFileSync} = require("node:child_process");
 
 function fakeDatabase() {
   const documents = new Map();
@@ -42,6 +43,62 @@ function service(db = fakeDatabase(), now = () => 1_800_000_000_000) {
     return "https://scaled-circle.firebaseapp.com/__/auth/action?mode=verifyEmail&oobCode=REAL_CODE";
   }};
   return {db, value: email.createService({db, auth, FieldValue, now})};
+}
+
+for (const [project, origin] of [
+  ["scaledcircle-staging", "https://scaledcircle-staging.web.app"],
+  ["scaled-circle", "https://scaledcircle.com"],
+]) {
+  test(`${project} signup recovery and resend keep all account actions in their environment`, () => {
+    const script = `
+      const assert = require('node:assert/strict');
+      const email = require('./transactional_email');
+      const db = (${fakeDatabase.toString()})();
+      const authUser = ${JSON.stringify(authUser)};
+      const signup = ${JSON.stringify(signup)};
+      const continuations = [];
+      const auth = {generateEmailVerificationLink: async (address, options) => {
+        assert.equal(address, authUser.email);
+        continuations.push(options.url);
+        return 'https://example.test/__/auth/action?oobCode=MOCK_ONLY';
+      }};
+      const service = email.createService({db, auth,
+        FieldValue: {serverTimestamp: () => 'SERVER_TIMESTAMP'}, now: () => 1800000000000});
+      (async () => {
+        // Auth already exists; finalization must recover once without replacing it.
+        const request = {uid: 'existing-auth', authUser,
+          data: {...signup, projectId: 'caller-must-not-select-project', continueUrl: 'https://evil.test'}};
+        await service.finalize(request);
+        await service.finalize(request);
+        assert.equal(db.documents.size, 3);
+        assert.equal(db.documents.get('users/existing-auth').active, false);
+        assert.equal(db.documents.get('users/existing-auth').betaAccess, 'pending');
+        assert.equal([...db.documents.keys()].some(path => path.includes('consent')), false);
+        await service.resend({uid: 'existing-auth', authUser});
+        const jobs = [...db.documents.entries()].filter(([path]) =>
+          path.includes('welcome-user_') || path.includes('verify-email_')).map(([, data]) => data);
+        process.stdout.write(JSON.stringify({continuations, jobs}));
+      })().catch(() => process.exit(1));
+    `;
+    const result = JSON.parse(execFileSync(process.execPath, ["-e", script], {
+      cwd: __dirname, encoding: "utf8",
+      env: {...process.env, GCLOUD_PROJECT: project, GOOGLE_CLOUD_PROJECT: "ignored-project"},
+    }));
+    assert.equal(result.continuations.length, 3);
+    for (const destination of result.continuations) assert.equal(destination, `${origin}/#/complete-scaler-profile`);
+    assert.equal(result.jobs.length, 2);
+    for (const job of result.jobs) {
+      assert.ok(job.text.includes(`${origin}/#/verify-email?`));
+      assert.ok(job.html.includes(`${origin}/#/verify-email?`));
+      assert.ok(!job.text.includes('evil.test'));
+    }
+    assert.ok(result.jobs[0].text.includes(`${origin}/#/complete-scaler-profile`));
+    if (project === "scaledcircle-staging") {
+      for (const job of result.jobs) {
+        assert.ok(!(job.text + job.html).includes('https://scaledcircle.com/#/'));
+      }
+    }
+  });
 }
 
 test("Scaler finalization atomically creates profile and exactly two deterministic jobs", async () => {
