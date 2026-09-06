@@ -21,6 +21,7 @@ class _CompleteScalerProfileScreenState
     extends State<CompleteScalerProfileScreen> {
   bool _loading = true;
   String? _message;
+  bool _retryable = false;
 
   @override
   void initState() {
@@ -29,6 +30,24 @@ class _CompleteScalerProfileScreenState
   }
 
   Future<void> _open() async {
+    setState(() {
+      _loading = true;
+      _retryable = false;
+    });
+    try {
+      await _resolve();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _retryable = true;
+          _message = 'Unable to load your profile. Please try again.';
+        });
+      }
+    }
+  }
+
+  Future<void> _resolve() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       await Navigator.of(context).pushReplacement(
@@ -39,7 +58,8 @@ class _CompleteScalerProfileScreenState
       );
       return;
     }
-    await user.reload();
+    await user.reload().timeout(const Duration(seconds: 20));
+    if (!mounted) return;
     if (FirebaseAuth.instance.currentUser?.emailVerified != true) {
       if (mounted) {
         setState(() {
@@ -52,7 +72,9 @@ class _CompleteScalerProfileScreenState
     final profile = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
-        .get();
+        .get()
+        .timeout(const Duration(seconds: 20));
+    if (!mounted) return;
     final data = profile.data() ?? const <String, dynamic>{};
     if (data['role'] != 'scaler') {
       if (mounted) {
@@ -132,9 +154,13 @@ class _CompleteScalerProfileScreenState
                   ),
                   const SizedBox(height: 18),
                   FilledButton(
-                    onPressed: () =>
-                        AppNavigation.replace(context, AppRoutes.verifyEmail),
-                    child: const Text('VERIFY MY EMAIL'),
+                    onPressed: _retryable
+                        ? _open
+                        : () => AppNavigation.replace(
+                            context,
+                            AppRoutes.verifyEmail,
+                          ),
+                    child: Text(_retryable ? 'Retry' : 'VERIFY MY EMAIL'),
                   ),
                 ],
               ),

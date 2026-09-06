@@ -58,3 +58,15 @@ test("ordinary Business and assigned-zone queries retain access", async () => {
   await assertSucceeds(db("other").collection("campaignZones").where("campaignId", "==", "ordinary").get());
   await assertFails(db("other").collection("campaignZones").where("campaignId", "==", qaId).get());
 });
+
+test("pending profile stays callable-only; approved owner cannot read another owner's preferences", async () => {
+  await environment.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().doc('users/pending-profile').set({role:'scaler',active:false,betaAccess:'pending'});
+    await ctx.firestore().doc('discoveryPreferences/scaler').set({userUid:'scaler'});
+  });
+  await assertFails(db('pending-profile').doc('discoveryPreferences/pending-profile').get());
+  await assertFails(db('pending-profile').doc('discoveryPreferences/pending-profile').set({areas:[]}));
+  await assertSucceeds(db('scaler').doc('discoveryPreferences/scaler').get());
+  await assertFails(db('other').doc('discoveryPreferences/scaler').get());
+  await assertFails(db('scaler').doc('discoveryPreferences/scaler').update({areas:[]}));
+});

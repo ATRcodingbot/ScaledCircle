@@ -65,6 +65,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   late final TextEditingController _otherWorkInterests;
   List<MarketplaceWorkType> _workTypes = const [];
   bool _loading = true;
+  bool _loadFailed = false;
   bool _saving = false;
   Map<String, dynamic> _authoritative = {};
   Map<String, bool> _alertDelivery = {
@@ -102,60 +103,70 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
   }
 
   Future<void> _load() async {
-    final results = await Future.wait<dynamic>([
-      widget.loadPreferences?.call() ?? _service.load(),
-      if (!_business)
-        widget.loadWorkTypes?.call() ?? _service.loadMarketplaceWorkTypes(),
-    ]);
-    final data = results.first as Map<String, dynamic>?;
-    if (!_business) {
-      _workTypes = (results[1] as List).cast<MarketplaceWorkType>();
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
+    try {
+      final results = await Future.wait<dynamic>([
+        widget.loadPreferences?.call() ?? _service.load(),
+        if (!_business)
+          widget.loadWorkTypes?.call() ?? _service.loadMarketplaceWorkTypes(),
+      ], eagerError: true).timeout(const Duration(seconds: 20));
+      if (!mounted) return;
+      final data = results.first as Map<String, dynamic>?;
+      if (!_business) {
+        _workTypes = (results[1] as List).cast<MarketplaceWorkType>();
+      }
+      if (data != null) {
+        _authoritative = Map<String, dynamic>.from(data);
+        _areas.addAll(
+          (data['areas'] as List? ?? const []).whereType<Map>().map(
+            (value) => Map<String, dynamic>.from(value),
+          ),
+        );
+        _priorities
+          ..clear()
+          ..addAll(_strings(data['priorityServices']));
+        _otherServices.addAll(_strings(data['otherServices']));
+        _excluded.addAll(_strings(data['excludedServices']));
+        final storedJobTypes = _strings(data['jobTypes']);
+        _jobTypes.addAll(
+          storedJobTypes.where(
+            (id) => !_legacyOutreachWorkTypeIds.contains(id.toLowerCase()),
+          ),
+        );
+        _outsideScope = data['outsideOpportunityScope']?.toString() ?? 'none';
+        _travelMode = data['travelMode']?.toString() ?? 'nearby';
+        _travelMiles = (data['maxTravelMiles'] as num?)?.toDouble() ?? 20;
+        _outreach =
+            data['outreachOptIn'] == true ||
+            storedJobTypes.any(
+              (id) => _legacyOutreachWorkTypeIds.contains(id.toLowerCase()),
+            );
+        _crew = data['crewOptIn'] == true;
+        _vehicleType = data['vehicleType']?.toString() ?? '';
+        _vehicleBed = data['vehicleBed']?.toString() ?? '';
+        _otherWorkInterests.text = data['otherWorkInterests']?.toString() ?? '';
+        _notifications = Map<String, bool>.from(
+          (data['notifications'] as Map? ?? const {}).map(
+            (key, value) => MapEntry(key.toString(), value == true),
+          ),
+        );
+        _alertDelivery = Map<String, bool>.from(
+          (data['alertDelivery'] as Map? ?? const {}).map(
+            (key, value) => MapEntry(key.toString(), value == true),
+          ),
+        );
+        _alertDelivery.putIfAbsent('inApp', () => true);
+        _alertDelivery.putIfAbsent('email', () => false);
+        _alertDelivery['push'] = false;
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    if (data != null) {
-      _authoritative = Map<String, dynamic>.from(data);
-      _areas.addAll(
-        (data['areas'] as List? ?? const []).whereType<Map>().map(
-          (value) => Map<String, dynamic>.from(value),
-        ),
-      );
-      _priorities
-        ..clear()
-        ..addAll(_strings(data['priorityServices']));
-      _otherServices.addAll(_strings(data['otherServices']));
-      _excluded.addAll(_strings(data['excludedServices']));
-      final storedJobTypes = _strings(data['jobTypes']);
-      _jobTypes.addAll(
-        storedJobTypes.where(
-          (id) => !_legacyOutreachWorkTypeIds.contains(id.toLowerCase()),
-        ),
-      );
-      _outsideScope = data['outsideOpportunityScope']?.toString() ?? 'none';
-      _travelMode = data['travelMode']?.toString() ?? 'nearby';
-      _travelMiles = (data['maxTravelMiles'] as num?)?.toDouble() ?? 20;
-      _outreach =
-          data['outreachOptIn'] == true ||
-          storedJobTypes.any(
-            (id) => _legacyOutreachWorkTypeIds.contains(id.toLowerCase()),
-          );
-      _crew = data['crewOptIn'] == true;
-      _vehicleType = data['vehicleType']?.toString() ?? '';
-      _vehicleBed = data['vehicleBed']?.toString() ?? '';
-      _otherWorkInterests.text = data['otherWorkInterests']?.toString() ?? '';
-      _notifications = Map<String, bool>.from(
-        (data['notifications'] as Map? ?? const {}).map(
-          (key, value) => MapEntry(key.toString(), value == true),
-        ),
-      );
-      _alertDelivery = Map<String, bool>.from(
-        (data['alertDelivery'] as Map? ?? const {}).map(
-          (key, value) => MapEntry(key.toString(), value == true),
-        ),
-      );
-      _alertDelivery.putIfAbsent('inApp', () => true);
-      _alertDelivery.putIfAbsent('email', () => false);
-      _alertDelivery['push'] = false;
-    }
-    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -912,6 +923,19 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
     ),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
+        : _loadFailed
+        ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Unable to load work preferences. Please try again.',
+                ),
+                const SizedBox(height: 16),
+                FilledButton(onPressed: _load, child: const Text('Retry')),
+              ],
+            ),
+          )
         : ListView(
             padding: const EdgeInsets.all(20),
             children: [
