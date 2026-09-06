@@ -1,0 +1,1 @@
+{"name":"scaledcircle-staging-admin","private":true,"version":"1.0.0","main":"index.js","engines":{"node":"24"},"dependencies":{"firebase-admin":"^13.6.0","firebase-functions":"^7.0.0"}}

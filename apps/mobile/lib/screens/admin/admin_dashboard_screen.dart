@@ -12,6 +12,7 @@ import 'admin_agentic_growth_screen.dart';
 import 'admin_dashboard_card.dart';
 import 'admin_platform_health_screen.dart';
 import 'admin_role_gate.dart';
+import 'staging_scaler_approval_screen.dart';
 import 'admin_role_management_screen.dart';
 import 'admin_social_operations_screen.dart';
 import 'admin_subscription_overview_screen.dart';
@@ -71,6 +72,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
         actions: [
+          if (AppEnvironmentConfig.isStaging)
+            IconButton(
+              tooltip: 'Staging Scaler approval',
+              icon: const Icon(Icons.person_add_alt_1),
+              onPressed: () => _push(const StagingScalerApprovalScreen()),
+            ),
           if (MediaQuery.sizeOf(context).width >= 520)
             IconButton(
               onPressed: _refresh,

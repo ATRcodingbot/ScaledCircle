@@ -1,6 +1,11 @@
 {
   "functions": [
     {
+      "source": "functions-staging-admin",
+      "codebase": "staging-admin",
+      "ignore": ["node_modules", ".git", "*.test.js", "*.local"]
+    },
+    {
       "source": "functions-assignment",
       "codebase": "assignment-core",
       "disallowLegacyRuntimeConfig": true,
