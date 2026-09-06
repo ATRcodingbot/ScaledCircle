@@ -1,3 +1,4 @@
+import 'staging_qa_discovery.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -34,20 +35,9 @@ class CampaignService {
 
   Stream<List<CampaignModel>> getOpenCampaigns() {
 
-    return _firestore
-        .collection("campaigns")
-        .where(
-          "status",
-          isEqualTo: "open",
-        )
-        .orderBy(
-          "createdAt",
-          descending: true,
-        )
-        .snapshots()
-        .map((snapshot) {
+    return marketplaceCampaigns(_firestore).map((documents) {
 
-      return snapshot.docs
+      return documents
           .map(
             (doc) =>
                 CampaignModel.fromFirestore(doc),

@@ -22,6 +22,10 @@ class ScalerCampaignMarketplaceScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
+          if (snapshot.hasError) {
+            return const Center(child: Text('Campaigns are temporarily unavailable. Please try again.'));
+          }
+
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(child: Text("No campaigns available."));
           }
