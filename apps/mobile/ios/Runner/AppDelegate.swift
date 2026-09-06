@@ -237,7 +237,7 @@ private final class ActiveJobTrackingBridge: NSObject, FlutterPlugin {
   init(messenger: FlutterBinaryMessenger) { channel = FlutterMethodChannel(name: "com.scaledcircle/active_job_tracking", binaryMessenger: messenger) }
   func register() { channel.setMethodCallHandler(handle) }
   static func register(with registrar: FlutterPluginRegistrar) {}
-  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let store = ActiveTrackingStore.shared
     let arguments = call.arguments as? [String: Any] ?? [:]
     switch call.method {
