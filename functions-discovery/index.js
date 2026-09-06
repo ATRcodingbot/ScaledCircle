@@ -1,3 +1,4 @@
+const stagingPhysicalQa = require("./staging_physical_qa");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -4063,6 +4064,9 @@ async function generateSmartZonePlan(input, desiredHours) {
 exports.getSmartZonePlan = onCall(
   { enforceAppCheck: false, maxInstances: 10 },
   async (request) => {
+    if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
+      throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
+    }
     const input = await smartZoneCampaign(request);
     try {
       return (await generateSmartZonePlan(input, request.data?.desiredHours)).plan;
@@ -4075,6 +4079,9 @@ exports.getSmartZonePlan = onCall(
 exports.applySmartZonePlan = onCall(
   { enforceAppCheck: false, maxInstances: 5 },
   async (request) => {
+    if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
+      throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
+    }
     const input = await smartZoneCampaign(request);
     let plan;
     let geographicSnapshot;

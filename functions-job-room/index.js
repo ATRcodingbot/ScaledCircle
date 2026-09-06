@@ -1,3 +1,18 @@
+const stagingPhysicalQa = require("./staging_physical_qa");
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.AUTHORITY_PATH).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -6195,6 +6210,7 @@ const TRACKING_CALLABLE_OPTIONS = {
 function trackingCallable(name, handler) {
   return onCall(TRACKING_CALLABLE_OPTIONS, async (request) => {
     try {
+      await assertPhysicalQaRequest(request);
       return await handler(request);
     } catch (error) {
       if (error instanceof HttpsError) throw error;

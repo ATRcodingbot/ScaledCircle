@@ -1,5 +1,6 @@
 "use strict";
 const Stripe = require("stripe");
+const stagingPhysicalQa = require("./staging_physical_qa");
 const {initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
@@ -50,6 +51,12 @@ async function ownedCampaign(request) {
   if (String(user.role || "").toLowerCase() !== "business") throw new HttpsError("permission-denied", "Business access required.");
   const campaignId = cleanId(request.data?.campaignId);
   if (!campaignId) throw new HttpsError("invalid-argument", "A campaign is required.");
+  if (stagingPhysicalQa.reserved(campaignId)) {
+    const authority = (await db.doc(stagingPhysicalQa.AUTHORITY_PATH).get()).data();
+    try { stagingPhysicalQa.assertAccess({projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority, uid: request.auth.uid}); }
+    catch (_) { throw new HttpsError("permission-denied", "This internal certification job is unavailable."); }
+  }
   const ref = db.collection("campaigns").doc(campaignId);
   const snapshot = await ref.get();
   if (!snapshot.exists) throw new HttpsError("not-found", "Campaign not found.");

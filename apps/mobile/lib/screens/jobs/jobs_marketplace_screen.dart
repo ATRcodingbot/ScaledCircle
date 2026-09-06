@@ -1,3 +1,4 @@
+import '../../services/staging_qa_discovery.dart';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -192,12 +193,8 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
           const SizedBox(height: 20),
 
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('campaigns')
-                  .where('status', isEqualTo: 'open')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
+            child: StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
+              stream: marketplaceCampaigns(FirebaseFirestore.instance),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
@@ -215,10 +212,10 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final docs = snapshot.data?.docs ?? [];
+                final docs = snapshot.data ?? [];
 
                 final campaigns = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
+                  final data = doc.data()!;
 
                   if (forYou && !_matchesSavedPreferences(data)) return false;
 

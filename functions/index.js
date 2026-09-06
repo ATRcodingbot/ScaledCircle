@@ -1,3 +1,4 @@
+const stagingPhysicalQa = require("./staging_physical_qa");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
@@ -2827,8 +2828,26 @@ const EXACT_LOCATION_TYPES = new Set([
   "material_dropoff", "dump_pickup", "dump_dropoff", "event_location",
 ]);
 
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.AUTHORITY_PATH).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId,
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
+
 function completionAuthorityCallable(handler) {
-  return onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, handler);
+  return onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, async (request) => {
+    await assertPhysicalQaRequest(request);
+    return handler(request);
+  });
 }
 const COMPLETION_PROOF_TYPES = new Set([
   "gps_route", "checkpoint_photo", "installation_photo", "before_photo",
@@ -4547,6 +4566,9 @@ async function generateSmartZonePlan(input, desiredHours) {
 exports.getSmartZonePlan = onCall(
   {enforceAppCheck: false, maxInstances: 10},
   async (request) => {
+    if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
+      throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
+    }
     const input = await smartZoneCampaign(request);
     try {
       return (await generateSmartZonePlan(input, request.data?.desiredHours)).plan;
@@ -4559,6 +4581,9 @@ exports.getSmartZonePlan = onCall(
 exports.applySmartZonePlan = onCall(
   {enforceAppCheck: false, maxInstances: 5},
   async (request) => {
+    if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
+      throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
+    }
     const input = await smartZoneCampaign(request);
     let plan;
     let geographicSnapshot;
@@ -6706,6 +6731,7 @@ function trackingSegmentId(index) {
 function trackingCallable(name, handler) {
   return onCall(TRACKING_CALLABLE_OPTIONS, async (request) => {
     try {
+      await assertPhysicalQaRequest(request);
       return await handler(request);
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -6999,6 +7025,7 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
   const before = event.data?.before.data() || {};
   const campaign = event.data?.after.data() || {};
   if (before.status === "open" || campaign.status !== "open") return;
+  if (stagingPhysicalQa.suppressOpportunity(event.params.campaignId, campaign)) return;
   // A bounded candidate query prevents one Firestore query per Scaler. Detailed
   // geometry and travel policy are evaluated deterministically in memory.
   const candidateQuery = db.collection("discoveryPreferences").where("role", "==", "scaler");
@@ -7403,6 +7430,7 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
       );
     }
     const scalerId = String(application.scalerId || "").trim();
+    await assertPhysicalQaRequest({...request, data: {...request.data, applicationId: scalerId}});
     const scalerEmail = String(application.scalerEmail || application.email || "").trim();
     const pointCount = Number(zone.serviceAreaPointCount || 0);
     const assignedHomes = Number(zone.estimatedHomes || 0);
@@ -7552,6 +7580,9 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
 
 exports.configureZoneGroupAssignment = trackingCallable(
   "configureZoneGroupAssignment", async (request) => {
+  if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {
+    throw new HttpsError("failed-precondition", "Group work is unavailable for this certification job.");
+  }
     assertTrackingPayload(request.data, new Set(["campaignId", "zoneId", "requiredScalerCount"]), 4096);
     const context = await requireVerifiedUser(request, "Sign in before configuring group work.");
     if (context.role !== "business" && !context.isAdmin) throw new HttpsError("permission-denied", "Only the campaign Business can configure group work.");
@@ -7620,6 +7651,9 @@ exports.configureZoneGroupAssignment = trackingCallable(
   });
 
 exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (request) => {
+  if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {
+    throw new HttpsError("failed-precondition", "Group work is unavailable for this certification job.");
+  }
   assertTrackingPayload(request.data, new Set(["campaignId", "zoneId", "applicationId"]), 4096);
   const context = await requireVerifiedUser(request, "Sign in before accepting group work.");
   if (!["scaler", "business"].includes(context.role) && !context.isAdmin) {
@@ -8112,6 +8146,10 @@ exports.listCampaignDiscovery = trackingCallable("listCampaignDiscovery", async 
   const unique = new Map();
   for (const snapshot of snapshots) {
     for (const document of snapshot.docs) {
+      if (stagingPhysicalQa.reserved(document.id)) {
+        try { await assertPhysicalQaRequest({...request, data: {campaignId: document.id}}); }
+        catch (_) { continue; }
+      }
       unique.set(document.id, operations.safeDiscoveryProjection({...document.data(), id: document.id}));
     }
   }
@@ -10221,6 +10259,7 @@ function safeCampaignQuoteCallable(name, handler) {
 function safeStripeCallable(name, handler) {
   return onCall(MARKETPLACE_FUNCTION_OPTIONS, async (request) => {
     try {
+      await assertPhysicalQaRequest(request);
       return await handler(request);
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -10235,6 +10274,7 @@ function safeStripeCallable(name, handler) {
 function safeMarketplaceAuthorityCallable(name, handler) {
   return onCall(MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS, async (request) => {
     try {
+      await assertPhysicalQaRequest(request);
       return await handler(request);
     } catch (error) {
       if (error instanceof HttpsError) throw error;

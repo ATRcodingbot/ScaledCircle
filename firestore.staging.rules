@@ -1,0 +1,1340 @@
+rules_version = '2';
+
+service cloud.firestore {
+
+  match /databases/{database}/documents {
+    // Staging-only reserved physical-certification namespace. Authority is
+    // provisioned by trusted tooling; clients cannot create or edit it.
+    match /internalCertificationAuthorities/{id} {
+      allow read: if isSignedIn() && id == 'ios_physical_qa_v1'
+        && (request.auth.uid == resource.data.businessUid || request.auth.uid == resource.data.scalerUid);
+      allow write: if false;
+    }
+
+    function physicalQaProtectedFields() {
+      return financialCampaignFields().concat(['certificationFixture', 'certificationAuthorityId',
+        'certificationScalerUid', 'certificationBusinessUid']);
+    }
+
+    function physicalQaActor() {
+      let a = get(/databases/$(database)/documents/internalCertificationAuthorities/ios_physical_qa_v1).data;
+      return isSignedIn() && a.projectId == 'scaledcircle-staging'
+        && a.certificationFixture == true && a.immutable == true
+        && a.campaignId == 'ios_physical_qa_v1' && a.zoneId == 'ios_physical_qa_zone_v1'
+        && (request.auth.uid == a.businessUid || request.auth.uid == a.scalerUid);
+    }
+    function physicalQaCampaignRead(id) {
+      return resource['__name__'] != /databases/$(database)/documents/campaigns/ios_physical_qa_v1
+        || physicalQaActor()
+        || resource.data.businessId == request.auth.uid;
+    }
+    function physicalQaZoneRead(id) {
+      // Campaign/assignment ownership is server-bound and immutable to clients.
+      // These predicates also preserve ordinary owner/assigned-job queries.
+      return resource.data.campaignId != 'ios_physical_qa_v1' || physicalQaActor()
+        || resource.data.businessId == request.auth.uid
+        || resource.data.assignedScalerId == request.auth.uid
+        || ('assignedScalerIds' in resource.data && request.auth.uid in resource.data.assignedScalerIds);
+    }
+
+
+
+    // ============================================================
+    // USERS
+    // ============================================================
+
+    match /users/{userId} {
+
+      allow read:
+        if isSignedIn()
+        && request.auth.uid == userId;
+
+
+      allow create:
+        if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'email',
+          'displayName',
+          'companyName',
+          'postalCode',
+          'contactNumber',
+          'role',
+          'accountType',
+          'activeView',
+          'active',
+          'betaAccess',
+          'earlyAccessSource',
+          'discoverySource',
+          'referrerName',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'email',
+          'displayName',
+          'postalCode',
+          'role',
+          'accountType',
+          'activeView',
+          'active',
+          'betaAccess',
+          'discoverySource',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.role in ['business', 'scaler']
+        && request.resource.data.accountType == request.resource.data.role
+        && request.resource.data.activeView == request.resource.data.role
+        && request.resource.data.active == false
+        && request.resource.data.betaAccess == 'pending'
+        && (
+          !request.resource.data.keys().hasAll(['contactNumber'])
+          || request.resource.data.contactNumber is string
+        )
+        && request.resource.data.discoverySource in [
+          'personal_referral',
+          'search_engine',
+          'social_media',
+          'online_ad',
+          'event_or_group',
+          'other'
+        ]
+        && (
+          request.resource.data.discoverySource != 'personal_referral'
+          || (
+            request.resource.data.keys().hasAll(['referrerName'])
+            && request.resource.data.referrerName is string
+            && request.resource.data.referrerName.size() > 0
+          )
+        );
+
+
+      allow update:
+        if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName',
+          'companyName',
+          'postalCode',
+          'contactNumber',
+          'accountType',
+          'activeView',
+          'weatherCoverageCountyIds',
+          'weatherCoverageEnabled',
+          'weatherEmailAlertsEnabled',
+          'updatedAt'
+        ])
+        && request.resource.data.accountType in ['business', 'scaler']
+        && request.resource.data.activeView in ['business', 'scaler']
+        && (
+          !request.resource.data.keys().hasAll(['weatherCoverageCountyIds'])
+          || (
+            request.resource.data.weatherCoverageCountyIds is list
+            && request.resource.data.weatherCoverageCountyIds.size() <= 24
+            && request.resource.data.weatherCoverageCountyIds.hasOnly([
+              'allegany',
+              'anne_arundel',
+              'baltimore',
+              'baltimore_city',
+              'calvert',
+              'caroline',
+              'carroll',
+              'cecil',
+              'charles',
+              'dorchester',
+              'frederick',
+              'garrett',
+              'harford',
+              'howard',
+              'kent',
+              'montgomery',
+              'prince_georges',
+              'queen_annes',
+              'saint_marys',
+              'somerset',
+              'talbot',
+              'washington',
+              'wicomico',
+              'worcester'
+            ])
+          )
+        )
+        && (
+          !request.resource.data.keys().hasAll(['weatherCoverageEnabled'])
+          || request.resource.data.weatherCoverageEnabled is bool
+        )
+        && (
+          !request.resource.data.keys().hasAll(['weatherEmailAlertsEnabled'])
+          || request.resource.data.weatherEmailAlertsEnabled is bool
+        );
+
+    }
+
+
+
+    // ============================================================
+    // CAMPAIGNS
+    // ============================================================
+
+    match /campaigns/{campaignId} {
+
+      allow read:
+        if isApprovedAccount() && physicalQaCampaignRead(campaignId);
+
+
+      allow create:
+        if campaignId != 'ios_physical_qa_v1' && isApprovedAccount()
+        && request.resource.data.businessId == request.auth.uid
+        && !request.resource.data.keys().hasAny(physicalQaProtectedFields());
+
+
+      allow update:
+        if physicalQaCampaignRead(campaignId) && isApprovedAccount()
+        && resource.data.businessId == request.auth.uid
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(physicalQaProtectedFields());
+
+
+      allow delete:
+        if false;
+
+
+
+      // ----------------------------------------------------------
+      // APPLICATIONS
+      // ----------------------------------------------------------
+
+      match /applications/{scalerId} {
+
+
+        // Applications are contractual work-entry records and are created only
+        // by the consent-gated applyToCampaign server authority.
+        allow create:
+          if false;
+
+
+        allow read:
+          if isApprovedAccount()
+          &&
+          (
+            request.auth.uid == scalerId
+            ||
+            get(
+              /databases/$(database)/documents/campaigns/$(campaignId)
+            ).data.businessId == request.auth.uid
+          );
+
+
+        // Review/assignment changes are contractual authority and must pass
+        // through the transaction-safe campaign callables.
+        allow update, delete:
+          if false;
+
+      }
+
+
+
+      // ----------------------------------------------------------
+      // ASSIGNED SCALERS
+      // ----------------------------------------------------------
+
+      match /assignedScalers/{scalerId} {
+
+
+        allow read:
+          if isApprovedAccount()
+          &&
+          (
+            request.auth.uid == scalerId
+            ||
+            get(
+              /databases/$(database)/documents/campaigns/$(campaignId)
+            ).data.businessId == request.auth.uid
+          );
+
+
+        // Assignment state is maintained only by server authority.
+        allow create, update, delete:
+          if false;
+
+      }
+
+    }
+
+
+
+    // ============================================================
+    // SERVER-MANAGED PUBLIC SITE DATA
+    // ============================================================
+
+    match /campaignTrackingCodes/{trackingCode} {
+
+      // Public redirects and metrics are handled by Cloud Functions. Keeping
+      // codes off the client prevents destination tampering and raw event
+      // enumeration.
+      allow read, write:
+        if false;
+
+      match /events/{eventId} {
+        allow read, write:
+          if false;
+      }
+
+    }
+
+
+    match /waitlist/{entryId} {
+
+      // The public form writes through joinWaitlist, which validates and
+      // rate-limits the shape. Administrators may inspect launch entries.
+      allow read:
+        if isAdmin();
+
+      allow create, update, delete:
+        if false;
+
+    }
+
+    match /outboundEmailJobs/{jobId} {
+
+      // Only trusted backend code may author or inspect outbound messages.
+      // This prevents clients from choosing recipients, sender identities, or
+      // arbitrary message content.
+      allow read, create, update, delete:
+        if false;
+
+    }
+
+    match /adminIssues/{issueId} {
+      // Actionable issue details are visible only inside the authoritative
+      // Admin experience. Creation and resolution remain server-only.
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /adminAuditEvents/{eventId} {
+      // Role-transfer and login-readiness evidence is immutable and authored
+      // only by trusted backend/operator code.
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+
+    match /weatherOpportunityCache/{cacheId} {
+
+      allow read, write:
+        if false;
+
+    }
+
+
+
+    // ============================================================
+    // APPLICATION COLLECTION-GROUP QUERIES
+    // ============================================================
+
+    match /{path=**}/applications/{applicationId} {
+
+      allow read:
+        if isApprovedAccount()
+        && resource.data.scalerId == request.auth.uid;
+
+    }
+
+
+
+    // ============================================================
+    // CAMPAIGN ZONES
+    // ============================================================
+
+    match /campaignZones/{zoneId} {
+
+      allow read:
+        if isApprovedAccount() && physicalQaZoneRead(zoneId);
+
+
+      allow create:
+        if zoneId != 'ios_physical_qa_zone_v1'
+        && request.resource.data.campaignId != 'ios_physical_qa_v1' && isApprovedBusiness()
+        && request.resource.data.businessId == request.auth.uid
+        && request.resource.data.campaignId is string
+        && request.resource.data.campaignId.size() > 0
+        && request.resource.data.campaignId.size() <= 128
+        && exists(
+          /databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)
+        )
+        && get(
+          /databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)
+        ).data.businessId == request.auth.uid
+        && get(
+          /databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)
+        ).data.status == 'draft'
+        && request.resource.data.assignedScalerId == null
+        && request.resource.data.status == 'unassigned'
+        && request.resource.data.keys().hasOnly([
+          'campaignId', 'businessId', 'zoneName', 'shapeType',
+          'serviceAreaType', 'serviceArea', 'serviceAreaPointCount',
+          'serviceAreaCenter', 'serviceAreaRadiusMeters', 'estimatedHomes',
+          'homeCountStatus', 'analysisStatus', 'assignedScalerId', 'status',
+          'createdAt', 'updatedAt', 'serviceAreaUpdatedAt'
+        ])
+        && validDraftZoneTarget(request.resource.data);
+
+
+      allow update:
+        if physicalQaZoneRead(zoneId) && isApprovedBusiness()
+        && resource.data.businessId == request.auth.uid
+        && resource.data.assignedScalerId == null
+        && (!('mapLocked' in resource.data) || resource.data.mapLocked != true)
+        && get(
+          /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+        ).data.status == 'draft'
+        && get(
+          /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+        ).data.businessId == request.auth.uid
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.campaignId == resource.data.campaignId
+        && request.resource.data.assignedScalerId == resource.data.assignedScalerId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'zoneName', 'shapeType', 'serviceAreaType', 'serviceArea',
+          'serviceAreaPointCount', 'serviceAreaCenter',
+          'serviceAreaRadiusMeters', 'updatedAt', 'serviceAreaUpdatedAt'
+        ])
+        && validDraftZoneUpdate(request.resource.data);
+
+
+      allow delete:
+        if isAdmin()
+        || (
+          isApprovedBusiness()
+          && resource.data.businessId == request.auth.uid
+          && resource.data.assignedScalerId == null
+          && resource.data.status == 'unassigned'
+          && get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.businessId == request.auth.uid
+          && get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.status == 'draft'
+          && !resource.data.keys().hasAny([
+            'activeTrackingSessionId', 'routeId', 'completionStatus',
+            'verificationStatus', 'paymentStatus', 'payoutStatus',
+            'settlementStatus', 'materialHandoffStatus'
+          ])
+        );
+
+    }
+
+
+
+    // Shared Property Intelligence cache is written and served only by the
+    // trusted backend. Clients receive sanitized results through the callable.
+    match /propertyIntelligenceCache/{analysisId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // AI interpretations, provider usage metadata, and rate-limit counters are
+    // backend-only. Entitled clients receive a sanitized response via the
+    // analyzeScaleIntelligence callable and cannot forge or enumerate results.
+    match /intelligenceAnalysisCache/{analysisId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /intelligenceRateLimits/{windowId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Business-supplied grounding profiles are owner-readable. Validation,
+    // versioning, and every write flow through saveBusinessGrowthProfile.
+    match /businessGrowthProfiles/{businessId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
+    // Generated drafts are owner-readable; model, prompt, usage, and source
+    // metadata are backend-authored and cannot be forged by a client.
+    match /managedGrowthArtifacts/{artifactId} {
+      allow read: if isApprovedAccount() && resource.data.businessUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /managedGrowthRateLimits/{windowId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // The generated-file recipient is distinct from Auth, billing, and support
+    // email. Owners may read it; validated writes use platform-core only.
+    match /artifactDeliveryPreferences/{businessId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
+    match /artifactDeliveryEmailJobs/{jobId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Social account projections contain display/capability state only. Tokens,
+    // provider credentials, approval authority, and publishing results are backend-only.
+    match /socialConnections/{businessId}/providers/{providerId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
+    match /socialPostDrafts/{draftId} {
+      allow read: if isApprovedAccount() && resource.data.businessUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /socialPublishingJobs/{jobId} {
+      allow read: if isApprovedAccount() && resource.data.businessUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    // Social Operations V1 is server-owned. Clients consume bounded callable
+    // projections instead of writing plans, metrics, Ads health, or learning.
+    match /socialContentPlans/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialContentItems/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialContentVersions/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialProviderReceipts/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialExternalApprovals/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialPerformanceSnapshots/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialLearningSignals/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialContentQualityAssessments/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialPostCapabilitySnapshots/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialPastPostRatings/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialContentReplacementProposals/{document=**} {
+      allow read, write: if false;
+    }
+    match /managedGrowthPlans/{document=**} {
+      allow read, write: if false;
+    }
+    match /emailContentPlans/{document=**} {
+      allow read, write: if false;
+    }
+    match /adConnections/{document=**} {
+      allow read, write: if false;
+    }
+    match /adAccounts/{document=**} {
+      allow read, write: if false;
+    }
+    match /adCampaignSnapshots/{document=**} {
+      allow read, write: if false;
+    }
+    match /adAccountHealth/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /socialMediaLibraries/{businessId}/items/{mediaId} {
+      allow read: if isApprovedAccount() && request.auth.uid == businessId;
+      allow create, update, delete: if false;
+    }
+
+    match /socialConnectionCredentials/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialOAuthAttempts/{document=**} {
+      allow read, write: if false;
+    }
+    match /socialProviderConfigs/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentProfiles/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentPlaybooks/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentPermissions/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentRuns/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentActions/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentActionVersions/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentApprovals/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentEscalations/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentObservations/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentRecommendations/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentProviderReceipts/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentBudgets/{document=**} {
+      allow read, write: if false;
+    }
+    match /agentHealth/{document=**} {
+      allow read, write: if false;
+    }
+    // Areas and discovery preferences are separate from identity and billing.
+    // Owners can read their sanitized projection; versioned writes and matching
+    // flow through platform-core so clients cannot spoof role or match reasons.
+      match /discoveryPreferences/{userId} {
+      allow read: if isApprovedAccount() && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+
+
+
+    // ============================================================
+    // CAMPAIGN GPS ROUTES
+    // ============================================================
+
+    match /campaignRoutes/{routeId} {
+      allow read:
+        if isApprovedAccount()
+        &&
+        (
+          resource.data.scalerId == request.auth.uid
+          || get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.businessId == request.auth.uid
+          || isAdmin()
+        );
+
+      // Native and legacy/simulation routes are both stamped and written by
+      // trusted backend code. A client cannot self-declare a legacy source.
+      allow create, update, delete: if false;
+
+    }
+
+    // Native tracking evidence is written only by trusted Cloud Functions.
+    // Scalers can read their own session; the campaign owner can review it.
+    // Neither party can alter uploaded evidence from a client.
+    match /trackingSessions/{sessionId} {
+      allow read:
+        if isApprovedAccount()
+        && (
+          resource.data.scalerId == request.auth.uid
+          || resource.data.businessId == request.auth.uid
+          || isAdmin()
+        );
+
+      allow create, update, delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read:
+          if isApprovedAccount()
+          && (
+            get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.scalerId == request.auth.uid
+            || get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.businessId == request.auth.uid
+            || isAdmin()
+          );
+
+        allow create, update, delete: if false;
+      }
+
+      // Matching-job email jobs are created and processed only by trusted backend code.
+      match /scalerJobAlertEmailJobs/{jobId} {
+        allow read, create, update, delete: if false;
+      }
+
+      match /scalerJobAlertEmailRateLimits/{limitId} {
+        allow read, create, update, delete: if false;
+      }
+
+      match /checkpoints/{checkpointId} {
+        allow read:
+          if isApprovedAccount()
+          && (
+            get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.scalerId == request.auth.uid
+            || get(
+              /databases/$(database)/documents/trackingSessions/$(sessionId)
+            ).data.businessId == request.auth.uid
+            || isAdmin()
+          );
+
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /activeTrackingSessions/{scalerId} {
+      allow read, create, update, delete: if false;
+    }
+
+
+
+
+    // ============================================================
+    // CAMPAIGN LOCATIONS
+    // ============================================================
+
+    match /campaignLocations/{locationId} {
+
+
+      allow read:
+        if isApprovedAccount()
+        && (
+          isAdmin()
+          || resource.data.assignedScalerId == request.auth.uid
+          || get(
+            /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
+          ).data.businessId == request.auth.uid
+        );
+
+
+      // Exact locations contain private addresses and consequential assignment
+      // state. Creation, assignment, proof completion, and removal all flow
+      // through maintained server authority.
+      allow create, update, delete: if false;
+
+    }
+
+
+
+
+    // ============================================================
+    // COMPLETIONS
+    // ============================================================
+
+    match /campaignCompletions/{completionId} {
+
+
+      allow create: if false;
+
+
+      allow read:
+        if isApprovedAccount()
+        &&
+        (
+          resource.data.scalerId == request.auth.uid
+          ||
+          resource.data.businessId == request.auth.uid
+          || isAdmin()
+        );
+
+
+      // Evidence, lifecycle transitions, review outcomes, and earnings are a
+      // single server-authoritative state machine. Clients retain scoped read
+      // access only.
+      allow update, delete: if false;
+
+    }
+
+
+
+
+    // ============================================================
+    // WALLETS
+    // ============================================================
+
+    match /wallets/{walletId} {
+
+
+      allow read:
+        if isApprovedAccount()
+        &&
+        request.auth.uid == walletId;
+
+
+      // Wallets are legacy/sanitized projections only. They are never an
+      // authoritative cash ledger and all writes are trusted-backend only.
+      allow create, update, delete: if false;
+
+
+
+      // ----------------------------------------------------------
+      // WALLET TRANSACTIONS
+      // ----------------------------------------------------------
+
+      match /transactions/{transactionId} {
+
+
+        allow read:
+          if isApprovedAccount()
+          &&
+          request.auth.uid == walletId;
+
+
+        allow create, update, delete: if false;
+
+      }
+
+
+
+      // ----------------------------------------------------------
+      // PROMOTIONAL CREDITS
+      // ----------------------------------------------------------
+
+      match /promoRedemptions/{promoId} {
+
+
+        allow read:
+          if isApprovedAccount()
+          &&
+          request.auth.uid == walletId;
+
+
+        allow create:
+          if isAdmin();
+
+
+        allow update, delete:
+          if false;
+
+      }
+
+    }
+
+
+
+
+    // ============================================================
+    // GLOBAL WALLET TRANSACTIONS
+    // ============================================================
+
+    match /walletTransactions/{transactionId} {
+
+
+      allow read:
+        if isApprovedAccount()
+        &&
+        (
+          resource.data.businessId == request.auth.uid
+          ||
+          resource.data.scalerId == request.auth.uid
+        );
+
+
+      allow create, update, delete: if false;
+
+    }
+
+    // ============================================================
+    // SERVER-AUTHORITATIVE FINANCIAL RECORDS
+    // ============================================================
+
+    match /stripeCustomers/{businessId} {
+      allow read: if isAdmin() || (isApprovedAccount() && request.auth.uid == businessId);
+      allow create, update, delete: if false;
+    }
+
+    match /stripeConnectedAccounts/{scalerId} {
+      allow read: if isAdmin() || (isApprovedAccount() && request.auth.uid == scalerId);
+      allow create, update, delete: if false;
+    }
+
+    match /campaignPayments/{paymentId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && resource.data.businessId == request.auth.uid
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /scalerTransfers/{transferId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && (
+          resource.data.scalerId == request.auth.uid ||
+          resource.data.businessId == request.auth.uid
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /assignmentCompensations/{zoneId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && (
+          resource.data.scalerId == request.auth.uid ||
+          resource.data.businessId == request.auth.uid
+        )
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /zoneGroupAssignments/{zoneId} {
+      allow read: if isAdmin() || (isApprovedAccount() && (
+        resource.data.businessId == request.auth.uid ||
+        (resource.data.acceptedScalerIds is list && request.auth.uid in resource.data.acceptedScalerIds)
+      ));
+      allow create, update, delete: if false;
+    }
+
+    match /zoneScalerParticipations/{participantId} {
+      allow read: if isAdmin() || (isApprovedAccount() && (
+        resource.data.businessId == request.auth.uid ||
+        resource.data.scalerUid == request.auth.uid
+      ));
+      allow create, update, delete: if false;
+    }
+
+    match /financialOperations/{operationId} {
+      allow read: if isAdmin() || (
+        isApprovedAccount() && resource.data.ownerId == request.auth.uid
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /stripeEvents/{eventId} {
+      allow read, create, update, delete: if false;
+    }
+
+
+
+
+    // ============================================================
+    // MARKETING ASSETS
+    // ============================================================
+
+    match /marketingAssets/{assetId} {
+
+
+      allow read:
+        if isApprovedAccount();
+
+
+      allow create, update:
+        if isApprovedAccount();
+
+
+      allow delete:
+        if isAdmin();
+
+    }
+
+
+
+
+    // ============================================================
+    // VERIFIED CAMPAIGN REVIEWS
+    // ============================================================
+
+    match /reviews/{reviewId} {
+
+      allow read:
+        if isApprovedAccount();
+
+
+      // Reviews are written only by submitCampaignReview after the server
+      // verifies campaign ownership and completed participation.
+      allow create, update, delete:
+        if false;
+
+    }
+
+
+
+    // ============================================================
+    // REVIEW FRAUD / SCAM REPORTS
+    // ============================================================
+
+    match /reviewReports/{reportId} {
+
+      allow read:
+        if isApprovedAccount()
+        &&
+        (
+          resource.data.reporterId == request.auth.uid
+          ||
+          isAdmin()
+        );
+
+
+      // Reports are created only by reportCampaignReview, which enforces
+      // the 72-hour window and preserves the original locked review.
+      allow create, update, delete:
+        if false;
+
+    }
+
+
+
+    // ============================================================
+    // NOTIFICATIONS
+    // ============================================================
+
+    match /notifications/{notificationId} {
+
+      // A missing deterministic id contains no private data; existing
+      // notifications remain readable only by their recipient.
+      allow get:
+        if isApprovedAccount()
+        && (
+          resource == null
+          || resource.data.userId == request.auth.uid
+        );
+
+
+      allow list:
+        if isApprovedAccount()
+        && resource.data.userId == request.auth.uid;
+
+
+      // Authoritative event notifications are written only by Admin SDK
+      // callables/triggers. Clients cannot impersonate a system event.
+      allow create:
+        if false;
+
+
+      allow update:
+        if isApprovedAccount()
+        &&
+        resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['read', 'readAt'])
+        && request.resource.data.read == true;
+
+
+      allow delete:
+        if false;
+
+    }
+
+
+
+
+    // ============================================================
+    // AUDIT LOGS
+    // ============================================================
+
+    match /auditLogs/{logId} {
+
+
+      allow read:
+        if isAdmin();
+
+
+      allow create:
+        if isApprovedAccount();
+
+
+      allow update, delete:
+        if false;
+
+    }
+
+
+
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    function isSignedIn() {
+
+      return request.auth != null;
+
+    }
+
+
+    function isAdmin() {
+
+      return isSignedIn()
+      &&
+      exists(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      )
+      &&
+      get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      ).data.role == "admin";
+
+    }
+
+    // Stripe/payment truth is written only by trusted Cloud Functions. These
+    // lists intentionally protect legacy campaigns too, without preventing a
+    // Business from editing ordinary draft content and geometry.
+    // Attribution Foundation V1 is server-authoritative. Public response
+    // traffic enters only through resolveTrackedResponse; authenticated actors
+    // use purpose-built callables and cannot forge attribution or conversions.
+    match /responseAssets/{assetId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Landing Page + Form V1 is server-authoritative. Public pages are rendered
+    // by landing-page-core and public forms enter only through its bounded HTTP
+    // authority; clients cannot enumerate drafts or forge lead ownership.
+    match /landingPages/{pageId} {
+      allow read, create, update, delete: if false;
+      match /versions/{versionId} {
+        allow read, create, update, delete: if false;
+      }
+    }
+
+    match /landingPageSubmissionReceipts/{receiptId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /landingPageSubmissionRates/{rateId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /businessBrandProfiles/{businessId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /businessMediaLibraries/{businessId}/{document=**} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /businessMediaUploadIntents/{intentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Generated-service-visual jobs, moderation state, provider references,
+    // usage, and candidate links are exclusively mediated by creative-media-core.
+    match /visualGenerationJobs/{jobId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /visualGenerationReservations/{reservationId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /visualGenerationUsage/{usageId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /providerConfigurations/{configurationId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Physical Marketing Execution V1 is server-authoritative. Draft roots,
+    // immutable versions, print artifacts, approvals, pricing, quotes, orders,
+    // recipients, payment state, and provider receipts are never client-written.
+    match /marketingMaterials/{materialId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /marketingMaterialVersions/{versionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /printReadyArtifacts/{artifactId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /marketingMaterialApprovals/{versionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /fulfillmentPricingPolicies/{policyId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /printQuotes/{quoteId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /printOrders/{orderId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /mailCampaigns/{mailCampaignId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /mailAudienceSnapshots/{snapshotId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /providerReceipts/{receiptId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // Tracking Phone Number V1 is server-authoritative. Clients use bounded
+    // callables and cannot provision numbers, self-verify destinations, forge
+    // call events, rewrite lifecycle/cost truth, or enumerate telecom PII.
+    match /trackingPhoneAssets/{assetId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneForwardingDestinations/{destinationId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneForwardingDestinationVersions/{versionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /trackingPhoneBindings/{bindingId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /callSessions/{callSessionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /callWebhookEvents/{eventId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneProvisioningJobs/{jobId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /phoneUsageLedger/{entryId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /trackingPhoneConfigurations/{configurationId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /releasedTrackingPhoneTombstones/{fingerprint} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /physicalFulfillmentPayments/{paymentId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /responseInteractions/{interactionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /attributionConversions/{conversionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /featureHealth/{featureId} {
+      allow read, create, update, delete: if false;
+    }
+
+    function financialCampaignFields() {
+      return [
+        'fundingStatus', 'fundingPaymentId', 'fundingVersion', 'fundedAt',
+        'workerAmountCents', 'platformFeeRateBasisPoints',
+        'platformFeeCents', 'businessChargeCents',
+        'stripeCheckoutSessionId', 'stripePaymentIntentId', 'stripeChargeId',
+        'paymentStatus', 'refundStatus', 'refundedAt', 'cancelledAt',
+        'transferredWorkerAmountCents', 'refundedWorkerAmountCents',
+        'refundedPlatformFeeCents', 'refundedTotalCents',
+        'disputedAmountCents', 'settlementFrozen',
+        'platformFeePendingCents', 'platformFeeRecognizedCents',
+        'platformFeeRefundedCents', 'transferOperationId',
+        'stripeTransferId', 'paidAmountCents', 'payoutStatus',
+        'earningsStatus', 'settlementStatus'
+      ];
+    }
+
+    function financialCompletionFields() {
+      return [
+        'verificationPassed', 'verificationStatus', 'reviewStatus',
+        'reviewFinalizedAt', 'paymentStatus', 'payoutStatus',
+        'payoutEligible', 'paid', 'paidAt', 'paidAmountCents',
+        'transferOperationId', 'stripeTransferId', 'earningsStatus',
+        'settlementStatus', 'redoRequired', 'redoCount', 'disputeOpen'
+      ];
+    }
+
+    function isApprovedBusiness() {
+      return isApprovedAccount()
+        && get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == 'business';
+    }
+
+    function validZonePoint(point) {
+      return point is map
+        && point.keys().hasOnly(['latitude', 'longitude'])
+        && point.latitude is number
+        && point.longitude is number
+        && point.latitude >= -90
+        && point.latitude <= 90
+        && point.longitude >= -180
+        && point.longitude <= 180;
+    }
+
+    // Firestore Rules cannot iterate arbitrary lists. The bounded list, exact
+    // point count, map-only first/last vertices, and client model validation
+    // provide a deterministic gate; server analysis remains authoritative.
+    function validZoneGeometry(data) {
+      return data.serviceArea is list
+        && data.serviceArea.size() >= 3
+        && data.serviceArea.size() <= 200
+        && data.serviceAreaPointCount == data.serviceArea.size()
+        && validZonePoint(data.serviceArea[0])
+        && validZonePoint(data.serviceArea[1])
+        && validZonePoint(data.serviceArea[2])
+        && validZonePoint(data.serviceArea[data.serviceArea.size() - 1]);
+    }
+
+    function validDraftZoneTarget(data) {
+      return data.zoneName is string
+        && data.zoneName.size() > 0
+        && data.zoneName.size() <= 100
+        && data.shapeType in ['polygon', 'triangle', 'rectangle', 'circle']
+        && data.serviceAreaType == data.shapeType
+        && validZoneGeometry(data)
+        && data.estimatedHomes == 0
+        && data.homeCountStatus == 'pending'
+        && data.analysisStatus == 'waiting';
+    }
+
+    function validDraftZoneUpdate(data) {
+      return data.zoneName is string
+        && data.zoneName.size() > 0
+        && data.zoneName.size() <= 100
+        && data.shapeType in ['polygon', 'triangle', 'rectangle', 'circle']
+        && data.serviceAreaType == data.shapeType
+        && validZoneGeometry(data);
+    }
+
+
+    function isApprovedAccount() {
+
+      return isSignedIn()
+      &&
+      exists(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      )
+      &&
+      (
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.role == "admin"
+        ||
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.active == true
+        ||
+        get(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.betaAccess == "approved"
+      );
+
+    }
+
+
+  }
+
+}

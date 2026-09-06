@@ -1,3 +1,18 @@
+const stagingPhysicalQa = require("./staging_physical_qa");
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.AUTHORITY_PATH).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -6195,6 +6210,7 @@ const TRACKING_CALLABLE_OPTIONS = {
 function trackingCallable(name, handler) {
   return onCall(TRACKING_CALLABLE_OPTIONS, async (request) => {
     try {
+      await assertPhysicalQaRequest(request);
       return await handler(request);
     } catch (error) {
       if (error instanceof HttpsError) throw error;
@@ -6892,6 +6908,7 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
       );
     }
     const scalerId = String(application.scalerId || "").trim();
+    await assertPhysicalQaRequest({ ...request, data: { ...request.data, applicationId: scalerId } });
     const scalerEmail = String(application.scalerEmail || application.email || "").trim();
     const pointCount = Number(zone.serviceAreaPointCount || 0);
     const assignedHomes = Number(zone.estimatedHomes || 0);
@@ -7041,6 +7058,9 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
 
 exports.configureZoneGroupAssignment = trackingCallable(
   "configureZoneGroupAssignment", async (request) => {
+    if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {
+      throw new HttpsError("failed-precondition", "Group work is unavailable for this certification job.");
+    }
     assertTrackingPayload(request.data, new Set(["campaignId", "zoneId", "requiredScalerCount"]), 4096);
     const context = await requireVerifiedUser(request, "Sign in before configuring group work.");
     if (context.role !== "business" && !context.isAdmin) throw new HttpsError("permission-denied", "Only the campaign Business can configure group work.");
@@ -7109,6 +7129,9 @@ exports.configureZoneGroupAssignment = trackingCallable(
   });
 
 exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (request) => {
+  if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {
+    throw new HttpsError("failed-precondition", "Group work is unavailable for this certification job.");
+  }
   assertTrackingPayload(request.data, new Set(["campaignId", "zoneId", "applicationId"]), 4096);
   const context = await requireVerifiedUser(request, "Sign in before accepting group work.");
   if (!["scaler", "business"].includes(context.role) && !context.isAdmin) {

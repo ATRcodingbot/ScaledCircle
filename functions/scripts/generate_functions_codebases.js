@@ -378,6 +378,12 @@ function copyPackage(destination, mode) {
     const source = path.join(sourceRoot, name);
     if (!fs.statSync(source).isFile()) continue;
     if (name.endsWith(".test.js")) continue;
+    if (name === "staging_physical_qa.js") {
+      if (transformIndex(mode).includes('require("./staging_physical_qa")')) {
+        fs.copyFileSync(source, path.join(destination, name));
+      }
+      continue;
+    }
     if (name === "index.js" || (!name.endsWith(".js") &&
         !["package.json", "package-lock.json"].includes(name))) continue;
     if (mode === "wallet" && name.endsWith(".js")) continue;
@@ -583,3 +589,5 @@ fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
   path.join(campaignFundingRoot, "legal_consent.js"));
 
 console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, physical-marketing-core, business-profile-core, job-room-core, completion-authority-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
+
+fs.copyFileSync(path.join(sourceRoot, "staging_physical_qa.js"), path.join(campaignFundingRoot, "staging_physical_qa.js"));
