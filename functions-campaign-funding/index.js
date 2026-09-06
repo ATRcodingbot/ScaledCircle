@@ -70,6 +70,10 @@ async function assertFundable(input) {
     .includes(String(input.campaign.fundingStatus || ""))) {
     throw new HttpsError("failed-precondition", "This campaign is not fundable.");
   }
+  return validatedCampaignZones(input);
+}
+
+async function validatedCampaignZones(input) {
   const zoneSnapshots = await db.collection("campaignZones")
     .where("campaignId", "==", input.campaignId).get();
   const zones = zoneSnapshots.docs.map((doc) => doc.data() || {});
@@ -412,7 +416,7 @@ exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRI
 exports.publishFundedCampaign = onCall(OPTIONS, async (request) => {
   const input = await ownedCampaign(request);
   if (input.campaign.status === "open") return {campaignId: input.campaignId, status: "open"};
-  const zones = await validZones(input.campaignId, input.uid);
+  const zones = await validatedCampaignZones(input);
   const paymentId = cleanId(input.campaign.fundingPaymentId);
   const payment = paymentId ? (await db.collection("campaignPayments").doc(paymentId).get()).data() : null;
   if (!zones.length || input.campaign.fundingStatus !== "funded" || payment?.status !== "paid" ||
