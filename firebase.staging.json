@@ -59,19 +59,6 @@
         "*.local",
         "*.test.js"
       ]
-    },
-    {
-      "source": "functions-legacy",
-      "codebase": "default",
-      "disallowLegacyRuntimeConfig": true,
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local",
-        "*.test.js"
-      ]
     }
   ],
   "firestore": {
