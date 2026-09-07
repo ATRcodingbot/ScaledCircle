@@ -73,6 +73,17 @@ class JobRoomService {
     );
   }
 
+  Future<void> reportWorkIssue({
+    required String zoneId,
+    required String summary,
+  }) async {
+    await _functions.httpsCallable('createSupportCase').call({
+      'zoneId': zoneId,
+      'category': 'campaign_issue',
+      'summary': summary,
+    });
+  }
+
   Future<void> reportMaterialIssue({
     required String zoneId,
     required String summary,

@@ -1,6 +1,5 @@
 import '../../config/app_environment.dart';
 import '../../services/job_room_service.dart';
-import '../../widgets/completion_evidence_panel.dart';
 import '../../widgets/checkpoint_action.dart';
 import 'dart:async';
 
@@ -259,8 +258,67 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     }
   }
 
-  late final Future<Map<String, dynamic>> _completionEvidenceFuture =
-      const JobRoomService().load(widget.zone.id);
+  bool get _baseCoverageReached =>
+      _progress?['state'] == 'available' &&
+      (_progress?['coveragePercentage'] as num? ?? -1) >= 80;
+
+  Future<void> _reportAccessIssue() async {
+    final controller = TextEditingController();
+    final summary = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Report Access Issue'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          maxLength: 2500,
+          decoration: const InputDecoration(
+            hintText:
+                'Describe the gate, safety concern or access restriction. Do not enter unauthorized areas.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(dialogContext, controller.text.trim());
+              }
+            },
+            child: const Text('Send for review'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (summary == null || !mounted) return;
+    try {
+      await const JobRoomService().reportWorkIssue(
+        zoneId: widget.zone.id,
+        summary: summary,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Access issue recorded for review. Coverage and pay have not been changed.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Issue was not confirmed. Please retry.'),
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _complete() async {
     if (_working) return;
@@ -269,7 +327,9 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
       builder: (dialogContext) => AlertDialog(
         title: Text(
           AppEnvironmentConfig.isStaging && _photoFree
-              ? 'Save route for exception review?'
+              ? (_baseCoverageReached
+                    ? 'Finish route for completion review?'
+                    : 'Save route for exception or technical review?')
               : 'Complete this job?',
         ),
         content: const Text(
@@ -483,22 +543,17 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
             ),
             const SizedBox(height: 12),
             if (AppEnvironmentConfig.isStaging && _photoFree) ...[
-              FutureBuilder<Map<String, dynamic>>(
-                future: _completionEvidenceFuture,
-                builder: (context, snapshot) =>
-                    snapshot.data?['completionEvidence'] is Map
-                    ? CompletionEvidencePanel(
-                        evidence: Map<String, dynamic>.from(
-                          snapshot.data!['completionEvidence'] as Map,
-                        ),
-                      )
-                    : const Text(
-                        'Eligibility held. Loading authoritative requirements; no ordinary completion is authorized.',
-                      ),
+              const Text(
+                'GPS records automatically. Full accepted base at 80% eligible route coverage; accepted coverage bonus at 95%. Aim for 100%. Final lifecycle and evidence checks apply.',
               ),
-              FilledButton(
-                onPressed: _working ? null : _sync,
-                child: const Text('Continue Zone'),
+              if (!_baseCoverageReached)
+                FilledButton(
+                  onPressed: _working ? null : _sync,
+                  child: const Text('Continue Route'),
+                ),
+              OutlinedButton(
+                onPressed: _working ? null : _reportAccessIssue,
+                child: const Text('Report Access Issue'),
               ),
             ],
             FilledButton.icon(
@@ -511,7 +566,9 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
                     ? 'Finalizing...'
                     : _state.active
                     ? (AppEnvironmentConfig.isStaging && _photoFree
-                          ? 'Save for Exception Review'
+                          ? (_baseCoverageReached
+                                ? 'Finish Route'
+                                : 'Save Route for Review')
                           : 'Complete Job')
                     : 'Retry Secure Finalization',
               ),

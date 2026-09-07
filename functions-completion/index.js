@@ -3321,6 +3321,25 @@ exports.reviewCampaignCompletion = completionAuthorityCallable(async (request) =
  * Route coverage and pending payout values are calculated on the trusted
  * server. The client supplies only the completion record identifier and notes.
  */
+async function assessCanvassingCompletion(transaction, zoneId, zone, route, contract, options = {}) {
+  const sessionId = cleanId(route.trackingSessionId);
+  const sessionRef = db.collection('trackingSessions').doc(sessionId || 'missing');
+  const sessionSnapshot = await transaction.get(sessionRef);
+  const chunkSnapshot = await transaction.get(sessionRef.collection('chunks'));
+  const pointer = await transaction.get(db.collection('activeTrackingSessions').doc(zone.assignedScalerId));
+  const assessment = canvassingCompletion.assess({ ...zone, id: zoneId },
+  { ...(sessionSnapshot.data() || {}), sessionId: sessionSnapshot.exists ? sessionId : null },
+  chunkSnapshot.docs.map((d) => d.data()), route, calculateRouteCompletion);
+  if (pointer.data()?.sessionId === sessionId) {assessment.finalized = false;assessment.technicalIssue = 'tracking_pointer_not_finalized';}
+  const authorityValid = contract.immutable === true && contract.zoneId === zoneId &&
+  contract.campaignId === zone.campaignId && contract.scalerId === zone.assignedScalerId && contract.businessId === zone.businessId &&
+  zone.settlementBlocked !== true && zone.disputeOpen !== true && zone.status !== 'failed_business';
+  const policy = canvassingCompletion.decision({ coverage: assessment.estimate,
+    baseAmountCents: Number(contract.baseAmountCents), bonusAmountCents: Number(contract.bonusAmountCents || 0), authorityValid,
+    finalized: assessment.finalized, technicalIssue: assessment.technicalIssue, technicalReviewSupported: assessment.technicalReviewSupported, ...options });
+  return { ...assessment, policy };
+}
+
 exports.submitZoneCompletion = onCall(
   {
     enforceAppCheck: false,
@@ -3474,20 +3493,31 @@ exports.submitZoneCompletion = onCall(
         }
 
         if (canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
-          if (request.data?.reviewMode !== 'access_exception' || !scalerNotes) {
-            throw new HttpsError('failed-precondition', 'Continue Zone. Ordinary canvassing completion is held pending approved requirements. Use exception review only for documented access restrictions.');
-          }
+          const requestedMode = String(request.data?.reviewMode || 'ordinary');
+          if (!['ordinary', 'access_exception', 'technical_review'].includes(requestedMode)) throw new HttpsError('invalid-argument', 'Unknown completion review mode.');
+          const evaluation = await assessCanvassingCompletion(transaction, zoneId, zone, route, contractSnapshot.data() || {}, { accessIssue: requestedMode === 'access_exception' });
+          const policy = evaluation.policy;
+          if (requestedMode === 'ordinary' && !policy.ordinarySubmissionAllowed) throw new HttpsError('failed-precondition', policy.reason);
+          if (requestedMode === 'access_exception' && !scalerNotes) throw new HttpsError('invalid-argument', 'Describe the access restriction for review.');
+          if (requestedMode === 'technical_review' && !policy.technicalReviewAllowed) throw new HttpsError('failed-precondition', 'No authoritative technical-review condition is established.');
+          const ordinary = requestedMode === 'ordinary';
           const timestamp = FieldValue.serverTimestamp();
-          transaction.update(completionReference, { status: 'submitted', reviewMode: 'access_exception',
-            reviewStatus: 'verification_pending', scalerNotes, submittedAt: timestamp, updatedAt: timestamp,
-            economicPolicyVersion: canvassingCompletion.VERSION, eligibleForPayment: false,
-            calculatedTransferAmountCents: null, calculatedBaseAmountCents: null,
-            accessException: { reason: scalerNotes, status: 'pending_review' }, proofRequirement: 'gps_route' });
-          transaction.update(zoneReference, { status: 'submitted', reviewStatus: 'verification_pending',
-            submittedCompletionId: completionId, submittedAt: timestamp, updatedAt: timestamp,
-            reviewMode: 'access_exception', eligibleForPayment: false, gpsTracking: false,
-            calculatedTransferAmountCents: null, calculatedBaseAmountCents: null });
-          return { completionId, reviewMode: 'access_exception', eligibleForPayment: false };
+          const receipt = { policyVersion: canvassingCompletion.VERSION, sessionId: evaluation.sessionId, evidenceDigest: evaluation.evidenceDigest, acceptedEvidenceHash: evaluation.acceptedEvidenceHash,
+            routeHash: zone.executionRoute?.routeHash || null, corridorHash: zone.executionRoute?.corridorHash || null,
+            coveragePercentage: evaluation.estimate.coveragePercentage, baseAmountCents: policy.baseAmountCents,
+            bonusAmountCents: policy.acceptedBonusAmountCents, technicalIssue: evaluation.technicalIssue || null };
+          const common = { status: 'submitted', reviewMode: requestedMode, reviewStatus: 'verification_pending',
+            submittedAt: timestamp, updatedAt: timestamp, economicPolicyVersion: canvassingCompletion.VERSION,
+            eligibleForPayment: ordinary, calculatedTransferAmountCents: ordinary ? policy.payableAmountCents : null,
+            calculatedBaseAmountCents: ordinary ? policy.payableBaseAmountCents : null, calculatedBonusAmountCents: ordinary ? policy.bonusAmountCents : null,
+            completionPercentage: evaluation.estimate.coveragePercentage, coverageBasis: 'unique_assigned_route_estimate',
+            compensationContractId: contractReference.id, canvassingAssessment: receipt };
+          transaction.update(completionReference, { ...common, scalerNotes, proofRequirement: 'gps_route',
+            ...(requestedMode === 'access_exception' ? { accessException: { reason: scalerNotes, status: 'pending_review' } } : {}),
+            ...(requestedMode === 'technical_review' ? { technicalReview: { reason: evaluation.technicalIssue, status: 'required', baseProtected: true, createdAt: timestamp } } : {}) });
+          transaction.update(zoneReference, { ...common, submittedCompletionId: completionId, gpsTracking: false,
+            paymentStatus: 'verification_pending', submittedRoutePointCount: routePoints.length });
+          return { completionId, reviewMode: requestedMode, eligibleForPayment: ordinary, calculatedTransferAmountCents: common.calculatedTransferAmountCents };
         }
         const trackingResult = calculateRouteCompletion(zone, routePoints);
         const completionBasisPoints = Math.max(0, Math.min(
@@ -10400,6 +10430,11 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
 const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   enforceAppCheck: false,
   maxInstances: 10,
@@ -11412,8 +11447,9 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
         throw new HttpsError("failed-precondition", "This assignment is closed to normal review.");
       }
       const reviewCampaign = await transaction.get(db.collection('campaigns').doc(zone.campaignId));
-      if (decision === 'approve' && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, reviewCampaign.data() || {})) {
-        throw new HttpsError('failed-precondition', 'Canvassing base and bonus eligibility policy awaits Founder review. No prorated earning may be approved.');
+      const canvassingReview = canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, reviewCampaign.data() || {});
+      if (decision === 'approve' && canvassingReview && (zone.economicPolicyVersion !== canvassingCompletion.VERSION || zone.reviewMode !== 'ordinary')) {
+        throw new HttpsError('failed-precondition', 'Historical or exception submissions require separate authoritative review; normal payment is not authorized.');
       }
       const current = String(zone.reviewStatus || "");
       const target = decision === "approve" ? "approved" :
@@ -11478,9 +11514,24 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
         return { zoneId, reviewStatus: "disputed" };
       }
       const completionBasisPoints = Math.round(Number(zone.completionPercentage || 0) * 100);
-      const payout = marketplace.payoutForCompletion(
-        contractSnapshot.data() || {}, completionBasisPoints, releaseOptionalBonus
-      );
+      let payout;
+      if (canvassingReview) {
+        if (payment.status !== marketplace.PAYMENT_STATES.funded || payment.settlementFrozen === true) throw new HttpsError('failed-precondition', 'Funding is not available for this review.');
+        const routeSnapshot = await transaction.get(db.collection('campaignRoutes').doc(cleanId(completion.routeId) || 'missing'));
+        const evaluation = await assessCanvassingCompletion(transaction, zoneId, zone, routeSnapshot.data() || {}, contractSnapshot.data() || {});
+        const receipt = completion.canvassingAssessment;
+        if (!evaluation.policy.ordinarySubmissionAllowed || completion.economicPolicyVersion !== canvassingCompletion.VERSION || completion.reviewMode !== 'ordinary' ||
+        !receipt || receipt.policyVersion !== canvassingCompletion.VERSION || receipt.sessionId !== evaluation.sessionId || receipt.evidenceDigest !== evaluation.evidenceDigest || receipt.acceptedEvidenceHash !== evaluation.acceptedEvidenceHash ||
+        receipt.routeHash !== zone.executionRoute?.routeHash || receipt.corridorHash !== zone.executionRoute?.corridorHash ||
+        receipt.baseAmountCents !== evaluation.policy.baseAmountCents || receipt.bonusAmountCents !== evaluation.policy.acceptedBonusAmountCents) {
+          throw new HttpsError('failed-precondition', 'Completion evidence or immutable compensation requires authoritative review. No payment was posted.');
+        }
+        payout = { completionBasisPoints: Math.floor(evaluation.estimate.coveragePercentage * 100), baseAmountCents: evaluation.policy.payableBaseAmountCents,
+          bonusAmountCents: evaluation.policy.bonusAmountCents, transferAmountCents: evaluation.policy.payableAmountCents,
+          bonusReason: evaluation.policy.coverageBonusEligible ? 'accepted_coverage_bonus_95' : 'not_earned' };
+      } else {
+        payout = marketplace.payoutForCompletion(contractSnapshot.data() || {}, completionBasisPoints, releaseOptionalBonus);
+      }
       if (payout.transferAmountCents <= 0) {
         throw new HttpsError("failed-precondition", "This completion does not establish an earning.");
       }

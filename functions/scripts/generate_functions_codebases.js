@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const parser = require("@babel/parser");
 const generator = require("@babel/generator").default;
-const traverse = require("@babel/traverse").default;
+const {exportedName, selectedProgram} = require("./select_function_program");
 
 const root = path.resolve(__dirname, "..", "..");
 const sourceRoot = path.join(root, "functions");
@@ -161,55 +161,6 @@ const allSecretNames = new Set([
   "STRIPE_TEST_SECRET_KEY",
   "STRIPE_TEST_WEBHOOK_SECRET",
 ]);
-
-function exportedName(statement) {
-  const expression = statement.type === "ExpressionStatement" && statement.expression;
-  const left = expression?.type === "AssignmentExpression" && expression.left;
-  if (left?.type !== "MemberExpression" || left.computed ||
-      left.object?.type !== "Identifier" || left.object.name !== "exports" ||
-      left.property?.type !== "Identifier") return null;
-  return left.property.name;
-}
-
-function selectedProgram(ast, selectedExports) {
-  const retained = new Set();
-  const queued = [];
-  let programPath;
-  traverse(ast, {Program(path) { programPath = path; path.stop(); }});
-
-  function retain(statementPath) {
-    if (!statementPath || retained.has(statementPath.node)) return;
-    retained.add(statementPath.node);
-    queued.push(statementPath);
-  }
-
-  for (const statementPath of programPath.get("body")) {
-    const name = exportedName(statementPath.node);
-    if (name && selectedExports.has(name)) retain(statementPath);
-    if (statementPath.isExpressionStatement()) {
-      const callee = statementPath.node.expression?.callee;
-      if (callee?.type === "Identifier" && ["initializeApp", "setGlobalOptions"].includes(callee.name)) {
-        retain(statementPath);
-      }
-    }
-  }
-
-  while (queued.length) {
-    const statementPath = queued.pop();
-    statementPath.traverse({
-      ReferencedIdentifier(identifierPath) {
-        const binding = identifierPath.scope.getBinding(identifierPath.node.name);
-        if (!binding || binding.scope.path !== programPath) return;
-        retain(binding.path.getStatementParent());
-      },
-    });
-  }
-
-  ast.program.body = programPath.get("body")
-    .filter((statementPath) => retained.has(statementPath.node))
-    .map((statementPath) => statementPath.node);
-  return ast;
-}
 
 function transformIndex(mode) {
   const source = fs.readFileSync(path.join(sourceRoot, "index.js"), "utf8");

@@ -38,17 +38,67 @@ void main() {
       );
       expect(find.text('Accepted base compensation: \$15.00'), findsOneWidget);
       expect(
-        find.text('Exact payable amount: HELD — not authorized'),
+        find.text('Held payable amount before approval: HELD — not authorized'),
         findsOneWidget,
       );
       expect(
         find.textContaining('Historical calculation: \$3.11'),
         findsOneWidget,
       );
-      expect(find.textContaining('manual progress marks are optional'), findsOneWidget);
+      expect(
+        find.textContaining('manual progress marks are optional'),
+        findsOneWidget,
+      );
       expect(find.textContaining('5 / 23'), findsNothing);
       expect(find.textContaining('GPS proximity estimate'), findsOneWidget);
       expect(find.text('Assigned walking area'), findsOneWidget);
+      expect(
+        find.textContaining('Minimum for base eligibility: 80%'),
+        findsOneWidget,
+      );
     },
   );
+  for (final value in [1500, 1800]) {
+    testWidgets(
+      'eligible review shows exact held cents $value without proration',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: CompletionEvidencePanel(
+                  tilesEnabled: false,
+                  evidence: {
+                    'policy': {
+                      'baseAmountCents': 1500,
+                      'baseEligibility': 'Eligible',
+                      'payableAmountCents': value,
+                    },
+                    'estimate': {
+                      'state': 'available',
+                      'coveragePercentage': 95.0,
+                    },
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(
+          find.text(
+            'Held payable amount before approval: \$${(value / 100).toStringAsFixed(2)}',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Accepted base compensation: \$15.00'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Minimum for base eligibility: 80%'),
+          findsOneWidget,
+        );
+      },
+    );
+  }
 }

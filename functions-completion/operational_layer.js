@@ -395,7 +395,7 @@ function safeDiscoveryProjection(campaign) {
     title: campaign.name || campaign.title || "Campaign",
     campaignType: campaign.campaignType || campaign.type || null,
     businessDisplayName: campaign.businessDisplayName || campaign.companyName || "Business",
-    mapPreview: campaign.publicMapPreview || campaign.zoneMapPreview || null,
+    mapPreview: null,
     zoneName: campaign.zoneName || null,
     zoneSummary: campaign.zoneSummary || null,
     estimatedWalkingMinutes: campaign.estimatedWalkingMinutes || null,
@@ -409,19 +409,88 @@ function safeDiscoveryProjection(campaign) {
     bonusAmountCents: campaign.bonusAmountCents || null,
     materialsRequired: materialLogistics.materialsRequired,
     materialFulfillmentType: campaign.materialFulfillmentType || null,
-    materialLogistics: {
-      ...materialLogistics,
-      version: Number(campaign.materialLogisticsVersion || 1),
-      digest: materialLogisticsDigest(materialLogistics),
-    },
-    handoffWindow: campaign.publicHandoffWindow || null,
+    materialLogistics: publicMaterialLogistics(campaign),
+    handoffWindow: null,
     recommendedStartTime: campaign.recommendedStartTime || null,
     workWindowSummary: campaign.workWindowSummary || null,
     deadline: campaign.deadline || null,
   };
 }
 
+// Public logistics are an allowlist, never a redacted copy of private notes.
+// Coarse travel values must be supplied explicitly; missing values remain unknown.
+function publicMaterialLogistics(campaign = {}) {
+  const type = materialLogisticsFromCampaign(campaign);
+  const coarse = campaign.publicLogistics || {};
+  return {
+    materialsRequired: type.materialsRequired,
+    fulfillmentType: type.fulfillmentType,
+    postalCode: /^\d{5}$/.test(String(coarse.postalCode || '')) ? coarse.postalCode : null,
+    approximateDistanceMiles: Number.isFinite(coarse.approximateDistanceMiles) && coarse.approximateDistanceMiles >= 0 ? coarse.approximateDistanceMiles : null,
+    estimatedTravelMinutes: Number.isFinite(coarse.estimatedTravelMinutes) && coarse.estimatedTravelMinutes >= 0 ? coarse.estimatedTravelMinutes : null,
+    accessStatus: ['public', 'restricted_or_uncertain', 'business_authorized_access', 'excluded'].includes(coarse.accessStatus) ? coarse.accessStatus : 'unknown',
+    exactDetailsAfterAssignment: true,
+  };
+}
+
+function publicCampaignDocument(id, campaign) {
+  const result = {campaignId: id, schemaVersion: 1, materialLogistics: publicMaterialLogistics(campaign)};
+  // Legacy campaigns store `type`; consumers require the canonical public field.
+  const publicType = campaign.campaignType || campaign.type;
+  if (typeof publicType === 'string') result.campaignType = publicType;
+  for (const key of ['businessId', 'campaignName', 'campaignType', 'status', 'description',
+    'basePay', 'bonus', 'workerPoolCents', 'scheduledShareCents', 'requiredScalerCount',
+    'requestedScalerCount', 'assignedScalerCount', 'estimatedMinutes', 'preliminaryEstimatedMinutes',
+    'createdAt', 'updatedAt', 'deadline', 'materialsRequired', 'materialFulfillmentType']) {
+    const value = campaign[key];
+    if (typeof value === 'string' || typeof value === 'boolean' ||
+        (typeof value === 'number' && Number.isFinite(value)) ||
+        (['createdAt', 'updatedAt', 'deadline'].includes(key) &&
+          (value instanceof Date || typeof value?.toDate === 'function'))) result[key] = value;
+  }
+  result.verification = {};
+  result.tracking = {};
+  for (const key of ['beforePhotoRequired', 'afterPhotoRequired', 'businessApprovalRequired']) {
+    if (typeof campaign.verification?.[key] === 'boolean') result.verification[key] = campaign.verification[key];
+  }
+  for (const key of ['gpsRequired', 'locationRequired']) {
+    if (typeof campaign.tracking?.[key] === 'boolean') result.tracking[key] = campaign.tracking[key];
+  }
+  return result;
+}
+
+function privateLogisticsAssignmentAllowed({uid, role, zoneId, campaignId, businessId, zone, participant}) {
+  if (role !== 'scaler' || !uid || !zone || zone.campaignId !== campaignId || zone.businessId !== businessId) return false;
+  const activeStates = ['assigned', 'accepted', 'in_progress', 'paused', 'paused_out_of_window', 'ready'];
+  if (zone.assignedScalerId === uid) return activeStates.includes(zone.status);
+  if (![...activeStates, 'unassigned'].includes(zone.status) ||
+      !Array.isArray(zone.assignedScalerIds) || !zone.assignedScalerIds.includes(uid)) return false;
+  return participant?.scalerUid === uid && participant?.zoneId === zoneId &&
+    participant?.campaignId === campaignId && participant?.businessId === businessId &&
+    ['accepted', 'participating', 'paused'].includes(participant.status);
+}
+
+function historicalJobRoomProjection(response) {
+  const pick = (value, keys) => Object.fromEntries(keys.filter(k => value?.[k] !== undefined).map(k => [k, value[k]]));
+  return {
+    viewerRole: response.viewerRole,
+    privateLogisticsAvailable: false,
+    room: pick(response.room, ['id', 'campaignId', 'zoneId', 'businessId', 'scalerId', 'status']),
+    campaign: publicCampaignDocument(response.campaign.id, response.campaign),
+    zone: pick(response.zone, ['id', 'campaignId', 'businessId', 'status', 'zoneName', 'reviewStatus']),
+    handoff: {required: false, status: 'unavailable'},
+    compensation: pick(response.compensation, ['currency', 'baseAmountCents', 'bonusAmountCents', 'immutable']),
+    completions: response.completions.map(c => pick(c, ['id', 'campaignId', 'zoneId', 'status', 'reviewStatus', 'proofCount', 'gpsPointCount', 'submittedAt', 'reviewedAt', 'earning'])),
+    messages: [], events: [],
+    startEligibility: {allowed: false, reasons: ['This assignment is no longer active.']},
+  };
+}
+
 module.exports = {
+  publicMaterialLogistics,
+  publicCampaignDocument,
+  privateLogisticsAssignmentAllowed,
+  historicalJobRoomProjection,
   DEFAULT_WORK_WINDOWS,
   CUTOFF_WARNING_MINUTES,
   HANDOFF_GRACE_MINUTES,

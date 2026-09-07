@@ -57,10 +57,19 @@ class CompletionEvidencePanel extends StatelessWidget {
         Text(
           'Start: ${evidence['startedAt'] ?? 'Not started'} · End: ${evidence['endedAt'] ?? 'Not ended'}',
         ),
+        const Text(
+          'Minimum for base eligibility: 80%. Bonus threshold: 95%. Aim for 100%.',
+        ),
         Text('Accepted base compensation: ${money(policy['baseAmountCents'])}'),
         Text('Base eligibility: ${policy['baseEligibility'] ?? 'HELD'}'),
+        if (policy['baseProtected'] == true)
+          Text(
+            'Protected base: ${money(policy['baseAmountCents'])} — held for technical review; not reduced or automatically paid.',
+          ),
         Text('Bonus: ${policy['bonusStatus'] ?? 'Not activated'}'),
-        Text('Exact payable amount: ${money(policy['payableAmountCents'])}'),
+        Text(
+          'Held payable amount before approval: ${money(policy['payableAmountCents'])}',
+        ),
         if (evidence['historicalCalculatedAmountCents'] != null)
           Text(
             'Historical calculation: ${money(evidence['historicalCalculatedAmountCents'])} — not approved or posted.',

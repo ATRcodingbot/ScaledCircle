@@ -39,6 +39,10 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
   bool _submitting = false;
   Map<String, dynamic>? _evidence;
   bool _exceptionSelected = false;
+  Map<String, dynamic> get _policy =>
+      Map<String, dynamic>.from(_evidence?['policy'] as Map? ?? {});
+  bool get _ordinaryAllowed => _policy['ordinarySubmissionAllowed'] == true;
+  bool get _technicalReview => _policy['technicalReviewAllowed'] == true;
 
   String? _completionId;
 
@@ -117,7 +121,11 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
 
   Future<void> _submitCompletion() async {
     if (_evidence != null) {
-      if (!_exceptionSelected || _notesController.text.trim().isEmpty) return;
+      if (!_ordinaryAllowed &&
+          !_technicalReview &&
+          (!_exceptionSelected || _notesController.text.trim().isEmpty)) {
+        return;
+      }
       await _createDraftCompletion();
     }
     if (!mounted) return;
@@ -137,7 +145,9 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
       await _completionService.submitCompletion(
         completionId: _completionId!,
         scalerNotes: _notesController.text.trim(),
-        accessException: _evidence != null,
+        accessException: _evidence != null && _exceptionSelected,
+        technicalReview:
+            _evidence != null && _technicalReview && !_exceptionSelected,
       );
 
       if (!mounted) return;
@@ -193,7 +203,7 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
               title: Text(
                 _loadError != null
                     ? "GPS Route Verification Failed"
-                    : _completionId == null
+                    : _completionId == null && _evidence == null
                     ? "Verifying GPS Route..."
                     : "GPS Route Ready",
               ),
@@ -205,7 +215,7 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
 
               trailing: _loadError != null
                   ? const Icon(Icons.error_outline, color: Colors.red)
-                  : _completionId == null
+                  : _completionId == null && _evidence == null
                   ? const SizedBox(
                       width: 22,
                       height: 22,
@@ -241,10 +251,11 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
 
           if (_evidence != null) ...[
             CompletionEvidencePanel(evidence: _evidence!),
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Continue Zone'),
-            ),
+            if (!_ordinaryAllowed)
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Continue Route'),
+              ),
             CheckboxListTile(
               value: _exceptionSelected,
               onChanged: (v) => setState(() => _exceptionSelected = v == true),
@@ -265,7 +276,9 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
                   _submitting ||
                       (_evidence == null
                           ? _completionId == null
-                          : !_exceptionSelected)
+                          : !(_ordinaryAllowed ||
+                                _technicalReview ||
+                                _exceptionSelected))
                   ? null
                   : _submitCompletion,
 
@@ -278,8 +291,12 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Text(
-                      _evidence != null
+                      _evidence != null && _exceptionSelected
                           ? 'Submit for Exception Review'
+                          : _technicalReview
+                          ? 'Submit for Technical Review'
+                          : _evidence != null && !_ordinaryAllowed
+                          ? 'Continue Route'
                           : 'Submit Completion',
                     ),
             ),

@@ -5,6 +5,8 @@ const ZONE_ID = "ios_physical_qa_zone_v1";
 const AUTHORITY_PATH = `internalCertificationAuthorities/${CAMPAIGN_ID}`;
 
 const FIXTURES = Object.freeze([
+  Object.freeze({campaignId:'ios_physical_qa_v2',zoneId:'ios_physical_qa_zone_v2',purpose:'IOS_PHYSICAL_CERTIFICATION'}),
+  Object.freeze({campaignId:'android_physical_qa_v2',zoneId:'android_physical_qa_zone_v2',purpose:'ANDROID_PHYSICAL_CERTIFICATION'}),
   Object.freeze({campaignId: CAMPAIGN_ID, zoneId: ZONE_ID, purpose: 'IOS_PHYSICAL_CERTIFICATION'}),
   Object.freeze({campaignId: 'android_physical_qa_v1', zoneId: 'android_physical_qa_zone_v1', purpose: 'ANDROID_PHYSICAL_CERTIFICATION'}),
 ]);

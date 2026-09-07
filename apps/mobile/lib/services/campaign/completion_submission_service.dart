@@ -79,6 +79,7 @@ class CompletionSubmissionService {
     required String completionId,
     String? scalerNotes,
     bool accessException = false,
+    bool technicalReview = false,
   }) async {
     final completionSnapshot = await _completions.doc(completionId).get();
 
@@ -117,7 +118,11 @@ class CompletionSubmissionService {
       functionName: 'submitZoneCompletion',
       data: {
         'completionId': completionId,
-        'reviewMode': accessException ? 'access_exception' : 'ordinary',
+        'reviewMode': accessException
+            ? 'access_exception'
+            : technicalReview
+            ? 'technical_review'
+            : 'ordinary',
         'scalerNotes': scalerNotes?.trim() ?? '',
       },
     );

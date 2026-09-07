@@ -34,7 +34,12 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
   bool get _stagingReview =>
       AppEnvironmentConfig.isStaging && widget.zoneId != null;
   bool get _approvalHeld =>
-      _stagingReview && (_room == null || _room!['completionEvidence'] != null);
+      _stagingReview &&
+      (_room == null ||
+          (_room!['completionEvidence'] is Map &&
+              (_room!['completionEvidence']['policy']
+                      as Map?)?['ordinarySubmissionAllowed'] !=
+                  true));
   @override
   void initState() {
     super.initState();

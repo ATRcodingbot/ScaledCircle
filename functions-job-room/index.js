@@ -6126,6 +6126,36 @@ async function assertPhysicalQaRequest(request) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function moneyValue(value) {
   const number = typeof value === "number" ? value : Number(value);
 
@@ -8477,12 +8507,16 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     const checkpointDocs = sessionDoc ? await sessionDoc.ref.collection('checkpoints').get() : null;
     const chunks = chunkDocs?.docs.map((d) => d.data()) || [];
     const checkpoints = checkpointDocs?.docs.map((d) => d.data()) || [];
-    const valid = sessionDoc && routeProgress.projectProgress({ ...session, sessionId: sessionDoc.id }, zone, chunks, calculateRouteCompletion);
-    const points = valid?.state === 'available' ? chunks.flatMap((c) => c.points || []).filter((p) => p.accepted === true) : [];
-    const estimate = canvassingCompletion.coverage(zone, points);
+    const points = sessionDoc ? routeProgress.acceptedEvidence({ ...session, sessionId: sessionDoc.id }, chunks) || [] : [];
+    const finalizedRoute = session.routeId ? await db.collection('campaignRoutes').doc(session.routeId).get() : null;
+    const assessment = canvassingCompletion.assess({ ...zone, id: zoneId }, { ...session, sessionId: sessionDoc?.id }, chunks, finalizedRoute?.data() || {}, calculateRouteCompletion);
+    const estimate = assessment.estimate;
+    const contract = compensationSnapshot.data() || {};
     response.completionEvidence = { estimate, policy: canvassingCompletion.decision({ coverage: estimate,
-        baseAmountCents: Number(compensationSnapshot.data()?.baseAmountCents), checkpointCount: checkpoints.length,
-        requiredCheckpointCount: zone.executionRoute?.checkpoints?.length || 0 }),
+        baseAmountCents: Number(contract.baseAmountCents), bonusAmountCents: Number(contract.bonusAmountCents || 0), checkpointCount: checkpoints.length,
+        authorityValid: contract.immutable === true && contract.zoneId === zoneId && contract.campaignId === zone.campaignId && contract.scalerId === zone.assignedScalerId && contract.businessId === zone.businessId && zone.settlementBlocked !== true && zone.disputeOpen !== true,
+        finalized: assessment.finalized, technicalIssue: assessment.technicalIssue, technicalReviewSupported: assessment.technicalReviewSupported,
+        accessIssue: zone.reviewMode === 'access_exception', historical: zone.status === 'submitted' && zone.economicPolicyVersion !== canvassingCompletion.VERSION }),
       path: points.map((p) => ({ latitude: p.latitude, longitude: p.longitude })),
       corridor: zone.serviceArea || [], route: zone.executionRoute || null,
       checkpoints: checkpoints.map((p) => ({ latitude: p.latitude ?? null, longitude: p.longitude ?? null, createdAt: p.createdAt || null })),

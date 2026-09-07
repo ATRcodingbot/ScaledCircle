@@ -17,16 +17,21 @@ function validateRoute(route, corridor) {
   if(!Number.isFinite(route.denominatorMeters)||meters<=0||Math.abs(route.denominatorMeters-meters)>0.01)throw Error('route_denominator_invalid');
   return meters;
 }
-function projectProgress(session, zone, chunks, calculate) {
-  const unknown={state:'calculating',provisional:true,coveragePercentage:null};
-  if(chunks.length!==Number(session.chunkCount||0)) return unknown;
+function acceptedEvidence(session, chunks) {
+  if(chunks.length!==Number(session.chunkCount||0)) return null;
   let next=1;const accepted=[];
   for(const c of [...chunks].sort((a,b)=>a.startSequence-b.startSequence)) {
     if(c.sessionId!==session.sessionId||c.scalerId!==session.scalerId||c.zoneId!==session.zoneId||
-      c.startSequence!==next||!Array.isArray(c.points))return unknown;
-    for(const p of c.points) {if(p.sequence!==next++)return unknown;if(p.accepted===true)accepted.push(p);}
+      c.startSequence!==next||!Array.isArray(c.points))return null;
+    for(const p of c.points) {if(p.sequence!==next++)return null;if(p.accepted===true)accepted.push(p);}
   }
-  if(next-1!==Number(session.pointCount||0)||accepted.length<2)return unknown;
+  if(next-1!==Number(session.pointCount||0)||accepted.length<2)return null;
+  return accepted;
+}
+function projectProgress(session, zone, chunks, calculate) {
+  const unknown={state:'calculating',provisional:true,coveragePercentage:null};
+  const accepted=acceptedEvidence(session,chunks);
+  if(!accepted)return unknown;
   const exact=zone.executionRoute;
   const denominator=exact?validateRoute(exact,zone.serviceArea):zone.estimatedWalkingMeters;
   const result=calculate({...zone,estimatedWalkingMeters:denominator},accepted);
@@ -37,4 +42,4 @@ function projectProgress(session, zone, chunks, calculate) {
       .map(p=>({latitude:p.latitude,longitude:p.longitude})),
     corridor:zone.serviceArea,route:exact||null};
 }
-module.exports={hash,distance,validateRoute,projectProgress};
+module.exports={hash,distance,validateRoute,acceptedEvidence,projectProgress};
