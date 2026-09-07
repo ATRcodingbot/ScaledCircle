@@ -16,7 +16,42 @@ class _RoomService extends JobRoomService {
   }
 }
 
+class _HistoricalRoomService extends JobRoomService {
+  @override
+  Future<Map<String, dynamic>> load(String zoneId) async => {
+    'viewerRole': 'scaler',
+    'privateLogisticsAvailable': false,
+    'room': {'id': zoneId, 'scalerId': 'scaler', 'status': 'submitted'},
+    'campaign': {'materialsRequired': true},
+    'handoff': {'required': false, 'status': 'unavailable'},
+  };
+}
+
 void main() {
+  testWidgets(
+    'Historical logistics are withheld without claiming no materials or offering actions',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: JobRoomScreen(
+            zoneId: 'historical-zone',
+            service: _HistoricalRoomService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('no longer available for this assignment'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('No Materials Required'), findsNothing);
+      expect(find.text('No physical materials required'), findsNothing);
+      expect(find.text('Confirm Ready'), findsNothing);
+      expect(find.text('Confirm Materials Received'), findsNothing);
+      expect(find.text('Send Message'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'Job Room read failure exits loading and offers an explicit retry',
     (tester) async {
