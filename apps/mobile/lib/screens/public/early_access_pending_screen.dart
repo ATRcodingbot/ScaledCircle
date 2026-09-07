@@ -173,7 +173,7 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'The Business Referral Program becomes available after Scaler access is approved.',
+                        'Referral Program — Coming Soon. Enrollment and rewards are not available yet.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Color(0xFF7FA0B8)),
                       ),

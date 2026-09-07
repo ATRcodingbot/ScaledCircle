@@ -528,9 +528,9 @@ class ScalerDashboardScreen extends StatelessWidget {
                     _navigationCard(
                       context: context,
                       icon: Icons.handshake_outlined,
-                      title: 'Earn with Referrals',
+                      title: 'Referral Program — Coming Soon',
                       subtitle:
-                          'Introduce local businesses and track referral status.',
+                          'Business and Scaler referrals are being prepared.',
                       accent: AppColors.blue,
                       onTap: () {
                         Navigator.push(

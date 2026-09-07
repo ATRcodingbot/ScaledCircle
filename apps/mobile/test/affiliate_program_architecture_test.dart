@@ -44,16 +44,19 @@ void main() {
     final business = File(
       'lib/screens/business/business_dashboard.dart',
     ).readAsStringSync();
-    expect(scaler, contains('Earn with Referrals'));
-    expect(business, isNot(contains('Earn with Referrals')));
+    expect(scaler, contains('Referral Program — Coming Soon'));
+    expect(business, isNot(contains('Referral Program — Coming Soon')));
   });
 
   test('affiliate screen is truthful about Phase 1 accounting', () {
     final source = File(
       'lib/screens/scaler/affiliate/scaler_affiliate_screen.dart',
     ).readAsStringSync();
-    expect(source, contains('Commission accounting is being prepared'));
-    expect(source, contains('qualifying paid Business subscription revenue'));
+    expect(
+      source,
+      contains('Enrollment and referral rewards are not available yet.'),
+    );
+    expect(source, contains('Existing referral records are preserved.'));
     expect(source, isNot(contains('guaranteed income')));
     expect(source, isNot(contains('discount')));
   });

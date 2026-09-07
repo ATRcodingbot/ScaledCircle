@@ -1,8 +1,45 @@
 import unittest
+import json
+import re
+import subprocess
 from prepare_marketing_delivery import documents, content
 
 
 class DeliveryTest(unittest.TestCase):
+    def test_metadata_and_structured_data_are_complete_for_each_route(self):
+        titles, descriptions = set(), set()
+        for route, page in documents().items():
+            titles.add(re.search(r'<title>(.*?)</title>', page).group(1))
+            descriptions.add(re.search(r'<meta name="description" content="([^"]+)"', page).group(1))
+            for key in ['og:title', 'og:description', 'og:url', 'og:image']:
+                self.assertIn('property="' + key + '"', page)
+            schema = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', page, re.S).group(1))
+            self.assertEqual(schema['url'], 'https://scaledcircle.com' + route)
+            self.assertEqual(schema['@type'], 'WebPage')
+            self.assertNotIn('AggregateRating', page)
+        self.assertEqual(len(titles), 5)
+        self.assertEqual(len(descriptions), 5)
+
+    def test_referral_and_hash_product_navigation_without_network_or_attribution(self):
+        script = re.findall(r'<script>(.*?)</script>', documents()['/'], re.S)[0]
+        harness = r'''
+const vm=require('node:vm'), assert=require('node:assert/strict');
+const script=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
+for(const ref of ['abc234','invalid-secret-value','']) {
+ const anchors=['/#/businesses','/pricing','mailto:support@scaledcircle.com'].map(href=>({href,getAttribute(){return this.href},setAttribute(k,v){this.href=v}}));
+ let appended=0,removed=0,listener;
+ const location={href:'https://scaledcircle.com/?ref='+ref,origin:'https://scaledcircle.com',search:'?ref='+ref,hash:''};
+ const context={URL,URLSearchParams,location,addEventListener:(k,v)=>listener=v,document:{querySelectorAll:()=>anchors,getElementById:()=>({remove:()=>removed++}),createElement:()=>({}),body:{appendChild:()=>appended++}}};
+ vm.runInNewContext(script,context);
+ assert.equal(appended,0);
+ assert.equal(anchors[0].href,ref==='abc234'? '/?ref=ABC234#/businesses':'/#/businesses');
+ assert.equal(anchors[2].href,'mailto:support@scaledcircle.com');
+ location.hash='#/job-room/example';listener();listener();
+ assert.equal(appended,1);assert.equal(removed,1);
+}
+'''
+        subprocess.run(['node', '-e', harness], input=json.dumps(script), text=True, check=True, capture_output=True)
+
     def test_five_routes_have_visible_copy_and_distinct_canonicals(self):
         docs = documents()
         self.assertEqual(len(docs), 5)

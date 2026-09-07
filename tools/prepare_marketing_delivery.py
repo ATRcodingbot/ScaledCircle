@@ -73,6 +73,18 @@ def documents(*, staging=False):
 <footer><a href="/#/privacy">Privacy</a> · <a href="/#/terms">Terms</a> · <a href="mailto:support@scaledcircle.com">Contact support</a></footer>
 </main>
 <script>
+// Preserve only a valid existing referral code across same-site navigation.
+// No attribution write, enrollment, or commission is created by this page.
+const referral = new URLSearchParams(location.search).get('ref');
+if (referral && /^[A-HJ-NP-Z2-9]{6,16}$/i.test(referral)) {
+  for (const anchor of document.querySelectorAll('a[href]')) {
+    const target = new URL(anchor.getAttribute('href'), location.href);
+    if (target.origin === location.origin) {
+      target.searchParams.set('ref', referral.toUpperCase());
+      anchor.setAttribute('href', target.pathname + target.search + target.hash);
+    }
+  }
+}
 // Existing product hash URLs retain the Flutter shell. Marketing paths need no
 // Flutter download. Do not change OAuth or Response Asset Hosting rewrites.
 let appStarted = false;

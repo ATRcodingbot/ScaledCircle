@@ -46,7 +46,7 @@ void main() {
     expect(source, contains('FINISH SETTING UP YOUR WORK PREFERENCES'));
     expect(source, contains('COMPLETE SETUP'));
     expect(source, contains('Edit Work Preferences'));
-    expect(source, contains('Earn with Referrals'));
+    expect(source, contains('Referral Program — Coming Soon'));
   });
 
   test(

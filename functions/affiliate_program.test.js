@@ -77,7 +77,7 @@ test("Phase 1 never fabricates subscription commission or changes Business prici
 test("affiliate UI is Scaler-only and attribution is server-mediated", () => {
   const dashboard = fs.readFileSync(path.join(__dirname, "../apps/mobile/lib/screens/scaler/dashboard/scaler_dashboard_screen.dart"), "utf8");
   const register = fs.readFileSync(path.join(__dirname, "../apps/mobile/lib/services/auth/auth_service.dart"), "utf8");
-  assert.match(dashboard, /Earn with Referrals/);
+  assert.match(dashboard, /Referral Program — Coming Soon/);
   assert.match(register, /recordBusinessAttribution/);
   assert.doesNotMatch(register, /businessReferralAttributions.*\.set/s);
 });
