@@ -378,8 +378,8 @@ function copyPackage(destination, mode) {
     const source = path.join(sourceRoot, name);
     if (!fs.statSync(source).isFile()) continue;
     if (name.endsWith(".test.js")) continue;
-    if (name === "staging_physical_qa.js") {
-      if (transformIndex(mode).includes('require("./staging_physical_qa")')) {
+    if (["staging_physical_qa.js", "route_progress.js"].includes(name)) {
+      if (transformIndex(mode).includes(`require("./${name.slice(0, -3)}")`)) {
         fs.copyFileSync(source, path.join(destination, name));
       }
       continue;

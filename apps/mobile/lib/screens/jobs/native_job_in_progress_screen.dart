@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../models/tracking_models.dart';
 import '../../models/canvassing_photo_policy.dart';
+import '../../widgets/active_route_guidance.dart';
 import '../../services/active_job_tracking_service.dart';
 import '../../services/native_tracking_bridge.dart';
 import '../scaler/completion/submit_completion_screen.dart';
@@ -36,6 +37,9 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
   Timer? _refreshTimer;
   Timer? _syncTimer;
   bool _working = false;
+  bool _refreshing = false;
+  bool _syncing = false;
+  Map<String, dynamic>? _progress;
   String _syncMessage = 'Checking secure device queue…';
   bool get _photoFree => prohibitsResidentialPhotos(
     _campaignData['campaignType'] ?? _campaignData['type'],
@@ -54,6 +58,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
         ActiveJobTrackingService.forCurrentEnvironment();
     WidgetsBinding.instance.addObserver(this);
     _refresh();
+    _sync();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _refresh(),
@@ -78,28 +83,43 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
   }
 
   Future<void> _refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
     try {
-      final state = await _tracking.recover();
+      // The one-second timer updates local elapsed/GPS state only. Server
+      // reconciliation belongs to the bounded sync interval, not every tick.
+      final state = await _tracking
+          .recover(reconcileWithServer: false)
+          .timeout(const Duration(seconds: 10));
       if (mounted) setState(() => _state = state);
     } catch (error) {
       if (mounted) {
         setState(() => _syncMessage = 'GPS state unavailable: $error');
       }
+    } finally {
+      _refreshing = false;
     }
   }
 
   Future<void> _sync() async {
+    if (_syncing) return;
+    _syncing = true;
     try {
-      await _tracking.syncPending();
+      await _tracking.syncPending().timeout(const Duration(seconds: 45));
+      final progress = await _tracking.getProgress();
+      if (mounted) setState(() => _progress = progress);
       if (mounted) setState(() => _syncMessage = 'Synced with Scaled Circle');
       await _refresh();
     } catch (_) {
       if (mounted) {
+        setState(() => _progress = {'state': 'unavailable'});
         setState(
           () => _syncMessage =
               'Offline — GPS evidence is safely queued on this phone',
         );
       }
+    } finally {
+      _syncing = false;
     }
   }
 
@@ -263,7 +283,8 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
       final route = await FirebaseFirestore.instance
           .collection('campaignRoutes')
           .doc(routeId)
-          .get();
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 20));
       final count =
           (route.data()?['pointCount'] as num?)?.toInt() ?? _state.pointCount;
       if (!mounted) return;
@@ -287,7 +308,12 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to complete job: $error')),
+          const SnackBar(
+            content: Text(
+              'Finalization could not be confirmed. Your saved evidence is retained. '
+              'Check your connection, then check completion again.',
+            ),
+          ),
         );
       }
     } finally {
@@ -335,6 +361,11 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            ActiveRouteGuidance(
+              zone: _zoneData,
+              location: _state.lastLocation,
+              progress: _progress,
+            ),
             if (_tracking.emulatorHarness != null) ...[
               Card(
                 color: const Color(0xFFFFE8A3),

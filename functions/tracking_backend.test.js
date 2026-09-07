@@ -542,6 +542,24 @@ test("business handoff fault reserves one $50/$50 split and blocks later settlem
     .where("type", "==", "campaign_refund").get()).size, 0);
 });
 
+test("live progress reads validated chunks and never mutates coverage or money", async () => {
+  await db.doc('campaignZones/zone').update({assignedHomes:23,estimatedWalkingMeters:100,
+    serviceArea:[{latitude:38.99,longitude:-76.01},{latitude:39.01,longitude:-76.01},
+      {latitude:39.01,longitude:-75.99},{latitude:38.99,longitude:-75.99}]});
+  const {sessionId}=await start();
+  const before=await call(functions.getTrackingSessionState,'scaler',{sessionId,includeProgress:true});
+  assert.equal(before.progress.coveragePercentage,null);
+  await upload(sessionId,[point(1),point(2,3)]);
+  const original=(await db.doc('campaignZones/zone').get()).data();
+  const result=await call(functions.getTrackingSessionState,'scaler',{sessionId,includeProgress:true});
+  assert.equal(result.progress.state,'available');
+  assert.ok(result.progress.coveragePercentage>0);
+  assert.equal(result.progress.provisional,true);
+  await assert.rejects(call(functions.getTrackingSessionState,'other',{sessionId,includeProgress:true}));
+  assert.deepEqual((await db.doc('campaignZones/zone').get()).data(),original);
+  assert.equal((await db.collection('walletTransactions').get()).size,0);
+});
+
 test("canvassing checkpoint uses genuine location without image and rejects photo submission", async () => {
   await db.doc('campaigns/campaign').update({type: 'neighborhoodCanvassing'});
   const {sessionId} = await start();

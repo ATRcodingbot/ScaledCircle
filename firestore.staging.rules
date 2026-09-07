@@ -14,7 +14,7 @@ service cloud.firestore {
     // Staging-only reserved physical-certification namespace. Authority is
     // provisioned by trusted tooling; clients cannot create or edit it.
     match /internalCertificationAuthorities/{id} {
-      allow read: if isSignedIn() && id in ['ios_physical_qa_v1', 'android_physical_qa_v1']
+      allow read: if isSignedIn() && id in ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2']
         && (request.auth.uid == resource.data.businessUid || request.auth.uid == resource.data.scalerUid);
       allow write: if false;
     }
@@ -32,19 +32,23 @@ service cloud.firestore {
         && a.certificationFixture == true && a.immutable == true
         && a.campaignId == campaignId
         && ((campaignId == 'ios_physical_qa_v1' && a.zoneId == 'ios_physical_qa_zone_v1')
-          || (campaignId == 'android_physical_qa_v1' && a.zoneId == 'android_physical_qa_zone_v1'))
+          || (campaignId == 'android_physical_qa_v1' && a.zoneId == 'android_physical_qa_zone_v1')
+          || (campaignId == 'ios_physical_qa_v2' && a.zoneId == 'ios_physical_qa_zone_v2')
+          || (campaignId == 'android_physical_qa_v2' && a.zoneId == 'android_physical_qa_zone_v2'))
         && (request.auth.uid == a.businessUid || request.auth.uid == a.scalerUid);
     }
     function physicalQaCampaignRead(id) {
       return (resource['__name__'] != /databases/$(database)/documents/campaigns/ios_physical_qa_v1
-          && resource['__name__'] != /databases/$(database)/documents/campaigns/android_physical_qa_v1)
+          && resource['__name__'] != /databases/$(database)/documents/campaigns/android_physical_qa_v1
+          && resource['__name__'] != /databases/$(database)/documents/campaigns/ios_physical_qa_v2
+          && resource['__name__'] != /databases/$(database)/documents/campaigns/android_physical_qa_v2)
         || physicalQaActor(id)
         || resource.data.businessId == request.auth.uid;
     }
     function physicalQaZoneRead(id) {
       // Campaign/assignment ownership is server-bound and immutable to clients.
       // These predicates also preserve ordinary owner/assigned-job queries.
-      return !(resource.data.campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1']) || physicalQaActor(resource.data.campaignId)
+      return !(resource.data.campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2']) || physicalQaActor(resource.data.campaignId)
         || resource.data.businessId == request.auth.uid
         || resource.data.assignedScalerId == request.auth.uid
         || ('assignedScalerIds' in resource.data && request.auth.uid in resource.data.assignedScalerIds);
@@ -197,7 +201,7 @@ service cloud.firestore {
 
 
       allow create:
-        if !(campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1']) && isApprovedAccount()
+        if !(campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2']) && isApprovedAccount()
         && request.resource.data.businessId == request.auth.uid
         && !request.resource.data.keys().hasAny(physicalQaProtectedFields());
 
@@ -205,7 +209,7 @@ service cloud.firestore {
       allow update:
         if physicalQaCampaignRead(campaignId) && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
-        && (!(campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1'])
+        && (!(campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2'])
           || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'businessId', 'basePay', 'bonus', 'qualityBonus', 'workerBudget', 'status', 'isTestCampaign',
             'environment', 'scalersNeeded', 'zoneCount']))
@@ -372,8 +376,8 @@ service cloud.firestore {
 
 
       allow create:
-        if !(zoneId in ['ios_physical_qa_zone_v1', 'android_physical_qa_zone_v1'])
-        && !(request.resource.data.campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1']) && isApprovedBusiness()
+        if !(zoneId in ['ios_physical_qa_zone_v1', 'android_physical_qa_zone_v1', 'ios_physical_qa_zone_v2', 'android_physical_qa_zone_v2'])
+        && !(request.resource.data.campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2']) && isApprovedBusiness()
         && request.resource.data.businessId == request.auth.uid
         && request.resource.data.campaignId is string
         && request.resource.data.campaignId.size() > 0

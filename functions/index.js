@@ -1,4 +1,5 @@
 const stagingPhysicalQa = require("./staging_physical_qa");
+const routeProgress = require("./route_progress");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
@@ -6197,7 +6198,9 @@ function calculateRouteCompletion(zone, routePoints) {
     );
   }
 
-  let expectedWalkingMeters = moneyValue(zone.estimatedWalkingMeters);
+  let expectedWalkingMeters = zone.executionRoute ?
+    routeProgress.validateRoute(zone.executionRoute, zone.serviceArea) :
+    moneyValue(zone.estimatedWalkingMeters);
 
   if (expectedWalkingMeters <= 0) {
     expectedWalkingMeters = moneyValue(zone.estimatedWalkingMiles) * 1609.344;
@@ -9755,7 +9758,7 @@ exports.startTrackingSession = trackingCallable("startTrackingSession", async (r
 
 exports.getTrackingSessionState = trackingCallable(
   "getTrackingSessionState", async (request) => {
-    assertTrackingPayload(request.data, new Set(["sessionId"]), 4096);
+    assertTrackingPayload(request.data, new Set(["sessionId", "includeProgress"]), 4096);
     const context = await authenticatedUserContext(request, "Sign in to check tracking.");
     const sessionId = String(request.data?.sessionId || "").trim();
     if (!sessionId) throw new HttpsError("invalid-argument", "Session is required.");
@@ -9765,9 +9768,28 @@ exports.getTrackingSessionState = trackingCallable(
         (session.scalerId !== context.uid && !context.isAdmin)) {
       throw new HttpsError("permission-denied", "The tracking session is unavailable.");
     }
+    let progress;
+    if (request.data?.includeProgress === true) {
+      const [zone, chunks] = await Promise.all([
+        db.collection("campaignZones").doc(session.zoneId).get(),
+        snapshot.ref.collection("chunks").orderBy("startSequence").get(),
+      ]);
+      if (!zone.exists || zone.data()?.campaignId !== session.campaignId ||
+          zone.data()?.assignedScalerId !== session.scalerId) {
+        throw new HttpsError("permission-denied", "The assigned route is unavailable.");
+      }
+      try {
+        progress = routeProgress.projectProgress({...session, sessionId}, zone.data(),
+          chunks.docs.map(doc => doc.data()), calculateRouteCompletion);
+      } catch (_) {
+        progress = {state: "unavailable", provisional: true, coveragePercentage: null};
+      }
+    }
     return {
       sessionId,
       status: String(session.status || "unknown"),
+      ...(progress ? {progress} : {}),
+      routeId: session.routeId || null,
       campaignId: session.campaignId,
       zoneId: session.zoneId,
       syncStatus: session.syncStatus,

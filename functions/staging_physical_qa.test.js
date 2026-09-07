@@ -31,11 +31,11 @@ test("QA suppresses broad notification fan-out; ordinary jobs remain unchanged",
 });
 
 test('exactly two reserved fixtures deny cross-access and cross-assignment',()=>{
- assert.equal(qa.FIXTURES.length,2);
+ assert.equal(qa.FIXTURES.length,4);
  for(const f of qa.FIXTURES){const own={...authority,...f,scalerUid:f.purpose};
   const args={projectId:'scaledcircle-staging',authority:own,campaignId:f.campaignId,zoneId:f.zoneId};
   assert.equal(qa.assertAccess({...args,uid:f.purpose}).scalerUid,f.purpose);
-  const other=qa.FIXTURES.find(x=>x!==f);
+  const other=qa.FIXTURES.find(x=>x.purpose!==f.purpose);
   assert.throws(()=>qa.assertAccess({...args,uid:other.purpose}),/identity_denied/);
   assert.throws(()=>qa.assertAccess({...args,uid:'business',targetScalerUid:other.purpose}),/identity_denied/);
   assert.throws(()=>qa.assertAccess({...args,uid:f.purpose,zoneId:other.zoneId}),/identity_denied/);

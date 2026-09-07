@@ -178,6 +178,7 @@ private final class ActiveJobLocationManager: NSObject, CLLocationManagerDelegat
   private let store = ActiveTrackingStore.shared
   private var oneShot: (([String: Any]?) -> Void)?
   private var oneShotFlags: [String] = []
+  private var oneShotTimeout: DispatchWorkItem?
   private var cutoffTimer: DispatchWorkItem?
 
   override init() {
@@ -209,7 +210,23 @@ private final class ActiveJobLocationManager: NSObject, CLLocationManagerDelegat
     scheduleCutoff()
   }
   func capture(flags: [String] = [], completion: @escaping ([String: Any]?) -> Void) {
-    oneShot = completion; oneShotFlags = flags; manager.requestLocation()
+    // Never overwrite an outstanding Flutter result or wait indefinitely for
+    // Core Location. A missing fix is not fabricated location evidence.
+    guard oneShot == nil else { completion(nil); return }
+    oneShot = completion
+    oneShotFlags = flags
+    let timeout = DispatchWorkItem { [weak self] in self?.finishCapture(nil) }
+    oneShotTimeout = timeout
+    DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
+    manager.requestLocation()
+  }
+  private func finishCapture(_ point: [String: Any]?) {
+    oneShotTimeout?.cancel()
+    oneShotTimeout = nil
+    let callback = oneShot
+    oneShot = nil
+    oneShotFlags = []
+    callback?(point)
   }
   func stop(reason: String, captureFinal: Bool, completion: @escaping () -> Void) {
     let finish = { self.cutoffTimer?.cancel(); self.manager.stopUpdatingLocation(); self.store.stop(reason: reason); completion() }
@@ -219,10 +236,10 @@ private final class ActiveJobLocationManager: NSObject, CLLocationManagerDelegat
     if store.cutoffReached { stopForCutoff(); return }
     locations.sorted { $0.timestamp < $1.timestamp }.forEach { location in
       let point = store.append(location, forcedFlags: oneShot == nil ? [] : oneShotFlags)
-      if let callback = oneShot { oneShot = nil; oneShotFlags = []; callback(point) }
+      if oneShot != nil { finishCapture(point) }
     }
   }
-  func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { if let callback = oneShot { oneShot = nil; callback(nil) } }
+  func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { finishCapture(nil) }
   private func scheduleCutoff() {
     cutoffTimer?.cancel()
     let delay = max(0, Double(store.cutoffAtMs) / 1000 - Date().timeIntervalSince1970)
@@ -234,6 +251,7 @@ private final class ActiveJobLocationManager: NSObject, CLLocationManagerDelegat
     cutoffTimer?.cancel()
     manager.stopUpdatingLocation()
     store.stop(reason: "work_window_cutoff")
+    finishCapture(nil)
   }
   enum TrackingError: Error { case locationDisabled, permissionDenied, alreadyActive, workWindowClosed }
 }

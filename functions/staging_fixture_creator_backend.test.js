@@ -10,7 +10,7 @@ const app=initializeApp({projectId:'demo-fixture-creator'}),db=getFirestore(app)
 // Private committed geometry is supplied only to the local certification run.
 const packet=require(require('node:path').resolve(process.env.QA_GEOMETRY_TEST_FILE));
 let authUsers;
-const run=(actorUid='admin',data={},projectId=c.PROJECT)=>c.createFixtureService({db,FieldValue,projectId,
+const run=(actorUid='admin',data={},projectId=c.PROJECT,retest=false)=>c.createFixtureService({db,FieldValue,projectId,retest,
  auth:{getUser:async uid=>{if(!authUsers[uid])throw Error('missing');return authUsers[uid];}}})({actorUid,data});
 beforeEach(async()=>{
  for(const collection of await db.listCollections()) await db.recursiveDelete(collection);
@@ -28,6 +28,29 @@ beforeEach(async()=>{
  await db.doc('campaigns/ordinary').set({status:'draft',businessId:'ordinary'});
 });
 after(()=>deleteApp(app));
+
+test('fresh retest creation and replay preserve historical records and create no money',async()=>{
+ const p=require(require('node:path').resolve(process.env.QA_RETEST_GEOMETRY_TEST_FILE));
+ await run();
+ const old=await Promise.all(c.FIXTURES.map(async f=>({campaign:(await db.doc(`campaigns/${f.campaignId}`).get()).data(),zone:(await db.doc(`campaignZones/${f.zoneId}`).get()).data()})));
+ await db.doc(`internalCertificationGeometry/${p.version}`).set(p);
+ const result=await run('admin',{},c.PROJECT,true);
+ assert.equal(result.replayed,false);
+ assert.equal((await run('admin',{},c.PROJECT,true)).replayed,true);
+ assert.equal((await db.collection('campaignZones').get()).size,4);
+ for(const f of result.fixtures){
+  const z=(await db.doc(`campaignZones/${f.zoneId}`).get()).data();
+  assert.ok(Math.abs(z.estimatedWalkingMeters-p.routeDistanceMeters)<.01);
+  assert.equal(z.executionRoute.routeHash,p.routeHash);
+  assert.equal(z.baseAmountCents,1500);
+  assert.equal(z.assignedScalerId,null);
+  assert.equal((await db.doc(`campaigns/${f.campaignId}`).get()).data().fundingStatus,'unfunded');
+  assert.equal((await db.doc(`adminAuditEvents/${f.auditId}`).get()).data().actionVersion,'DualMobileRetestV2');
+ }
+ const after=await Promise.all(c.FIXTURES.map(async f=>({campaign:(await db.doc(`campaigns/${f.campaignId}`).get()).data(),zone:(await db.doc(`campaignZones/${f.zoneId}`).get()).data()})));
+ assert.deepEqual(after,old);
+ for(const name of ['walletTransactions','scalerEarnings','campaignPayments','financialOperations','notifications'])assert.equal((await db.collection(name).get()).size,0);
+});
 test('atomic concurrent creation makes exactly two unfunded shells and two audits, no economic effects',async()=>{
  const r=await Promise.all([run(),run()]);assert.equal(r.filter(x=>!x.replayed).length,1);
  assert.equal((await db.collection('campaigns').get()).size,3);assert.equal((await db.collection('campaignZones').get()).size,2);

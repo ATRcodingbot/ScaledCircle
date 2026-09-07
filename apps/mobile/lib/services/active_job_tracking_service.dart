@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:geolocator/geolocator.dart';
@@ -17,7 +19,10 @@ abstract interface class TrackingSessionGateway {
     required TrackingChunk chunk,
   });
   Future<Map<String, dynamic>> completeSession({required String sessionId});
-  Future<Map<String, dynamic>> getSessionState({required String sessionId});
+  Future<Map<String, dynamic>> getSessionState({
+    required String sessionId,
+    bool includeProgress = false,
+  });
   Future<void> cancelSession({
     required String sessionId,
     required String reason,
@@ -59,11 +64,16 @@ class FirebaseTrackingSessionGateway implements TrackingSessionGateway {
         data: {'sessionId': sessionId},
       );
   @override
-  Future<Map<String, dynamic>> getSessionState({required String sessionId}) =>
-      _functions.call(
-        functionName: 'getTrackingSessionState',
-        data: {'sessionId': sessionId},
-      );
+  Future<Map<String, dynamic>> getSessionState({
+    required String sessionId,
+    bool includeProgress = false,
+  }) => _functions.call(
+    functionName: 'getTrackingSessionState',
+    data: {
+      'sessionId': sessionId,
+      if (includeProgress) 'includeProgress': true,
+    },
+  );
   @override
   Future<void> cancelSession({
     required String sessionId,
@@ -80,6 +90,7 @@ class ActiveJobTrackingService {
   ActiveJobTrackingService({
     NativeTrackingBridge? nativeBridge,
     TrackingSessionGateway? gateway,
+    this.finalizationTimeout = const Duration(seconds: 60),
   }) : _native = nativeBridge ?? const MethodChannelNativeTrackingBridge(),
        _gateway = gateway ?? const FirebaseTrackingSessionGateway();
 
@@ -96,11 +107,26 @@ class ActiveJobTrackingService {
   }
   final NativeTrackingBridge _native;
   final TrackingSessionGateway _gateway;
+  final Duration finalizationTimeout;
+  Future<String>? _completionOperation;
+  String? _completedRouteId;
+  bool _providerCompletionPending = false;
   EmulatorTrackingHarness? get emulatorHarness =>
       _native is EmulatorTrackingHarness
       ? _native as EmulatorTrackingHarness
       : null;
   Future<void>? _startOperation;
+  Future<Map<String, dynamic>> getProgress() async {
+    final state = await _native.getState().timeout(const Duration(seconds: 10));
+    if (state.sessionId == null) return {'state': 'unavailable'};
+    final result = await _gateway
+        .getSessionState(sessionId: state.sessionId!, includeProgress: true)
+        .timeout(const Duration(seconds: 20));
+    return Map<String, dynamic>.from(
+      result['progress'] as Map? ?? {'state': 'unavailable'},
+    );
+  }
+
   Future<void>? _syncOperation;
   Future<ActiveTrackingState> recover({bool reconcileWithServer = true}) async {
     final state = await _native.getState();
@@ -193,6 +219,9 @@ class ActiveJobTrackingService {
     required String zoneId,
     required String zoneName,
   }) async {
+    if (_completionOperation != null || _providerCompletionPending) {
+      throw StateError('Confirm the pending completion before starting a job.');
+    }
     final current = await _native.getState();
     if (current.active) {
       if (current.zoneId == zoneId) return;
@@ -223,6 +252,7 @@ class ActiveJobTrackingService {
         cutoffAtMs: cutoffAtMs,
         resume: resumed,
       );
+      _completedRouteId = null;
     } catch (_) {
       // A native failure on the first segment may safely close the empty
       // session. A resumed segment belongs to a long-lived job with existing
@@ -266,21 +296,72 @@ class ActiveJobTrackingService {
     }
   }
 
-  Future<String> complete() async {
-    final state = await _native.getState();
+  Future<String> complete() {
+    final completed = _completedRouteId;
+    if (completed != null) return Future.value(completed);
+    final pending = _completionOperation;
+    if (pending != null) return pending;
+    final operation = _completeBounded();
+    _completionOperation = operation;
+    return operation.whenComplete(() => _completionOperation = null);
+  }
+
+  Future<String> _completeBounded() async {
+    // Timeout each stage rather than the whole workflow: a late native result
+    // must not silently continue into a completion create after the UI exits.
+    final state = await _native.getState().timeout(finalizationTimeout);
     final sessionId = state.sessionId;
     if (sessionId == null || sessionId.isEmpty) {
-      throw Exception('There is no tracking session to finalize.');
+      throw StateError('No saved tracking session is available.');
     }
-    // If network finalization fails, the durable queue and session ID remain
-    // available for a safe retry without restarting location collection.
+    final remote = await _gateway
+        .getSessionState(sessionId: sessionId)
+        .timeout(finalizationTimeout);
+    if (remote['status'] == 'completed') {
+      if (state.active) {
+        await _native
+            .stop(reason: 'server_completed', captureFinalPoint: false)
+            .timeout(finalizationTimeout);
+      }
+      return _completedRouteId = remote['routeId']?.toString() ?? sessionId;
+    }
+    if (remote['status'] != 'active' || _providerCompletionPending) {
+      throw StateError(
+        'Completion is awaiting confirmation. Check status before retrying.',
+      );
+    }
     if (state.active) {
-      await _native.stop(reason: 'completed', captureFinalPoint: true);
+      await _native
+          .stop(reason: 'completed', captureFinalPoint: true)
+          .timeout(finalizationTimeout);
     }
-    await syncPending();
-    final result = await _gateway.completeSession(sessionId: sessionId);
-    await _native.purgeAcknowledgedEvidence(sessionId: sessionId);
-    return result['routeId']?.toString() ?? sessionId;
+    await syncPending().timeout(finalizationTimeout);
+    Map<String, dynamic> result;
+    try {
+      _providerCompletionPending = true;
+      result = await _gateway
+          .completeSession(sessionId: sessionId)
+          .whenComplete(() => _providerCompletionPending = false)
+          .timeout(finalizationTimeout);
+    } catch (_) {
+      // A lost response can follow a committed server result. Read only;
+      // never automatically issue a second completion request.
+      final reconciled = await _gateway
+          .getSessionState(sessionId: sessionId)
+          .timeout(finalizationTimeout);
+      if (reconciled['status'] != 'completed') rethrow;
+      result = reconciled;
+    }
+    _completedRouteId = result['routeId']?.toString() ?? sessionId;
+    // Cleanup failure must not disguise a confirmed completion as a failure.
+    try {
+      await _native
+          .purgeAcknowledgedEvidence(sessionId: sessionId)
+          .timeout(finalizationTimeout);
+    } catch (_) {
+      /* Retain local evidence for later cleanup. */
+    }
+    return _completedRouteId!;
   }
 
   Future<void> cancel({String reason = 'cancelled_by_scaler'}) async {

@@ -12,7 +12,6 @@ import '../../services/campaign_service.dart';
 import '../../services/campaign/campaign_proof_policy.dart';
 import '../../services/active_job_tracking_service.dart';
 import '../../services/tracking_runtime_policy.dart';
-import '../../widgets/home_completion_counter.dart';
 import 'native_job_in_progress_screen.dart';
 import '../../widgets/legal_consent_prompt.dart';
 
@@ -134,9 +133,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       if (_usesNativeTracking) {
         if (!mounted) return;
         if (!await ensureLegalConsentForAction(
-          context,
-          LegalActionConsent.locationTracking,
-        ) || !mounted) {
+              context,
+              LegalActionConsent.locationTracking,
+            ) ||
+            !mounted) {
           return;
         }
         await _nativeTracking.start(
@@ -525,14 +525,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         if (status == 'in_progress') {
           return Column(
             children: [
-              HomeCompletionCounter(
-                zoneId: zone.id,
-
-                assignedHomes: (data['estimatedHomes'] as num?)?.toInt() ?? 0,
-
-                completedHomes: (data['completedHomes'] as num?)?.toInt() ?? 0,
-
-                basePay: (campaignData['basePay'] as num?)?.toDouble() ?? 0,
+              const Text(
+                'Live route coverage is shown on the active tracking map. '
+                'Final completion and payment are calculated from submitted GPS evidence.',
               ),
 
               const SizedBox(height: 20),

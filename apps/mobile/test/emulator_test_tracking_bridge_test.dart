@@ -172,6 +172,7 @@ class _Gateway implements TrackingSessionGateway {
   @override
   Future<Map<String, dynamic>> getSessionState({
     required String sessionId,
+    bool includeProgress = false,
   }) async => {'status': 'active'};
 
   @override

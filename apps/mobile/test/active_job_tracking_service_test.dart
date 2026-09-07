@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/models/tracking_models.dart';
 import 'package:flutter_app/services/active_job_tracking_service.dart';
@@ -5,6 +6,81 @@ import 'package:flutter_app/services/native_tracking_bridge.dart';
 
 void main() {
   group('active job tracking coordinator', () {
+    test('concurrent completion taps share one finalization', () async {
+      final native = _FakeNativeBridge()..seedActive();
+      final gateway = _FakeGateway();
+      final service = ActiveJobTrackingService(
+        nativeBridge: native,
+        gateway: gateway,
+      );
+      expect(await Future.wait([service.complete(), service.complete()]), [
+        'route',
+        'route',
+      ]);
+      expect(gateway.completeCount, 1);
+      expect(native.stopCount, 1);
+      expect(await service.complete(), 'route');
+      expect(gateway.completeCount, 1);
+    });
+    test(
+      'lost completion response reconciles without a second request',
+      () async {
+        final native = _FakeNativeBridge()..seedActive();
+        final gateway = _FakeGateway()..loseCompletionResponse = true;
+        final service = ActiveJobTrackingService(
+          nativeBridge: native,
+          gateway: gateway,
+        );
+        expect(await service.complete(), 'route');
+        expect(gateway.completeCount, 1);
+        expect(native.stopCount, 1);
+      },
+    );
+    test('native final-fix hang exits without sending completion', () async {
+      final native = _FakeNativeBridge()..seedActive();
+      native.stopBlocker = Completer<void>();
+      final gateway = _FakeGateway();
+      final service = ActiveJobTrackingService(
+        nativeBridge: native,
+        gateway: gateway,
+        finalizationTimeout: const Duration(milliseconds: 5),
+      );
+      await expectLater(service.complete(), throwsA(isA<TimeoutException>()));
+      native.stopBlocker!.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.completeCount, 0);
+      expect(native.purgeCount, 0);
+    });
+    test(
+      'server finalizing state holds without another completion request',
+      () async {
+        final native = _FakeNativeBridge()..seedActive();
+        final gateway = _FakeGateway()..remoteStatus = 'finalizing';
+        final service = ActiveJobTrackingService(
+          nativeBridge: native,
+          gateway: gateway,
+        );
+        await expectLater(service.complete(), throwsStateError);
+        expect(gateway.completeCount, 0);
+        expect(native.purgeCount, 0);
+      },
+    );
+    test('timed-out in-flight completion cannot be sent again', () async {
+      final native = _FakeNativeBridge()..seedActive();
+      final gateway = _FakeGateway()..completionBlocker = Completer<void>();
+      final service = ActiveJobTrackingService(
+        nativeBridge: native,
+        gateway: gateway,
+        finalizationTimeout: const Duration(milliseconds: 5),
+      );
+      await expectLater(service.complete(), throwsA(isA<TimeoutException>()));
+      await expectLater(service.complete(), throwsStateError);
+      expect(gateway.completeCount, 1);
+      gateway.completionBlocker!.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(await service.complete(), 'route');
+      expect(gateway.completeCount, 1);
+    });
     test('starting the same active job creates exactly one session', () async {
       final native = _FakeNativeBridge();
       final gateway = _FakeGateway();
@@ -223,6 +299,8 @@ class _FakeNativeBridge implements NativeTrackingBridge {
   final List<TrackingChunk> chunks = [];
   int purgeCount = 0;
   bool failStart = false;
+  Completer<void>? stopBlocker;
+  int stopCount = 0;
 
   void seedActive() {
     active = true;
@@ -277,6 +355,8 @@ class _FakeNativeBridge implements NativeTrackingBridge {
     required String reason,
     required bool captureFinalPoint,
   }) async {
+    stopCount++;
+    if (stopBlocker != null) await stopBlocker!.future;
     active = false;
     stopReason = reason;
     this.captureFinalPoint = captureFinalPoint;
@@ -294,6 +374,9 @@ class _FakeGateway implements TrackingSessionGateway {
   String remoteStatus = 'active';
   bool failSessionLookup = false;
   bool resumedStart = false;
+  bool loseCompletionResponse = false;
+  int completeCount = 0;
+  Completer<void>? completionBlocker;
   @override
   Future<Map<String, dynamic>> startSession({
     required String campaignId,
@@ -324,14 +407,25 @@ class _FakeGateway implements TrackingSessionGateway {
   @override
   Future<Map<String, dynamic>> completeSession({
     required String sessionId,
-  }) async => {'routeId': 'route'};
+  }) async {
+    completeCount++;
+    if (completionBlocker != null) await completionBlocker!.future;
+    remoteStatus = 'completed';
+    if (loseCompletionResponse) throw Exception('response lost');
+    return {'routeId': 'route'};
+  }
 
   @override
   Future<Map<String, dynamic>> getSessionState({
     required String sessionId,
+    bool includeProgress = false,
   }) async {
     if (failSessionLookup) throw Exception('offline');
-    return {'sessionId': sessionId, 'status': remoteStatus};
+    return {
+      'sessionId': sessionId,
+      'status': remoteStatus,
+      if (remoteStatus == 'completed') 'routeId': 'route',
+    };
   }
 
   @override

@@ -31,12 +31,16 @@ function validateGeometry(packet) {
     estimate.estimatedWalkingMinutes<=0 || estimate.estimatedWalkingMinutes>360) fail('geometry_mismatch');
   return estimate;
 }
-function createFixtureService({db,auth,FieldValue,projectId}) {
+function createFixtureService({db,auth,FieldValue,projectId,retest=false}) {
+  const fixtures=retest?FIXTURES.map(f=>({...f,campaignId:f.campaignId.replace('_v1','_v2'),zoneId:f.zoneId.replace('_v1','_v2')})):FIXTURES;
+  const geometryVersion=retest?'dual_mobile_kenilworth_v2':GEOMETRY_VERSION;
+  const geometryHash=retest?'0b3ac6c4545771f6a4d9e0b0c393243b84a6223dfc51a85c699a2edd2a5ecb93':GEOMETRY_HASH;
+  const bind=f=>({...binding(f),...(retest?{actionVersion:'DualMobileRetestV2',geometryVersion,geometryHash}: {})});
   return async function create({actorUid,data={}}) {
     if(projectId!==PROJECT) fail('staging_only');
     if(!actorUid) fail('admin_required');
     if(!data || Array.isArray(data) || Object.keys(data).length) fail('empty_request_required');
-    const people=await Promise.all([actorUid,BUSINESS,...FIXTURES.map(f=>f.scalerUid)].map(async uid=>{
+    const people=await Promise.all([actorUid,BUSINESS,...fixtures.map(f=>f.scalerUid)].map(async uid=>{
       const user=await auth.getUser(uid).catch(()=>fail('account_ineligible'));
       if(user.disabled || user.emailVerified!==true) fail('account_ineligible');
       return user;
@@ -44,18 +48,18 @@ function createFixtureService({db,auth,FieldValue,projectId}) {
     if(people.length!==4) fail('account_ineligible');
     return db.runTransaction(async tx=>{
       const paths=[`users/${actorUid}`,`users/${BUSINESS}`,
-        `internalCertificationGeometry/${GEOMETRY_VERSION}`];
-      for(const uid of [BUSINESS,...FIXTURES.map(f=>f.scalerUid)]) {
+        `internalCertificationGeometry/${geometryVersion}`];
+      for(const uid of [BUSINESS,...fixtures.map(f=>f.scalerUid)]) {
         if(uid!==BUSINESS) paths.push(`users/${uid}`,`discoveryPreferences/${uid}`);
         for(const [type,v] of Object.entries(AGREEMENTS)) {
           if(uid!==BUSINESS || type!=='scaler_work') paths.push(`legalConsents/${uid}_${type}_${v}`);
         }
       }
-      for(const f of FIXTURES) paths.push(`internalCertificationAuthorities/${f.campaignId}`,
-        `campaigns/${f.campaignId}`,`campaignZones/${f.zoneId}`,`adminAuditEvents/qa_fixture_${hash(binding(f))}`);
+      for(const f of fixtures) paths.push(`internalCertificationAuthorities/${f.campaignId}`,
+        `campaigns/${f.campaignId}`,`campaignZones/${f.zoneId}`,`adminAuditEvents/qa_fixture_${hash(bind(f))}`);
       const snapshots=await Promise.all(paths.map(p=>tx.get(db.doc(p))));
-      const zoneSets=await Promise.all(FIXTURES.map(f=>tx.get(db.collection('campaignZones').where('campaignId','==',f.campaignId))));
-      if(zoneSets.some((set,i)=>set.docs.some(doc=>doc.id!==FIXTURES[i].zoneId))) fail('fixture_conflict');
+      const zoneSets=await Promise.all(fixtures.map(f=>tx.get(db.collection('campaignZones').where('campaignId','==',f.campaignId))));
+      if(zoneSets.some((set,i)=>set.docs.some(doc=>doc.id!==fixtures[i].zoneId))) fail('fixture_conflict');
       const records=new Map(paths.map((p,i)=>[p,snapshots[i].data()]));
       const read=p=>records.get(p);
       if(read(`users/${actorUid}`)?.role!=='admin') fail('admin_required');
@@ -64,23 +68,42 @@ function createFixtureService({db,auth,FieldValue,projectId}) {
         if(u?.role!==role || u.active!==true || u.betaAccess!=='approved') fail('account_ineligible');
       };
       eligible(BUSINESS,'business');
-      for(const f of FIXTURES) {
+      for(const f of fixtures) {
         eligible(f.scalerUid,'scaler');
         const p=read(`discoveryPreferences/${f.scalerUid}`);
         if(p?.userUid!==f.scalerUid || p.role!=='scaler' || !p.initialSetupCompletedAt?.toMillis?.()) fail('profile_incomplete');
         const a=read(`internalCertificationAuthorities/${f.campaignId}`);
-        if(a?.projectId!==PROJECT || a.immutable!==true || a.certificationFixture!==true ||
-          a.businessUid!==BUSINESS || a.scalerUid!==f.scalerUid || a.campaignId!==f.campaignId || a.zoneId!==f.zoneId) fail('authority_mismatch');
+        if(!(retest&&!a) && (a?.projectId!==PROJECT || a.immutable!==true || a.certificationFixture!==true ||
+          a.businessUid!==BUSINESS || a.scalerUid!==f.scalerUid || a.campaignId!==f.campaignId || a.zoneId!==f.zoneId)) fail('authority_mismatch');
       }
-      for(const uid of [BUSINESS,...FIXTURES.map(f=>f.scalerUid)]) for(const [type,v] of Object.entries(AGREEMENTS)) {
+      for(const uid of [BUSINESS,...fixtures.map(f=>f.scalerUid)]) for(const [type,v] of Object.entries(AGREEMENTS)) {
         if(uid===BUSINESS && type==='scaler_work') continue;
         const c=read(`legalConsents/${uid}_${type}_${v}`);
         if(c?.uid!==uid || c.agreementType!==type || c.agreementVersion!==v || !c.acceptedAt) fail('consent_required');
       }
-      const packet=read(`internalCertificationGeometry/${GEOMETRY_VERSION}`);
-      const estimate=validateGeometry(packet);
-      const states=FIXTURES.map(f=>{
-        const b=binding(f), digest=hash(b);
+      const packet=read(`internalCertificationGeometry/${geometryVersion}`);
+      let estimate;
+      let executionRoute;
+      if(retest) {
+        if(packet?.projectId!==PROJECT||packet.version!==geometryVersion||packet.immutable!==true||
+          packet.geometryHash!==geometryHash||hash(packet.geometry)!==geometryHash||
+          hash(packet.routeCenterline)!=='bf4601a989e80e8c9b85b9cfd8f2e8ff9ad586705fc3c07f84c54df7f796950f')fail('geometry_mismatch');
+        const rad=x=>x*Math.PI/180;
+        const meters=packet.routeCenterline.slice(1).reduce((sum,b,i)=>{
+          const a=packet.routeCenterline[i],h=Math.sin(rad(b.latitude-a.latitude)/2)**2+
+            Math.cos(rad(a.latitude))*Math.cos(rad(b.latitude))*Math.sin(rad(b.longitude-a.longitude)/2)**2;
+          return sum+12742000*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));
+        },0);
+        if(Math.abs(meters-packet.completionDenominatorMeters)>.01)fail('geometry_mismatch');
+        // Keep the maintained assignment planning checks intact. Completion has
+        // its own immutable route-distance denominator, independent of area planning.
+        estimate={...geometry.calculateGeometryWalkingEstimate(packet.geometry),estimatedWalkingMeters:meters};
+        executionRoute={version:geometryVersion,centerline:packet.routeCenterline,
+          routeHash:hash(packet.routeCenterline),corridorHash:geometryHash,denominatorMeters:meters,
+          checkpoints:packet.checkpoints,instructions:packet.routeInstructions};
+      } else estimate=validateGeometry(packet);
+      const states=fixtures.map(f=>{
+        const b=bind(f), digest=hash(b);
         const campaign=read(`campaigns/${f.campaignId}`),zone=read(`campaignZones/${f.zoneId}`);
         const audit=read(`adminAuditEvents/qa_fixture_${digest}`);
         if(!campaign&&!zone&&!audit) return {f,b,digest,exists:false};
@@ -90,18 +113,24 @@ function createFixtureService({db,auth,FieldValue,projectId}) {
           campaign.certificationScalerUid!==f.scalerUid || zone.certificationScalerUid!==f.scalerUid ||
           hash(campaign.certificationContract)!==hash(b) || hash(zone.certificationContract)!==hash(b) ||
           campaign.workerAmountCents!==1500 || campaign.basePay!==15 || zone.baseAmountCents!==1500 ||
-          campaign.bonus!==0 || zone.bonusAmountCents!==0 || hash(zone.serviceArea)!==GEOMETRY_HASH) fail('fixture_conflict');
+          campaign.bonus!==0 || zone.bonusAmountCents!==0 || hash(zone.serviceArea)!==geometryHash ||
+          (retest && hash(zone.executionRoute)!==hash(executionRoute))) fail('fixture_conflict');
         return {f,b,digest,exists:true};
       });
       if(states.some(s=>s.exists)!==states.every(s=>s.exists)) fail('fixture_conflict');
       if(states.every(s=>s.exists)) return {replayed:true,fixtures:states.map(s=>({...s.f,bindingDigest:s.digest,auditId:`qa_fixture_${s.digest}`}))};
       const at=FieldValue.serverTimestamp();
       for(const {f,b,digest} of states) {
+        if(retest&&!read(`internalCertificationAuthorities/${f.campaignId}`)) {
+          tx.create(db.doc(`internalCertificationAuthorities/${f.campaignId}`),{
+            projectId:PROJECT,immutable:true,certificationFixture:true,businessUid:BUSINESS,
+            scalerUid:f.scalerUid,campaignId:f.campaignId,zoneId:f.zoneId,createdAt:at});
+        }
         const common={businessId:BUSINESS,certificationFixture:true,isTestCampaign:true,
           certificationAuthorityId:f.campaignId,certificationScalerUid:f.scalerUid,
           certificationBusinessUid:BUSINESS,certificationPurpose:f.purpose,
           certificationContract:b,certificationBindingDigest:digest,
-          geometryVersion:GEOMETRY_VERSION,geometryHash:GEOMETRY_HASH,environment:'staging',
+          geometryVersion,geometryHash,environment:'staging',
           createdAt:at,updatedAt:at};
         tx.create(db.doc(`campaigns/${f.campaignId}`),{...common,name:f.purpose,campaignName:f.purpose,
           description:'Internal staging physical-device certification. No marketing activity.',
@@ -112,13 +141,14 @@ function createFixtureService({db,auth,FieldValue,projectId}) {
           workWindowStart:'00:00',workWindowEnd:'23:59'});
         tx.create(db.doc(`campaignZones/${f.zoneId}`),{...common,campaignId:f.campaignId,
           zoneName:f.purpose,status:'unassigned',assignedScalerId:null,mapped:true,mapLocked:true,
-          serviceArea:packet.geometry,serviceAreaType:'basic_area_estimate',serviceAreaPointCount:8,
+          serviceArea:packet.geometry,serviceAreaType:'basic_area_estimate',serviceAreaPointCount:packet.geometry.length,
+          ...(executionRoute?{executionRoute}:{}),
           estimatedHomes:23,homeCountStatus:'estimated',homeCountMethod:'certified_qa_planning_estimate',
           homeCountConfidence:'low',analysisStatus:'complete',baseAmountCents:1500,bonusAmountCents:0,
           serverZoneMetricsVersion:estimate.version,serverZoneGeometryDigest:geometry.zoneGeometryDigest(packet.geometry),
           serverEstimatedWalkingMinutes:estimate.estimatedWalkingMinutes,
           estimatedWalkingMeters:estimate.estimatedWalkingMeters,estimatedMinutes:estimate.estimatedWalkingMinutes});
-        tx.create(db.doc(`adminAuditEvents/qa_fixture_${digest}`),{actionVersion:VERSION,
+        tx.create(db.doc(`adminAuditEvents/qa_fixture_${digest}`),{actionVersion:b.actionVersion,
           eventType:'staging_qa_fixture_created',actorUid,environment:'staging',binding:b,
           bindingDigest:digest,createdAt:at});
       }

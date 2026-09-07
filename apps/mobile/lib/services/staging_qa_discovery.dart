@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/app_environment.dart';
 
-const physicalQaCampaignIds = ['ios_physical_qa_v1', 'android_physical_qa_v1'];
+const physicalQaCampaignIds = ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2'];
 
 /// Rules authorize the reserved document separately; the ordinary query never
 /// includes it. A denied QA read is expected for unrelated staging accounts.
