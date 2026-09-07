@@ -19,6 +19,27 @@ before(async()=>{
  await db.doc('assignmentCompensations/private-zone').set({campaignId:'private-job',businessId:'owner',scalerId:'assigned',immutable:true,baseAmountCents:1500,acceptedMaterialLogistics:{location:'PRIVATE LOCATION'}});
 });
 after(async()=>{fft.cleanup();for(const app of getApps()) await app.delete();});
+test('assigned-location discovery is staging-only, exact actor, active and read-only',async()=>{
+ const fn=discovery.listStagingAssignedLocationIds;
+ await assert.rejects(call(fn,'assigned',{}),e=>e.code==='failed-precondition');
+ process.env.GCLOUD_PROJECT='scaledcircle-staging';
+ try {
+  for(const uid of ['owner','admin',null]) await assert.rejects(call(fn,uid,{}));
+  await assert.rejects(call(fn,'assigned',{},false));
+  await assert.rejects(call(fn,'assigned',{uid:'other'}));
+  await db.doc('users/inactive').set({role:'scaler',active:false});
+  await assert.rejects(call(fn,'inactive',{}));
+  for(const [id,fields] of Object.entries({active:{},terminal:{status:'completed'},cross:{assignedScalerId:'other'},mismatch:{businessId:'tenant'}}))
+   await db.doc('campaignLocations/'+id).set({campaignId:'private-job',businessId:'owner',assignedScalerId:'assigned',status:'assigned',address:'PRIVATE',...fields});
+  assert.deepEqual(await call(fn,'assigned',{}),{locationIds:['active']});
+  assert.deepEqual(await call(fn,'applicant',{}),{locationIds:[]});
+  const before=(await db.doc('campaignLocations/active').get()).updateTime;
+  assert.deepEqual(await call(fn,'assigned',{}),{locationIds:['active']});
+  assert.ok(before.isEqual((await db.doc('campaignLocations/active').get()).updateTime));
+  await db.doc('campaignLocations/active').update({status:'completed'});
+  assert.deepEqual(await call(fn,'assigned',{}),{locationIds:[]});
+ } finally {process.env.GCLOUD_PROJECT='demo-logistics-backend';}
+});
 test('actual Job Room handler enforces identity and revokes exact logistics after cancellation',async()=>{
  for(const uid of ['assigned','owner','admin']) assert.match(JSON.stringify(await call(room,uid,{zoneId:'private-zone'})),/PRIVATE LOCATION/);
  for(const uid of ['other','applicant','tenant',null]) await assert.rejects(call(room,uid,{zoneId:'private-zone'}));

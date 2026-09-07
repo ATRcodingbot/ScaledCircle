@@ -1,4 +1,5 @@
 import '../../services/staging_qa_discovery.dart';
+import '../../services/assigned_locations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -70,11 +71,8 @@ class MyJobsScreen extends StatelessWidget {
             );
           }
 
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _firestore
-                .collection('campaignLocations')
-                .where('assignedScalerId', isEqualTo: user.uid)
-                .snapshots(),
+          return StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
+            stream: assignedLocations(_firestore, user.uid),
             builder: (context, locationSnapshot) {
               if (locationSnapshot.hasError) {
                 return _errorView(
@@ -97,7 +95,7 @@ class MyJobsScreen extends StatelessWidget {
 
               final zones = zoneSnapshot.data?.docs ?? [];
 
-              final locations = locationSnapshot.data?.docs ?? [];
+              final locations = locationSnapshot.data ?? [];
 
               final activeZones = zones.where((zone) {
                 final status = zone.data()['status']?.toString() ?? '';
@@ -128,11 +126,11 @@ class MyJobsScreen extends StatelessWidget {
 
                 final allCompleted = campaignLocations.every(
                   (location) =>
-                      location.data()['status']?.toString() == 'completed',
+                      location.data()!['status']?.toString() == 'completed',
                 );
 
                 final hasActive = campaignLocations.any((location) {
-                  final status = location.data()['status']?.toString() ?? '';
+                  final status = location.data()!['status']?.toString() ?? '';
 
                   return _isActiveStatus(status);
                 });
@@ -219,15 +217,14 @@ class MyJobsScreen extends StatelessWidget {
     );
   }
 
-  Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+  Map<String, List<DocumentSnapshot<Map<String, dynamic>>>>
   _groupLocationsByCampaign(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> locations,
+    List<DocumentSnapshot<Map<String, dynamic>>> locations,
   ) {
-    final grouped =
-        <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+    final grouped = <String, List<DocumentSnapshot<Map<String, dynamic>>>>{};
 
     for (final location in locations) {
-      final campaignId = location.data()['campaignId']?.toString() ?? '';
+      final campaignId = location.data()!['campaignId']?.toString() ?? '';
 
       if (campaignId.isEmpty) {
         continue;
@@ -555,7 +552,7 @@ class MyJobsScreen extends StatelessWidget {
   Widget _exactLocationJobCard(
     BuildContext context,
     String campaignId,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> locations,
+    List<DocumentSnapshot<Map<String, dynamic>>> locations,
   ) {
     final campaignReference = _firestore
         .collection(scalerCampaignCollection)
@@ -617,11 +614,11 @@ class MyJobsScreen extends StatelessWidget {
         final totalQuantity = locations.fold<int>(
           0,
           (total, location) =>
-              total + ((location.data()['quantity'] as num?)?.toInt() ?? 1),
+              total + ((location.data()!['quantity'] as num?)?.toInt() ?? 1),
         );
 
         final completedLocations = locations.where((location) {
-          return location.data()['status']?.toString() == 'completed';
+          return location.data()!['status']?.toString() == 'completed';
         }).length;
 
         final allCompleted =
@@ -630,18 +627,18 @@ class MyJobsScreen extends StatelessWidget {
         final paymentComplete =
             locations.isNotEmpty &&
             locations.every((location) {
-              final data = location.data();
+              final data = location.data()!;
               return data['status']?.toString() == 'completed' &&
                   (data['paymentStatus']?.toString() == 'paid' ||
                       data['paidAt'] is Timestamp);
             });
 
         final hasInProgress = locations.any((location) {
-          return location.data()['status']?.toString() == 'in_progress';
+          return location.data()!['status']?.toString() == 'in_progress';
         });
 
         final hasSubmitted = locations.any((location) {
-          return location.data()['status']?.toString() == 'submitted';
+          return location.data()!['status']?.toString() == 'submitted';
         });
 
         final status = allCompleted

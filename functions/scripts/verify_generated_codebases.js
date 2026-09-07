@@ -164,6 +164,7 @@ assert.deepEqual(Object.keys(assignment).sort(), [
   "acceptZoneGroupSlot", "assignScalerToZone", "configureZoneGroupAssignment",
 ]);
 assert.deepEqual(Object.keys(discovery).sort(), [
+  "listStagingAssignedLocationIds",
   "analyzeCampaignZone", "applySmartZonePlan", "getSmartZonePlan",
   "projectStagingCampaignDiscovery", "refreshStagingCampaignDiscovery",
   "resolveServiceAreaPlace", "saveDiscoveryPreferences",

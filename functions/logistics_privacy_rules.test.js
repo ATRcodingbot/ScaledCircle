@@ -20,6 +20,17 @@ before(async()=>{
  });
 });
 after(async()=>env?.cleanup());
+test('assigned location collection query must constrain active state',async()=>{
+ await env.withSecurityRulesDisabled(async ctx=>{
+  await ctx.firestore().doc('campaignLocations/query-active').set({campaignId:'job',businessId:'owner',assignedScalerId:'assigned',status:'assigned',address:'PRIVATE'});
+  await ctx.firestore().doc('campaignLocations/query-terminal').set({campaignId:'job',businessId:'owner',assignedScalerId:'assigned',status:'completed',address:'PRIVATE'});
+ });
+ await assertFails(db('assigned').collection('campaignLocations').where('assignedScalerId','==','assigned').get());
+ await assertFails(db('assigned').collection('campaignLocations').where('assignedScalerId','==','assigned').where('status','in',['assigned','in_progress']).get());
+ const result=await assertSucceeds(db('assigned').collection('campaignLocations').where('campaignId','==','job').where('businessId','==','owner').where('assignedScalerId','==','assigned').where('status','in',['assigned','in_progress']).get());
+ assert.equal(result.docs.some(d=>d.id==='query-active'),true);
+ assert.equal(result.docs.some(d=>d.id==='query-terminal'),false);
+});
 test('raw private source denied before and after assignment; owner/Admin retain authority',async()=>{
  for(const uid of ['assigned','unassigned','applicant','cross','tenant']) await assertFails(db(uid).doc('campaigns/job').get());
  for(const uid of ['owner','admin']) await assertSucceeds(db(uid).doc('campaigns/job').get());

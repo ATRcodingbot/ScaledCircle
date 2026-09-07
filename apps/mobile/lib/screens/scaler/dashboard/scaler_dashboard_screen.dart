@@ -6,6 +6,7 @@ import '../../../theme/app_theme.dart';
 import '../../../models/scaler_earnings_summary.dart';
 import '../../../config/app_environment.dart';
 import '../../../widgets/reputation_card.dart';
+import '../../../widgets/stable_dashboard_scroll.dart';
 import '../../../widgets/scaled_circle_brand.dart';
 import '../../../widgets/authenticated_sign_out_button.dart';
 import '../../jobs/jobs_marketplace_screen.dart';
@@ -404,7 +405,7 @@ class ScalerDashboardScreen extends StatelessWidget {
               ? (constraints.maxWidth - 1120) / 2
               : 20.0;
 
-          return ListView(
+          return StableDashboardScroll(
             padding: EdgeInsets.fromLTRB(
               horizontalPadding,
               20,

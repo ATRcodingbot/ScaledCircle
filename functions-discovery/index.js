@@ -6217,3 +6217,50 @@ exports.refreshStagingCampaignDiscovery = onCall({region: 'us-east1', maxInstanc
   for (const id of new Set(ids)) await refreshStagingPublicCampaign(id);
   return {refreshed: new Set(ids).size, sourceRecordsChanged: 0};
 });
+
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId,
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
+
+// IDs only. Exact addresses still require the existing per-document Rules check.
+exports.listStagingAssignedLocationIds = onCall({region: 'us-east1', maxInstances: 2}, async request => {
+  if (process.env.GCLOUD_PROJECT !== 'scaledcircle-staging') {
+    throw new HttpsError('failed-precondition', 'Available in staging only.');
+  }
+  const context = await requireVerifiedUser(request, 'Sign in to view assigned work.');
+  if (context.role !== 'scaler' || context.user.active !== true) {
+    throw new HttpsError('permission-denied', 'An active Scaler account is required.');
+  }
+  if (request.data && Object.keys(request.data).length) {
+    throw new HttpsError('invalid-argument', 'No target identity or filters are accepted.');
+  }
+  const rows = await db.collection('campaignLocations').where('assignedScalerId', '==', context.uid).limit(501).get();
+  if (rows.size > 500) throw new HttpsError('resource-exhausted', 'Contact support to load this assignment history.');
+  const ids = [];
+  const campaigns = new Map();
+  for (const row of rows.docs) {
+    const data = row.data();
+    if (!['assigned', 'in_progress'].includes(data.status)) continue;
+    if (typeof data.campaignId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(data.campaignId)) continue;
+    if (!campaigns.has(data.campaignId)) campaigns.set(data.campaignId, await db.doc(`campaigns/${data.campaignId}`).get());
+    const campaign = campaigns.get(data.campaignId);
+    if (!campaign.exists || !data.businessId || campaign.data().businessId !== data.businessId) continue;
+    if (stagingPhysicalQa.reserved(data.campaignId)) {
+      try { await assertPhysicalQaRequest({...request, data: {campaignId: data.campaignId}}); }
+      catch (_) { continue; }
+    }
+    ids.push(row.id);
+  }
+  return {locationIds: ids.sort()};
+});
