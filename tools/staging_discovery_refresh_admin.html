@@ -21,7 +21,7 @@ login.addEventListener('submit',async e=>{e.preventDefault();result.textContent=
  try{await signInWithEmailAndPassword(auth,document.querySelector('#email').value,document.querySelector('#password').value);result.textContent='Ready for server Admin eligibility checks.';}
  catch(e){result.textContent=`Sign-in failed (${e.code||'unavailable'}).`;}
  finally{document.querySelector('#password').value='';}});
-create.addEventListener('click',async()=>{create.disabled=true;result.textContent='Checking eligibility and creating shells…';
+create.addEventListener('click',async()=>{create.disabled=true;result.textContent='Refreshing public discovery...';
  try{const response=await httpsCallable(getFunctions(app,'us-east1'),'refreshStagingCampaignDiscovery')({campaignIds:document.querySelector('#campaignIds').value.split(/\s+/).filter(Boolean)});result.textContent=JSON.stringify(response.data,null,2);}
  catch(e){result.textContent=`${e.code||'unavailable'}: ${e.message||'Inspect records before retry.'}`;}
  // Deliberately no automatic retry or automatic second invocation.
