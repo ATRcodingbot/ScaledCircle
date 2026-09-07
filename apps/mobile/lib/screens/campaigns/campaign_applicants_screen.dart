@@ -238,7 +238,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
           content: Text(
             'Assign ${scalerEmail ?? 'this Scaler'} '
             'to $zoneName with '
-            '$selectedEstimatedHomes homes?',
+            '$selectedEstimatedHomes estimated homes?',
           ),
           actions: [
             TextButton(
@@ -297,7 +297,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
         SnackBar(
           content: Text(
             '${scalerEmail ?? 'Scaler'} was assigned to '
-            '$zoneName with $selectedEstimatedHomes homes.',
+            '$zoneName with $selectedEstimatedHomes estimated homes.',
           ),
         ),
       );
@@ -918,7 +918,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
                                     assignedHomes > 0
                                         ? 'Assigned to '
                                               '$assignedZoneName • '
-                                              '$assignedHomes homes'
+                                              '$assignedHomes estimated homes'
                                         : 'Assigned to '
                                               '$assignedZoneName',
                                     style: const TextStyle(
@@ -985,7 +985,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
                                 : assignedHomes > 0
                                 ? 'This Scaler is assigned to '
                                       '$assignedZoneName with '
-                                      '$assignedHomes homes.'
+                                      '$assignedHomes estimated homes.'
                                 : 'This Scaler is assigned to '
                                       '$assignedZoneName.',
                           ),
