@@ -31,16 +31,16 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(app());
-    expect(find.text('PLAN LOCAL GROWTH. PUT IT INTO ACTION.'), findsOneWidget);
     expect(
-      find.textContaining('ScaledCircle recommends workable Smart Zones'),
+      find.text('Local marketing that actually gets executed.'),
       findsOneWidget,
     );
-    expect(find.textContaining('Digital marketing drafts'), findsOneWidget);
+    expect(find.textContaining('Plan practical territory'), findsOneWidget);
+    expect(find.textContaining('Evidence you can review'), findsOneWidget);
     expect(find.text('VALIDATED SMART ZONE • DEMO'), findsOneWidget);
     expect(find.textContaining('Route not yet verified'), findsWidgets);
     expect(find.text('Grow My Business'), findsWidgets);
-    expect(find.text('Earn as a Scaler'), findsWidgets);
+    expect(find.text('Become a Scaler'), findsWidgets);
   });
 
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {

@@ -21,8 +21,8 @@ def funnel(name):
 
 def content():
     landing = (SCREENS / 'public_landing_screen.dart').read_text(encoding='utf-8')
-    hero = 'PLAN LOCAL GROWTH. PUT IT INTO ACTION.'
-    intro = 'Choose a real service area. ScaledCircle recommends workable Smart Zones. Real people deliver results.'
+    hero = 'Local marketing that actually gets executed.'
+    intro = 'Plan practical territory, set fixed compensation and bonuses, and coordinate Scalers. Review recorded execution evidence and measure supported responses.'
     assert hero in landing and intro in landing
     how = landing.split('class _HowItWorks ')[1].split('\nclass ')[0]
     steps = re.findall(r"title:\s*'([^']+)',\s*body:\s*'([^']+)'", how)

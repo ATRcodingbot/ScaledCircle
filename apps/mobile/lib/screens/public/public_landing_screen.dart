@@ -7,6 +7,7 @@ import 'authentic_product_map.dart';
 import 'public_funnel_components.dart'
     show ScaledCircleBrand, openPublicRoleChooser;
 import 'public_legal_footer.dart';
+import '../../widgets/customer_capability_status.dart';
 
 const _bg = Color(0xFF020914);
 const _navy = Color(0xFF071525);
@@ -75,10 +76,18 @@ class PublicLandingScreen extends StatelessWidget {
                         ),
                         const _Gap(),
                         _HowItWorks(key: howItWorksKey),
+                        const SizedBox(height: 24),
+                        FilledButton(
+                          key: const Key('business-after-proof-cta'),
+                          onPressed: () => _start(context, 'business'),
+                          child: const Text('Build My First Campaign'),
+                        ),
                         const _Gap(),
                         const _BusinessExperience(),
                         const _Gap(),
                         const _ManagedGrowth(),
+                        const _Gap(),
+                        const CustomerCapabilityStatus(),
                         const _Gap(),
                         const _FieldCampaigns(),
                         const _Gap(),
@@ -196,7 +205,7 @@ class _Hero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'PLAN LOCAL GROWTH. PUT IT INTO ACTION.',
+            'Local marketing that actually gets executed.',
             key: Key('homepage-hero-title'),
             style: TextStyle(
               color: Colors.white,
@@ -208,12 +217,12 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Choose a real service area. ScaledCircle recommends workable Smart Zones. Real people deliver results.',
+            'Plan practical territory, set fixed compensation and bonuses, and coordinate Scalers. Review recorded execution evidence and measure supported responses.',
             style: TextStyle(color: _muted, fontSize: 19, height: 1.55),
           ),
           const SizedBox(height: 12),
           const Text(
-            'Structured local planning. Digital marketing drafts. Verified field campaigns. One platform.',
+            'Clear costs. Defined work. Evidence you can review. No guaranteed leads or sales.',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 28),
@@ -232,15 +241,16 @@ class _Hero extends StatelessWidget {
                 icon: const Icon(Icons.trending_up),
                 label: const Text('Grow My Business'),
               ),
-              FilledButton.icon(
+              OutlinedButton.icon(
                 key: const Key('scaler-primary-cta'),
                 onPressed: onScaler,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _blue,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: _blue),
                   minimumSize: const Size(190, 52),
                 ),
                 icon: const Icon(Icons.directions_walk),
-                label: const Text('Earn as a Scaler'),
+                label: const Text('Become a Scaler'),
               ),
             ],
           ),
@@ -432,8 +442,8 @@ class _MiniCalendar extends StatelessWidget {
           ),
           _CalendarRow(
             day: 'THU',
-            title: 'Google Business • Fence Post',
-            status: 'READY TO SCHEDULE',
+            title: 'Marketing draft • Fence Post',
+            status: 'NEEDS REVIEW',
             color: _blue,
           ),
           _CalendarRow(
@@ -524,7 +534,7 @@ class _FieldCampaigns extends StatelessWidget {
             icon: Icons.verified_outlined,
             title: 'VERIFY RESULTS',
             body:
-                'GPS and proof confirm delivery. Response tracking shows what happened next.',
+                'Review recorded GPS, checkpoints, and completion evidence. Supported response tracking records what happened next.',
           ),
         ],
       ),

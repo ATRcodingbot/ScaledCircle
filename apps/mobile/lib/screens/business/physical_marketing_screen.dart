@@ -111,7 +111,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Choose a service, professional layout, approved image, and destination. ScaledCircle handles the print details.',
+                      'Choose a service, professional layout, approved image, and destination. Prepare downloadable artwork. Printing and mailing orders are Coming Soon.',
                     ),
                   ),
                   const SizedBox(height: 10),

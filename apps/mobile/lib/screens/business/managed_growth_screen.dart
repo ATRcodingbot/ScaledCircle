@@ -9,21 +9,24 @@ import 'business_growth_profile_wizard.dart';
 import 'agentic_growth_screen.dart';
 import 'social_approval_screen.dart';
 import 'social_operations_screen.dart';
+import '../../widgets/customer_capability_status.dart';
 
 class ManagedGrowthScreen extends StatefulWidget {
-  const ManagedGrowthScreen({super.key, this.postcardHandoff});
+  const ManagedGrowthScreen({super.key, this.postcardHandoff, this.service});
   final Map<String, dynamic>? postcardHandoff;
+  final ManagedGrowthService? service;
   @override
   State<ManagedGrowthScreen> createState() => _ManagedGrowthScreenState();
 }
 
 class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
-  final _service = ManagedGrowthService();
+  late final _service = widget.service ?? ManagedGrowthService();
   final _exports = const ArtifactExportService();
   BusinessGrowthProfile? _profile;
   final Map<String, ManagedGrowthArtifact> _artifacts = {};
   String? _deliveryEmail;
   bool _loading = true;
+  bool _loadFailed = false;
 
   static const _packages = <({IconData icon, String type, String title, String description})>[
     (
@@ -71,9 +74,9 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
     (
       icon: Icons.markunread_mailbox_outlined,
       type: 'direct_mail_plan',
-      title: 'Postcards / Direct Mail',
+      title: 'Postcard Planning',
       description:
-          'A physical-channel draft with printing, postage, vendor cost, and the 20% management fee separated.',
+          'Draft a territory-to-mail plan only. Postcards / Direct Mail fulfillment is Coming Soon; no orders or checkout.',
     ),
   ];
 
@@ -84,17 +87,23 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
     try {
       final values = await Future.wait([
         _service.loadProfile(),
         _service.loadArtifactDeliveryEmail(),
-      ]);
+      ]).timeout(const Duration(seconds: 30));
       if (mounted) {
         setState(() {
           _profile = values[0] as BusinessGrowthProfile?;
           _deliveryEmail = values[1] as String?;
         });
       }
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -614,6 +623,22 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
     appBar: AppBar(title: const Text('Managed Growth — Beta')),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
+        : _loadFailed
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Unable to load your growth workspace. Please try again.',
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(onPressed: _load, child: const Text('Retry')),
+                ],
+              ),
+            ),
+          )
         : ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -621,7 +646,10 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                 'Your marketing shouldn’t stop when you’re busy.',
                 style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
               ),
-              const Text('RIGHT CHANNEL • RIGHT AREA • RIGHT TIME'),
+              const Text(
+                'Recommendations first. External actions need approval.',
+              ),
+              const CustomerCapabilityStatus(),
               Card(
                 child: ListTile(
                   leading: Icon(
