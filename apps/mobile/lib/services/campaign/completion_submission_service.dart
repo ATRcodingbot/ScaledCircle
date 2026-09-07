@@ -78,6 +78,7 @@ class CompletionSubmissionService {
   Future<void> submitCompletion({
     required String completionId,
     String? scalerNotes,
+    bool accessException = false,
   }) async {
     final completionSnapshot = await _completions.doc(completionId).get();
 
@@ -116,6 +117,7 @@ class CompletionSubmissionService {
       functionName: 'submitZoneCompletion',
       data: {
         'completionId': completionId,
+        'reviewMode': accessException ? 'access_exception' : 'ordinary',
         'scalerNotes': scalerNotes?.trim() ?? '',
       },
     );

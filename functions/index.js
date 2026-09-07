@@ -1,5 +1,6 @@
 const stagingPhysicalQa = require("./staging_physical_qa");
 const routeProgress = require("./route_progress");
+const canvassingCompletion = require("./canvassing_completion");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
@@ -3472,6 +3473,22 @@ exports.submitZoneCompletion = onCall(
           );
         }
 
+        if (canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
+          if (request.data?.reviewMode !== 'access_exception' || !scalerNotes) {
+            throw new HttpsError('failed-precondition', 'Continue Zone. Ordinary canvassing completion is held pending approved requirements. Use exception review only for documented access restrictions.');
+          }
+          const timestamp = FieldValue.serverTimestamp();
+          transaction.update(completionReference, {status: 'submitted', reviewMode: 'access_exception',
+            reviewStatus: 'verification_pending', scalerNotes, submittedAt: timestamp, updatedAt: timestamp,
+            economicPolicyVersion: canvassingCompletion.VERSION, eligibleForPayment: false,
+            calculatedTransferAmountCents: null, calculatedBaseAmountCents: null,
+            accessException: {reason: scalerNotes, status: 'pending_review'}, proofRequirement: 'gps_route'});
+          transaction.update(zoneReference, {status: 'submitted', reviewStatus: 'verification_pending',
+            submittedCompletionId: completionId, submittedAt: timestamp, updatedAt: timestamp,
+            reviewMode: 'access_exception', eligibleForPayment: false, gpsTracking: false,
+            calculatedTransferAmountCents: null, calculatedBaseAmountCents: null});
+          return {completionId, reviewMode: 'access_exception', eligibleForPayment: false};
+        }
         const trackingResult = calculateRouteCompletion(zone, routePoints);
         const completionBasisPoints = Math.max(0, Math.min(
           10000, Math.round(trackingResult.completionPercentage * 100),
@@ -8449,7 +8466,33 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     messages, events, completions,
     startEligibility: {...gate, workWindow},
   };
-  return privateLogisticsAllowed ? response : operations.historicalJobRoomProjection(response);
+  const ownSubmittedEvidence = context.role === 'scaler' && zone.assignedScalerId === context.uid && zone.status === 'submitted' && zone.campaignId === room.campaignId;
+  if ((privateLogisticsAllowed || ownSubmittedEvidence) && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
+    const sessions = await db.collection('trackingSessions').where('zoneId', '==', zoneId).get();
+    const ownSessions = sessions.docs.filter(d => d.data().scalerId === zone.assignedScalerId && d.data().campaignId === room.campaignId)
+      .sort((a,b) => Number(b.data().startedAt?.toMillis?.() || 0)-Number(a.data().startedAt?.toMillis?.() || 0));
+    const sessionDoc = ownSessions.find(d => d.data().status !== 'cancelled');
+    const session = sessionDoc?.data() || {};
+    const chunkDocs = sessionDoc ? await sessionDoc.ref.collection('chunks').get() : null;
+    const checkpointDocs = sessionDoc ? await sessionDoc.ref.collection('checkpoints').get() : null;
+    const chunks = chunkDocs?.docs.map(d => d.data()) || [];
+    const checkpoints = checkpointDocs?.docs.map(d => d.data()) || [];
+    const valid = sessionDoc && routeProgress.projectProgress({...session,sessionId:sessionDoc.id}, zone, chunks, calculateRouteCompletion);
+    const points = valid?.state === 'available' ? chunks.flatMap(c => c.points || []).filter(p => p.accepted === true) : [];
+    const estimate = canvassingCompletion.coverage(zone, points);
+    response.completionEvidence = {estimate, policy:canvassingCompletion.decision({coverage:estimate,
+      baseAmountCents:Number(compensationSnapshot.data()?.baseAmountCents), checkpointCount:checkpoints.length,
+      requiredCheckpointCount:zone.executionRoute?.checkpoints?.length || 0}),
+      path:points.map(p => ({latitude:p.latitude,longitude:p.longitude})),
+      corridor:zone.serviceArea || [], route:zone.executionRoute || null,
+      checkpoints:checkpoints.map(p => ({latitude:p.latitude ?? null,longitude:p.longitude ?? null,createdAt:p.createdAt || null})),
+      startedAt:session.startedAt?.toDate?.().toISOString() || null, endedAt:session.endedAt?.toDate?.().toISOString() || null,
+      trackingActive:session.status === 'active', sessionStatus:session.status || 'not_started',
+      proofCount:points.length, accessExceptions:completionSnapshots.docs.map(d => d.data().accessException).filter(Boolean),
+      historicalCalculatedAmountCents:zone.calculatedTransferAmountCents ?? null};
+  }
+  return privateLogisticsAllowed ? response : {...operations.historicalJobRoomProjection(response),
+    ...(ownSubmittedEvidence && response.completionEvidence ? {completionEvidence: response.completionEvidence} : {})};
 });
 
 exports.sendJobMessage = operationalCallable("sendJobMessage", async (request) => {
@@ -9854,6 +9897,13 @@ exports.getTrackingSessionState = trackingCallable(
       try {
         progress = routeProgress.projectProgress({...session, sessionId}, zone.data(),
           chunks.docs.map(doc => doc.data()), calculateRouteCompletion);
+        if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === 'scaledcircle-staging' && progress.state === 'available') {
+          const campaign = await db.collection('campaigns').doc(session.campaignId).get();
+          if (canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign.data() || {})) {
+            const estimate = canvassingCompletion.coverage(zone.data(), chunks.docs.flatMap(d => d.data().points || []));
+            progress = {...progress, ...estimate, provisional:true};
+          }
+        }
       } catch (_) {
         progress = {state: "unavailable", provisional: true, coveragePercentage: null};
       }
@@ -11360,6 +11410,10 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
     }
     if (zone.settlementBlocked === true || zone.status === "failed_business") {
       throw new HttpsError("failed-precondition", "This assignment is closed to normal review.");
+    }
+    const reviewCampaign = await transaction.get(db.collection('campaigns').doc(zone.campaignId));
+    if (decision === 'approve' && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, reviewCampaign.data() || {})) {
+      throw new HttpsError('failed-precondition', 'Canvassing base and bonus eligibility policy awaits Founder review. No prorated earning may be approved.');
     }
     const current = String(zone.reviewStatus || "");
     const target = decision === "approve" ? "approved" :

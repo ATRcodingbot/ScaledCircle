@@ -1,3 +1,6 @@
+import '../../config/app_environment.dart';
+import '../../services/job_room_service.dart';
+import '../../widgets/completion_evidence_panel.dart';
 import '../../widgets/checkpoint_action.dart';
 import 'dart:async';
 
@@ -239,7 +242,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
           SnackBar(
             content: Text(
               _photoFree
-                  ? 'GPS checkpoint saved. No property photo needed.'
+                  ? 'Optional progress mark saved. Route GPS continues automatically.'
                   : 'Checkpoint photo and GPS saved.',
             ),
           ),
@@ -256,12 +259,19 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     }
   }
 
+  late final Future<Map<String, dynamic>> _completionEvidenceFuture =
+      const JobRoomService().load(widget.zone.id);
+
   Future<void> _complete() async {
     if (_working) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Complete this job?'),
+        title: Text(
+          AppEnvironmentConfig.isStaging && _photoFree
+              ? 'Save route for exception review?'
+              : 'Complete this job?',
+        ),
         content: const Text(
           'This captures a final location, uploads queued evidence, and immediately stops background GPS. This action cannot be undone.',
         ),
@@ -272,7 +282,11 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Complete Job'),
+            child: Text(
+              AppEnvironmentConfig.isStaging && _photoFree
+                  ? 'Save route'
+                  : 'Complete Job',
+            ),
           ),
         ],
       ),
@@ -363,6 +377,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
           padding: const EdgeInsets.all(20),
           children: [
             ActiveRouteGuidance(
+              automaticGps: _photoFree,
               zone: _zoneData,
               location: _state.lastLocation,
               progress: _progress,
@@ -419,13 +434,15 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
             ],
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
-              child: const ListTile(
-                leading: Icon(Icons.location_searching),
+              child: ListTile(
+                leading: const Icon(Icons.location_searching),
                 title: Text(
-                  'Tracking Active',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  _state.active
+                      ? 'Route Tracking Active'
+                      : 'Route Tracking Stopped',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(
+                subtitle: const Text(
                   'Tracking continues while the screen is locked or another app is open.',
                 ),
               ),
@@ -465,6 +482,25 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
               label: const Text('Return to job details'),
             ),
             const SizedBox(height: 12),
+            if (AppEnvironmentConfig.isStaging && _photoFree) ...[
+              FutureBuilder<Map<String, dynamic>>(
+                future: _completionEvidenceFuture,
+                builder: (context, snapshot) =>
+                    snapshot.data?['completionEvidence'] is Map
+                    ? CompletionEvidencePanel(
+                        evidence: Map<String, dynamic>.from(
+                          snapshot.data!['completionEvidence'] as Map,
+                        ),
+                      )
+                    : const Text(
+                        'Eligibility held. Loading authoritative requirements; no ordinary completion is authorized.',
+                      ),
+              ),
+              FilledButton(
+                onPressed: _working ? null : _sync,
+                child: const Text('Continue Zone'),
+              ),
+            ],
             FilledButton.icon(
               onPressed: _working || _state.sessionId == null
                   ? null
@@ -474,7 +510,9 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
                 _working
                     ? 'Finalizing...'
                     : _state.active
-                    ? 'Complete Job'
+                    ? (AppEnvironmentConfig.isStaging && _photoFree
+                          ? 'Save for Exception Review'
+                          : 'Complete Job')
                     : 'Retry Secure Finalization',
               ),
             ),

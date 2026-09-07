@@ -1,3 +1,5 @@
+import '../../config/app_environment.dart';
+
 import '../../widgets/campaign_card_header.dart';
 import '../../services/staging_qa_discovery.dart';
 import '../../services/assigned_locations.dart';
@@ -101,8 +103,19 @@ class MyJobsScreen extends StatelessWidget {
               final activeZones = zones.where((zone) {
                 final status = zone.data()['status']?.toString() ?? '';
 
-                return _isActiveStatus(status);
+                return _isActiveStatus(status) &&
+                    !(AppEnvironmentConfig.isStaging && status == 'submitted');
               }).toList();
+
+              final submittedZones =
+                  zones
+                      .where(
+                        (z) =>
+                            AppEnvironmentConfig.isStaging &&
+                            z.data()['status'] == 'submitted',
+                      )
+                      .toList()
+                    ..sort(_sortDocumentsNewestFirst);
 
               final completedZones = zones.where((zone) {
                 return zone.data()['status']?.toString() == 'completed';
@@ -174,6 +187,22 @@ class MyJobsScreen extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 30),
+
+                  if (AppEnvironmentConfig.isStaging) ...[
+                    const Text(
+                      'Awaiting Business Review',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    ...submittedZones.map(
+                      (zone) => _zoneJobCard(context, zone),
+                    ),
+
+                    const SizedBox(height: 30),
+                  ],
 
                   const Text(
                     'Completed Jobs',
@@ -346,6 +375,12 @@ class MyJobsScreen extends StatelessWidget {
         final businessEmail = campaignData['businessEmail']?.toString() ?? '';
         final businessId = campaignData['businessId']?.toString() ?? '';
 
+        final qaRun =
+            AppEnvironmentConfig.isStaging &&
+                campaignData['certificationFixture'] == true
+            ? RegExp(r'_v([0-9]+)$').firstMatch(campaignId)?.group(1)
+            : null;
+
         final zoneName = zoneData['zoneName']?.toString() ?? 'Assigned Zone';
 
         final status = zoneData['status']?.toString() ?? 'assigned';
@@ -387,7 +422,10 @@ class MyJobsScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CampaignCardHeader(
-                    title: campaignName,
+                    title: qaRun == null
+                        ? campaignName
+                        : '${campaignDisplayName(campaignName)} · QA Run $qaRun',
+
                     icon: Icons.map_outlined,
                     subtitle: zoneName,
                     businessName: businessEmail,
@@ -448,7 +486,9 @@ class MyJobsScreen extends StatelessWidget {
                         avatar: const Icon(Icons.home_outlined, size: 18),
                         label: Text(
                           estimatedHomes > 0
-                              ? '$estimatedHomes Homes'
+                              ? (AppEnvironmentConfig.isStaging
+                                    ? 'Route-based territory'
+                                    : '$estimatedHomes Homes')
                               : 'Homes Pending',
                         ),
                       ),
@@ -749,7 +789,9 @@ class MyJobsScreen extends StatelessWidget {
         return 'Assigned';
 
       case 'in_progress':
-        return 'In Progress';
+        return AppEnvironmentConfig.isStaging
+            ? 'Work unfinished — tracking status separate'
+            : 'In Progress';
 
       case 'submitted':
         return 'Business Review Pending';

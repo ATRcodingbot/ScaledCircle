@@ -1,18 +1,6 @@
 const stagingPhysicalQa = require("./staging_physical_qa");
-async function assertPhysicalQaRequest(request) {
-  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
-  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
-  try {
-    stagingPhysicalQa.assertAccess({
-      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
-      authority: authority.data(), uid: request.auth?.uid,
-      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
-      targetScalerUid: request.data?.applicationId || request.data?.scalerId
-    });
-  } catch (_) {
-    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
-  }
-}
+const routeProgress = require("./route_progress");
+const canvassingCompletion = require("./canvassing_completion");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -44,6 +32,8 @@ const {
   serializedBytes
 } = require("./tracking_security");
 const marketplace = require("./marketplace_finance");
+
+
 
 
 
@@ -476,6 +466,10 @@ setGlobalOptions({
   maxInstances: 10,
   region: "us-east1"
 });
+
+
+
+
 
 
 
@@ -2826,10 +2820,30 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
 const EXACT_LOCATION_TYPES = new Set([
 "service_point", "yard_sign_installation", "material_pickup",
 "material_dropoff", "dump_pickup", "dump_dropoff", "event_location"]
 );
+
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
 
 function completionAuthorityCallable(handler) {
   return onCall({ region: "us-east1", enforceAppCheck: false, maxInstances: 10 }, async (request) => {
@@ -3459,6 +3473,22 @@ exports.submitZoneCompletion = onCall(
           );
         }
 
+        if (canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
+          if (request.data?.reviewMode !== 'access_exception' || !scalerNotes) {
+            throw new HttpsError('failed-precondition', 'Continue Zone. Ordinary canvassing completion is held pending approved requirements. Use exception review only for documented access restrictions.');
+          }
+          const timestamp = FieldValue.serverTimestamp();
+          transaction.update(completionReference, { status: 'submitted', reviewMode: 'access_exception',
+            reviewStatus: 'verification_pending', scalerNotes, submittedAt: timestamp, updatedAt: timestamp,
+            economicPolicyVersion: canvassingCompletion.VERSION, eligibleForPayment: false,
+            calculatedTransferAmountCents: null, calculatedBaseAmountCents: null,
+            accessException: { reason: scalerNotes, status: 'pending_review' }, proofRequirement: 'gps_route' });
+          transaction.update(zoneReference, { status: 'submitted', reviewStatus: 'verification_pending',
+            submittedCompletionId: completionId, submittedAt: timestamp, updatedAt: timestamp,
+            reviewMode: 'access_exception', eligibleForPayment: false, gpsTracking: false,
+            calculatedTransferAmountCents: null, calculatedBaseAmountCents: null });
+          return { completionId, reviewMode: 'access_exception', eligibleForPayment: false };
+        }
         const trackingResult = calculateRouteCompletion(zone, routePoints);
         const completionBasisPoints = Math.max(0, Math.min(
           10000, Math.round(trackingResult.completionPercentage * 100)
@@ -6082,6 +6112,12 @@ exports.submitZoneCompletion = onCall(
 
 
 
+
+
+
+
+
+
 function cleanId(value) {
   if (typeof value !== "string") {
     return "";
@@ -6179,7 +6215,9 @@ function calculateRouteCompletion(zone, routePoints) {
     );
   }
 
-  let expectedWalkingMeters = moneyValue(zone.estimatedWalkingMeters);
+  let expectedWalkingMeters = zone.executionRoute ?
+  routeProgress.validateRoute(zone.executionRoute, zone.serviceArea) :
+  moneyValue(zone.estimatedWalkingMeters);
 
   if (expectedWalkingMeters <= 0) {
     expectedWalkingMeters = moneyValue(zone.estimatedWalkingMiles) * 1609.344;
@@ -6280,6 +6318,7 @@ function pointInsidePolygon(point, polygon) {
 
   return inside;
 }
+
 
 
 
@@ -10160,6 +10199,207 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   enforceAppCheck: false,
   maxInstances: 10,
@@ -10167,6 +10407,7 @@ const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   timeoutSeconds: 60,
   memory: "256MiB"
 };
+
 
 
 
@@ -11127,6 +11368,19 @@ function safeMarketplaceAuthorityCallable(name, handler) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
   "finalizeZoneReview", async (request) => {
     const context = await requireVerifiedUser(request, "Sign in to review completed work.");
@@ -11156,6 +11410,10 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
       }
       if (zone.settlementBlocked === true || zone.status === "failed_business") {
         throw new HttpsError("failed-precondition", "This assignment is closed to normal review.");
+      }
+      const reviewCampaign = await transaction.get(db.collection('campaigns').doc(zone.campaignId));
+      if (decision === 'approve' && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, reviewCampaign.data() || {})) {
+        throw new HttpsError('failed-precondition', 'Canvassing base and bonus eligibility policy awaits Founder review. No prorated earning may be approved.');
       }
       const current = String(zone.reviewStatus || "");
       const target = decision === "approve" ? "approved" :

@@ -1,3 +1,5 @@
+import '../../config/app_environment.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -1341,14 +1343,22 @@ class CampaignZonesScreen extends StatelessWidget {
             const SizedBox(height: 18),
 
             _reviewMetricRow(
-              label: 'Homes Completed',
-              value: '$completedHomes / $assignedHomes',
+              label: AppEnvironmentConfig.isStaging
+                  ? 'Household coverage'
+                  : 'Homes Completed',
+
+              value: AppEnvironmentConfig.isStaging
+                  ? 'Not verified — route evidence only'
+                  : '$completedHomes / $assignedHomes',
             ),
 
             const Divider(),
 
             _reviewMetricRow(
-              label: 'Completion',
+              label: AppEnvironmentConfig.isStaging
+                  ? 'Historical Route Coverage Estimate'
+                  : 'Completion',
+
               value: '${completionPercentage.toStringAsFixed(1)}%',
             ),
 

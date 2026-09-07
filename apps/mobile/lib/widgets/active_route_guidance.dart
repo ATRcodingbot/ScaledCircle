@@ -39,11 +39,13 @@ class ActiveRouteGuidance extends StatelessWidget {
     required this.location,
     required this.progress,
     this.tilesEnabled = true,
+    this.automaticGps = false,
   });
   final Map<String, dynamic> zone;
   final TrackingLocationSample? location;
   final Map<String, dynamic>? progress;
   final bool tilesEnabled;
+  final bool automaticGps;
   @override
   Widget build(BuildContext context) {
     final corridor = routeCoordinates(zone['serviceArea']);
@@ -77,7 +79,7 @@ class ActiveRouteGuidance extends StatelessWidget {
             Text(
               known
                   ? '$percent% route coverage · server-calculated, provisional'
-                  : 'Route coverage: ${progress?['state'] == 'unavailable' ? 'UNKNOWN' : 'CALCULATING'}',
+                  : 'Route Coverage Estimate: ${progress?['state'] == 'unavailable' ? 'UNKNOWN' : 'CALCULATING'}',
             ),
             const Text(
               'Coverage uses uploaded GPS evidence. Final payment is determined after submission and review.',
@@ -154,7 +156,9 @@ class ActiveRouteGuidance extends StatelessWidget {
                               child: Tooltip(
                                 message:
                                     checkpoint['label']?.toString() ??
-                                    'GPS checkpoint',
+                                    (automaticGps
+                                        ? 'Route waypoint'
+                                        : 'GPS checkpoint'),
                                 child: const Icon(
                                   Icons.location_on,
                                   color: Colors.purple,
@@ -179,8 +183,10 @@ class ActiveRouteGuidance extends StatelessWidget {
                   ],
                 ),
               ),
-            const Text(
-              'Blue: assigned corridor/route. Green: uploaded GPS path. Purple: GPS checkpoints.',
+            Text(
+              automaticGps
+                  ? 'Blue: assigned corridor/route. Green: automatically tracked GPS path. Purple: route waypoints; no manual mark required.'
+                  : 'Blue: assigned corridor/route. Green: uploaded GPS path. Purple: GPS checkpoints.',
             ),
             if (line.isEmpty)
               const Text(
@@ -192,7 +198,7 @@ class ActiveRouteGuidance extends StatelessWidget {
             ],
             for (final checkpoint in checkpoints.whereType<Map>())
               Text(
-                'GPS checkpoint: ${checkpoint['label'] ?? 'Assigned checkpoint'}',
+                '${automaticGps ? 'Route waypoint' : 'GPS checkpoint'}: ${checkpoint['label'] ?? 'Assigned checkpoint'}',
               ),
           ],
         ),

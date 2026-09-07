@@ -1,18 +1,6 @@
 const stagingPhysicalQa = require("./staging_physical_qa");
-async function assertPhysicalQaRequest(request) {
-  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
-  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
-  try {
-    stagingPhysicalQa.assertAccess({
-      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
-      authority: authority.data(), uid: request.auth?.uid,
-      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
-      targetScalerUid: request.data?.applicationId || request.data?.scalerId
-    });
-  } catch (_) {
-    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
-  }
-}
+const routeProgress = require("./route_progress");
+const canvassingCompletion = require("./canvassing_completion");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -43,6 +31,8 @@ const {
   normalizePoint,
   serializedBytes
 } = require("./tracking_security");
+
+
 
 
 
@@ -519,6 +509,10 @@ setGlobalOptions({
 
 
 
+
+
+
+const MINIMUM_PAYABLE_COMPLETION_PERCENTAGE = 10;
 
 
 
@@ -2836,6 +2830,20 @@ async function requireVerifiedUser(request, message) {
 
 
 
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
 
 
 
@@ -5777,6 +5785,539 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function moneyValue(value) {
+  const number = typeof value === "number" ? value : Number(value);
+
+  return Number.isFinite(number) ? number : 0;
+}
+
+function firstMoneyValue(...values) {
+  for (const value of values) {
+    const number = moneyValue(value);
+
+    if (number > 0) {
+      return number;
+    }
+  }
+
+  return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function validRoutePoints(rawPoints) {
+  if (!Array.isArray(rawPoints)) {
+    return [];
+  }
+
+  return rawPoints.
+  filter((point) =>
+  point &&
+  typeof point === "object" &&
+  Number.isFinite(point.latitude) &&
+  Number.isFinite(point.longitude)
+  ).
+  map((point) => ({
+    latitude: point.latitude,
+    longitude: point.longitude
+  }));
+}
+
+function calculateRouteCompletion(zone, routePoints) {
+  const assignedHomes = Math.round(
+    firstMoneyValue(zone.assignedHomes, zone.estimatedHomes)
+  );
+
+  if (assignedHomes <= 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The zone does not have a valid assigned home count."
+    );
+  }
+
+  const serviceArea = validRoutePoints(zone.serviceArea);
+
+  if (serviceArea.length < 3) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The zone does not contain a valid mapped service area."
+    );
+  }
+
+  let expectedWalkingMeters = zone.executionRoute ?
+  routeProgress.validateRoute(zone.executionRoute, zone.serviceArea) :
+  moneyValue(zone.estimatedWalkingMeters);
+
+  if (expectedWalkingMeters <= 0) {
+    expectedWalkingMeters = moneyValue(zone.estimatedWalkingMiles) * 1609.344;
+  }
+
+  if (expectedWalkingMeters <= 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The zone does not have a valid expected walking distance."
+    );
+  }
+
+  let totalRouteMeters = 0;
+  let insideZoneMeters = 0;
+
+  for (let index = 1; index < routePoints.length; index++) {
+    const previous = routePoints[index - 1];
+    const current = routePoints[index];
+    const segmentMeters = distanceMeters(previous, current);
+
+    if (segmentMeters < 2 || segmentMeters > 250) {
+      continue;
+    }
+
+    totalRouteMeters += segmentMeters;
+
+    const midpoint = {
+      latitude: (previous.latitude + current.latitude) / 2,
+      longitude: (previous.longitude + current.longitude) / 2
+    };
+
+    if (pointInsidePolygon(midpoint, serviceArea)) {
+      insideZoneMeters += segmentMeters;
+    }
+  }
+
+  const completionRatio = Math.max(
+    0,
+    Math.min(1, insideZoneMeters / expectedWalkingMeters)
+  );
+  const completionPercentage = completionRatio * 100;
+  const completedHomes = Math.max(
+    0,
+    Math.min(assignedHomes, Math.round(assignedHomes * completionRatio))
+  );
+
+  return {
+    assignedHomes,
+    completedHomes,
+    completionPercentage,
+    eligibleForPayment:
+    completionPercentage >= MINIMUM_PAYABLE_COMPLETION_PERCENTAGE,
+    routeDistanceMeters: totalRouteMeters,
+    insideZoneDistanceMeters: insideZoneMeters
+  };
+}
+
+function distanceMeters(start, end) {
+  const earthRadiusMeters = 6371000;
+  const toRadians = (degrees) => degrees * Math.PI / 180;
+  const latitudeDelta = toRadians(end.latitude - start.latitude);
+  const longitudeDelta = toRadians(end.longitude - start.longitude);
+  const startLatitude = toRadians(start.latitude);
+  const endLatitude = toRadians(end.latitude);
+  const haversine =
+  Math.sin(latitudeDelta / 2) ** 2 +
+  Math.cos(startLatitude) * Math.cos(endLatitude) *
+  Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusMeters * 2 * Math.atan2(
+    Math.sqrt(haversine),
+    Math.sqrt(1 - haversine)
+  );
+}
+
+function pointInsidePolygon(point, polygon) {
+  let inside = false;
+  let previousIndex = polygon.length - 1;
+
+  for (let index = 0; index < polygon.length; index++) {
+    const current = polygon[index];
+    const previous = polygon[previousIndex];
+    const intersects =
+    current.latitude > point.latitude !==
+    previous.latitude > point.latitude &&
+    point.longitude <
+    (previous.longitude - current.longitude) * (
+    point.latitude - current.latitude) / (
+    previous.latitude - current.latitude) +
+    current.longitude;
+
+    if (intersects) {
+      inside = !inside;
+    }
+
+    previousIndex = index;
+  }
+
+  return inside;
+}
 
 
 
@@ -7672,6 +8213,82 @@ function campaignWorkPolicy(campaign = {}) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
   const context = await requireVerifiedUser(request, "Verify your email to open this Job Room.");
@@ -7711,10 +8328,10 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   const campaign = campaignSnapshot.data() || {};
   const zone = zoneSnapshot.data() || {};
   const ownsRoom = context.role === 'business' && context.uid === room.businessId && campaign.businessId === context.uid;
-  const privateLogisticsAllowed = context.isAdmin || ownsRoom || (campaign.businessId === room.businessId && operations.privateLogisticsAssignmentAllowed({
+  const privateLogisticsAllowed = context.isAdmin || ownsRoom || campaign.businessId === room.businessId && operations.privateLogisticsAssignmentAllowed({
     uid: context.uid, role: context.role, zoneId, campaignId: room.campaignId,
-    businessId: room.businessId, zone, participant,
-  }));
+    businessId: room.businessId, zone, participant
+  });
   const campaignLogistics = operations.materialLogisticsFromCampaign(campaign);
   const authoritativeLogistics = room.materialLogistics || campaignLogistics;
   const materialsRequired = authoritativeLogistics.materialsRequired === true ||
@@ -7771,7 +8388,7 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     authoritativeLogistics.fulfillmentType,
     businessConfirmed: snapshot?.data()?.businessConfirmedAt != null,
     scalerConfirmed: snapshot?.data()?.scalerConfirmedAt != null
-    })) : [];
+  })) : [];
   const completionSnapshots = await db.collection("campaignCompletions").
   where("zoneId", "==", zoneId).limit(20).get();
   const earningSnapshot = await db.collection("walletTransactions").
@@ -7849,5 +8466,31 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     messages, events, completions,
     startEligibility: { ...gate, workWindow }
   };
-  return privateLogisticsAllowed ? response : operations.historicalJobRoomProjection(response);
+  const ownSubmittedEvidence = context.role === 'scaler' && zone.assignedScalerId === context.uid && zone.status === 'submitted' && zone.campaignId === room.campaignId;
+  if ((privateLogisticsAllowed || ownSubmittedEvidence) && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
+    const sessions = await db.collection('trackingSessions').where('zoneId', '==', zoneId).get();
+    const ownSessions = sessions.docs.filter((d) => d.data().scalerId === zone.assignedScalerId && d.data().campaignId === room.campaignId).
+    sort((a, b) => Number(b.data().startedAt?.toMillis?.() || 0) - Number(a.data().startedAt?.toMillis?.() || 0));
+    const sessionDoc = ownSessions.find((d) => d.data().status !== 'cancelled');
+    const session = sessionDoc?.data() || {};
+    const chunkDocs = sessionDoc ? await sessionDoc.ref.collection('chunks').get() : null;
+    const checkpointDocs = sessionDoc ? await sessionDoc.ref.collection('checkpoints').get() : null;
+    const chunks = chunkDocs?.docs.map((d) => d.data()) || [];
+    const checkpoints = checkpointDocs?.docs.map((d) => d.data()) || [];
+    const valid = sessionDoc && routeProgress.projectProgress({ ...session, sessionId: sessionDoc.id }, zone, chunks, calculateRouteCompletion);
+    const points = valid?.state === 'available' ? chunks.flatMap((c) => c.points || []).filter((p) => p.accepted === true) : [];
+    const estimate = canvassingCompletion.coverage(zone, points);
+    response.completionEvidence = { estimate, policy: canvassingCompletion.decision({ coverage: estimate,
+        baseAmountCents: Number(compensationSnapshot.data()?.baseAmountCents), checkpointCount: checkpoints.length,
+        requiredCheckpointCount: zone.executionRoute?.checkpoints?.length || 0 }),
+      path: points.map((p) => ({ latitude: p.latitude, longitude: p.longitude })),
+      corridor: zone.serviceArea || [], route: zone.executionRoute || null,
+      checkpoints: checkpoints.map((p) => ({ latitude: p.latitude ?? null, longitude: p.longitude ?? null, createdAt: p.createdAt || null })),
+      startedAt: session.startedAt?.toDate?.().toISOString() || null, endedAt: session.endedAt?.toDate?.().toISOString() || null,
+      trackingActive: session.status === 'active', sessionStatus: session.status || 'not_started',
+      proofCount: points.length, accessExceptions: completionSnapshots.docs.map((d) => d.data().accessException).filter(Boolean),
+      historicalCalculatedAmountCents: zone.calculatedTransferAmountCents ?? null };
+  }
+  return privateLogisticsAllowed ? response : { ...operations.historicalJobRoomProjection(response),
+    ...(ownSubmittedEvidence && response.completionEvidence ? { completionEvidence: response.completionEvidence } : {}) };
 });

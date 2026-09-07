@@ -101,9 +101,9 @@ void main() {
         photos ? findsOneWidget : findsNothing,
       );
       if (type != null && !photos) {
-        expect(find.text('Add GPS Checkpoint'), findsOneWidget);
+        expect(find.text('Mark Progress (optional)'), findsOneWidget);
       }
-      await tester.tap(find.byType(FilledButton));
+      await tester.tap(find.byType(type != null && !photos ? OutlinedButton : FilledButton));
       expect(calls, type == null ? 0 : 1);
       expect(tester.takeException(), isNull);
     });

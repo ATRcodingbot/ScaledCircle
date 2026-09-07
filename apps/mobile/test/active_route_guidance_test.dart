@@ -12,7 +12,7 @@ void main() {
   testWidgets('unknown coverage is not displayed as zero', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: ActiveRouteGuidance(
       zone:{},location:null,progress:null,tilesEnabled:false))));
-    expect(find.text('Route coverage: CALCULATING'),findsOneWidget);
+    expect(find.text('Route Coverage Estimate: CALCULATING'),findsOneWidget);
     expect(find.textContaining('0.0%'),findsNothing);
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: ActiveRouteGuidance(
       zone:{},location:null,progress:{'state':'available','coveragePercentage':25},tilesEnabled:false))));

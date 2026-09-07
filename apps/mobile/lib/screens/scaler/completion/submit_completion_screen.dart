@@ -1,5 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../config/app_environment.dart';
+import '../../../services/job_room_service.dart';
+import '../../../widgets/completion_evidence_panel.dart';
 
 import '../../../services/campaign/completion_submission_service.dart';
 
@@ -34,6 +37,8 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
   final TextEditingController _notesController = TextEditingController();
 
   bool _submitting = false;
+  Map<String, dynamic>? _evidence;
+  bool _exceptionSelected = false;
 
   String? _completionId;
 
@@ -43,13 +48,38 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
   void initState() {
     super.initState();
 
-    _createDraftCompletion();
+    _prepare();
   }
 
   @override
   void dispose() {
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _prepare() async {
+    if (AppEnvironmentConfig.isStaging) {
+      try {
+        final room = await const JobRoomService().load(widget.zoneId);
+        if (!mounted) return;
+        if (room['completionEvidence'] is Map) {
+          setState(
+            () => _evidence = Map<String, dynamic>.from(
+              room['completionEvidence'] as Map,
+            ),
+          );
+          return;
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(
+            () => _loadError = 'Unable to load completion eligibility. Retry.',
+          );
+        }
+        return;
+      }
+    }
+    await _createDraftCompletion();
   }
 
   Future<void> _createDraftCompletion() async {
@@ -86,6 +116,11 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
   }
 
   Future<void> _submitCompletion() async {
+    if (_evidence != null) {
+      if (!_exceptionSelected || _notesController.text.trim().isEmpty) return;
+      await _createDraftCompletion();
+    }
+    if (!mounted) return;
     if (_completionId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Completion is still loading.")),
@@ -102,6 +137,7 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
       await _completionService.submitCompletion(
         completionId: _completionId!,
         scalerNotes: _notesController.text.trim(),
+        accessException: _evidence != null,
       );
 
       if (!mounted) return;
@@ -203,13 +239,33 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
             ),
           ),
 
+          if (_evidence != null) ...[
+            CompletionEvidencePanel(evidence: _evidence!),
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Continue Zone'),
+            ),
+            CheckboxListTile(
+              value: _exceptionSelected,
+              onChanged: (v) => setState(() => _exceptionSelected = v == true),
+              title: const Text(
+                'I am requesting review of an access restriction, not claiming ordinary completion.',
+              ),
+            ),
+          ],
+          if (_loadError != null)
+            TextButton(onPressed: _prepare, child: const Text('Retry')),
           const SizedBox(height: 35),
 
           SizedBox(
             height: 55,
 
             child: ElevatedButton(
-              onPressed: _submitting || _completionId == null
+              onPressed:
+                  _submitting ||
+                      (_evidence == null
+                          ? _completionId == null
+                          : !_exceptionSelected)
                   ? null
                   : _submitCompletion,
 
@@ -221,7 +277,11 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
 
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text("Submit Completion"),
+                  : Text(
+                      _evidence != null
+                          ? 'Submit for Exception Review'
+                          : 'Submit Completion',
+                    ),
             ),
           ),
         ],

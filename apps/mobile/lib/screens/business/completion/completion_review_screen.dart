@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../config/app_environment.dart';
+import '../../../services/job_room_service.dart';
+import '../../../widgets/completion_evidence_panel.dart';
 
 import '../../../models/campaign/campaign_completion.dart';
 import '../../../services/campaign/campaign_service.dart';
@@ -26,8 +29,38 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
   final CampaignService _campaignService = CampaignService();
 
   bool _processing = false;
+  Map<String, dynamic>? _room;
+  String? _evidenceError;
+  bool get _stagingReview =>
+      AppEnvironmentConfig.isStaging && widget.zoneId != null;
+  bool get _approvalHeld =>
+      _stagingReview && (_room == null || _room!['completionEvidence'] != null);
+  @override
+  void initState() {
+    super.initState();
+    if (_stagingReview) _loadEvidence();
+  }
+
+  Future<void> _loadEvidence() async {
+    try {
+      final room = await const JobRoomService().load(widget.zoneId!);
+      if (mounted) {
+        setState(() {
+          _room = room;
+          _evidenceError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _evidenceError = 'Evidence unavailable. Retry before review.',
+        );
+      }
+    }
+  }
 
   Future<void> _approveCompletion() async {
+    if (_approvalHeld) return;
     setState(() {
       _processing = true;
     });
@@ -274,6 +307,19 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
 
               ...completion.proofs.map(_proofCard),
 
+              if (_stagingReview && _room == null) ...[
+                Text(_evidenceError ?? 'Loading authoritative evidence...'),
+                TextButton(
+                  onPressed: _loadEvidence,
+                  child: const Text('Retry evidence'),
+                ),
+              ],
+              if (_room?['completionEvidence'] is Map)
+                CompletionEvidencePanel(
+                  evidence: Map<String, dynamic>.from(
+                    _room!['completionEvidence'] as Map,
+                  ),
+                ),
               const SizedBox(height: 30),
 
               if (awaitingReview)
@@ -282,7 +328,9 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                   width: double.infinity,
 
                   child: ElevatedButton(
-                    onPressed: _processing ? null : _approveCompletion,
+                    onPressed: _processing || _approvalHeld
+                        ? null
+                        : _approveCompletion,
 
                     child: _processing
                         ? const SizedBox(
