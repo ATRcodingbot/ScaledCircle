@@ -2,7 +2,7 @@ const stagingPhysicalQa = require("./staging_physical_qa");
 const routeProgress = require("./route_progress");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
-const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const {initializeApp, getApp} = require("firebase-admin/app");
@@ -8124,6 +8124,38 @@ exports.submitZoneGroupCompletion = trackingCallable("submitZoneGroupCompletion"
   return result;
 });
 
+async function refreshStagingPublicCampaign(campaignId) {
+  if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) !== 'scaledcircle-staging') {
+    throw new HttpsError('failed-precondition', 'This projection is staging-only.');
+  }
+  // Re-read current state transactionally: delayed/replayed triggers cannot restore stale content.
+  return db.runTransaction(async transaction => {
+    const source = await transaction.get(db.collection('campaigns').doc(campaignId));
+    const target = db.collection('campaignDiscovery').doc(campaignId);
+    if (!source.exists) { transaction.delete(target); return; }
+    transaction.set(target, operations.publicCampaignDocument(campaignId, source.data()));
+  });
+}
+
+exports.projectStagingCampaignDiscovery = onDocumentWritten({document: 'campaigns/{campaignId}', region: 'us-east1'}, async event => {
+  await refreshStagingPublicCampaign(event.params.campaignId);
+});
+
+exports.refreshStagingCampaignDiscovery = onCall({region: 'us-east1', maxInstances: 1}, async request => {
+  const context = await requireVerifiedUser(request, 'Sign in as an administrator.');
+  if (!context.isAdmin) throw new HttpsError('permission-denied', 'Administrator authority required.');
+  if (!request.data || Object.keys(request.data).some(key => key !== 'campaignIds')) {
+    throw new HttpsError('invalid-argument', 'Only campaign IDs are accepted.');
+  }
+  const ids = request.data?.campaignIds;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50 ||
+      ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) {
+    throw new HttpsError('invalid-argument', 'Provide one to fifty exact campaign IDs.');
+  }
+  for (const id of new Set(ids)) await refreshStagingPublicCampaign(id);
+  return {refreshed: new Set(ids).size, sourceRecordsChanged: 0};
+});
+
 exports.getCampaignDiscovery = trackingCallable("getCampaignDiscovery", async (request) => {
   assertTrackingPayload(request.data, new Set(["campaignId"]), 4096);
   await requireVerifiedUser(request, "Verify your email to browse campaigns.");
@@ -8211,6 +8243,9 @@ exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) =>
 exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
   const context = await requireVerifiedUser(request, "Verify your email to open this Job Room.");
+  if (!context.isAdmin && context.user.active !== true && context.user.betaAccess !== 'approved') {
+    throw new HttpsError('permission-denied', 'An approved account is required.');
+  }
   const zoneId = String(request.data?.zoneId || "").trim();
   const roomRef = db.collection("jobRooms").doc(zoneId);
   const roomSnapshot = await roomRef.get();
@@ -8243,6 +8278,11 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   ]);
   const campaign = campaignSnapshot.data() || {};
   const zone = zoneSnapshot.data() || {};
+  const ownsRoom = context.role === 'business' && context.uid === room.businessId && campaign.businessId === context.uid;
+  const privateLogisticsAllowed = context.isAdmin || ownsRoom || (campaign.businessId === room.businessId && operations.privateLogisticsAssignmentAllowed({
+    uid: context.uid, role: context.role, zoneId, campaignId: room.campaignId,
+    businessId: room.businessId, zone, participant,
+  }));
   const campaignLogistics = operations.materialLogisticsFromCampaign(campaign);
   const authoritativeLogistics = room.materialLogistics || campaignLogistics;
   const materialsRequired = authoritativeLogistics.materialsRequired === true ||
@@ -8349,7 +8389,7 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     materialsRequired: room.coordination?.materialsRequired === true,
     receivedCount,
   });
-  return {
+  const response = {
     viewerRole: context.isAdmin ? "admin" :
       (context.uid === room.businessId ? "business" : "scaler"),
     room: {...room, id: zoneId}, campaign: {...campaign, id: room.campaignId},
@@ -8377,6 +8417,7 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     messages, events, completions,
     startEligibility: {...gate, workWindow},
   };
+  return privateLogisticsAllowed ? response : operations.historicalJobRoomProjection(response);
 });
 
 exports.sendJobMessage = operationalCallable("sendJobMessage", async (request) => {

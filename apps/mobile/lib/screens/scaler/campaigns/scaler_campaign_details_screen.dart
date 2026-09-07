@@ -1,3 +1,4 @@
+import '../../../widgets/public_logistics_summary.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -973,68 +974,12 @@ class _ScalerCampaignDetailsScreenState
     );
   }
 
-  Widget _materialPlanCard(Map<String, dynamic> logistics) {
-    final type =
-        logistics['fulfillmentType']?.toString() ?? 'no_materials_required';
-    final label = switch (type) {
-      'scaler_pickup_print_shop' => 'Printing Shop Pickup',
-      'scaler_pickup_business' => 'Business Pickup',
-      'business_delivery' => 'Business Delivery',
-      _ => 'No Physical Materials Required',
-    };
-    final location = logistics['location']?.toString();
-    final shop = logistics['printingShopName']?.toString();
-    final instructions = logistics['instructions']?.toString();
-    final scheduled = _materialDate(logistics['scheduledAt']);
-    final scheduleLabel = scheduled == null
-        ? null
-        : '${scheduled.month}/${scheduled.day}/${scheduled.year} '
-              '${scheduled.hour.toString().padLeft(2, '0')}:'
-              '${scheduled.minute.toString().padLeft(2, '0')}';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'MATERIALS',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text('Fulfillment: $label'),
-            if (shop != null && shop.isNotEmpty) Text('Printing shop: $shop'),
-            if (location != null && location.isNotEmpty)
-              Text('Location: $location'),
-            if (scheduleLabel != null) Text('Date/time: $scheduleLabel'),
-            if (instructions != null && instructions.isNotEmpty)
-              Text('Instructions: $instructions'),
-            const SizedBox(height: 8),
-            const Text(
-              'These material terms become locked when you accept the assignment.',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  DateTime? _materialDate(dynamic value) {
-    if (value is DateTime) return value;
-    if (value is String) return DateTime.tryParse(value);
-    if (value is Map) {
-      final seconds = value['seconds'] ?? value['_seconds'];
-      if (seconds is num) {
-        return DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000);
-      }
-    }
-    try {
-      final dynamic date = value?.toDate();
-      return date is DateTime ? date : null;
-    } catch (_) {
-      return null;
-    }
-  }
+  Widget _materialPlanCard(Map<String, dynamic> logistics) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: PublicLogisticsSummary(logistics: logistics),
+    ),
+  );
 
   Widget _check(String label, bool enabled) {
     return Row(

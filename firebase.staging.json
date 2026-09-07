@@ -3,7 +3,12 @@
     {
       "source": "functions-staging-admin",
       "codebase": "staging-admin",
-      "ignore": ["node_modules", ".git", "*.test.js", "*.local"]
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.test.js",
+        "*.local"
+      ]
     },
     {
       "source": "functions-assignment",
@@ -28,6 +33,45 @@
         "firebase-debug.*.log",
         "*.local"
       ]
+    },
+    {
+      "source": "functions-discovery",
+      "codebase": "discovery-core",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local",
+        "*.test.js"
+      ]
+    },
+    {
+      "source": "functions-job-room",
+      "codebase": "job-room-core",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local",
+        "*.test.js"
+      ]
+    },
+    {
+      "source": "functions-legacy",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local",
+        "*.test.js"
+      ]
     }
   ],
   "firestore": {
@@ -41,13 +85,54 @@
   },
   "hosting": {
     "public": "apps/mobile/build/web",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "headers": [
-      {"source": "/index.html", "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]},
-      {"source": "/flutter_bootstrap.js", "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]},
-      {"source": "/flutter_service_worker.js", "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]},
-      {"source": "/main.dart.js", "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]}
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
     ],
-    "rewrites": [{"source": "**", "destination": "/index.html"}]
+    "headers": [
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/flutter_bootstrap.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/flutter_service_worker.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/main.dart.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
   }
 }

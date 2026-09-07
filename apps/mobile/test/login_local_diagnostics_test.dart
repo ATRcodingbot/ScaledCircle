@@ -52,7 +52,8 @@ void main() {
   test('all Firebase emulators attach before the widget tree starts', () {
     final source = File('lib/main.dart').readAsStringSync();
     final initialize = source.indexOf('Firebase.initializeApp');
-    final clearHint = source.indexOf('clearRetainedAuthEmulatorOrigin');
+    final emulatorBody = source.substring(source.indexOf('Future<void> _connectToFirebaseEmulators()'));
+    final clearHint = emulatorBody.indexOf('clearRetainedAuthEmulatorOrigin');
     final verify = source.indexOf('verifyInitializedProject');
     final connect = source.indexOf('await _connectToFirebaseEmulators()');
     final runApp = source.indexOf('runApp(const ScaledCircleApp())');
@@ -70,8 +71,8 @@ void main() {
     expect(source, contains('useFirestoreEmulator(host, 8080)'));
     expect(source, contains('useFunctionsEmulator(host, 5001)'));
     expect(source, contains('useStorageEmulator(host, 9199)'));
-    expect(clearHint, greaterThan(initialize));
-    expect(clearHint, lessThan(source.indexOf('FirebaseAuth.instance')));
+    expect(clearHint, greaterThanOrEqualTo(0));
+    expect(clearHint, lessThan(emulatorBody.indexOf('FirebaseAuth.instance')));
   });
 
   test('local application code has no production Auth REST endpoint', () {

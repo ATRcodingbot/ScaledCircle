@@ -56,6 +56,26 @@ service cloud.firestore {
 
 
 
+    // Canonical campaign documents may contain private logistics. Scalers read
+    // only the server-written discovery projection; exact data is assignment-scoped.
+    function currentLogisticsAssignment(zoneId, campaignId, businessId, scalerId) {
+      let z = get(/databases/$(database)/documents/campaignZones/$(zoneId)).data;
+      return isApprovedAccount() && request.auth.token.email_verified == true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler'
+        && scalerId == request.auth.uid && z.assignedScalerId == request.auth.uid
+        && z.campaignId == campaignId && z.businessId == businessId
+        && z.status in ['assigned', 'accepted', 'in_progress', 'paused', 'paused_out_of_window', 'ready'];
+    }
+    match /campaignDiscovery/{campaignId} {
+      allow read: if isApprovedAccount() && request.auth.token.email_verified == true
+        && ((resource['__name__'] != /databases/$(database)/documents/campaignDiscovery/ios_physical_qa_v1
+          && resource['__name__'] != /databases/$(database)/documents/campaignDiscovery/android_physical_qa_v1
+          && resource['__name__'] != /databases/$(database)/documents/campaignDiscovery/ios_physical_qa_v2
+          && resource['__name__'] != /databases/$(database)/documents/campaignDiscovery/android_physical_qa_v2)
+          || physicalQaActor(campaignId) || resource.data.businessId == request.auth.uid);
+      allow write: if false;
+    }
+
     // ============================================================
     // USERS
     // ============================================================
@@ -197,7 +217,7 @@ service cloud.firestore {
     match /campaigns/{campaignId} {
 
       allow read:
-        if isApprovedAccount() && physicalQaCampaignRead(campaignId);
+        if isAdmin() || (isApprovedAccount() && resource.data.businessId == request.auth.uid);
 
 
       allow create:
@@ -726,7 +746,11 @@ service cloud.firestore {
         if isApprovedAccount()
         && (
           isAdmin()
-          || resource.data.assignedScalerId == request.auth.uid
+          || (resource.data.assignedScalerId == request.auth.uid
+            && request.auth.token.email_verified == true
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler'
+            && resource.data.status in ['assigned', 'in_progress']
+            && get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.businessId == resource.data.businessId)
           || get(
             /databases/$(database)/documents/campaigns/$(resource.data.campaignId)
           ).data.businessId == request.auth.uid
@@ -894,7 +918,7 @@ service cloud.firestore {
     match /assignmentCompensations/{zoneId} {
       allow read: if isAdmin() || (
         isApprovedAccount() && (
-          resource.data.scalerId == request.auth.uid ||
+          currentLogisticsAssignment(zoneId, resource.data.campaignId, resource.data.businessId, resource.data.scalerId) ||
           resource.data.businessId == request.auth.uid
         )
       );
@@ -912,7 +936,14 @@ service cloud.firestore {
     match /zoneScalerParticipations/{participantId} {
       allow read: if isAdmin() || (isApprovedAccount() && (
         resource.data.businessId == request.auth.uid ||
-        resource.data.scalerUid == request.auth.uid
+        (resource.data.scalerUid == request.auth.uid
+          && request.auth.token.email_verified == true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler'
+          && resource.data.status in ['accepted', 'participating', 'paused']
+          && get(/databases/$(database)/documents/campaignZones/$(resource.data.zoneId)).data.campaignId == resource.data.campaignId
+          && get(/databases/$(database)/documents/campaignZones/$(resource.data.zoneId)).data.businessId == resource.data.businessId
+          && request.auth.uid in get(/databases/$(database)/documents/campaignZones/$(resource.data.zoneId)).data.assignedScalerIds
+          && get(/databases/$(database)/documents/campaignZones/$(resource.data.zoneId)).data.status in ['unassigned', 'assigned', 'accepted', 'in_progress', 'paused', 'paused_out_of_window', 'ready'])
       ));
       allow create, update, delete: if false;
     }

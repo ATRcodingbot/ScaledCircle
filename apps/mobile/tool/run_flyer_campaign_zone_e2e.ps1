@@ -64,6 +64,8 @@ try {
     PassThru = $true
   }
   $process = Start-Process @processArguments
+  # Retain the process handle so Windows PowerShell can report its exit code.
+  $processHandle = $process.Handle
 
   if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
     & taskkill.exe /PID $process.Id /T /F | Out-Null
@@ -77,7 +79,10 @@ try {
   }
 } finally {
   if (Test-Path -LiteralPath $canvasKitRoot) {
-    Remove-Item -LiteralPath $canvasKitRoot -Recurse -Force
+    $resolvedCanvasKit = [System.IO.Path]::GetFullPath($canvasKitRoot)
+    $expectedCanvasKit = [System.IO.Path]::GetFullPath((Join-Path $mobileRoot 'test\canvaskit'))
+    if ($resolvedCanvasKit -ne $expectedCanvasKit) { throw 'CanvasKit cleanup target escaped the test directory.' }
+    Remove-Item -LiteralPath $resolvedCanvasKit -Recurse -Force
   }
   Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue
 }

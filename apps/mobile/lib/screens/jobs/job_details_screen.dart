@@ -1,3 +1,4 @@
+import '../../widgets/public_logistics_summary.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -685,6 +686,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                       const SizedBox(height: 10),
 
                       Text(description),
+                      const SizedBox(height: 12),
+                      PublicLogisticsSummary(logistics: Map<String, dynamic>.from(data['materialLogistics'] as Map? ?? {})),
                     ],
                   ),
                 ),

@@ -114,7 +114,7 @@ test("discovery projection excludes addresses, contacts, chat, and access detail
   assert.equal("privateContactName" in safe, false);
 });
 
-test("discovery includes assignment material contract without contact fields", () => {
+test("discovery withholds exact assignment material contract", () => {
   const safe = safeDiscoveryProjection({
     id: "campaign-materials", name: "Group job", workerAmountCents: 40000,
     requiredScalerCount: 4, materialFulfillmentType: "business_delivery",
@@ -123,9 +123,9 @@ test("discovery includes assignment material contract without contact fields", (
     materialHandoffInstructions: "Meet at the entrance",
     businessPhone: "private", businessEmail: "private@example.test",
   });
-  assert.equal(safe.materialLogistics.location, "100 Staging Plaza");
+  assert.equal(safe.materialLogistics.location, undefined);
   assert.equal(safe.materialLogistics.fulfillmentType, "business_delivery");
-  assert.equal(typeof safe.materialLogistics.digest, "string");
+  assert.equal(safe.materialLogistics.digest, undefined);
   assert.equal("businessPhone" in safe.materialLogistics, false);
   assert.equal("businessEmail" in safe.materialLogistics, false);
 });

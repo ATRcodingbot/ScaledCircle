@@ -1,3 +1,4 @@
+const {onDocumentWritten} = require("firebase-functions/v2/firestore");
 const stagingPhysicalQa = require("./staging_physical_qa");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
@@ -6184,3 +6185,35 @@ fallback = 0)
 }
 
 // Native active-job tracking -------------------------------------------------
+
+async function refreshStagingPublicCampaign(campaignId) {
+  if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) !== 'scaledcircle-staging') {
+    throw new HttpsError('failed-precondition', 'This projection is staging-only.');
+  }
+  // Re-read current state transactionally: delayed/replayed triggers cannot restore stale content.
+  return db.runTransaction(async transaction => {
+    const source = await transaction.get(db.collection('campaigns').doc(campaignId));
+    const target = db.collection('campaignDiscovery').doc(campaignId);
+    if (!source.exists) { transaction.delete(target); return; }
+    transaction.set(target, operations.publicCampaignDocument(campaignId, source.data()));
+  });
+}
+
+exports.projectStagingCampaignDiscovery = onDocumentWritten({document: 'campaigns/{campaignId}', region: 'us-east1'}, async event => {
+  await refreshStagingPublicCampaign(event.params.campaignId);
+});
+
+exports.refreshStagingCampaignDiscovery = onCall({region: 'us-east1', maxInstances: 1}, async request => {
+  const context = await requireVerifiedUser(request, 'Sign in as an administrator.');
+  if (!context.isAdmin) throw new HttpsError('permission-denied', 'Administrator authority required.');
+  if (!request.data || Object.keys(request.data).some(key => key !== 'campaignIds')) {
+    throw new HttpsError('invalid-argument', 'Only campaign IDs are accepted.');
+  }
+  const ids = request.data?.campaignIds;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50 ||
+      ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) {
+    throw new HttpsError('invalid-argument', 'Provide one to fifty exact campaign IDs.');
+  }
+  for (const id of new Set(ids)) await refreshStagingPublicCampaign(id);
+  return {refreshed: new Set(ids).size, sourceRecordsChanged: 0};
+});

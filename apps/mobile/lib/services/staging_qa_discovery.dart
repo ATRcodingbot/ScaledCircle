@@ -2,14 +2,22 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/app_environment.dart';
 
-const physicalQaCampaignIds = ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2'];
+String get scalerCampaignCollection =>
+    AppEnvironmentConfig.isStaging ? 'campaignDiscovery' : 'campaigns';
+
+const physicalQaCampaignIds = [
+  'ios_physical_qa_v1',
+  'android_physical_qa_v1',
+  'ios_physical_qa_v2',
+  'android_physical_qa_v2',
+];
 
 /// Rules authorize the reserved document separately; the ordinary query never
 /// includes it. A denied QA read is expected for unrelated staging accounts.
 Stream<List<DocumentSnapshot<Map<String, dynamic>>>> marketplaceCampaigns(
   FirebaseFirestore firestore,
 ) {
-  final campaigns = firestore.collection('campaigns');
+  final campaigns = firestore.collection(scalerCampaignCollection);
   if (!AppEnvironmentConfig.isStaging) {
     return campaigns
         .where('status', isEqualTo: 'open')

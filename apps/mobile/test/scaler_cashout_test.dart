@@ -84,7 +84,7 @@ void main() {
     if (environment == 'production') {
       expect(ScalerCashoutService.enabled, isFalse);
     } else if (environment == 'staging') {
-      expect(ScalerCashoutService.enabled, isTrue);
+      expect(ScalerCashoutService.enabled, const bool.fromEnvironment('ENABLE_TEST_CASHOUT'));
     }
   });
   testWidgets(

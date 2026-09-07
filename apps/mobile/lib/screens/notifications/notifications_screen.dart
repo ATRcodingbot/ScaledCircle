@@ -1,3 +1,4 @@
+import '../../services/staging_qa_discovery.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -112,10 +113,13 @@ class NotificationsScreen extends StatelessWidget {
         return;
       }
 
-      final campaign = await FirebaseFirestore.instance
-          .collection('campaigns')
-          .doc(campaignId)
-          .get();
+      DocumentSnapshot<Map<String, dynamic>> campaign;
+      try {
+        campaign = await FirebaseFirestore.instance.collection('campaigns').doc(campaignId).get();
+      } on FirebaseException catch (error) {
+        if (error.code != 'permission-denied') rethrow;
+        campaign = await FirebaseFirestore.instance.collection(scalerCampaignCollection).doc(campaignId).get();
+      }
 
       if (!context.mounted) {
         return;

@@ -1,3 +1,4 @@
+import '../../services/staging_qa_discovery.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -293,7 +294,7 @@ class MyJobsScreen extends StatelessWidget {
     }
 
     final campaignReference = _firestore
-        .collection('campaigns')
+        .collection(scalerCampaignCollection)
         .doc(campaignId);
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -557,7 +558,7 @@ class MyJobsScreen extends StatelessWidget {
     List<QueryDocumentSnapshot<Map<String, dynamic>>> locations,
   ) {
     final campaignReference = _firestore
-        .collection('campaigns')
+        .collection(scalerCampaignCollection)
         .doc(campaignId);
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(

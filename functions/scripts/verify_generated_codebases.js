@@ -165,6 +165,7 @@ assert.deepEqual(Object.keys(assignment).sort(), [
 ]);
 assert.deepEqual(Object.keys(discovery).sort(), [
   "analyzeCampaignZone", "applySmartZonePlan", "getSmartZonePlan",
+  "projectStagingCampaignDiscovery", "refreshStagingCampaignDiscovery",
   "resolveServiceAreaPlace", "saveDiscoveryPreferences",
 ].sort());
 assert.deepEqual(Object.keys(jobRoom), ["getJobRoom"]);

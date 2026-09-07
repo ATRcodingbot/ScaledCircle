@@ -90,6 +90,7 @@ const assignmentExports = new Set([
   "acceptZoneGroupSlot",
 ]);
 const discoveryExports = new Set([
+  "projectStagingCampaignDiscovery", "refreshStagingCampaignDiscovery",
   "saveDiscoveryPreferences",
   "resolveServiceAreaPlace",
   "analyzeCampaignZone",

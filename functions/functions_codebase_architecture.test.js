@@ -171,7 +171,8 @@ test("campaign-funding owns the isolated TEST-mode campaign payment boundary", (
 
 test("discovery-core exclusively owns the secret-free discovery and Zone analysis callables", () => {
   const names = ["saveDiscoveryPreferences", "analyzeCampaignZone",
-    "getSmartZonePlan", "applySmartZonePlan", "resolveServiceAreaPlace"];
+    "getSmartZonePlan", "applySmartZonePlan", "resolveServiceAreaPlace",
+    "projectStagingCampaignDiscovery", "refreshStagingCampaignDiscovery"];
   assert.deepEqual(exportsIn(discovery).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));

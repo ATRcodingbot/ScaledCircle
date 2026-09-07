@@ -117,17 +117,14 @@ void main() {
     },
   );
 
-  test('Scaler discovery displays material terms before acceptance', () {
+  test('Scaler discovery uses coarse logistics before acceptance', () {
     final screen = File(
       'lib/screens/scaler/campaigns/scaler_campaign_details_screen.dart',
     ).readAsStringSync();
     final model = File('lib/models/campaign_model.dart').readAsStringSync();
     expect(model, contains('materialLogistics'));
-    expect(screen, contains("'MATERIALS'"));
-    expect(
-      screen,
-      contains('These material terms become locked when you accept'),
-    );
+    expect(screen, contains("PublicLogisticsSummary("));
+    expect(screen, isNot(contains("logistics['location']")));
   });
 
   test('group campaign details never projects a zero legacy base pay', () {

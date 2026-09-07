@@ -55,7 +55,7 @@ void main() {
     );
     expect(wallet, contains('Scaler Wallet'));
     expect(wallet, contains('Verified Earnings'));
-    expect(wallet, contains('Cash-out is not yet available'));
+    expect(wallet, contains('ScalerCashoutCard'));
     expect(dashboard, contains('Wallet'));
     expect(dashboard, contains('View wallet'));
   });

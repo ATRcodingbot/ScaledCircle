@@ -156,7 +156,7 @@ class CampaignService {
 
     final snapshot =
         await _firestore
-            .collection("campaigns")
+            .collection(scalerCampaignCollection)
             .doc(campaignId)
             .get();
 

@@ -7675,6 +7675,9 @@ function campaignWorkPolicy(campaign = {}) {
 exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
   const context = await requireVerifiedUser(request, "Verify your email to open this Job Room.");
+  if (!context.isAdmin && context.user.active !== true && context.user.betaAccess !== 'approved') {
+    throw new HttpsError('permission-denied', 'An approved account is required.');
+  }
   const zoneId = String(request.data?.zoneId || "").trim();
   const roomRef = db.collection("jobRooms").doc(zoneId);
   const roomSnapshot = await roomRef.get();
@@ -7707,6 +7710,11 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   );
   const campaign = campaignSnapshot.data() || {};
   const zone = zoneSnapshot.data() || {};
+  const ownsRoom = context.role === 'business' && context.uid === room.businessId && campaign.businessId === context.uid;
+  const privateLogisticsAllowed = context.isAdmin || ownsRoom || (campaign.businessId === room.businessId && operations.privateLogisticsAssignmentAllowed({
+    uid: context.uid, role: context.role, zoneId, campaignId: room.campaignId,
+    businessId: room.businessId, zone, participant,
+  }));
   const campaignLogistics = operations.materialLogisticsFromCampaign(campaign);
   const authoritativeLogistics = room.materialLogistics || campaignLogistics;
   const materialsRequired = authoritativeLogistics.materialsRequired === true ||
@@ -7813,7 +7821,7 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     materialsRequired: room.coordination?.materialsRequired === true,
     receivedCount
   });
-  return {
+  const response = {
     viewerRole: context.isAdmin ? "admin" :
     context.uid === room.businessId ? "business" : "scaler",
     room: { ...room, id: zoneId }, campaign: { ...campaign, id: room.campaignId },
@@ -7841,4 +7849,5 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     messages, events, completions,
     startEligibility: { ...gate, workWindow }
   };
+  return privateLogisticsAllowed ? response : operations.historicalJobRoomProjection(response);
 });

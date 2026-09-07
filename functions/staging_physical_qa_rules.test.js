@@ -21,6 +21,11 @@ before(async () => {
     await db.doc("campaigns/ordinary").set({businessId: "business", status: "open", createdAt: new Date()});
     await db.doc("campaignZones/ios_physical_qa_zone_v1").set({businessId: "business",
       campaignId: qaId, assignedScalerId: null, status: "unassigned"});
+    for (const id of [qaId, 'ordinary']) {
+      const source = await db.doc(`campaigns/${id}`).get();
+      await db.doc(`campaignDiscovery/${id}`).set(
+        require('./operational_layer').publicCampaignDocument(id, source.data()));
+    }
   });
 });
 after(async () => environment?.cleanup());
@@ -37,16 +42,16 @@ test('Scaler Privacy inspection is owner-only, exact-version and read-only',asyn
  await assertFails(environment.unauthenticatedContext().firestore().doc(path).get());
 });
 test("intended actors can read QA; unrelated Scaler cannot get or list it", async () => {
-  await assertSucceeds(db("scaler").doc(`campaigns/${qaId}`).get());
-  await assertSucceeds(db("business").doc(`campaigns/${qaId}`).get());
-  await assertFails(db("other").doc(`campaigns/${qaId}`).get());
-  await assertFails(db("other").collection("campaigns").where("status", "==", "open").get());
+  await assertSucceeds(db("scaler").doc(`campaignDiscovery/${qaId}`).get());
+  await assertSucceeds(db("business").doc(`campaignDiscovery/${qaId}`).get());
+  await assertFails(db("other").doc(`campaignDiscovery/${qaId}`).get());
+  await assertFails(db("other").collection("campaignDiscovery").where("status", "==", "open").get());
   await assertFails(db("other").doc("campaignZones/ios_physical_qa_zone_v1").get());
 });
 test("ordinary staging discovery remains usable when reserved ID is excluded", async () => {
-  await assertSucceeds(db("other").collection("campaigns").where("status", "==", "open")
+  await assertSucceeds(db("other").collection("campaignDiscovery").where("status", "==", "open")
     .where("__name__", "not-in", [qaId, "android_physical_qa_v1", "ios_physical_qa_v2", "android_physical_qa_v2"]).get());
-  await assertSucceeds(db("other").doc("campaigns/ordinary").get());
+  await assertSucceeds(db("other").doc("campaignDiscovery/ordinary").get());
 });
 test("clients cannot write authority, mutate bindings, or bypass application authority", async () => {
   await assertFails(db("business").doc(`internalCertificationAuthorities/${qaId}`).update({scalerUid: "other"}));
@@ -95,17 +100,18 @@ test('two fixtures stay isolated across both Scalers and normal discovery',async
   await db.doc('users/android').set({role:'scaler',active:true});
   await db.doc('internalCertificationAuthorities/android_physical_qa_v1').set({projectId:'scaledcircle-staging',immutable:true,certificationFixture:true,campaignId:'android_physical_qa_v1',zoneId:'android_physical_qa_zone_v1',businessUid:'business',scalerUid:'android'});
   await db.doc('campaigns/android_physical_qa_v1').set({businessId:'business',status:'open',createdAt:new Date()});
+  await db.doc('campaignDiscovery/android_physical_qa_v1').set({businessId:'business',status:'open'});
   await db.doc('campaignZones/android_physical_qa_zone_v1').set({businessId:'business',campaignId:'android_physical_qa_v1',assignedScalerId:null,status:'unassigned'});
  });
- await assertSucceeds(db('android').doc('campaigns/android_physical_qa_v1').get());
- await assertFails(db('android').doc('campaigns/ios_physical_qa_v1').get());
- await assertFails(db('scaler').doc('campaigns/android_physical_qa_v1').get());
+ await assertSucceeds(db('android').doc('campaignDiscovery/android_physical_qa_v1').get());
+ await assertFails(db('android').doc('campaignDiscovery/ios_physical_qa_v1').get());
+ await assertFails(db('scaler').doc('campaignDiscovery/android_physical_qa_v1').get());
  for(const uid of ['scaler','android','other']){
-  const result=await assertSucceeds(db(uid).collection('campaigns').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2']).get());
+  const result=await assertSucceeds(db(uid).collection('campaignDiscovery').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2']).get());
   if(result.docs.some(d=>d.id.includes('physical_qa')))throw Error('QA leaked');
  }
  for(const fixture of ['ios','android']) {
-  await assertFails(db('other').doc(`campaigns/${fixture}_physical_qa_v1`).get());
+  await assertFails(db('other').doc(`campaignDiscovery/${fixture}_physical_qa_v1`).get());
   await assertFails(db('other').doc(`campaignZones/${fixture}_physical_qa_zone_v1`).get());
  }
  await assertFails(db('scaler').doc('campaignZones/android_physical_qa_zone_v1').get());
@@ -120,11 +126,12 @@ test('fresh retests preserve owner-only reads without changing historical fixtur
    const campaignId=`${device}_physical_qa_v2`,zoneId=`${device}_physical_qa_zone_v2`;
    await store.doc(`internalCertificationAuthorities/${campaignId}`).set({projectId:'scaledcircle-staging',immutable:true,certificationFixture:true,campaignId,zoneId,businessUid:'business',scalerUid:uid});
    await store.doc(`campaigns/${campaignId}`).set({businessId:'business',status:'open'});
+   await store.doc(`campaignDiscovery/${campaignId}`).set({businessId:"business",status:"open"});
    await store.doc(`campaignZones/${zoneId}`).set({businessId:'business',campaignId,assignedScalerId:null,status:'unassigned'});
   }
  });
  for(const [device,owner,other] of [['ios','scaler','android'],['android','android','scaler']]){
-  for(const path of [`campaigns/${device}_physical_qa_v2`,`campaignZones/${device}_physical_qa_zone_v2`]){
+  for(const path of [`campaignDiscovery/${device}_physical_qa_v2`,`campaignZones/${device}_physical_qa_zone_v2`]){
    await assertSucceeds(db(owner).doc(path).get());
    await assertFails(db(other).doc(path).get());
    await assertFails(db('other').doc(path).get());

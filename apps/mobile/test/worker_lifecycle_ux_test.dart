@@ -33,7 +33,7 @@ void main() {
 
   test('Wallet describes earnings without implying cash-out', () {
     expect(wallet, contains('Verified Earnings'));
-    expect(wallet, contains('Cash-out is not yet available'));
+    expect(wallet, contains('ScalerCashoutCard'));
     expect(wallet, contains('Verified work earnings will appear here'));
     expect(wallet, isNot(contains("'Available Balance'")));
   });
