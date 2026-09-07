@@ -3,19 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../config/app_environment.dart';
 
-/// Staging discovers IDs through server authority, then retains Rules-governed
+/// Discover IDs through server authority, then retain Rules-governed
 /// document listeners. Revocation removes a record instead of retaining its data.
 Stream<List<DocumentSnapshot<Map<String, dynamic>>>> assignedLocations(
   FirebaseFirestore firestore,
   String uid,
 ) {
-  if (!AppEnvironmentConfig.isStaging) {
-    return firestore
-        .collection('campaignLocations')
-        .where('assignedScalerId', isEqualTo: uid)
-        .snapshots()
-        .map((value) => value.docs);
-  }
   late StreamController<List<DocumentSnapshot<Map<String, dynamic>>>>
   controller;
   final subscriptions =
@@ -30,9 +23,13 @@ Stream<List<DocumentSnapshot<Map<String, dynamic>>>> assignedLocations(
   controller = StreamController(
     onListen: () async {
       try {
-        final result = await FirebaseFunctions.instanceFor(
-          region: 'us-east1',
-        ).httpsCallable('listStagingAssignedLocationIds').call();
+        final result = await FirebaseFunctions.instanceFor(region: 'us-east1')
+            .httpsCallable(
+              AppEnvironmentConfig.isStaging
+                  ? 'listStagingAssignedLocationIds'
+                  : 'listAssignedLocationIdsV1',
+            )
+            .call();
         if (cancelled) return;
         final ids = List<String>.from(
           (result.data as Map)['locationIds'] as List,

@@ -2,8 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/app_environment.dart';
 
-String get scalerCampaignCollection =>
-    AppEnvironmentConfig.isStaging ? 'campaignDiscovery' : 'campaigns';
+String get scalerCampaignCollection => 'campaignDiscovery';
 
 const physicalQaCampaignIds = [
   'ios_physical_qa_v1',
@@ -21,11 +20,19 @@ Stream<List<DocumentSnapshot<Map<String, dynamic>>>> marketplaceCampaigns(
 ) {
   final campaigns = firestore.collection(scalerCampaignCollection);
   if (!AppEnvironmentConfig.isStaging) {
-    return campaigns
-        .where('status', isEqualTo: 'open')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((s) => s.docs);
+    return campaigns.where('status', isEqualTo: 'open').snapshots().map((s) {
+      // A missing legacy timestamp must not silently remove a safe listing.
+      // The status-only query also needs no new composite index at cutover.
+      final docs = [...s.docs];
+      docs.sort((a, b) {
+        final at = a.data()['createdAt'];
+        final bt = b.data()['createdAt'];
+        final order = (bt is Timestamp ? bt.millisecondsSinceEpoch : 0)
+            .compareTo(at is Timestamp ? at.millisecondsSinceEpoch : 0);
+        return order == 0 ? a.id.compareTo(b.id) : order;
+      });
+      return docs;
+    });
   }
   late StreamController<List<DocumentSnapshot<Map<String, dynamic>>>>
   controller;

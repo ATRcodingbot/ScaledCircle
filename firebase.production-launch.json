@@ -1,0 +1,8 @@
+{
+  "functions": [
+    {"source":"functions-logistics-access","codebase":"logistics-access","ignore":["node_modules",".git","*.test.js"]},
+    {"source":".firebase/production-launch/job-room","codebase":"job-room-core","ignore":["node_modules",".git","README.md"]}
+  ],
+  "firestore":{"rules":"firestore.production.rules","indexes":"firestore.indexes.json"},
+  "emulators":{"firestore":{"port":8080},"auth":{"port":9099},"singleProjectMode":false}
+}

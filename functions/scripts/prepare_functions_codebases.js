@@ -7,6 +7,12 @@ const root = path.resolve(__dirname, "..", "..");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const npmCache = path.join(root, "tmp", "npm-cache");
 
+// Production has individually retained deployed contracts. Generic generation
+// must never overwrite them as a side effect of a broad CLI deployment.
+if (process.env.GCLOUD_PROJECT === 'scaled-circle') {
+  throw new Error('Use the reviewed, pinned production release configuration. Generic production codebase preparation is blocked.');
+}
+
 function run(command, args, cwd) {
   const result = spawnSync(command, args, {
     cwd,

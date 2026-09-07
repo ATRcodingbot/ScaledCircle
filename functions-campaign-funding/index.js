@@ -73,9 +73,15 @@ async function assertFundable(input) {
   return validatedCampaignZones(input);
 }
 
-async function validatedCampaignZones(input) {
+async function validatedCampaignZones(input, {forPublication = false} = {}) {
   const zoneSnapshots = await db.collection("campaignZones")
     .where("campaignId", "==", input.campaignId).get();
+  if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === 'scaled-circle') {
+    const {productionValidZones} = require('./production_publish_compatibility');
+    const valid = productionValidZones(zoneSnapshots.docs, input.campaignId, input.uid);
+    if (!valid.length && !forPublication) throw new HttpsError('failed-precondition', 'Map at least one valid campaign Zone before funding.');
+    return valid;
+  }
   const zones = zoneSnapshots.docs.map((doc) => doc.data() || {});
   if (!lifecycle.allMappedZonesValid(zones, input.campaignId, input.uid)) {
     throw new HttpsError("failed-precondition",
@@ -416,7 +422,7 @@ exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRI
 exports.publishFundedCampaign = onCall(OPTIONS, async (request) => {
   const input = await ownedCampaign(request);
   if (input.campaign.status === "open") return {campaignId: input.campaignId, status: "open"};
-  const zones = await validatedCampaignZones(input);
+  const zones = await validatedCampaignZones(input, {forPublication: true});
   const paymentId = cleanId(input.campaign.fundingPaymentId);
   const payment = paymentId ? (await db.collection("campaignPayments").doc(paymentId).get()).data() : null;
   if (!zones.length || input.campaign.fundingStatus !== "funded" || payment?.status !== "paid" ||

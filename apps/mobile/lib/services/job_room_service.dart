@@ -1,4 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import '../config/app_environment.dart';
 
 class JobRoomService {
   const JobRoomService();
@@ -9,6 +10,8 @@ class JobRoomService {
   Future<Map<String, dynamic>> load(String zoneId) async {
     final response = await _functions.httpsCallable('getJobRoom').call({
       'zoneId': zoneId,
+      if (AppEnvironmentConfig.isProduction)
+        'privacyVersion': 'logistics_privacy_v1',
     });
     return Map<String, dynamic>.from(response.data as Map);
   }
