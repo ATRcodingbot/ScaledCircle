@@ -1,3 +1,4 @@
+import '../../../widgets/campaign_card_header.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/campaign_model.dart';
@@ -57,7 +58,7 @@ class ScalerCampaignMarketplaceScreen extends StatelessWidget {
 
                     children: [
                       Text(
-                        campaign.campaignName,
+                        campaignDisplayName(campaign.campaignName),
 
                         style: const TextStyle(
                           fontSize: 20,

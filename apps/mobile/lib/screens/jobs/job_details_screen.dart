@@ -1,3 +1,4 @@
+import '../../widgets/campaign_card_header.dart';
 import '../../widgets/public_logistics_summary.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -640,7 +641,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         final data = campaign.data() as Map<String, dynamic>;
 
         final campaignName =
-            data['campaignName']?.toString() ?? 'Untitled Campaign';
+            campaignDisplayName(data['campaignName']?.toString() ?? 'Untitled Campaign');
 
         final description = data['description']?.toString() ?? '';
 

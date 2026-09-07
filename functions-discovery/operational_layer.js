@@ -435,6 +435,9 @@ function publicMaterialLogistics(campaign = {}) {
 
 function publicCampaignDocument(id, campaign) {
   const result = {campaignId: id, schemaVersion: 1, materialLogistics: publicMaterialLogistics(campaign)};
+  // Legacy campaigns store `type`; consumers require the canonical public field.
+  const publicType = campaign.campaignType || campaign.type;
+  if (typeof publicType === 'string') result.campaignType = publicType;
   for (const key of ['businessId', 'campaignName', 'campaignType', 'status', 'description',
     'basePay', 'bonus', 'workerPoolCents', 'scheduledShareCents', 'requiredScalerCount',
     'requestedScalerCount', 'assignedScalerCount', 'estimatedMinutes', 'preliminaryEstimatedMinutes',

@@ -1,3 +1,4 @@
+import '../../widgets/campaign_card_header.dart';
 import '../../services/staging_qa_discovery.dart';
 import '../../services/assigned_locations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -385,51 +386,12 @@ class MyJobsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const CircleAvatar(child: Icon(Icons.map_outlined)),
-
-                      const SizedBox(width: 12),
-
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              campaignName,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            Text(
-                              zoneName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-
-                            if (businessEmail.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-
-                              Text(
-                                businessEmail,
-                                style: TextStyle(color: Colors.grey.shade700),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      _statusChip(status, hasChangesRequested),
-                    ],
+                  CampaignCardHeader(
+                    title: campaignName,
+                    icon: Icons.map_outlined,
+                    subtitle: zoneName,
+                    businessName: businessEmail,
+                    status: _statusChip(status, hasChangesRequested),
                   ),
 
                   if (description.isNotEmpty) ...[
@@ -668,53 +630,12 @@ class MyJobsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CircleAvatar(
-                        child: Icon(_campaignTypeIcon(campaignType)),
-                      ),
-
-                      const SizedBox(width: 12),
-
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              campaignName,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            Text(
-                              typeLabel,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-
-                            if (businessEmail.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-
-                              Text(
-                                businessEmail,
-                                style: TextStyle(color: Colors.grey.shade700),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      _statusChip(status, false),
-                    ],
+                  CampaignCardHeader(
+                    title: campaignName,
+                    icon: _campaignTypeIcon(campaignType),
+                    subtitle: typeLabel,
+                    businessName: businessEmail,
+                    status: _statusChip(status, false),
                   ),
 
                   if (description.isNotEmpty) ...[

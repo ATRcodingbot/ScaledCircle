@@ -1,3 +1,4 @@
+import '../../../widgets/campaign_card_header.dart';
 import '../../../widgets/public_logistics_summary.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -562,7 +563,7 @@ class _ScalerCampaignDetailsScreenState
           // CAMPAIGN HEADER
           // ====================================================
           Text(
-            campaign.campaignName,
+            campaignDisplayName(campaign.campaignName),
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
 

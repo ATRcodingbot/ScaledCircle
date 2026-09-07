@@ -1,3 +1,4 @@
+import '../../widgets/campaign_card_header.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -255,16 +256,16 @@ class ScalerWalletScreen extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: CircleAvatar(child: Icon(_transactionIcon(type))),
-        title: Text(
-          description,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(_formatTimestamp(createdAt)),
-        trailing: Text(
-          '\$${amount.toStringAsFixed(2)}',
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: CampaignCardHeader(
+          title: description,
+          icon: _transactionIcon(type),
+          subtitle: _formatTimestamp(createdAt),
+          status: Text(
+            '\$${amount.toStringAsFixed(2)}',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );

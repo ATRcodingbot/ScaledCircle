@@ -1,3 +1,4 @@
+import '../../widgets/campaign_card_header.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -2057,7 +2058,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         final data = liveCampaign.data() as Map<String, dynamic>;
 
         final campaignName =
-            data['campaignName']?.toString() ?? 'Untitled Campaign';
+            campaignDisplayName(data['campaignName']?.toString() ?? 'Untitled Campaign');
 
         final description = data['description']?.toString() ?? '';
 

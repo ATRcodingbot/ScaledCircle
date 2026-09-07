@@ -1,3 +1,4 @@
+import '../../../widgets/campaign_card_header.dart';
 import 'package:flutter/material.dart';
 import '../../../services/campaign_service.dart';
 import '../../../models/campaign_model.dart';
@@ -158,7 +159,7 @@ class ScalerAppliedCampaignsScreen extends StatelessWidget {
 
                       Text(
 
-                        campaign.campaignName,
+                        campaignDisplayName(campaign.campaignName),
 
                         style:
                           const TextStyle(
@@ -196,9 +197,9 @@ class ScalerAppliedCampaignsScreen extends StatelessWidget {
                           const SizedBox(width:8),
 
 
-                          const Text(
+                          const Expanded(child: Text(
                             "Pending Business Approval",
-                          ),
+                          )),
 
                         ],
 

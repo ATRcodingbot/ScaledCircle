@@ -4,6 +4,16 @@ const op=require('./operational_layer');
 const campaign={businessId:'owner',campaignName:'Public job',campaignType:'flyer_distribution',status:'open',basePay:15,
  materialFulfillmentType:'scaler_pickup_business',materialHandoffAddress:'PRIVATE ADDRESS',materialHandoffInstructions:'PRIVATE CODE',
  materialHandoffLatitude:1,materialHandoffLongitude:2,businessPhone:'PRIVATE PHONE',publicLogistics:{postalCode:'21061',gateCode:'PRIVATE CODE',accessStatus:'restricted_or_uncertain'}};
+
+test('legacy canvassing type survives public projection without private logistics',()=>{
+ const legacy={...campaign,campaignType:undefined,type:'neighborhoodCanvassing'};
+ const projected=op.publicCampaignDocument('qa',legacy);
+ assert.equal(projected.campaignType,'neighborhoodCanvassing');
+ assert.equal(JSON.stringify(projected).includes('PRIVATE'),false);
+ assert.equal('type' in projected,false);
+ assert.equal(op.publicCampaignDocument('job',campaign).campaignType,'flyer_distribution');
+ assert.equal(op.publicCampaignDocument('job',{...legacy,campaignType:'cleanup'}).campaignType,'cleanup');
+});
 test('discovery surfaces omit every private logistics field, including nested injected fields',()=>{
  for(const value of [op.safeDiscoveryProjection(campaign),op.publicCampaignDocument('job',campaign)]){
   assert.equal(JSON.stringify(value).includes('PRIVATE'),false);

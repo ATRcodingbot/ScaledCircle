@@ -1,3 +1,4 @@
+import '../../widgets/campaign_card_header.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/job_room_service.dart';
@@ -602,9 +603,9 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            zone['zoneName']?.toString() ??
+            campaignDisplayName(zone['zoneName']?.toString() ??
                 campaign['campaignName']?.toString() ??
-                'Assigned Job',
+                'Assigned Job'),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           Text('$scalerCount assigned Scaler${scalerCount == 1 ? '' : 's'}'),

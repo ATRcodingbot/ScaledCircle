@@ -1,3 +1,4 @@
+import '../../widgets/checkpoint_action.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -357,7 +358,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     return PopScope(
       canPop: true,
       child: Scaffold(
-        appBar: AppBar(title: const Text('JOB IN PROGRESS')),
+        appBar: AppBar(title: const Text('Job in Progress')),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
@@ -421,7 +422,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
               child: const ListTile(
                 leading: Icon(Icons.location_searching),
                 title: Text(
-                  'GPS TRACKING ACTIVE',
+                  'Tracking Active',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
@@ -453,12 +454,9 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
               value: 'Adaptive movement samples; stationary points reduced',
             ),
             const SizedBox(height: 24),
-            FilledButton.icon(
+            CheckpointAction(
+              jobType: _campaignData['campaignType'] ?? _campaignData['type'],
               onPressed: _working ? null : _addCheckpoint,
-              icon: Icon(_photoFree ? Icons.location_on : Icons.add_a_photo),
-              label: Text(
-                _photoFree ? 'Add GPS checkpoint' : 'Add checkpoint/photo',
-              ),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
