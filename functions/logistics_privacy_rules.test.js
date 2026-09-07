@@ -41,8 +41,8 @@ test('public get/list projections contain coarse logistics only and reject clien
   const snap=await assertSucceeds(db(uid).doc('campaignDiscovery/job').get());
   assert.equal(JSON.stringify(snap.data()).includes('PRIVATE'),false);
   assert.equal(snap.data().materialLogistics.postalCode,'21061');
-  await assertSucceeds(db(uid).collection('campaignDiscovery').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2']).get());
-  await assertFails(db(uid).collection('campaigns').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2']).get());
+  await assertSucceeds(db(uid).collection('campaignDiscovery').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2','ios_physical_qa_v3','android_physical_qa_v3']).get());
+  await assertFails(db(uid).collection('campaigns').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2','ios_physical_qa_v3','android_physical_qa_v3']).get());
  }
  await assertFails(db('owner').doc('campaignDiscovery/job').update({materialHandoffAddress:'PRIVATE'}));
 });

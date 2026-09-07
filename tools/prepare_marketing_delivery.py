@@ -21,8 +21,8 @@ def funnel(name):
 
 def content():
     landing = (SCREENS / 'public_landing_screen.dart').read_text(encoding='utf-8')
-    hero = 'Local marketing that actually gets executed.'
-    intro = 'Plan practical territory, set fixed compensation and bonuses, and coordinate Scalers. Review recorded execution evidence and measure supported responses.'
+    hero = 'Put local marketing into motion.'
+    intro = 'Choose the area. Set the work and pay. A Scaler carries out the campaign, and you review the tracked route before approving completed work.'
     assert hero in landing and intro in landing
     how = landing.split('class _HowItWorks ')[1].split('\nclass ')[0]
     steps = re.findall(r"title:\s*'([^']+)',\s*body:\s*'([^']+)'", how)
@@ -32,9 +32,19 @@ def content():
     assert len(prices) == 4
     pricing = [(name + (' - LIMITED BETA' if name == 'Managed Growth' else ''),
                 '$' + format(float(price), '.0f') + '/month') for name, price in prices]
-    return {'/': [(hero, intro), *steps], '/businesses': funnel('business_funnel_screen.dart'),
+    def heading(name):
+        section = landing.split('class ' + name + ' ')[1].split('\nclass ')[0]
+        match = re.search(r"title:\s*'([^']+)',\s*subtitle:\s*'([^']+)'", section)
+        if not match:
+            raise ValueError('Public heading extraction changed: ' + name)
+        return match.groups()
+    scaler = ('Know the work and pay before you apply.',
+              'Choose from available local campaigns that fit your preferences. Work availability varies by area; creating a profile does not guarantee a job.')
+    assert all(text in landing for text in scaler)
+    return {'/': [(hero, intro), heading('_BusinessExperience'), *steps,
+                  heading('_FieldCampaigns'), scaler, heading('_ManagedGrowth')], '/businesses': funnel('business_funnel_screen.dart'),
             '/scalers': funnel('scaler_funnel_screen.dart'),
-            '/how-it-works': [('A simpler way to grow locally.', 'Start with your goal. ScaledCircle handles the complexity underneath.'), *steps],
+            '/how-it-works': [('From a local campaign to work you can review.', 'One clear workflow for the Business and the Scaler.'), *steps],
             '/pricing': [('Choose how much help you want.', 'Software access is clear. Variable campaign costs are approved separately.'), *pricing]}
 
 
@@ -56,6 +66,7 @@ def documents(*, staging=False):
                 blocks.append(cta(primary[0]))
                 if route == '/':
                     blocks.append('<p><a href="/#/scalers">Become a Scaler</a> · <a href="/how-it-works">See How It Works</a></p>')
+                    blocks.append('<img width="1200" height="630" loading="lazy" src="https://scaledcircle.com/social/2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png" alt="ScaledCircle public Baltimore planning demo; estimated geography is not verified household coverage">')
             if index == 2:
                 blocks.append(cta('Find Local Work' if route == '/scalers' else 'Build My First Campaign'))
         if route in ('/', '/businesses', '/pricing'):
@@ -66,8 +77,12 @@ def documents(*, staging=False):
             blocks.append('<section><h2>Availability at a glance</h2><div class="capabilities">' + ''.join(
                 f'<article><h3>{html.escape(title)}</h3><p>{html.escape(description)}</p></article>'
                 for title, description in capabilities) + '</div></section>')
+        if route == '/':
+            blocks.append('<section><h2>Pricing</h2><p>Subscription access and campaign costs are separate. Review compensation and platform fees before funding.</p><div class="capabilities">' + ''.join(
+                f'<article><h3>{html.escape(name)}</h3><p>{html.escape(price)}</p></article>'
+                for name, price in content()['/pricing'][1:]) + '</div><a href="/pricing">Compare plans</a></section>')
         blocks.append(cta('Create Scaler Account' if route == '/scalers' else 'Create Business Account'))
-        picture = '' if route == '/pricing' else '<img width="1200" height="630" loading="lazy" src="https://scaledcircle.com/social/2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png" alt="ScaledCircle Smart Mapping: public Baltimore planning demo with estimated homes and an unverified route">'
+        picture = '' if route in ('/', '/pricing') else '<img width="1200" height="630" loading="lazy" src="https://scaledcircle.com/social/2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png" alt="ScaledCircle Smart Mapping: public Baltimore planning demo with estimated homes and an unverified route">'
         body = '<body><main id="marketing"><nav aria-label="Main">' + navigation + '<a class="cta" href="/#/businesses">Get Started</a></nav>' + ''.join(blocks) + picture + '''
 <p><a href="/#/login">Log in</a> · <a href="/#/businesses">Open Business experience</a> · <a href="/#/scalers">Open Scaler experience</a></p>
 <footer><a href="/#/privacy">Privacy</a> · <a href="/#/terms">Terms</a> · <a href="mailto:support@scaledcircle.com">Contact support</a></footer>

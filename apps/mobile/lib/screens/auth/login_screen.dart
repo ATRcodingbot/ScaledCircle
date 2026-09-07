@@ -184,9 +184,13 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to log in: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sign-in did not finish. Check your connection and try again. Contact support if this continues.',
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -455,15 +459,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 spacing: 4,
                 children: [
                   TextButton(
-                    onPressed: () => AppNavigation.push(context, AppRoutes.terms),
+                    onPressed: () =>
+                        AppNavigation.push(context, AppRoutes.terms),
                     child: const Text('Terms'),
                   ),
                   TextButton(
-                    onPressed: () => AppNavigation.push(context, AppRoutes.privacy),
+                    onPressed: () =>
+                        AppNavigation.push(context, AppRoutes.privacy),
                     child: const Text('Privacy'),
                   ),
                   TextButton(
-                    onPressed: () => AppNavigation.push(context, AppRoutes.support),
+                    onPressed: () =>
+                        AppNavigation.push(context, AppRoutes.support),
                     child: const Text('Support'),
                   ),
                 ],

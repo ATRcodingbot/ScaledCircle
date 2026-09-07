@@ -30,7 +30,7 @@ void main() {
     expect(screen, contains('Check & confirm'));
     expect(
       screen,
-      contains('Publishing, bulk email delivery, and ad changes remain off'),
+      contains('Existing approved schedules have separate execution controls'),
     );
     expect(screen, contains('30-Day Email Content'));
     expect(screen, contains('Ads — Read Only'));

@@ -9,6 +9,45 @@ import 'package:flutter_app/screens/public/public_landing_screen.dart';
 import 'package:flutter_app/screens/public/scaler_funnel_screen.dart';
 
 void main() {
+  testWidgets(
+    'homepage explains real work without sample outcomes on narrow phones',
+    (tester) async {
+      final reportError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        FlutterError.dumpErrorToConsole(details, forceReport: true);
+        reportError?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = reportError);
+      await tester.binding.setSurfaceSize(const Size(320, 740));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.6)),
+            child: child!,
+          ),
+          home: const PublicLandingScreen(),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('Put local marketing into motion.'), findsOneWidget);
+      expect(find.textContaining('422 homes'), findsNothing);
+      expect(find.textContaining('98% coverage'), findsNothing);
+      expect(find.textContaining('THIS WEEK'), findsNothing);
+      expect(
+        find.textContaining(
+          'Residential before-and-after photos are not required',
+        ),
+        findsOneWidget,
+      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -1800));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   Widget app({Widget? home}) => MaterialApp(
     home: home ?? const PublicLandingScreen(),
     routes: {
@@ -31,11 +70,11 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(app());
+    expect(find.text('Put local marketing into motion.'), findsOneWidget);
     expect(
-      find.text('Local marketing that actually gets executed.'),
+      find.textContaining('Choose the area. Set the work and pay.'),
       findsOneWidget,
     );
-    expect(find.textContaining('Plan practical territory'), findsOneWidget);
     expect(find.textContaining('Evidence you can review'), findsOneWidget);
     expect(find.text('VALIDATED SMART ZONE • DEMO'), findsOneWidget);
     expect(find.textContaining('Route not yet verified'), findsWidgets);

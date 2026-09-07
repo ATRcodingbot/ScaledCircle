@@ -75,11 +75,11 @@ void main() {
     final source = File(
       'lib/screens/public/public_landing_screen.dart',
     ).readAsStringSync();
-    expect(source, contains('PROPERTY OPPORTUNITY • EXAMPLE'));
-    expect(source, contains('WEATHER OPPORTUNITY • ILLUSTRATION'));
+    expect(source, contains('Property Intelligence — Beta'));
+    expect(source, contains('Weather Intelligence — Beta'));
     expect(
       source,
-      contains('Official weather facts remain separate from AI interpretation.'),
+      contains('These capabilities are still being tested and measured.'),
     );
   });
 }

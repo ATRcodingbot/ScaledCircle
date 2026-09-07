@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../config/app_environment.dart';
 import '../../../services/job_room_service.dart';
 import '../../../widgets/completion_evidence_panel.dart';
+import '../../../widgets/campaign_card_header.dart';
 
 import '../../../models/campaign/campaign_completion.dart';
 import '../../../services/campaign/campaign_service.dart';
@@ -27,10 +28,43 @@ class CompletionReviewScreen extends StatefulWidget {
 
 class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
   final CampaignService _campaignService = CampaignService();
+  late Future<CampaignCompletion?> _completionFuture;
 
   bool _processing = false;
   Map<String, dynamic>? _room;
   String? _evidenceError;
+  String get _scalerLabel {
+    final labels = _room?['participantLabels'];
+    if (labels is Map && labels['participants'] is List) {
+      for (final item in labels['participants'] as List) {
+        if (item is Map && item['uid'] == widget.scalerId) {
+          final name = item['displayName']?.toString().trim() ?? '';
+          if (name.isNotEmpty) return name;
+        }
+      }
+    }
+    final completions = _room?['completions'];
+    if (completions is List) {
+      for (final item in completions) {
+        if (item is Map && item['scalerId'] == widget.scalerId) {
+          final email = item['scalerEmail']?.toString().trim() ?? '';
+          if (email.isNotEmpty) return email;
+        }
+      }
+    }
+    return 'Assigned Scaler — name unavailable';
+  }
+
+  String get _campaignLabel {
+    final campaign = _room?['campaign'];
+    final name = campaign is Map
+        ? campaign['campaignName']?.toString().trim()
+        : null;
+    return name == null || name.isEmpty
+        ? 'Campaign name unavailable'
+        : campaignDisplayName(name);
+  }
+
   bool get _stagingReview =>
       AppEnvironmentConfig.isStaging && widget.zoneId != null;
   bool get _approvalHeld =>
@@ -43,12 +77,17 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
   @override
   void initState() {
     super.initState();
-    if (_stagingReview) _loadEvidence();
+    _completionFuture = _campaignService
+        .getCompletion(widget.completionId)
+        .timeout(const Duration(seconds: 25));
+    if (widget.zoneId != null) _loadEvidence();
   }
 
   Future<void> _loadEvidence() async {
     try {
-      final room = await const JobRoomService().load(widget.zoneId!);
+      final room = await const JobRoomService()
+          .load(widget.zoneId!)
+          .timeout(const Duration(seconds: 25));
       if (mounted) {
         setState(() {
           _room = room;
@@ -91,7 +130,11 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Unable to approve completion: $e")),
+        const SnackBar(
+          content: Text(
+            'Approval could not be confirmed. Reopen the Job Room to check its status before trying again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -198,11 +241,31 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
       appBar: AppBar(title: const Text("Completion Review")),
 
       body: FutureBuilder<CampaignCompletion?>(
-        future: _campaignService.getCompletion(widget.completionId),
+        future: _completionFuture,
 
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Completion details could not be loaded. No approval was submitted.',
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _completionFuture = _campaignService
+                          .getCompletion(widget.completionId)
+                          .timeout(const Duration(seconds: 25));
+                    }),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
           }
 
           final completion = snapshot.data;
@@ -233,7 +296,7 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.person),
                   title: const Text("Scaler"),
-                  subtitle: Text(widget.scalerId),
+                  subtitle: Text(_scalerLabel),
                 ),
               ),
 
@@ -241,9 +304,9 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.account_balance_wallet_outlined),
-                    title: Text('Authoritative approval'),
+                    title: Text('Review before payment'),
                     subtitle: Text(
-                      'Approval records exactly one Wallet earning from the immutable assignment compensation. Cash-out and provider transfer remain separate.',
+                      'Check the route, agreed pay, and payable amount below. Approval records the earning once; withdrawing money is a separate step.',
                     ),
                   ),
                 ),
@@ -251,7 +314,7 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.route),
-                  title: const Text("GPS Verification"),
+                  title: const Text('Recorded route evidence'),
                   subtitle: Text(
                     completion.hasGpsEvidence
                         ? "${completion.gpsPointCount} recorded route points"
@@ -273,7 +336,7 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.campaign),
                   title: const Text("Campaign"),
-                  subtitle: Text(widget.campaignId),
+                  subtitle: Text(_campaignLabel),
                 ),
               ),
 
@@ -281,7 +344,16 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.info),
                   title: const Text("Status"),
-                  subtitle: Text(completion.status.name),
+                  subtitle: Text(switch (completion.status) {
+                    CampaignCompletionStatus.submitted =>
+                      'Awaiting Business Review',
+                    CampaignCompletionStatus.approved => 'Approved',
+                    CampaignCompletionStatus.changesRequested =>
+                      'Changes requested',
+                    CampaignCompletionStatus.inProgress => 'Work in progress',
+                    CampaignCompletionStatus.rejected => 'Not approved',
+                    CampaignCompletionStatus.draft => 'Draft',
+                  }),
                 ),
               ),
 

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/attribution_service.dart';
 import '../../services/social_operations_service.dart';
+import '../../widgets/social_runtime_status_card.dart';
 
 class SocialOperationsScreen extends StatefulWidget {
   const SocialOperationsScreen({super.key});
@@ -910,6 +911,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           if (workspace.firstXCertificationAvailable)
             _section('First X publish candidate', _firstXPublishCard()),
           _section('30-Day Plan', _plans(workspace)),
+          SocialRuntimeStatusCard(
+            status: workspace.runtimeStatus,
+            onRefresh: _load,
+          ),
           _section('Content Health', _contentHealth(workspace)),
           _section("What's Working", _learning(workspace)),
           if (workspace.managedGrowth)
@@ -925,7 +930,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       leading: Icon(Icons.shield_outlined),
       title: Text('Read-only connection phase'),
       subtitle: Text(
-        'Account identity and available analytics may be connected. Publishing, bulk email delivery, and ad changes remain off.',
+        'Connections and analytics do not grant publication approval. Existing approved schedules have separate execution controls. Bulk email delivery and ad changes are not enabled here.',
       ),
     ),
   );

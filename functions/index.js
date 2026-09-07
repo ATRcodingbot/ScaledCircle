@@ -8471,6 +8471,7 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
   const response = {
     viewerRole: context.isAdmin ? "admin" :
       (context.uid === room.businessId ? "business" : "scaler"),
+    participantLabels: await require("./job_room_participant_labels").load(db, room, context),
     room: {...room, id: zoneId}, campaign: {...campaign, id: room.campaignId},
     zone: {...zone, id: zoneId}, handoff,
     compensation: participant ? {

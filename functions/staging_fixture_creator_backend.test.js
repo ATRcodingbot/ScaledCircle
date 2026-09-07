@@ -10,7 +10,7 @@ const app=initializeApp({projectId:'demo-fixture-creator'}),db=getFirestore(app)
 // Private committed geometry is supplied only to the local certification run.
 const packet=require(require('node:path').resolve(process.env.QA_GEOMETRY_TEST_FILE));
 let authUsers;
-const run=(actorUid='admin',data={},projectId=c.PROJECT,retest=false)=>c.createFixtureService({db,FieldValue,projectId,retest,
+const run=(actorUid='admin',data={},projectId=c.PROJECT,retest=false,finalRetest=false)=>c.createFixtureService({db,FieldValue,projectId,retest,finalRetest,
  auth:{getUser:async uid=>{if(!authUsers[uid])throw Error('missing');return authUsers[uid];}}})({actorUid,data});
 beforeEach(async()=>{
  for(const collection of await db.listCollections()) await db.recursiveDelete(collection);
@@ -77,3 +77,40 @@ for(const [label,change,error] of [
  ['partial existing fixture',()=>db.doc(`campaigns/${c.FIXTURES[0].campaignId}`).set({status:'draft'}),'fixture_conflict'],
  ])test(label+' fails closed with zero new shells',async()=>{await change();await assert.rejects(run(),new RegExp(error));assert.equal((await db.collection('campaignZones').get()).size,0);assert.equal((await db.collection('adminAuditEvents').get()).size,0);});
 test('compensation conflict cannot be overwritten',async()=>{await run();await db.doc(`campaignZones/${c.FIXTURES[0].zoneId}`).update({baseAmountCents:1});await assert.rejects(run(),/fixture_conflict/);assert.equal((await db.collection('adminAuditEvents').get()).size,2);});
+
+
+test('V3 concurrent creation is bounded, funds base plus accepted bonus, and preserves V1/V2',async()=>{
+ const p=require(require('node:path').resolve(process.env.QA_RETEST_GEOMETRY_TEST_FILE));
+ await run();
+ await db.doc(`internalCertificationGeometry/${p.version}`).set(p);
+ const v2=await run('admin',{},c.PROJECT,true);
+ const oldIds=[...c.FIXTURES,...v2.fixtures];
+ const snapshot=()=>Promise.all(oldIds.map(async f=>({campaign:(await db.doc(`campaigns/${f.campaignId}`).get()).data(),zone:(await db.doc(`campaignZones/${f.zoneId}`).get()).data()})));
+ const before=await snapshot();
+ const results=await Promise.all([run('admin',{},c.PROJECT,false,true),run('admin',{},c.PROJECT,false,true)]);
+ assert.equal(results.filter(r=>!r.replayed).length,1);
+ const result=results[0];
+ assert.deepEqual(result.fixtures.map(f=>f.campaignId),['ios_physical_qa_v3','android_physical_qa_v3']);
+ for(const [i,f] of result.fixtures.entries()){
+  const campaign=(await db.doc(`campaigns/${f.campaignId}`).get()).data();
+  const zone=(await db.doc(`campaignZones/${f.zoneId}`).get()).data();
+  assert.equal(f.scalerUid,c.FIXTURES[i].scalerUid);
+  assert.equal(f.zoneId,c.FIXTURES[i].zoneId.replace('_v1','_v3'));
+  assert.equal(campaign.status,'draft');assert.equal(campaign.fundingStatus,'unfunded');
+  assert.equal(campaign.workerAmountCents,1800);assert.equal(campaign.basePay,15);assert.equal(campaign.bonus,3);
+  assert.equal(campaign.requiredTestFundingCents,2160);assert.equal(campaign.certificationContract.platformFeeCents,360);
+  assert.equal(zone.baseAmountCents,1500);assert.equal(zone.bonusAmountCents,300);
+  assert.equal(zone.assignedScalerId,null);assert.equal(zone.status,'unassigned');
+  assert.equal(zone.executionRoute.corridorHash,p.geometryHash);
+  const projection=require('./operational_layer').publicCampaignDocument(f.campaignId,campaign);
+  assert.equal(projection.campaignType,'neighborhoodCanvassing');
+  assert.match(campaign.name,/Physical Certification.*Retest V3/);
+  assert.equal((await db.doc(`adminAuditEvents/${f.auditId}`).get()).data().actionVersion,'DualMobileRetestV3');
+ }
+ assert.equal((await db.collection('campaignZones').get()).size,6);
+ assert.equal((await db.collection('adminAuditEvents').get()).size,6);
+ assert.deepEqual(await snapshot(),before);
+ for(const n of ['walletTransactions','scalerEarnings','campaignPayments','assignmentCompensations','notifications'])assert.equal((await db.collection(n).get()).size,0);
+ await db.doc('campaignZones/ios_physical_qa_zone_v3').update({bonusAmountCents:301});
+ await assert.rejects(run('admin',{},c.PROJECT,false,true),/fixture_conflict/);
+});

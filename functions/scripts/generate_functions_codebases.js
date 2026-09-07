@@ -361,6 +361,7 @@ function copyPackage(destination, mode) {
           "subscription_entitlements.js"].includes(name)) continue;
     if (mode === "job-room" && name.endsWith(".js") &&
         !["marketplace_finance.js", "marketplace_operations.js", "operational_layer.js",
+          "job_room_participant_labels.js",
           "group_assignment.js", "campaign_funding_quote.js",
           "multi_scaler_rollout.js", "tracking_security.js"].includes(name)) continue;
     if (mode === "completion" && name.endsWith(".js") &&

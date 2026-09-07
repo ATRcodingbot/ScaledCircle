@@ -30,8 +30,8 @@ test("QA suppresses broad notification fan-out; ordinary jobs remain unchanged",
   assert.equal(qa.reserved("ordinary", "ordinary-zone"), false);
 });
 
-test('exactly two reserved fixtures deny cross-access and cross-assignment',()=>{
- assert.equal(qa.FIXTURES.length,4);
+test('exactly three pairs of reserved fixtures deny cross-access and cross-assignment',()=>{
+ assert.equal(qa.FIXTURES.length,6);
  for(const f of qa.FIXTURES){const own={...authority,...f,scalerUid:f.purpose};
   const args={projectId:'scaledcircle-staging',authority:own,campaignId:f.campaignId,zoneId:f.zoneId};
   assert.equal(qa.assertAccess({...args,uid:f.purpose}).scalerUid,f.purpose);

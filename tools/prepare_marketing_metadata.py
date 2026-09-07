@@ -6,8 +6,8 @@ from pathlib import Path
 import re
 
 ROUTES = {
-    '/': ('ScaledCircle: Local Marketing and Verified Field Work',
-          'Plan local marketing and review verified field work. Explore ScaledCircle for Maryland businesses and local Scalers.'),
+    '/': ('ScaledCircle: Put Local Marketing into Motion',
+          'Choose an area, set the work and pay, and review tracked routes before approving completed local campaigns.'),
     '/businesses': ('Local Business Campaigns in Maryland — ScaledCircle',
                     'Plan local campaigns, coordinate Scalers, and review completion evidence for your Maryland business.'),
     '/scalers': ('Scaler Field Work in Maryland — ScaledCircle',

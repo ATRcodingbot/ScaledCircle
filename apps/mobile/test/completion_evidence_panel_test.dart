@@ -73,10 +73,14 @@ void main() {
                       'baseAmountCents': 1500,
                       'baseEligibility': 'Eligible',
                       'payableAmountCents': value,
+                      'acceptedBonusAmountCents': 300,
+                      'bonusStatus': value == 1800
+                          ? 'Earned - held for approval'
+                          : 'Not Earned',
                     },
                     'estimate': {
                       'state': 'available',
-                      'coveragePercentage': 95.0,
+                      'coveragePercentage': value == 1800 ? 95.0 : 84.0,
                     },
                   },
                 ),
@@ -87,6 +91,15 @@ void main() {
         expect(
           find.text(
             'Held payable amount before approval: \$${(value / 100).toStringAsFixed(2)}',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Accepted coverage bonus: \$3.00'), findsOneWidget);
+        expect(
+          find.text(
+            value == 1800
+                ? 'Bonus: Earned - held for approval'
+                : 'Bonus: Not Earned',
           ),
           findsOneWidget,
         );

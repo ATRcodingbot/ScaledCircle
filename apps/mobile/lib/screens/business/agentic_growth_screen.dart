@@ -33,14 +33,17 @@ class _AgenticGrowthScreenState extends State<AgenticGrowthScreen> {
       _error = null;
     });
     try {
-      final workspace = await _service.load();
+      final workspace = await _service.load().timeout(
+        const Duration(seconds: 25),
+      );
       if (mounted) {
         setState(() => _workspace = workspace);
       }
-    } on FirebaseFunctionsException catch (error) {
+    } on FirebaseFunctionsException catch (_) {
       if (mounted) {
         setState(
-          () => _error = error.message ?? 'Unable to load your AI Team.',
+          () => _error =
+              'Unable to load your AI Team. Retry to check its saved state.',
         );
       }
     } catch (_) {
@@ -173,7 +176,7 @@ class _AgenticGrowthScreenState extends State<AgenticGrowthScreen> {
             leading: const Icon(Icons.shield_outlined),
             title: const Text('External actions'),
             subtitle: const Text(
-              'Posts, messages, calls, bookings, and ads cannot run.',
+              'This AI Team review does not publish, send messages, or spend money. Separately approved Social schedules keep their own controls.',
             ),
             trailing: const Chip(label: Text('Off')),
           ),
@@ -183,10 +186,16 @@ class _AgenticGrowthScreenState extends State<AgenticGrowthScreen> {
         const SizedBox(height: 8),
         ...workspace.agents.map(
           (agent) => Card(
-            child: ListTile(
+            child: ExpansionTile(
               leading: const Icon(Icons.auto_awesome_outlined),
               title: Text(agent['name']?.toString() ?? 'AI teammate'),
-              subtitle: Text(agent['state']?.toString() ?? 'Off'),
+              subtitle: Text(workspace.activitySummary(agent).split('\n')[1]),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Text(workspace.activitySummary(agent)),
+                ),
+              ],
             ),
           ),
         ),
@@ -248,11 +257,10 @@ class _AgenticGrowthScreenState extends State<AgenticGrowthScreen> {
                   '${item['recommendation'] ?? 'Review'} · ${item['platform'] ?? 'Social'}',
                 ),
                 subtitle: Text(
-                  'Item ${item['contentItemId'] ?? 'Unavailable'} · Version ${item['versionId'] ?? 'Unavailable'}\n'
-                  'Quality ${item['qualityScore'] ?? 'Unavailable'} · Performance ${item['performanceEvidenceState'] ?? 'UNAVAILABLE'} · Timing ${item['timingConfidence'] ?? 'LOW'}\n'
+                  'Creative quality: ${item['qualityScore'] ?? 'Not scored'}\n'
                   '${item['reason'] ?? 'Review the supporting evidence.'}\n'
                   '${item['discoveryNotes'] ?? 'No discovery evidence.'} ${item['hashtagNotes'] ?? ''}\n'
-                  'Repetition ${item['repetitionRisk'] ?? 'NOT_FLAGGED'}',
+                  'Review the content and supporting evidence before approving.',
                 ),
                 trailing: item['founderActionNeeded'] == true
                     ? const Chip(label: Text('Needs review'))

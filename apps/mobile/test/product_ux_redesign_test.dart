@@ -25,28 +25,32 @@ void main() {
     ).readAsStringSync();
   });
 
-  test('homepage follows the outcome-led product hierarchy', () {
-    final headings = [
-      'Local marketing that actually gets executed.',
-      'HOW SCALEDCIRCLE WORKS',
-      'FOR BUSINESSES',
-      'MANAGED GROWTH',
-      'VERIFIED FIELD CAMPAIGNS',
-      'FOR SCALERS',
-      'SIMPLE PRICING',
-      'READY TO GROW LOCALLY?',
-    ];
-    var previous = -1;
-    for (final heading in headings) {
-      final current = homepage.indexOf(heading);
-      expect(
-        current,
-        greaterThan(previous),
-        reason: '$heading must appear in order',
-      );
-      previous = current;
-    }
-  });
+  testWidgets(
+    'homepage follows the actual field-work journey before growth tools',
+    (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: PublicLandingScreen()));
+      final headings = [
+        'Put local marketing into motion.',
+        'HOW SCALEDCIRCLE WORKS',
+        'A PRACTICAL EXAMPLE',
+        'EVIDENCE YOU CAN REVIEW',
+        'FOR SCALERS',
+        'GROWTH TOOLS — BETA',
+        'SIMPLE PRICING',
+        'READY TO GROW LOCALLY?',
+      ];
+      var previous = -1.0;
+      for (final heading in headings) {
+        final current = tester.getTopLeft(find.text(heading)).dy;
+        expect(
+          current,
+          greaterThan(previous),
+          reason: '$heading must appear in order',
+        );
+        previous = current;
+      }
+    },
+  );
 
   test(
     'Business and Scaler primary actions have consistent semantic colors',
@@ -60,11 +64,11 @@ void main() {
   );
 
   test('public examples are honest and confusing launch copy is removed', () {
-    expect(homepage, contains('PROPERTY OPPORTUNITY • EXAMPLE'));
-    expect(homepage, contains('WEATHER OPPORTUNITY • ILLUSTRATION'));
+    expect(homepage, isNot(contains('422 homes analyzed')));
+    expect(homepage, isNot(contains('98% coverage')));
     expect(
       homepage,
-      contains('You review it before anything is published or launched.'),
+      contains('Publishing and paid actions require the appropriate approval.'),
     );
     expect(homepage, isNot(contains('test credits')));
     expect(homepage, isNot(contains('Business Early Access')));
@@ -123,7 +127,7 @@ void main() {
 
   test('responsive and accessibility primitives remain present', () {
     expect(homepage, contains('LayoutBuilder'));
-    expect(homepage, contains('Semantics'));
+    expect(homepage, contains('SelectionArea'));
     expect(dashboard, contains('Semantics('));
     expect(dashboard, contains('BoxConstraints(minHeight: 170)'));
     expect(property, contains('viewport.maxWidth >= 760'));

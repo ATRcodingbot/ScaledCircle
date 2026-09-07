@@ -29,6 +29,24 @@ class ScalerDashboardScreen extends StatelessWidget {
           .doc(userId)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Work preferences could not be loaded. Reopen Profile to retry; your saved preferences have not been changed.',
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Checking your saved work preferences…'),
+            ),
+          );
+        }
         final complete =
             snapshot.data?.data()?['initialSetupCompletedAt'] != null;
         void openPreferences() {
@@ -102,7 +120,10 @@ class ScalerDashboardScreen extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data() ?? <String, dynamic>{};
-        final pending = (data['pendingBalance'] as num?)?.toDouble() ?? 0.0;
+        final walletAvailable = snapshot.hasData && !snapshot.hasError;
+        final pending = walletAvailable
+            ? (data['pendingBalance'] as num?)?.toDouble() ?? 0.0
+            : null;
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
@@ -189,11 +210,13 @@ class ScalerDashboardScreen extends StatelessWidget {
                         final metrics = [
                           _earningMetric(
                             'Available',
-                            ScalerEarningsSummary.displayAvailable(
-                              data,
-                              testEnvironment:
-                                  !AppEnvironmentConfig.isProduction,
-                            ),
+                            walletAvailable
+                                ? ScalerEarningsSummary.displayAvailable(
+                                    data,
+                                    testEnvironment:
+                                        !AppEnvironmentConfig.isProduction,
+                                  )
+                                : null,
                             emphasize: true,
                           ),
                           _earningMetric('Pending', pending),
@@ -222,7 +245,9 @@ class ScalerDashboardScreen extends StatelessWidget {
                     ),
                   const SizedBox(height: 8),
                   Text(
-                    earningsSnapshot.hasError
+                    snapshot.hasError
+                        ? 'Wallet totals could not be loaded. Open your Wallet to retry.'
+                        : earningsSnapshot.hasError
                         ? 'Monthly earnings are temporarily unavailable.'
                         : 'This Month uses UTC calendar dates.',
                     style: const TextStyle(
@@ -469,8 +494,9 @@ class ScalerDashboardScreen extends StatelessWidget {
                     _navigationCard(
                       context: context,
                       icon: Icons.play_circle_outline,
-                      title: 'Current Campaigns',
-                      subtitle: 'Open assigned and running campaign work.',
+                      title: 'My Work',
+                      subtitle:
+                          'Open assignments, active work, and submissions awaiting review.',
                       accent: AppColors.primary,
                       onTap: () {
                         Navigator.push(
@@ -485,7 +511,7 @@ class ScalerDashboardScreen extends StatelessWidget {
                     _navigationCard(
                       context: context,
                       icon: Icons.map_outlined,
-                      title: 'Campaign Marketplace',
+                      title: 'Find Work',
                       subtitle: 'Find available campaigns near you.',
                       onTap: () {
                         Navigator.push(
@@ -498,22 +524,8 @@ class ScalerDashboardScreen extends StatelessWidget {
                     ),
                     _navigationCard(
                       context: context,
-                      icon: Icons.assignment_outlined,
-                      title: 'Applied Campaigns',
-                      subtitle: 'Track pending campaign applications.',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ScalerAppliedCampaignsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _navigationCard(
-                      context: context,
                       icon: Icons.account_balance_wallet_outlined,
-                      title: 'Wallet',
+                      title: 'Earnings',
                       subtitle:
                           'View verified work earnings. Cash-out is not yet available.',
                       accent: AppColors.primary,
@@ -528,24 +540,8 @@ class ScalerDashboardScreen extends StatelessWidget {
                     ),
                     _navigationCard(
                       context: context,
-                      icon: Icons.handshake_outlined,
-                      title: 'Referral Program — Coming Soon',
-                      subtitle:
-                          'Business and Scaler referrals are being prepared.',
-                      accent: AppColors.blue,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ScalerAffiliateScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _navigationCard(
-                      context: context,
                       icon: Icons.person_outline,
-                      title: 'My Profile',
+                      title: 'Profile',
                       subtitle: 'Manage your profile and reputation.',
                       onTap: () {
                         Navigator.push(
@@ -583,6 +579,31 @@ class ScalerDashboardScreen extends StatelessWidget {
                         .toList(),
                   );
                 },
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ScalerAppliedCampaignsScreen(),
+                      ),
+                    ),
+                    child: const Text('View applications'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ScalerAffiliateScreen(),
+                      ),
+                    ),
+                    child: const Text('Referral Program — Coming Soon'),
+                  ),
+                ],
               ),
             ],
           );

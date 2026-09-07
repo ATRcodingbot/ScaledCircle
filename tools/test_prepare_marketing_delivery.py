@@ -60,6 +60,10 @@ for(const ref of ['abc234','invalid-secret-value','']) {
         self.assertIn('Create Business Account', home)
         self.assertIn('Social Manager — Beta', home)
         self.assertIn('Printing — Coming Soon', home)
+        self.assertIn('A flyer campaign for a local contractor.', home)
+        self.assertIn('Know the work and pay before you apply.', home)
+        self.assertIn('<h2>Pricing</h2>', home)
+        self.assertNotIn('422 homes analyzed', home)
         self.assertNotIn('checkout', home.split('<script>')[1])
         self.assertNotIn('noindex,nofollow', documents()['/'])
 

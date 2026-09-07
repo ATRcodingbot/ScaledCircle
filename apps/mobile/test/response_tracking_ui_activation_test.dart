@@ -13,6 +13,9 @@ void main() {
     final dashboard = File(
       'lib/screens/business/business_dashboard.dart',
     ).readAsStringSync();
+    final growthTools = File(
+      'lib/screens/business/scaled_circle_services_screen.dart',
+    ).readAsStringSync();
     final builder = File(
       'lib/screens/business/create_campaign_screen.dart',
     ).readAsStringSync();
@@ -32,7 +35,7 @@ void main() {
     );
     expect(builder, contains('AppRoutes.businessAttribution'));
     expect(dashboard, isNot(contains('BusinessAttributionScreen()')));
-    for (final source in [dashboard, attribution, builder, flyer]) {
+    for (final source in [growthTools, attribution, builder, flyer]) {
       expect(source, contains('AppEnvironmentConfig.responseTrackingEnabled'));
     }
     final environment = File(

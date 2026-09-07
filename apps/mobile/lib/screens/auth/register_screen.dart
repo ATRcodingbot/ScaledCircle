@@ -91,8 +91,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         affiliateReferralCode: _role == UserRole.business
             ? _affiliateReferralCode
             : null,
-        affiliateCapturedAtMillis: _role == UserRole.business &&
-                _affiliateReferralCode != null
+        affiliateCapturedAtMillis:
+            _role == UserRole.business && _affiliateReferralCode != null
             ? _affiliateCapturedAtMillis
             : null,
       );
@@ -135,8 +135,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } on FirebaseAuthException catch (error) {
       _showError(_authMessage(error));
-    } catch (error) {
-      _showError(error.toString().replaceFirst('Exception: ', ''));
+    } catch (_) {
+      _showError(
+        'Setup did not finish. If your account was already created, sign in to continue. Otherwise retry. Contact support if this continues.',
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -351,7 +353,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     value: _acceptedLegal,
                     onChanged: _loading
                         ? null
-                        : (value) => setState(() => _acceptedLegal = value ?? false),
+                        : (value) =>
+                              setState(() => _acceptedLegal = value ?? false),
                     title: Text(
                       _role == UserRole.business
                           ? 'I confirm I am at least 18 and authorized to act for this Business. I agree to the Terms and acknowledge the Privacy Policy.'
@@ -361,16 +364,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       spacing: 4,
                       children: [
                         TextButton(
-                          onPressed: () => AppNavigation.push(context, AppRoutes.terms),
+                          onPressed: () =>
+                              AppNavigation.push(context, AppRoutes.terms),
                           child: const Text('Read Terms'),
                         ),
                         TextButton(
-                          onPressed: () => AppNavigation.push(context, AppRoutes.privacy),
+                          onPressed: () =>
+                              AppNavigation.push(context, AppRoutes.privacy),
                           child: const Text('Read Privacy Policy'),
                         ),
                         if (_role == UserRole.scaler)
                           TextButton(
-                            onPressed: () => AppNavigation.push(context, AppRoutes.scalerTerms),
+                            onPressed: () => AppNavigation.push(
+                              context,
+                              AppRoutes.scalerTerms,
+                            ),
                             child: const Text('Scaler Work & Earnings'),
                           ),
                       ],

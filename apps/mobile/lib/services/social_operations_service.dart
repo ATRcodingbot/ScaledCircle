@@ -14,6 +14,8 @@ class SocialOperationsWorkspace {
   List<Map<String, dynamic>> get ads => _maps(data['ads']);
   Map<String, dynamic> get contentHealth =>
       Map<String, dynamic>.from(data['contentHealth'] as Map? ?? const {});
+  Map<String, dynamic> get runtimeStatus =>
+      Map<String, dynamic>.from(data['runtimeStatus'] as Map? ?? const {});
   Map<String, dynamic> get learning =>
       Map<String, dynamic>.from(data['weeklyLearning'] as Map? ?? const {});
   Map<String, dynamic>? get internalPlanAlignment =>

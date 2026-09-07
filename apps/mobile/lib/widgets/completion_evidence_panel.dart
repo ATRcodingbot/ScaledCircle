@@ -61,6 +61,10 @@ class CompletionEvidencePanel extends StatelessWidget {
           'Minimum for base eligibility: 80%. Bonus threshold: 95%. Aim for 100%.',
         ),
         Text('Accepted base compensation: ${money(policy['baseAmountCents'])}'),
+        if (policy['acceptedBonusAmountCents'] != null)
+          Text(
+            'Accepted coverage bonus: ${money(policy['acceptedBonusAmountCents'])}',
+          ),
         Text('Base eligibility: ${policy['baseEligibility'] ?? 'HELD'}'),
         if (policy['baseProtected'] == true)
           Text(

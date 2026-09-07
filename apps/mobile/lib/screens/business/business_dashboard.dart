@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../../config/app_environment.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 
@@ -142,7 +141,7 @@ class _GoalCard extends StatelessWidget {
                   description,
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),
-                const Spacer(),
+                const SizedBox(height: 12),
                 if (onTap != null)
                   const Align(
                     alignment: Alignment.centerRight,
@@ -173,10 +172,13 @@ class _BusinessToday extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'THIS WEEK',
+            'Business Assistant — Beta',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
+          const Text(
+            'Based on your current campaign records. No automated action has been taken.',
+          ),
           if (needsReview > 0)
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -185,7 +187,7 @@ class _BusinessToday extends StatelessWidget {
                 color: AppColors.warning,
               ),
               title: Text(
-                '$needsReview campaign${needsReview == 1 ? '' : 's'} need your review',
+                '$needsReview submitted zone${needsReview == 1 ? '' : 's'} need your review',
               ),
             ),
           if (activeCampaigns > 0)
@@ -627,34 +629,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             icon: const Icon(Icons.menu),
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'home', child: Text('Home')),
-              const PopupMenuItem(value: 'grow', child: Text('Grow')),
+              const PopupMenuItem(value: 'grow', child: Text('Growth')),
               const PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
               const PopupMenuItem(value: 'results', child: Text('Results')),
-              const PopupMenuItem(
-                value: 'landing_pages',
-                child: Text('Landing Pages — Beta'),
-              ),
-              const PopupMenuItem(
-                value: 'brand_assets',
-                child: Text('Brand Assets — Beta'),
-              ),
-              const PopupMenuItem(
-                value: 'physical_marketing',
-                child: Text('Physical Marketing — Beta'),
-              ),
-              const PopupMenuItem(
-                value: 'tracking_phone',
-                child: Text('Tracking Numbers — Beta'),
-              ),
-              PopupMenuItem(
-                value: 'responses',
-                enabled: AppEnvironmentConfig.responseTrackingEnabled,
-                child: Text(
-                  AppEnvironmentConfig.responseTrackingEnabled
-                      ? 'Response tracking — Beta'
-                      : 'Response tracking — Coming Soon',
-                ),
-              ),
               const PopupMenuItem(value: 'account', child: Text('Account')),
               const PopupMenuItem(value: 'support', child: Text('Support')),
             ],
@@ -677,7 +654,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               } else if (value == 'brand_assets') {
                 AppNavigation.push(context, AppRoutes.businessBrandAssets);
               } else if (value == 'physical_marketing') {
-                AppNavigation.push(context, AppRoutes.businessPhysicalMarketing);
+                AppNavigation.push(
+                  context,
+                  AppRoutes.businessPhysicalMarketing,
+                );
               } else if (value == 'tracking_phone') {
                 AppNavigation.push(context, AppRoutes.businessTrackingPhone);
               } else if (value == 'account') {
@@ -763,7 +743,16 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
-                children: [Center(child: Text(snapshot.error.toString()))],
+                children: [
+                  const Text(
+                    'We could not load your campaigns. Pull down to retry, or use Retry below.',
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: _refreshDashboard,
+                    child: const Text('Retry'),
+                  ),
+                ],
               );
             }
 
@@ -838,19 +827,27 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   children: [
                     DashboardHero(
                       eyebrow: 'BUSINESS HOME',
-                      title: 'Good morning. What do you want to accomplish?',
+                      title: awaitingReviewCount > 0
+                          ? 'Your work is ready for review.'
+                          : campaigns.isEmpty
+                          ? 'Create your first local campaign.'
+                          : 'Keep your campaigns moving.',
                       description:
-                          'Choose a goal. ScaledCircle will take you to the right tools without making you sort through every feature.',
-                      primaryActionLabel: 'Find an Opportunity',
-                      primaryActionIcon: Icons.travel_explore_outlined,
+                          'Choose the area, define the work and pay, then review the tracked evidence when work is submitted.',
+                      primaryActionLabel: awaitingReviewCount > 0
+                          ? 'Review Submitted Work'
+                          : campaigns.isEmpty
+                          ? 'Create Campaign'
+                          : 'Open Campaigns',
+                      primaryActionIcon: Icons.campaign_outlined,
                       onPrimaryAction: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const PropertyIntelligenceCenterScreen(),
-                          ),
-                        );
+                        if (awaitingReviewCount > 0) {
+                          _openCampaigns(context, user.uid, results: true);
+                        } else if (campaigns.isEmpty) {
+                          _openCreateCampaign(context, user.uid);
+                        } else {
+                          _openCampaigns(context, user.uid);
+                        }
                       },
                       metrics: [
                         DashboardPill(
@@ -869,40 +866,50 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         ),
                         const DashboardPill(
                           icon: Icons.gps_fixed,
-                          label: 'GPS verification ready',
+                          label: 'Automatic route evidence',
                           accent: AppColors.primary,
                         ),
                       ],
                     ),
                     const SizedBox(height: 22),
 
-                    _BusinessGoalGrid(
-                      onFindOpportunity: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const PropertyIntelligenceCenterScreen(),
-                        ),
+                    ExpansionTile(
+                      title: const Text('Planning and growth tools'),
+                      subtitle: const Text(
+                        'Optional help with your next campaign',
                       ),
-                      onCreateMarketing: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ManagedGrowthScreen(),
-                        ),
-                      ),
-                      onLaunchCampaign: () =>
-                          _openCreateCampaign(context, user.uid),
-                      onReviewResults: () {
-                        if (reviewCampaigns.length == 1) {
-                          AppNavigation.push(
+                      children: [
+                        _BusinessGoalGrid(
+                          onFindOpportunity: () => Navigator.push(
                             context,
-                            AppRoutes.campaignDetail(reviewCampaigns.single.id),
-                          );
-                          return;
-                        }
-                        _openCampaigns(context, user.uid, results: true);
-                      },
-                      hasResults: resultSummary.hasResults,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const PropertyIntelligenceCenterScreen(),
+                            ),
+                          ),
+                          onCreateMarketing: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ManagedGrowthScreen(),
+                            ),
+                          ),
+                          onLaunchCampaign: () =>
+                              _openCreateCampaign(context, user.uid),
+                          onReviewResults: () {
+                            if (reviewCampaigns.length == 1) {
+                              AppNavigation.push(
+                                context,
+                                AppRoutes.campaignDetail(
+                                  reviewCampaigns.single.id,
+                                ),
+                              );
+                              return;
+                            }
+                            _openCampaigns(context, user.uid, results: true);
+                          },
+                          hasResults: resultSummary.hasResults,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 24),
 
@@ -916,10 +923,14 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
                     _buildBusinessPaymentsSection(),
                     const SizedBox(height: 16),
-                    _buildPropertyIntelligenceCard(user.uid),
-                    _buildManagedGrowthCard(user.uid),
-                    const SizedBox(height: 16),
-                    _buildWeatherSection(),
+                    ExpansionTile(
+                      title: const Text('Explore growth insights — Beta'),
+                      children: [
+                        _buildPropertyIntelligenceCard(user.uid),
+                        _buildManagedGrowthCard(user.uid),
+                        _buildWeatherSection(),
+                      ],
+                    ),
                     const SizedBox(height: 16),
                     Card(
                       child: ListTile(
@@ -1088,7 +1099,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(20),
-                          child: Text('No campaigns yet.'),
+                          child: Text(
+                            'No campaigns yet. Create your first campaign to choose the area, work, and pay.',
+                          ),
                         ),
                       ),
 

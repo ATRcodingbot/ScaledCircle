@@ -5,6 +5,12 @@ const {getAuth}=require('firebase-admin/auth');
 const {onCall,HttpsError}=require('firebase-functions/v2/https');
 const {createApprovalService}=require('./scaler_approval');
 initializeApp();
+exports.createStagingDualMobileQaRetestV3=onCall({region:'us-east1',enforceAppCheck:false,maxInstances:1},async request=>{
+ if(!request.auth)throw new HttpsError('unauthenticated','Sign in as a staging administrator.');
+ try {return await require('./fixture_creator').createFixtureService({db:getFirestore(),auth:getAuth(),FieldValue,
+   projectId:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,finalRetest:true})({actorUid:request.auth.uid,data:request.data});}
+ catch(error){throw new HttpsError('failed-precondition','Retest preparation failed eligibility or immutable-binding checks. Inspect state before retry.');}
+});
 exports.createStagingDualMobileQaRetestV2=onCall({region:'us-east1',enforceAppCheck:false,maxInstances:1},async request=>{
  if(!request.auth)throw new HttpsError('unauthenticated','Sign in as a staging administrator.');
  try {return await require('./fixture_creator').createFixtureService({db:getFirestore(),auth:getAuth(),FieldValue,

@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const {AGREEMENTS} = require('./scaler_approval');
 const geometry = require('./fixture_geometry');
+const {quoteCampaignFunding} = require('./campaign_funding_quote');
 const PROJECT = 'scaledcircle-staging';
 const VERSION = 'DualMobileFixtureV1';
 const GEOMETRY_VERSION = 'dual_mobile_v1';
@@ -31,11 +32,16 @@ function validateGeometry(packet) {
     estimate.estimatedWalkingMinutes<=0 || estimate.estimatedWalkingMinutes>360) fail('geometry_mismatch');
   return estimate;
 }
-function createFixtureService({db,auth,FieldValue,projectId,retest=false}) {
-  const fixtures=retest?FIXTURES.map(f=>({...f,campaignId:f.campaignId.replace('_v1','_v2'),zoneId:f.zoneId.replace('_v1','_v2')})):FIXTURES;
+function createFixtureService({db,auth,FieldValue,projectId,retest=false,finalRetest=false}) {
+  if (retest && finalRetest) fail('unsupported_fixture_version');
+  const version=finalRetest?3:retest?2:1;
+  retest=version>1;
+  const bonusCents=finalRetest?300:0;
+  const quote=quoteCampaignFunding(1500+bonusCents);
+  const fixtures=retest?FIXTURES.map(f=>({...f,campaignId:f.campaignId.replace('_v1',`_v${version}`),zoneId:f.zoneId.replace('_v1',`_v${version}`)})):FIXTURES;
   const geometryVersion=retest?'dual_mobile_kenilworth_v2':GEOMETRY_VERSION;
   const geometryHash=retest?'0b3ac6c4545771f6a4d9e0b0c393243b84a6223dfc51a85c699a2edd2a5ecb93':GEOMETRY_HASH;
-  const bind=f=>({...binding(f),...(retest?{actionVersion:'DualMobileRetestV2',geometryVersion,geometryHash}: {})});
+  const bind=f=>({...binding(f),...(retest?{actionVersion:`DualMobileRetestV${version}`,geometryVersion,geometryHash}: {}),...(finalRetest?{acceptedBonusCents:bonusCents,workerReserveCents:quote.workerAmountCents,platformFeeCents:quote.platformFeeCents,requiredTestFundingCents:quote.businessChargeCents}: {})});
   return async function create({actorUid,data={}}) {
     if(projectId!==PROJECT) fail('staging_only');
     if(!actorUid) fail('admin_required');
@@ -112,8 +118,9 @@ function createFixtureService({db,auth,FieldValue,projectId,retest=false}) {
           campaign.businessId!==BUSINESS || zone.businessId!==BUSINESS || zone.campaignId!==f.campaignId ||
           campaign.certificationScalerUid!==f.scalerUid || zone.certificationScalerUid!==f.scalerUid ||
           hash(campaign.certificationContract)!==hash(b) || hash(zone.certificationContract)!==hash(b) ||
-          campaign.workerAmountCents!==1500 || campaign.basePay!==15 || zone.baseAmountCents!==1500 ||
-          campaign.bonus!==0 || zone.bonusAmountCents!==0 || hash(zone.serviceArea)!==geometryHash ||
+          campaign.workerAmountCents!==quote.workerAmountCents || campaign.basePay!==15 || zone.baseAmountCents!==1500 ||
+          campaign.bonus!==bonusCents/100 || zone.bonusAmountCents!==bonusCents || hash(zone.serviceArea)!==geometryHash ||
+          (finalRetest && (campaign.workerBudget!==18 || campaign.qualityBonus!==3 || campaign.requiredTestFundingCents!==2160)) ||
           (retest && hash(zone.executionRoute)!==hash(executionRoute))) fail('fixture_conflict');
         return {f,b,digest,exists:true};
       });
@@ -126,25 +133,26 @@ function createFixtureService({db,auth,FieldValue,projectId,retest=false}) {
             projectId:PROJECT,immutable:true,certificationFixture:true,businessUid:BUSINESS,
             scalerUid:f.scalerUid,campaignId:f.campaignId,zoneId:f.zoneId,createdAt:at});
         }
+        const displayName=finalRetest?`${f.purpose.startsWith('IOS')?'iOS':'Android'} Physical Certification — Retest V3`:f.purpose;
         const common={businessId:BUSINESS,certificationFixture:true,isTestCampaign:true,
           certificationAuthorityId:f.campaignId,certificationScalerUid:f.scalerUid,
           certificationBusinessUid:BUSINESS,certificationPurpose:f.purpose,
           certificationContract:b,certificationBindingDigest:digest,
           geometryVersion,geometryHash,environment:'staging',
           createdAt:at,updatedAt:at};
-        tx.create(db.doc(`campaigns/${f.campaignId}`),{...common,name:f.purpose,campaignName:f.purpose,
+        tx.create(db.doc(`campaigns/${f.campaignId}`),{...common,name:displayName,campaignName:displayName,
           description:'Internal staging physical-device certification. No marketing activity.',
           status:'draft',fundingStatus:'unfunded',archived:false,type:'neighborhoodCanvassing',
-          workerAmountCents:1500,workerBudget:15,basePay:15,bonus:0,qualityBonus:0,
-          requiredTestFundingCents:1800,scalersNeeded:1,zoneCount:1,applicationCount:0,
+          workerAmountCents:quote.workerAmountCents,workerBudget:quote.workerAmountCents/100,basePay:15,bonus:bonusCents/100,qualityBonus:bonusCents/100,
+          requiredTestFundingCents:quote.businessChargeCents,scalersNeeded:1,zoneCount:1,applicationCount:0,
           materialFulfillmentType:'no_materials_required',timeZone:'America/New_York',
           workWindowStart:'00:00',workWindowEnd:'23:59'});
         tx.create(db.doc(`campaignZones/${f.zoneId}`),{...common,campaignId:f.campaignId,
-          zoneName:f.purpose,status:'unassigned',assignedScalerId:null,mapped:true,mapLocked:true,
+          zoneName:displayName,status:'unassigned',assignedScalerId:null,mapped:true,mapLocked:true,
           serviceArea:packet.geometry,serviceAreaType:'basic_area_estimate',serviceAreaPointCount:packet.geometry.length,
           ...(executionRoute?{executionRoute}:{}),
           estimatedHomes:23,homeCountStatus:'estimated',homeCountMethod:'certified_qa_planning_estimate',
-          homeCountConfidence:'low',analysisStatus:'complete',baseAmountCents:1500,bonusAmountCents:0,
+          homeCountConfidence:'low',analysisStatus:'complete',baseAmountCents:1500,bonusAmountCents:bonusCents,
           serverZoneMetricsVersion:estimate.version,serverZoneGeometryDigest:geometry.zoneGeometryDigest(packet.geometry),
           serverEstimatedWalkingMinutes:estimate.estimatedWalkingMinutes,
           estimatedWalkingMeters:estimate.estimatedWalkingMeters,estimatedMinutes:estimate.estimatedWalkingMinutes});

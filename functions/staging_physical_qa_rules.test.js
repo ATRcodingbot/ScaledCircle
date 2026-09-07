@@ -50,7 +50,7 @@ test("intended actors can read QA; unrelated Scaler cannot get or list it", asyn
 });
 test("ordinary staging discovery remains usable when reserved ID is excluded", async () => {
   await assertSucceeds(db("other").collection("campaignDiscovery").where("status", "==", "open")
-    .where("__name__", "not-in", [qaId, "android_physical_qa_v1", "ios_physical_qa_v2", "android_physical_qa_v2"]).get());
+    .where("__name__", "not-in", [qaId, "android_physical_qa_v1", "ios_physical_qa_v2", "android_physical_qa_v2", "ios_physical_qa_v3", "android_physical_qa_v3"]).get());
   await assertSucceeds(db("other").doc("campaignDiscovery/ordinary").get());
 });
 test("clients cannot write authority, mutate bindings, or bypass application authority", async () => {
@@ -107,7 +107,7 @@ test('two fixtures stay isolated across both Scalers and normal discovery',async
  await assertFails(db('android').doc('campaignDiscovery/ios_physical_qa_v1').get());
  await assertFails(db('scaler').doc('campaignDiscovery/android_physical_qa_v1').get());
  for(const uid of ['scaler','android','other']){
-  const result=await assertSucceeds(db(uid).collection('campaignDiscovery').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2']).get());
+  const result=await assertSucceeds(db(uid).collection('campaignDiscovery').where('status','==','open').where('__name__','not-in',['ios_physical_qa_v1','android_physical_qa_v1','ios_physical_qa_v2','android_physical_qa_v2','ios_physical_qa_v3','android_physical_qa_v3']).get());
   if(result.docs.some(d=>d.id.includes('physical_qa')))throw Error('QA leaked');
  }
  for(const fixture of ['ios','android']) {
@@ -137,5 +137,29 @@ test('fresh retests preserve owner-only reads without changing historical fixtur
    await assertFails(db('other').doc(path).get());
   }
   await assertFails(db(other).doc(`campaigns/${device}_physical_qa_v2/applications/${other}`).set({status:'pending'}));
+ }
+});
+
+test('V3 retests preserve owner-only reads without changing historical fixtures',async()=>{
+ await environment.withSecurityRulesDisabled(async ctx=>{
+  const store=ctx.firestore();
+  await store.doc('users/android').set({role:'scaler',active:true});
+  for(const [device,uid] of [['ios','scaler'],['android','android']]){
+   const campaignId=`${device}_physical_qa_v3`,zoneId=`${device}_physical_qa_zone_v3`;
+   await store.doc(`internalCertificationAuthorities/${campaignId}`).set({projectId:'scaledcircle-staging',immutable:true,certificationFixture:true,campaignId,zoneId,businessUid:'business',scalerUid:uid});
+   await store.doc(`campaigns/${campaignId}`).set({businessId:'business',status:'open'});
+   await store.doc(`campaignDiscovery/${campaignId}`).set({businessId:"business",status:"open"});
+   await store.doc(`campaignZones/${zoneId}`).set({businessId:'business',campaignId,assignedScalerId:null,status:'unassigned'});
+  }
+ });
+ for(const [device,owner,other] of [['ios','scaler','android'],['android','android','scaler']]){
+  for(const path of [`campaignDiscovery/${device}_physical_qa_v3`,`campaignZones/${device}_physical_qa_zone_v3`]){
+   await assertSucceeds(db(owner).doc(path).get());
+   await assertSucceeds(db('business').doc(path).get());
+   await assertFails(environment.unauthenticatedContext().firestore().doc(path).get());
+   await assertFails(db(other).doc(path).get());
+   await assertFails(db('other').doc(path).get());
+  }
+  await assertFails(db(other).doc(`campaigns/${device}_physical_qa_v3/applications/${other}`).set({status:'pending'}));
  }
 });

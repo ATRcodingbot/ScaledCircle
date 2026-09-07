@@ -10,6 +10,8 @@ const physicalQaCampaignIds = [
   'android_physical_qa_v1',
   'ios_physical_qa_v2',
   'android_physical_qa_v2',
+  'ios_physical_qa_v3',
+  'android_physical_qa_v3',
 ];
 
 /// Rules authorize the reserved document separately; the ordinary query never

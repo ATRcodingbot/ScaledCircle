@@ -49,7 +49,11 @@ class PublicLandingScreen extends StatelessWidget {
               pinned: true,
               automaticallyImplyLeading: false,
               backgroundColor: const Color(0xF2020914),
-              toolbarHeight: mobile ? 108 : 72,
+              toolbarHeight: mobile
+                  ? (MediaQuery.textScalerOf(context).scale(14) > 18
+                        ? 184
+                        : 108)
+                  : 72,
               title: _Navigation(
                 onLogin: () => AppNavigation.push(context, AppRoutes.login),
                 onStart: () => openPublicRoleChooser(context),
@@ -85,16 +89,16 @@ class PublicLandingScreen extends StatelessWidget {
                         const _Gap(),
                         const _BusinessExperience(),
                         const _Gap(),
-                        const _ManagedGrowth(),
-                        const _Gap(),
-                        const CustomerCapabilityStatus(
-                          foregroundColor: Colors.white,
-                        ),
-                        const _Gap(),
                         const _FieldCampaigns(),
                         const _Gap(),
                         _ScalerExperience(
                           onStart: () => _start(context, 'scaler'),
+                        ),
+                        const _Gap(),
+                        const _ManagedGrowth(),
+                        const _Gap(),
+                        const CustomerCapabilityStatus(
+                          foregroundColor: Colors.white,
                         ),
                         const _Gap(),
                         _Pricing(
@@ -162,11 +166,12 @@ class _Navigation extends StatelessWidget {
                   _NavText('Pricing', onPressed: onPricing),
                 ],
               ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 TextButton(onPressed: onLogin, child: const Text('Log In')),
-                const SizedBox(width: 8),
                 FilledButton(
                   onPressed: onStart,
                   style: FilledButton.styleFrom(
@@ -207,7 +212,7 @@ class _Hero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Local marketing that actually gets executed.',
+            'Put local marketing into motion.',
             key: Key('homepage-hero-title'),
             style: TextStyle(
               color: Colors.white,
@@ -219,7 +224,7 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Plan practical territory, set fixed compensation and bonuses, and coordinate Scalers. Review recorded execution evidence and measure supported responses.',
+            'Choose the area. Set the work and pay. A Scaler carries out the campaign, and you review the tracked route before approving completed work.',
             style: TextStyle(color: _muted, fontSize: 19, height: 1.55),
           ),
           const SizedBox(height: 12),
@@ -292,9 +297,8 @@ class _HowItWorks extends StatelessWidget {
     children: [
       _Heading(
         eyebrow: 'HOW SCALEDCIRCLE WORKS',
-        title: 'A simpler way to grow locally.',
-        subtitle:
-            'Start with your goal. ScaledCircle handles the complexity underneath.',
+        title: 'From a local campaign to work you can review.',
+        subtitle: 'One clear workflow for the Business and the Scaler.',
       ),
       SizedBox(height: 22),
       _Cards(
@@ -302,23 +306,23 @@ class _HowItWorks extends StatelessWidget {
           _Outcome(
             number: '1',
             icon: Icons.travel_explore,
-            title: 'KNOW WHERE TO GROW',
+            title: 'Choose the area and work',
             body:
-                'Understand your service area and find places or moments worth marketing.',
+                'Define the territory, materials, schedule, base pay, and any offered bonus before funding.',
           ),
           _Outcome(
             number: '2',
             icon: Icons.auto_awesome,
-            title: 'CREATE YOUR MARKETING',
+            title: 'Publish and assign',
             body:
-                'ScaledCircle helps prepare the marketing. You review and approve it.',
+                'Scalers apply to funded campaigns. Review applicants and assign the agreed work.',
           ),
           _Outcome(
             number: '3',
             icon: Icons.rocket_launch_outlined,
-            title: 'PUT IT INTO ACTION',
+            title: 'Track and review',
             body:
-                'Plan digital marketing drafts or hire verified local Scalers for real-world campaigns.',
+                'Active canvassing routes are recorded automatically. Review the evidence and payable amount before approving completion.',
           ),
         ],
       ),
@@ -329,179 +333,27 @@ class _HowItWorks extends StatelessWidget {
 class _BusinessExperience extends StatelessWidget {
   const _BusinessExperience();
   @override
-  Widget build(BuildContext context) => const Column(
-    children: [
-      _Heading(
-        eyebrow: 'FOR BUSINESSES',
-        title: 'See the opportunity before you spend.',
+  Widget build(BuildContext context) => const _Panel(
+    child: Padding(
+      padding: EdgeInsets.all(24),
+      child: _Heading(
+        eyebrow: 'A PRACTICAL EXAMPLE',
+        title: 'A flyer campaign for a local contractor.',
         subtitle:
-            'Property and Weather Intelligence Beta turn trustworthy local facts into bounded, reviewable next steps.',
+            'Choose a neighborhood and describe the authorized work. Set materials, timing, and compensation. After funding and assignment, the Scaler walks the route with automatic GPS tracking. You review the route and completion evidence in the Job Room. Responses or sales are not guaranteed.',
       ),
-      SizedBox(height: 22),
-      _Cards(
-        children: [
-          _Example(
-            label: 'PROPERTY OPPORTUNITY • EXAMPLE',
-            icon: Icons.home_work_outlined,
-            lines: [
-              '422 homes analyzed',
-              '86% built before 1980',
-              'High older-home concentration',
-              '98% coverage',
-            ],
-            action: 'Explore Property Intelligence Beta',
-            footnote: 'BETA • Included with Scale',
-          ),
-          _Example(
-            label: 'WEATHER OPPORTUNITY • ILLUSTRATION',
-            icon: Icons.thunderstorm_outlined,
-            lines: [
-              'Severe storm',
-              'Anne Arundel County',
-              'Exterior-service marketing may become more timely after the event.',
-            ],
-            action: 'See Weather Intelligence Beta',
-            footnote:
-                'BETA • Official weather facts remain separate from AI interpretation.',
-          ),
-        ],
-      ),
-    ],
+    ),
   );
 }
 
 class _ManagedGrowth extends StatelessWidget {
   const _ManagedGrowth();
   @override
-  Widget build(BuildContext context) => _Panel(
-    child: Padding(
-      padding: const EdgeInsets.all(28),
-      child: LayoutBuilder(
-        builder: (context, c) {
-          const copy = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'MANAGED GROWTH',
-                style: TextStyle(color: _green, fontWeight: FontWeight.w900),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'YOUR MARKETING, READY FOR YOUR APPROVAL.',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                'Tell ScaledCircle what your business does and where you work. ScaledCircle helps prepare your marketing. You review it before anything is published or launched.',
-                style: TextStyle(color: _muted, height: 1.55),
-              ),
-            ],
-          );
-          return c.maxWidth > 760
-              ? const Row(
-                  children: [
-                    Expanded(child: copy),
-                    SizedBox(width: 28),
-                    Expanded(child: _MiniCalendar()),
-                  ],
-                )
-              : const Column(
-                  children: [copy, SizedBox(height: 24), _MiniCalendar()],
-                );
-        },
-      ),
-    ),
-  );
-}
-
-class _MiniCalendar extends StatelessWidget {
-  const _MiniCalendar();
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'Example weekly marketing approval calendar',
-    child: Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B2034),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'THIS WEEK • EXAMPLE',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-          ),
-          _CalendarRow(
-            day: 'TUE',
-            title: 'Facebook + Instagram • Deck Post',
-            status: 'NEEDS REVIEW',
-            color: Color(0xFFFFB34D),
-          ),
-          _CalendarRow(
-            day: 'THU',
-            title: 'Marketing draft • Fence Post',
-            status: 'NEEDS REVIEW',
-            color: _blue,
-          ),
-          _CalendarRow(
-            day: 'FRI',
-            title: 'Local Campaign • 500 Homes',
-            status: 'READY',
-            color: _green,
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Review This Week’s Marketing →',
-            style: TextStyle(color: _green, fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _CalendarRow extends StatelessWidget {
-  const _CalendarRow({
-    required this.day,
-    required this.title,
-    required this.status,
-    required this.color,
-  });
-  final String day;
-  final String title;
-  final String status;
-  final Color color;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 14),
-    child: Row(
-      children: [
-        SizedBox(
-          width: 42,
-          child: Text(
-            day,
-            style: const TextStyle(color: _muted, fontWeight: FontWeight.w700),
-          ),
-        ),
-        Expanded(
-          child: Text(title, style: const TextStyle(color: Colors.white)),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          status,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => const _Heading(
+    eyebrow: 'GROWTH TOOLS — BETA',
+    title: 'More help as your business grows.',
+    subtitle:
+        'Explore social planning, prospect research, business recommendations, and ad preparation. These capabilities are still being tested and measured. Publishing and paid actions require the appropriate approval.',
   );
 }
 
@@ -511,10 +363,10 @@ class _FieldCampaigns extends StatelessWidget {
   Widget build(BuildContext context) => const Column(
     children: [
       _Heading(
-        eyebrow: 'VERIFIED FIELD CAMPAIGNS',
-        title: 'Put local marketing on the map.',
+        eyebrow: 'EVIDENCE YOU CAN REVIEW',
+        title: 'Understand what happened before you approve.',
         subtitle:
-            'Choose an area, fund the campaign securely, verify field work by GPS, and connect responses back to the campaign.',
+            'The Job Room brings the assignment, tracked route, timing, and compensation together.',
       ),
       SizedBox(height: 22),
       _Cards(
@@ -522,21 +374,23 @@ class _FieldCampaigns extends StatelessWidget {
           _Outcome(
             number: '1',
             icon: Icons.map_outlined,
-            title: 'CHOOSE THE AREA',
-            body: 'Draw the territory and keep the campaign focused.',
+            title: 'Assigned area and actual route',
+            body:
+                'Compare the assigned territory with the recorded path. Route Coverage Estimate does not prove individual households were serviced.',
           ),
           _Outcome(
             number: '2',
             icon: Icons.assignment_outlined,
-            title: 'SET THE JOB',
-            body: 'Define the work, materials, timing, and clear pay.',
+            title: 'Agreed pay, explained',
+            body:
+                'Review accepted base pay, any offered bonus, eligibility, and the payable amount together.',
           ),
           _Outcome(
             number: '3',
             icon: Icons.verified_outlined,
-            title: 'VERIFY RESULTS',
+            title: 'Photo-free canvassing',
             body:
-                'Review recorded GPS, checkpoints, and completion evidence. Supported response tracking records what happened next.',
+                'GPS is automatic during active work. Residential before-and-after photos are not required; access issues can be reported for review.',
           ),
         ],
       ),
@@ -567,7 +421,7 @@ class _ScalerExperience extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'WORK WHERE YOU WANT.',
+              'Know the work and pay before you apply.',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 32,
@@ -576,7 +430,7 @@ class _ScalerExperience extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Choose local opportunities that fit your schedule, travel preferences, and the kind of work you want to do.',
+              'Choose from available local campaigns that fit your preferences. Work availability varies by area; creating a profile does not guarantee a job.',
               style: TextStyle(color: _muted, height: 1.5),
             ),
             const SizedBox(height: 18),
@@ -593,46 +447,11 @@ class _ScalerExperience extends StatelessWidget {
         const job = _Panel(
           child: Padding(
             padding: EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'EXAMPLE LOCAL JOB',
-                  style: TextStyle(color: _blue, fontWeight: FontWeight.w800),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Flyer Distribution',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    Text('\$125', style: TextStyle(color: Colors.white)),
-                    Text('8 miles away', style: TextStyle(color: _muted)),
-                    Text(
-                      '2.5 hours estimated',
-                      style: TextStyle(color: _muted),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 14),
-                Text(
-                  '✓ Matches your work area',
-                  style: TextStyle(color: _green),
-                ),
-                SizedBox(height: 14),
-                Text(
-                  'View Job →',
-                  style: TextStyle(color: _blue, fontWeight: FontWeight.w800),
-                ),
-              ],
+            child: _Heading(
+              eyebrow: 'BEFORE YOU APPLY',
+              title: 'A clear agreement, then a clear next step.',
+              subtitle:
+                  'Review the area, base pay, bonus conditions, materials, and timing. During canvassing, tracking is automatic. See what remains before completion, and follow Business review through to your earnings.',
             ),
           ),
         );
@@ -663,7 +482,7 @@ class _Pricing extends StatelessWidget {
   static const _order = ['starter', 'growth', 'scale', 'managed_growth'];
 
   static const _descriptions = <String, String>{
-    'starter': 'For local businesses starting with verified field campaigns.',
+    'starter': 'For local businesses starting with field campaigns.',
     'growth':
         'For growing teams that want stronger planning, content, and response tracking.',
     'scale':
@@ -674,7 +493,7 @@ class _Pricing extends StatelessWidget {
 
   static const _featureLabels = <String, String>{
     'campaign_mapping': 'Campaign mapping',
-    'gps_verification': 'GPS-verified field work',
+    'gps_verification': 'Tracked route evidence',
     'basic_ai_planning': 'Simple AI campaign planning',
     'advanced_analytics': 'Advanced campaign analytics',
     'ai_content_creation': 'AI-assisted content creation',
@@ -752,7 +571,7 @@ class _Pricing extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'Scaler pay, advertising spend, printing, postage, and third-party vendors are separately approved and funded.',
+          'Campaign compensation and platform fees are shown before funding. Paid advertising needs separate approval. Printing and postcards are Coming Soon; ordering is not available.',
           style: TextStyle(color: _muted),
           textAlign: TextAlign.center,
         ),
@@ -935,63 +754,6 @@ class _Outcome extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text(body, style: const TextStyle(color: _muted, height: 1.45)),
-        ],
-      ),
-    ),
-  );
-}
-
-class _Example extends StatelessWidget {
-  const _Example({
-    required this.label,
-    required this.icon,
-    required this.lines,
-    required this.action,
-    required this.footnote,
-  });
-  final String label;
-  final IconData icon;
-  final List<String> lines;
-  final String action;
-  final String footnote;
-  @override
-  Widget build(BuildContext context) => _Panel(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: _green),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    color: _green,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          for (final line in lines)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                line,
-                style: const TextStyle(color: Colors.white, fontSize: 17),
-              ),
-            ),
-          const SizedBox(height: 8),
-          Text(
-            action,
-            style: const TextStyle(color: _green, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          Text(footnote, style: const TextStyle(color: _muted, fontSize: 12)),
         ],
       ),
     ),

@@ -30,3 +30,12 @@ test('caller cannot submit geometry, compensation or identity overrides',async()
  }
 });
 test('uncommitted geometry rejected',()=>assert.throws(()=>creator.validateGeometry({projectId:creator.PROJECT,immutable:true,version:creator.GEOMETRY_VERSION,geometryHash:creator.GEOMETRY_HASH,geometry:Array(8).fill({latitude:0,longitude:0})}),/geometry_mismatch/));
+
+
+test('V3 uses the exact maintained funding calculator and remains staging-only',async()=>{
+ assert.equal(fs.readFileSync('../functions-staging-admin/campaign_funding_quote.js','utf8').replaceAll('\r\n','\n'),fs.readFileSync('campaign_funding_quote.js','utf8').replaceAll('\r\n','\n'));
+ const quote=require('../functions-staging-admin/campaign_funding_quote').quoteCampaignFunding(1800);
+ assert.equal(quote.platformFeeCents,360);assert.equal(quote.businessChargeCents,2160);
+ await assert.rejects(creator.createFixtureService({projectId:'scaled-circle',finalRetest:true})({actorUid:'admin'}),/staging_only/);
+ for(const data of [{version:3},{bonus:3},{campaignId:'arbitrary'}])await assert.rejects(creator.createFixtureService({projectId:creator.PROJECT,finalRetest:true})({actorUid:'admin',data}),/empty_request_required/);
+});

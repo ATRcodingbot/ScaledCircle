@@ -75,6 +75,36 @@ Future<void> _pumpAt(
 }
 
 void main() {
+  test('agent mode labels never masquerade as completed work', () {
+    const workspace = AgenticGrowthWorkspace({
+      'initialized': true,
+      'runs': [
+        {'agentType': 'marketing_manager', 'status': 'completed'},
+        {'agentType': 'lead_generation', 'status': 'failed'},
+      ],
+    });
+    expect(
+      workspace.activitySummary({
+        'type': 'business_assistant',
+        'enabled': true,
+        'state': 'Active',
+      }),
+      contains('No completed run is recorded'),
+    );
+    expect(
+      workspace.activitySummary({'type': 'marketing_manager', 'enabled': true}),
+      contains('A stored review completed'),
+    );
+    expect(
+      workspace.activitySummary({'type': 'lead_generation', 'enabled': true}),
+      contains('recorded run failed'),
+    );
+    expect(
+      workspace.activitySummary({'type': 'supervisor', 'enabled': false}),
+      contains('Not enabled'),
+    );
+  });
+
   testWidgets(
     'Business AI Team is plain-language, responsive, and mutation-safe',
     (WidgetTester tester) async {
@@ -84,8 +114,13 @@ void main() {
       expect(find.text('External actions'), findsOneWidget);
       expect(find.text('Off'), findsOneWidget);
       expect(find.text('Marketing Manager'), findsOneWidget);
-      expect(find.text('Draft only'), findsOneWidget);
-      expect(find.text('Research only'), findsOneWidget);
+      expect(find.textContaining('No completed run is recorded'), findsWidgets);
+      expect(find.text('Observing'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('More evidence is needed'),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('More evidence is needed'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('No recommendations yet'),
@@ -105,6 +140,11 @@ void main() {
       expect(find.text('Set up AI Team'), findsOneWidget);
       await tester.tap(find.text('Set up AI Team'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Review current marketing plan'),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Review current marketing plan'));
       await tester.pumpAndSettle();
       expect(service.observeCalls, 1);

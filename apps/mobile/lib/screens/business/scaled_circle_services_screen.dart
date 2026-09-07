@@ -1,3 +1,6 @@
+import '../../navigation/app_routes.dart';
+import '../../navigation/app_router.dart';
+import '../../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -55,6 +58,30 @@ class ScaledCircleServicesScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ..._catalog(context, plan),
+              ExpansionTile(
+                title: const Text('Campaign support tools'),
+                children: [
+                  for (final tool in <(String, String)>[
+                    ('Landing Pages — Beta', AppRoutes.businessLandingPages),
+                    ('Brand Assets — Beta', AppRoutes.businessBrandAssets),
+                    ('Physical Marketing', AppRoutes.businessPhysicalMarketing),
+                    (
+                      'Tracking Numbers — Beta',
+                      AppRoutes.businessTrackingPhone,
+                    ),
+                    if (AppEnvironmentConfig.responseTrackingEnabled)
+                      (
+                        'Response tracking — Beta',
+                        AppRoutes.businessAttribution,
+                      ),
+                  ])
+                    ListTile(
+                      title: Text(tool.$1),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => AppNavigation.push(context, tool.$2),
+                    ),
+                ],
+              ),
               const SizedBox(height: 16),
               _financialOverview(),
               const SizedBox(height: 16),
