@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 /// Availability copy only. This widget grants no execution or billing authority.
 class CustomerCapabilityStatus extends StatelessWidget {
-  const CustomerCapabilityStatus({super.key});
+  const CustomerCapabilityStatus({super.key, this.foregroundColor});
+  final Color? foregroundColor;
 
   static const capabilities = <({String title, String description})>[
     (
@@ -51,14 +52,18 @@ class CustomerCapabilityStatus extends StatelessWidget {
                 header: true,
                 child: Text(
                   capability.title,
-                  style: const TextStyle(
+                  style: TextStyle(
+                    color: foregroundColor,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
               const SizedBox(height: 6),
-              Text(capability.description, style: const TextStyle(height: 1.5)),
+              Text(
+                capability.description,
+                style: TextStyle(height: 1.5, color: foregroundColor),
+              ),
             ],
           ),
         ),

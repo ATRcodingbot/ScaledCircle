@@ -52,7 +52,10 @@ void main() {
     );
     await tester.scrollUntilVisible(find.text('Join Referral Program'), 240);
     expect(find.text('Join Referral Program'), findsOneWidget);
-    expect(find.textContaining('Start at 10%'), findsOneWidget);
+    expect(
+      find.textContaining('Business referral policy: 10%'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('pending Scaler sees rollout information, not an error', (
@@ -120,9 +123,13 @@ void main() {
     );
     await _pump(tester, gateway);
     await tester.scrollUntilVisible(find.byType(CheckboxListTile), 240);
-    await tester.tap(find.byType(CheckboxListTile));
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox));
     await tester.pump();
     await tester.scrollUntilVisible(find.text('Join Referral Program'), 160);
+    await tester.ensureVisible(find.text('Join Referral Program'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Join Referral Program'));
     await tester.pumpAndSettle();
     expect(gateway.joinCalls, 1);

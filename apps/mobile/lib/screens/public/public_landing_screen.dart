@@ -87,7 +87,9 @@ class PublicLandingScreen extends StatelessWidget {
                         const _Gap(),
                         const _ManagedGrowth(),
                         const _Gap(),
-                        const CustomerCapabilityStatus(),
+                        const CustomerCapabilityStatus(
+                          foregroundColor: Colors.white,
+                        ),
                         const _Gap(),
                         const _FieldCampaigns(),
                         const _Gap(),

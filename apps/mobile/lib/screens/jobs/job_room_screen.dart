@@ -99,15 +99,16 @@ String jobRoomEarningOutcome(Map<String, dynamic> completion) {
 }
 
 class JobRoomScreen extends StatefulWidget {
-  const JobRoomScreen({super.key, required this.zoneId});
+  const JobRoomScreen({super.key, required this.zoneId, this.service});
   final String zoneId;
+  final JobRoomService? service;
 
   @override
   State<JobRoomScreen> createState() => _JobRoomScreenState();
 }
 
 class _JobRoomScreenState extends State<JobRoomScreen> {
-  final _service = const JobRoomService();
+  late final _service = widget.service ?? const JobRoomService();
   final _message = TextEditingController();
   final _location = TextEditingController();
   final _instructions = TextEditingController();
@@ -115,6 +116,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
   final _orderReference = TextEditingController();
   Map<String, dynamic>? _data;
   bool _loading = true;
+  bool _loadFailed = false;
   String _fulfillmentType = 'no_materials_required';
   DateTime? _scheduledAt;
   bool _acknowledgingReadiness = false;
@@ -168,32 +170,47 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
   }
 
   Future<void> _load() async {
-    final data = await _service.load(widget.zoneId);
-    if (!mounted) return;
-    final room = Map<String, dynamic>.from(data['room'] as Map? ?? {});
-    final handoff = Map<String, dynamic>.from(data['handoff'] as Map? ?? {});
-    final logistics = Map<String, dynamic>.from(
-      room['materialLogistics'] as Map? ?? {},
-    );
     setState(() {
-      _data = data;
-      _loading = false;
-      _fulfillmentType =
-          logistics['fulfillmentType']?.toString() ??
-          handoff['fulfillmentType']?.toString() ??
-          'no_materials_required';
-      _scheduledAt = _readDate(logistics['scheduledAt']);
-      _location.text =
-          logistics['location']?.toString() ??
-          handoff['privateLocation']?.toString() ??
-          '';
-      _instructions.text =
-          logistics['instructions']?.toString() ??
-          handoff['instructions']?.toString() ??
-          '';
-      _printingShop.text = logistics['printingShopName']?.toString() ?? '';
-      _orderReference.text = logistics['orderReference']?.toString() ?? '';
+      _loading = true;
+      _loadFailed = false;
     });
+    try {
+      final data = await _service
+          .load(widget.zoneId)
+          .timeout(const Duration(seconds: 30));
+      if (!mounted) return;
+      final room = Map<String, dynamic>.from(data['room'] as Map? ?? {});
+      final handoff = Map<String, dynamic>.from(data['handoff'] as Map? ?? {});
+      final logistics = Map<String, dynamic>.from(
+        room['materialLogistics'] as Map? ?? {},
+      );
+      setState(() {
+        _data = data;
+        _loading = false;
+        _fulfillmentType =
+            logistics['fulfillmentType']?.toString() ??
+            handoff['fulfillmentType']?.toString() ??
+            'no_materials_required';
+        _scheduledAt = _readDate(logistics['scheduledAt']);
+        _location.text =
+            logistics['location']?.toString() ??
+            handoff['privateLocation']?.toString() ??
+            '';
+        _instructions.text =
+            logistics['instructions']?.toString() ??
+            handoff['instructions']?.toString() ??
+            '';
+        _printingShop.text = logistics['printingShopName']?.toString() ?? '';
+        _orderReference.text = logistics['orderReference']?.toString() ?? '';
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadFailed = true;
+        });
+      }
+    }
   }
 
   Future<void> _openCompletionReview(Map<String, dynamic> completion) async {
@@ -506,6 +523,24 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_loadFailed) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Job Room')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Unable to load this Job Room. Please try again.'),
+                const SizedBox(height: 16),
+                FilledButton(onPressed: _load, child: const Text('Retry')),
+              ],
+            ),
+          ),
+        ),
+      );
     }
     final data = _data!;
     final viewerRole = data['viewerRole']?.toString();

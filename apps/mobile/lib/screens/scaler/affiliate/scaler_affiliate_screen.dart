@@ -29,13 +29,17 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
   }
 
   Future<_AffiliateViewData> _load() async {
-    final eligibility = await _service.eligibility();
+    final eligibility = await _service.eligibility().timeout(
+      const Duration(seconds: 30),
+    );
     if (eligibility != AffiliateEligibility.eligible) {
       return _AffiliateViewData(eligibility: eligibility);
     }
     return _AffiliateViewData(
       eligibility: eligibility,
-      dashboard: await _service.dashboard(),
+      dashboard: await _service.dashboard().timeout(
+        const Duration(seconds: 30),
+      ),
     );
   }
 
@@ -193,7 +197,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
     ),
     const SizedBox(height: 10),
     const Text(
-      'Start at 10% recurring commission on qualifying Business subscriptions. Higher rates may become available based on program eligibility.',
+      'Business referral policy: 10% of qualifying collected recurring subscription revenue. Accounting is being prepared; joining does not create earnings or activate payouts.',
     ),
     const SizedBox(height: 24),
     const _TermsCard(),
@@ -244,7 +248,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'YOUR REFERRAL LINK',
+                'My Referral Link',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 10),
@@ -274,7 +278,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
       Card(
         child: ListTile(
           leading: const Icon(Icons.business_outlined),
-          title: Text('${dashboard.referralCount} referred'),
+          title: Text('Businesses Referred: ${dashboard.referralCount}'),
           subtitle: const Text(
             'Attributed Businesses appear here without exposing their private operations.',
           ),
@@ -283,10 +287,18 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
       const SizedBox(height: 12),
       const Card(
         child: ListTile(
+          title: Text('Scalers Referred — Coming Soon'),
+          subtitle: Text(
+            'Planned: one percentage point of qualifying completed work, funded from the platform fee. Single level only; no reward for signup and no self-referrals.',
+          ),
+        ),
+      ),
+      const Card(
+        child: ListTile(
           leading: Icon(Icons.receipt_long_outlined),
           title: Text('Commission accounting is being prepared'),
           subtitle: Text(
-            'Referrals can be attributed now. Earned, reversed, payable, and paid balances will appear only after authoritative subscription invoice and refund accounting is released.',
+            'Pending: Unavailable • Earned: Unavailable • Paid: Unavailable. These are not zero balances. Business referrals can be attributed now; amounts appear only after reviewed invoice, refund, tax and payout accounting is released.',
           ),
         ),
       ),
