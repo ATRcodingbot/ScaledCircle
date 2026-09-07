@@ -222,6 +222,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   }
 
   static const Set<String> _distributionCampaignTypes = {
+    'neighborhoodCanvassing',
     'flyer_distribution',
     'door_hanger_distribution',
     'business_card_distribution',
@@ -461,6 +462,8 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
   String _campaignTypeLabel(String type) {
     switch (type) {
+      case 'neighborhoodCanvassing':
+        return 'Neighborhood Canvassing';
       case 'flyer_distribution':
         return 'Flyer Distribution';
 
@@ -486,6 +489,8 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
   String _campaignTypeDescription(String type) {
     switch (type) {
+      case 'neighborhoodCanvassing':
+        return 'Mapped, authorized outreach with automatic route tracking. No property photos required.';
       case 'flyer_distribution':
         return 'Scalers distribute flyers throughout mapped neighborhoods.';
 
@@ -1120,6 +1125,8 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                     child: Column(
                       children:
                           [
+                            if (AppEnvironmentConfig.isStaging)
+                              'neighborhoodCanvassing',
                             'flyer_distribution',
                             'door_hanger_distribution',
                             'business_card_distribution',

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../../../../config/app_environment.dart';
+import '../flyer/flyer_campaign_screen.dart';
 
 class CanvassingCampaignScreen extends StatelessWidget {
   const CanvassingCampaignScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    if (AppEnvironmentConfig.isStaging) {
+      return const FlyerCampaignScreen(campaignType: 'neighborhoodCanvassing');
+    }
     return Scaffold(
       appBar: AppBar(title: const Text("Neighborhood Canvassing")),
 
