@@ -137,13 +137,11 @@ void main() {
   });
 
   test('beta access remains authoritative and is not locally bypassed', () {
-    final loginSource = File(
-      'lib/screens/auth/login_screen.dart',
+    final gate = File(
+      'lib/navigation/startup_session_gate.dart',
     ).readAsStringSync();
-    expect(loginSource, contains("userData?['betaAccess'] == 'approved'"));
-    final gateStart = loginSource.indexOf('final approvedForBeta');
-    final gateEnd = loginSource.indexOf('final accountType', gateStart);
-    final gate = loginSource.substring(gateStart, gateEnd);
+    expect(gate, contains("profile['betaAccess'] != 'approved'"));
+    expect(gate, contains("profile['active'] != true"));
     expect(gate, isNot(contains('AppEnvironmentConfig.isLocal')));
   });
 }

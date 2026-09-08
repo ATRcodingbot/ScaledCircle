@@ -12,6 +12,7 @@ abstract final class AppRoutes {
   static const businessTrackingPhone = '/business/tracking-numbers';
   static const businessSocialOperations = '/business/social-operations';
   static const scalerDashboard = '/scaler';
+  static const myWork = '/scaler/work';
   static const adminLogin = '/admin/login';
   static const adminDashboard = '/admin';
   static const sales = '/sales';

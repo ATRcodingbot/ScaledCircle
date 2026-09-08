@@ -272,7 +272,7 @@ void main() {
       'lib/screens/auth/register_screen.dart',
     ).readAsStringSync();
     final loginSource = File(
-      'lib/screens/auth/login_screen.dart',
+      'lib/navigation/startup_session_gate.dart',
     ).readAsStringSync();
 
     expect(funnelSource, contains('RegisterScreen('));
@@ -283,8 +283,8 @@ void main() {
     expect(registerSource, contains('EarlyAccessPendingScreen('));
     expect(registerSource, contains('role: UserProfile.roleValue(_role)'));
     expect(loginSource, contains("role == 'admin'"));
-    expect(loginSource, contains("userData?['active'] == true"));
-    expect(loginSource, contains("userData?['betaAccess'] == 'approved'"));
+    expect(loginSource, contains("profile['active'] != true"));
+    expect(loginSource, contains("profile['betaAccess'] != 'approved'"));
   });
 
   test('public previews use approved branding and truthful field evidence', () {

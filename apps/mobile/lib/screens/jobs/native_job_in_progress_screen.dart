@@ -1,6 +1,8 @@
-import '../../config/app_environment.dart';
-import '../../services/job_room_service.dart';
+import '../../models/work_lifecycle_presentation.dart';
+import '../scaler/completion/submitted_completion_screen.dart';
 import '../../widgets/checkpoint_action.dart';
+import '../../widgets/automatic_canvassing_progress.dart';
+import '../../services/business_workspace_service.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -37,12 +39,17 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     with WidgetsBindingObserver {
   late final ActiveJobTrackingService _tracking;
   ActiveTrackingState _state = ActiveTrackingState.inactive;
+  StreamSubscription<DocumentSnapshot>? _zoneSubscription;
+  Timer? _zoneLoadTimeout;
+  Map<String, dynamic>? _resolvedZone;
+  bool _zoneUnavailable = false;
   Timer? _refreshTimer;
   Timer? _syncTimer;
   bool _working = false;
   bool _refreshing = false;
   bool _syncing = false;
   Map<String, dynamic>? _progress;
+  Map<String, dynamic> _acceptedContract = {};
   String _syncMessage = 'Checking secure device queue…';
   bool get _photoFree => prohibitsResidentialPhotos(
     _campaignData['campaignType'] ?? _campaignData['type'],
@@ -60,13 +67,48 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
         widget.trackingService ??
         ActiveJobTrackingService.forCurrentEnvironment();
     WidgetsBinding.instance.addObserver(this);
+    _watchZone();
     _refresh();
     _sync();
+    _loadAcceptedContract();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _refresh(),
     );
     _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) => _sync());
+  }
+
+  void _watchZone() {
+    _zoneSubscription?.cancel();
+    _zoneLoadTimeout?.cancel();
+    _zoneUnavailable = false;
+    _zoneLoadTimeout = Timer(const Duration(seconds: 20), () {
+      if (mounted && _resolvedZone == null) {
+        setState(() => _zoneUnavailable = true);
+      }
+    });
+    _zoneSubscription = widget.zone.reference.snapshots().listen(
+      (snapshot) {
+        if (!mounted) return;
+        if (!snapshot.exists) {
+          setState(() => _zoneUnavailable = true);
+          return;
+        }
+        final data = Map<String, dynamic>.from(snapshot.data() as Map);
+        if (workIsSubmitted(data['status']?.toString()) ||
+            workSection(data['status']?.toString()) == WorkSection.completed) {
+          _refreshTimer?.cancel();
+          _syncTimer?.cancel();
+        }
+        setState(() {
+          _resolvedZone = data;
+          _zoneUnavailable = false;
+        });
+      },
+      onError: (_) {
+        if (mounted) setState(() => _zoneUnavailable = true);
+      },
+    );
   }
 
   @override
@@ -82,6 +124,8 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _syncTimer?.cancel();
+    _zoneSubscription?.cancel();
+    _zoneLoadTimeout?.cancel();
     super.dispose();
   }
 
@@ -262,6 +306,18 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
       _progress?['state'] == 'available' &&
       (_progress?['coveragePercentage'] as num? ?? -1) >= 80;
 
+  Future<void> _loadAcceptedContract() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .doc('assignmentCompensations/${widget.zone.id}')
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 20));
+      if (mounted) setState(() => _acceptedContract = snapshot.data() ?? {});
+    } catch (_) {
+      /* Unknown accepted terms remain visibly unknown. */
+    }
+  }
+
   Future<void> _reportAccessIssue() async {
     final controller = TextEditingController();
     final summary = await showDialog<String>(
@@ -296,10 +352,11 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     controller.dispose();
     if (summary == null || !mounted) return;
     try {
-      await const JobRoomService().reportWorkIssue(
-        zoneId: widget.zone.id,
-        summary: summary,
-      );
+      await BusinessWorkspaceService().call('addActiveWorkNote', {
+        'zoneId': widget.zone.id,
+        'kind': 'access',
+        'note': summary,
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -326,7 +383,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          AppEnvironmentConfig.isStaging && _photoFree
+          _photoFree
               ? (_baseCoverageReached
                     ? 'Finish route for completion review?'
                     : 'Save route for exception or technical review?')
@@ -342,11 +399,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(
-              AppEnvironmentConfig.isStaging && _photoFree
-                  ? 'Save route'
-                  : 'Complete Job',
-            ),
+            child: Text(_photoFree ? 'Save route' : 'Complete Job'),
           ),
         ],
       ),
@@ -377,6 +430,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
             routeId: routeId,
             gpsPointCount: count,
             routeSimulated: false,
+            canvassing: _photoFree,
           ),
         ),
       );
@@ -428,6 +482,35 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_zoneUnavailable || _resolvedZone == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Checking work status')),
+        body: Center(
+          child: _zoneUnavailable
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Work status is unavailable. Retry before taking another action.',
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {});
+                        _watchZone();
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                )
+              : const CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (workIsSubmitted(_resolvedZone!['status']?.toString()) ||
+        workSection(_resolvedZone!['status']?.toString()) ==
+            WorkSection.completed) {
+      return SubmittedCompletionScreen(zoneId: widget.zone.id);
+    }
     final last = _state.lastLocation;
     return PopScope(
       canPop: true,
@@ -502,33 +585,48 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
                       : 'Route Tracking Stopped',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
-                  'Tracking continues while the screen is locked or another app is open.',
+                subtitle: Text(
+                  _state.active
+                      ? 'Tracking continues while the screen is locked or another app is open.'
+                      : 'Tracking is stopped. Saved route evidence is preserved.',
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            _StatusRow(label: 'Elapsed time', value: _elapsed()),
-            _StatusRow(
-              label: 'GPS status',
-              value: _state.active ? 'Active' : 'Stopped',
-            ),
-            _StatusRow(
-              label: 'Last location',
-              value: last == null
-                  ? 'Acquiring accurate fix…'
-                  : '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)} (±${last.horizontalAccuracy.round()} m)',
-            ),
-            _StatusRow(label: 'Recorded points', value: '${_state.pointCount}'),
-            _StatusRow(
-              label: 'Sync status',
-              value: _state.pendingPointCount == 0
-                  ? _syncMessage
-                  : '${_state.pendingPointCount} safely queued • $_syncMessage',
-            ),
-            const _StatusRow(
-              label: 'Battery-friendly tracking',
-              value: 'Adaptive movement samples; stationary points reduced',
+            if (_photoFree)
+              AutomaticCanvassingProgress(
+                progress: _progress ?? {},
+                contract: _acceptedContract,
+              ),
+            ExpansionTile(
+              title: const Text('Tracking details'),
+              children: [
+                _StatusRow(label: 'Elapsed time', value: _elapsed()),
+                _StatusRow(
+                  label: 'GPS status',
+                  value: _state.active ? 'Active' : 'Stopped',
+                ),
+                _StatusRow(
+                  label: 'Last location',
+                  value: last == null
+                      ? 'Acquiring accurate fix…'
+                      : '${last.latitude.toStringAsFixed(5)}, ${last.longitude.toStringAsFixed(5)} (±${last.horizontalAccuracy.round()} m)',
+                ),
+                _StatusRow(
+                  label: 'Recorded points',
+                  value: '${_state.pointCount}',
+                ),
+                _StatusRow(
+                  label: 'Sync status',
+                  value: _state.pendingPointCount == 0
+                      ? _syncMessage
+                      : '${_state.pendingPointCount} safely queued • $_syncMessage',
+                ),
+                const _StatusRow(
+                  label: 'Battery-friendly tracking',
+                  value: 'Adaptive movement samples; stationary points reduced',
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             CheckpointAction(
@@ -542,7 +640,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
               label: const Text('Return to job details'),
             ),
             const SizedBox(height: 12),
-            if (AppEnvironmentConfig.isStaging && _photoFree) ...[
+            if (_photoFree) ...[
               const Text(
                 'GPS records automatically. Full accepted base at 80% eligible route coverage; accepted coverage bonus at 95%. Aim for 100%. Final lifecycle and evidence checks apply.',
               ),
@@ -556,23 +654,32 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
                 child: const Text('Report Access Issue'),
               ),
             ],
-            FilledButton.icon(
-              onPressed: _working || _state.sessionId == null
-                  ? null
-                  : _complete,
-              icon: const Icon(Icons.task_alt),
-              label: Text(
-                _working
-                    ? 'Finalizing...'
-                    : _state.active
-                    ? (AppEnvironmentConfig.isStaging && _photoFree
-                          ? (_baseCoverageReached
-                                ? 'Finish Route'
-                                : 'Save Route for Review')
-                          : 'Complete Job')
-                    : 'Retry Secure Finalization',
+            if (_photoFree && !_baseCoverageReached)
+              OutlinedButton.icon(
+                onPressed: _working || _state.sessionId == null
+                    ? null
+                    : _complete,
+                icon: const Icon(Icons.help_outline),
+                label: const Text('Review saved route / exception'),
               ),
-            ),
+            if (!_photoFree || _baseCoverageReached)
+              FilledButton.icon(
+                onPressed: _working || _state.sessionId == null
+                    ? null
+                    : _complete,
+                icon: const Icon(Icons.task_alt),
+                label: Text(
+                  _working
+                      ? 'Finalizing...'
+                      : _state.active
+                      ? (_photoFree
+                            ? (_baseCoverageReached
+                                  ? 'Finish Route'
+                                  : 'Save Route for Review')
+                            : 'Complete Job')
+                      : 'Retry Secure Finalization',
+                ),
+              ),
             const SizedBox(height: 20),
             TextButton(
               onPressed: _working || !_state.active

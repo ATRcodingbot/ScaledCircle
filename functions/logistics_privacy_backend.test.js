@@ -12,6 +12,10 @@ if (!getApps().length) initializeApp({projectId:'demo-logistics-backend'});
 const db=getFirestore();
 const call=(fn,uid,data,verified=true)=>fft.wrap(fn)({data,auth:uid?{uid,token:{email_verified:verified}}:undefined});
 before(async()=>{
+ if(!process.env.FIREBASE_AUTH_EMULATOR_HOST)throw Error('Auth emulator required');
+ const auth=require('firebase-admin/auth').getAuth();
+ for(const uid of ['owner', 'admin', 'assigned', 'other', 'applicant', 'tenant']) {try{await auth.createUser({uid,email:`${uid}@example.test`,emailVerified:true});}catch(e){if(e.code!=='auth/uid-already-exists')throw e;}}
+
  for(const [uid,role] of [['owner','business'],['admin','admin'],['assigned','scaler'],['other','scaler'],['applicant','scaler'],['tenant','business']]) await db.doc('users/'+uid).set({role,active:true});
  await db.doc('campaigns/private-job').set({businessId:'owner',status:'open',materialFulfillmentType:'scaler_pickup_business',materialHandoffAddress:'PRIVATE LOCATION',publicLogistics:{postalCode:'21061'}});
  await db.doc('campaignZones/private-zone').set({campaignId:'private-job',businessId:'owner',assignedScalerId:'assigned',status:'accepted'});

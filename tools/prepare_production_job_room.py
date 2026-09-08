@@ -1,8 +1,8 @@
 """Build a narrowly patched production Job Room package from its pinned archive.
 
 No network or deployment. The input is the verified deployed source archive;
-the output must be private. All original modules stay byte-identical except
-index.js, plus the two explicit pure privacy modules. Never uses QA source.
+the output must be private. Preserve the deployed handler with explicit privacy,
+production evidence and workspace-authority adapters. Never includes QA authority.
 """
 import argparse
 import hashlib
@@ -39,7 +39,7 @@ def prepare(archive, output):
     guard = '''  if (request.data?.privacyVersion !== require('./policy').VERSION) {
     throw new HttpsError('failed-precondition', 'Update ScaledCircle to open this Job Room. Refresh the web page or install the latest production app.');
   }
-  const authRecord = await require('firebase-admin/auth').getAuth().getUser(context.uid);
+  const authRecord = await require('firebase-admin/auth').getAuth().getUser(request.auth.uid);
   if (authRecord.disabled || !authRecord.emailVerified ||
       (!context.isAdmin && context.user.active !== true)) {
     throw new HttpsError('permission-denied', 'An enabled, verified approved account is required.');
@@ -74,6 +74,9 @@ def prepare(archive, output):
   return safe;
 });''', 1)
     path.write_text(before + handler, encoding='utf-8', newline='\n')
+    import subprocess
+    adapter = "const fs=require('fs');const p=process.argv[1];fs.writeFileSync(p,require('./tools/production_workspace_adapter.cjs').adapt(fs.readFileSync(p,'utf8'),'getJobRoom'));"
+    subprocess.run(['node', '-e', adapter, str(path)], cwd=root, check=True)
     for name in ['policy.js', 'job_room_privacy.js']:
         (output / name).write_bytes((root / 'functions-logistics-access' / name).read_bytes())
     # Shared policy modules come from the deterministic production generator;
@@ -91,6 +94,8 @@ def prepare(archive, output):
         for relative in re.findall(r"require\(['\"]\./([\w_-]+)['\"]\)", content):
             policy_copy(relative + '.js')
     policy_copy('production_job_room_evidence.js')
+    for name in ['workspace_access.js', 'business_workspace.js', 'subscription_entitlements.js', 'legal_consent.js']:
+        (output / name).write_bytes((root / 'functions' / name).read_bytes())
     manifest = {p.relative_to(output).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in output.rglob('*') if p.is_file() and 'node_modules' not in p.parts}
     (output.parent / 'job-room-package-manifest.private.json').write_text(json.dumps({

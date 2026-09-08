@@ -1,5 +1,5 @@
+import '../../services/business_workspace_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +12,6 @@ import '../../services/discovery_preferences_service.dart';
 import '../../services/property_intelligence_service.dart';
 import '../../services/property_area_context_service.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
-import '../../services/subscription_plan_service.dart';
 import '../../services/opportunity_goal_service.dart';
 import '../../models/campaign/campaign.dart';
 import '../../widgets/mapped_address_field.dart';
@@ -44,7 +43,6 @@ class _PropertyIntelligenceCenterScreenState
   final _aiQuestionFocus = FocusNode();
   final _service = PropertyIntelligenceService();
   final _aiService = ScaledCircleIntelligenceService();
-  final _planService = SubscriptionPlanService();
   final _areaContextService = const PropertyAreaContextService();
   final List<LatLng> _inputPoints = [];
   List<LatLng> _area = [];
@@ -1104,21 +1102,27 @@ class _PropertyIntelligenceCenterScreenState
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return _buildPremiumGate();
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('wallets')
-          .doc(user.uid)
-          .snapshots(),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: BusinessWorkspaceService().context(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData &&
-            snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final entitled = _planService.hasActiveScalePropertyIntelligence(
-          snapshot.data?.data(),
-        );
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () => setState(() {}),
+                child: const Text('Retry workspace access'),
+              ),
+            ),
+          );
+        }
+        final entitled =
+            snapshot.data?['propertyIntelligenceAvailable'] == true &&
+            BusinessWorkspaceSession.can('intelligence');
         return entitled ? _buildOperationalCenter() : _buildPremiumGate();
       },
     );

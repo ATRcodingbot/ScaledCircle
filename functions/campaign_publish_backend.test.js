@@ -1,5 +1,5 @@
 "use strict";
-const {test, after} = require("node:test");
+const {test, before, after} = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const {createRequire} = require("node:module");
@@ -9,12 +9,20 @@ process.env.APP_ENV = "staging";
 const fundingRequire = createRequire(require.resolve("../functions-campaign-funding/index.js"));
 const fn = fundingRequire("./index.js").publishFundedCampaign;
 const db = fundingRequire("firebase-admin/firestore").getFirestore();
+before(async () => {
+ if(!process.env.FIREBASE_AUTH_EMULATOR_HOST)throw Error('Auth emulator required');
+ const auth=fundingRequire('firebase-admin/auth').getAuth();
+ for(const uid of ['publish_business','publish_other']) {
+  try {await auth.createUser({uid,email:`${uid}@example.test`,emailVerified:true});}
+  catch(e){if(e.code!=='auth/uid-already-exists')throw e;}
+ }
+});
 after(async () => Promise.all(fundingRequire("firebase-admin/app").getApps().map((app) => app.delete())));
 const call = (id, uid = "publish_business") => fn.run({data: {campaignId: id},
   auth: {uid, token: {email_verified: true}}});
 async function seed(id, overrides = {}, zoneOverrides = {}) {
-  await db.doc("users/publish_business").set({role: "business"});
-  await db.doc("users/publish_other").set({role: "business"});
+  await db.doc("users/publish_business").set({role: "business", active: true});
+  await db.doc("users/publish_other").set({role: "business", active: true});
   await db.doc(`campaigns/${id}`).set({businessId: "publish_business", status: "draft",
     fundingStatus: "funded", fundingPaymentId: id, basePay: 15, ...overrides});
   await db.doc(`campaignPayments/${id}`).set({campaignId: id, businessUid: "publish_business",
@@ -67,4 +75,12 @@ test("reserved QA requires exact authority and preserves its binding", async () 
     businessUid: "publish_business", scalerUid: "qa_scaler"});
   assert.equal((await call(id)).status, "open");
   assert.equal((await db.doc(`campaigns/${id}`).get()).data().certificationScalerUid, "qa_scaler");
+});
+test('funding package enforces team responsibilities and attributes the actor', async()=>{
+ const {Timestamp}=fundingRequire('firebase-admin/firestore'),auth=fundingRequire('firebase-admin/auth').getAuth();
+ const b='publish_business',id='publish_member_authority';await seed(id);await db.doc(`users/${b}`).set({role:'business',active:true},{merge:true});await db.doc(`businessSubscriptions/${b}`).set({plan:'growth',status:'active',expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
+ for(const [uid,permissions]of [['publish_analyst',['analytics']],['publish_manager',['campaigns','authorizeCampaigns']]]){await auth.createUser({uid,email:`${uid}@example.test`,emailVerified:true});await db.doc(`users/${uid}`).set({role:'business',active:true});await db.doc(`businessWorkspaces/${b}/members/${uid}`).set({uid,businessId:b,status:'active',seatIndex:uid==='publish_analyst'?1:2,permissions});}
+ await assert.rejects(call(id,'publish_analyst'),e=>e.code==='permission-denied');
+ await assert.rejects(fundingRequire('./index.js').quoteCampaignFunding.run({auth:{uid:'publish_manager',token:{email_verified:true}},data:{campaignId:id}}),e=>e.code==='permission-denied');
+ assert.equal((await call(id,'publish_manager')).status,'open');assert.equal((await db.doc(`campaigns/${id}`).get()).data().publishedByActorUid,'publish_manager');await db.doc(`businessWorkspaces/${b}/members/publish_manager`).update({status:'removed'});await assert.rejects(call(id,'publish_manager'),e=>e.code==='permission-denied');assert.equal((await db.collection('walletTransactions').where('campaignId','==',id).get()).size,0);
 });

@@ -14,9 +14,7 @@ function replaceFunction(source,name,replacement) {
   if(!node)throw Error('Missing maintained function '+name);
   return source.slice(0,node.start)+replacement+source.slice(node.end);
 }
-function prepare(output=path.join(root,'.firebase','production-engineering','tracking')) {
-  output=path.resolve(output);
-  if(!output.startsWith(path.join(root,'.firebase')+path.sep))throw Error('Private output required');
+function prepareSource(){
   let source=fs.readFileSync(path.join(root,'functions','index.js'),'utf8');
   source=replaceFunction(source,'assertPhysicalQaRequest',`async function assertProductionEnvironment(request, scalerOnly=true) {
     const project=process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT;
@@ -27,12 +25,19 @@ function prepare(output=path.join(root,'.firebase','production-engineering','tra
     if(!request.auth?.uid)throw new HttpsError('unauthenticated','Sign in to continue.');
     const authUser=await getAuth().getUser(request.auth.uid);
     const profile=(await db.doc('users/'+request.auth.uid).get()).data();
-    if(authUser.disabled||!authUser.emailVerified||!profile||profile.active!==true||
+    let approved=profile?.active===true;
+    if(!approved&&!scalerOnly&&profile?.activeBusinessId) {
+      try {await businessWorkspaceService().authority({uid:request.auth.uid,businessId:profile.activeBusinessId,allowExpired:true});approved=true;}catch(_){}
+    }
+    if(authUser.disabled||!authUser.emailVerified||!profile||!approved||
         (scalerOnly?profile.role!=='scaler':!['business','scaler','admin'].includes(profile.role))) {
       throw new HttpsError('permission-denied','An enabled, verified approved Scaler is required.');
     }
   }`);
   source=source.replaceAll('assertPhysicalQaRequest(','assertProductionEnvironment(');
+  source=replaceFunction(source,'businessWorkspaceService',`function businessWorkspaceService() {
+    return require('./business_workspace').createWorkspaceService({db,auth:getAuth(),FieldValue,Timestamp,origin:'https://scaledcircle.com'});
+  }`);
   source=source.replace(/const campaign = \(process\.env\.GCLOUD_PROJECT \|\| process\.env\.GOOGLE_CLOUD_PROJECT\) === 'scaledcircle-staging'\s*\? await db\.collection\('campaigns'\)\.doc\(session\.campaignId\)\.get\(\) : null;/,
     "const campaign = await db.collection('campaigns').doc(session.campaignId).get();");
   const startMarker='  const deadlineValue = zone.deadline || campaign.deadline || null;';
@@ -73,6 +78,12 @@ function prepare(output=path.join(root,'.firebase','production-engineering','tra
   // Financial review has its own Business/zone authorization in the handler.
   const reviewStart=source.indexOf('function safeMarketplaceAuthorityCallable');
   source=source.slice(0,reviewStart)+source.slice(reviewStart).replace('await assertProductionEnvironment(request);','await assertProductionEnvironment(request,false);');
+  return source;
+}
+function prepare(output=path.join(root,'.firebase','production-engineering','tracking')) {
+  output=path.resolve(output);
+  if(!output.startsWith(path.join(root,'.firebase')+path.sep))throw Error('Private output required');
+  const source=prepareSource();
   const ast=selectedProgram(parser.parse(source,{sourceType:'unambiguous'}),new Set([...TRACKING,...POLICY]));
   const text=generate(ast,{comments:true}).code+'\n';
   fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'index.js'),text);
@@ -108,4 +119,4 @@ function prepare(output=path.join(root,'.firebase','production-engineering','tra
   return {output,exports:[...TRACKING,...POLICY],files:Object.keys(files).length};
 }
 if(require.main===module)console.log(JSON.stringify(prepare(process.argv[2])));
-module.exports={prepare,replaceFunction,TRACKING};
+module.exports={prepare,prepareSource,replaceFunction,TRACKING};

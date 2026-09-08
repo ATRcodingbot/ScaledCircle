@@ -24,7 +24,8 @@
     "test:wallet-backend": "npx firebase-tools emulators:exec --project demo-scaledcircle --only firestore \"node --test wallet_projection_backend.test.js\"",
     "test:cashout-backend": "node --test scaler_cashout_backend.test.js",
     "test:logistics-privacy": "npx firebase-tools emulators:exec --project demo-logistics-privacy --only firestore \"node --test logistics_privacy_rules.test.js staging_physical_qa_rules.test.js logistics_privacy_backend.test.js canvassing_completion_backend.test.js\"",
-    "test:production-privacy": "npx firebase-tools emulators:exec --config ../firebase.production-launch.json --project demo-production-privacy --only firestore,auth \"node --test --test-concurrency=1 production_logistics_rules.test.js production_logistics_backend.test.js production_job_room_backend.test.js\""
+    "test:production-privacy": "npx firebase-tools emulators:exec --config ../firebase.production-launch.json --project demo-production-privacy --only firestore,auth \"node --test --test-concurrency=1 production_logistics_rules.test.js production_logistics_backend.test.js production_job_room_backend.test.js\"",
+    "test:workspace": "npx firebase-tools emulators:exec --config ../firebase.production-launch.json --project demo-business-workspace --only firestore,auth \"node --test --test-concurrency=1 business_workspace_backend.test.js business_workspace_rules.test.js business_live_progress_backend.test.js campaign_publish_backend.test.js\""
   },
   "engines": {
     "node": "24"

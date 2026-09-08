@@ -17,6 +17,8 @@ const {getApps}=localRequire('firebase-admin/app');
 const db=getFirestore();
 const invoke=id=>fft.wrap(fn)({data:{campaignId:id},auth:{uid:'business',token:{email_verified:true}}});
 before(async()=>{
+ const auth=localRequire('firebase-admin/auth').getAuth();
+ try{await auth.createUser({uid:'business',email:'business@example.invalid',emailVerified:true});}catch(error){if(error.code!=='auth/uid-already-exists')throw error;}
  await db.doc('users/business').set({role:'business',active:true});
  for(const id of ['mixed','invalid']) {
   await db.doc('campaigns/'+id).set({businessId:'business',status:'draft',fundingStatus:'funded',fundingPaymentId:'payment-'+id});

@@ -1,3 +1,4 @@
+import '../../../../../services/business_workspace_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -105,7 +106,7 @@ class _CleanupCampaignScreenState extends State<CleanupCampaignScreen> {
       final campaign = Campaign(
         id: "",
 
-        businessId: user.uid,
+        businessId: BusinessWorkspaceSession.businessIdFor(user.uid),
 
         campaignName: nameController.text.trim(),
 

@@ -81,7 +81,9 @@ class CompletionSubmissionService {
     bool accessException = false,
     bool technicalReview = false,
   }) async {
-    final completionSnapshot = await _completions.doc(completionId).get();
+    final completionSnapshot = await _completions
+        .doc(completionId)
+        .get(const GetOptions(source: Source.server));
 
     if (!completionSnapshot.exists) {
       throw Exception('Completion record not found.');
@@ -102,7 +104,7 @@ class CompletionSubmissionService {
     final routeSnapshot = await _firestore
         .collection('campaignRoutes')
         .doc(routeId)
-        .get();
+        .get(const GetOptions(source: Source.server));
     final routeData = routeSnapshot.data();
     final routePoints = routeData?['points'];
 
@@ -133,7 +135,9 @@ class CompletionSubmissionService {
   // ------------------------------------------------------------
 
   Future<CampaignCompletion?> getCompletion(String completionId) async {
-    final snapshot = await _completions.doc(completionId).get();
+    final snapshot = await _completions
+        .doc(completionId)
+        .get(const GetOptions(source: Source.server));
 
     if (!snapshot.exists) {
       return null;

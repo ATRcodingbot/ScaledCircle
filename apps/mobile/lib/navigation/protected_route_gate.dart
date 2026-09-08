@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../screens/auth/login_screen.dart';
 import 'app_routes.dart';
 import 'app_router.dart';
+import 'startup_session_gate.dart';
+import 'business_workspace_gate.dart';
 
 enum ProtectedRouteAudience { business, scaler, admin, jobRoomParticipant }
 
@@ -69,12 +71,26 @@ class ProtectedRouteGate extends StatelessWidget {
           future: FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
-              .get(),
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 20)),
           builder: (context, profileSnapshot) {
             if (profileSnapshot.connectionState != ConnectionState.done) {
               return const _RouteLoadingScreen();
             }
             final profile = profileSnapshot.data?.data();
+            if (profile != null &&
+                (audience == ProtectedRouteAudience.business ||
+                    (audience == ProtectedRouteAudience.jobRoomParticipant &&
+                        (profile['role'] == 'business' ||
+                            (profile['activeBusinessId'] != null &&
+                                profile['activeView'] == 'business')))) &&
+                profile['role'] != 'admin') {
+              return BusinessWorkspaceGate(
+                user: user,
+                profile: profile,
+                builder: builder,
+              );
+            }
             if (profile == null || !profileAllowsAudience(profile, audience)) {
               return RouteRecoveryScreen(
                 title: 'You don\'t have access to this page.',
@@ -93,41 +109,9 @@ class ProtectedRouteGate extends StatelessWidget {
 
 class AuthenticatedLandingGate extends StatelessWidget {
   const AuthenticatedLandingGate({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      initialData: FirebaseAuth.instance.currentUser,
-      builder: (context, authSnapshot) {
-        final user = authSnapshot.data;
-        if (authSnapshot.connectionState == ConnectionState.waiting) {
-          return const _RouteLoadingScreen();
-        }
-        if (user == null) return const LoginScreen();
-        return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          future: FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get(),
-          builder: (context, profileSnapshot) {
-            if (profileSnapshot.connectionState != ConnectionState.done) {
-              return const _RouteLoadingScreen();
-            }
-            final profile = profileSnapshot.data?.data();
-            if (profile == null) return const LoginScreen();
-            final destination = dashboardRouteForProfile(profile);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (context.mounted) {
-                AppNavigation.replace(context, destination);
-              }
-            });
-            return const _RouteLoadingScreen();
-          },
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) =>
+      const StartupSessionGate(signedOut: LoginScreen());
 }
 
 class UnknownRouteGate extends StatelessWidget {
@@ -151,7 +135,8 @@ class UnknownRouteGate extends StatelessWidget {
           future: FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
-              .get(),
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 20)),
           builder: (context, profileSnapshot) {
             if (profileSnapshot.connectionState != ConnectionState.done) {
               return const _RouteLoadingScreen();

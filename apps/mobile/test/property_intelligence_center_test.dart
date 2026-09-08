@@ -54,7 +54,7 @@ void main() {
       final source = File(
         'lib/screens/business/property_intelligence_center_screen.dart',
       ).readAsStringSync();
-      expect(source, contains('hasActiveScalePropertyIntelligence'));
+      expect(source, contains("snapshot.data?['propertyIntelligenceAvailable'] == true"));
       expect(source, contains('_buildPremiumGate'));
       expect(source, contains("'Upgrade to Scale'"));
       expect(
@@ -68,7 +68,7 @@ void main() {
     final source = File(
       'lib/screens/business/business_dashboard.dart',
     ).readAsStringSync();
-    expect(source, contains('_buildPropertyIntelligenceCard(user.uid)'));
+    expect(source, contains('_buildPropertyIntelligenceCard('));
     expect(source, contains("'AI intelligence included with Scale.'"));
     expect(source, contains("'Upgrade to Scale'"));
     expect(source, contains('PropertyIntelligenceCenterScreen'));
@@ -126,7 +126,8 @@ void main() {
 
     expect(center, isNot(contains("collection('campaigns')")));
     expect(center, isNot(contains("collection('campaignZones')")));
-    expect(dashboard, contains("collection('campaigns')"));
+    expect(dashboard, contains("businessWorkspaceRecords("));
+    expect(dashboard, contains("'campaigns'"));
     expect(dashboard, isNot(contains('stagingFixture')));
     expect(dashboard, isNot(contains('Staging Property Intelligence')));
   });

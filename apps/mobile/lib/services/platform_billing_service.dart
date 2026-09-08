@@ -1,3 +1,4 @@
+import 'business_workspace_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -95,7 +96,8 @@ class PlatformBillingService {
   }) async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null || user.uid != businessId) {
+    if (user == null ||
+        BusinessWorkspaceSession.businessIdFor(user.uid) != businessId) {
       throw Exception('You must be logged in as this business.');
     }
 

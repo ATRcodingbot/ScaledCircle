@@ -1,3 +1,4 @@
+import '../../services/business_workspace_records.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +19,8 @@ import 'subscription_screen.dart';
 import 'managed_growth_screen.dart';
 import 'weather_alerts_screen.dart';
 import '../../widgets/reputation_card.dart';
-import 'profile/business_profile_screen.dart';
+import 'business_account_screen.dart';
+import '../../services/business_workspace_service.dart';
 import 'property_intelligence_center_screen.dart';
 import 'scaled_circle_services_screen.dart';
 import 'internal_beta_entitlements_screen.dart';
@@ -40,10 +42,10 @@ class _BusinessGoalGrid extends StatelessWidget {
     required this.hasResults,
   });
 
-  final VoidCallback onFindOpportunity;
-  final VoidCallback onCreateMarketing;
-  final VoidCallback onLaunchCampaign;
-  final VoidCallback onReviewResults;
+  final VoidCallback? onFindOpportunity;
+  final VoidCallback? onCreateMarketing;
+  final VoidCallback? onLaunchCampaign;
+  final VoidCallback? onReviewResults;
   final bool hasResults;
 
   @override
@@ -283,34 +285,13 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
   Future<void> _openCreateCampaign(BuildContext context, String userId) async {
     try {
-      final walletSnapshot = await FirebaseFirestore.instance
-          .collection('wallets')
-          .doc(userId)
-          .get();
-
-      if (!context.mounted) {
-        return;
+      final workspace = await BusinessWorkspaceService().context();
+      if (!context.mounted) return;
+      if (!BusinessWorkspaceSession.can('campaigns')) {
+        throw StateError('Campaign access is required.');
       }
-
-      final walletData = walletSnapshot.data();
-
-      final subscriptionStatus = walletData?['subscriptionStatus']
-          ?.toString()
-          .toLowerCase();
-
-      final planId = walletData?['subscriptionPlan']?.toString().toLowerCase();
-
-      final expiresAt = walletData?['subscriptionExpiresAt'];
-
-      final subscriptionActive =
-          walletSnapshot.exists &&
-          subscriptionStatus == 'active' &&
-          planId != null &&
-          planId.isNotEmpty &&
-          (expiresAt == null ||
-              (expiresAt is Timestamp &&
-                  expiresAt.toDate().isAfter(DateTime.now())));
-
+      final planId = workspace['planId']?.toString() ?? '';
+      final subscriptionActive = workspace['subscriptionActive'] == true;
       if (!subscriptionActive) {
         final subscribed = await Navigator.push<bool>(
           context,
@@ -334,10 +315,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
         return;
       }
 
-      final campaignsSnapshot = await FirebaseFirestore.instance
-          .collection('campaigns')
-          .where('businessId', isEqualTo: userId)
-          .get();
+      final campaignsSnapshot = await businessWorkspaceRecords(
+        FirebaseFirestore.instance,
+        'campaigns',
+        userId,
+      ).first.timeout(const Duration(seconds: 25));
 
       if (!context.mounted) {
         return;
@@ -345,8 +327,8 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
       int activeCampaignCount = 0;
 
-      for (final campaign in campaignsSnapshot.docs) {
-        final data = campaign.data();
+      for (final campaign in campaignsSnapshot) {
+        final data = campaign.data() ?? {};
 
         final status = data['status']?.toString().toLowerCase() ?? '';
 
@@ -644,9 +626,16 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ),
                 );
               } else if (value == 'campaigns') {
-                _openCampaigns(context, user.uid);
+                _openCampaigns(
+                  context,
+                  BusinessWorkspaceSession.businessIdFor(user.uid),
+                );
               } else if (value == 'results') {
-                _openCampaigns(context, user.uid, results: true);
+                _openCampaigns(
+                  context,
+                  BusinessWorkspaceSession.businessIdFor(user.uid),
+                  results: true,
+                );
               } else if (value == 'responses') {
                 AppNavigation.push(context, AppRoutes.businessAttribution);
               } else if (value == 'landing_pages') {
@@ -664,7 +653,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const BusinessProfileScreen(),
+                    builder: (_) => const BusinessAccountScreen(),
                   ),
                 );
               } else if (value == 'support') {
@@ -732,12 +721,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       ),
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
-        child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('campaigns')
-              .where('businessId', isEqualTo: user.uid)
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
+        child: StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
+          stream: businessWorkspaceRecords(
+            FirebaseFirestore.instance,
+            'campaigns',
+            BusinessWorkspaceSession.businessIdFor(user.uid),
+          ),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return ListView(
@@ -760,17 +749,18 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final campaigns = (snapshot.data?.docs ?? []).where((campaign) {
+            final campaigns = (snapshot.data ?? []).where((campaign) {
               final data = campaign.data() as Map<String, dynamic>;
               return data['archived'] != true &&
                   data['hiddenFromBusinessHistory'] != true;
             }).toList();
 
-            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('campaignZones')
-                  .where('businessId', isEqualTo: user.uid)
-                  .snapshots(),
+            return StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
+              stream: businessWorkspaceRecords(
+                FirebaseFirestore.instance,
+                'campaignZones',
+                BusinessWorkspaceSession.businessIdFor(user.uid),
+              ),
               builder: (context, zoneSnapshot) {
                 if (zoneSnapshot.hasError) {
                   return ListView(
@@ -789,7 +779,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final resultSummary = BusinessResultSummary.fromZones(
-                  zoneSnapshot.data!.docs.map((zone) => zone.data()),
+                  zoneSnapshot.data!.map((zone) => zone.data()!),
                 );
 
                 final activeCampaigns = campaigns.where((campaign) {
@@ -842,11 +832,21 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       primaryActionIcon: Icons.campaign_outlined,
                       onPrimaryAction: () {
                         if (awaitingReviewCount > 0) {
-                          _openCampaigns(context, user.uid, results: true);
+                          _openCampaigns(
+                            context,
+                            BusinessWorkspaceSession.businessIdFor(user.uid),
+                            results: true,
+                          );
                         } else if (campaigns.isEmpty) {
-                          _openCreateCampaign(context, user.uid);
+                          _openCreateCampaign(
+                            context,
+                            BusinessWorkspaceSession.businessIdFor(user.uid),
+                          );
                         } else {
-                          _openCampaigns(context, user.uid);
+                          _openCampaigns(
+                            context,
+                            BusinessWorkspaceSession.businessIdFor(user.uid),
+                          );
                         }
                       },
                       metrics: [
@@ -854,7 +854,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                           icon: Icons.campaign_outlined,
                           label:
                               '${activeCampaigns.length} active campaign${activeCampaigns.length == 1 ? '' : 's'}',
-                          onTap: () => _openCampaigns(context, user.uid),
+                          onTap: () => _openCampaigns(
+                            context,
+                            BusinessWorkspaceSession.businessIdFor(user.uid),
+                          ),
                         ),
                         DashboardPill(
                           icon: Icons.fact_check_outlined,
@@ -880,33 +883,55 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       ),
                       children: [
                         _BusinessGoalGrid(
-                          onFindOpportunity: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const PropertyIntelligenceCenterScreen(),
-                            ),
-                          ),
-                          onCreateMarketing: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const ManagedGrowthScreen(),
-                            ),
-                          ),
-                          onLaunchCampaign: () =>
-                              _openCreateCampaign(context, user.uid),
-                          onReviewResults: () {
-                            if (reviewCampaigns.length == 1) {
-                              AppNavigation.push(
-                                context,
-                                AppRoutes.campaignDetail(
-                                  reviewCampaigns.single.id,
+                          onFindOpportunity:
+                              !BusinessWorkspaceSession.can('intelligence')
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const PropertyIntelligenceCenterScreen(),
+                                  ),
                                 ),
-                              );
-                              return;
-                            }
-                            _openCampaigns(context, user.uid, results: true);
-                          },
+                          onCreateMarketing:
+                              !BusinessWorkspaceSession.can('intelligence')
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ManagedGrowthScreen(),
+                                  ),
+                                ),
+                          onLaunchCampaign:
+                              !BusinessWorkspaceSession.can('campaigns')
+                              ? null
+                              : () => _openCreateCampaign(
+                                  context,
+                                  BusinessWorkspaceSession.businessIdFor(
+                                    user.uid,
+                                  ),
+                                ),
+                          onReviewResults:
+                              !BusinessWorkspaceSession.can('analytics')
+                              ? null
+                              : () {
+                                  if (reviewCampaigns.length == 1) {
+                                    AppNavigation.push(
+                                      context,
+                                      AppRoutes.campaignDetail(
+                                        reviewCampaigns.single.id,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  _openCampaigns(
+                                    context,
+                                    BusinessWorkspaceSession.businessIdFor(
+                                      user.uid,
+                                    ),
+                                    results: true,
+                                  );
+                                },
                           hasResults: resultSummary.hasResults,
                         ),
                       ],
@@ -921,25 +946,32 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     if (activeCampaigns.isNotEmpty || awaitingReviewCount > 0)
                       const SizedBox(height: 24),
 
-                    _buildBusinessPaymentsSection(),
+                    if (BusinessWorkspaceSession.can('payments') ||
+                        BusinessWorkspaceSession.can('billing'))
+                      _buildBusinessPaymentsSection(),
                     const SizedBox(height: 16),
-                    ExpansionTile(
-                      title: const Text('Explore growth insights — Beta'),
-                      children: [
-                        _buildPropertyIntelligenceCard(user.uid),
-                        _buildManagedGrowthCard(user.uid),
-                        _buildWeatherSection(),
-                      ],
-                    ),
+                    if (BusinessWorkspaceSession.can('intelligence'))
+                      ExpansionTile(
+                        title: const Text('Explore growth insights — Beta'),
+                        children: [
+                          _buildPropertyIntelligenceCard(
+                            BusinessWorkspaceSession.businessIdFor(user.uid),
+                          ),
+                          _buildManagedGrowthCard(
+                            BusinessWorkspaceSession.businessIdFor(user.uid),
+                          ),
+                          _buildWeatherSection(),
+                        ],
+                      ),
                     const SizedBox(height: 16),
                     Card(
                       child: ListTile(
                         leading: const Icon(Icons.business),
 
-                        title: const Text("My Business Profile"),
+                        title: const Text("Business Account"),
 
                         subtitle: const Text(
-                          "View your company profile and reputation.",
+                          "Profile, Team, Billing and Plan.",
                         ),
 
                         trailing: const Icon(Icons.arrow_forward_ios),
@@ -949,7 +981,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                             context,
 
                             MaterialPageRoute(
-                              builder: (_) => const BusinessProfileScreen(),
+                              builder: (_) => const BusinessAccountScreen(),
                             ),
                           );
                         },
@@ -966,7 +998,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
 
                     const SizedBox(height: 18),
 
-                    _buildSubscriptionSection(user.uid),
+                    _buildSubscriptionSection(
+                      BusinessWorkspaceSession.businessIdFor(user.uid),
+                    ),
 
                     const SizedBox(height: 22),
 
@@ -976,7 +1010,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         icon: const Icon(Icons.add_location_alt_outlined),
                         label: const Text('Create Another Campaign'),
                         onPressed: () async {
-                          await _openCreateCampaign(context, user.uid);
+                          await _openCreateCampaign(
+                            context,
+                            BusinessWorkspaceSession.businessIdFor(user.uid),
+                          );
                         },
                       ),
                     ),
@@ -989,7 +1026,12 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                           child: Card(
                             child: InkWell(
                               key: const Key('active-campaign-summary'),
-                              onTap: () => _openCampaigns(context, user.uid),
+                              onTap: () => _openCampaigns(
+                                context,
+                                BusinessWorkspaceSession.businessIdFor(
+                                  user.uid,
+                                ),
+                              ),
                               child: Padding(
                                 padding: const EdgeInsets.all(20),
                                 child: Column(
@@ -1279,15 +1321,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
   }
 
   Widget _buildPropertyIntelligenceCard(String userId) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('wallets')
-          .doc(userId)
-          .snapshots(),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: BusinessWorkspaceService().context(),
       builder: (context, snapshot) {
-        final entitled = _planService.hasActiveScalePropertyIntelligence(
-          snapshot.data?.data(),
-        );
+        final entitled =
+            snapshot.data?['propertyIntelligenceAvailable'] == true;
         return Card(
           child: ListTile(
             leading: Icon(
@@ -1315,15 +1353,10 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
   }
 
   Widget _buildManagedGrowthCard(String userId) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('wallets')
-          .doc(userId)
-          .snapshots(),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: BusinessWorkspaceService().context(),
       builder: (context, snapshot) {
-        final entitled = _planService.hasActiveManagedGrowth(
-          snapshot.data?.data(),
-        );
+        final entitled = snapshot.data?['managedGrowthAvailable'] == true;
         return Card(
           child: ListTile(
             leading: Icon(entitled ? Icons.auto_awesome : Icons.lock_outline),

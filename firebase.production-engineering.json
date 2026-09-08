@@ -80,6 +80,78 @@
         ".git",
         "candidate-manifest.json"
       ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/business-profile-core",
+      "codebase": "business-profile-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/legal-core",
+      "codebase": "legal-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/transactional-email",
+      "codebase": "transactional-email",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/creative-media-core",
+      "codebase": "creative-media-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/physical-marketing-core",
+      "codebase": "physical-marketing-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/landing-page-core",
+      "codebase": "landing-page-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/platform-core",
+      "codebase": "platform-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/attribution-core",
+      "codebase": "attribution-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
     }
   ],
   "firestore": {

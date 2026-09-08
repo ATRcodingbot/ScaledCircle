@@ -233,7 +233,7 @@ test("assignment-core exclusively owns the maintained assignment callable IDs", 
 });
 
 test("job-room-core exclusively owns the secret-free Job Room read authority", () => {
-  const names = ["getJobRoom"];
+  const names = ["getJobRoom", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "getBusinessLiveProgress", "addActiveWorkNote"];
   assert.deepEqual(exportsIn(jobRoom).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
@@ -442,7 +442,7 @@ test("physical-marketing-core exclusively owns provider-free immutable print aut
 });
 
 test("business-profile-core exclusively owns the zero-secret customer profile save authority", () => {
-  assert.deepEqual(exportsIn(businessProfileCore), ["saveBusinessGrowthProfile"]);
+  assert.deepEqual(exportsIn(businessProfileCore).sort(), ["saveBusinessGrowthProfile", "listBusinessWorkspaceRecordIds", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "auditBusinessCampaignDraft"].sort());
   for (const source of [platform, legacy, physicalMarketingCore]) {
     assert.doesNotMatch(source, /exports\.saveBusinessGrowthProfile\s*=/);
   }

@@ -22,7 +22,12 @@ void main() {
       ),
     );
     final login = File('lib/screens/auth/login_screen.dart').readAsStringSync();
-    expect('widget.returnRoute != null'.allMatches(login).length, 2);
+    expect(login, contains('widget.returnRoute'));
+    final startup = File(
+      'lib/navigation/startup_session_gate.dart',
+    ).readAsStringSync();
+    expect(startup, contains('StartupDestination.scalerProfile'));
+    expect(startup, contains('CompleteScalerProfileScreen'));
   });
 
   test('final completion is distinct from intermediate preference saves', () {

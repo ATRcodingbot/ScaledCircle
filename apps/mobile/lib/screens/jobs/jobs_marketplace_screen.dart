@@ -380,7 +380,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
                                 children: [
                                   Chip(
                                     avatar: const Icon(Icons.home, size: 18),
-                                    label: Text('$homes Homes'),
+                                    label: Text('Estimated homes: ~$homes'),
                                   ),
                                   Chip(
                                     avatar: const Icon(

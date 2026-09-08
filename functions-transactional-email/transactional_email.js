@@ -344,9 +344,9 @@ function validateDeliveryJob(job) {
   const sender = cleanText(job?.fromAddress, 254).toLowerCase();
   const landingPageTemplate = LANDING_PAGE_TEMPLATES.has(template);
   const allowedTemplate = template.startsWith("welcome_") || template.startsWith("support_") ||
-    template.startsWith("verification_") || landingPageTemplate;
+    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate;
   const recipientAllowed = destination === SUPPORT_EMAIL || template.startsWith("welcome_") ||
-    template.startsWith("verification_") || landingPageTemplate;
+    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate;
   const html = job?.html == null ? undefined : String(job.html).slice(0, 60000);
   const htmlAllowed = !html || job.trustedHtml === true;
   if (!validEmail(destination) || sender !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed || !htmlAllowed) return false;

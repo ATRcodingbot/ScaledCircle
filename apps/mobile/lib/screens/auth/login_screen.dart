@@ -8,7 +8,6 @@ import '../../navigation/app_router.dart';
 import '../../widgets/scaled_circle_brand.dart';
 
 import '../notifications/notifications_screen.dart';
-import '../public/early_access_pending_screen.dart';
 import '../public/waitlist_screen.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
@@ -82,93 +81,8 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      final userDocument = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
       if (!mounted) return;
-
-      if (!userDocument.exists) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => EarlyAccessPendingScreen(
-              email: user.email ?? emailController.text.trim(),
-              role: null,
-            ),
-          ),
-        );
-        return;
-      }
-
-      final userData = userDocument.data();
-
-      final role = userData?['role']?.toString().toLowerCase();
-      final approvedForBeta =
-          role == 'admin' ||
-          userData?['active'] == true ||
-          userData?['betaAccess'] == 'approved';
-
-      if (!approvedForBeta) {
-        if (widget.returnRoute != null) {
-          AppNavigation.replace(context, widget.returnRoute!);
-          return;
-        }
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => EarlyAccessPendingScreen(
-              email: user.email ?? emailController.text.trim(),
-              role: role,
-            ),
-          ),
-        );
-        return;
-      }
-
-      if (widget.returnRoute != null) {
-        AppNavigation.replace(context, widget.returnRoute!);
-        return;
-      }
-
-      final accountType = (userData?['activeView'] ?? userData?['accountType'])
-          ?.toString()
-          .toLowerCase();
-
-      final loginNotification = await _buildLoginNotification(
-        userId: user.uid,
-        accountType: accountType,
-      );
-
-      if (!mounted) return;
-
-      if (role == 'admin') {
-        AppNavigation.replace(context, AppRoutes.adminDashboard);
-        return;
-      }
-      if (accountType == 'business' ||
-          accountType == 'scaler' ||
-          accountType == 'marketer') {
-        AppNavigation.replace(
-          context,
-          accountType == 'business'
-              ? AppRoutes.businessDashboard
-              : AppRoutes.scalerDashboard,
-          arguments: loginNotification,
-        );
-        return;
-      }
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EarlyAccessPendingScreen(
-            email: user.email ?? emailController.text.trim(),
-            role: role,
-          ),
-        ),
-      );
+      AppNavigation.replace(context, widget.returnRoute ?? '/');
     } on FirebaseAuthException catch (e) {
       final message = _loginAuthErrorMessage(e);
 
@@ -226,112 +140,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       default:
         return error.message ?? 'Login failed.';
-    }
-  }
-
-  Future<LoginNotificationData?> _buildLoginNotification({
-    required String userId,
-    required String? accountType,
-  }) async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('notifications')
-          .where('userId', isEqualTo: userId)
-          .where('read', isEqualTo: false)
-          .get();
-
-      if (snapshot.docs.isEmpty) {
-        return null;
-      }
-
-      final notifications = List<QueryDocumentSnapshot>.from(snapshot.docs);
-
-      notifications.sort(compareLoginNotificationsNewestFirst);
-
-      if (accountType == 'business') {
-        final applicationNotifications = notifications.where((notification) {
-          final data = notification.data() as Map<String, dynamic>;
-
-          return data['type'] == 'application_received';
-        }).toList();
-
-        if (applicationNotifications.isNotEmpty) {
-          final count = applicationNotifications.length;
-
-          return LoginNotificationData(
-            title: count == 1
-                ? 'New Scaler Application'
-                : 'New Scaler Applications',
-            message: count == 1
-                ? '1 Scaler has applied to one of your campaigns.'
-                : '$count Scalers have applied to your campaigns.',
-            notifications: applicationNotifications,
-          );
-        }
-
-        final newest = notifications.first;
-
-        final data = newest.data() as Map<String, dynamic>;
-
-        return LoginNotificationData(
-          title: data['title']?.toString() ?? 'New Notification',
-          message: data['message']?.toString() ?? '',
-          notifications: [newest],
-        );
-      }
-
-      if (accountType == 'scaler' || accountType == 'marketer') {
-        const priorityTypes = [
-          'changes_requested',
-          'application_accepted',
-          'campaign_completed',
-          'application_rejected',
-          'completion_submitted',
-          'application_received',
-        ];
-
-        QueryDocumentSnapshot? selectedNotification;
-
-        for (final type in priorityTypes) {
-          for (final notification in notifications) {
-            final data = notification.data() as Map<String, dynamic>;
-
-            if (data['type'] == type) {
-              selectedNotification = notification;
-
-              break;
-            }
-          }
-
-          if (selectedNotification != null) {
-            break;
-          }
-        }
-
-        selectedNotification ??= notifications.first;
-
-        final data = selectedNotification.data() as Map<String, dynamic>;
-
-        return LoginNotificationData(
-          title: data['title']?.toString() ?? 'New Notification',
-          message: data['message']?.toString() ?? '',
-          notifications: [selectedNotification],
-        );
-      }
-
-      final newest = notifications.first;
-
-      final data = newest.data() as Map<String, dynamic>;
-
-      return LoginNotificationData(
-        title: data['title']?.toString() ?? 'New Notification',
-        message: data['message']?.toString() ?? '',
-        notifications: [newest],
-      );
-    } catch (e) {
-      debugPrint('Unable to load login notifications: $e');
-
-      return null;
     }
   }
 

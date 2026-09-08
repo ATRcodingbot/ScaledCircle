@@ -12,7 +12,8 @@ void main() {
     );
 
     expect(dashboard, contains("value == 'campaigns'"));
-    expect(dashboard, contains('_openCampaigns(context, user.uid)'));
+    expect(dashboard, contains('_openCampaigns('));
+    expect(dashboard, contains('BusinessWorkspaceSession.businessIdFor(user.uid)'));
     expect(dashboard, contains("value == 'results'"));
     expect(dashboard, contains('BusinessCampaignView.results'));
     expect(
@@ -70,9 +71,14 @@ void main() {
       expect(review, contains("label: 'Base Earning'"));
       expect(review, contains('approve bonus eligibility'));
       expect(review, isNot(contains("label: 'Base Payment'")));
-      expect(publicHome, contains('Publishing and paid actions require the appropriate approval.'));
+      expect(
+        publicHome,
+        contains(
+          'Publishing and paid actions require the appropriate approval.',
+        ),
+      );
       expect(publicHome, isNot(contains('Publish digital marketing')));
-      expect(dashboard, contains('View your company profile and reputation.'));
+      expect(dashboard, contains('Profile, Team, Billing and Plan.'));
       expect(dashboard, contains("PopupMenuItem(value: 'support'"));
     },
   );

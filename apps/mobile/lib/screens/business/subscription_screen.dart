@@ -1,3 +1,5 @@
+import 'business_membership_screen.dart';
+import '../../services/business_workspace_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -41,6 +43,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   Future<void> _purchasePlan(String plan, double charge, bool upgrading) async {
+    if (upgrading) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => const BusinessMembershipScreen(),
+        ),
+      );
+      return;
+    }
     if (_purchasingPlan != null) {
       return;
     }
@@ -94,7 +105,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
     try {
       final activatedImmediately = await _billingService.purchaseSubscription(
-        businessId: user.uid,
+        businessId: BusinessWorkspaceSession.businessIdFor(user.uid),
         plan: plan,
         manageExisting: upgrading,
       );
@@ -162,7 +173,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('wallets')
-                    .doc(user.uid)
+                    .doc(BusinessWorkspaceSession.businessIdFor(user.uid))
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting &&

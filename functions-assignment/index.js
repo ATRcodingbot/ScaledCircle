@@ -1,25 +1,13 @@
 const stagingPhysicalQa = require("./staging_physical_qa");
-async function assertPhysicalQaRequest(request) {
-  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
-  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
-  try {
-    stagingPhysicalQa.assertAccess({
-      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
-      authority: authority.data(), uid: request.auth?.uid,
-      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
-      targetScalerUid: request.data?.applicationId || request.data?.scalerId
-    });
-  } catch (_) {
-    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
-  }
-}
+
+
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
 
 
 const { initializeApp, getApp } = require("firebase-admin/app");
-
+const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
@@ -59,6 +47,8 @@ const marketplace = require("./marketplace_finance");
 
 
 
+
+
 const operations = require("./operational_layer");
 
 
@@ -68,6 +58,9 @@ const operations = require("./operational_layer");
 
 const groupAssignment = require("./group_assignment");
 const multiScalerRollout = require("./multi_scaler_rollout");
+
+const businessWorkspace = require("./business_workspace");
+const workspaceAccess = require("./workspace_access");
 
 
 
@@ -97,6 +90,30 @@ function assertProductionScalerCount(value) {
 }
 
 const db = getFirestore();
+
+function businessWorkspaceService() {
+  const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+  return businessWorkspace.createWorkspaceService({ db, auth: getAuth(), FieldValue, Timestamp,
+    origin: project === 'scaledcircle-staging' ? 'https://scaledcircle-staging.web.app' : 'https://scaledcircle.com' });
+}
+function businessOperation(name, handler) {
+  return async (request) => {
+    try {return await workspaceAccess.createAccessAdapter({ db, workspace: businessWorkspaceService(), FieldValue })(name, request, handler);}
+    catch (error) {if (error instanceof HttpsError) throw error;
+      if (['unauthenticated', 'permission-denied', 'invalid-argument', 'failed-precondition', 'already-exists', 'resource-exhausted', 'not-found', 'aborted', 'unavailable'].includes(error.code)) throw new HttpsError(error.code, error.message);
+      throw new HttpsError('internal', 'The workspace operation could not complete. Please retry.');}
+  };
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -524,7 +541,15 @@ setGlobalOptions({
 
 
 
+
+
+
+
+
+
+
 async function authenticatedUserContext(request, message) {
+  if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
     throw new HttpsError("unauthenticated", message);
   }
@@ -2273,6 +2298,573 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
 
 
 
@@ -6590,6 +7182,12 @@ function setInAppNotification(transaction, notification) {
 
 
 
+
+
+
+
+
+
 function appendJobEvent(transaction, { campaignId, zoneId, businessId, scalerId, type, actorId, metadata = {} }) {
   const ref = db.collection("jobEvents").doc();
   transaction.create(ref, {
@@ -6835,7 +7433,7 @@ function appendJobEvent(transaction, { campaignId, zoneId, businessId, scalerId,
 
 
 
-exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (request) => {
+exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOperation("assignScalerToZone", async (request) => {
   assertTrackingPayload(
     request.data,
     new Set(["campaignId", "zoneId", "applicationId"]),
@@ -7054,10 +7652,10 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
     result = { scalerId, scalerEmail, zoneName, assignedHomes };
   });
   return result;
-});
+}));
 
 exports.configureZoneGroupAssignment = trackingCallable(
-  "configureZoneGroupAssignment", async (request) => {
+  "configureZoneGroupAssignment", businessOperation("configureZoneGroupAssignment", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {
       throw new HttpsError("failed-precondition", "Group work is unavailable for this certification job.");
     }
@@ -7126,7 +7724,7 @@ exports.configureZoneGroupAssignment = trackingCallable(
       result = policy;
     });
     return result;
-  });
+  }));
 
 exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (request) => {
   if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {

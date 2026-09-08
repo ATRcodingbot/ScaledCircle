@@ -1,4 +1,5 @@
 import '../../widgets/campaign_card_header.dart';
+import '../../widgets/business_live_progress_panel.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/job_room_service.dart';
@@ -603,12 +604,16 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            campaignDisplayName(zone['zoneName']?.toString() ??
-                campaign['campaignName']?.toString() ??
-                'Assigned Job'),
+            campaignDisplayName(
+              zone['zoneName']?.toString() ??
+                  campaign['campaignName']?.toString() ??
+                  'Assigned Job',
+            ),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           Text('$scalerCount assigned Scaler${scalerCount == 1 ? '' : 's'}'),
+          if (['business', 'admin'].contains(data['viewerRole']))
+            BusinessLiveProgressPanel(zoneId: widget.zoneId),
           if (workerPool != null)
             Text(
               'Group worker pool: \$${(workerPool / 100).toStringAsFixed(2)}',

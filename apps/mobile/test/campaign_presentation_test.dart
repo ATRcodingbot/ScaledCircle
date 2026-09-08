@@ -34,7 +34,9 @@ void main() {
                             icon: Icons.map,
                             businessName:
                                 'A Long Business Name With Several Readable Words',
-                            status: const Chip(label: Text('Business Review Pending')),
+                            status: const Chip(
+                              label: Text('Business Review Pending'),
+                            ),
                           ),
                         ),
                       ),
@@ -101,10 +103,14 @@ void main() {
         photos ? findsOneWidget : findsNothing,
       );
       if (type != null && !photos) {
-        expect(find.text('Mark Progress (optional)'), findsOneWidget);
+        expect(find.textContaining('Mark Progress'), findsNothing);
+        expect(find.byType(OutlinedButton), findsNothing);
+        expect(find.byType(FilledButton), findsNothing);
+        expect(calls, 0);
+      } else {
+        await tester.tap(find.byType(FilledButton));
+        expect(calls, type == null ? 0 : 1);
       }
-      await tester.tap(find.byType(type != null && !photos ? OutlinedButton : FilledButton));
-      expect(calls, type == null ? 0 : 1);
       expect(tester.takeException(), isNull);
     });
   }

@@ -43,10 +43,12 @@ class CompletionEvidencePanel extends StatelessWidget {
         const Text(
           'GPS proximity estimate, not verified homes or proof of both sides of a street. Repeated passes do not add credit.',
         ),
+        for(final n in (evidence['workNotes'] as List? ?? []).whereType<Map>())
+          Text('${n['kind']=='access'?'Access issue':n['kind']=='safety'?'Safety issue':'Scaler note'}: ${n['note']}'),
         Text('Planned walk: ${meters(estimate['plannedWalkingMeters'])}'),
         Text('GPS proof points: ${evidence['proofCount'] ?? 0}'),
         const Text(
-          'Automatic GPS route evidence — manual progress marks are optional.',
+          'Automatic GPS route evidence — no manual progress report required.',
         ),
         Text(
           'Access exceptions: ${(evidence['accessExceptions'] as List? ?? []).isEmpty ? 'None recorded' : evidence['accessExceptions']}',
@@ -70,7 +72,9 @@ class CompletionEvidencePanel extends StatelessWidget {
           Text(
             'Protected base: ${money(policy['baseAmountCents'])} — held for technical review; not reduced or automatically paid.',
           ),
-        Text('Bonus: ${policy['bonusStatus'] ?? 'Not activated'}'),
+        Text(
+          'Bonus: ${(policy['bonusStatus'] ?? 'Not activated').toString().replaceAll('â€”', '—')}',
+        ),
         Text(
           'Held payable amount before approval: ${money(policy['payableAmountCents'])}',
         ),

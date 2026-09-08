@@ -1,3 +1,7 @@
+import '../../models/canvassing_photo_policy.dart';
+import '../scaler/completion/submit_completion_screen.dart';
+import '../../models/work_lifecycle_presentation.dart';
+import '../scaler/completion/submitted_completion_screen.dart';
 import '../../widgets/production_compensation_acceptance.dart';
 import '../../widgets/campaign_card_header.dart';
 import '../../widgets/public_logistics_summary.dart';
@@ -173,9 +177,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${data['zoneName'] ?? 'Zone'} started.')),
-      );
+      // Returning from the tracking route is not a new start event.
+      // The active screen already confirms the actual tracking state.
     } catch (e) {
       if (!mounted) return;
 
@@ -465,7 +468,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                 const SizedBox(height: 10),
 
-                Text('Homes: ${data['estimatedHomes'] ?? 0}'),
+                Text('Estimated homes: ~${data['estimatedHomes'] ?? 0}'),
 
                 const Text('Route: Not yet verified'),
 
@@ -532,6 +535,32 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           );
         }
 
+        if (status == 'in_progress' &&
+            data['gpsTracking'] != true &&
+            data['activeTrackingSessionId'] == null &&
+            data['routeId'] is String) {
+          return OutlinedButton.icon(
+            icon: const Icon(Icons.fact_check_outlined),
+            label: const Text('Review Saved Route'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => SubmitCompletionScreen(
+                  campaignId: widget.campaign.id,
+                  businessId: campaignData['businessId']?.toString() ?? '',
+                  zoneId: zone.id,
+                  zoneName: zoneName,
+                  routeId: data['routeId'],
+                  gpsPointCount: (data['gpsPointCount'] as num?)?.toInt() ?? 0,
+                  routeSimulated: false,
+                  canvassing:
+                      !requiresPhotoProof &&
+                      prohibitsResidentialPhotos(campaignData['campaignType']),
+                ),
+              ),
+            ),
+          );
+        }
         if (status == 'in_progress') {
           return Column(
             children: [
@@ -597,14 +626,20 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           );
         }
 
-        if (status == 'submitted') {
+        if (workIsSubmitted(status)) {
           return Card(
             child: ListTile(
               leading: const Icon(Icons.hourglass_top),
 
               title: Text('$zoneName Submitted'),
 
-              subtitle: const Text('Waiting for business review.'),
+              subtitle: const Text('Awaiting Business Review'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => SubmittedCompletionScreen(zoneId: zone.id),
+                ),
+              ),
             ),
           );
         }

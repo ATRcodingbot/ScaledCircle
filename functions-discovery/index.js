@@ -1,8 +1,9 @@
-const {onDocumentWritten} = require("firebase-functions/v2/firestore");
 const stagingPhysicalQa = require("./staging_physical_qa");
+
+
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
-
+const { onDocumentCreated, onDocumentUpdated, onDocumentWritten, onDocumentWrittenWithAuthContext } = require("firebase-functions/v2/firestore");
 
 
 const { initializeApp, getApp } = require("firebase-admin/app");
@@ -15,6 +16,8 @@ const {
   Timestamp
 } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
+
+
 
 
 
@@ -56,6 +59,9 @@ const smartZoneGeography = require("./smart_zone_geography");
 const groupAssignment = require("./group_assignment");
 
 const subscriptionEntitlements = require("./subscription_entitlements");
+const businessWorkspace = require("./business_workspace");
+const workspaceAccess = require("./workspace_access");
+
 
 
 
@@ -84,6 +90,30 @@ initializeApp();
 
 
 const db = getFirestore();
+
+function businessWorkspaceService() {
+  const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+  return businessWorkspace.createWorkspaceService({ db, auth: getAuth(), FieldValue, Timestamp,
+    origin: project === 'scaledcircle-staging' ? 'https://scaledcircle-staging.web.app' : 'https://scaledcircle.com' });
+}
+function businessOperation(name, handler) {
+  return async (request) => {
+    try {return await workspaceAccess.createAccessAdapter({ db, workspace: businessWorkspaceService(), FieldValue })(name, request, handler);}
+    catch (error) {if (error instanceof HttpsError) throw error;
+      if (['unauthenticated', 'permission-denied', 'invalid-argument', 'failed-precondition', 'already-exists', 'resource-exhausted', 'not-found', 'aborted', 'unavailable'].includes(error.code)) throw new HttpsError(error.code, error.message);
+      throw new HttpsError('internal', 'The workspace operation could not complete. Please retry.');}
+  };
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -511,7 +541,15 @@ const DEVELOPMENT_HOMES_PER_ACRE = 2.5;
 
 
 
+
+
+
+
+
+
+
 async function authenticatedUserContext(request, message) {
+  if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
     throw new HttpsError("unauthenticated", message);
   }
@@ -2813,6 +2851,537 @@ async function requireVerifiedUser(request, message) {
 
 
 
+async function assertPhysicalQaRequest(request) {
+  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
+  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
+  try {
+    stagingPhysicalQa.assertAccess({
+      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+      authority: authority.data(), uid: request.auth?.uid,
+      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
+      targetScalerUid: request.data?.applicationId || request.data?.scalerId
+    });
+  } catch (_) {
+    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3589,7 +4158,7 @@ exports.analyzeCampaignZone = onCall(
     enforceAppCheck: false,
     maxInstances: 5
   },
-  async (request) => {
+  businessOperation("analyzeCampaignZone", async (request) => {
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -3636,7 +4205,7 @@ exports.analyzeCampaignZone = onCall(
 
       if (
       businessId.length === 0 ||
-      businessId !== request.auth.uid)
+      businessId !== (request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid))
       {
         throw new HttpsError(
           "permission-denied",
@@ -3950,7 +4519,7 @@ exports.analyzeCampaignZone = onCall(
         "Unable to analyze the campaign zone."
       );
     }
-  }
+  })
 );
 
 function smartZoneAnchor(campaign = {}) {
@@ -4046,8 +4615,9 @@ function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
     desiredHours: desiredHours ?? 5,
     workType: readText(input.campaign.campaignType || input.campaign.type, 80) ||
     "field_distribution",
-    totalWorkerPayCents: Math.round((Number(input.campaign.basePay || 0) +
-    Number(input.campaign.bonus || 0)) * 100),
+    workerBasePayCents: Math.round(Number(input.campaign.basePay || 0) * 100),
+    completionBonusCents: Math.round(Number(input.campaign.bonus || 0) * 100),
+    qualityBonusCents: Math.round(Number(input.campaign.qualityBonus || 0) * 100),
     label: readText(input.selectedArea?.name, 120) || "Recommended Area",
     sourceAreaDigest: input.sourceAreaDigest
   };
@@ -4064,7 +4634,7 @@ async function generateSmartZonePlan(input, desiredHours) {
 
 exports.getSmartZonePlan = onCall(
   { enforceAppCheck: false, maxInstances: 10 },
-  async (request) => {
+  businessOperation("getSmartZonePlan", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
       throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
     }
@@ -4074,12 +4644,12 @@ exports.getSmartZonePlan = onCall(
     } catch (_) {
       throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
     }
-  }
+  })
 );
 
 exports.applySmartZonePlan = onCall(
   { enforceAppCheck: false, maxInstances: 5 },
-  async (request) => {
+  businessOperation("applySmartZonePlan", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
       throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
     }
@@ -4127,8 +4697,23 @@ exports.applySmartZonePlan = onCall(
       where("campaignId", "==", input.campaignId));
       if (existing.docs.length && existing.docs.every((doc) =>
       doc.data()?.smartZonePlanId === plan.planId)) {
+        if (request.data?.useRecommendedPay === true) {
+          transaction.set(input.reference, {
+            basePay: plan.compensation.recommendedBasePayCents / 100,
+            compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
+            compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
+            compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
+            compensationMinimumEffectiveRateCentsPerHour:
+            plan.compensation.minimumEffectiveCompensationCentsPerHour,
+            compensationRecommendationAccepted: true,
+            compensationRecommendationAcceptedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
         return { success: true, campaignId: input.campaignId, planId: plan.planId,
-          zoneCount: existing.docs.length, replay: true };
+          zoneCount: existing.docs.length, replay: true,
+          recommendedPayApplied: request.data?.useRecommendedPay === true,
+          recommendedBasePayCents: plan.compensation.recommendedBasePayCents };
       }
       if (existing.docs.some((doc) => {
         const zone = doc.data() || {};
@@ -4183,13 +4768,25 @@ exports.applySmartZonePlan = onCall(
         smartZonePlanId: plan.planId,
         smartZonePolicyVersion: plan.policyVersion,
         recommendedScalerCount: plan.recommendedScalerCount,
+        compensationRecommendationPolicyVersion: plan.compensation.policyVersion,
+        compensationEstimatedWorkMinutes: plan.compensation.estimatedWorkMinutes,
+        compensationRecommendedBasePayCents: plan.compensation.recommendedBasePayCents,
+        compensationMinimumEffectiveRateCentsPerHour:
+        plan.compensation.minimumEffectiveCompensationCentsPerHour,
+        ...(request.data?.useRecommendedPay === true ? {
+          basePay: plan.compensation.recommendedBasePayCents / 100,
+          compensationRecommendationAccepted: true,
+          compensationRecommendationAcceptedAt: FieldValue.serverTimestamp()
+        } : {}),
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
       return { success: true, campaignId: input.campaignId, planId: plan.planId,
-        zoneCount: plan.zones.length, replay: false };
+        zoneCount: plan.zones.length, replay: false,
+        recommendedPayApplied: request.data?.useRecommendedPay === true,
+        recommendedBasePayCents: plan.compensation.recommendedBasePayCents };
     });
     return result;
-  }
+  })
 );
 
 /** Server-authoritative, industry-neutral property/housing-stock analysis. */
@@ -5815,6 +6412,8 @@ function calculateDevelopmentHomeEstimate({
 
 
 
+
+
 function readText(value, maximumLength = 500) {
   if (typeof value !== "string") {
     return "";
@@ -6186,55 +6785,1452 @@ fallback = 0)
 
 // Native active-job tracking -------------------------------------------------
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function refreshStagingPublicCampaign(campaignId) {
   if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) !== 'scaledcircle-staging') {
     throw new HttpsError('failed-precondition', 'This projection is staging-only.');
   }
   // Re-read current state transactionally: delayed/replayed triggers cannot restore stale content.
-  return db.runTransaction(async transaction => {
+  return db.runTransaction(async (transaction) => {
     const source = await transaction.get(db.collection('campaigns').doc(campaignId));
     const target = db.collection('campaignDiscovery').doc(campaignId);
-    if (!source.exists) { transaction.delete(target); return; }
+    if (!source.exists) {transaction.delete(target);return;}
     transaction.set(target, operations.publicCampaignDocument(campaignId, source.data()));
   });
 }
 
-exports.projectStagingCampaignDiscovery = onDocumentWritten({document: 'campaigns/{campaignId}', region: 'us-east1'}, async event => {
+exports.projectStagingCampaignDiscovery = onDocumentWritten({ document: 'campaigns/{campaignId}', region: 'us-east1' }, async (event) => {
   await refreshStagingPublicCampaign(event.params.campaignId);
 });
 
-exports.refreshStagingCampaignDiscovery = onCall({region: 'us-east1', maxInstances: 1}, async request => {
+exports.refreshStagingCampaignDiscovery = onCall({ region: 'us-east1', maxInstances: 1 }, async (request) => {
   const context = await requireVerifiedUser(request, 'Sign in as an administrator.');
   if (!context.isAdmin) throw new HttpsError('permission-denied', 'Administrator authority required.');
-  if (!request.data || Object.keys(request.data).some(key => key !== 'campaignIds')) {
+  if (!request.data || Object.keys(request.data).some((key) => key !== 'campaignIds')) {
     throw new HttpsError('invalid-argument', 'Only campaign IDs are accepted.');
   }
   const ids = request.data?.campaignIds;
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50 ||
-      ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) {
+  ids.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) {
     throw new HttpsError('invalid-argument', 'Provide one to fifty exact campaign IDs.');
   }
   for (const id of new Set(ids)) await refreshStagingPublicCampaign(id);
-  return {refreshed: new Set(ids).size, sourceRecordsChanged: 0};
+  return { refreshed: new Set(ids).size, sourceRecordsChanged: 0 };
 });
 
-async function assertPhysicalQaRequest(request) {
-  if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
-  const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
-  try {
-    stagingPhysicalQa.assertAccess({
-      projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
-      authority: authority.data(), uid: request.auth?.uid,
-      campaignId: request.data?.campaignId, zoneId: request.data?.zoneId,
-      targetScalerUid: request.data?.applicationId || request.data?.scalerId,
-    });
-  } catch (_) {
-    throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
-  }
-}
-
 // IDs only. Exact addresses still require the existing per-document Rules check.
-exports.listStagingAssignedLocationIds = onCall({region: 'us-east1', maxInstances: 2}, async request => {
+exports.listStagingAssignedLocationIds = onCall({ region: 'us-east1', maxInstances: 2 }, async (request) => {
   if (process.env.GCLOUD_PROJECT !== 'scaledcircle-staging') {
     throw new HttpsError('failed-precondition', 'Available in staging only.');
   }
@@ -6257,10 +8253,10 @@ exports.listStagingAssignedLocationIds = onCall({region: 'us-east1', maxInstance
     const campaign = campaigns.get(data.campaignId);
     if (!campaign.exists || !data.businessId || campaign.data().businessId !== data.businessId) continue;
     if (stagingPhysicalQa.reserved(data.campaignId)) {
-      try { await assertPhysicalQaRequest({...request, data: {campaignId: data.campaignId}}); }
-      catch (_) { continue; }
+      try {await assertPhysicalQaRequest({ ...request, data: { campaignId: data.campaignId } });}
+      catch (_) {continue;}
     }
     ids.push(row.id);
   }
-  return {locationIds: ids.sort()};
+  return { locationIds: ids.sort() };
 });

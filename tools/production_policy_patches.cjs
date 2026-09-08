@@ -26,7 +26,7 @@ function patch(source) {
     const campaign=initial?(await db.doc('campaigns/'+initial.campaignId).get()).data():null;
     if(canvassingCompletion.isCanvassing(campaign?.campaignType||campaign?.type)) {
       try { return await require('./production_mapping_service').analyze({db,FieldValue,zoneId:cleanZoneId,
-        uid:request.auth.uid,reviewDigest:request.data?.routeReviewDigest,endpoint:OVERPASS_URL,estimateHomes:determineHomeEstimate}); }
+        uid:request[workspaceAccess.CONTEXT]?.businessId||request.auth.uid,reviewDigest:request.data?.routeReviewDigest,endpoint:OVERPASS_URL,estimateHomes:determineHomeEstimate}); }
       catch(error) { throw new HttpsError('failed-precondition',
         'Review or regenerate an unworked, unfunded public route before funding. '+String(error.message).replaceAll('_',' ')); }
     }`));

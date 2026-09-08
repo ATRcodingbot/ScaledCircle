@@ -60,6 +60,14 @@ class AppRouterDelegate extends RouterDelegate<Uri>
     }
   }
 
+  void clearSessionNavigation() {
+    _appHistory.clear();
+    _arguments = null;
+    _location = Uri(path: '/');
+    _browserBackPending = false;
+    notifyListeners();
+  }
+
   bool popPreviousBusinessRoute(BuildContext context) {
     if (_browserBackPending) return true;
     while (_appHistory.isNotEmpty) {

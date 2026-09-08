@@ -169,7 +169,7 @@ assert.deepEqual(Object.keys(discovery).sort(), [
   "projectStagingCampaignDiscovery", "refreshStagingCampaignDiscovery",
   "resolveServiceAreaPlace", "saveDiscoveryPreferences",
 ].sort());
-assert.deepEqual(Object.keys(jobRoom), ["getJobRoom"]);
+assert.deepEqual(Object.keys(jobRoom).sort(), ["getJobRoom", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "getBusinessLiveProgress", "addActiveWorkNote"].sort());
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
   "retryTransactionalEmailJob",
@@ -201,7 +201,7 @@ assert.deepEqual(Object.keys(physicalMarketing).sort(), [
   "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
   "preparePhysicalMarketingVersion",
 ].sort());
-assert.deepEqual(Object.keys(businessProfile).sort(), ["saveBusinessGrowthProfile"]);
+assert.deepEqual(Object.keys(businessProfile).sort(), ["saveBusinessGrowthProfile", "listBusinessWorkspaceRecordIds", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "auditBusinessCampaignDraft"].sort());
 const canonicalEntitlements = fs.readFileSync(
   path.join(root, "functions", "subscription_entitlements.js"), "utf8");
 const creativeMediaEntitlements = fs.readFileSync(

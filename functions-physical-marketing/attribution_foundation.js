@@ -28,6 +28,30 @@ const PUBLIC_RESPONSE_ORIGINS = Object.freeze({
   "scaledcircle-staging": "https://scaledcircle-staging.web.app",
   "demo-scaledcircle": "http://127.0.0.1:5000",
 });
+const RESPONSE_ASSET_EXPOSURES = Object.freeze({
+  INTERNAL_QA: "internal_qa",
+  PUBLIC_PUBLISH: "public_publish",
+});
+const SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT = Object.freeze({
+  projectId: "scaled-circle",
+  ownerUid: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3",
+  campaignId: "sc_campaign_brand_launch_md_2026_09",
+  campaignName: "ScaledCircle Maryland brand launch — September 2026",
+  campaignType: "social_brand_launch",
+  socialPlanId: "sc_plan_2026_09_launch_readiness_v1",
+  socialPlanVersionId: "sc_plan_2026_09_launch_readiness_v1:v1",
+  receiptId: "scaledcircle_social_launch_2026_09_v1",
+});
+const SCALED_CIRCLE_X_RESPONSE_ASSET_V1 = Object.freeze({
+  projectId: "scaled-circle",
+  ownerUid: "FF1bfDuvtdNjuuC4mc7NdGtk3LC3",
+  campaignId: "sc_campaign_brand_launch_md_2026_09",
+  contentItemId: "sc_x_20260903_mapping_v1",
+  contentVersionId: "sc_x_20260903_mapping_v1:v3",
+  destination: "https://scaledcircle.com/#/businesses",
+  publicOrigin: "https://scaledcircle.com",
+  requestId: "scaledcircle_x_mapping_v3_production_response_v1",
+});
 
 function text(value, max = 240) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -53,6 +77,37 @@ function publicResponseOrigin(projectId) {
   return PUBLIC_RESPONSE_ORIGINS[text(projectId, 160)] || null;
 }
 
+function responseOriginPolicy(projectId) {
+  const normalizedProjectId = text(projectId, 160);
+  const origin = publicResponseOrigin(normalizedProjectId);
+  if (!origin) return null;
+  return Object.freeze({
+    projectId: normalizedProjectId,
+    origin,
+    defaultExposure: normalizedProjectId === "scaled-circle" ?
+      RESPONSE_ASSET_EXPOSURES.PUBLIC_PUBLISH : RESPONSE_ASSET_EXPOSURES.INTERNAL_QA,
+    permitsPublicPublish: normalizedProjectId === "scaled-circle",
+  });
+}
+
+function assertResponseOriginPolicy({origin, exposure, permitsPublicPublish}) {
+  const normalizedOrigin = assertPublicResponseOrigin(origin);
+  const normalizedExposure = text(exposure, 40).toLowerCase();
+  if (!Object.values(RESPONSE_ASSET_EXPOSURES).includes(normalizedExposure)) {
+    throw new Error("response_asset_exposure_invalid");
+  }
+  if (normalizedExposure === RESPONSE_ASSET_EXPOSURES.PUBLIC_PUBLISH) {
+    const hostname = new URL(normalizedOrigin).hostname.toLowerCase();
+    const blocked = hostname === "localhost" || hostname === "127.0.0.1" ||
+      hostname.endsWith(".web.app") || hostname.endsWith(".firebaseapp.com") ||
+      hostname.startsWith("scaledcircle-staging.");
+    if (!permitsPublicPublish || blocked || normalizedOrigin !== "https://scaledcircle.com") {
+      throw new Error("public_publish_origin_forbidden");
+    }
+  }
+  return {origin: normalizedOrigin, exposure: normalizedExposure};
+}
+
 function assertPublicResponseOrigin(value) {
   const raw = text(value, 1000);
   let parsed;
@@ -68,6 +123,26 @@ function assertPublicResponseOrigin(value) {
 function responseCodeFingerprint(value) {
   const code = text(value, 80);
   return code ? crypto.createHash("sha256").update(code).digest("hex").slice(0, 16) : null;
+}
+
+function assertCampaignImportHttpRequest(request) {
+  if (request?.method !== "POST") throw new Error("campaign_import_method_not_allowed");
+  const input = request?.body;
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).length !== 0 || Object.keys(request?.query || {}).length !== 0) {
+    throw new Error("campaign_import_empty_request_required");
+  }
+  return true;
+}
+
+function assertScaledCircleXResponseAssetHttpRequest(request) {
+  if (request?.method !== "POST") throw new Error("x_response_asset_method_not_allowed");
+  const input = request?.body;
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      Object.keys(input).length !== 0 || Object.keys(request?.query || {}).length !== 0) {
+    throw new Error("x_response_asset_empty_request_required");
+  }
+  return true;
 }
 
 function resolverFailureCategory(error) {
@@ -104,6 +179,8 @@ function canonicalEnvelope(input = {}) {
     source,
     sourceDetail: text(input.sourceDetail, 160) || null,
     campaignId: text(input.campaignId, 160) || null,
+    contentItemId: text(input.contentItemId, 160) || null,
+    contentVersionId: text(input.contentVersionId, 160) || null,
     zoneId: text(input.zoneId, 160) || null,
     materialId: text(input.materialId, 160) || null,
     materialType: text(input.materialType, 60).toLowerCase() || null,
@@ -150,7 +227,7 @@ function interactionEventId(assetId, requestIdentity) {
 }
 
 function safeAsset(id, data, publicBaseUrl) {
-  const origin = assertPublicResponseOrigin(publicBaseUrl);
+  const origin = assertPublicResponseOrigin(data.publicOrigin || publicBaseUrl);
   const code = text(data.publicCode, 80);
   return {
     responseAssetId: id,
@@ -160,13 +237,16 @@ function safeAsset(id, data, publicBaseUrl) {
     destination: text(data.destination, 1000),
     trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`,
     attribution: canonicalEnvelope(data.attribution || {}),
+    exposure: text(data.exposure, 40) || null,
+    publicOrigin: origin,
     createdAt: millis(data.createdAt),
     updatedAt: millis(data.updatedAt),
   };
 }
 
 function createAttributionService({db, FieldValue, now = () => Date.now(), randomBytes = crypto.randomBytes,
-  publicBaseUrl}) {
+  publicBaseUrl, defaultExposure = RESPONSE_ASSET_EXPOSURES.INTERNAL_QA,
+  permitsPublicPublish = false, adminSelfDogfoodBusinessUid = null, runtimeProjectId = ""}) {
   async function resolveBusinessUid(actor, requested) {
     assertAttributionActor(actor);
     const businessUid = actor.role === "business" ? actor.uid : text(requested, 160);
@@ -175,10 +255,11 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       throw new Error("cross_business_attribution_forbidden");
     }
     const user = await db.collection("users").doc(businessUid).get();
-    if (!user.exists || text(user.data()?.role, 40).toLowerCase() !== "business") {
-      throw new Error("business_identity_required");
-    }
-    return businessUid;
+    if (user.exists && text(user.data()?.role, 40).toLowerCase() === "business") return businessUid;
+    const adminSelfDogfood = actor.role === "admin" && actor.uid === businessUid &&
+      businessUid === text(adminSelfDogfoodBusinessUid, 180);
+    if (adminSelfDogfood) return businessUid;
+    throw new Error("business_identity_required");
   }
 
   async function validateOwnedReferences(businessUid, envelope) {
@@ -197,8 +278,73 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     }
   }
 
+  async function importScaledCircleDogfoodCampaign() {
+    const authority = SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT;
+    if (text(runtimeProjectId, 160) !== authority.projectId) {
+      throw new Error("campaign_import_wrong_environment");
+    }
+    if (text(adminSelfDogfoodBusinessUid, 180) !== authority.ownerUid) {
+      throw new Error("campaign_import_forbidden");
+    }
+    const campaignRef = db.collection("campaigns").doc(authority.campaignId);
+    const receiptRef = db.collection("campaignImportReceipts").doc(authority.receiptId);
+    return db.runTransaction(async (transaction) => {
+      const [campaignSnapshot, receiptSnapshot] = await Promise.all([
+        transaction.get(campaignRef), transaction.get(receiptRef),
+      ]);
+      const expectedCampaign = {
+        schemaVersion: "SocialCampaignAttributionV1",
+        businessId: authority.ownerUid,
+        campaignName: authority.campaignName,
+        campaignType: authority.campaignType,
+        status: "draft",
+        socialPlanId: authority.socialPlanId,
+        socialPlanVersionId: authority.socialPlanVersionId,
+        providerMutationEnabled: false,
+        financialAuthorityEnabled: false,
+      };
+      const matches = (actual, expected) => Object.entries(expected)
+        .every(([key, value]) => actual?.[key] === value);
+      if (campaignSnapshot.exists && !matches(campaignSnapshot.data(), expectedCampaign)) {
+        throw new Error("campaign_import_conflict");
+      }
+      const expectedReceipt = {
+        schemaVersion: "CanonicalCampaignImportReceiptV1",
+        importAuthority: "SCALED_CIRCLE_SELF_DOGFOOD_ONLY",
+        projectId: authority.projectId,
+        ownerUid: authority.ownerUid,
+        campaignId: authority.campaignId,
+        sourcePlanId: authority.socialPlanId,
+        sourcePlanVersionId: authority.socialPlanVersionId,
+        immutable: true,
+      };
+      if (receiptSnapshot.exists && !matches(receiptSnapshot.data(), expectedReceipt)) {
+        throw new Error("campaign_import_conflict");
+      }
+      if (!campaignSnapshot.exists && receiptSnapshot.exists) {
+        throw new Error("campaign_import_integrity");
+      }
+      if (!campaignSnapshot.exists) {
+        transaction.create(campaignRef, {...expectedCampaign,
+          createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      }
+      if (!receiptSnapshot.exists) {
+        transaction.create(receiptRef, {...expectedReceipt,
+          result: campaignSnapshot.exists ? "verified_existing" : "created",
+          createdAt: FieldValue.serverTimestamp()});
+      }
+      return {campaignId: authority.campaignId, ownerUid: authority.ownerUid,
+        campaignState: "draft", importReceiptId: authority.receiptId,
+        idempotentReplay: campaignSnapshot.exists && receiptSnapshot.exists,
+        duplicateCount: 0};
+    });
+  }
+
   async function createResponseAsset(input, actor) {
-    const origin = assertPublicResponseOrigin(publicBaseUrl);
+    const originPolicy = assertResponseOriginPolicy({origin: publicBaseUrl,
+      exposure: input?.exposure || defaultExposure, permitsPublicPublish});
+    const origin = originPolicy.origin;
+    const exposure = originPolicy.exposure;
     const businessUid = await resolveBusinessUid(actor, input?.businessUid);
     const type = text(input?.type, 40).toLowerCase();
     if (!ASSET_TYPES.has(type)) throw new Error("unsupported_response_asset_type");
@@ -214,6 +360,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       const data = existing.data() || {};
       if (!existing.exists || data.businessUid !== businessUid || data.creationRequestId !== creationRequestId ||
           data.type !== type || data.destination !== destination ||
+          text(data.exposure, 40) !== exposure || data.publicOrigin !== origin ||
           JSON.stringify(canonicalEnvelope(data.attribution || {})) !==
             JSON.stringify({...attribution, responseAssetId: ref.id})) return null;
       return {responseAssetId: ref.id, publicCode: data.publicCode,
@@ -227,6 +374,7 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     try {
       await ref.create({schemaVersion: SCHEMA_VERSION, businessUid, type, publicCode: code,
         status: "active", label: text(input?.label, 160) || null, destination,
+        exposure, publicOrigin: origin,
         attribution: {...attribution, responseAssetId: ref.id}, creationRequestId,
         createdBy: actor.uid, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
     } catch (error) {
@@ -237,6 +385,26 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
     }
     return {responseAssetId: ref.id, publicCode: code,
       trackedUrl: `${origin}/r?code=${encodeURIComponent(code)}`, idempotentReplay: false};
+  }
+
+  async function createScaledCircleXResponseAsset() {
+    const authority = SCALED_CIRCLE_X_RESPONSE_ASSET_V1;
+    if (text(runtimeProjectId, 160) !== authority.projectId ||
+        publicBaseUrl !== authority.publicOrigin || defaultExposure !== "public_publish" ||
+        permitsPublicPublish !== true) {
+      throw new Error("x_response_asset_wrong_environment");
+    }
+    if (text(adminSelfDogfoodBusinessUid, 180) !== authority.ownerUid) {
+      throw new Error("x_response_asset_forbidden");
+    }
+    const actor = {uid: authority.ownerUid, role: "admin", isAdmin: true,
+      emailVerified: true, user: {active: true}};
+    return createResponseAsset({businessUid: authority.ownerUid, type: "tracked_link",
+      label: "ScaledCircle X Smart Mapping v3", exposure: "public_publish",
+      requestId: authority.requestId, destination: authority.destination,
+      attribution: {source: "social", sourceDetail: "x",
+        campaignId: authority.campaignId, contentItemId: authority.contentItemId,
+        contentVersionId: authority.contentVersionId, creativeVersion: "v3"}}, actor);
   }
 
   async function resolveAndRecord({code, ip, userAgent, requestIdentity}) {
@@ -452,13 +620,19 @@ function createAttributionService({db, FieldValue, now = () => Date.now(), rando
       page: {limit, bounded: true}};
   }
 
-  return {createResponseAsset, resolveAndRecord, recordPhoneInteraction, bridgeLead, getOverview};
+  return {importScaledCircleDogfoodCampaign, createResponseAsset,
+    createScaledCircleXResponseAsset, resolveAndRecord,
+    recordPhoneInteraction, bridgeLead, getOverview};
 }
 
 module.exports = {SCHEMA_VERSION, ASSET_TYPES, FUTURE_ASSET_TYPES, SOURCES,
   CONVERSION_MILESTONES, PAGE_LIMIT, text, millis, assertHttpsDestination,
-  PUBLIC_RESPONSE_ORIGINS, publicResponseOrigin, assertPublicResponseOrigin,
-  responseCodeFingerprint, resolverFailureCategory, assertAttributionActor,
+  PUBLIC_RESPONSE_ORIGINS, RESPONSE_ASSET_EXPOSURES, publicResponseOrigin, responseOriginPolicy,
+  SCALED_CIRCLE_DOGFOOD_CAMPAIGN_IMPORT, SCALED_CIRCLE_X_RESPONSE_ASSET_V1,
+  assertPublicResponseOrigin, assertResponseOriginPolicy,
+  responseCodeFingerprint, resolverFailureCategory, assertCampaignImportHttpRequest,
+  assertScaledCircleXResponseAssetHttpRequest,
+  assertAttributionActor,
   opaqueCode, canonicalEnvelope, privacyFingerprint, responseActivityClass, interactionEventId,
   destinationWithResponseContext,
   safeAsset, createAttributionService};

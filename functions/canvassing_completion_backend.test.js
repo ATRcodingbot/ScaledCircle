@@ -11,6 +11,10 @@ const db=getFirestore(),r=require('./route_progress');
 const call=(fn,uid,data)=>fft.wrap(fn)({data,auth:uid?{uid,token:{email_verified:true}}:undefined});
 const line=[{latitude:0,longitude:0},{latitude:.001,longitude:0}],corridor=[...line,{latitude:0,longitude:.001}];
 before(async()=>{
+ if(!process.env.FIREBASE_AUTH_EMULATOR_HOST)throw Error('Auth emulator required');
+ const auth=require('firebase-admin/auth').getAuth();
+ for(const uid of ['coverage-owner', 'coverage-scaler', 'coverage-other']) {try{await auth.createUser({uid,email:`${uid}@example.test`,emailVerified:true});}catch(e){if(e.code!=='auth/uid-already-exists')throw e;}}
+
  for(const [uid,role]of [['coverage-owner','business'],['coverage-scaler','scaler'],['coverage-other','scaler']])await db.doc('users/'+uid).set({role,active:true});
  await db.doc('campaigns/coverage-c').set({businessId:'coverage-owner',type:'neighborhoodCanvassing',materialFulfillmentType:'no_materials_required'});
  await db.doc('campaignZones/coverage-z').set({campaignId:'coverage-c',businessId:'coverage-owner',assignedScalerId:'coverage-scaler',status:'in_progress',serviceArea:corridor,assignedHomes:23,estimatedWalkingMeters:r.distance(...line),executionRoute:{centerline:line,denominatorMeters:r.distance(...line),routeHash:r.hash(line),corridorHash:r.hash(corridor),checkpoints:[]}});

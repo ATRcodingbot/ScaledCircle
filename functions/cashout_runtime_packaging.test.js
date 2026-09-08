@@ -44,6 +44,7 @@ test("deployed callable authority denies admin, disabled, wrong mode and unauthe
       if (name === "stripe") return class {constructor() { providerConstructed++; throw new Error("Unexpected provider construction"); }};
       if (name === "./scaler_cashout") return require("./scaler_cashout");
       if (name === "./scaler_cashout_stripe") return {};
+      if (name === "./workspace_access") return require("./workspace_access");
       throw new Error("Unexpected dependency " + name);
     };
     vm.runInNewContext(fs.readFileSync(entry, "utf8"), {exports: exported, require: fakeRequire,
@@ -81,7 +82,8 @@ test("paused deployed webhook authenticates signatures and mode without database
     if (name === "stripe") return OfflineStripe;
     if (name === "./scaler_cashout") return require("./scaler_cashout");
     if (name === "./scaler_cashout_stripe") return require("./scaler_cashout_stripe");
-    throw new Error("Unexpected dependency " + name);
+    if (name === "./workspace_access") return require("./workspace_access");
+      throw new Error("Unexpected dependency " + name);
   };
   vm.runInNewContext(fs.readFileSync(entry, "utf8"), {exports: exported, require: fakeRequire,
     process: {env: {SCALEDCIRCLE_ENV: "staging", GCLOUD_PROJECT: "scaledcircle-staging", SCALEDCIRCLE_CASHOUT_TEST_ENABLED: "false"}}});
@@ -116,7 +118,8 @@ test("setup-only window allows status/onboarding but denies both financial calla
     if (name === "./scaler_cashout") return {...require("./scaler_cashout"), createStore: () => ({}), createService: () => ({})};
     if (name === "./scaler_cashout_stripe") return {createStripeProvider: () => ({})};
     if (name === "./scaler_cashout_endpoints") return {createEndpoints: () => ({status: () => "status", setup: () => {setupCalls++; return "setup";}})};
-    throw new Error("Unexpected dependency " + name);
+    if (name === "./workspace_access") return require("./workspace_access");
+      throw new Error("Unexpected dependency " + name);
   };
   vm.runInNewContext(fs.readFileSync(entry, "utf8"), {exports: exported, require: fakeRequire,
     process: {env: {SCALEDCIRCLE_ENV: "staging", GCLOUD_PROJECT: "scaledcircle-staging",

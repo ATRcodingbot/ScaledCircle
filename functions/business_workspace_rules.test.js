@@ -1,0 +1,33 @@
+'use strict';
+const {test,before,after}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
+const {doc,setDoc,getDoc,updateDoc,getDocs,collection,query,where,Timestamp}=require('firebase/firestore');
+let env;const projectId='demo-business-workspace';
+before(async()=>{assert.ok(process.env.FIRESTORE_EMULATOR_HOST);env=await initializeTestEnvironment({projectId,firestore:{rules:fs.readFileSync('../firestore.staging.rules','utf8')}});
+ await env.withSecurityRulesDisabled(async ctx=>{const db=ctx.firestore();for(const [uid,role] of [['team_owner','business'],['team_member','business'],['team_other','business']])await setDoc(doc(db,`users/${uid}`),{role,active:true,betaAccess:'approved'});
+ await setDoc(doc(db,'businessSubscriptions/team_owner'),{status:'active',plan:'growth',expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
+ await setDoc(doc(db,'businessWorkspaces/team_owner/members/team_member'),{uid:'team_member',businessId:'team_owner',status:'active',seatIndex:1,permissions:['analytics']});
+ await setDoc(doc(db,'campaigns/team_campaign'),{businessId:'team_owner',status:'draft',campaignName:'Controlled campaign',privatePickup:'private',certificationFixture:false});
+ await setDoc(doc(db,'campaigns/team_qa'),{businessId:'team_owner',status:'open',certificationFixture:true});
+ await setDoc(doc(db,'campaignZones/team_zone'),{businessId:'team_owner',campaignId:'team_campaign',assignedScalerId:null,status:'unassigned'});
+ await setDoc(doc(db,'wallets/team_owner'),{balance:100});});});
+after(async()=>{await env.cleanup();});
+const db=uid=>env.authenticatedContext(uid,{email_verified:true}).firestore();
+test('signed-out and unrelated Business denied workspace/private campaign',async()=>{await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'campaigns/team_campaign')));await assertFails(getDoc(doc(db('team_other'),'campaigns/team_campaign')));await assertFails(getDoc(doc(db('team_other'),'businessWorkspaces/team_owner/members/team_member')));});
+test('member permission permits exact campaign and query; analytics cannot edit/fund or alter seats',async()=>{const d=db('team_member');await assertSucceeds(getDoc(doc(d,'campaigns/team_campaign')));await assertSucceeds(getDocs(query(collection(d,'campaigns'),where('businessId','==','team_owner'),where('certificationFixture','==',false))));await assertFails(updateDoc(doc(d,'campaigns/team_campaign'),{campaignName:'Changed'}));await assertFails(updateDoc(doc(d,'campaigns/team_campaign'),{fundingStatus:'funded'}));await assertFails(getDoc(doc(d,'wallets/team_owner')));await assertFails(updateDoc(doc(d,'businessWorkspaces/team_owner/members/team_member'),{permissions:['billing']}));await assertFails(getDoc(doc(d,'campaigns/team_qa')));});
+test('removed team member cannot read private campaign after revocation',async()=>{await env.withSecurityRulesDisabled(async ctx=>updateDoc(doc(ctx.firestore(),'businessWorkspaces/team_owner/members/team_member'),{status:'removed'}));await assertFails(getDoc(doc(db('team_member'),'campaigns/team_campaign')));});
+
+test('campaign-only draft edits cannot publish, inject QA identity, spend, or change contracts',async()=>{
+ const {serverTimestamp}=require('firebase/firestore');
+ await env.withSecurityRulesDisabled(async c=>{await updateDoc(doc(c.firestore(),'businessWorkspaces/team_owner/members/team_member'),{status:'active',permissions:['campaigns']});});
+ const d=db('team_member'),draft={businessId:'team_owner',campaignName:'New draft',campaignType:'neighborhoodCanvassing',status:'draft',createdAt:serverTimestamp(),updatedAt:serverTimestamp(),applications:0};
+ await assertSucceeds(setDoc(doc(d,'campaigns/team_created'),draft));
+ await assertFails(setDoc(doc(d,'campaigns/team_bad_funding'),{...draft,fundingStatus:'funded'}));
+ await assertFails(setDoc(doc(d,'campaigns/team_bad_qa'),{...draft,certificationFixture:true}));
+ await assertFails(setDoc(doc(d,'campaigns/team_bad_open'),{...draft,status:'open'}));
+ await assertSucceeds(updateDoc(doc(d,'campaigns/team_created'),{campaignName:'Edited'}));
+ await assertFails(updateDoc(doc(d,'campaigns/team_created'),{status:'open'}));
+ await assertFails(updateDoc(doc(d,'campaigns/team_created'),{businessId:'team_other'}));
+ await assertFails(getDoc(doc(db('team_other'),'campaignZones/team_zone')));
+ await assertFails(setDoc(doc(d,'assignmentCompensations/team_zone'),{baseAmountCents:1}));
+});

@@ -1,3 +1,4 @@
+import '../../../../../services/business_workspace_service.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -648,7 +649,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
           int.tryParse(materialQuantityController.text.trim()) ?? 0;
 
       final initialData = <String, dynamic>{
-        'businessId': user.uid,
+        'businessId': BusinessWorkspaceSession.businessIdFor(user.uid),
         'businessEmail': user.email,
         'campaignName': campaignName,
         'description': descriptionController.text.trim(),
@@ -825,7 +826,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
             return;
           }
           await _billingService.fundCampaignWithCard(
-            businessId: user.uid,
+            businessId: BusinessWorkspaceSession.businessIdFor(user.uid),
             campaignId: campaignReference.id,
             approvedQuoteDigest: approvedQuote.quoteDigest,
           );
@@ -833,7 +834,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         }
 
         await _billingService.publishFundedCampaign(
-          businessId: user.uid,
+          businessId: BusinessWorkspaceSession.businessIdFor(user.uid),
           campaignId: campaignReference.id,
         );
 

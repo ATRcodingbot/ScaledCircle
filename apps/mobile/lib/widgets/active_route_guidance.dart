@@ -1,3 +1,4 @@
+import '../models/route_visualization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -32,7 +33,7 @@ bool positionInsideCorridor(LatLng point, List<LatLng> polygon) {
   return inside;
 }
 
-class ActiveRouteGuidance extends StatelessWidget {
+class ActiveRouteGuidance extends StatefulWidget {
   const ActiveRouteGuidance({
     super.key,
     required this.zone,
@@ -47,13 +48,25 @@ class ActiveRouteGuidance extends StatelessWidget {
   final bool tilesEnabled;
   final bool automaticGps;
   @override
+  State<ActiveRouteGuidance> createState() => _ActiveRouteGuidanceState();
+}
+
+class _ActiveRouteGuidanceState extends State<ActiveRouteGuidance> {
+  final _deviation = RouteDeviationTracker();
+  Map<String, dynamic> get zone => widget.zone;
+  TrackingLocationSample? get location => widget.location;
+  Map<String, dynamic>? get progress => widget.progress;
+  bool get automaticGps => widget.automaticGps;
+  bool get tilesEnabled => widget.tilesEnabled;
+  @override
   Widget build(BuildContext context) {
     final corridor = routeCoordinates(zone['serviceArea']);
     final route = zone['executionRoute'] is Map
         ? zone['executionRoute'] as Map
         : const {};
     final line = routeCoordinates(route['centerline']);
-    final walked = routeCoordinates(progress?['path']);
+    final walked = displayRoute(routeCoordinates(progress?['path']));
+    final hint = _deviation.update(location, line);
     final current = location == null
         ? null
         : LatLng(location!.latitude, location!.longitude);
@@ -84,11 +97,13 @@ class ActiveRouteGuidance extends StatelessWidget {
             const Text(
               'Coverage uses uploaded GPS evidence. Final payment is determined after submission and review.',
             ),
-            if (current != null &&
-                corridor.length >= 3 &&
-                !positionInsideCorridor(current, corridor))
+            if (hint == RoutePositionHint.accuracyAdjusting)
               const Text(
-                'Your GPS position is outside the assigned corridor. Check the map and GPS accuracy.',
+                'GPS accuracy is adjusting. Keep following the assigned route.',
+              ),
+            if (hint == RoutePositionHint.offRoute)
+              const Text(
+                'Recent GPS fixes suggest you have left the assigned route. Check the map when safe.',
                 style: TextStyle(color: Colors.deepOrange),
               ),
             if (corridor.length >= 3)
@@ -145,7 +160,9 @@ class ActiveRouteGuidance extends StatelessWidget {
                               child: Icon(Icons.flag, color: Colors.blue),
                             ),
                           ),
-                        for (final checkpoint in checkpoints.whereType<Map>())
+                        for (final checkpoint
+                            in (automaticGps ? const [] : checkpoints)
+                                .whereType<Map>())
                           if (routeCoordinates([
                             checkpoint['position'],
                           ]).isNotEmpty)
@@ -185,18 +202,27 @@ class ActiveRouteGuidance extends StatelessWidget {
               ),
             Text(
               automaticGps
-                  ? 'Blue: assigned corridor/route. Green: automatically tracked GPS path. Purple: route waypoints; no manual mark required.'
+                  ? 'Blue: assigned route. Green: automatically tracked path. GPS recording is automatic.'
                   : 'Blue: assigned corridor/route. Green: uploaded GPS path. Purple: GPS checkpoints.',
             ),
             if (line.isEmpty)
               const Text(
                 'A recommended route has not been supplied. Follow the assigned public service area; do not use private shortcuts.',
               ),
+            const Text(
+              'The map simplifies small GPS variations for readability. Original evidence and coverage are unchanged.',
+            ),
             if (route['instructions'] is List) ...[
               for (final instruction in route['instructions'] as List)
-                Text(instruction.toString()),
+                if (!automaticGps ||
+                    !RegExp(
+                      r'checkpoint|mark progress',
+                      caseSensitive: false,
+                    ).hasMatch(instruction.toString()))
+                  Text(instruction.toString()),
             ],
-            for (final checkpoint in checkpoints.whereType<Map>())
+            for (final checkpoint
+                in (automaticGps ? const [] : checkpoints).whereType<Map>())
               Text(
                 '${automaticGps ? 'Route waypoint' : 'GPS checkpoint'}: ${checkpoint['label'] ?? 'Assigned checkpoint'}',
               ),

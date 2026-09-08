@@ -45,3 +45,26 @@ test('submitted, completed and canceled Job Rooms revoke precise Scaler logistic
  await assert.rejects(call('assigned'));
  for(const c of ['walletTransactions','scalerEarnings','trackingSessions'])assert.equal((await db.collection(c).get()).empty,true);
 });
+test('pinned production Job Room permits delegated review and revokes removed members immediately',async()=>{
+ await getAuth().createUser({uid:'finance-member',email:'finance-member@example.invalid',emailVerified:true});
+ await db.doc('users/finance-member').set({role:'business',active:false,activeBusinessId:'owner'});
+ await db.doc('businessSubscriptions/owner').set({plan:'growth',status:'active',expiresAt:packageRequire('firebase-admin/firestore').Timestamp.fromMillis(Date.now()+86400000)});
+ await db.doc('businessWorkspaces/owner/members/finance-member').set({uid:'finance-member',businessId:'owner',status:'active',seatIndex:1,permissions:['payments']});
+ await db.doc('campaignZones/zone').update({businessId:'owner',status:'submitted'});
+ assert.match(JSON.stringify(await call('finance-member')),/PRIVATE/);
+ await db.doc('businessWorkspaces/owner/members/finance-member').update({status:'removed'});
+ await assert.rejects(call('finance-member'));
+});
+test('production evidence retains completed Scaler result and relevant notes without active tracking',async()=>{
+ const evidence=require('./production_job_room_evidence');
+ const {VERSION}=require('./production_canvassing_contract');
+ await db.doc('campaigns/campaign').update({completionPolicyVersion:VERSION});
+ await db.doc('campaignZones/zone').update({businessId:'owner',status:'completed',completionPolicyVersion:VERSION});
+ await db.doc('trackingSessions/closed').set({zoneId:'zone',campaignId:'campaign',scalerId:'assigned',status:'completed',startedAt:packageRequire('firebase-admin/firestore').Timestamp.now()});
+ await db.doc('trackingSessions/closed/workNotes/note').set({kind:'access',note:'Authorized access unavailable',createdAt:packageRequire('firebase-admin/firestore').Timestamp.now()});
+ const result=await evidence.read({db,zoneId:'zone',uid:'assigned'});
+ assert.equal(result.trackingActive,false);assert.equal(result.sessionStatus,'completed');
+ assert.equal(result.workNotes[0].note,'Authorized access unavailable');
+ assert.equal(result.historicalCalculatedAmountCents,null);
+ assert.equal(await evidence.read({db,zoneId:'zone',uid:'other'}),null);
+});

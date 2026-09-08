@@ -44,11 +44,12 @@ function checkoutReturnBaseUrl() {
   return PAYMENT_ENVIRONMENT.returnBaseUrl;
 }
 
-async function ownedCampaign(request) {
+async function ownedCampaign(request, permission='payments') {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in as a Business.");
   if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "Verify your email first.");
   const user = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
-  if (String(user.role || "").toLowerCase() !== "business") throw new HttpsError("permission-denied", "Business access required.");
+  const actor = await auth.getUser(request.auth.uid);
+  if(actor.disabled || !actor.emailVerified)throw new HttpsError("permission-denied","Use an enabled, verified account.");
   const campaignId = cleanId(request.data?.campaignId);
   if (!campaignId) throw new HttpsError("invalid-argument", "A campaign is required.");
   if (stagingPhysicalQa.reserved(campaignId)) {
@@ -61,8 +62,13 @@ async function ownedCampaign(request) {
   const snapshot = await ref.get();
   if (!snapshot.exists) throw new HttpsError("not-found", "Campaign not found.");
   const campaign = snapshot.data() || {};
-  if (campaign.businessId !== request.auth.uid) throw new HttpsError("permission-denied", "You do not own this campaign.");
-  return {uid: request.auth.uid, campaignId, ref, campaign};
+  if (campaign.businessId !== request.auth.uid) {
+    if(campaign.certificationFixture===true)throw new HttpsError('permission-denied','This certification campaign is private.');
+    const workspace=require('./business_workspace').createWorkspaceService({db,auth,FieldValue,Timestamp});
+    try {await workspace.authority({uid:request.auth.uid,businessId:campaign.businessId,permission,allowExpired:true});}
+    catch(_){throw new HttpsError('permission-denied','Your workspace access does not include this responsibility.');}
+  } else if(String(user.role||'').toLowerCase()!=='business'||(user.active!==true&&user.betaAccess!=='approved'))throw new HttpsError('permission-denied','Business access required.');
+  return {uid:campaign.businessId,actorUid:request.auth.uid,campaignId,ref,campaign};
 }
 
 async function assertFundable(input) {
@@ -107,7 +113,8 @@ exports.quoteCampaignFunding = onCall({...OPTIONS, timeoutSeconds: 30}, async (r
 exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STRIPE_SECRET_KEY]}, async (request) => {
   const input = await ownedCampaign(request);
   // Fail before payment records, Stripe customers, or Checkout Sessions exist.
-  await requireBusinessFundingConsent(input.uid);
+  await requireBusinessFundingConsent(input.actorUid);
+  if(input.actorUid!==input.uid)await requireBusinessFundingConsent(input.uid);
   await assertFundable(input);
   const quote = lifecycle.quoteForCampaign(input.campaign);
   if (request.data?.approvedQuoteDigest !== quote.quoteDigest) {
@@ -141,7 +148,7 @@ exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STR
     await paymentRef.set({status: "checkout_expired", stripeCheckoutUrl: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   }
   await paymentRef.set({paymentId, campaignId: input.campaignId, businessUid: input.uid, businessId: input.uid,
-    ...quote, fundingVersion: version, checkoutAttempt, status: "created", stripeMode: PAYMENT_ENVIRONMENT.stripeMode,
+    ...quote, initiatedByActorUid:input.actorUid, fundingVersion: version, checkoutAttempt, status: "created", stripeMode: PAYMENT_ENVIRONMENT.stripeMode,
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   const returnBaseUrl = checkoutReturnBaseUrl();
   const session = await stripe.checkout.sessions.create({mode: "payment", client_reference_id: paymentId,
@@ -265,12 +272,12 @@ exports.cancelUnassignedFundedCampaign = onCall({...OPTIONS, secrets: [STRIPE_SE
       payment: paymentSnapshot.data(), ...facts.policy, hasDispute: paymentSnapshot.data()?.status === "disputed"});
     if (!currentPolicy.eligible) throw new HttpsError("failed-precondition", "Campaign refund eligibility changed. Refresh and review it again.");
     transaction.set(input.ref, {status: "canceling", fundingStatus: "refund_pending",
-      marketplaceVisible: false, acceptingApplications: false, cancellationReason: cleanId(request.data?.reason) || null,
+      marketplaceVisible: false, acceptingApplications: false, cancellationReason: cleanId(request.data?.reason) || null, cancellationActorUid:input.actorUid,
       cancellationApplicantCount: facts.applications.size, cancellationAssignmentCount: 0,
       cancellationPolicyVersion: "unassigned_full_refund_v1",
       refundRequestedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
     transaction.set(paymentRef, {status: "refund_pending", settlementFrozen: true,
-      cancellationReason: cleanId(request.data?.reason) || null,
+      cancellationReason: cleanId(request.data?.reason) || null, cancellationActorUid:input.actorUid,
       cancellationPolicyVersion: "unassigned_full_refund_v1",
       refundRequestedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   });
@@ -327,16 +334,23 @@ exports.cancelUnassignedFundedCampaign = onCall({...OPTIONS, secrets: [STRIPE_SE
 });
 
 exports.archiveCanceledCampaign = onCall(OPTIONS, async (request) => {
-  const input = await ownedCampaign(request);
+  const input = await ownedCampaign(request, 'campaigns');
   if (input.campaign.status !== "canceled" || input.campaign.fundingStatus !== "refunded") {
     throw new HttpsError("failed-precondition", "Only a canceled, refunded campaign can be removed from My Campaigns.");
   }
-  await input.ref.set({archived: true, hiddenFromBusinessHistory: true, archivedBy: input.uid,
+  await input.ref.set({archived: true, hiddenFromBusinessHistory: true, archivedBy: input.actorUid,
     archivedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   return {campaignId: input.campaignId, archived: true};
 });
 
 async function processEvent(stripe, event) {
+  // The existing signed endpoint also reconciles membership lifecycle events.
+  if (event.type.startsWith('customer.subscription.')) {
+    const subscription = await stripe.subscriptions.retrieve(event.data.object.id);
+    await require('./workspace_subscription_sync').createSubscriptionSync({db,FieldValue,Timestamp})(subscription, `${event.id}_subscription`);
+    return;
+  }
+
   lifecycle.assertStripeEvent(event, PAYMENT_ENVIRONMENT.stripeMode);
   const object = event.data?.object || {};
   if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) {
@@ -420,7 +434,7 @@ exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRI
 });
 
 exports.publishFundedCampaign = onCall(OPTIONS, async (request) => {
-  const input = await ownedCampaign(request);
+  const input = await ownedCampaign(request, 'authorizeCampaigns');
   if (input.campaign.status === "open") return {campaignId: input.campaignId, status: "open"};
   const zones = await validatedCampaignZones(input, {forPublication: true});
   const paymentId = cleanId(input.campaign.fundingPaymentId);
@@ -430,7 +444,7 @@ exports.publishFundedCampaign = onCall(OPTIONS, async (request) => {
       payment.businessUid !== input.uid) {
     throw new HttpsError("failed-precondition", "Signed Stripe payment and a valid mapped Zone are required.");
   }
-  await input.ref.set({status: "open", publishedAt: FieldValue.serverTimestamp(), zonesLockedAt: FieldValue.serverTimestamp(),
+  await input.ref.set({status: "open", publishedByActorUid: input.actorUid, publishedAt: FieldValue.serverTimestamp(), zonesLockedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()}, {merge: true});
   const batch = db.batch();
   for (const zone of zones) batch.set(zone.ref, {mapLocked: true, mapLockedAt: FieldValue.serverTimestamp()}, {merge: true});

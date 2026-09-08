@@ -1,3 +1,6 @@
+
+
+
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -57,6 +60,11 @@ const {
 
 
 
+const workspaceAccess = require("./workspace_access");
+
+
+
+
 
 
 
@@ -82,6 +90,30 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -509,7 +541,15 @@ setGlobalOptions({
 
 
 
+
+
+
+
+
+
+
 async function authenticatedUserContext(request, message) {
+  if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
     throw new HttpsError("unauthenticated", message);
   }
@@ -527,6 +567,8 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
+
+
 
 
 

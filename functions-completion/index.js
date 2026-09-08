@@ -7,7 +7,7 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 const { initializeApp, getApp } = require("firebase-admin/app");
-
+const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
@@ -59,6 +59,9 @@ const marketplace = require("./marketplace_finance");
 
 
 
+const businessWorkspace = require("./business_workspace");
+const workspaceAccess = require("./workspace_access");
+
 
 
 
@@ -87,6 +90,30 @@ initializeApp();
 
 
 const db = getFirestore();
+
+function businessWorkspaceService() {
+  const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+  return businessWorkspace.createWorkspaceService({ db, auth: getAuth(), FieldValue, Timestamp,
+    origin: project === 'scaledcircle-staging' ? 'https://scaledcircle-staging.web.app' : 'https://scaledcircle.com' });
+}
+function businessOperation(name, handler) {
+  return async (request) => {
+    try {return await workspaceAccess.createAccessAdapter({ db, workspace: businessWorkspaceService(), FieldValue })(name, request, handler);}
+    catch (error) {if (error instanceof HttpsError) throw error;
+      if (['unauthenticated', 'permission-denied', 'invalid-argument', 'failed-precondition', 'already-exists', 'resource-exhausted', 'not-found', 'aborted', 'unavailable'].includes(error.code)) throw new HttpsError(error.code, error.message);
+      throw new HttpsError('internal', 'The workspace operation could not complete. Please retry.');}
+  };
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -512,6 +539,9 @@ setGlobalOptions({
 
 
 
+
+
+
 const MINIMUM_PAYABLE_COMPLETION_PERCENTAGE = 10;
 
 
@@ -519,6 +549,7 @@ const MINIMUM_PAYABLE_COMPLETION_PERCENTAGE = 10;
 
 
 async function authenticatedUserContext(request, message) {
+  if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
     throw new HttpsError("unauthenticated", message);
   }
@@ -547,16 +578,6 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -2860,7 +2881,7 @@ function exactCompletionId(campaignId, scalerId) {
   return `exact_${campaignId}_${scalerId}`;
 }
 
-exports.createCampaignLocation = completionAuthorityCallable(async (request) => {
+exports.createCampaignLocation = completionAuthorityCallable(businessOperation("createCampaignLocation", async (request) => {
   assertTrackingPayload(request.data, new Set([
   "campaignId", "locationType", "address", "latitude", "longitude",
   "instructions", "quantity", "scheduledAt", "windowStart", "windowEnd"]
@@ -2903,9 +2924,9 @@ exports.createCampaignLocation = completionAuthorityCallable(async (request) => 
     });
   });
   return { locationId: locationRef.id };
-});
+}));
 
-exports.deleteCampaignLocation = completionAuthorityCallable(async (request) => {
+exports.deleteCampaignLocation = completionAuthorityCallable(businessOperation("deleteCampaignLocation", async (request) => {
   assertTrackingPayload(request.data, new Set(["locationId"]), 4096);
   const context = await requireVerifiedUser(request, "Sign in to remove a campaign location.");
   const locationId = cleanId(request.data?.locationId);
@@ -2928,10 +2949,10 @@ exports.deleteCampaignLocation = completionAuthorityCallable(async (request) => 
     transaction.delete(ref);
   });
   return { locationId, deleted: true };
-});
+}));
 
 exports.assignScalerToCampaignLocations = completionAuthorityCallable(
-  async (request) => {
+  businessOperation("assignScalerToCampaignLocations", async (request) => {
     assertTrackingPayload(request.data, new Set(["campaignId", "applicationId", "locationIds"]), 16384);
     const context = await requireVerifiedUser(request, "Sign in before assigning exact-location work.");
     if (context.role !== "business" && !context.isAdmin) {
@@ -2987,10 +3008,10 @@ exports.assignScalerToCampaignLocations = completionAuthorityCallable(
       });
       return { campaignId, scalerId, assignedLocationIds: locationIds, assignedQuantity: quantity };
     });
-  }
+  })
 );
 
-exports.rejectCampaignApplication = completionAuthorityCallable(async (request) => {
+exports.rejectCampaignApplication = completionAuthorityCallable(businessOperation("rejectCampaignApplication", async (request) => {
   assertTrackingPayload(request.data, new Set(["campaignId", "applicationId"]), 4096);
   const context = await requireVerifiedUser(request, "Sign in before reviewing this application.");
   if (context.role !== "business" && !context.isAdmin) {
@@ -3030,7 +3051,7 @@ exports.rejectCampaignApplication = completionAuthorityCallable(async (request) 
     });
     return { campaignId, applicationId, status: "rejected", idempotentReplay: false };
   });
-});
+}));
 
 exports.initializeCampaignCompletion = completionAuthorityCallable(
   async (request) => {
@@ -3273,7 +3294,7 @@ exports.submitCampaignCompletion = completionAuthorityCallable(async (request) =
   });
 });
 
-exports.reviewCampaignCompletion = completionAuthorityCallable(async (request) => {
+exports.reviewCampaignCompletion = completionAuthorityCallable(businessOperation("reviewCampaignCompletion", async (request) => {
   assertTrackingPayload(request.data, new Set(["completionId", "decision", "feedback"]), 8192);
   const context = await requireVerifiedUser(request, "Sign in before reviewing completed work.");
   const completionId = cleanId(request.data?.completionId);
@@ -3313,7 +3334,7 @@ exports.reviewCampaignCompletion = completionAuthorityCallable(async (request) =
     });
     return { completionId, status, alreadyProcessed: false };
   });
-});
+}));
 
 /**
  * Submit GPS-backed zone work for business review.
@@ -10435,6 +10456,14 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
+
+
+
 const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   enforceAppCheck: false,
   maxInstances: 10,
@@ -11417,7 +11446,7 @@ function safeMarketplaceAuthorityCallable(name, handler) {
 
 
 exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
-  "finalizeZoneReview", async (request) => {
+  "finalizeZoneReview", businessOperation("finalizeZoneReview", async (request) => {
     const context = await requireVerifiedUser(request, "Sign in to review completed work.");
     const zoneId = cleanId(request.data?.zoneId);
     const decision = String(request.data?.decision || "");
@@ -11602,5 +11631,5 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
       return { zoneId, reviewStatus: "approved", payout,
         transferOperationId: transferId, earningRecorded: true };
     });
-  }
+  })
 );

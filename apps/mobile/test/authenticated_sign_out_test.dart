@@ -19,26 +19,29 @@ void main() {
     }
   });
 
-  test('shared Sign Out ends Firebase Auth and returns to login', () {
+  test('shared Sign Out ends Firebase Auth and returns to public startup', () {
     final source = File(
       'lib/widgets/authenticated_sign_out_button.dart',
     ).readAsStringSync();
 
     expect(source, contains('FirebaseAuth.instance.signOut()'));
-    expect(source, contains('AppNavigation.replace(context, AppRoutes.login)'));
+    expect(source, contains('router.clearSessionNavigation()'));
     expect(source, contains("tooltip: 'Sign Out'"));
     expect(source, isNot(contains('switchAccountView')));
   });
 
-  test('protected routes still resolve from authoritative Auth/profile state', () {
-    final gate = File(
-      'lib/navigation/protected_route_gate.dart',
-    ).readAsStringSync();
+  test(
+    'protected routes still resolve from authoritative Auth/profile state',
+    () {
+      final gate = File(
+        'lib/navigation/protected_route_gate.dart',
+      ).readAsStringSync();
 
-    expect(gate, contains('FirebaseAuth.instance.authStateChanges()'));
-    expect(gate, contains('FirebaseFirestore.instance'));
-    expect(gate, contains('if (user == null) return LoginScreen'));
-  });
+      expect(gate, contains('FirebaseAuth.instance.authStateChanges()'));
+      expect(gate, contains('FirebaseFirestore.instance'));
+      expect(gate, contains('if (user == null) return LoginScreen'));
+    },
+  );
 
   test('Admin login records only a safe staging Auth error code', () {
     final source = File(

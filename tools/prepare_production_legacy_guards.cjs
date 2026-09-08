@@ -24,13 +24,16 @@ function emit(name,sha,output,guard=false) {
  if(name!=='approveZonePayout')selected.program.body=selected.program.body.filter(n=>
    !(n.type==='ExpressionStatement'&&n.expression?.callee?.name==='setGlobalOptions'));
  source=generate(selected).code;
+ source=require('./production_workspace_adapter.cjs').adapt(source,name,{wrap:name!=='finalizeZoneReview',contextPath:name==='finalizeZoneReview'?'../workspace_access':'./workspace_access'});
  source=source.replace('initializeApp();',"if(!require('firebase-admin/app').getApps().length)initializeApp();");
  fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'index.js'),source);
  const copied=new Set();
  function deps(text) {for(const m of text.matchAll(/require\(['"]\.\/([\w./-]+)['"]\)/g)) {
    const n=m[1].replace(/\.js$/,'')+'.js';if(copied.has(n))continue;copied.add(n);
-   if(!files[n])throw Error('Missing archived dependency '+n);
-   fs.mkdirSync(path.dirname(path.join(output,n)),{recursive:true});fs.writeFileSync(path.join(output,n),files[n]);deps(files[n]);
+   const shared=['workspace_access.js','business_workspace.js','subscription_entitlements.js','legal_consent.js'];
+   const content=shared.includes(n)?fs.readFileSync(path.join(root,'functions',n),'utf8'):files[n];
+   if(!content)throw Error('Missing reviewed dependency '+n);
+   fs.mkdirSync(path.dirname(path.join(output,n)),{recursive:true});fs.writeFileSync(path.join(output,n),content);deps(content);
  }}
  deps(source);
  fs.writeFileSync(path.join(output,'legacy-base-manifest.json'),JSON.stringify({name,archiveSha256:sha,

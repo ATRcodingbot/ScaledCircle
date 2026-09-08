@@ -104,9 +104,13 @@ if (referral && /^[A-HJ-NP-Z2-9]{6,16}$/i.test(referral)) {
 // Flutter download. Do not change OAuth or Response Asset Hosting rewrites.
 let appStarted = false;
 function startProduct() {
-  if (!location.hash.startsWith('#/') || appStarted) return;
+  if (appStarted || (!location.hash.startsWith('#/') && location.pathname !== '/' && location.pathname !== '/login')) return;
   appStarted = true;
-  document.getElementById('marketing').remove();
+  document.getElementById('marketing')?.remove();
+  const loading=document.createElement('main'); loading.id='product-loading';
+  loading.textContent='Opening ScaledCircle…'; document.body.appendChild(loading);
+  const deadline=setTimeout(()=>{if(document.querySelector('flutter-view,flt-glass-pane'))return; loading.textContent='ScaledCircle could not finish loading. ';const retry=document.createElement('button');retry.textContent='Retry';retry.onclick=()=>location.reload();loading.appendChild(retry);},30000);
+  addEventListener('flutter-first-frame',()=>{clearTimeout(deadline);loading.remove();},{once:true});
   const script = document.createElement('script');
   script.src = '/flutter_bootstrap.js'; script.async = true;
   document.body.appendChild(script);
@@ -114,7 +118,8 @@ function startProduct() {
 addEventListener('hashchange', startProduct); startProduct();
 </script></body>'''
         document = re.sub(r'<body>.*?</body>', lambda _: body, document, flags=re.S)
-        document = document.replace('</head>', '''<style>
+        document = document.replace('</head>', '''<script>if(location.pathname==='/'||location.pathname==='/login'||location.hash.startsWith('#/')){document.documentElement.classList.add('resolving-session');}</script><style>
+.resolving-session #marketing{display:none}
 body{margin:0;background:#071525;color:#fff;font:18px/1.6 system-ui,sans-serif}
 main{max-width:1040px;margin:auto;padding:28px}nav{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
 a{color:#45dfbd}section{padding:24px 0;border-bottom:1px solid #29445b}

@@ -1,3 +1,4 @@
+import 'screens/jobs/jobs_marketplace_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'screens/auth/staging_privacy_screen.dart';
+import 'screens/auth/team_invitation_screen.dart';
 
 import 'config/app_environment.dart';
 import 'bootstrap/ios_startup_gate.dart';
@@ -14,6 +16,7 @@ import 'config/firebase_auth_emulator_session.dart';
 import 'navigation/app_routes.dart';
 import 'navigation/app_router.dart';
 import 'navigation/protected_route_gate.dart';
+import 'navigation/startup_session_gate.dart';
 import 'screens/business/business_dashboard.dart';
 import 'screens/business/business_attribution_screen.dart';
 import 'screens/business/landing_page_builder_screen.dart';
@@ -112,13 +115,20 @@ class ScaledCircleApp extends StatelessWidget {
     if (route?.path == '/') {
       return MaterialPageRoute(
         settings: settings,
-        builder: (_) => const PublicLandingScreen(),
+        builder: (_) =>
+            const StartupSessionGate(signedOut: PublicLandingScreen()),
       );
     }
     if (route?.path == AppRoutes.login) {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => const AuthenticatedLandingGate(),
+      );
+    }
+    if (route?.path == '/team-invitation') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => TeamInvitationScreen(location: route!),
       );
     }
     if (route?.path == AppRoutes.createAccount) {
@@ -146,7 +156,10 @@ class ScaledCircleApp extends StatelessWidget {
       );
     }
     if (route?.path == stagingPrivacyRoute) {
-      return MaterialPageRoute(settings: settings, builder: (_) => const StagingPrivacyScreen());
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const StagingPrivacyScreen(),
+      );
     }
     if (LegalDocumentKind.fromPath(route?.path) case final legalKind?) {
       return MaterialPageRoute(
@@ -238,6 +251,16 @@ class ScaledCircleApp extends StatelessWidget {
           routeName: AppRoutes.businessSocialOperations,
           audience: ProtectedRouteAudience.business,
           builder: (_, _) => const SocialOperationsScreen(),
+        ),
+      );
+    }
+    if (route?.path == AppRoutes.myWork) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: AppRoutes.myWork,
+          audience: ProtectedRouteAudience.scaler,
+          builder: (_, _) => const JobsMarketplaceScreen(initialIndex: 1),
         ),
       );
     }

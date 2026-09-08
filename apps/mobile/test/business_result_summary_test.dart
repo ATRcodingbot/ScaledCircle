@@ -135,7 +135,7 @@ void main() {
     ).readAsStringSync();
 
     for (final source in [dashboard, results]) {
-      expect(source, contains("collection('campaignZones')"));
+      expect(source, contains("'campaignZones'"));
       expect(source, contains('BusinessResultSummary.fromZones'));
     }
     expect(dashboard, contains('awaitingReviewCount'));

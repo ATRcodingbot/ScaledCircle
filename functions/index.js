@@ -3,7 +3,7 @@ const routeProgress = require("./route_progress");
 const canvassingCompletion = require("./canvassing_completion");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
-const {onDocumentCreated, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentUpdated, onDocumentWritten, onDocumentWrittenWithAuthContext} = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 const {initializeApp, getApp} = require("firebase-admin/app");
@@ -59,6 +59,9 @@ const scaledCircleIntelligence = require("./scaled_circle_intelligence");
 const groupAssignment = require("./group_assignment");
 const multiScalerRollout = require("./multi_scaler_rollout");
 const subscriptionEntitlements = require("./subscription_entitlements");
+const businessWorkspace = require("./business_workspace");
+const workspaceAccess = require("./workspace_access");
+const workspaceBilling = require("./workspace_billing");
 const managedGrowth = require("./managed_growth");
 const managedGrowthProfile = require("./managed_growth_profile");
 const managedGrowthDelivery = require("./managed_growth_delivery");
@@ -87,6 +90,30 @@ function assertProductionScalerCount(value) {
 }
 
 const db = getFirestore();
+
+function businessWorkspaceService() {
+  const project=process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT;
+  return businessWorkspace.createWorkspaceService({db,auth:getAuth(),FieldValue,Timestamp,
+    origin:project==='scaledcircle-staging'?'https://scaledcircle-staging.web.app':'https://scaledcircle.com'});
+}
+function businessOperation(name,handler) {
+  return async request=>{
+    try {return await workspaceAccess.createAccessAdapter({db,workspace:businessWorkspaceService(),FieldValue})(name,request,handler);}
+    catch(error){if(error instanceof HttpsError)throw error;
+      if(['unauthenticated','permission-denied','invalid-argument','failed-precondition','already-exists','resource-exhausted','not-found','aborted','unavailable'].includes(error.code))throw new HttpsError(error.code,error.message);
+      throw new HttpsError('internal','The workspace operation could not complete. Please retry.');}
+  };
+}
+function workspaceEndpoint(handler,options={}) {
+  return onCall({region:'us-east1',maxInstances:10,enforceAppCheck:false,...options},async request=>{
+    if(!request.auth)throw new HttpsError('unauthenticated','Sign in to continue.');
+    try{const service=businessWorkspaceService();await service.actor(request.auth.uid);return await handler(request,service);}
+    catch(error){if(error instanceof HttpsError)throw error;
+      if(['unauthenticated','permission-denied','invalid-argument','failed-precondition','already-exists','resource-exhausted','not-found','aborted','unavailable'].includes(error.code))throw new HttpsError(error.code,error.message);
+      if(error.message==='legal_consent_required')throw new HttpsError('failed-precondition','Accept the current Terms and Privacy Policy before joining.');
+      logger.error('Workspace action failed.',{type:error?.constructor?.name});throw new HttpsError('internal','The request could not complete. Please retry.');}
+  });
+}
 const internalBetaEntitlementService = internalBetaEntitlements
   .createInternalBetaEntitlementService({
     db,
@@ -488,7 +515,7 @@ const SIGNUP_NOTIFICATION_GMAIL_APP_PASSWORD = defineSecret(
 const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
 const CENSUS_API_KEY = defineSecret("CENSUS_API_KEY");
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
-const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
+const STRIPE_SECRET_KEY = defineSecret((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === "scaledcircle-staging" ? "STRIPE_TEST_SECRET_KEY" : "STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 // Dedicated TEST endpoint signing secret; provision only during supervised setup.
 const STRIPE_CASHOUT_TEST_API_KEY = defineSecret("STRIPE_TEST_SECRET_KEY");
@@ -498,18 +525,21 @@ const STRIPE_THIN_WEBHOOK_SECRET = defineSecret("STRIPE_THIN_WEBHOOK_SECRET");
 const STRIPE_STARTER_PRICE_ID = defineSecret("STRIPE_STARTER_PRICE_ID");
 const STRIPE_GROWTH_PRICE_ID = defineSecret("STRIPE_GROWTH_PRICE_ID");
 const STRIPE_SCALE_PRICE_ID = defineSecret("STRIPE_SCALE_PRICE_ID");
+const STRIPE_MANAGED_GROWTH_PRICE_ID = defineSecret("STRIPE_MANAGED_GROWTH_PRICE_ID");
 
 
 const SUBSCRIPTION_PRICES = {
   starter: 99,
   growth: 299,
   scale: 499,
+  managed_growth: 999,
 };
 
 const SUBSCRIPTION_RANKS = {
   starter: 1,
   growth: 2,
   scale: 3,
+  managed_growth: 4,
 };
 
 const MINIMUM_PAYABLE_COMPLETION_PERCENTAGE = 10;
@@ -519,6 +549,7 @@ const ADMIN_COMPED_SUBSCRIPTION_EXPIRATION = Timestamp.fromDate(
 );
 
 async function authenticatedUserContext(request, message) {
+  if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
     throw new HttpsError("unauthenticated", message);
   }
@@ -802,7 +833,7 @@ exports.provisionCampaignTracking = onCall(
     }
 
     const campaignReference = db.collection("campaigns").doc(campaignId);
-    const businessId = request.auth.uid;
+    const businessId = request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid;
 
     return db.runTransaction(async (transaction) => {
       const campaignSnapshot = await transaction.get(campaignReference);
@@ -1250,7 +1281,9 @@ exports.getLegalConsentStatus = onCall(
       "Sign in to review your agreement status.",
     );
     const requestedContext = readText(request.data?.context, 40);
-    const requirements = legalConsent.ROLE_REQUIREMENTS[requestedContext];
+    const requirements = requestedContext === "account" ?
+      ["terms", "privacy", ...(context.role === "scaler" ? ["scaler_work"] : [])] :
+      legalConsent.ROLE_REQUIREMENTS[requestedContext];
     if (!requirements) {
       throw new HttpsError("invalid-argument", "Choose a supported agreement context.");
     }
@@ -1559,7 +1592,7 @@ exports.purchaseSubscription = onCall(
     enforceAppCheck: false,
     maxInstances: 10,
   },
-  async (request) => {
+  businessOperation("purchaseSubscription", async (request) => {
     const authContext = await requireVerifiedUser(
       request,
       "You must be logged in to purchase a subscription.",
@@ -1584,7 +1617,7 @@ exports.purchaseSubscription = onCall(
       );
     }
 
-    const businessId = request.auth.uid;
+    const businessId = request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid;
     if (authContext.isAdmin) {
       return grantAdminScaleSubscription(businessId);
     }
@@ -1775,7 +1808,7 @@ exports.purchaseSubscription = onCall(
         "Unable to update the subscription right now.",
       );
     }
-  },
+  }),
 );
 
 /**
@@ -1787,7 +1820,7 @@ exports.ensureBillingEntitlement = onCall(
     enforceAppCheck: false,
     maxInstances: 10,
   },
-  async (request) => {
+  businessOperation("ensureBillingEntitlement", async (request) => {
     const authContext = await authenticatedUserContext(
       request,
       "You must be logged in to load billing access.",
@@ -1805,7 +1838,7 @@ exports.ensureBillingEntitlement = onCall(
       status: wallet.subscriptionStatus || "inactive",
       comped: wallet.subscriptionComped === true,
     };
-  },
+  }),
 );
 
 /**
@@ -1927,6 +1960,7 @@ function stripePriceForPlan(plan) {
     starter: STRIPE_STARTER_PRICE_ID.value(),
     growth: STRIPE_GROWTH_PRICE_ID.value(),
     scale: STRIPE_SCALE_PRICE_ID.value(),
+    managed_growth: STRIPE_MANAGED_GROWTH_PRICE_ID.value(),
   };
   return prices[plan] || "";
 }
@@ -1936,6 +1970,7 @@ function planForStripePrice(priceId) {
     [STRIPE_STARTER_PRICE_ID.value()]: "starter",
     [STRIPE_GROWTH_PRICE_ID.value()]: "growth",
     [STRIPE_SCALE_PRICE_ID.value()]: "scale",
+    [STRIPE_MANAGED_GROWTH_PRICE_ID.value()]: "managed_growth",
   };
   return prices[priceId] || null;
 }
@@ -1952,7 +1987,7 @@ async function getOrCreateStripeCustomer(stripe, context) {
     email: authUser.email || undefined,
     name: authUser.displayName || undefined,
     metadata: {firebaseUid: context.uid},
-  });
+  }, {idempotencyKey: `workspace_customer_${context.uid}_v1`});
   await walletReference.set({
     ownerId: context.uid,
     stripeCustomerId: customer.id,
@@ -1966,6 +2001,7 @@ const STRIPE_CHECKOUT_SECRETS = [
   STRIPE_STARTER_PRICE_ID,
   STRIPE_GROWTH_PRICE_ID,
   STRIPE_SCALE_PRICE_ID,
+  STRIPE_MANAGED_GROWTH_PRICE_ID,
 ];
 
 const STARTER_FREE_MONTH_PROMOTION_CODE = "SCALEDFREE99";
@@ -1983,7 +2019,7 @@ exports.createStarterFreeMonthPromotion = onCall(
     maxInstances: 2,
     secrets: [STRIPE_SECRET_KEY, STRIPE_STARTER_PRICE_ID],
   },
-  async (request) => {
+  businessOperation("createStarterFreeMonthPromotion", async (request) => {
     const context = await authenticatedUserContext(
       request,
       "You must be logged in to create a promotion code.",
@@ -2078,7 +2114,7 @@ exports.createStarterFreeMonthPromotion = onCall(
       promotionCodeId: promotionCode.id,
       created: true,
     };
-  },
+  }),
 );
 
 /** Create a Stripe-hosted recurring subscription Checkout session. */
@@ -2088,7 +2124,7 @@ exports.createSubscriptionCheckoutSession = onCall(
     maxInstances: 10,
     secrets: STRIPE_CHECKOUT_SECRETS,
   },
-  async (request) => {
+  businessOperation("createSubscriptionCheckoutSession", async (request) => {
     const context = await requireVerifiedUser(
       request,
       "You must be logged in to subscribe.",
@@ -2132,6 +2168,19 @@ exports.createSubscriptionCheckoutSession = onCall(
 
     const stripe = stripeClient();
     const customer = await getOrCreateStripeCustomer(stripe, context);
+    const checkoutWallet = db.doc(`wallets/${context.uid}`);
+    let checkoutRequestId;
+    await db.runTransaction(async tx => {
+      const current = (await tx.get(checkoutWallet)).data() || {};
+      if (current.pendingSubscriptionExpiresMs > Date.now()) {
+        if (current.pendingSubscriptionPlan !== plan) throw new HttpsError('failed-precondition', 'Complete or let the existing subscription Checkout expire before choosing another plan.');
+        checkoutRequestId = current.pendingSubscriptionRequestId;
+      } else {
+        checkoutRequestId = crypto.randomUUID();
+        tx.set(checkoutWallet, {pendingSubscriptionRequestId: checkoutRequestId,
+          pendingSubscriptionPlan: plan, pendingSubscriptionExpiresMs: Date.now()+24*60*60*1000}, {merge:true});
+      }
+    });
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer,
@@ -2140,10 +2189,10 @@ exports.createSubscriptionCheckoutSession = onCall(
       success_url: `${publicAppBaseUrl()}/?billing=success`,
       cancel_url: `${publicAppBaseUrl()}/?billing=cancelled`,
       metadata: {firebaseUid: context.uid, purchaseType: "subscription", plan},
-      subscription_data: {metadata: {firebaseUid: context.uid, plan}},
-    });
+      subscription_data: {metadata: {firebaseUid: context.uid, plan, checkoutRequestId}},
+    }, {idempotencyKey: `workspace_subscription_${checkoutRequestId}`});
     return {url: session.url, sessionId: session.id, plan, comped: false};
-  },
+  }),
 );
 
 /** Create a one-time Checkout session for wallet credits. */
@@ -2153,7 +2202,7 @@ exports.createCreditCheckoutSession = onCall(
     maxInstances: 10,
     secrets: [STRIPE_SECRET_KEY],
   },
-  async (request) => {
+  businessOperation("createCreditCheckoutSession", async (request) => {
     const context = await requireVerifiedUser(
       request,
       "You must be logged in to purchase credits.",
@@ -2188,7 +2237,7 @@ exports.createCreditCheckoutSession = onCall(
       },
     });
     return {url: session.url, sessionId: session.id, credits};
-  },
+  }),
 );
 
 exports.createBillingPortalSession = onCall(
@@ -2197,7 +2246,7 @@ exports.createBillingPortalSession = onCall(
     maxInstances: 10,
     secrets: [STRIPE_SECRET_KEY],
   },
-  async (request) => {
+  businessOperation("createBillingPortalSession", async (request) => {
     const context = await requireVerifiedUser(
       request,
       "You must be logged in to manage billing.",
@@ -2207,60 +2256,32 @@ exports.createBillingPortalSession = onCall(
     }
     const stripe = stripeClient();
     const customer = await getOrCreateStripeCustomer(stripe, context);
+    const configurationRef=db.doc('businessBillingPortalConfigurations/workspace_v1');
+    let configurationId=(await configurationRef.get()).data()?.configurationId;
+    if(!configurationId){
+      const configuration=await stripe.billingPortal.configurations.create({
+        business_profile:{headline:'ScaledCircle payment methods and billing records'},
+        features:{invoice_history:{enabled:true},payment_method_update:{enabled:true},
+          customer_update:{enabled:false},subscription_cancel:{enabled:false},subscription_update:{enabled:false}},
+        metadata:{purpose:'workspace_membership_v1'}
+      },{idempotencyKey:'scaledcircle_workspace_membership_portal_v1'});
+      configurationId=configuration.id;
+      await configurationRef.set({configurationId,createdAt:FieldValue.serverTimestamp()},{merge:true});
+    }
+    const portalConfig=await stripe.billingPortal.configurations.retrieve(configurationId);
+    if(portalConfig.features?.subscription_update?.enabled || portalConfig.features?.subscription_cancel?.enabled)throw new HttpsError('failed-precondition','Use Billing / Plan to change membership.');
     const session = await stripe.billingPortal.sessions.create({
-      customer,
-      return_url: `${publicAppBaseUrl()}/`,
+      customer,configuration:configurationId,
+      return_url: `${publicAppBaseUrl()}/#/business/account`,
     });
     return {url: session.url};
-  },
+  }),
 );
 
 async function syncStripeSubscription(subscription, eventId) {
-  const uid = cleanId(subscription.metadata?.firebaseUid);
-  if (!uid) return;
-  const firstItem = subscription.items?.data?.[0];
-  const priceId = firstItem?.price?.id || "";
-  const plan = readText(subscription.metadata?.plan, 20) ||
-    planForStripePrice(priceId);
-  if (!plan || !SUBSCRIPTION_PRICES[plan]) return;
-  const active = subscription.status === "active" ||
-    subscription.status === "trialing";
-  const periodEndSeconds = Number(firstItem?.current_period_end || 0);
-  const expiration = periodEndSeconds > 0
-    ? Timestamp.fromMillis(periodEndSeconds * 1000)
-    : Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
-  const eventReference = db.collection("stripeEvents").doc(eventId);
-  const walletReference = db.collection("wallets").doc(uid);
-  const subscriptionReference = db.collection("businessSubscriptions").doc(uid);
-  await db.runTransaction(async (transaction) => {
-    if ((await transaction.get(eventReference)).exists) return;
-    const values = {
-      subscriptionPlan: plan,
-      subscriptionPrice: SUBSCRIPTION_PRICES[plan],
-      subscriptionStatus: active ? "active" : subscription.status,
-      subscriptionExpiresAt: expiration,
-      subscriptionComped: false,
-      subscriptionSource: "stripe",
-      stripeSubscriptionId: subscription.id,
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-    transaction.set(walletReference, {ownerId: uid, ...values}, {merge: true});
-    transaction.set(subscriptionReference, {
-      businessId: uid,
-      plan,
-      planId: plan,
-      price: SUBSCRIPTION_PRICES[plan],
-      status: active ? "active" : subscription.status,
-      expiresAt: expiration,
-      stripeSubscriptionId: subscription.id,
-      source: "stripe",
-      updatedAt: FieldValue.serverTimestamp(),
-    }, {merge: true});
-    transaction.set(eventReference, {
-      type: `customer.subscription.${subscription.status}`,
-      processedAt: FieldValue.serverTimestamp(),
-    });
-  });
+  return require('./workspace_subscription_sync').createSubscriptionSync({
+    db, FieldValue, Timestamp, planForPrice: planForStripePrice,
+  })(subscription, eventId);
 }
 
 /**
@@ -2274,7 +2295,7 @@ exports.fundCampaign = onCall(
     enforceAppCheck: false,
     maxInstances: 10,
   },
-  async (request) => {
+  businessOperation("fundCampaign", async (request) => {
     const authContext = await requireVerifiedUser(
       request,
       "You must be logged in to fund a campaign.",
@@ -2290,7 +2311,7 @@ exports.fundCampaign = onCall(
     }
 
     const cleanCampaignId = campaignId.trim();
-    const businessId = request.auth.uid;
+    const businessId = request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid;
     const description = typeof request.data?.description === "string"
       ? request.data.description.trim().slice(0, 240)
       : "Worker funding reserved for campaign.";
@@ -2478,7 +2499,7 @@ exports.fundCampaign = onCall(
         "Unable to fund the campaign right now.",
       );
     }
-  },
+  }),
 );
 
 /**
@@ -2490,7 +2511,7 @@ exports.deleteDraftCampaign = onCall(
     enforceAppCheck: false,
     maxInstances: 5,
   },
-  async (request) => {
+  businessOperation("deleteDraftCampaign", async (request) => {
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -2516,7 +2537,7 @@ exports.deleteDraftCampaign = onCall(
 
     const campaign = campaignSnapshot.data() || {};
 
-    if (campaign.businessId !== request.auth.uid) {
+    if ((campaign.businessId !== (request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid))) {
       throw new HttpsError(
         "permission-denied",
         "You do not own this campaign.",
@@ -2578,7 +2599,7 @@ exports.deleteDraftCampaign = onCall(
       deletedRelatedRecords: relatedDocuments.length,
       alreadyDeleted: false,
     };
-  },
+  }),
 );
 
 /**
@@ -2860,7 +2881,7 @@ function exactCompletionId(campaignId, scalerId) {
   return `exact_${campaignId}_${scalerId}`;
 }
 
-exports.createCampaignLocation = completionAuthorityCallable(async (request) => {
+exports.createCampaignLocation = completionAuthorityCallable(businessOperation("createCampaignLocation", async (request) => {
   assertTrackingPayload(request.data, new Set([
     "campaignId", "locationType", "address", "latitude", "longitude",
     "instructions", "quantity", "scheduledAt", "windowStart", "windowEnd",
@@ -2903,9 +2924,9 @@ exports.createCampaignLocation = completionAuthorityCallable(async (request) => 
     });
   });
   return {locationId: locationRef.id};
-});
+}));
 
-exports.deleteCampaignLocation = completionAuthorityCallable(async (request) => {
+exports.deleteCampaignLocation = completionAuthorityCallable(businessOperation("deleteCampaignLocation", async (request) => {
   assertTrackingPayload(request.data, new Set(["locationId"]), 4096);
   const context = await requireVerifiedUser(request, "Sign in to remove a campaign location.");
   const locationId = cleanId(request.data?.locationId);
@@ -2928,10 +2949,10 @@ exports.deleteCampaignLocation = completionAuthorityCallable(async (request) => 
     transaction.delete(ref);
   });
   return {locationId, deleted: true};
-});
+}));
 
 exports.assignScalerToCampaignLocations = completionAuthorityCallable(
-  async (request) => {
+  businessOperation("assignScalerToCampaignLocations", async (request) => {
     assertTrackingPayload(request.data, new Set(["campaignId", "applicationId", "locationIds"]), 16384);
     const context = await requireVerifiedUser(request, "Sign in before assigning exact-location work.");
     if (context.role !== "business" && !context.isAdmin) {
@@ -2987,10 +3008,10 @@ exports.assignScalerToCampaignLocations = completionAuthorityCallable(
       });
       return {campaignId, scalerId, assignedLocationIds: locationIds, assignedQuantity: quantity};
     });
-  },
+  }),
 );
 
-exports.rejectCampaignApplication = completionAuthorityCallable(async (request) => {
+exports.rejectCampaignApplication = completionAuthorityCallable(businessOperation("rejectCampaignApplication", async (request) => {
   assertTrackingPayload(request.data, new Set(["campaignId", "applicationId"]), 4096);
   const context = await requireVerifiedUser(request, "Sign in before reviewing this application.");
   if (context.role !== "business" && !context.isAdmin) {
@@ -3030,7 +3051,7 @@ exports.rejectCampaignApplication = completionAuthorityCallable(async (request) 
     });
     return {campaignId, applicationId, status: "rejected", idempotentReplay: false};
   });
-});
+}));
 
 exports.initializeCampaignCompletion = completionAuthorityCallable(
   async (request) => {
@@ -3273,7 +3294,7 @@ exports.submitCampaignCompletion = completionAuthorityCallable(async (request) =
   });
 });
 
-exports.reviewCampaignCompletion = completionAuthorityCallable(async (request) => {
+exports.reviewCampaignCompletion = completionAuthorityCallable(businessOperation("reviewCampaignCompletion", async (request) => {
   assertTrackingPayload(request.data, new Set(["completionId", "decision", "feedback"]), 8192);
   const context = await requireVerifiedUser(request, "Sign in before reviewing completed work.");
   const completionId = cleanId(request.data?.completionId);
@@ -3313,7 +3334,7 @@ exports.reviewCampaignCompletion = completionAuthorityCallable(async (request) =
     });
     return {completionId, status, alreadyProcessed: false};
   });
-});
+}));
 
 /**
  * Submit GPS-backed zone work for business review.
@@ -3628,7 +3649,7 @@ exports.approveZonePayout = onCall(
     enforceAppCheck: false,
     maxInstances: 10,
   },
-  async (request) => {
+  businessOperation("approveZonePayout", async (request) => {
     await requireVerifiedUser(
       request,
       "You must be logged in to approve a payout.",
@@ -3643,7 +3664,7 @@ exports.approveZonePayout = onCall(
       );
     }
 
-    const businessId = request.auth.uid;
+    const businessId = request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid;
     const releaseBonus = request.data?.releaseBonus === true;
     const payoutReference = db.collection("payouts").doc(payoutId);
 
@@ -3958,7 +3979,7 @@ exports.approveZonePayout = onCall(
         "Unable to approve this payout right now.",
       );
     }
-  },
+  }),
 );
 
 /**
@@ -3970,14 +3991,14 @@ exports.requestZoneRedo = onCall(
     enforceAppCheck: false,
     maxInstances: 10,
   },
-  async (request) => {
+  businessOperation("requestZoneRedo", async (request) => {
     await requireVerifiedUser(request, "You must be logged in to review a payout.");
     const payoutId = cleanId(request.data?.payoutId);
     const feedback = String(request.data?.feedback || "").trim().slice(0, 2000);
     if (!payoutId || !feedback) {
       throw new HttpsError("invalid-argument", "Payout and review feedback are required.");
     }
-    const businessId = request.auth.uid;
+    const businessId = request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid;
     const payoutRef = db.collection("payouts").doc(payoutId);
     try {
       return await db.runTransaction(async (transaction) => {
@@ -4039,7 +4060,7 @@ exports.requestZoneRedo = onCall(
       });
       throw new HttpsError("internal", "Unable to request changes right now.");
     }
-  },
+  }),
 );
 
 /**
@@ -4051,11 +4072,11 @@ exports.dropZoneScaler = onCall(
     enforceAppCheck: false,
     maxInstances: 10,
   },
-  async (request) => {
+  businessOperation("dropZoneScaler", async (request) => {
     await requireVerifiedUser(request, "You must be logged in to review a payout.");
     const payoutId = cleanId(request.data?.payoutId);
     if (!payoutId) throw new HttpsError("invalid-argument", "A valid payout is required.");
-    const businessId = request.auth.uid;
+    const businessId = request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid;
     const payoutRef = db.collection("payouts").doc(payoutId);
     try {
       return await db.runTransaction(async (transaction) => {
@@ -4119,7 +4140,7 @@ exports.dropZoneScaler = onCall(
       });
       throw new HttpsError("internal", "Unable to remove this Scaler right now.");
     }
-  },
+  }),
 );
 
 /**
@@ -4137,7 +4158,7 @@ exports.analyzeCampaignZone = onCall(
     enforceAppCheck: false,
     maxInstances: 5,
   },
-  async (request) => {
+  businessOperation("analyzeCampaignZone", async (request) => {
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -4184,7 +4205,7 @@ exports.analyzeCampaignZone = onCall(
 
       if (
         businessId.length === 0 ||
-        businessId !== request.auth.uid
+        businessId !== (request[workspaceAccess.CONTEXT]?.businessId || request.auth.uid)
       ) {
         throw new HttpsError(
           "permission-denied",
@@ -4498,7 +4519,7 @@ exports.analyzeCampaignZone = onCall(
         "Unable to analyze the campaign zone.",
       );
     }
-  },
+  }),
 );
 
 function smartZoneAnchor(campaign = {}) {
@@ -4613,7 +4634,7 @@ async function generateSmartZonePlan(input, desiredHours) {
 
 exports.getSmartZonePlan = onCall(
   {enforceAppCheck: false, maxInstances: 10},
-  async (request) => {
+  businessOperation("getSmartZonePlan", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
       throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
     }
@@ -4623,12 +4644,12 @@ exports.getSmartZonePlan = onCall(
     } catch (_) {
       throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
     }
-  },
+  }),
 );
 
 exports.applySmartZonePlan = onCall(
   {enforceAppCheck: false, maxInstances: 5},
-  async (request) => {
+  businessOperation("applySmartZonePlan", async (request) => {
     if (stagingPhysicalQa.reserved(request.data?.campaignId)) {
       throw new HttpsError("failed-precondition", "The certification territory is server-bound.");
     }
@@ -4765,13 +4786,13 @@ exports.applySmartZonePlan = onCall(
         recommendedBasePayCents: plan.compensation.recommendedBasePayCents};
     });
     return result;
-  },
+  }),
 );
 
 /** Server-authoritative, industry-neutral property/housing-stock analysis. */
 exports.analyzePropertyIntelligence = onCall(
   {enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 60, memory: "512MiB", secrets: [CENSUS_API_KEY]},
-  async (request) => {
+  businessOperation("analyzePropertyIntelligence", async (request) => {
     const context = await authenticatedUserContext(request,
       "You must be logged in to use Property Intelligence.");
     try { propertyIntelligence.assertBusinessAccess({uid: context.uid, role: context.role,
@@ -4861,7 +4882,7 @@ exports.analyzePropertyIntelligence = onCall(
     return {success: true, zoneId: zoneId || null, analysisScope: zoneId ? "campaign_zone" : "exploratory",
       cached: false, analysis: sanitized,
       aiContext: propertyIntelligence.aiGrounding(sanitized, request.data?.objective)};
-  },
+  }),
 );
 
 async function requireTrustedBetaAdmin(request) {
@@ -5204,7 +5225,7 @@ async function loadAuthoritativePropertyIntelligence(analysisId, geometryDigest)
 exports.analyzeScaleIntelligence = onCall(
   {enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 30, memory: "512MiB",
     secrets: [OPENAI_API_KEY]},
-  async (request) => {
+  businessOperation("analyzeScaleIntelligence", async (request) => {
     const trace = localIntelligenceTrace();
     trace.mark("CALLABLE_ENTRY");
     assertScaleIntelligenceRuntimeIsolation();
@@ -5340,7 +5361,7 @@ exports.analyzeScaleIntelligence = onCall(
         message: "AI analysis is temporarily unavailable.",
         knownData: intelligenceContext.componentSignals};
     }
-  },
+  }),
 );
 
 async function requireManagedGrowthBusiness(request) {
@@ -5361,7 +5382,7 @@ async function requireManagedGrowthBusiness(request) {
 /** Saves a versioned, reusable Business-supplied grounding profile. */
 exports.saveBusinessGrowthProfile = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  async (request) => {
+  businessOperation("saveBusinessGrowthProfile", async (request) => {
     const business = await requireManagedGrowthBusiness(request);
     let profile;
     try { profile = managedGrowthProfile.sanitizeProfile(request.data?.profile); }
@@ -5382,13 +5403,13 @@ exports.saveBusinessGrowthProfile = onCall(
     });
     return {profile: {...profile, businessUid: business.uid,
       schemaVersion: managedGrowthProfile.PROFILE_SCHEMA_VERSION, profileVersion}, profileVersion};
-  },
+  }),
 );
 
 /** Reads a public website and returns suggestions that the Business must confirm. */
 exports.suggestBusinessGrowthProfileFromWebsite = onCall(
   {enforceAppCheck: false, maxInstances: 2, timeoutSeconds: 10, memory: "256MiB"},
-  async (request) => {
+  businessOperation("suggestBusinessGrowthProfileFromWebsite", async (request) => {
     await requireManagedGrowthBusiness(request);
     let website;
     try { website = managedGrowthProfile.validatePublicWebsite(request.data?.website); }
@@ -5419,7 +5440,7 @@ exports.suggestBusinessGrowthProfileFromWebsite = onCall(
       });
       throw new HttpsError("unavailable", "We could not read that website. You can continue without it.");
     } finally { clearTimeout(timeout); }
-  },
+  }),
 );
 
 /** Saves owner preferences without changing identity, entitlement, or search authority. */
@@ -5601,7 +5622,7 @@ async function consumeManagedGrowthRateLimit(business, artifactType, now = Date.
 exports.generateManagedGrowthArtifact = onCall(
   {enforceAppCheck: false, maxInstances: 3, timeoutSeconds: 60, memory: "512MiB",
     secrets: [OPENAI_API_KEY]},
-  async (request) => {
+  businessOperation("generateManagedGrowthArtifact", async (request) => {
     const business = await requireManagedGrowthBusiness(request);
     let generationRequest;
     try { generationRequest = managedGrowthProfile.sanitizeGenerationRequest(request.data); }
@@ -5667,13 +5688,13 @@ exports.generateManagedGrowthArtifact = onCall(
         artifactType: generationRequest.artifactType, error: String(error?.message || error).slice(0, 120)});
       throw new HttpsError("unavailable", "Managed Growth generation is temporarily unavailable.");
     }
-  },
+  }),
 );
 
 /** Saves a dedicated generated-file recipient without changing Auth or billing email. */
 exports.saveArtifactDeliveryPreference = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  async (request) => {
+  businessOperation("saveArtifactDeliveryPreference", async (request) => {
     const business = await requireManagedGrowthBusiness(request);
     let preference;
     try {
@@ -5690,13 +5711,13 @@ exports.saveArtifactDeliveryPreference = onCall(
     }, {merge: true});
     return {artifactDeliveryEmail: preference.artifactDeliveryEmail,
       schemaVersion: managedGrowthDelivery.DELIVERY_PREFERENCE_VERSION};
-  },
+  }),
 );
 
 /** Queues one owner-authorized artifact email; it never sends a marketing campaign. */
 exports.deliverManagedGrowthArtifact = onCall(
   {enforceAppCheck: false, maxInstances: 6},
-  async (request) => {
+  businessOperation("deliverManagedGrowthArtifact", async (request) => {
     const business = await requireManagedGrowthBusiness(request);
     const artifactId = readText(request.data?.artifactId, 128);
     if (!artifactId) throw new HttpsError("invalid-argument", "Choose a generated file to send.");
@@ -5733,7 +5754,7 @@ exports.deliverManagedGrowthArtifact = onCall(
     }
     return {status: alreadyQueued ? "already_queued" : "queued",
       artifactDeliveryEmail: delivery.recipient, attachmentIncluded: false};
-  },
+  }),
 );
 
 /** Returns capability-driven provider availability without credentials. */
@@ -7056,17 +7077,22 @@ exports.notifyOnCampaignZoneUpdated = onDocumentUpdated({
   const recipient = becameSubmitted ? after.businessId : after.assignedScalerId;
   if (!recipient) return;
   const zoneId = event.params.zoneId;
-  await writeInAppNotification(inAppNotification({
+  const notification=inAppNotification({
     id: `${becameSubmitted ? "completion-submitted" : "work-cutoff"}_${zoneId}`,
     userId: recipient,
     type: becameSubmitted ? "zone_completion_submitted" : "work_cutoff_paused",
     title: becameSubmitted ? "Zone completion submitted" : "Work paused at cutoff",
-    message: becameSubmitted ? "Verified work is ready for Business review." :
+    message: becameSubmitted ? "Captured work is ready for Business review." :
       "Route evidence was preserved. Resume during the next allowed work window.",
     campaignId: after.campaignId, zoneId, entityId: after.submittedCompletionId || zoneId,
     deepLink: {destination: becameSubmitted ? "campaign_review" : "job_room", zoneId,
       campaignId: after.campaignId}, priority: "high",
-  }));
+  });
+  await db.runTransaction(async transaction=>{
+    const ref=db.collection("notifications").doc(notification.id);
+    if((await transaction.get(ref)).exists)return;
+    transaction.create(ref,notification);
+  });
 });
 
 exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
@@ -7407,7 +7433,7 @@ exports.enforceOperationalWorkCutoffs = onSchedule(
 // emulator regression tests exercise the identical trusted cutoff handler.
 exports.enforceOperationalWorkCutoffs.__testRun = enforceOperationalWorkCutoffsHandler;
 
-exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (request) => {
+exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOperation("assignScalerToZone", async (request) => {
   assertTrackingPayload(
     request.data,
     new Set(["campaignId", "zoneId", "applicationId"]),
@@ -7626,10 +7652,10 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", async (reque
     result = {scalerId, scalerEmail, zoneName, assignedHomes};
   });
   return result;
-});
+}));
 
 exports.configureZoneGroupAssignment = trackingCallable(
-  "configureZoneGroupAssignment", async (request) => {
+  "configureZoneGroupAssignment", businessOperation("configureZoneGroupAssignment", async (request) => {
   if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {
     throw new HttpsError("failed-precondition", "Group work is unavailable for this certification job.");
   }
@@ -7698,7 +7724,7 @@ exports.configureZoneGroupAssignment = trackingCallable(
       result = policy;
     });
     return result;
-  });
+  }));
 
 exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (request) => {
   if (stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) {
@@ -7981,7 +8007,7 @@ exports.cancelZoneGroupParticipation = trackingCallable(
     return result;
   });
 
-exports.settleZoneGroupAssignment = trackingCallable("settleZoneGroupAssignment", async (request) => {
+exports.settleZoneGroupAssignment = trackingCallable("settleZoneGroupAssignment", businessOperation("settleZoneGroupAssignment", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
   const context = await requireVerifiedUser(request, "Sign in before settling group work.");
   const zoneId = String(request.data?.zoneId || "").trim();
@@ -8092,7 +8118,7 @@ exports.settleZoneGroupAssignment = trackingCallable("settleZoneGroupAssignment"
       zoneId, paymentId, status: "reserved", result, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
   });
   return result;
-});
+}));
 
 exports.submitZoneGroupCompletion = trackingCallable("submitZoneGroupCompletion", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
@@ -8319,7 +8345,7 @@ exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) =>
   return {status: "pending"};
 });
 
-exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
+exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoom", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
   const context = await requireVerifiedUser(request, "Verify your email to open this Job Room.");
   if (!context.isAdmin && context.user.active !== true && context.user.betaAccess !== 'approved') {
@@ -8497,7 +8523,7 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     messages, events, completions,
     startEligibility: {...gate, workWindow},
   };
-  const ownSubmittedEvidence = context.role === 'scaler' && zone.assignedScalerId === context.uid && zone.status === 'submitted' && zone.campaignId === room.campaignId;
+  const ownSubmittedEvidence = context.role === 'scaler' && zone.assignedScalerId === context.uid && ['submitted','completed'].includes(zone.status) && zone.campaignId === room.campaignId;
   if ((privateLogisticsAllowed || ownSubmittedEvidence) && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
     const sessions = await db.collection('trackingSessions').where('zoneId', '==', zoneId).get();
     const ownSessions = sessions.docs.filter(d => d.data().scalerId === zone.assignedScalerId && d.data().campaignId === room.campaignId)
@@ -8508,6 +8534,8 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
     const checkpointDocs = sessionDoc ? await sessionDoc.ref.collection('checkpoints').get() : null;
     const chunks = chunkDocs?.docs.map(d => d.data()) || [];
     const checkpoints = checkpointDocs?.docs.map(d => d.data()) || [];
+    const noteDocs = sessionDoc ? await sessionDoc.ref.collection('workNotes').orderBy('createdAt','desc').limit(50).get() : null;
+    const workNotes = noteDocs?.docs.map(d => ({kind:d.data().kind,note:d.data().note,createdAt:d.data().createdAt?.toDate?.().toISOString() || null})) || [];
     const points = sessionDoc ? (routeProgress.acceptedEvidence({...session,sessionId:sessionDoc.id},chunks) || []) : [];
     const finalizedRoute = session.routeId ? await db.collection('campaignRoutes').doc(session.routeId).get() : null;
     const assessment = canvassingCompletion.assess({...zone,id:zoneId},{...session,sessionId:sessionDoc?.id},chunks,finalizedRoute?.data() || {},calculateRouteCompletion);
@@ -8523,12 +8551,12 @@ exports.getJobRoom = trackingCallable("getJobRoom", async (request) => {
       checkpoints:checkpoints.map(p => ({latitude:p.latitude ?? null,longitude:p.longitude ?? null,createdAt:p.createdAt || null})),
       startedAt:session.startedAt?.toDate?.().toISOString() || null, endedAt:session.endedAt?.toDate?.().toISOString() || null,
       trackingActive:session.status === 'active', sessionStatus:session.status || 'not_started',
-      proofCount:points.length, accessExceptions:completionSnapshots.docs.map(d => d.data().accessException).filter(Boolean),
-      historicalCalculatedAmountCents:zone.calculatedTransferAmountCents ?? null};
+      workNotes, proofCount:points.length, accessExceptions:completionSnapshots.docs.map(d => d.data().accessException).filter(Boolean),
+      historicalCalculatedAmountCents:zone.status==='submitted' && zone.economicPolicyVersion!==canvassingCompletion.VERSION ? (zone.calculatedTransferAmountCents ?? null) : null};
   }
   return privateLogisticsAllowed ? response : {...operations.historicalJobRoomProjection(response),
     ...(ownSubmittedEvidence && response.completionEvidence ? {completionEvidence: response.completionEvidence} : {})};
-});
+}));
 
 exports.sendJobMessage = operationalCallable("sendJobMessage", async (request) => {
   assertOperationalPayload(request.data, new Set(["zoneId", "text"]), 8192);
@@ -8578,7 +8606,7 @@ exports.sendJobMessage = operationalCallable("sendJobMessage", async (request) =
 });
 
 exports.updateCampaignMaterialLogistics = operationalCallable(
-  "updateCampaignMaterialLogistics", async (request) => {
+  "updateCampaignMaterialLogistics", businessOperation("updateCampaignMaterialLogistics", async (request) => {
     assertOperationalPayload(request.data, new Set([
       "campaignId", "fulfillmentType", "scheduledAt", "windowEndAt",
       "location", "printingShopName", "orderReference", "instructions",
@@ -8735,11 +8763,11 @@ exports.updateCampaignMaterialLogistics = operationalCallable(
       };
     });
     return result;
-  },
+  }),
 );
 
 exports.proposeMaterialLogisticsChange = operationalCallable(
-  "proposeMaterialLogisticsChange", async (request) => {
+  "proposeMaterialLogisticsChange", businessOperation("proposeMaterialLogisticsChange", async (request) => {
     assertOperationalPayload(request.data, new Set([
       "zoneId", "reason", "fulfillmentType", "scheduledAt", "windowEndAt",
       "location", "printingShopName", "orderReference", "instructions",
@@ -8823,7 +8851,7 @@ exports.proposeMaterialLogisticsChange = operationalCallable(
       result = {proposalId: proposalRef.id, ...proposal};
     });
     return result;
-  });
+  }));
 
 exports.respondToMaterialLogisticsChange = operationalCallable(
   "respondToMaterialLogisticsChange", async (request) => {
@@ -8951,7 +8979,7 @@ exports.respondToMaterialLogisticsChange = operationalCallable(
   });
 
 exports.configureJobCoordination = operationalCallable(
-  "configureJobCoordination", async (request) => {
+  "configureJobCoordination", businessOperation("configureJobCoordination", async (request) => {
     assertOperationalPayload(request.data, new Set([
       "zoneId", "fulfillmentType", "scheduledAt", "windowEndAt", "location",
       "printingShopName", "orderReference", "instructions",
@@ -9049,7 +9077,7 @@ exports.configureJobCoordination = operationalCallable(
       result = details;
     });
     return result;
-  });
+  }));
 
 exports.acknowledgeJobReadiness = operationalCallable(
   "acknowledgeJobReadiness", async (request) => {
@@ -10673,7 +10701,7 @@ exports.getMarketplacePolicy = safeStripeCallable("getMarketplacePolicy", async 
   };
 });
 
-exports.quoteCampaignFunding = safeCampaignQuoteCallable("quoteCampaignFunding", async (request) => {
+exports.quoteCampaignFunding = safeCampaignQuoteCallable("quoteCampaignFunding", businessOperation("quoteCampaignFunding", async (request) => {
   await requireFinancialRole(
     request, "business", "Sign in as a Business to request campaign pricing.",
   );
@@ -10683,13 +10711,13 @@ exports.quoteCampaignFunding = safeCampaignQuoteCallable("quoteCampaignFunding",
   } catch (_) {
     throw new HttpsError("invalid-argument", "The worker amount is invalid.");
   }
-});
+}));
 
 // Purchased wallet credits are intentionally retired for marketplace money.
 // Historical promotional balances remain readable but cannot fund Scaler pay.
 exports.createCreditCheckoutSession = safeStripeCallable(
   "createCreditCheckoutSession",
-  async (request) => {
+  businessOperation("createCreditCheckoutSession", async (request) => {
     await requireFinancialRole(
       request, "business", "Sign in as a Business to view funding options.",
     );
@@ -10697,12 +10725,12 @@ exports.createCreditCheckoutSession = safeStripeCallable(
       "failed-precondition",
       "Purchased credits are retired. Fund campaigns directly through secure checkout.",
     );
-  },
+  }),
 );
 
 exports.publishFundedCampaign = safeStripeCallable(
   "publishFundedCampaign",
-  async (request) => {
+  businessOperation("publishFundedCampaign", async (request) => {
     const context = await requireFinancialRole(
       request, "business", "Sign in as a Business to launch a campaign.",
     );
@@ -10745,7 +10773,7 @@ exports.publishFundedCampaign = safeStripeCallable(
     }
     await batch.commit();
     return {campaignId, status: "open", zonesLocked: zones.size};
-  },
+  }),
 );
 
 exports.createScalerConnectedAccount = safeStripeCallable(
@@ -10860,7 +10888,7 @@ exports.createScalerOnboardingLink = safeStripeCallable(
 
 exports.createCampaignFundingCheckoutSession = safeStripeCallable(
   "createCampaignFundingCheckoutSession",
-  async (request) => {
+  businessOperation("createCampaignFundingCheckoutSession", async (request) => {
     const context = await requireFinancialRole(
       request, "business", "Sign in as a Business to fund a campaign.",
     );
@@ -10951,7 +10979,7 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
       },
     });
     return {paymentId, ...result, quote};
-  },
+  }),
 );
 
 async function claimStripeEvent(event) {
@@ -11418,7 +11446,7 @@ exports.createScalerTransfer = safeStripeCallable("createScalerTransfer", async 
 });
 
 exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
-  "finalizeZoneReview", async (request) => {
+  "finalizeZoneReview", businessOperation("finalizeZoneReview", async (request) => {
   const context = await requireVerifiedUser(request, "Sign in to review completed work.");
   const zoneId = cleanId(request.data?.zoneId);
   const decision = String(request.data?.decision || "");
@@ -11603,12 +11631,12 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
     return {zoneId, reviewStatus: "approved", payout,
       transferOperationId: transferId, earningRecorded: true};
   });
-  },
+  }),
 );
 
 exports.requestCampaignCancellationRefund = safeStripeCallable(
   "requestCampaignCancellationRefund",
-  async (request) => {
+  businessOperation("requestCampaignCancellationRefund", async (request) => {
     const context = await requireFinancialRole(
       request, "business", "Sign in as a Business to cancel campaign funding.",
     );
@@ -11781,7 +11809,7 @@ exports.requestCampaignCancellationRefund = safeStripeCallable(
       }
     });
     return {paymentId, refundOperationId: operationId, status: refund.status};
-  },
+  }),
 );
 
 exports.autoApproveVerifiedCompletions = onSchedule(
@@ -12074,35 +12102,35 @@ async function creativeMediaCall(request, operation) {
 
 exports.getBusinessMediaWorkspace = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
-  (request) => creativeMediaCall(request, creativeMediaService.workspace),
+  businessOperation("getBusinessMediaWorkspace", (request) => creativeMediaCall(request, creativeMediaService.workspace)),
 );
 exports.createBusinessMediaUploadIntent = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
-  (request) => creativeMediaCall(request, creativeMediaService.createUploadIntent),
+  businessOperation("createBusinessMediaUploadIntent", (request) => creativeMediaCall(request, creativeMediaService.createUploadIntent)),
 );
 exports.finalizeBusinessMediaUpload = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 120, memory: "1GiB"},
-  (request) => creativeMediaCall(request, creativeMediaService.finalizeUpload),
+  businessOperation("finalizeBusinessMediaUpload", (request) => creativeMediaCall(request, creativeMediaService.finalizeUpload)),
 );
 exports.updateBusinessMediaRevisionMetadata = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
-  (request) => creativeMediaCall(request, creativeMediaService.updateMetadata),
+  businessOperation("updateBusinessMediaRevisionMetadata", (request) => creativeMediaCall(request, creativeMediaService.updateMetadata)),
 );
 exports.approveBusinessMediaRevision = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
-  (request) => creativeMediaCall(request, creativeMediaService.approve),
+  businessOperation("approveBusinessMediaRevision", (request) => creativeMediaCall(request, creativeMediaService.approve)),
 );
 exports.rejectBusinessMediaRevision = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
-  (request) => creativeMediaCall(request, creativeMediaService.reject),
+  businessOperation("rejectBusinessMediaRevision", (request) => creativeMediaCall(request, creativeMediaService.reject)),
 );
 exports.removeBusinessMediaAsset = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
-  (request) => creativeMediaCall(request, creativeMediaService.remove),
+  businessOperation("removeBusinessMediaAsset", (request) => creativeMediaCall(request, creativeMediaService.remove)),
 );
 exports.updateBusinessBrandProfile = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 10},
-  (request) => creativeMediaCall(request, creativeMediaService.updateBrand),
+  businessOperation("updateBusinessBrandProfile", (request) => creativeMediaCall(request, creativeMediaService.updateBrand)),
 );
 
 function generationHttpsError(error) {
@@ -12142,25 +12170,25 @@ async function generationBusinessCall(request, operation) {
 }
 exports.getGeneratedServiceVisualWorkspace = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 4},
-  (request) => generationBusinessCall(request,
-    ({actor, input}) => generationService.list({actor, input, admin: false})),
+  businessOperation("getGeneratedServiceVisualWorkspace", (request) => generationBusinessCall(request,
+    ({actor, input}) => generationService.list({actor, input, admin: false}))),
 );
 exports.requestGeneratedServiceVisual = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 2},
-  (request) => generationBusinessCall(request, generationService.request),
+  businessOperation("requestGeneratedServiceVisual", (request) => generationBusinessCall(request, generationService.request)),
 );
 exports.processGeneratedServiceVisual = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 2, timeoutSeconds: 120, memory: "1GiB"},
-  (request) => generationBusinessCall(request,
-    ({actor, input}) => generationService.process({actor, jobId: input.jobId})),
+  businessOperation("processGeneratedServiceVisual", (request) => generationBusinessCall(request,
+    ({actor, input}) => generationService.process({actor, jobId: input.jobId}))),
 );
 exports.approveGeneratedServiceVisual = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 4},
-  (request) => generationBusinessCall(request, generationService.approve),
+  businessOperation("approveGeneratedServiceVisual", (request) => generationBusinessCall(request, generationService.approve)),
 );
 exports.rejectGeneratedServiceVisual = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 4},
-  (request) => generationBusinessCall(request, generationService.reject),
+  businessOperation("rejectGeneratedServiceVisual", (request) => generationBusinessCall(request, generationService.reject)),
 );
 exports.getGeneratedMediaOperations = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 2},
@@ -12459,12 +12487,12 @@ async function physicalMarketingCall(request, operation, options) {
 
 exports.createResponseAsset = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  async (request) => {
+  businessOperation("createResponseAsset", async (request) => {
     const actor = await requireAttributionActor(request);
     try { return await attributionService.createResponseAsset(request.data, actor); } catch (error) {
       throw attributionHttpsError(error);
     }
-  },
+  }),
 );
 
 exports.importScaledCircleDogfoodCampaignV1 = onRequest(
@@ -12522,7 +12550,7 @@ exports.createScaledCircleXResponseAssetV1 = onRequest(
 
 exports.getTrackingPhoneWorkspace = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  (request) => trackingPhoneCall(request, trackingPhoneService.workspace),
+  businessOperation("getTrackingPhoneWorkspace", (request) => trackingPhoneCall(request, trackingPhoneService.workspace)),
 );
 
 exports.getTrackingPhoneOperations = onCall(
@@ -12532,19 +12560,19 @@ exports.getTrackingPhoneOperations = onCall(
 
 exports.getPhysicalMarketingWorkspace = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  (request) => physicalMarketingCall(request, physicalMarketingService.workspace),
+  businessOperation("getPhysicalMarketingWorkspace", (request) => physicalMarketingCall(request, physicalMarketingService.workspace)),
 );
 exports.mutatePhysicalMarketingMaterial = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  (request) => physicalMarketingCall(request, physicalMarketingService.mutate),
+  businessOperation("mutatePhysicalMarketingMaterial", (request) => physicalMarketingCall(request, physicalMarketingService.mutate)),
 );
 exports.preparePhysicalMarketingVersion = onCall(
   {enforceAppCheck: false, maxInstances: 2, timeoutSeconds: 120, memory: "1GiB"},
-  (request) => physicalMarketingCall(request, physicalMarketingService.prepare),
+  businessOperation("preparePhysicalMarketingVersion", (request) => physicalMarketingCall(request, physicalMarketingService.prepare)),
 );
 exports.approvePhysicalMarketingVersion = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  (request) => physicalMarketingCall(request, physicalMarketingService.approve),
+  businessOperation("approvePhysicalMarketingVersion", (request) => physicalMarketingCall(request, physicalMarketingService.approve)),
 );
 exports.getPhysicalMarketingOperations = onCall(
   {enforceAppCheck: false, maxInstances: 2},
@@ -12573,7 +12601,7 @@ exports.retryTransactionalEmailJob = onDocumentUpdated(
 
 exports.getAttributionOverview = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  async (request) => {
+  businessOperation("getAttributionOverview", async (request) => {
     const actor = await requireAttributionActor(request);
     try { return await attributionService.getOverview(request.data, actor); } catch (error) {
       console.error("attribution_overview_failed", {
@@ -12583,17 +12611,17 @@ exports.getAttributionOverview = onCall(
       });
       throw attributionHttpsError(error);
     }
-  },
+  }),
 );
 
 exports.bridgeResponseLead = onCall(
   {enforceAppCheck: false, maxInstances: 4},
-  async (request) => {
+  businessOperation("bridgeResponseLead", async (request) => {
     const actor = await requireAttributionActor(request);
     try { return await attributionService.bridgeLead(request.data, actor); } catch (error) {
       throw attributionHttpsError(error);
     }
-  },
+  }),
 );
 
 exports.resolveTrackedResponse = onRequest(
@@ -12648,6 +12676,7 @@ const landingPageService = landingPage.createLandingPageService({db, FieldValue,
     process.env.GOOGLE_CLOUD_PROJECT || "demo-scaledcircle")});
 
 async function requireLandingPageActor(request) {
+  if(request[workspaceAccess.CONTEXT]) {const c=request[workspaceAccess.CONTEXT];return {uid:c.businessId,actorUid:c.actorUid,role:c.role};}
   if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign in to manage landing pages.");
   const profile = await db.collection("users").doc(request.auth.uid).get();
   const role = String(profile.data()?.role || "").toLowerCase();
@@ -12723,7 +12752,7 @@ async function recordLandingPageRecipientResolutionSafe(outcome, context = {}) {
   }
 }
 
-exports.getLandingPageWorkspace = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, async (request) => {
+exports.getLandingPageWorkspace = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, businessOperation("getLandingPageWorkspace", async (request) => {
   const actor = await requireLandingPageActor(request);
   if (request.data?.action === "create") {
     try { return await landingPageService.createDraft(request.data || {}, actor); } catch (error) { throw landingPageError(error); }
@@ -12799,29 +12828,29 @@ exports.getLandingPageWorkspace = onCall({region: "us-east1", enforceAppCheck: f
       source: "Landing page",
       createdAt: doc.data()?.createdAt || null,
     }))}};
-});
+}));
 
-exports.mutateLandingPageDraft = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, async (request) => {
+exports.mutateLandingPageDraft = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, businessOperation("mutateLandingPageDraft", async (request) => {
   const actor = await requireLandingPageActor(request);
   try { return await landingPageService.saveDraft(request.data || {}, actor); } catch (error) { throw landingPageError(error); }
-});
+}));
 
-exports.transitionLandingPage = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, async (request) => {
+exports.transitionLandingPage = onCall({region: "us-east1", enforceAppCheck: false, maxInstances: 10}, businessOperation("transitionLandingPage", async (request) => {
   const actor = await requireLandingPageActor(request);
   try { const result = await landingPageService.transition(request.data || {}, actor);
     await recordLandingPageHealth("publish", true); return result;
   } catch (error) { await recordLandingPageHealth("publish", false); throw landingPageError(error); }
-});
+}));
 
 exports.reconcileLandingPageInquiryDelivery = onCall(
   {region:"us-east1",enforceAppCheck:false,maxInstances:2},
-  async(request)=>{
+  businessOperation("reconcileLandingPageInquiryDelivery", async(request)=>{
     const actor=await requireLandingPageActor(request);
     if(actor.role!=="admin")throw new HttpsError("permission-denied","Admin authority is required.");
     try{return await landingPageService.reconcileInquiry(request.data||{},actor);}
     catch(error){logger.warn("landing_page_delivery_reconciliation_failed",{actorUidFingerprint:landingPage.digest(actor.uid).slice(0,16),
       code:String(error?.message||"reconciliation_failed").slice(0,80)});throw landingPageError(error);}
-  },
+  }),
 );
 
 exports.renderLandingPage = onRequest({region: "us-east1", cors: false, maxInstances: 20}, async (request, response) => {
@@ -12869,4 +12898,97 @@ exports.submitLandingPageForm = onRequest({region: "us-east1", cors: false, maxI
     response.set("Cache-Control", "no-store");
     response.redirect(303, `/p/${encodeURIComponent(result.slug)}?submitted=1`);
   } catch (_) { await recordLandingPageHealthSafe("lead_transaction", false); response.status(400).type("html").send("<!doctype html><title>Try again</title><main><h1>We couldn't send your request.</h1><p>Check your details and try again.</p></main>"); }
+});
+
+exports.listBusinessWorkspaceRecordIds = workspaceEndpoint(async(request,service)=>{
+  const type=request.data?.collection;
+  if(!['campaigns','campaignZones'].includes(type))throw new HttpsError('invalid-argument','Choose a supported workspace view.');
+  const a=await service.authority({uid:request.auth.uid,businessId:request.data?.businessId,allowExpired:true});
+  if(!a.permissions.some(p=>['campaigns','authorizeCampaigns','payments','analytics'].includes(p)))return {ids:[],nextCursor:null};
+  let query=db.collection(type).where('businessId','==',a.businessId).orderBy(FieldPath.documentId()).limit(100);
+  const cursor=request.data?.cursor;
+  if(cursor){if(typeof cursor!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(cursor))throw new HttpsError('invalid-argument','Invalid page.');query=query.startAfter(cursor);}
+  const snapshot=await query.get(),ids=[];
+  for(const d of snapshot.docs){
+    const data=d.data();
+    if(data.certificationFixture===true)continue;
+    if(type==='campaignZones'){const c=(await db.doc(`campaigns/${data.campaignId}`).get()).data();if(!c||c.businessId!==a.businessId||c.certificationFixture===true)continue;}
+    ids.push(d.id);
+  }
+  return {ids,nextCursor:snapshot.size===100?snapshot.docs.at(-1).id:null};
+});
+exports.prepareInvitedBusinessAccount = onCall({region:'us-east1',maxInstances:10,enforceAppCheck:false},async request=>{
+  if(!request.auth)throw new HttpsError('unauthenticated','Sign in to continue.');
+  try{return await businessWorkspaceService().prepareInvitedAccount({uid:request.auth.uid,businessId:request.data?.businessId,invitationId:request.data?.invitationId,token:request.data?.token,name:request.data?.name});}
+  catch(e){throw new HttpsError(['permission-denied','invalid-argument','unauthenticated'].includes(e.code)?e.code:'failed-precondition','The invitation could not be verified. Use the invited email and a current invitation.');}
+});
+exports.getBusinessTeam = workspaceEndpoint((request,service)=>service.list({uid:request.auth.uid,businessId:request.data?.businessId}));
+exports.inviteBusinessTeamMember = workspaceEndpoint((request,service)=>service.invite({uid:request.auth.uid,businessId:request.data?.businessId,data:request.data||{}}));
+exports.acceptBusinessTeamInvitation = workspaceEndpoint((request,service)=>service.accept({uid:request.auth.uid,businessId:request.data?.businessId,invitationId:request.data?.invitationId,token:request.data?.token}));
+exports.updateBusinessTeamMember = workspaceEndpoint((request,service)=>service.changeMember({uid:request.auth.uid,businessId:request.data?.businessId,data:request.data||{}}));
+exports.getBusinessWorkspaceContext = workspaceEndpoint(async(request,service)=>{
+  const uid=request.auth.uid,profile=(await db.doc(`users/${uid}`).get()).data()||{};
+  const desired=request.data?.businessId||profile.activeBusinessId||uid;
+  const a=await service.authority({uid,businessId:desired,allowExpired:true});
+  return {businessId:a.businessId,actorUid:uid,isOwner:a.isOwner,permissions:a.permissions,
+    businessName:await service.workspaceName(a.businessId,a.owner),
+    subscriptionActive:subscriptionEntitlements.hasActivePaidBusinessEntitlement(a.entitlement),
+    planId:String(a.entitlement.planId||a.entitlement.plan||""),
+    propertyIntelligenceAvailable:subscriptionEntitlements.hasActiveScaleEntitlement(a.entitlement),
+    managedGrowthAvailable:subscriptionEntitlements.hasActiveManagedGrowthEntitlement(a.entitlement),seatLimit:a.capacity};
+});
+exports.selectBusinessWorkspace = workspaceEndpoint(async(request,service)=>{
+  const a=await service.authority({uid:request.auth.uid,businessId:request.data?.businessId,allowExpired:true});
+  await db.doc(`users/${request.auth.uid}`).update({activeBusinessId:a.businessId});
+  return {businessId:a.businessId};
+});
+function businessBillingService(service) {
+  return workspaceBilling.createBillingService({db,FieldValue,workspace:service,stripe:stripeClient,
+    planForPrice:planForStripePrice,priceForPlan:stripePriceForPlan,sync:syncStripeSubscription});
+}
+exports.getBusinessMembership = workspaceEndpoint((request,service)=>businessBillingService(service).get({uid:request.auth.uid,businessId:request.data?.businessId}),{secrets:STRIPE_CHECKOUT_SECRETS});
+exports.previewBusinessMembershipChange = workspaceEndpoint((request,service)=>businessBillingService(service).preview({uid:request.auth.uid,businessId:request.data?.businessId,plan:request.data?.plan}),{secrets:STRIPE_CHECKOUT_SECRETS});
+exports.changeBusinessMembership = workspaceEndpoint((request,service)=>businessBillingService(service).change({uid:request.auth.uid,businessId:request.data?.businessId,
+  action:request.data?.action,requestId:request.data?.requestId,plan:request.data?.plan,quoteId:request.data?.quoteId}),{secrets:STRIPE_CHECKOUT_SECRETS});
+
+function businessProgressService(){return require('./business_live_progress').createProgressService({db,FieldValue});}
+exports.projectBusinessWorkProgress = onDocumentWritten({document:'trackingSessions/{sessionId}',region:'us-east1',maxInstances:3,retry:true},async event=>{
+  if(!event.data?.after.exists)return;
+  await businessProgressService().project(event.params.sessionId);
+});
+exports.projectSubmittedWorkProgress = onDocumentUpdated({document:'campaignZones/{zoneId}',region:'us-east1',maxInstances:3,retry:true},async event=>{
+  const before=event.data?.before.data(),zone=event.data?.after.data();
+  if(zone?.status!=='submitted'||before?.status==='submitted'||!zone.routeId)return;
+  await businessProgressService().project(zone.routeId);
+});
+exports.getBusinessLiveProgress = workspaceEndpoint(async(request,service)=>{
+  const zoneId=cleanId(request.data?.zoneId);if(!zoneId)throw new HttpsError('invalid-argument','Choose a job.');
+  const zone=(await db.doc(`campaignZones/${zoneId}`).get()).data();if(!zone)throw new HttpsError('not-found','Job unavailable.');
+  const actor=await authenticatedUserContext(request,'Sign in to view progress.');
+  if(!actor.isAdmin)await service.authority({uid:request.auth.uid,businessId:zone.businessId,permission:'analytics',allowExpired:true});
+  if(zone.certificationFixture===true && !actor.isAdmin && request.auth.uid!==zone.businessId)throw new HttpsError('permission-denied','This certification job is private.');
+  const sessionId=zone.activeTrackingSessionId||zone.routeId;
+  if(!sessionId)return {state:'not_available',estimate:{state:'calculating',coveragePercentage:null}};
+  // No writes/backfill from customer reads, including historical certification jobs.
+  const progress=await businessProgressService().project(sessionId,{readOnly:true});
+  if(progress.skipped)return {state:'not_available',estimate:{state:'calculating',coveragePercentage:null}};
+  return progress;
+});
+exports.addActiveWorkNote = workspaceEndpoint(async(request)=>{
+  const context=await requireVerifiedUser(request,'Sign in to report a work issue.');
+  if(context.role!=='scaler'||(context.user.active!==true&&context.user.betaAccess!=='approved'))throw new HttpsError('permission-denied','Active Scaler access required.');
+  const zoneId=cleanId(request.data?.zoneId);if(!zoneId)throw new HttpsError('invalid-argument','Choose an assigned job.');
+  try{return await businessProgressService().note({uid:request.auth.uid,zoneId,kind:request.data?.kind,note:request.data?.note});}
+  catch(_){throw new HttpsError('failed-precondition','The note requires your current active assignment and valid text.');}
+});
+
+// Canonical Firestore identity, not a client-supplied attribution field.
+exports.auditBusinessCampaignDraft = onDocumentWrittenWithAuthContext({document:'campaigns/{campaignId}',region:'us-east1',retry:true,maxInstances:3},async event=>{
+  const after=event.data?.after,before=event.data?.before,actorUid=event.authId;
+  if(!after?.exists||!actorUid||event.authType!=='user')return;
+  const campaign=after.data();
+  if(campaign.status!=='draft'||campaign.certificationFixture===true)return;
+  const id=crypto.createHash('sha256').update(event.id).digest('hex');
+  const ref=db.doc(`businessWorkspaces/${campaign.businessId}/activity/draft_${id}`);
+  await db.runTransaction(async tx=>{if((await tx.get(ref)).exists)return;tx.create(ref,{businessId:campaign.businessId,actorUid,action:before?.exists?'campaign_draft_edited':'campaign_draft_created',campaignId:event.params.campaignId,createdAt:FieldValue.serverTimestamp(),sourceEventTime:event.time});});
 });

@@ -14,7 +14,7 @@ function prepare() {
  source=source.slice(0,begin)+source.slice(end);
  source=once(source,'  const campaignId = cleanId(request.data?.campaignId);',
  `  const authRecord=await auth.getUser(request.auth.uid);
-  if(authRecord.disabled||!authRecord.emailVerified||user.active!==true)throw new HttpsError('permission-denied','An enabled approved Business is required.');
+  if(authRecord.disabled||!authRecord.emailVerified)throw new HttpsError('permission-denied','An enabled approved Business is required.');
   const campaignId = cleanId(request.data?.campaignId);`);
  source=replaceFunction(source,'validatedCampaignZones',`async function validatedCampaignZones(input, {forPublication=false}={}) {
   const docs=(await db.collection('campaignZones').where('campaignId','==',input.campaignId).get()).docs;
@@ -48,7 +48,7 @@ function prepare() {
  // Publication is one transaction: exact legacy valid-zone filtering is retained;
  // prospective canvassing additionally verifies its funded immutable offer.
  source=section(source,'publishFundedCampaign',()=>`exports.publishFundedCampaign = onCall(OPTIONS, async request=>{
-  const input=await ownedCampaign(request);
+  const input=await ownedCampaign(request,'authorizeCampaigns');
   return db.runTransaction(async transaction=>{
     const campaign=(await transaction.get(input.ref)).data();
     const docs=(await transaction.get(db.collection('campaignZones').where('campaignId','==',input.campaignId))).docs;
@@ -60,7 +60,7 @@ function prepare() {
       throw new HttpsError('failed-precondition','Signed payment and a valid mapped Zone are required.');
     }
     productionPolicy.assertFundedOffer(input.campaignId,campaign,zones.map(d=>({...d.data(),id:d.id})),payment);
-    transaction.update(input.ref,{status:'open',publishedAt:FieldValue.serverTimestamp(),zonesLockedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+    transaction.update(input.ref,{status:'open',publishedByActorUid:input.actorUid,publishedAt:FieldValue.serverTimestamp(),zonesLockedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
     for(const zone of zones)transaction.update(zone.ref,{mapLocked:true,mapLockedAt:FieldValue.serverTimestamp()});
     return {campaignId:input.campaignId,status:'open',zonesLocked:zones.length};
   });

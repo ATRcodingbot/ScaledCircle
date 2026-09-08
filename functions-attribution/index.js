@@ -1,10 +1,13 @@
+
+
+
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
 
 
 const { initializeApp, getApp } = require("firebase-admin/app");
-
+const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
@@ -56,6 +59,11 @@ const crypto = require("node:crypto");
 
 
 
+const businessWorkspace = require("./business_workspace");
+const workspaceAccess = require("./workspace_access");
+
+
+
 
 
 
@@ -82,6 +90,30 @@ initializeApp();
 
 
 const db = getFirestore();
+
+function businessWorkspaceService() {
+  const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+  return businessWorkspace.createWorkspaceService({ db, auth: getAuth(), FieldValue, Timestamp,
+    origin: project === 'scaledcircle-staging' ? 'https://scaledcircle-staging.web.app' : 'https://scaledcircle.com' });
+}
+function businessOperation(name, handler) {
+  return async (request) => {
+    try {return await workspaceAccess.createAccessAdapter({ db, workspace: businessWorkspaceService(), FieldValue })(name, request, handler);}
+    catch (error) {if (error instanceof HttpsError) throw error;
+      if (['unauthenticated', 'permission-denied', 'invalid-argument', 'failed-precondition', 'already-exists', 'resource-exhausted', 'not-found', 'aborted', 'unavailable'].includes(error.code)) throw new HttpsError(error.code, error.message);
+      throw new HttpsError('internal', 'The workspace operation could not complete. Please retry.');}
+  };
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -509,7 +541,15 @@ setGlobalOptions({
 
 
 
+
+
+
+
+
+
+
 async function authenticatedUserContext(request, message) {
+  if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
     throw new HttpsError("unauthenticated", message);
   }
@@ -527,6 +567,976 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -11477,12 +12487,12 @@ async function trackingPhoneCall(request, operation, options) {
 
 exports.createResponseAsset = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
-  async (request) => {
+  businessOperation("createResponseAsset", async (request) => {
     const actor = await requireAttributionActor(request);
     try {return await attributionService.createResponseAsset(request.data, actor);} catch (error) {
       throw attributionHttpsError(error);
     }
-  }
+  })
 );
 
 exports.importScaledCircleDogfoodCampaignV1 = onRequest(
@@ -11512,35 +12522,35 @@ exports.importScaledCircleDogfoodCampaignV1 = onRequest(
 );
 
 exports.createScaledCircleXResponseAssetV1 = onRequest(
-  {invoker: "private", cors: false, maxInstances: 1},
+  { invoker: "private", cors: false, maxInstances: 1 },
   async (request, response) => {
-    try { attributionFoundation.assertScaledCircleXResponseAssetHttpRequest(request); } catch (error) {
+    try {attributionFoundation.assertScaledCircleXResponseAssetHttpRequest(request);} catch (error) {
       if (String(error?.message || "") === "x_response_asset_method_not_allowed") {
-        return response.status(405).json({error: "method_not_allowed"});
+        return response.status(405).json({ error: "method_not_allowed" });
       }
-      return response.status(400).json({error: "empty_request_required"});
+      return response.status(400).json({ error: "empty_request_required" });
     }
     try {
       const result = await attributionService.createScaledCircleXResponseAsset();
-      return response.status(200).json({result});
+      return response.status(200).json({ result });
     } catch (error) {
       const code = String(error?.message || "");
       if (["x_response_asset_forbidden", "x_response_asset_wrong_environment",
-        "attribution_reference_forbidden"].includes(code)) {
-        return response.status(403).json({error: "x_response_asset_unavailable"});
+      "attribution_reference_forbidden"].includes(code)) {
+        return response.status(403).json({ error: "x_response_asset_unavailable" });
       }
       if (["already_exists", "public_publish_origin_forbidden"].includes(code)) {
-        return response.status(409).json({error: "x_response_asset_conflict"});
+        return response.status(409).json({ error: "x_response_asset_conflict" });
       }
-      console.error("x_response_asset_failed", {category: "internal_failure"});
-      return response.status(500).json({error: "x_response_asset_failed"});
+      console.error("x_response_asset_failed", { category: "internal_failure" });
+      return response.status(500).json({ error: "x_response_asset_failed" });
     }
-  },
+  }
 );
 
 exports.getTrackingPhoneWorkspace = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
-  (request) => trackingPhoneCall(request, trackingPhoneService.workspace)
+  businessOperation("getTrackingPhoneWorkspace", (request) => trackingPhoneCall(request, trackingPhoneService.workspace))
 );
 
 exports.getTrackingPhoneOperations = onCall(
@@ -11591,7 +12601,7 @@ exports.getTrackingPhoneOperations = onCall(
 
 exports.getAttributionOverview = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
-  async (request) => {
+  businessOperation("getAttributionOverview", async (request) => {
     const actor = await requireAttributionActor(request);
     try {return await attributionService.getOverview(request.data, actor);} catch (error) {
       console.error("attribution_overview_failed", {
@@ -11601,17 +12611,17 @@ exports.getAttributionOverview = onCall(
       });
       throw attributionHttpsError(error);
     }
-  }
+  })
 );
 
 exports.bridgeResponseLead = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
-  async (request) => {
+  businessOperation("bridgeResponseLead", async (request) => {
     const actor = await requireAttributionActor(request);
     try {return await attributionService.bridgeLead(request.data, actor);} catch (error) {
       throw attributionHttpsError(error);
     }
-  }
+  })
 );
 
 exports.resolveTrackedResponse = onRequest(

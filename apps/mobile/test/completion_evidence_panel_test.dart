@@ -46,7 +46,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining('manual progress marks are optional'),
+        find.textContaining('no manual progress report required'),
         findsOneWidget,
       );
       expect(find.textContaining('5 / 23'), findsNothing);

@@ -3,6 +3,133 @@ rules_version = '2';
 service cloud.firestore {
 
   match /databases/{database}/documents {
+    // Workspace membership is server-managed. Every private read rechecks the
+    // member document and authoritative subscription capacity, not client claims.
+    function workspaceSeatLimit(businessId) {
+      let s = get(/databases/$(database)/documents/businessSubscriptions/$(businessId)).data;
+      return s.get('status', '') == 'active' && s.get('expiresAt', request.time) > request.time
+        ? (s.get('planId', s.get('plan', '')) == 'managed_growth' ? 10
+          : s.get('planId', s.get('plan', '')) == 'scale' ? 5
+          : s.get('planId', s.get('plan', '')) == 'growth' ? 3 : 1) : 1;
+    }
+    function workspaceMember(businessId, required) {
+      let m = get(/databases/$(database)/documents/businessWorkspaces/$(businessId)/members/$(request.auth.uid)).data;
+      let owner = get(/databases/$(database)/documents/users/$(businessId)).data;
+      return isSignedIn() && request.auth.token.email_verified == true
+        && request.auth.uid != businessId && owner.role == 'business'
+        && (owner.get('active', false) || owner.get('betaAccess', '') == 'approved')
+        && m.get('status', '') == 'active' && m.get('uid', '') == request.auth.uid
+        && m.get('businessId', '') == businessId && m.get('seatIndex', 0) is int
+        && m.seatIndex > 0 && m.seatIndex < workspaceSeatLimit(businessId)
+        && m.get('permissions', []).hasAny(required);
+    }
+    function workspaceCampaignRead(data) {
+      return !data.get('certificationFixture', false)
+        && workspaceMember(data.businessId, ['campaigns', 'authorizeCampaigns', 'payments', 'analytics']);
+    }
+    function workspaceResourceRead(data) {
+      let campaign = get(/databases/$(database)/documents/campaigns/$(data.campaignId)).data;
+      return campaign.businessId == data.businessId && workspaceCampaignRead(campaign);
+    }
+    match /businessWorkspaces/{businessId} {
+      allow get: if isSignedIn() && request.auth.uid == businessId;
+      allow list, write: if false;
+      match /members/{memberId} {
+        allow get: if isSignedIn() && (request.auth.uid == businessId || request.auth.uid == memberId);
+        allow list, write: if false;
+      }
+      match /invitations/{invitationId} { allow read, write: if false; }
+      match /activity/{activityId} {
+        allow read: if isSignedIn() && (request.auth.uid == businessId || workspaceMember(businessId, ['teamManagement']));
+        allow write: if false;
+      }
+    }
+    match /businessWorkspaceAccess/{uid}/workspaces/{businessId} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /businessBillingOperations/{id} { allow read, write: if false; }
+    match /businessWorkProgress/{zoneId} { allow read, write: if false; }
+    match /campaigns/{campaignId} {
+      allow read: if workspaceCampaignRead(resource.data);
+      allow create: if workspaceMember(request.resource.data.businessId, ['campaigns'])
+        && request.resource.data.status == 'draft'
+        && request.resource.data.get('isTestCampaign', false) == false
+        && request.resource.data.get('applications', 0) == 0
+        && request.resource.data.get('assignedScalerCount', 0) == 0
+        && request.resource.data.get('assignedZoneCount', 0) == 0
+        && request.resource.data.get('completedZoneCount', 0) == 0
+        && request.resource.data.campaignName is string
+        && request.resource.data.campaignName.size() > 0 && request.resource.data.campaignName.size() <= 200
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly(['businessId','businessEmail','campaignName','description','campaignType','campaignTypeLabel',
+        'configurationMode','requiresExactLocations','basePay','bonus','requestedScalerCount',
+        'maximumWorkerBudget','marketingDate','startAt','deadlineAt','status','applications',
+        'zoneCount','mappedZoneCount','estimatedHomes','serviceArea','serviceAreaPointCount',
+        'serviceAreaType','shapeType','serviceAreaTemplateName','opportunityGoal','promotedService',
+        'propertyIntelligenceAnalysisId','trackingEnabled','createdAt','updatedAt','assignedScalerCount',
+        'materialSource','materialQuantity','materialsRequired','materialFulfillmentType',
+        'materialHandoffMethod','materialHandoffAddress','materialHandoffLatitude','materialHandoffLongitude',
+        'materialHandoffScheduledAt','materialHandoffWindowEndAt','materialHandoffPrintingShopName',
+        'materialHandoffOrderReference','materialHandoffInstructions','workerBudget','platformFee','totalFunding',
+        'targetQuantity','assignedZoneCount','completedZoneCount','archived','isTestCampaign']);
+      // Campaigns may be edited only while draft. Publishing, money, contracts,
+      // ownership, assignments and audit attribution remain server-authoritative.
+      allow update: if workspaceMember(resource.data.businessId, ['campaigns'])
+        && !resource.data.get('certificationFixture', false) && resource.data.status == 'draft'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'campaignName','description','instructions','startDate','endDate','updatedAt',
+          'locationCount','setupStatus','zoneCount','mappedZoneCount','estimatedHomes','serviceArea',
+          'serviceAreaType','serviceAreaPointCount','shapeType','serviceAreaCenter','serviceAreaRadiusMeters']);
+      match /applications/{scalerId} {
+        allow read: if workspaceCampaignRead(get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
+      }
+      match /assignedScalers/{scalerId} {
+        allow read: if workspaceCampaignRead(get(/databases/$(database)/documents/campaigns/$(campaignId)).data);
+      }
+    }
+    match /campaignZones/{zoneId} {
+      allow read: if workspaceResourceRead(resource.data);
+      allow create: if workspaceMember(request.resource.data.businessId, ['campaigns'])
+        && workspaceCampaignRead(get(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)).data)
+        && get(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)).data.businessId == request.resource.data.businessId
+        && get(/databases/$(database)/documents/campaigns/$(request.resource.data.campaignId)).data.status == 'draft'
+        && request.resource.data.assignedScalerId == null && request.resource.data.status == 'unassigned'
+        && request.resource.data.keys().hasOnly([
+          'campaignId','businessId','zoneName','shapeType','serviceAreaType','serviceArea','serviceAreaPointCount',
+          'serviceAreaCenter','serviceAreaRadiusMeters','estimatedHomes','homeCountStatus','analysisStatus',
+          'assignedScalerId','status','createdAt','updatedAt','serviceAreaUpdatedAt'])
+        && validDraftZoneTarget(request.resource.data);
+      allow update: if workspaceResourceRead(resource.data) && workspaceMember(resource.data.businessId, ['campaigns'])
+        && get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.status == 'draft'
+        && resource.data.assignedScalerId == null && !resource.data.get('mapLocked', false)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'zoneName','shapeType','serviceAreaType','serviceArea','serviceAreaPointCount','serviceAreaCenter',
+          'serviceAreaRadiusMeters','updatedAt','serviceAreaUpdatedAt'])
+        && validDraftZoneUpdate(request.resource.data);
+      allow delete: if workspaceResourceRead(resource.data) && workspaceMember(resource.data.businessId, ['campaigns'])
+        && get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.status == 'draft'
+        && resource.data.assignedScalerId == null && resource.data.status == 'unassigned'
+        && !resource.data.keys().hasAny(['activeTrackingSessionId','routeId','completionStatus','paymentStatus','settlementStatus']);
+    }
+    match /campaignLocations/{locationId} {
+      allow read: if workspaceCampaignRead(get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data);
+    }
+    match /campaignCompletions/{id} { allow read: if workspaceResourceRead(resource.data); }
+    match /campaignRoutes/{id} { allow read: if workspaceCampaignRead(get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data) && workspaceMember(get(/databases/$(database)/documents/campaigns/$(resource.data.campaignId)).data.businessId, ['analytics']); }
+    match /assignmentCompensations/{id} { allow read: if workspaceResourceRead(resource.data); }
+    match /campaignPayments/{id} { allow read: if workspaceMember(resource.data.businessId, ['payments', 'billing']); }
+    match /wallets/{businessId} {
+      allow read: if workspaceMember(businessId, ['payments', 'billing']);
+      match /transactions/{id} { allow read: if workspaceMember(businessId, ['payments', 'billing']); }
+    }
+    match /businessSubscriptions/{businessId} {
+      allow get: if workspaceMember(businessId, ['payments', 'billing']);
+    }
+    match /businessProfiles/{businessId} {
+      allow get: if workspaceMember(businessId, ['campaigns','authorizeCampaigns','intelligence','analytics','teamManagement','payments','billing']);
+    }
+
     // Existing Scalers can inspect only their current Privacy acknowledgment.
     // Creation remains exclusively owned by recordLegalConsent.
     match /legalConsents/{id} {
@@ -398,7 +525,7 @@ service cloud.firestore {
     match /campaignZones/{zoneId} {
 
       allow read:
-        if isApprovedAccount() && physicalQaZoneRead(zoneId);
+        if physicalQaZoneRead(zoneId) && (isAdmin() || (isApprovedAccount() && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'scaler' || resource.data.businessId == request.auth.uid)));
 
 
       allow create:

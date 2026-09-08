@@ -1,3 +1,5 @@
+import '../../models/work_lifecycle_presentation.dart';
+import '../scaler/completion/submitted_completion_screen.dart';
 import '../../config/app_environment.dart';
 
 import '../../widgets/campaign_card_header.dart';
@@ -103,22 +105,20 @@ class MyJobsScreen extends StatelessWidget {
               final activeZones = zones.where((zone) {
                 final status = zone.data()['status']?.toString() ?? '';
 
-                return _isActiveStatus(status) &&
-                    !(AppEnvironmentConfig.isStaging && status == 'submitted');
+                return _isActiveStatus(status);
               }).toList();
 
               final submittedZones =
                   zones
                       .where(
-                        (z) =>
-                            AppEnvironmentConfig.isStaging &&
-                            z.data()['status'] == 'submitted',
+                        (z) => workIsSubmitted(z.data()['status']?.toString()),
                       )
                       .toList()
                     ..sort(_sortDocumentsNewestFirst);
 
               final completedZones = zones.where((zone) {
-                return zone.data()['status']?.toString() == 'completed';
+                return workSection(zone.data()['status']?.toString()) ==
+                    WorkSection.completed;
               }).toList();
 
               activeZones.sort(_sortDocumentsNewestFirst);
@@ -128,6 +128,7 @@ class MyJobsScreen extends StatelessWidget {
               final exactLocationGroups = _groupLocationsByCampaign(locations);
 
               final activeExactCampaignIds = <String>[];
+              final submittedExactCampaignIds = <String>[];
 
               final completedExactCampaignIds = <String>[];
 
@@ -153,6 +154,11 @@ class MyJobsScreen extends StatelessWidget {
                   completedExactCampaignIds.add(entry.key);
                 } else if (hasActive) {
                   activeExactCampaignIds.add(entry.key);
+                } else if (campaignLocations.any(
+                  (location) =>
+                      workIsSubmitted(location.data()!['status']?.toString()),
+                )) {
+                  submittedExactCampaignIds.add(entry.key);
                 }
               }
 
@@ -160,7 +166,7 @@ class MyJobsScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 children: [
                   const Text(
-                    'Active Jobs',
+                    'Active Work',
                     style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
 
@@ -188,7 +194,8 @@ class MyJobsScreen extends StatelessWidget {
 
                   const SizedBox(height: 30),
 
-                  if (AppEnvironmentConfig.isStaging) ...[
+                  if (submittedZones.isNotEmpty ||
+                      submittedExactCampaignIds.isNotEmpty) ...[
                     const Text(
                       'Awaiting Business Review',
                       style: TextStyle(
@@ -199,6 +206,13 @@ class MyJobsScreen extends StatelessWidget {
 
                     ...submittedZones.map(
                       (zone) => _zoneJobCard(context, zone),
+                    ),
+                    ...submittedExactCampaignIds.map(
+                      (campaignId) => _exactLocationJobCard(
+                        context,
+                        campaignId,
+                        exactLocationGroups[campaignId] ?? [],
+                      ),
                     ),
 
                     const SizedBox(height: 30),
@@ -269,10 +283,7 @@ class MyJobsScreen extends StatelessWidget {
   }
 
   bool _isActiveStatus(String status) {
-    return status == 'assigned' ||
-        status == 'accepted' ||
-        status == 'in_progress' ||
-        status == 'submitted';
+    return workSection(status) == WorkSection.active;
   }
 
   int _sortDocumentsNewestFirst(
@@ -377,7 +388,8 @@ class MyJobsScreen extends StatelessWidget {
 
         final qaRun =
             AppEnvironmentConfig.isStaging &&
-                campaignData['certificationFixture'] == true
+                (campaignData['certificationFixture'] == true ||
+                    zoneData['certificationFixture'] == true)
             ? RegExp(r'_v([0-9]+)$').firstMatch(campaignId)?.group(1)
             : null;
 
@@ -405,7 +417,14 @@ class MyJobsScreen extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () {
-              if (zoneData['groupAssignmentId'] != null) {
+              if (workIsSubmitted(status)) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => SubmittedCompletionScreen(zoneId: zone.id),
+                  ),
+                );
+              } else if (zoneData['groupAssignmentId'] != null) {
                 AppNavigation.push(context, AppRoutes.jobRoom(zone.id));
               } else {
                 Navigator.push(
@@ -486,16 +505,14 @@ class MyJobsScreen extends StatelessWidget {
                         avatar: const Icon(Icons.home_outlined, size: 18),
                         label: Text(
                           estimatedHomes > 0
-                              ? (AppEnvironmentConfig.isStaging
-                                    ? 'Route-based territory'
-                                    : '$estimatedHomes Homes')
-                              : 'Homes Pending',
+                              ? 'Estimated homes: ~$estimatedHomes'
+                              : 'Assigned territory',
                         ),
                       ),
 
-                      const Chip(
-                        avatar: Icon(Icons.route_outlined, size: 18),
-                        label: Text('Route not yet verified'),
+                      Chip(
+                        avatar: const Icon(Icons.route_outlined, size: 18),
+                        label: Text(routeCaptureLabel(zoneData)),
                       ),
                     ],
                   ),
@@ -512,9 +529,10 @@ class MyJobsScreen extends StatelessWidget {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    JobDetailsScreen(campaign: campaign),
+                              MaterialPageRoute<void>(
+                                builder: (_) => workIsSubmitted(status)
+                                    ? SubmittedCompletionScreen(zoneId: zone.id)
+                                    : JobDetailsScreen(campaign: campaign),
                               ),
                             );
                           },
@@ -789,9 +807,7 @@ class MyJobsScreen extends StatelessWidget {
         return 'Assigned';
 
       case 'in_progress':
-        return AppEnvironmentConfig.isStaging
-            ? 'Work unfinished — tracking status separate'
-            : 'In Progress';
+        return 'Work in progress';
 
       case 'submitted':
         return 'Business Review Pending';

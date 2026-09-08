@@ -80,10 +80,12 @@ void main() {
     final register = File(
       'lib/screens/auth/register_screen.dart',
     ).readAsStringSync();
-    final login = File('lib/screens/auth/login_screen.dart').readAsStringSync();
+    final login = File(
+      'lib/navigation/startup_session_gate.dart',
+    ).readAsStringSync();
     expect(register, contains('role: UserProfile.roleValue(_role)'));
     expect(login, contains('betaAccess'));
     expect(login, contains('role == \'admin\''));
-    expect(login, contains("userData?['active'] == true"));
+    expect(login, contains("profile['active'] != true"));
   });
 }

@@ -98,7 +98,7 @@ const discoveryExports = new Set([
   "getSmartZonePlan",
   "applySmartZonePlan",
 ]);
-const jobRoomExports = new Set(["getJobRoom"]);
+const jobRoomExports = new Set(["getJobRoom", "getBusinessLiveProgress", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "addActiveWorkNote"]);
 const completionExports = new Set([
   "createCampaignLocation", "deleteCampaignLocation",
   "assignScalerToCampaignLocations", "rejectCampaignApplication",
@@ -142,7 +142,7 @@ const physicalMarketingExports = new Set([
   "preparePhysicalMarketingVersion", "approvePhysicalMarketingVersion",
   "getPhysicalMarketingOperations",
 ]);
-const businessProfileExports = new Set(["saveBusinessGrowthProfile"]);
+const businessProfileExports = new Set(["saveBusinessGrowthProfile", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "listBusinessWorkspaceRecordIds", "auditBusinessCampaignDraft"]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.
@@ -402,6 +402,22 @@ function copyPackage(destination, mode) {
   }
 }
 
+// Copy only statically required local modules from the selected index, with
+// transitive closure. This prevents missing workspace authority on small codebases.
+function copyRequiredLocalModules(destination, program) {
+  const seen=new Set();
+  function visit(source) {
+    for(const match of source.matchAll(/require\(["']\.\/([A-Za-z0-9_\/-]+)(?:\.js)?["']\)/g)) {
+      const name=match[1]+(match[1].endsWith('.js')?'':'.js');
+      if(seen.has(name))continue;seen.add(name);
+      const from=path.resolve(sourceRoot,name),to=path.resolve(destination,name);
+      if(!from.startsWith(sourceRoot+path.sep)||!to.startsWith(destination+path.sep)||!fs.existsSync(from))throw Error(`Missing bounded runtime module ${name}`);
+      fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to);visit(fs.readFileSync(from,'utf8'));
+    }
+  }
+  visit(program);
+}
+
 function writePackageManifest(mode, destination) {
   const sourcePackage = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package.json"), "utf8"));
   const sourceLock = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package-lock.json"), "utf8"));
@@ -532,7 +548,9 @@ for (const [mode, destination] of [
   resetDirectory(destination);
   copyPackage(destination, mode);
   writePackageManifest(mode, destination);
-  fs.writeFileSync(path.join(destination, "index.js"), transformIndex(mode));
+  const program=transformIndex(mode);
+  fs.writeFileSync(path.join(destination, "index.js"), program);
+  copyRequiredLocalModules(destination,program);
   fs.writeFileSync(path.join(destination, "README.md"),
     "Deployment package generated from functions/index.js. Do not edit generated contents; run npm --prefix functions run generate:function-codebases.\n");
 }
@@ -545,3 +563,5 @@ fs.copyFileSync(path.join(sourceRoot, "legal_consent.js"),
 console.log("Generated isolated legacy, platform-core, assignment-core, discovery-core, application-core, attribution-core, landing-page-core, creative-media-core, physical-marketing-core, business-profile-core, job-room-core, completion-authority-core, wallet-core, artifact-email, job-alert-email, campaign-funding, transactional-email, admin-ops-core, sales-core, and legal-core Functions packages.");
 
 fs.copyFileSync(path.join(sourceRoot, "staging_physical_qa.js"), path.join(campaignFundingRoot, "staging_physical_qa.js"));
+
+copyRequiredLocalModules(campaignFundingRoot, `require("./business_workspace");require("./workspace_subscription_sync")`);

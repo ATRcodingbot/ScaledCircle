@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../config/app_environment.dart';
+import '../../../widgets/completion_pay_summary.dart';
+import '../../../models/canvassing_photo_policy.dart';
 import '../../../services/job_room_service.dart';
 import '../../../widgets/completion_evidence_panel.dart';
 import '../../../widgets/campaign_card_header.dart';
@@ -65,15 +66,22 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
         : campaignDisplayName(name);
   }
 
-  bool get _stagingReview =>
-      AppEnvironmentConfig.isStaging && widget.zoneId != null;
-  bool get _approvalHeld =>
-      _stagingReview &&
-      (_room == null ||
-          (_room!['completionEvidence'] is Map &&
-              (_room!['completionEvidence']['policy']
-                      as Map?)?['ordinarySubmissionAllowed'] !=
-                  true));
+  bool get _evidenceReview => widget.zoneId != null;
+  bool get _approvalHeld {
+    if (!_evidenceReview) return false;
+    if (_room == null || _evidenceError != null) return true;
+    final evidence = _room!['completionEvidence'];
+    if (evidence is Map) {
+      return (evidence['policy'] as Map?)?['ordinarySubmissionAllowed'] != true;
+    }
+    final campaign = _room!['campaign'];
+    final zone = _room!['zone'];
+    return prohibitsResidentialPhotos(
+      (campaign is Map ? campaign['campaignType'] : null) ??
+          (zone is Map ? zone['campaignType'] : null),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -311,10 +319,17 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                   ),
                 ),
 
+              if (_room?['completionEvidence'] is Map)
+                CompletionPaySummary(
+                  evidence: Map<String, dynamic>.from(
+                    _room!['completionEvidence'] as Map,
+                  ),
+                  submitted: awaitingReview,
+                ),
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.route),
-                  title: const Text('Recorded route evidence'),
+                  title: const Text('GPS Route Captured'),
                   subtitle: Text(
                     completion.hasGpsEvidence
                         ? "${completion.gpsPointCount} recorded route points"
@@ -323,7 +338,7 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                   ),
                   trailing: Icon(
                     completion.hasGpsEvidence
-                        ? Icons.verified
+                        ? Icons.route
                         : Icons.error_outline,
                     color: completion.hasGpsEvidence
                         ? Colors.green
@@ -384,7 +399,7 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
 
               ...completion.proofs.map(_proofCard),
 
-              if (_stagingReview && _room == null) ...[
+              if (_evidenceReview && _room == null) ...[
                 Text(_evidenceError ?? 'Loading authoritative evidence...'),
                 TextButton(
                   onPressed: _loadEvidence,
