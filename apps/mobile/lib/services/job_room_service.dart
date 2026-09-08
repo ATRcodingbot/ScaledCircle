@@ -16,6 +16,23 @@ class JobRoomService {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  Future<Map<String, dynamic>> reviewPausedWork(
+    String zoneId,
+    String action, {
+    int? amountCents,
+    String? reason,
+    String? offerId,
+  }) async {
+    final response = await _functions.httpsCallable('reviewPausedWorkV1').call({
+      'zoneId': zoneId,
+      'action': action,
+      'amountCents': ?amountCents,
+      'reason': ?reason,
+      'offerId': ?offerId,
+    });
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<void> sendMessage(String zoneId, String text) async {
     await _functions.httpsCallable('sendJobMessage').call({
       'zoneId': zoneId,

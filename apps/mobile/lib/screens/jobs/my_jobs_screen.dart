@@ -1,3 +1,4 @@
+import 'job_room_screen.dart';
 import '../../models/work_lifecycle_presentation.dart';
 import '../scaler/completion/submitted_completion_screen.dart';
 import '../../config/app_environment.dart';
@@ -530,7 +531,13 @@ class MyJobsScreen extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute<void>(
-                                builder: (_) => workIsSubmitted(status)
+                                builder: (_) =>
+                                    [
+                                      'paused_work_window',
+                                      'incomplete_review',
+                                    ].contains(status)
+                                    ? JobRoomScreen(zoneId: zone.id)
+                                    : workIsSubmitted(status)
                                     ? SubmittedCompletionScreen(zoneId: zone.id)
                                     : JobDetailsScreen(campaign: campaign),
                               ),
@@ -808,6 +815,10 @@ class MyJobsScreen extends StatelessWidget {
 
       case 'in_progress':
         return 'Work in progress';
+      case 'paused_work_window':
+        return 'Work paused';
+      case 'incomplete_review':
+        return 'Review required';
 
       case 'submitted':
         return 'Business Review Pending';
@@ -832,6 +843,10 @@ class MyJobsScreen extends StatelessWidget {
 
       case 'in_progress':
         return 'Continue Zone';
+      case 'paused_work_window':
+        return 'Resume Job';
+      case 'incomplete_review':
+        return 'Review saved work';
 
       case 'submitted':
         return 'Review Pending';

@@ -77,6 +77,7 @@ const artifactEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
 const jobAlertEmailExports = new Set(["sendScalerJobAlertEmailJob"]);
 const jobAlertEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
 const campaignFundingExports = new Set([
+  "reconcileUnusedWorkReservesV1",
   "quoteCampaignFunding",
   "createCampaignFundingCheckoutSession",
   "cancelUnassignedFundedCampaign",
@@ -98,7 +99,7 @@ const discoveryExports = new Set([
   "getSmartZonePlan",
   "applySmartZonePlan",
 ]);
-const jobRoomExports = new Set(["getJobRoom", "getBusinessLiveProgress", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "addActiveWorkNote"]);
+const jobRoomExports = new Set(["pauseAssignedWorkV1", "reviewPausedWorkV1", "expirePausedWorkV1", "getJobRoom", "getBusinessLiveProgress", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "addActiveWorkNote"]);
 const completionExports = new Set([
   "createCampaignLocation", "deleteCampaignLocation",
   "assignScalerToCampaignLocations", "rejectCampaignApplication",
@@ -572,3 +573,4 @@ console.log("Generated isolated legacy, platform-core, assignment-core, discover
 fs.copyFileSync(path.join(sourceRoot, "staging_physical_qa.js"), path.join(campaignFundingRoot, "staging_physical_qa.js"));
 
 copyRequiredLocalModules(campaignFundingRoot, `require("./business_workspace");require("./workspace_subscription_sync")`);
+copyRequiredLocalModules(campaignFundingRoot, `require("./campaign_reserve_settlement")`);

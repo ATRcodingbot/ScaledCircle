@@ -1,3 +1,5 @@
+import '../../config/app_environment.dart';
+import 'job_room_screen.dart';
 import '../../models/work_lifecycle_presentation.dart';
 import '../scaler/completion/submitted_completion_screen.dart';
 import '../../widgets/checkpoint_action.dart';
@@ -385,12 +387,12 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
         title: Text(
           _photoFree
               ? (_baseCoverageReached
-                    ? 'Finish route for completion review?'
+                    ? 'Finish this route?'
                     : 'Save route for exception or technical review?')
               : 'Complete this job?',
         ),
         content: const Text(
-          'This captures a final location, uploads queued evidence, and immediately stops background GPS. This action cannot be undone.',
+          'Your route will be saved and tracking will stop. You can review your work before submitting it to the Business.',
         ),
         actions: [
           TextButton(
@@ -441,6 +443,53 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
             content: Text(
               'Finalization could not be confirmed. Your saved evidence is retained. '
               'Check your connection, then check completion again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _pauseWork() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pause & Finish Later?'),
+        content: const Text(
+          'Your route will sync and GPS will stop. You have 24 hours to resume the same job. Saved evidence and any secured base or bonus are preserved. The Business can review the saved work.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep working'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pause & Finish Later'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _working = true);
+    try {
+      await _tracking.pauseAndFinishLater(zoneId: widget.zone.id);
+      if (mounted) {
+        await Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => JobRoomScreen(zoneId: widget.zone.id),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Pause is not yet confirmed. Your saved route is retained. Reconnect, then retry Pause & Finish Later.',
             ),
           ),
         );
@@ -644,11 +693,6 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
               const Text(
                 'GPS records automatically. Full accepted base at 80% eligible route coverage; accepted coverage bonus at 95%. Aim for 100%. Final lifecycle and evidence checks apply.',
               ),
-              if (!_baseCoverageReached)
-                FilledButton(
-                  onPressed: _working ? null : _sync,
-                  child: const Text('Continue Route'),
-                ),
               OutlinedButton(
                 onPressed: _working ? null : _reportAccessIssue,
                 child: const Text('Report Access Issue'),
@@ -682,10 +726,18 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
               ),
             const SizedBox(height: 20),
             TextButton(
-              onPressed: _working || !_state.active
+              onPressed: _working
+                  ? null
+                  : _photoFree && AppEnvironmentConfig.isStaging
+                  ? _pauseWork
+                  : !_state.active
                   ? null
                   : _stopWithoutCompleting,
-              child: const Text('Stop tracking without completing'),
+              child: Text(
+                _photoFree && AppEnvironmentConfig.isStaging
+                    ? 'Pause & Finish Later'
+                    : 'Stop tracking without completing',
+              ),
             ),
           ],
         ),

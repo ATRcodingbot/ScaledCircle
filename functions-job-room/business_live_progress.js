@@ -2,7 +2,7 @@
 const {hash,acceptedEvidence}=require('./route_progress');
 const {coverage,isCanvassing}=require('./canvassing_completion');
 const iso=value=>value?.toDate?.().toISOString()||null;
-const currentSession=(zone,sessionId)=>zone.activeTrackingSessionId===sessionId || (!zone.activeTrackingSessionId && zone.routeId===sessionId);
+const currentSession=(zone,sessionId)=>zone.activeTrackingSessionId===sessionId || (!zone.activeTrackingSessionId && (zone.routeId===sessionId || (zone.pauseReason==='intentional_finish_later' && zone.resumableTrackingSessionId===sessionId)));
 function milestoneNames({status,coveragePercentage,reliable,bonusAmountCents,submitted}) {
  return [...(['active','completed'].includes(status)?['started']:[]),
   ...(reliable&&coveragePercentage>=80?['base80']:[]),

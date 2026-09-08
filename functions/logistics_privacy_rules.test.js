@@ -20,6 +20,15 @@ before(async()=>{
  });
 });
 after(async()=>env?.cleanup());
+test('pause, partial-offer, settlement and refund authorities cannot be edited directly by clients',async()=>{
+ for(const uid of ['assigned','unassigned','owner','admin'])for(const collection of ['workPauses','partialWorkOffers','campaignSettlements','financialOperations']) {
+  await assertFails(db(uid).doc(collection+'/private-work-test').set({state:'settled',amountCents:1}));
+ }
+ for(const uid of ['assigned','unassigned','owner'])for(const collection of ['workPauses','partialWorkOffers','campaignSettlements']) {
+  await assertFails(db(uid).doc(collection+'/private-work-test').get());
+ }
+});
+
 test('assigned location collection query must constrain active state',async()=>{
  await env.withSecurityRulesDisabled(async ctx=>{
   await ctx.firestore().doc('campaignLocations/query-active').set({campaignId:'job',businessId:'owner',assignedScalerId:'assigned',status:'assigned',address:'PRIVATE'});

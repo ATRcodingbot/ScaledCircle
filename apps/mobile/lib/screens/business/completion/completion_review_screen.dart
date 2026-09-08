@@ -1,3 +1,5 @@
+import '../../../widgets/reserve_settlement_panel.dart';
+import '../../jobs/job_room_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../widgets/completion_pay_summary.dart';
 import '../../../models/canvassing_photo_policy.dart';
@@ -412,6 +414,22 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                     _room!['completionEvidence'] as Map,
                   ),
                 ),
+              if (_room?['reserveSettlement'] is Map)
+                ReserveSettlementPanel(
+                  settlement: Map<String, dynamic>.from(
+                    _room!['reserveSettlement'] as Map,
+                  ),
+                ),
+              if (widget.zoneId != null)
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => JobRoomScreen(zoneId: widget.zoneId!),
+                    ),
+                  ),
+                  child: const Text('Message Scaler in Job Room'),
+                ),
               const SizedBox(height: 30),
 
               if (awaitingReview)
@@ -430,7 +448,12 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
                             width: 22,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text("Approve Completion"),
+                        : Text(
+                            _room?['completionEvidence']?['policy']?['payableAmountCents']
+                                    is num
+                                ? 'Approve \$${((_room!['completionEvidence']['policy']['payableAmountCents'] as num) / 100).toStringAsFixed(2)}'
+                                : 'Approve Completion',
+                          ),
                   ),
                 ),
 

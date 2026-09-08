@@ -3,6 +3,7 @@
 // changes request.auth: actorUid remains the authenticated person, not the owner.
 const CONTEXT=Symbol('authoritativeBusinessWorkspace');
 const ACTIONS=Object.freeze({
+ reviewPausedWorkV1:'payments',
  getPostcardWorkspaceV1:'campaigns',createPostcardCampaignV1:'campaigns',updatePostcardMailingV1:'campaigns',requestPostcardQuoteV1:'authorizeCampaigns',createPostcardCheckoutV1:'payments',reconcilePostcardPaymentV1:'payments',requestPostcardCancellationV1:'payments',downloadPostcardArtifactV1:'campaigns',
  getSmartZonePlan:'campaigns',applySmartZonePlan:'campaigns',analyzeCampaignZone:'campaigns',deleteDraftCampaign:'campaigns',
  createCampaignLocation:'campaigns',deleteCampaignLocation:'campaigns',updateCampaignMaterialLogistics:'campaigns',proposeMaterialLogisticsChange:'campaigns',configureJobCoordination:'campaigns',
@@ -30,7 +31,7 @@ function createAccessAdapter({db,workspace,FieldValue}) {
   if(data.zoneId)target=(await db.doc(`campaignZones/${resourceId(data.zoneId)}`).get()).data();
   else if(data.campaignId)target=(await db.doc(`campaigns/${resourceId(data.campaignId)}`).get()).data();
   // Scaler Job Room reads retain their original assignment checks.
-  if(name==='getJobRoom'&&profile.role==='scaler'&&(target?.assignedScalerId===uid || target?.assignedScalerIds?.includes(uid)))return handler(request);
+  if((name==='getJobRoom'||(name==='reviewPausedWorkV1'&&['accept_offer','decline_offer'].includes(data.action)))&&profile.role==='scaler'&&(target?.assignedScalerId===uid || target?.assignedScalerIds?.includes(uid)))return handler(request);
   if(target?.businessId)businessId=target.businessId;
   const a=await workspace.authority({uid,businessId,permission:name==='getJobRoom'?null:permission,allowExpired:!NEW_PAID.has(name)||name==='createSubscriptionCheckoutSession'||(name==='publishFundedCampaign'&&target?.fundingStatus==='funded')});
   if(name==='getJobRoom'&&!a.permissions.some(p=>['analytics','payments'].includes(p))){const e=new Error('Results or completion payment authority is required.');e.code='permission-denied';throw e;}

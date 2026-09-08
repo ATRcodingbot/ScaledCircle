@@ -6,6 +6,63 @@ import 'package:flutter_app/services/native_tracking_bridge.dart';
 
 void main() {
   group('active job tracking coordinator', () {
+    test(
+      'intentional pause syncs, stops native tracking, preserves queue history and never completes',
+      () async {
+        final native = _FakeNativeBridge()..seedActive();
+        final gateway = _FakeGateway();
+        final service = ActiveJobTrackingService(
+          nativeBridge: native,
+          gateway: gateway,
+        );
+        await Future.wait([
+          service.pauseAndFinishLater(zoneId: 'zone'),
+          service.pauseAndFinishLater(zoneId: 'zone'),
+        ]);
+        expect(gateway.pauseCount, 1);
+        expect(gateway.completeCount, 0);
+        expect(gateway.cancelCount, 0);
+        expect(native.active, false);
+        expect(native.purgeCount, 0);
+        expect(native.sessionId, 'session');
+        expect(native.stopReason, 'intentional_finish_later');
+        expect(native.captureFinalPoint, true);
+        await expectLater(service.complete(), throwsStateError);
+      },
+    );
+    test(
+      'lost pause response reconciles saved intentional pause without retry or purge',
+      () async {
+        final native = _FakeNativeBridge()..seedActive();
+        final gateway = _FakeGateway()..losePauseResponse = true;
+        final service = ActiveJobTrackingService(
+          nativeBridge: native,
+          gateway: gateway,
+        );
+        expect(
+          (await service.pauseAndFinishLater(zoneId: 'zone'))['status'],
+          'paused',
+        );
+        expect(gateway.pauseCount, 1);
+        expect(native.purgeCount, 0);
+        expect(gateway.completeCount, 0);
+      },
+    );
+    test(
+      'normal recovery and synchronization never intentionally pause a live session',
+      () async {
+        final native = _FakeNativeBridge()..seedActive();
+        final gateway = _FakeGateway();
+        final service = ActiveJobTrackingService(
+          nativeBridge: native,
+          gateway: gateway,
+        );
+        await service.recover();
+        await service.syncPending();
+        expect(gateway.pauseCount, 0);
+        expect(native.active, true);
+      },
+    );
     test('concurrent completion taps share one finalization', () async {
       final native = _FakeNativeBridge()..seedActive();
       final gateway = _FakeGateway();
@@ -366,7 +423,22 @@ class _FakeNativeBridge implements NativeTrackingBridge {
   Future<TrackingLocationSample?> captureCheckpointLocation() async => null;
 }
 
-class _FakeGateway implements TrackingSessionGateway {
+class _FakeGateway implements TrackingSessionGateway, IntentionalPauseGateway {
+  int pauseCount = 0;
+  bool losePauseResponse = false;
+  @override
+  Future<Map<String, dynamic>> pauseSession({
+    required String zoneId,
+    required String sessionId,
+    required int expectedPointCount,
+  }) async {
+    pauseCount++;
+    expect(expectedPointCount, 2);
+    remoteStatus = 'paused';
+    if (losePauseResponse) throw StateError('response lost');
+    return {'status': 'paused'};
+  }
+
   int startCount = 0;
   int cancelCount = 0;
   bool failNextUpload = false;
@@ -424,6 +496,7 @@ class _FakeGateway implements TrackingSessionGateway {
     return {
       'sessionId': sessionId,
       'status': remoteStatus,
+      if (remoteStatus == 'paused') 'pauseReason': 'intentional_finish_later',
       if (remoteStatus == 'completed') 'routeId': 'route',
     };
   }

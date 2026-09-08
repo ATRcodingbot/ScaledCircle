@@ -36,6 +36,8 @@ void main() {
           ),
         ),
       );
+      await tester.tap(find.text('Evidence Details'));
+      await tester.pumpAndSettle();
       expect(find.text('Accepted base compensation: \$15.00'), findsOneWidget);
       expect(
         find.text('Held payable amount before approval: HELD — not authorized'),
@@ -88,6 +90,8 @@ void main() {
             ),
           ),
         );
+        await tester.tap(find.text('Evidence Details'));
+        await tester.pumpAndSettle();
         expect(
           find.text(
             'Held payable amount before approval: \$${(value / 100).toStringAsFixed(2)}',

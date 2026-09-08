@@ -12,7 +12,7 @@ void main() {
     final service = File(
       'lib/services/job_room_service.dart',
     ).readAsStringSync();
-    expect(source, contains("'Group Chat'"));
+    expect(source, contains("'Job Messages'"));
     expect(source, contains("'Confirm Ready'"));
     expect(source, contains("'Ready Confirmed'"));
     expect(service, contains('acknowledgeJobReadiness'));

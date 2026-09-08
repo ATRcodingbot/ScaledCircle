@@ -6,6 +6,7 @@ const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const lifecycle = require("./campaign_funding_lifecycle");
 const adminRevenueNotifications = require("./admin_revenue_notifications");
@@ -344,6 +345,8 @@ exports.archiveCanceledCampaign = onCall(OPTIONS, async (request) => {
 });
 
 async function processEvent(stripe, event) {
+  if(await require('./campaign_reserve_settlement').createService({db,FieldValue,
+    project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,stripe:()=>stripe}).handleStripeEvent(event))return;
   // The existing signed endpoint also reconciles membership lifecycle events.
   if (event.type.startsWith('customer.subscription.')) {
     const subscription = await stripe.subscriptions.retrieve(event.data.object.id);
@@ -431,6 +434,20 @@ exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRI
       code: error?.code || "webhook_rejected"});
     return response.status(event ? 500 : 400).send("Webhook rejected.");
   }
+});
+
+exports.reconcileUnusedWorkReservesV1 = onSchedule({schedule:'every 5 minutes',region:'us-east1',maxInstances:1,secrets:[STRIPE_SECRET_KEY]},async()=>{
+  const project=process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT;
+  if(project!=='scaledcircle-staging')return;
+  const service=require('./campaign_reserve_settlement').createService({db,FieldValue,project,stripe:stripeClient});
+  const pending=await db.collection('financialOperations').where('type','==','unused_work_reserve_refund').get();
+  let attempted=0;
+  for(const doc of pending.docs){
+    if(!['queued','processing','hold_unknown_outcome'].includes(doc.data().status)||attempted>=20)continue;
+    attempted++;
+    try{await service.reconcile(doc.id);}catch(error){logger.error('Unused reserve reconciliation held.',{operationId:doc.id,type:error?.constructor?.name});}
+  }
+  return {attempted};
 });
 
 exports.publishFundedCampaign = onCall(OPTIONS, async (request) => {

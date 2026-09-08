@@ -1,3 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../services/staging_qa_discovery.dart';
+import '../../widgets/paused_work_panel.dart';
+import '../../widgets/reserve_settlement_panel.dart';
+import 'job_details_screen.dart';
 import '../../widgets/campaign_card_header.dart';
 import '../../widgets/business_live_progress_panel.dart';
 import 'package:flutter/material.dart';
@@ -111,6 +116,8 @@ class JobRoomScreen extends StatefulWidget {
 
 class _JobRoomScreenState extends State<JobRoomScreen> {
   late final _service = widget.service ?? const JobRoomService();
+  final _messageKey = GlobalKey();
+  final _messageFocus = FocusNode();
   final _message = TextEditingController();
   final _location = TextEditingController();
   final _instructions = TextEditingController();
@@ -137,6 +144,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
 
   @override
   void dispose() {
+    _messageFocus.dispose();
     for (final controller in [
       _message,
       _location,
@@ -324,6 +332,42 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
     } finally {
       if (mounted) setState(() => _respondingToProposal = false);
     }
+  }
+
+  Future<void> _resumeView(String campaignId) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(scalerCampaignCollection)
+          .doc(campaignId)
+          .get();
+      if (!snapshot.exists || !mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => JobDetailsScreen(campaign: snapshot),
+        ),
+      );
+      if (mounted) await _load();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Saved assignment could not load. Please retry.'),
+          ),
+        );
+      }
+    }
+  }
+
+  void _focusMessage() {
+    final target = _messageKey.currentContext;
+    if (target != null) {
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 250),
+      );
+    }
+    _messageFocus.requestFocus();
   }
 
   Future<void> _sendMessage() async {
@@ -614,6 +658,26 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
           Text('$scalerCount assigned Scaler${scalerCount == 1 ? '' : 's'}'),
           if (['business', 'admin'].contains(data['viewerRole']))
             BusinessLiveProgressPanel(zoneId: widget.zoneId),
+          if (data['pausedWork'] is Map &&
+              [
+                'paused',
+                'incomplete_review',
+              ].contains((data['pausedWork'] as Map)['state']))
+            PausedWorkPanel(
+              zoneId: widget.zoneId,
+              data: Map<String, dynamic>.from(data['pausedWork'] as Map),
+              business: viewerRole == 'business',
+              onChanged: _load,
+              onResume: () => _resumeView(zone['campaignId'].toString()),
+              onMessage: _focusMessage,
+              service: _service,
+            ),
+          if (viewerRole == 'business' && data['reserveSettlement'] is Map)
+            ReserveSettlementPanel(
+              settlement: Map<String, dynamic>.from(
+                data['reserveSettlement'] as Map,
+              ),
+            ),
           if (workerPool != null)
             Text(
               'Group worker pool: \$${(workerPool / 100).toStringAsFixed(2)}',
@@ -693,8 +757,10 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           if (!privateLogisticsAvailable)
-            const Text(
-              'Exact logistics and coordination actions are no longer available for this assignment.',
+            Text(
+              data['pausedWork'] is Map
+                  ? 'Saved work and messages remain available. Private pickup details are hidden while work is paused.'
+                  : 'Exact logistics and coordination actions are no longer available for this assignment.',
             )
           else ...[
             Text('Fulfillment: ${_fulfillmentLabel(fulfillmentType)}'),
@@ -998,9 +1064,11 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
                 ),
               ],
             ],
+          ],
+          if (privateLogisticsAvailable || data['canMessage'] == true) ...[
             const Divider(height: 28),
             const Text(
-              'Group Chat',
+              'Job Messages',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             ...messages.map(
@@ -1010,9 +1078,11 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
               ),
             ),
             TextField(
+              key: _messageKey,
+              focusNode: _messageFocus,
               controller: _message,
               decoration: const InputDecoration(
-                labelText: 'Message assigned group',
+                labelText: 'Message about this job',
               ),
             ),
             FilledButton(

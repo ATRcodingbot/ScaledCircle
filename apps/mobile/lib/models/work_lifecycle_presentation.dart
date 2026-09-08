@@ -4,12 +4,14 @@ enum WorkSection { active, review, completed, other }
 WorkSection workSection(String? status) => switch (status) {
   'submitted' ||
   'review_pending' ||
-  'verification_pending' => WorkSection.review,
+  'verification_pending' ||
+  'incomplete_review' => WorkSection.review,
   'completed' || 'approved' || 'paid' => WorkSection.completed,
   'assigned' ||
   'accepted' ||
   'in_progress' ||
   'paused' ||
+  'paused_work_window' ||
   'paused_out_of_window' ||
   'ready' => WorkSection.active,
   _ => WorkSection.other,
@@ -25,6 +27,10 @@ String routeCaptureLabel(Map<String, dynamic> zone) {
   if (workSection(zone['status']?.toString()) == WorkSection.completed) {
     return 'Work approved';
   }
+  if (zone['status'] == 'paused_work_window') {
+    return 'Work paused · route saved';
+  }
+  if (zone['status'] == 'incomplete_review') return 'Saved work needs review';
   if (zone['gpsTracking'] == true && zone['activeTrackingSessionId'] != null) {
     return 'Route tracking active';
   }

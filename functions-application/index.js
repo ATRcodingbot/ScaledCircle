@@ -8309,6 +8309,10 @@ function setInAppNotification(transaction, notification) {
 
 
 
+
+
+
+
 exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) => {
   assertTrackingPayload(request.data, new Set(["campaignId"]), 2048);
   const context = await requireVerifiedUser(request, "Verify your email before applying.");

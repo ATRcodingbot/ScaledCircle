@@ -29,7 +29,29 @@ abstract interface class TrackingSessionGateway {
   });
 }
 
-class FirebaseTrackingSessionGateway implements TrackingSessionGateway {
+abstract interface class IntentionalPauseGateway {
+  Future<Map<String, dynamic>> pauseSession({
+    required String zoneId,
+    required String sessionId,
+    required int expectedPointCount,
+  });
+}
+
+class FirebaseTrackingSessionGateway
+    implements TrackingSessionGateway, IntentionalPauseGateway {
+  @override
+  Future<Map<String, dynamic>> pauseSession({
+    required String zoneId,
+    required String sessionId,
+    required int expectedPointCount,
+  }) => _functions.call(
+    functionName: 'pauseAssignedWorkV1',
+    data: {
+      'zoneId': zoneId,
+      'sessionId': sessionId,
+      'expectedPointCount': expectedPointCount,
+    },
+  );
   const FirebaseTrackingSessionGateway();
   final SecureFunctionService _functions = const SecureFunctionService();
   @override
@@ -168,6 +190,9 @@ class ActiveJobTrackingService {
     required String zoneId,
     required String zoneName,
   }) {
+    if (_pauseOperation != null) {
+      return Future.error(StateError('Wait for pause confirmation.'));
+    }
     final existing = _startOperation;
     if (existing != null) return existing;
     final operation = _startInternal(
@@ -296,7 +321,61 @@ class ActiveJobTrackingService {
     }
   }
 
+  Future<Map<String, dynamic>>? _pauseOperation;
+  Future<Map<String, dynamic>> pauseAndFinishLater({required String zoneId}) {
+    final pending = _pauseOperation;
+    if (pending != null) return pending;
+    if (_completionOperation != null || _startOperation != null) {
+      return Future.error(StateError('Wait for the current tracking action.'));
+    }
+    final operation = _pauseSavedWork(zoneId);
+    _pauseOperation = operation;
+    return operation.whenComplete(() => _pauseOperation = null);
+  }
+
+  Future<Map<String, dynamic>> _pauseSavedWork(String zoneId) async {
+    final gateway = _gateway;
+    if (gateway is! IntentionalPauseGateway) {
+      throw StateError('Pause is unavailable in this build.');
+    }
+    final state = await _native.getState().timeout(finalizationTimeout);
+    final sessionId = state.sessionId;
+    if (sessionId == null || state.zoneId != zoneId) {
+      throw StateError('The assigned session is unavailable.');
+    }
+    if (state.active) {
+      await _native
+          .stop(reason: 'intentional_finish_later', captureFinalPoint: true)
+          .timeout(finalizationTimeout);
+    }
+    await syncPending().timeout(finalizationTimeout);
+    final saved = await _native.getState().timeout(finalizationTimeout);
+    if (saved.pendingPointCount != 0) {
+      throw StateError(
+        'Saved route is waiting to sync. Check your connection and retry.',
+      );
+    }
+    try {
+      return await (gateway as IntentionalPauseGateway)
+          .pauseSession(
+            zoneId: zoneId,
+            sessionId: sessionId,
+            expectedPointCount: saved.pointCount,
+          )
+          .timeout(finalizationTimeout);
+    } catch (_) {
+      final remote = await _gateway
+          .getSessionState(sessionId: sessionId)
+          .timeout(finalizationTimeout);
+      if (remote['status'] == 'paused' && remote['pauseReason'] == 'intentional_finish_later') return {'status': 'paused'};
+      rethrow;
+    }
+  }
+
   Future<String> complete() {
+    if (_pauseOperation != null) {
+      return Future.error(StateError('Wait for pause confirmation.'));
+    }
     final completed = _completedRouteId;
     if (completed != null) return Future.value(completed);
     final pending = _completionOperation;

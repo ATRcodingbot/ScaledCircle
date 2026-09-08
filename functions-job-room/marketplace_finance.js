@@ -109,7 +109,7 @@ function assertAllocationAvailable(payment, transferCents, refundWorkerCents = 0
   const reserved = assertSafeCents(payment.reservedWorkerAmountCents || 0);
   assertSafeCents(transferCents, "transferAmountCents");
   assertSafeCents(refundWorkerCents, "refundWorkerAmountCents");
-  if (transferred + refunded + reserved + transferCents + refundWorkerCents > worker) {
+  if (transferred + refunded + reserved + assertSafeCents(payment.refundReservedWorkerAmountCents || 0) + transferCents + refundWorkerCents > worker) {
     throw new Error("campaign_worker_allocation_exceeded");
   }
 }

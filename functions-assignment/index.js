@@ -1,6 +1,6 @@
 const stagingPhysicalQa = require("./staging_physical_qa");
 
-
+const canvassingCompletion = require("./canvassing_completion");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
@@ -7573,6 +7573,10 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOper
       acceptedMaterialLogisticsVersion: materialLogisticsVersion,
       acceptedMaterialLogisticsDigest: materialLogisticsDigest,
       acceptedMaterialLogistics: materialLogistics,
+      ...(canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign) ? {
+        pausePolicyVersion: require('./paused_work').VERSION,
+        partialSettlementDisclosure: require('./paused_work').DISCLOSURE
+      } : {}),
       immutable: true,
       createdAt: FieldValue.serverTimestamp()
     });

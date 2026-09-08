@@ -158,7 +158,7 @@ assert.deepEqual(Object.keys(jobAlertEmail).sort(), ["sendScalerJobAlertEmailJob
 assert.deepEqual(Object.keys(campaignFunding).filter((name) => !name.startsWith("_")).sort(), [
   "archiveCanceledCampaign", "cancelUnassignedFundedCampaign",
   "createCampaignFundingCheckoutSession", "publishFundedCampaign",
-  "quoteCampaignFunding", "stripeWebhook",
+  "quoteCampaignFunding", "reconcileUnusedWorkReservesV1", "stripeWebhook",
 ]);
 assert.deepEqual(Object.keys(assignment).sort(), [
   "acceptZoneGroupSlot", "assignScalerToZone", "configureZoneGroupAssignment",
@@ -169,7 +169,7 @@ assert.deepEqual(Object.keys(discovery).sort(), [
   "projectStagingCampaignDiscovery", "refreshStagingCampaignDiscovery",
   "resolveServiceAreaPlace", "saveDiscoveryPreferences",
 ].sort());
-assert.deepEqual(Object.keys(jobRoom).sort(), ["getJobRoom", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "getBusinessLiveProgress", "addActiveWorkNote"].sort());
+assert.deepEqual(Object.keys(jobRoom).sort(), ["getJobRoom", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "getBusinessLiveProgress", "addActiveWorkNote", "pauseAssignedWorkV1", "reviewPausedWorkV1", "expirePausedWorkV1"].sort());
 assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "finalizePublicAccountSignup", "resendEmailVerification", "sendTransactionalEmailJob",
   "retryTransactionalEmailJob",

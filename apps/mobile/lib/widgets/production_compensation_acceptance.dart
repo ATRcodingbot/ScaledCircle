@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../config/app_environment.dart';
+import '../models/canvassing_photo_policy.dart';
 
 /// Empty digest preserves the existing non-versioned/staging flow. Null means
 /// the user cancelled; never infer acceptance from viewing the offer.
@@ -8,13 +9,39 @@ Future<String?> confirmProductionCompensation(
   BuildContext context,
   String campaignId,
 ) async {
-  if (!AppEnvironmentConfig.isProduction) return '';
+  if (!AppEnvironmentConfig.isProduction && !AppEnvironmentConfig.isStaging) {
+    return '';
+  }
   final document = await FirebaseFirestore.instance
       .collection('campaignDiscovery')
       .doc(campaignId)
       .get();
   final data = document.data();
   if (data == null) throw Exception('This opportunity is no longer available.');
+  if (AppEnvironmentConfig.isStaging) {
+    if (!prohibitsResidentialPhotos(data['campaignType'])) return '';
+    if (!context.mounted) return null;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Your work and pay'),
+        content: const Text(
+          'Full accepted base is eligible at 80% Route Coverage Estimate. An accepted coverage bonus is eligible at 95%. If you intentionally pause, you have 24 hours to resume. Below 80%, the Business may offer partial payment for saved work; payment is not guaranteed and you must explicitly accept the exact offer. Secured base pay cannot be reduced.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Go back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('I understand — continue'),
+          ),
+        ],
+      ),
+    );
+    return accepted == true ? '' : null;
+  }
   if (data['completionPolicyVersion'] != 'CanvassingRoute80_95V1') return '';
   final offer = Map<String, dynamic>.from(
     data['compensationOffer'] as Map? ?? {},

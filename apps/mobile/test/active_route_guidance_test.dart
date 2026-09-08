@@ -16,6 +16,6 @@ void main() {
     expect(find.textContaining('0.0%'),findsNothing);
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: ActiveRouteGuidance(
       zone:{},location:null,progress:{'state':'available','coveragePercentage':25},tilesEnabled:false))));
-    expect(find.text('25.0% route coverage · server-calculated, provisional'),findsOneWidget);
+    expect(find.text('25.0% Route Coverage Estimate'),findsOneWidget);
   });
 }

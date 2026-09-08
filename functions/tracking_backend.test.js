@@ -49,7 +49,7 @@ async function seed() {
   await Promise.all([
     db.doc("users/scaler").set({role: "scaler"}),
     db.doc("users/other").set({role: "scaler"}),
-    db.doc("users/business").set({role: "business"}),
+    db.doc("users/business").set({role: "business", active:true}),
     db.doc("users/admin").set({role: "admin"}),
     db.doc("legalConsents/scaler_location_notice_location-notice-2026-08-v1").set({
       uid: "scaler", userRole: "scaler", agreementType: "location_notice",
@@ -83,6 +83,12 @@ async function seed() {
 
 before(async () => {
   assert.ok(process.env.FIRESTORE_EMULATOR_HOST, "Run through the Firestore emulator script.");
+  assert.ok(process.env.FIREBASE_AUTH_EMULATOR_HOST, "Run with the Auth emulator for maintained workspace authority.");
+  const auth=require('firebase-admin/auth').getAuth();
+  for(const uid of ['scaler','other','business','admin']) {
+    try {await auth.createUser({uid,email:uid+'@tracking.example.test',emailVerified:true});}
+    catch(error){if(error.code!=='auth/uid-already-exists')throw error;}
+  }
 });
 
 beforeEach(async () => {

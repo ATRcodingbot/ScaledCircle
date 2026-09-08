@@ -55,13 +55,33 @@ async function seedEligible(key,{offRoute=false,bonus=0,badDigest=false}={}) {
   executionRoute:{centerline:line,routeHash:r.hash(line),corridorHash:r.hash(corridor),denominatorMeters:r.distance(...line)}});
  await db.doc('jobRooms/'+zoneId).set({campaignId,businessId:'coverage-owner',scalerId:'coverage-scaler',status:'open'});
  await db.doc('assignmentCompensations/'+zoneId).set({campaignId,zoneId,businessId:'coverage-owner',scalerId:'coverage-scaler',baseAmountCents:1500,bonusAmountCents:bonus,immutable:true});
- await db.doc('campaignPayments/'+key+'-p').set({campaignId,businessId:'coverage-owner',workerAmountCents:1500+bonus,status:'funded'});
+ await db.doc('campaignPayments/'+key+'-p').set({campaignId,businessId:'coverage-owner',workerAmountCents:1500+bonus,platformFeeCents:Math.round((1500+bonus)*.2),businessChargeCents:Math.round((1500+bonus)*1.2),stripeMode:'test',stripePaymentIntentId:'pi_'+key,paidAt:Timestamp.now(),status:'paid'});
  await db.doc('trackingSessions/'+sessionId).set({campaignId,zoneId,scalerId:'coverage-scaler',routeId:sessionId,status:'completed',startedAt:Timestamp.now(),endedAt:Timestamp.now(),pointCount:12,chunkCount:1,finalPointCount:12,finalAcceptedPointCount:12});
  await db.doc('trackingSessions/'+sessionId+'/chunks/one').set({sessionId,zoneId,scalerId:'coverage-scaler',startSequence:1,endSequence:12,payloadDigest:'test-digest',points});
  await db.doc('campaignRoutes/'+sessionId).set({campaignId,zoneId,scalerId:'coverage-scaler',trackingSessionId:sessionId,tracking:false,simulated:false,evidenceDigest:badDigest?'mismatch':digest,points});
  await db.doc('campaignCompletions/'+completionId).set({campaignId,zoneId,scalerId:'coverage-scaler',businessId:'coverage-owner',routeId:sessionId,status:'draft'});
  return {zoneId,campaignId,sessionId,completionId};
 }
+
+test('intentional pause resumes through the maintained tracking callable in the same session',async()=>{
+ const f=await seedEligible('intentional-resume',{bonus:300});
+ const native=require('../functions-legacy'), work=require('../functions-job-room');
+ await db.recursiveDelete(db.doc('trackingSessions/'+f.sessionId));
+ await db.doc('campaigns/'+f.campaignId).update({status:'active',timeZone:'UTC',workWindowStart:'00:00',workWindowEnd:'23:59'});
+ await db.doc('campaignZones/'+f.zoneId).update({status:'assigned'});
+ await db.doc('legalConsents/coverage-scaler_location_notice_location-notice-2026-08-v1').set({
+  uid:'coverage-scaler',userRole:'scaler',agreementType:'location_notice',agreementVersion:'location-notice-2026-08-v1',source:'scaler_tracking',acceptedAt:Timestamp.now()});
+ const first=await call(native.startTrackingSession,'coverage-scaler',{zoneId:f.zoneId,campaignId:f.campaignId});
+ const paused=await call(work.pauseAssignedWorkV1,'coverage-scaler',{zoneId:f.zoneId,sessionId:first.sessionId,expectedPointCount:0});
+ assert.equal(paused.status,'paused');
+ const resumed=await call(native.startTrackingSession,'coverage-scaler',{zoneId:f.zoneId,campaignId:f.campaignId});
+ assert.equal(resumed.sessionId,first.sessionId);assert.equal(resumed.resumed,true);assert.equal(resumed.segmentId,'segment_0002');
+ assert.equal((await db.collection('trackingSessions').where('zoneId','==',f.zoneId).get()).size,1);
+ assert.equal((await db.doc('activeTrackingSessions/coverage-scaler').get()).data().sessionId,first.sessionId);
+ assert.equal((await db.doc('workPauses/'+paused.pauseId).get()).data().state,'resumed');
+ assert.equal((await db.collection('walletTransactions').where('campaignId','==',f.campaignId).get()).size,0);
+ await db.doc('activeTrackingSessions/coverage-scaler').delete();
+});
 test('eligible finalized submission preserves full immutable base; exactly-once review uses accepted bonus only',async()=>{
  const f=await seedEligible('eligible',{bonus:300});
  const result=await call(completion.submitZoneCompletion,'coverage-scaler',{completionId:f.completionId});
@@ -126,4 +146,26 @@ test('authoritative live progress is route-only and excludes other Scalers witho
  assert.equal(result.progress.state,'available');assert.ok(result.progress.coveragePercentage>=95);assert.equal(result.progress.householdCoverage,null);
  await assert.rejects(call(tracking,'coverage-other',{sessionId:f.sessionId,includeProgress:true}));
  assert.ok(before.isEqual((await db.doc('campaignZones/'+f.zoneId).get()).updateTime));
+});
+
+test('paused Scaler can read saved work and messages without recovering private logistics',async()=>{
+ const f=await seedEligible('paused-room',{bonus:300});
+ await db.doc('trackingSessions/'+f.sessionId).update({status:'active'});
+ await db.doc('campaignZones/'+f.zoneId).update({status:'in_progress',activeTrackingSessionId:f.sessionId,gpsTracking:true});
+ await db.doc('activeTrackingSessions/coverage-scaler').set({sessionId:f.sessionId});
+ const endpoint=require('../functions-job-room').pauseAssignedWorkV1;
+ await assert.rejects(call(endpoint,'coverage-other',{zoneId:f.zoneId,sessionId:f.sessionId,expectedPointCount:12}));
+ const result=await call(endpoint,'coverage-scaler',{zoneId:f.zoneId,sessionId:f.sessionId,expectedPointCount:12});
+ assert.equal(result.status,'paused');
+ await db.doc('jobMessages/paused-room-message').set({roomId:f.zoneId,text:'Saved work question',senderRole:'business'});
+ const read=await call(room,'coverage-scaler',{zoneId:f.zoneId});
+ assert.equal(read.privateLogisticsAvailable,false);assert.equal(read.pausedWork.canResume,true);assert.equal(read.pausedWork.securedBaseCents,1500);
+ assert.equal(read.canMessage,true);assert.equal(read.messages.length,1);
+ assert.equal(read.room.materialLogistics,undefined);
+ await assert.rejects(call(room,'coverage-other',{zoneId:f.zoneId}));
+ const saved=(await db.doc('campaignZones/'+f.zoneId).get()).data();assert.equal(saved.gpsTracking,false);
+ assert.equal((await db.collection('walletTransactions').where('campaignId','==',f.campaignId).get()).size,0);
+ process.env.GCLOUD_PROJECT='scaledcircle-prod';
+ try {await assert.rejects(call(endpoint,'coverage-scaler',{zoneId:f.zoneId,sessionId:f.sessionId,expectedPointCount:12}),e=>e.code==='failed-precondition');}
+ finally {process.env.GCLOUD_PROJECT='scaledcircle-staging';}
 });

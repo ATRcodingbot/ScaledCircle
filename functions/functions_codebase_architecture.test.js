@@ -144,7 +144,7 @@ test("campaign-funding owns the isolated TEST-mode campaign payment boundary", (
   assert.deepEqual(exportsIn(campaignFunding), [
     "quoteCampaignFunding", "createCampaignFundingCheckoutSession",
     "cancelUnassignedFundedCampaign", "archiveCanceledCampaign",
-    "stripeWebhook", "publishFundedCampaign",
+    "stripeWebhook", "reconcileUnusedWorkReservesV1", "publishFundedCampaign",
   ]);
   assert.doesNotMatch(legacy, /exports\.quoteCampaignFunding\s*=/);
   assert.match(campaignFunding, /exports\.quoteCampaignFunding\s*=\s*onCall/);
@@ -233,7 +233,7 @@ test("assignment-core exclusively owns the maintained assignment callable IDs", 
 });
 
 test("job-room-core exclusively owns the secret-free Job Room read authority", () => {
-  const names = ["getJobRoom", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "getBusinessLiveProgress", "addActiveWorkNote"];
+  const names = ["getJobRoom", "projectBusinessWorkProgress", "projectSubmittedWorkProgress", "getBusinessLiveProgress", "addActiveWorkNote", "pauseAssignedWorkV1", "reviewPausedWorkV1", "expirePausedWorkV1"];
   assert.deepEqual(exportsIn(jobRoom).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));

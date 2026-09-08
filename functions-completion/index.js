@@ -10477,6 +10477,28 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   enforceAppCheck: false,
   maxInstances: 10,
@@ -10528,6 +10550,15 @@ function safeMarketplaceAuthorityCallable(name, handler) {
     }
   });
 }
+
+
+
+
+
+
+
+
+
 
 
 
@@ -11558,7 +11589,7 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
       const completionBasisPoints = Math.round(Number(zone.completionPercentage || 0) * 100);
       let payout;
       if (canvassingReview) {
-        if (payment.status !== marketplace.PAYMENT_STATES.funded || payment.settlementFrozen === true) throw new HttpsError('failed-precondition', 'Funding is not available for this review.');
+        if (!require('./campaign_reserve_settlement').funded(payment)) throw new HttpsError('failed-precondition', 'Funding is not available for this review.');
         const routeSnapshot = await transaction.get(db.collection('campaignRoutes').doc(cleanId(completion.routeId) || 'missing'));
         const evaluation = await assessCanvassingCompletion(transaction, zoneId, zone, routeSnapshot.data() || {}, contractSnapshot.data() || {});
         const receipt = completion.canvassingAssessment;
@@ -11576,6 +11607,12 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
       }
       if (payout.transferAmountCents <= 0) {
         throw new HttpsError("failed-precondition", "This completion does not establish an earning.");
+      }
+      if (canvassingReview) {
+        return require('./campaign_reserve_settlement').createService({ db, FieldValue,
+          project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT }).commit(transaction, {
+          zoneId, zone, contract: contractSnapshot.data(), paymentId: paymentSnapshot.id, payment, payout,
+          actorUid: context.actorUid || context.uid, completionId: completionRef.id });
       }
       marketplace.assertAllocationAvailable(payment, payout.transferAmountCents);
       const transferId = marketplace.operationId("scaler-transfer", zoneId, 1);

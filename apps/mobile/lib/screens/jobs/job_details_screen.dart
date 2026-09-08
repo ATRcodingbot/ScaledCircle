@@ -1,3 +1,5 @@
+import '../../config/app_environment.dart';
+import 'job_room_screen.dart';
 import '../../models/canvassing_photo_policy.dart';
 import '../scaler/completion/submit_completion_screen.dart';
 import '../../models/work_lifecycle_presentation.dart';
@@ -140,6 +142,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       if (status != 'assigned' &&
           status != 'accepted' &&
+          !(AppEnvironmentConfig.isStaging && status == 'paused_work_window') &&
           !(status == 'in_progress' && redoRequired)) {
         throw Exception('Zone cannot be started.');
       }
@@ -519,7 +522,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
         final restartRedo =
             status == 'in_progress' && data['redoRequired'] == true;
-        if (status == 'assigned' || status == 'accepted' || restartRedo) {
+        if (status == 'assigned' ||
+            status == 'accepted' ||
+            (AppEnvironmentConfig.isStaging &&
+                status == 'paused_work_window') ||
+            restartRedo) {
           return SizedBox(
             width: double.infinity,
             height: 55,
@@ -528,13 +535,26 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
               icon: const Icon(Icons.play_arrow),
               label: Text(
                 _usesNativeTracking
-                    ? '${restartRedo ? 'Restart' : 'Start'} $zoneName'
+                    ? (status == 'paused_work_window'
+                          ? 'Resume Job'
+                          : '${restartRedo ? 'Restart' : 'Start'} $zoneName')
                     : 'Use the mobile app to start this job',
               ),
             ),
           );
         }
 
+        if (status == 'incomplete_review') {
+          return OutlinedButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => JobRoomScreen(zoneId: zone.id),
+              ),
+            ),
+            child: const Text('Review saved work'),
+          );
+        }
         if (status == 'in_progress' &&
             data['gpsTracking'] != true &&
             data['activeTrackingSessionId'] == null &&
@@ -804,6 +824,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       case 'accepted':
         return 'Accepted';
 
+      case 'paused_work_window':
+        return 'Work paused';
+      case 'incomplete_review':
+        return 'Review required';
       case 'in_progress':
         return 'In Progress';
 

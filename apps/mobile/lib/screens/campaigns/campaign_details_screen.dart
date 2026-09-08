@@ -2057,8 +2057,9 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
         final data = liveCampaign.data() as Map<String, dynamic>;
 
-        final campaignName =
-            campaignDisplayName(data['campaignName']?.toString() ?? 'Untitled Campaign');
+        final campaignName = campaignDisplayName(
+          data['campaignName']?.toString() ?? 'Untitled Campaign',
+        );
 
         final description = data['description']?.toString() ?? '';
 
@@ -2161,21 +2162,31 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 8),
+                                if ((basePay + bonus - quote.workerCompensation)
+                                        .abs() <
+                                    .005) ...[
+                                  Text(
+                                    'Base Pay  \$${basePay.toStringAsFixed(2)}',
+                                  ),
+                                  Text(
+                                    'Potential Bonus  +\$${bonus.toStringAsFixed(2)}',
+                                  ),
+                                ],
                                 Text(
-                                  'Worker compensation  \$${quote.workerCompensation.toStringAsFixed(2)}',
+                                  'Maximum Scaler Pay  \$${quote.workerCompensation.toStringAsFixed(2)}',
                                 ),
                                 Text(
-                                  'Platform fee (${quote.platformFeePercentLabel})  \$${quote.platformFee.toStringAsFixed(2)}',
+                                  'ScaledCircle Fee (${quote.platformFeePercentLabel}), up to  \$${quote.platformFee.toStringAsFixed(2)}',
                                 ),
                                 Text(
-                                  'Estimated total  \$${quote.estimatedTotal.toStringAsFixed(2)}',
+                                  'Maximum Campaign Cost  \$${quote.estimatedTotal.toStringAsFixed(2)}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 const SizedBox(height: 6),
                                 const Text(
-                                  'The final campaign amount is confirmed again before funding.',
+                                  'The final amount is confirmed before funding. Unused compensation and its associated fee are returned after settlement.',
                                 ),
                               ],
                             );

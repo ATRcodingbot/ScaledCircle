@@ -48,7 +48,7 @@ class CompletionPaySummary extends StatelessWidget {
             ),
             Text(
               percent is num && percent.isFinite
-                  ? '${percent.toStringAsFixed(2)}%'
+                  ? '${percent.toStringAsFixed(1)}%'
                   : 'Calculating',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
@@ -60,7 +60,6 @@ class CompletionPaySummary extends StatelessWidget {
                   ? 'Protected · technical review required'
                   : 'Not yet eligible'}',
             ),
-            line('Base threshold', '${policy['baseThreshold'] ?? 80}%'),
             line(
               'Coverage Bonus',
               bonus is num && bonus > 0
@@ -72,7 +71,14 @@ class CompletionPaySummary extends StatelessWidget {
                   : 'No additional bonus accepted',
             ),
             if (bonus is num && bonus > 0)
-              line('Bonus threshold', '${policy['bonusThreshold'] ?? 95}%'),
+              line(
+                'Bonus progress',
+                bonusEarned
+                    ? 'Earned'
+                    : percent is num
+                    ? '${((95 - percent).clamp(0, 95)).toStringAsFixed(1)}% more coverage to earn bonus'
+                    : 'Calculating',
+              ),
             line(
               'Expected after Business approval',
               money(policy['payableAmountCents']),
@@ -82,9 +88,7 @@ class CompletionPaySummary extends StatelessWidget {
                   ? 'Awaiting Business Review'
                   : 'Aim for 100%. Final evidence and Business review apply.',
             ),
-            const Text(
-              'Route proximity estimate, not verified household coverage. No earnings have been posted by this submission.',
-            ),
+            const Text('Payment follows Business approval.'),
           ],
         ),
       ),

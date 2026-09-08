@@ -91,7 +91,7 @@ class _ActiveRouteGuidanceState extends State<ActiveRouteGuidance> {
             ),
             Text(
               known
-                  ? '$percent% route coverage · server-calculated, provisional'
+                  ? '$percent% Route Coverage Estimate'
                   : 'Route Coverage Estimate: ${progress?['state'] == 'unavailable' ? 'UNKNOWN' : 'CALCULATING'}',
             ),
             const Text(

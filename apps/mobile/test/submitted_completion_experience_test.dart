@@ -60,7 +60,7 @@ void main() {
             ),
           ),
         );
-        expect(find.text('${percent.toStringAsFixed(2)}%'), findsOneWidget);
+        expect(find.text('${percent.toStringAsFixed(1)}%'), findsOneWidget);
         expect(find.textContaining('\$15.00 —'), findsOneWidget);
         expect(
           find.text(
@@ -72,7 +72,7 @@ void main() {
           ),
           findsOneWidget,
         );
-        expect(find.textContaining('95%'), findsOneWidget);
+        expect(find.text('Bonus progress:'), findsOneWidget);
         expect(find.textContaining('5 / 23'), findsNothing);
         expect(find.textContaining('Tracking Active'), findsNothing);
       },
@@ -118,7 +118,7 @@ void main() {
       );
       await t.tap(find.text('Open review'));
       await t.pumpAndSettle();
-      expect(find.text('98.59%'), findsOneWidget);
+      expect(find.text('98.6%'), findsOneWidget);
       expect(find.text('\$18.00'), findsOneWidget);
       final button = find.widgetWithText(FilledButton, 'Submit Completion');
       await t.ensureVisible(button);
@@ -129,7 +129,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('JOB SUBMITTED'), findsOneWidget);
       expect(find.byType(SubmitCompletionScreen), findsNothing);
-      expect(find.text('98.59%'), findsOneWidget);
+      expect(find.text('98.6%'), findsOneWidget);
       expect(find.text('\$18.00'), findsOneWidget);
       expect(find.text('Tracking Active'), findsNothing);
       expect(find.text('Start Job'), findsNothing);
@@ -181,7 +181,7 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text('98.50%'), findsOneWidget);
+      expect(find.text('98.5%'), findsOneWidget);
       expect(find.text('\$18.00'), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
       expect(find.textContaining('Tracking Active'), findsNothing);

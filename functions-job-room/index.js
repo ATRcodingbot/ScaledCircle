@@ -4,7 +4,7 @@ const canvassingCompletion = require("./canvassing_completion");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated, onDocumentUpdated, onDocumentWritten, onDocumentWrittenWithAuthContext } = require("firebase-functions/v2/firestore");
-
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 const { initializeApp, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
@@ -74,7 +74,7 @@ const workspaceAccess = require("./workspace_access");
 
 
 
-
+const legalConsent = require("./legal_consent");
 
 initializeApp();
 
@@ -134,6 +134,7 @@ function workspaceEndpoint(handler, options = {}) {
 
 
 
+const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
 
 
 
@@ -463,31 +464,30 @@ function workspaceEndpoint(handler, options = {}) {
 
 
 
+function legalConsentError(error, message) {
+  if (error?.message !== "legal_consent_required") return null;
+  return new HttpsError(
+    "failed-precondition",
+    message || "Review and accept the current ScaledCircle agreements to continue.",
+    {
+      reason: "LEGAL_CONSENT_REQUIRED",
+      missing: Array.isArray(error.missing) ? error.missing : []
+    }
+  );
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+async function requireCurrentLegalConsents(
+uid,
+agreementTypes,
+transaction = null,
+message = null)
+{
+  try {
+    return await legalConsentService.requireCurrent({ uid, agreementTypes, transaction });
+  } catch (error) {
+    throw legalConsentError(error, message) || error;
+  }
+}
 
 setGlobalOptions({
   maxInstances: 10,
@@ -6999,12 +6999,16 @@ function campaignWorkPolicy(campaign = {}) {
 
 
 
-
-
-
-
-
-
+function assertOperationalPayload(data, allowed, maximumBytes) {
+  try {
+    assertAllowedKeys(data || {}, allowed, "Operational request");
+  } catch (_) {
+    throw new HttpsError("invalid-argument", "The operational request is malformed.");
+  }
+  if (serializedBytes(data) > maximumBytes) {
+    throw new HttpsError("invalid-argument", "The operational request is too large.");
+  }
+}
 
 
 
@@ -8536,8 +8540,9 @@ exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoo
     messages, events, completions,
     startEligibility: { ...gate, workWindow }
   };
+  const ownPausedEvidence = (process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === 'scaledcircle-staging' && context.role === 'scaler' && zone.assignedScalerId === context.uid && zone.campaignId === room.campaignId && zone.pauseReason === 'intentional_finish_later' && ['paused_work_window', 'incomplete_review'].includes(zone.status);
   const ownSubmittedEvidence = context.role === 'scaler' && zone.assignedScalerId === context.uid && ['submitted', 'completed'].includes(zone.status) && zone.campaignId === room.campaignId;
-  if ((privateLogisticsAllowed || ownSubmittedEvidence) && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
+  if ((privateLogisticsAllowed || ownSubmittedEvidence || ownPausedEvidence) && canvassingCompletion.applies(process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT, campaign)) {
     const sessions = await db.collection('trackingSessions').where('zoneId', '==', zoneId).get();
     const ownSessions = sessions.docs.filter((d) => d.data().scalerId === zone.assignedScalerId && d.data().campaignId === room.campaignId).
     sort((a, b) => Number(b.data().startedAt?.toMillis?.() || 0) - Number(a.data().startedAt?.toMillis?.() || 0));
@@ -8567,9 +8572,41 @@ exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoo
       workNotes, proofCount: points.length, accessExceptions: completionSnapshots.docs.map((d) => d.data().accessException).filter(Boolean),
       historicalCalculatedAmountCents: zone.status === 'submitted' && zone.economicPolicyVersion !== canvassingCompletion.VERSION ? zone.calculatedTransferAmountCents ?? null : null };
   }
+  if ((privateLogisticsAllowed || ownPausedEvidence) && (process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === 'scaledcircle-staging') {
+    const settlement = (await db.doc('campaignSettlements/' + zoneId).get()).data();
+    if (settlement) response.reserveSettlement = settlement;
+    const payable = response.completionEvidence?.policy?.payableAmountCents;
+    if (!settlement && Number.isSafeInteger(payable) && compensationSnapshot.exists) {
+      response.reserveSettlement = { ...require('./campaign_reserve_settlement').allocation(compensationSnapshot.data(), payable), returnStatus: 'preview' };
+    }
+    if (zone.intentionalPauseId) response.pausedWork = await require('./paused_work').createService({ db, FieldValue, Timestamp,
+      project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT }).read(zoneId, context);
+  }
   return privateLogisticsAllowed ? response : { ...operations.historicalJobRoomProjection(response),
-    ...(ownSubmittedEvidence && response.completionEvidence ? { completionEvidence: response.completionEvidence } : {}) };
+    ...((ownSubmittedEvidence || ownPausedEvidence) && response.completionEvidence ? { completionEvidence: response.completionEvidence } : {}),
+    ...(ownPausedEvidence ? { pausedWork: response.pausedWork, messages: response.messages, canMessage: true } : {}) };
 }));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -13012,7 +13049,7 @@ exports.getBusinessLiveProgress = workspaceEndpoint(async (request, service) => 
   const actor = await authenticatedUserContext(request, 'Sign in to view progress.');
   if (!actor.isAdmin) await service.authority({ uid: request.auth.uid, businessId: zone.businessId, permission: 'analytics', allowExpired: true });
   if (zone.certificationFixture === true && !actor.isAdmin && request.auth.uid !== zone.businessId) throw new HttpsError('permission-denied', 'This certification job is private.');
-  const sessionId = zone.activeTrackingSessionId || zone.routeId;
+  const sessionId = zone.activeTrackingSessionId || zone.resumableTrackingSessionId || zone.routeId;
   if (!sessionId) return { state: 'not_available', estimate: { state: 'calculating', coveragePercentage: null } };
   // No writes/backfill from customer reads, including historical certification jobs.
   const progress = await businessProgressService().project(sessionId, { readOnly: true });
@@ -13028,3 +13065,50 @@ exports.addActiveWorkNote = workspaceEndpoint(async (request) => {
 });
 
 // Canonical Firestore identity, not a client-supplied attribution field.
+
+
+
+
+
+
+
+
+
+
+function stagingPausedWorkService() {
+  return require('./paused_work').createService({ db, FieldValue, Timestamp,
+    project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT });
+}
+function stagedWorkCallable(name, handler) {
+  return onCall({ region: 'us-east1', maxInstances: 10, enforceAppCheck: false }, async (request) => {
+    if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) !== 'scaledcircle-staging')
+    throw new HttpsError('failed-precondition', 'This work-pause release is staging only.');
+    try {await assertPhysicalQaRequest(request);return await handler(request);}
+    catch (error) {
+      if (error instanceof HttpsError) throw error;
+      if (['invalid-argument', 'permission-denied', 'failed-precondition', 'not-found', 'unauthenticated'].includes(error.code))
+      throw new HttpsError(error.code, error.message);
+      logger.error('Saved work action failed.', { action: name, type: error?.constructor?.name });
+      throw new HttpsError('internal', 'Saved work could not be updated. Please retry.');
+    }
+  });
+}
+exports.pauseAssignedWorkV1 = stagedWorkCallable('pauseAssignedWorkV1', async (request) => {
+  assertOperationalPayload(request.data, new Set(['zoneId', 'sessionId', 'expectedPointCount']), 4096);
+  const context = await requireVerifiedUser(request, 'Sign in to pause your work.');
+  if (context.role !== 'scaler') throw new HttpsError('permission-denied', 'Only the assigned Scaler can pause.');
+  for (const key of ['zoneId', 'sessionId']) if (!/^[A-Za-z0-9_-]{1,128}$/.test(request.data?.[key] || '')) throw new HttpsError('invalid-argument', 'Choose a valid assignment.');
+  if (!Number.isSafeInteger(request.data.expectedPointCount) || request.data.expectedPointCount < 0) throw new HttpsError('invalid-argument', 'Saved point count is required.');
+  return stagingPausedWorkService().pause(request.data, context);
+});
+exports.reviewPausedWorkV1 = stagedWorkCallable('reviewPausedWorkV1', businessOperation('reviewPausedWorkV1', async (request) => {
+  assertOperationalPayload(request.data, new Set(['zoneId', 'action', 'amountCents', 'reason', 'offerId']), 8192);
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(request.data?.zoneId || '')) throw new HttpsError('invalid-argument', 'Choose a valid assignment.');
+  const context = await requireVerifiedUser(request, 'Sign in to review saved work.');
+  await requireCurrentLegalConsents(context.actorUid || context.uid, context.role === 'scaler' ? ['terms', 'privacy', 'scaler_work'] : ['terms', 'privacy']);
+  return stagingPausedWorkService().review(request.data, context);
+}));
+exports.expirePausedWorkV1 = onSchedule({ schedule: 'every 5 minutes', region: 'us-east1', maxInstances: 1 }, async () => {
+  if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) !== 'scaledcircle-staging') return;
+  return stagingPausedWorkService().expire();
+});
