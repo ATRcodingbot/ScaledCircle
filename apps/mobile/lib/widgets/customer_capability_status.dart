@@ -32,9 +32,9 @@ class CustomerCapabilityStatus extends StatelessWidget {
           'Planned: order flyers or door hangers after reviewing quantity, total cost, and delivery estimates. Printing orders are not available yet.',
     ),
     (
-      title: 'Postcards / Direct Mail — Coming Soon',
+      title: 'Postcard Campaigns — Beta',
       description:
-          'Planned: turn selected territory into a mailing plan, review quantity and total cost, then approve fulfillment. Mailing orders are not available yet.',
+          'Neighborhood mail fulfilled by ScaledCircle. The managed quote, print and mail workflow is being verified; customer payments are not enabled yet.',
     ),
   ];
 

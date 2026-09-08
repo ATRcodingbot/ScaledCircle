@@ -19,7 +19,7 @@ void main() {
       'Business Assistant — Beta',
       'Ad Manager — Beta',
       'Printing — Coming Soon',
-      'Postcards / Direct Mail — Coming Soon',
+      'Postcard Campaigns — Beta',
     ]) {
       expect(find.text(title), findsOneWidget);
     }
@@ -28,7 +28,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('Mailing orders are not available yet.'),
+      find.textContaining('customer payments are not enabled yet.'),
       findsOneWidget,
     );
     expect(find.byType(FilledButton), findsNothing);
@@ -57,7 +57,7 @@ void main() {
       ),
     );
     await tester.ensureVisible(
-      find.text('Postcards / Direct Mail — Coming Soon'),
+      find.text('Postcard Campaigns — Beta'),
     );
     expect(tester.takeException(), isNull);
   });

@@ -9,6 +9,8 @@ abstract final class AppRoutes {
   static const businessLandingPages = '/business/landing-pages';
   static const businessBrandAssets = '/business/brand-assets';
   static const businessPhysicalMarketing = '/business/physical-marketing';
+  static const businessPostcards = '/business/postcards';
+  static const adminPostcards = '/admin/postcards';
   static const businessTrackingPhone = '/business/tracking-numbers';
   static const businessSocialOperations = '/business/social-operations';
   static const scalerDashboard = '/scaler';

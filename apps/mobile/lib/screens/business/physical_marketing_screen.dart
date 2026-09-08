@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../navigation/business_back_button.dart';
+import '../../navigation/app_routes.dart';
 import '../../services/binary_artifact_download.dart';
 import '../../services/physical_marketing_service.dart';
 import '../../widgets/authenticated_media_preview.dart';
@@ -422,6 +423,17 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                     ),
                     const SizedBox(height: 20),
                     const _FulfillmentChoices(),
+                    ListTile(
+                      title: const Text('Neighborhood Postcards — Beta'),
+                      subtitle: const Text(
+                        'Fulfilled by ScaledCircle. Review your design and confirmed quote before payment. Staging TEST orders only.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        AppRoutes.businessPostcards,
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     if (missingBusinessName) ...[
                       const Card(

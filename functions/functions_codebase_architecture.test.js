@@ -416,8 +416,10 @@ test("creative-media-core exclusively owns private Business media processing", (
     entry.codebase === "creative-media-core")?.source, "functions-creative-media");
 });
 
-test("physical-marketing-core exclusively owns provider-free immutable print authority", () => {
-  const names = ["getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
+test("physical-marketing-core owns immutable print and separately gated TEST postcard authority", () => {
+  const names = [
+  "reconcilePendingPostcardTestPaymentsV1", "getPostcardWorkspaceV1", "createPostcardCampaignV1", "requestPostcardQuoteV1", "confirmPostcardQuoteV1", "createPostcardCheckoutV1", "reconcilePostcardPaymentV1", "recordPostcardEvidenceV1", "advancePostcardFulfillmentV1", "recordPostcardCostsV1", "requestPostcardCancellationV1", "reconcilePostcardRefundV1", "downloadPostcardArtifactV1",
+"getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
     "preparePhysicalMarketingVersion", "approvePhysicalMarketingVersion",
     "getPhysicalMarketingOperations"];
   assert.deepEqual(exportsIn(physicalMarketingCore).sort(), [...names].sort());
@@ -428,13 +430,13 @@ test("physical-marketing-core exclusively owns provider-free immutable print aut
   }
   assert.deepEqual(Object.keys(physicalMarketingPackage.dependencies).sort(), [
     "@fontsource/roboto", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
-    "pdf-lib", "qrcode", "sharp",
+    "pdf-lib", "qrcode", "sharp", "stripe",
   ]);
-  for (const forbidden of ["defineSecret", "STRIPE_", "OPENAI_API_KEY", "SMTP_PASSWORD",
+  for (const forbidden of ["STRIPE_SECRET_KEY", "OPENAI_API_KEY", "SMTP_PASSWORD",
     "PostGrid", "4over", "FedEx", "providerGenerationEnabled"]) {
     assert.doesNotMatch(physicalMarketingCore, new RegExp(forbidden));
   }
-  for (const forbiddenPackage of ["node_modules/stripe", "node_modules/nodemailer", "openai"]) {
+  for (const forbiddenPackage of ["node_modules/nodemailer", "openai"]) {
     assert.doesNotMatch(physicalMarketingLock, new RegExp(forbiddenPackage));
   }
   assert.equal(firebaseConfig.functions.find((entry) =>
@@ -707,7 +709,7 @@ test("generated codebase preparation installs dependencies after regeneration", 
   ]);
   assert.deepEqual(Object.keys(physicalMarketingPackage.dependencies).sort(), [
     "@fontsource/roboto", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
-    "pdf-lib", "qrcode", "sharp",
+    "pdf-lib", "qrcode", "sharp", "stripe",
   ]);
   const preparation = fs.readFileSync(
     path.join(root, "functions", "scripts", "prepare_functions_codebases.js"), "utf8");

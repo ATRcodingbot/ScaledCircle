@@ -22,6 +22,7 @@ import 'screens/business/business_attribution_screen.dart';
 import 'screens/business/landing_page_builder_screen.dart';
 import 'screens/business/brand_assets_screen.dart';
 import 'screens/business/physical_marketing_screen.dart';
+import 'screens/business/postcard_campaign_screen.dart';
 import 'screens/business/tracking_phone_screen.dart';
 import 'screens/business/social_operations_screen.dart';
 import 'screens/campaigns/campaign_funding_return_screen.dart';
@@ -221,6 +222,24 @@ class ScaledCircleApp extends StatelessWidget {
           routeName: AppRoutes.businessBrandAssets,
           audience: ProtectedRouteAudience.business,
           builder: (_, _) => const BrandAssetsScreen(),
+        ),
+      );
+    }
+    if ([
+      AppRoutes.businessPostcards,
+      AppRoutes.adminPostcards,
+    ].contains(route?.path)) {
+      final admin = route?.path == AppRoutes.adminPostcards;
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: admin
+              ? AppRoutes.adminPostcards
+              : AppRoutes.businessPostcards,
+          audience: admin
+              ? ProtectedRouteAudience.admin
+              : ProtectedRouteAudience.business,
+          builder: (_, _) => PostcardCampaignScreen(admin: admin),
         ),
       );
     }

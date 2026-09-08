@@ -74,6 +74,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         actions: [
           if (AppEnvironmentConfig.isStaging)
             IconButton(
+              tooltip: 'Postcard fulfillment',
+              icon: const Icon(Icons.local_post_office_outlined),
+              onPressed: () =>
+                  Navigator.pushNamed(context, AppRoutes.adminPostcards),
+            ),
+          if (AppEnvironmentConfig.isStaging)
+            IconButton(
               tooltip: 'Staging Scaler approval',
               icon: const Icon(Icons.person_add_alt_1),
               onPressed: () => _push(const StagingScalerApprovalScreen()),

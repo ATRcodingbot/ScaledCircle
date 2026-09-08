@@ -4,8 +4,8 @@
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
-
-
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { defineSecret } = require("firebase-functions/params");
 const { initializeApp, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getStorage } = require("firebase-admin/storage");
@@ -15,7 +15,7 @@ const {
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
-
+const logger = require("firebase-functions/logger");
 
 
 
@@ -74,7 +74,7 @@ const workspaceAccess = require("./workspace_access");
 
 
 
-
+const legalConsent = require("./legal_consent");
 
 initializeApp();
 
@@ -134,6 +134,7 @@ function businessOperation(name, handler) {
 
 
 
+const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
 
 
 
@@ -463,31 +464,30 @@ function businessOperation(name, handler) {
 
 
 
+function legalConsentError(error, message) {
+  if (error?.message !== "legal_consent_required") return null;
+  return new HttpsError(
+    "failed-precondition",
+    message || "Review and accept the current ScaledCircle agreements to continue.",
+    {
+      reason: "LEGAL_CONSENT_REQUIRED",
+      missing: Array.isArray(error.missing) ? error.missing : []
+    }
+  );
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+async function requireCurrentLegalConsents(
+uid,
+agreementTypes,
+transaction = null,
+message = null)
+{
+  try {
+    return await legalConsentService.requireCurrent({ uid, agreementTypes, transaction });
+  } catch (error) {
+    throw legalConsentError(error, message) || error;
+  }
+}
 
 setGlobalOptions({
   maxInstances: 10,
@@ -12591,5 +12591,35 @@ exports.getPhysicalMarketingOperations = onCall(
   { enforceAppCheck: false, maxInstances: 2 },
   (request) => physicalMarketingCall(request, physicalMarketingService.operations, { admin: true })
 );
+
+const postcardFulfillment = require("./postcard_fulfillment");
+const POSTCARD_STRIPE_TEST_KEY = defineSecret("STRIPE_TEST_SECRET_KEY");
+function postcardService() {
+  return postcardFulfillment.createPostcardService({ db, FieldValue, bucket: () => getStorage().bucket(),
+    physicalService: physicalMarketingService, projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+    stripe: () => {const key = POSTCARD_STRIPE_TEST_KEY.value();if (!key?.startsWith('sk_test_')) throw new HttpsError('failed-precondition', 'Postcard TEST payments are unavailable.');return new (require('stripe'))(key);} });
+}
+async function postcardCall(request, operation, admin = false) {
+  const actor = await requirePhysicalMarketingActor(request, { admin });
+  if (operation === 'checkout') await requireCurrentLegalConsents(actor.actorUid || actor.uid, ['terms', 'privacy']);
+  try {return await postcardService()[operation](request.data || {}, actor);}
+  catch (error) {if (error instanceof HttpsError) throw error;if (['failed-precondition', 'permission-denied', 'invalid-argument'].includes(error.code)) throw new HttpsError(error.code, error.message);logger.error('postcard_operation_failed', { operation, type: error?.constructor?.name });throw new HttpsError('internal', 'The postcard action could not complete. Refresh the order and retry.');}
+}
+exports.getPostcardWorkspaceV1 = onCall({ maxInstances: 4 }, businessOperation('getPostcardWorkspaceV1', (r) => postcardCall(r, 'workspace', r.data?.admin === true)));
+exports.createPostcardCampaignV1 = onCall({ maxInstances: 4 }, businessOperation('createPostcardCampaignV1', (r) => postcardCall(r, 'create')));
+exports.requestPostcardQuoteV1 = onCall({ maxInstances: 4 }, businessOperation('requestPostcardQuoteV1', (r) => postcardCall(r, 'requestQuote')));
+exports.confirmPostcardQuoteV1 = onCall({ maxInstances: 2 }, (r) => postcardCall(r, 'confirmQuote', true));
+exports.createPostcardCheckoutV1 = onCall({ maxInstances: 4, secrets: [POSTCARD_STRIPE_TEST_KEY] }, businessOperation('createPostcardCheckoutV1', (r) => postcardCall(r, 'checkout')));
+exports.reconcilePostcardPaymentV1 = onCall({ maxInstances: 4, secrets: [POSTCARD_STRIPE_TEST_KEY] }, businessOperation('reconcilePostcardPaymentV1', (r) => postcardCall(r, 'reconcile', r.data?.admin === true)));
+exports.recordPostcardEvidenceV1 = onCall({ maxInstances: 2, memory: '512MiB' }, (r) => postcardCall(r, 'evidence', true));
+exports.advancePostcardFulfillmentV1 = onCall({ maxInstances: 2 }, (r) => postcardCall(r, 'advance', true));
+exports.recordPostcardCostsV1 = onCall({ maxInstances: 2 }, (r) => postcardCall(r, 'costs', true));
+exports.requestPostcardCancellationV1 = onCall({ maxInstances: 4 }, businessOperation('requestPostcardCancellationV1', (r) => postcardCall(r, 'cancel')));
+exports.reconcilePostcardRefundV1 = onCall({ maxInstances: 2, secrets: [POSTCARD_STRIPE_TEST_KEY] }, (r) => postcardCall(r, 'refund', true));
+exports.downloadPostcardArtifactV1 = onCall({ maxInstances: 2, memory: '512MiB' }, businessOperation('downloadPostcardArtifactV1', (r) => postcardCall(r, 'artifact', r.data?.admin === true)));
+exports.reconcilePendingPostcardTestPaymentsV1 = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Etc/UTC', maxInstances: 1, secrets: [POSTCARD_STRIPE_TEST_KEY] }, async () => {
+  if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) !== 'scaledcircle-staging') return;
+  await postcardService().sweep();
+});
 
 /** Process an explicitly reconciled job without replaying arbitrary updates. */

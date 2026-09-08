@@ -55,6 +55,13 @@ const UNSUPPORTED_CLAIM_PATTERNS = Object.freeze([
 ]);
 
 const PRODUCT_SPECS = Object.freeze({
+  postcard_eddm_6x11: Object.freeze({
+    productType: "postcard", label: "Neighborhood mail 6 × 11", widthInches: 11, heightInches: 6,
+    bleedInches: 0.125, safeInches: 0.25, sides: [2], defaultSides: 2,
+    quantities: [200, 500, 1000, 2500, 5000], colorProfile: "CMYK",
+    mailingMethod: "eddm_retail", uspsReference: "https://pe.usps.com/text/dmm300/143.htm",
+    requirementsVerifiedOn: "2026-09-08", physicalStockCheckRequired: true, uiHidden: true,
+  }),
   door_hanger_3_5x8_5: Object.freeze({
     productType: "door_hanger", label: "Door hanger", widthInches: 3.5, heightInches: 8.5,
     bleedInches: 0.0625, safeInches: 0.125, sides: [1, 2], defaultSides: 2,
@@ -643,6 +650,7 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
 
 async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer}) {
   const spec = productSpec(version.productSpecId);
+  if (spec.mailingMethod === "eddm_retail") return renderEddmPrintMaster({version, trackedUrl, mediaBuffer});
   if (spec.productType === "door_hanger") return renderDoorHangerPrintMaster({version, trackedUrl,
     mediaBuffer, logoBuffer});
   const draft = version.content;
@@ -735,6 +743,65 @@ async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer})
     evidence: {pdfXVersion: PDF_X_VERSION, outputIntent: "CMYK", fontsEmbedded: true,
       sideCount: draft.sideCount, sideEvidence, pageEvidence,
       effectiveRasterDpi: normalizedMedia?.effectiveDpi || null, vectorOnly: !normalizedMedia}};
+}
+
+async function renderEddmPrintMaster({version, trackedUrl, mediaBuffer}) {
+  const spec = productSpec(version.productSpecId), draft = version.content;
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+  const regular = await pdf.embedFont(fs.readFileSync(FONT_REGULAR), {subset:true});
+  const bold = await pdf.embedFont(fs.readFileSync(FONT_BOLD), {subset:true});
+  pdf.setTitle(`${version.brandSnapshot?.businessName || "Business"} - Neighborhood Mail`);
+  pdf.setAuthor("ScaledCircle"); pdf.setCreator("ScaledCircle Physical Marketing");
+  pdf.setCreationDate(new Date("2000-01-01T00:00:00Z")); pdf.setModificationDate(new Date("2000-01-01T00:00:00Z"));
+  addPdfXMetadata(pdf,await cmykOutputProfile());
+  const bleed=9,width=810,height=450,left=27,top=423,bottom=27;
+  const brand=version.brandSnapshot?.businessName || "";
+  const media=await normalizePlacedImage(mediaBuffer,{widthInches:4.8,heightInches:4.8});
+  const img=media?await pdf.embedJpg(media.cmykJpeg):null;
+  const qr=qrMatrix(trackedUrl), primary=hexToCmyk(draft.primaryColor),dark=cmyk(0,0,0,1);
+  const readable=readableColor(draft.primaryColor),ink=hexToCmyk(readable.hex);
+  const white=cmyk(0,0,0,0),black=cmyk(0,0,0,1), proofs=[],pages=[],sideEvidence=[];
+  const indicia=["PRSRT STD","ECRWSS","U.S. POSTAGE","PAID","EDDM RETAIL"];
+  for(let side=1;side<=2;side++) {
+    const page=pdf.addPage([width,height]);page.setTrimBox(bleed,bleed,792,432);page.setBleedBox(0,0,width,height);
+    page.drawRectangle({x:0,y:0,width,height,color:side===1?primary:white});
+    let svg=`<rect width="810" height="450" fill="${side===1?draft.primaryColor:'#fff'}"/>`;
+    const draw=(value,x,y,size,font,color,svgColor,maxWidth)=>{
+      const lines=wrap(font,value,size,maxWidth);
+      if(lines.length>5)throw new Error("physical_copy_does_not_fit");
+      for(const line of lines){page.drawText(line,{x,y,size,font,color});svg+=`<text x="${x}" y="${height-y}" font-size="${size}" font-family="Arial,sans-serif" font-weight="${font===bold?700:400}" fill="${svgColor}">${xml(line)}</text>`;y-=size*1.25;}return y;
+    };
+    if(side===1) {
+      let y=draw(brand,left,top-12,14,bold,ink,readable.hex,740)-26;
+      y=draw(draft.headline,left,y,img?29:44,bold,ink,readable.hex,img?365:570)-20;
+      y=draw(draft.offer||customerServiceLanguage(draft.service).noun,left,y,16,regular,ink,readable.hex,img?365:710);
+      if(y<90)throw new Error("physical_copy_does_not_fit");
+      draw(draft.cta,left,55,16,bold,ink,readable.hex,740);
+      if(img){const box=fittedImageBox(img,345,345,600,240);page.drawImage(img,box);svg+=`<image href="data:image/jpeg;base64,${media.proof.toString('base64')}" x="${box.x}" y="${height-box.y-box.height}" width="${box.width}" height="${box.height}"/>`;}
+    } else {
+      draw(brand,left,top-18,22,bold,dark,draft.secondaryColor,420);
+      draw(draft.cta,left,top-80,22,bold,dark,draft.secondaryColor,420);
+      const q=drawQr(page,qr,left,75,108);sideEvidence.push({side,qr:q});svg+=svgQr(qr,left,height-75-108,108);
+      draw('Scan to learn more',left,51,11,regular,dark,draft.secondaryColor,420);
+      if(draft.phone)draw(draft.phone,160,105,14,bold,dark,draft.secondaryColor,275);
+      // Reserved, unprinted right-hand mailing panel. Above/right of address,
+      // >=0.5-inch indicia, >=4pt capitals, with >1/8-inch top/right clearance.
+      page.drawRectangle({x:684,y:351,width:99,height:72,borderColor:black,borderWidth:.6});
+      svg+='<rect x="684" y="27" width="99" height="72" fill="none" stroke="#000" stroke-width=".6"/>';
+      let iy=409;for(const line of indicia){draw(line,690,iy,9,regular,black,'#000',90);iy-=12;}
+      draw('LOCAL POSTAL CUSTOMER',510,290,12,bold,black,'#000',273);
+      if(version.mediaSnapshot?.origin==='generated_service_concept')draw('Concept image — illustrative only',left,27,9,regular,black,'#000',420);
+    }
+    pages.push({side,widthPoints:width,heightPoints:height,bleedPoints:9,safePoints:18,mailingPanelReserved:side===2});
+    const source=Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1688" height="938" viewBox="0 0 810 450">${svg}</svg>`);
+    const webp=await sharp(source).webp({quality:92}).toBuffer(),jpg=await sharp(source).jpeg({quality:95}).toBuffer();
+    proofs.push({side,webp,jpg,width:1688,height:938});
+  }
+  return {pdf:Buffer.from(await pdf.save({useObjectStreams:false})),proofs,digitalJpg:proofs[0].jpg,
+    evidence:{pdfXVersion:PDF_X_VERSION,outputIntent:'CMYK',fontsEmbedded:true,sideCount:2,pageEvidence:pages,sideEvidence,
+      effectiveRasterDpi:media?.effectiveDpi||null,vectorOnly:!media,eddmMailingPanel:true,physicalStockApprovalRequired:true,
+      colorContrastRatio:readable.ratio,marketingLayout:{emptyRequiredRegions:brand?[]:['business_identity'],ctaInsideSafeArea:true,minimumVisualMarginPoints:18,qrBreathingRoomPoints:18,minimumFontPoints:9,frontBackDifferentiated:true,conceptualDisclosurePresent:version.mediaSnapshot?.origin==='generated_service_concept'}}};
 }
 
 function xml(value) {
@@ -977,6 +1044,7 @@ function preflightReport({version, renderEvidence, artifactHash}) {
   const pages = Array.isArray(renderEvidence.pageEvidence) ? renderEvidence.pageEvidence : [];
   const front = pages.find((item) => item.side === 1);
   const checks = {
+    eddmMailingPanel: spec.mailingMethod !== "eddm_retail" || renderEvidence.eddmMailingPanel === true,
     exactTrim: pages.length === version.content.sideCount && pages.every((page) =>
       Math.abs(page.widthPoints - expectedWidthPoints) < 0.01 &&
       Math.abs(page.heightPoints - expectedHeightPoints) < 0.01),
