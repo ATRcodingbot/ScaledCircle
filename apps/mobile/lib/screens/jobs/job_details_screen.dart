@@ -1,3 +1,4 @@
+import '../../widgets/production_compensation_acceptance.dart';
 import '../../widgets/campaign_card_header.dart';
 import '../../widgets/public_logistics_summary.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -61,9 +62,16 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       )) {
         return;
       }
+      if (!mounted) return;
+      final acceptedDigest = await confirmProductionCompensation(
+        context,
+        widget.campaign.id,
+      );
+      if (acceptedDigest == null) return;
       await _campaignService.applyToCampaign(
         campaignId: widget.campaign.id,
         scalerId: user.uid,
+        acceptedOfferDigest: acceptedDigest,
       );
 
       if (!mounted) return;
@@ -640,8 +648,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
         final data = campaign.data() as Map<String, dynamic>;
 
-        final campaignName =
-            campaignDisplayName(data['campaignName']?.toString() ?? 'Untitled Campaign');
+        final campaignName = campaignDisplayName(
+          data['campaignName']?.toString() ?? 'Untitled Campaign',
+        );
 
         final description = data['description']?.toString() ?? '';
 
@@ -688,7 +697,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                       Text(description),
                       const SizedBox(height: 12),
-                      PublicLogisticsSummary(logistics: Map<String, dynamic>.from(data['materialLogistics'] as Map? ?? {})),
+                      PublicLogisticsSummary(
+                        logistics: Map<String, dynamic>.from(
+                          data['materialLogistics'] as Map? ?? {},
+                        ),
+                      ),
                     ],
                   ),
                 ),

@@ -167,12 +167,20 @@ service cloud.firestore {
       allow create:
         if isApprovedAccount()
         && request.resource.data.businessId == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.status == 'draft'
         && !request.resource.data.keys().hasAny(financialCampaignFields());
 
 
       allow update:
         if isApprovedAccount()
         && resource.data.businessId == request.auth.uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt'])
+        && (!('completionPolicyVersion' in resource.data)
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']))
+        && (!('completionPolicyVersion' in resource.data)
+          || ((!('fundingStatus' in resource.data) || resource.data.fundingStatus in ['unfunded','payment_failed','checkout_expired'])
+            && resource.data.status == 'draft'))
         && !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(financialCampaignFields());
 
@@ -1238,7 +1246,7 @@ service cloud.firestore {
         'platformFeePendingCents', 'platformFeeRecognizedCents',
         'platformFeeRefundedCents', 'transferOperationId',
         'stripeTransferId', 'paidAmountCents', 'payoutStatus',
-        'earningsStatus', 'settlementStatus'
+        'earningsStatus', 'settlementStatus', 'completionPolicyVersion', 'acceptedOffer'
       ];
     }
 

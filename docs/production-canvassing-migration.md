@@ -1,73 +1,66 @@
-# Prospective canvassing compensation migration
+# Production canvassing promotion package
 
-Status: policy core prepared; production runtime integration is not certified.
-This document does not authorize deployment or reinterpretation of existing work.
+Status: prepared for controlled certification and held promotion. This file is not deployment authorization. Exact candidate hashes, deployed revision inventory, legacy ledger hashes and the revision-bound projection seed are private release evidence.
 
-## Contract semantics
+## Policy and normal Business lifecycle
 
-New neighborhood canvassing work must have an explicitly offered, funded and
-accepted versioned contract. Reliable Route Coverage Estimate of at least 80%
-qualifies for the entire accepted base. At least 95% additionally qualifies for
-the actual accepted bonus, if one was offered and reserved. Neither figure is
-verified household coverage. There is no percentage proration of the base.
+`CanvassingRoute80_95V1` applies prospectively to new canvassing contracts. Below 80% reliable Route Coverage Estimate, ordinary completion remains ineligible. At 80% the entire immutable accepted base is eligible; at 95% the separately offered and funded bonus is also eligible. A zero bonus remains zero. Route percentage never represents a count of serviced households. Technical uncertainty holds base for review and grants no automatic bonus or payment. Access exceptions neither require trespass nor silently change the denominator.
 
-The prospective core in `functions/production_canvassing_contract.js` binds the
-campaign, Business, zone, Scaler, offer digest, immutable base and optional bonus,
-route/corridor hashes, source geometry provenance, and acceptance timestamp.
-Its inputs must come from server reads inside maintained authority transactions;
-the module is not a callable and must never accept client assertions as evidence.
-Funding fees continue to use the maintained authoritative quote. The module
-checks the worker reserve; it does not replace fee, payment or allocation checks.
+The maintained Smart Mapping provider snapshot now retains ordered public-road linework. The production adapter clips it to the selected polygon and known exclusions, rejects inaccessible/unsupported or disconnected paths, deduplicates overlapping segments, and derives connected out-and-back guidance. It does not order property centroids or treat polygon perimeter/workload distance as a route. Bridges, tunnels and separated layers are conservatively withheld. Business must review the displayed route and acknowledge authorized access. This review is not independent legal certification of public access.
 
-Existing accepted contracts remain unchanged. Missing legacy contracts are not
-permission to manufacture replacement terms. Unknown policy versions fail closed.
-An offered amount change or counteroffer requires a newly reviewed, reserved and
-explicitly accepted offer before assignment. No administrative batch migrates
-historical completions, ledgers, accepted contracts or review results.
+Both Smart Zone generation and manual saved-zone analysis use that same mapper. Malformed, empty, disconnected or over-complex routes require adjusted/split territory. No connector is inferred. The immutable authority binds campaign, zone, route/corridor hashes, source snapshot digest, version and the exact unique-route denominator used by the maintained coverage evaluator. Planned out-and-back distance is reported separately from unique covered distance.
 
-Technical uncertainty can protect the accepted base on HOLD for authoritative
-review; it cannot automatically pay base or bonus. An access exception neither
-shrinks the denominator nor grants coverage automatically. Ordinary completion
-requires valid assignment, finalized immutable evidence and reliable coverage.
-Manual progress marks and residential photographs are not required for canvassing.
+A server quote binds the reviewed zones, exact base/bonus reserve and existing fee calculation. Checkout freezes that offer under maintained Stripe idempotency. Only signed reconciled funding permits publication. Publication retains deployed `validZones` filtering for historical/non-canvassing work and additionally requires every payable versioned canvassing zone to have valid route authority. It is transactional and replay-safe.
 
-## Unresolved production route dependency
+The public discovery projection includes only safe offer terms. Scaler application requires explicit unchecked-then-accepted terms and the exact offer digest. Assignment rechecks Auth eligibility, legal consent, payment, immutable geometry and offer acceptance. Old payout/group entry points reject new versioned contracts. Existing historical review dispatches to the pinned deployed legacy implementation; settled records are never recomputed.
 
-The normal Smart Zone planner currently emits polygons, component points and a
-workload-distance estimate. It explicitly lists `pedestrian_route` as unsupported.
-It does not emit the verified `executionRoute` required by corrected coverage.
-Ordering building centroids, drawing a polygon perimeter, or reusing workload
-distance would invent walkable connections and reproduce the denominator defect.
+## Evidence, review and client compatibility
 
-Before migration is deployable, the maintained normal mapping authority must
-produce a versioned serviceable route with connected public-access geometry,
-known exclusions, provenance, route/corridor hashes and a truthful denominator.
-Unknown access or disconnected components must require review, not invented
-connectors. The Business and Scaler must review the same route before acceptance.
-The production route-authority envelope expected by the pure core describes the
-required contract; its existence is not evidence that the planner implements it.
+The six maintained mobile tracking calls are `startTrackingSession`, `uploadTrackingChunk`, `getTrackingSessionState`, `completeTrackingSession`, `cancelTrackingSession` and `registerTrackingCheckpoint`. The actual call sites are in `active_job_tracking_service.dart`. `startAssignedZone` is a seventh historical source entry, absent in current staging metadata and deliberately unused by the client. It is prepared for inspection but excluded from promotion; it is not a missing client dependency.
 
-## Required runtime integration
+The six deployed candidates preserve request/response shapes, accepted point/sequence limits, the offline queue and bounded finalization contract. They add production environment and actual enabled/verified active-Scaler checks, intended current assignment, authoritative location consent, one active pointer, and current contract/route requirements. Cross-user uploads and revoked-assignment progress reads fail closed. Canvassing photographs remain rejected; manual progress marks remain optional.
 
-1. Mapping generates and preserves the route authority through edits and review.
-2. Quote/funding binds exact offered policy, pay, route and reserve; reject drift.
-3. Application captures explicit acceptance of that offer; assignment atomically
-   validates eligibility, acceptance, funding, immutable route and contract.
-4. Live progress and finalization use that accepted route and evidence model.
-5. Job Room and submission expose full base, offered bonus, eligibility, evidence
-   and HOLD reasons. Unsupported policy clients must update before new work.
-6. Business review recomputes the same policy/evidence identity, then uses the
-   existing atomic earning/Wallet/ledger transaction and duplicate protection.
+Job Room shows the actual path, assigned route/corridor, evidence count, start/end, truthful coverage denominator, full accepted base/bonus, payable amount and HOLD reasons before approval. Current pointer, dispute and settlement holds block payable presentation. Approval recomputes immutable contract/evidence identity and uses the maintained atomic earning/Wallet transaction. Concurrent approval and replay produce one effect.
 
-These production handlers are not patched by importing the policy core. Prepare
-each from its verified deployed implementation, preserve unrelated semantics,
-and test actual handlers, concurrent review, accepted-hash drift, privacy and
-reserve accounting before declaring a coordinated promotion ready. In particular,
-do not substitute a broad staging completion or assignment codebase.
+Production clients require refresh for explicit offer acceptance, route review, new evidence UI and the restrictive logistics read path. Existing staging physical artifacts remain valid: these changes do not change native tracking, lifecycle bridges, queue/upload or final-location behavior. Unit/emulator tests are not physical evidence.
 
-## Physical build compatibility
+## Privacy and existing records
 
-Preparing this policy core and fixing the Business creation entry does not change
-native tracking, Scaler GPS/session/finalization code, or the existing staging
-policy. Source tests are not physical evidence. Existing matched staging builds
-remain usable for their authorized physical certification scope.
+Raw campaign pickup/logistics remain restricted to Business/Admin or the current intended active assignment. Discovery contains coarse allowlisted fields only. Submitted/completed/cancelled states revoke precise Scaler logistics. Old Job Room callers receive an update-required result; do not restore permissive Rules as rollback. The current private inventory/seed is revision-bound and must be revalidated immediately before promotion. Invalid public identities remain withheld, never fabricated.
+
+Legacy polygons without a known ordered route are not safely backfillable. Preserve historical submissions, assignments, payments and ledger values. Unworked legacy canvassing needs a newly reviewed campaign/route/offer before new GPS work. An active historical assignment needing help goes to support review, not an automated reset or silent contract replacement.
+
+## Reproducible held package
+
+1. Run `node tools/prepare_production_engineering.cjs` and `node tools/prepare_production_funding.cjs`.
+2. Run `python tools/prepare_production_job_room.py --archive <pinned deployed getJobRoom ZIP> --output .firebase/production-launch/job-room`.
+3. Run `node tools/package_production_engineering.cjs`. It emits nine isolated codebases and 26 exact candidate selectors in `firebase.production-engineering.json` and a private promotion manifest. It never deploys.
+4. Install/lock dependencies in the private candidate directories, rerun packaging to seal recursive file hashes, and run the exact-package emulator lifecycle with `PRODUCTION_PACKAGE_TEST=true`.
+5. Verify `candidate-manifest.json` including lockfiles/environment files before any future upload. Never deploy an entire shared root or codebase without the exact selector list.
+
+The legacy adapters require these exact read-only downloaded archive SHA-256 values:
+
+| Deployed handler | Archive SHA-256 |
+|---|---|
+| getJobRoom | c4af6705ff473cd7c4209362595149945909c4830b96fd23bea32b8d664106b8 |
+| finalizeZoneReview | a73d4cfeeba2f51971fe37b998984d29f52e4a1523ec6246fa6ae4aa9ab3e144 |
+| approveZonePayout | cb5c9d9e93649a73b2f940418368db654b5f5d4537ff9df61dfaf48010f97db9 |
+| configureZoneGroupAssignment | 455a3e463445d960124dc6d811545370b256f0783aa3c39c86b66bc11683f596 |
+
+Private archives are inputs, not public repository files. Legacy bodies retain historical financial semantics, with only documented shared initialization, inherited global options and new-policy rejection adapters.
+
+## Coordinated promotion order — held
+
+1. Revalidate revisions, source hashes, seed update-times, active legacy-work disposition and economic before hashes. Require a bounded coordinated maintenance window for incompatible clients; do not pretend Functions/client/Rules changes are atomic.
+2. Keep `CANVASSING_NEW_CONTRACTS_ENABLED=false`. Keep the pinned prospective epoch `1788825600000` (2026-09-08 UTC) immutable. Deploy only the four privacy authorities, seed the reviewed exact records under authenticated Admin authority, and verify ongoing projection refresh.
+3. Promote compatible production clients and the privacy-preserving Job Room. Enforce restrictive privacy Rules as part of the same controlled window. Missing projections/old clients fail closed with recovery/update guidance; never reopen raw logistics. Existing data has no mutation-based compatibility workaround.
+4. Deploy the exact legacy payout/group guards, completion/review authority and six tracking candidates, preserving deployed codebase ownership. Deploy mapping, application/assignment and reconciled funding/publication candidates with new-contract execution still disabled. No blanket Function deploy; no financial executor/Stripe transfer/cash-out deployment.
+5. Read back every exact revision/config/secret reference and run read-only production sanity, projection/private access and old-client denial checks. Confirm all dependencies before enabling prospective mapping/quote/Checkout. No new contract may be funded while its tracking/review authority is unavailable.
+6. Enable prospective contracts only in the separately approved promotion window. Existing accepted contracts continue their pinned settlement version when the flag is later disabled. Never change the epoch or fall back to legacy proration.
+7. Perform the separately authorized legitimate LIVE payment smoke only after Founder approval. This engineering package creates no provider object.
+
+Rollback before any new contract may restore exact pinned legacy revisions only where compatible, retaining restrictive privacy and compatible client reads. After a new contract exists, stop new contracts using the flag, retain its policy/tracking/reconciliation/settlement authorities and repair forward. Never reinterpret an accepted contract, restore exposed logistics or blindly retry a financial/provider effect.
+
+## Validation
+
+The controlled normal Business lifecycle uses real generated handlers and Rules with synthetic mapper input and a locally signed mock Stripe payment. No LIVE network execution occurs. It covers create, reviewed mapping, quote, funded publication, discovery, explicit acceptance, assignment, denied cross-access, automatic tracking/chunks/finalization, evidence review, concurrent approval, one earning and one Wallet effect. Separate coverage boundaries, invalid GPS, legacy replay, Storage/Auth/Rules and production/staging Flutter suites are required. Hosted and mobile artifacts remain held until exact environment/signature/hash guards pass; release certification does not claim production deployment or a physical walk.

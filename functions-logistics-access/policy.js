@@ -17,6 +17,18 @@ function projection(id, source) {
   const doc = {campaignId: id, businessId: source.businessId,
     campaignName: title.trim().slice(0, 200), campaignType: type,
     status: source.status, schemaVersion: 2, privacyVersion: VERSION};
+  if(source.completionPolicyVersion==='CanvassingRoute80_95V1') {
+    const o=source.acceptedOffer;
+    if(!o||o.version!==source.completionPolicyVersion||!/^[a-f0-9]{64}$/.test(o.offerDigest||'')||
+      !Number.isSafeInteger(o.baseAmountCents)||o.baseAmountCents<=0||
+      !Number.isSafeInteger(o.bonusAmountCents)||o.bonusAmountCents<0||o.currency!=='usd') {
+      return {document:null,reason:'accepted_compensation_offer_missing'};
+    }
+    doc.completionPolicyVersion=o.version;
+    doc.compensationOffer={offerDigest:o.offerDigest,baseAmountCents:o.baseAmountCents,
+      bonusAmountCents:o.bonusAmountCents,currency:o.currency,baseThresholdBasisPoints:8000,
+      bonusThresholdBasisPoints:9500,coverageBasis:'unique_assigned_route_estimate'};
+  }
   for (const key of ['basePay', 'bonus', 'workerPoolCents', 'scheduledShareCents',
     'requiredScalerCount', 'requestedScalerCount', 'assignedScalerCount',
     'estimatedMinutes', 'preliminaryEstimatedMinutes']) {

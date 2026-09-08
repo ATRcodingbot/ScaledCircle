@@ -65,13 +65,32 @@ def prepare(archive, output):
     if handler.count(marker) != 1:
         raise ValueError('Unexpected deployed response tail')
     handler = handler.replace(marker, '''  };
+  const evidence = await require('./production_job_room_evidence').read({db,zoneId,uid:context.uid,isAdmin:context.isAdmin});
+  if (evidence) response.completionEvidence = evidence;
   if (context.isAdmin || (context.role === 'business' && context.uid === campaign.businessId)) return response;
   if (context.role !== 'scaler') throw new HttpsError('permission-denied', 'Scaler authority required.');
-  return privacy.scalerResponse(response, privateAllowed);
+  const safe = privacy.scalerResponse(response, privateAllowed);
+  if (evidence) safe.completionEvidence = evidence;
+  return safe;
 });''', 1)
     path.write_text(before + handler, encoding='utf-8', newline='\n')
     for name in ['policy.js', 'job_room_privacy.js']:
         (output / name).write_bytes((root / 'functions-logistics-access' / name).read_bytes())
+    # Shared policy modules come from the deterministic production generator;
+    # the current deployed Job Room and privacy adapter remain the base.
+    candidate = root / '.firebase/production-engineering/tracking'
+    import re
+    copied = set()
+    def policy_copy(name):
+        if name in copied:
+            return
+        copied.add(name)
+        source_path = root / 'functions' / name if name == 'production_job_room_evidence.js' else candidate / name
+        content = source_path.read_text(encoding='utf-8')
+        (output / name).write_text(content, encoding='utf-8', newline='\n')
+        for relative in re.findall(r"require\(['\"]\./([\w_-]+)['\"]\)", content):
+            policy_copy(relative + '.js')
+    policy_copy('production_job_room_evidence.js')
     manifest = {p.relative_to(output).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in output.rglob('*') if p.is_file() and 'node_modules' not in p.parts}
     (output.parent / 'job-room-package-manifest.private.json').write_text(json.dumps({

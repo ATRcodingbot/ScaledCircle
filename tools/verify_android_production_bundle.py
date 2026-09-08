@@ -60,7 +60,7 @@ def manifest_elements(node):
                 yield from manifest_elements(child)
 
 
-def inspect(path):
+def inspect(path, build_number=2):
     forbidden = ["scaledcircle-staging", "demo-scaledcircle", "10.0.2.2",
                  "http://127.0.0.1:5000", "http://127.0.0.1:5001"]
     markers = forbidden + ["localhost", "127.0.0.1",
@@ -87,7 +87,7 @@ def inspect(path):
                 if marker.encode() not in data:
                     raise ValueError(f"Missing production marker {marker} in {abi}")
     errors = [f"Forbidden production marker: {marker}" for marker in forbidden if hits[marker]]
-    for key, expected in {"package": "com.scaledcircle.app", "versionCode": "2",
+    for key, expected in {"package": "com.scaledcircle.app", "versionCode": str(build_number),
                           "versionName": "1.0.0"}.items():
         if manifest.get(key) != expected:
             errors.append(f"Unexpected {key}: {manifest.get(key)}")
@@ -106,8 +106,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--build-number", type=int, default=2)
     args = parser.parse_args()
-    result = inspect(args.bundle)
+    result = inspect(args.bundle, args.build_number)
     output = json.dumps(result, indent=2)
     if args.report:
         args.report.write_text(output + "\n", encoding="utf-8")

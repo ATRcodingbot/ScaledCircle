@@ -253,6 +253,7 @@ class CampaignService {
   Future<void> applyToCampaign({
   required String campaignId,
   required String scalerId,
+  String? acceptedOfferDigest,
 }) async {
   final currentUid = FirebaseAuth.instance.currentUser?.uid;
   if (currentUid == null || currentUid != scalerId) {
@@ -260,6 +261,8 @@ class CampaignService {
   }
   await _functions.httpsCallable('applyToCampaign').call({
     'campaignId': campaignId,
+    if (acceptedOfferDigest != null && acceptedOfferDigest.isNotEmpty)
+      'acceptedOfferDigest': acceptedOfferDigest,
   });
 }
 

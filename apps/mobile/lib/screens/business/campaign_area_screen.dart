@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/production_route_review.dart';
+import '../../config/app_environment.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -522,7 +524,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         region: 'us-east1',
       ).httpsCallable('analyzeCampaignZone');
 
-      await callable.call({'zoneId': widget.campaignReference.id});
+      final result = await callable.call({'zoneId': widget.campaignReference.id});
+      if (!mounted) return false;
+      await reviewProductionRouteAnalysis(context, result.data);
 
       return true;
     } on FirebaseFunctionsException catch (e) {
@@ -531,10 +535,12 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         '${e.code} ${e.message}',
       );
 
+      if (AppEnvironmentConfig.isProduction) return false;
       return _markHomeEstimateUnavailable();
     } catch (e) {
       debugPrint('Zone analysis failed: $e');
 
+      if (AppEnvironmentConfig.isProduction) return false;
       return _markHomeEstimateUnavailable();
     }
   }
@@ -899,7 +905,12 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       // Persistence is authoritative. Optional intelligence continues after
       // the map workflow returns and can never invalidate the saved target.
-      unawaited(_analyzeSavedZone());
+      if (AppEnvironmentConfig.isProduction) {
+        await _analyzeSavedZone();
+        if (!mounted) return;
+      } else {
+        unawaited(_analyzeSavedZone());
+      }
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) {

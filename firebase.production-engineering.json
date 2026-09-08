@@ -1,0 +1,92 @@
+{
+  "functions": [
+    {
+      "source": ".firebase/production-engineering/package/logistics-access",
+      "codebase": "logistics-access",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/job-room-core",
+      "codebase": "job-room-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/discovery-core",
+      "codebase": "discovery-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/application-core",
+      "codebase": "application-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/assignment-core",
+      "codebase": "assignment-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/completion-authority-core",
+      "codebase": "completion-authority-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/tracking-core",
+      "codebase": "tracking-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/campaign-funding",
+      "codebase": "campaign-funding",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
+      "source": ".firebase/production-engineering/package/default",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.production.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

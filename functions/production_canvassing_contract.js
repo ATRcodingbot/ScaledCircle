@@ -30,9 +30,14 @@ function routeBinding(zone, authority) {
       authority.accessReviewed !== true || authority.state !== 'approved') {
     throw Error('authoritative_serviceable_route_required');
   }
+  const denominator=coveragePolicy.coverage(zone,[]).denominatorMeters;
+  if(!Number.isFinite(authority.uniqueRouteMeters)||authority.uniqueRouteMeters<=0||
+      authority.uniqueRouteMeters!==zone.executionRoute.uniqueRouteMeters||
+      Math.abs(authority.uniqueRouteMeters-denominator)>0.001)throw Error('authoritative_denominator_required');
   return {routeHash: zone.executionRoute.routeHash,
     corridorHash: zone.executionRoute.corridorHash,
     plannedWalkingMeters: zone.executionRoute.denominatorMeters,
+    uniqueRouteMeters: authority.uniqueRouteMeters,
     sourceSnapshotDigest: authority.sourceSnapshotDigest,
     authorityVersion: authority.version};
 }
@@ -109,7 +114,10 @@ function evaluate({contract, zone, routeAuthority, session, chunks, route,
   accessIssue = false}) {
   if (!contract?.completionPolicyVersion) return {disposition: 'legacy_contract_preserved'};
   if (contract.completionPolicyVersion !== VERSION) throw Error('unsupported_compensation_policy');
-  const {contractDigest, ...body} = contract;
+  const {contractDigest} = contract;
+  const body = Object.fromEntries(['completionPolicyVersion','campaignId','businessId','zoneId',
+    'scalerId','currency','baseAmountCents','bonusAmountCents','offerDigest','routeBinding',
+    'acceptedAtMs','immutable'].map(key=>[key,contract[key]]));
   if (contract.immutable !== true || hash(body) !== contractDigest ||
       zone.id !== contract.zoneId || zone.campaignId !== contract.campaignId ||
       zone.businessId !== contract.businessId || zone.assignedScalerId !== contract.scalerId) {
@@ -132,4 +140,4 @@ function evaluate({contract, zone, routeAuthority, session, chunks, route,
     householdCoverage:null};
 }
 
-module.exports = {VERSION, ROUTE_AUTHORITY_VERSION, prepareOffer, acceptOffer, evaluate};
+module.exports = {VERSION, ROUTE_AUTHORITY_VERSION, prepareOffer, acceptOffer, evaluate, validateOffer};

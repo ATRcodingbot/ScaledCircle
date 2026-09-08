@@ -37,6 +37,7 @@ async function fetchSnapshot({selectedBoundary, endpoint, fetchImpl = fetch}) {
 
 function snapshotFromElements(selectedBoundary, rawElements) {
   const serviceablePoints = []; const exclusionPolygons = []; const mappedBoundaries = [];
+  const routeWays = [];
   let waterFeatureCount = 0; let parkFeatureCount = 0; let barrierFeatureCount = 0;
   for (const element of Array.isArray(rawElements) ? rawElements : []) {
     const tags = element.tags || {}; const geometry = Array.isArray(element.geometry) ?
@@ -60,6 +61,13 @@ function snapshotFromElements(selectedBoundary, rawElements) {
     }
     if (isBarrier) { barrierFeatureCount += 1; continue; }
     if (tags.highway && geometry.length) {
+      // Preserve the provider's actual ordered linework. Building centroids and
+      // an unordered cloud of component points cannot establish a walkable route.
+      routeWays.push({id: String(element.id), geometry,
+        access: tags.access || null, foot: tags.foot || null,
+        highway: tags.highway, service: tags.service || null,
+        bridge: tags.bridge || null, tunnel: tags.tunnel || null,
+        layer: tags.layer || null});
       for (const item of geometry) serviceablePoints.push({...item,
         componentId: `road-${element.id}`, kind: "local_road"});
       continue;
@@ -77,6 +85,7 @@ function snapshotFromElements(selectedBoundary, rawElements) {
   const serviceableBoundary = mappedBoundaries.find((boundary) =>
     smartZonePlanning.pointInsidePolygon(territoryCenter, boundary)) || null;
   return {source: "openstreetmap_bounded_snapshot_v1", serviceablePoints,
+    routeWays,
     exclusionPolygons, waterFeatureCount, parkFeatureCount, barrierFeatureCount,
     serviceableBoundary, serviceableBoundaryType: serviceableBoundary ?
       "mapped_place_boundary" : null};

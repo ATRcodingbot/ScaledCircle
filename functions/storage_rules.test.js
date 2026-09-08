@@ -15,7 +15,7 @@ before(async () => {
     // Cross-service Storage rules read the Firestore emulator in the same
     // Firebase project namespace, so this must match emulators:exec.
     projectId: testProjectId,
-    firestore: {rules: fs.readFileSync(path.join(__dirname, "..", "firestore.rules"), "utf8")},
+    firestore: {rules: fs.readFileSync(path.join(__dirname, "..", process.env.PRODUCTION_RULES_TEST==='true' ? "firestore.production.rules" : "firestore.rules"), "utf8")},
     storage: {rules: fs.readFileSync(path.join(__dirname, "..", "storage.rules"), "utf8")},
   });
 });

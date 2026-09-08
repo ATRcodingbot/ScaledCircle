@@ -258,6 +258,23 @@ class _SmartZoneGeometryMapState extends State<SmartZoneGeometryMap> {
                                 })
                                 .toList(growable: false),
                           ),
+                          PolylineLayer(
+                            polylines: [
+                              for (final zone in validZones)
+                                if (widget.zones[zone.index]['executionRoute']
+                                    is Map)
+                                  Polyline(
+                                    points: smartZonePoints(
+                                      widget.zones[zone
+                                          .index]['executionRoute']['centerline'],
+                                    ),
+                                    color: smartZoneColor(
+                                      zone.identity.styleKey - 1,
+                                    ),
+                                    strokeWidth: 4,
+                                  ),
+                            ],
+                          ),
                           MarkerLayer(
                             markers: validZones
                                 .asMap()

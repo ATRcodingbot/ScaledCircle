@@ -1,8 +1,41 @@
 {
   "functions": [
-    {"source":"functions-logistics-access","codebase":"logistics-access","ignore":["node_modules",".git","*.test.js"]},
-    {"source":".firebase/production-launch/job-room","codebase":"job-room-core","ignore":["node_modules",".git","README.md"]}
+    {
+      "source": "functions-logistics-access",
+      "codebase": "logistics-access",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.test.js"
+      ]
+    },
+    {
+      "source": ".firebase/production-launch/job-room",
+      "codebase": "job-room-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "README.md"
+      ]
+    }
   ],
-  "firestore":{"rules":"firestore.production.rules","indexes":"firestore.indexes.json"},
-  "emulators":{"firestore":{"port":8080},"auth":{"port":9099},"singleProjectMode":false}
+  "firestore": {
+    "rules": "firestore.production.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "auth": {
+      "port": 9099
+    },
+    "singleProjectMode": false,
+    "storage": {
+      "port": 9199
+    }
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
 }

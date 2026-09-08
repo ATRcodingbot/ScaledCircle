@@ -62,7 +62,7 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
   }
 
   Future<void> _prepare() async {
-    if (AppEnvironmentConfig.isStaging) {
+    if (AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isProduction) {
       try {
         final room = await const JobRoomService().load(widget.zoneId);
         if (!mounted) return;

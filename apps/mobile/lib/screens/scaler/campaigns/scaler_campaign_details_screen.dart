@@ -1,3 +1,4 @@
+import '../../../widgets/production_compensation_acceptance.dart';
 import '../../../widgets/campaign_card_header.dart';
 import '../../../widgets/public_logistics_summary.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -166,9 +167,16 @@ class _ScalerCampaignDetailsScreenState
       )) {
         return;
       }
+      if (!mounted) return;
+      final acceptedDigest = await confirmProductionCompensation(
+        context,
+        widget.campaign.id,
+      );
+      if (acceptedDigest == null) return;
       await _campaignService.applyToCampaign(
         campaignId: widget.campaign.id,
         scalerId: user.uid,
+        acceptedOfferDigest: acceptedDigest,
       );
 
       if (!mounted) return;

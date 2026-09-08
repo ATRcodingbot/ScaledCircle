@@ -3,6 +3,7 @@ import '../../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/production_route_review.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 import '../../models/campaign/zone_display_identity.dart';
@@ -249,7 +250,9 @@ class CampaignZonesScreen extends StatelessWidget {
       final callable = FirebaseFunctions.instanceFor(
         region: 'us-east1',
       ).httpsCallable('analyzeCampaignZone');
-      await callable.call({'zoneId': zone.id});
+      final result = await callable.call({'zoneId': zone.id});
+      if (!context.mounted) return;
+      await reviewProductionRouteAnalysis(context, result.data);
       messenger.showSnackBar(
         const SnackBar(content: Text('Zone analysis updated.')),
       );
@@ -296,6 +299,8 @@ class CampaignZonesScreen extends StatelessWidget {
       if (!context.mounted) return;
       var selectedZoneIndex = 0;
       var useRecommendedPay = false;
+      var routeReviewed = false;
+      final requiresRouteReview = plan['routeReviewDigest'] is String;
       final selectedTerritory = smartZonePoints(plan['selectedTerritory']);
       final accepted = await showDialog<bool>(
         context: context,
@@ -318,6 +323,21 @@ class CampaignZonesScreen extends StatelessWidget {
                       mapKey: const Key('recommended-smart-zone-map'),
                     ),
                     const SizedBox(height: 16),
+                    if (requiresRouteReview)
+                      CheckboxListTile(
+                        value: routeReviewed,
+                        onChanged: (value) =>
+                            setDialogState(() => routeReviewed = value == true),
+                        title: const Text(
+                          'I reviewed the mapped routes for authorized public access.',
+                        ),
+                        subtitle: const Text(
+                          'Exclude inaccessible or unsafe areas before funding. '
+                          'Route Coverage Estimate uses unique mapped route length, not household counts. '
+                          'Full base requires 80%; an offered coverage bonus requires 95%.',
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
                     Text(
                       '${plan['totalEstimatedProperties']} estimated properties • '
                       '~${plan['totalEstimatedHours']} estimated total hours',
@@ -499,7 +519,9 @@ class CampaignZonesScreen extends StatelessWidget {
                 child: const Text('Advanced Edit'),
               ),
               ElevatedButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
+                onPressed: requiresRouteReview && !routeReviewed
+                    ? null
+                    : () => Navigator.pop(dialogContext, true),
                 child: const Text('Use Recommended Zones'),
               ),
             ],
@@ -511,6 +533,8 @@ class CampaignZonesScreen extends StatelessWidget {
         ...request,
         'planId': plan['planId'],
         'useRecommendedPay': useRecommendedPay,
+        if (requiresRouteReview && routeReviewed)
+          'routeReviewDigest': plan['routeReviewDigest'],
       });
       messenger.showSnackBar(
         SnackBar(
@@ -1935,14 +1959,16 @@ class CampaignZonesScreen extends StatelessWidget {
                               },
                       ),
 
-                      if (data['analysisStatus'] != 'complete' ||
+                      if (data['coverageAuthority']?['state'] == 'review_required' ||
+                          data['analysisStatus'] != 'complete' ||
                           data['serverZoneMetricsVersion'] !=
                               'geometry_v1_server') ...[
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
                           onPressed: () => _retryZoneAnalysis(context, zone),
                           icon: const Icon(Icons.refresh),
-                          label: const Text('Retry Zone Analysis'),
+                          label: Text(data['coverageAuthority']?['state'] == 'review_required'
+                            ? 'Review mapped route' : 'Retry Zone Analysis'),
                         ),
                       ],
 
