@@ -197,7 +197,7 @@ assert.deepEqual(Object.keys(creativeMedia).sort(), [
   "updateGeneratedMediaSafetyConfiguration",
 ].sort());
 assert.deepEqual(Object.keys(physicalMarketing).sort(), [
-  "reconcilePendingPostcardTestPaymentsV1", "getPostcardWorkspaceV1", "createPostcardCampaignV1", "requestPostcardQuoteV1", "confirmPostcardQuoteV1", "createPostcardCheckoutV1", "reconcilePostcardPaymentV1", "recordPostcardEvidenceV1", "advancePostcardFulfillmentV1", "recordPostcardCostsV1", "requestPostcardCancellationV1", "reconcilePostcardRefundV1", "downloadPostcardArtifactV1",
+  "reconcilePendingPostcardTestPaymentsV1", "getPostcardWorkspaceV1", "createPostcardCampaignV1", "updatePostcardMailingV1", "requestPostcardQuoteV1", "confirmPostcardQuoteV1", "createPostcardCheckoutV1", "reconcilePostcardPaymentV1", "recordPostcardEvidenceV1", "advancePostcardFulfillmentV1", "recordPostcardCostsV1", "requestPostcardCancellationV1", "reconcilePostcardRefundV1", "downloadPostcardArtifactV1",
   "approvePhysicalMarketingVersion", "getPhysicalMarketingOperations",
   "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
   "preparePhysicalMarketingVersion",

@@ -12498,6 +12498,7 @@ async function trackingPhoneCall(request, operation, options) {
 
 
 
+
 exports.createResponseAsset = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
   businessOperation("createResponseAsset", async (request) => {
@@ -12570,6 +12571,7 @@ exports.getTrackingPhoneOperations = onCall(
   { enforceAppCheck: false, maxInstances: 2 },
   (request) => trackingPhoneCall(request, trackingPhoneService.operations, { admin: true })
 );
+
 
 
 

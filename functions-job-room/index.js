@@ -12994,6 +12994,8 @@ exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoo
 
 
 
+
+
 function businessProgressService() {return require('./business_live_progress').createProgressService({ db, FieldValue });}
 exports.projectBusinessWorkProgress = onDocumentWritten({ document: 'trackingSessions/{sessionId}', region: 'us-east1', maxInstances: 3, retry: true }, async (event) => {
   if (!event.data?.after.exists) return;

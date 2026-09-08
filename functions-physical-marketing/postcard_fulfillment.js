@@ -5,6 +5,7 @@
 const crypto = require("node:crypto");
 const physical = require("./physical_marketing");
 const POLICY = "NeighborhoodPostcardFulfillmentV1";
+const FEE_POLICY = Object.freeze({version:'PostcardFulfillmentCreative20V1',rateBps:2000,basis:['printingCents','postageCents'],rounding:'nearest_cent_half_up',taxExcluded:true});
 const USPS_REFERENCE = Object.freeze({
   checkedOn: "2026-09-08", rateEffectiveOn: "2026-07-12", rateCents: 26,
   price: "https://pe.usps.com/text/dmm300/Notice123.htm",
@@ -47,15 +48,17 @@ function routeSelection(input) {
 }
 function quoteMath(input, quantity) {
   const printingCents = money(input.printingCents), postageCents = money(input.postageCents);
-  const fulfillmentCents = money(input.fulfillmentCents), taxCents = money(input.taxCents || 0);
+  const feeBaseCents=money(printingCents+postageCents);
+  const fulfillmentCents = Math.floor((feeBaseCents*FEE_POLICY.rateBps+5000)/10000), taxCents = money(input.taxCents || 0);
+  if(input.fulfillmentCents!=null && input.fulfillmentCents!==fulfillmentCents)fail('The ScaledCircle Fulfillment & Creative fee is calculated as 20% of printing plus postage.');
   const printCostCents = money(input.printCostCents), postageCostCents = money(input.postageCostCents);
   const handlingCostCents = money(input.handlingCostCents || 0);
   const rateCents = money(input.postageRateCents);
   if (!rateCents || postageCents !== rateCents * quantity || postageCostCents !== postageCents) fail("Postage must match the confirmed USPS cost without hidden markup.");
   const totalCents = money(printingCents + postageCents + fulfillmentCents + taxCents);
   if (!totalCents || printingCents + fulfillmentCents < printCostCents + handlingCostCents) fail("The quote does not cover the confirmed fulfillment costs.");
-  return {customer: {printingCents, postageCents, fulfillmentCents, taxCents, totalCents, currency: "usd"},
-    internal: {printCostCents, postageCostCents, handlingCostCents, estimatedGrossMarginCents: totalCents - taxCents - printCostCents - postageCostCents - handlingCostCents, postageRateCents: rateCents}};
+  return {customer: {printingCents, postageCents, feeBaseCents,fulfillmentCents,feePolicy:FEE_POLICY,taxCents, totalCents, currency: "usd"},
+    internal: {printCostCents, postageCostCents, handlingCostCents,fulfillmentRevenueCents:fulfillmentCents,estimatedGrossMarginCents: totalCents - taxCents - printCostCents - postageCostCents - handlingCostCents, postageRateCents: rateCents}};
 }
 function createPostcardService({db, FieldValue, bucket, physicalService, stripe, projectId, now = () => Date.now()}) {
   const orders = db.collection("postcardOrders"), privateOps = db.collection("postcardFulfillmentPrivate");
@@ -84,6 +87,7 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
           names.set(item.businessId,String(g.businessName||u.businessName||u.companyName||u.displayName||'Business').slice(0,120));
         }
         item.businessName=names.get(item.businessId);
+        if(item.versionId){const v=(await db.doc(`marketingMaterialVersions/${item.versionId}`).get()).data();item.uploadReview=v?.artworkSnapshot?.report||null;item.uploadSources=(v?.artworkSnapshot?.originals||[]).map((s,index)=>({index,contentType:s.contentType,sha256:s.sha256}));}
       }
     }
     return {policy: POLICY, available: true, environment: "staging", fulfilledBy: "ScaledCircle", orders: items.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))), usps: admin ? USPS_REFERENCE : null, physical: admin ? null : await physicalService.workspace({}, actor)};
@@ -91,27 +95,37 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
   async function create(input, actor) {
     actorCheck(actor);
     const requestId = id(input.requestId), orderId = `postcard_${hash([actor.uid, requestId]).slice(0,40)}`;
-    const name = label(input.name, 100), targetArea = label(input.targetArea), zip = String(input.zip || "");
+    const creationMode=['upload','template','assisted'].includes(input.creationMode)?input.creationMode:null;
+    const mailingPending=creationMode!==null && input.targetArea==null;
+    const name = label(input.name, 100), targetArea = mailingPending?null:label(input.targetArea), zip = mailingPending?null:String(input.zip || "");
     const desiredQuantity = input.desiredQuantity == null ? 200 : money(input.desiredQuantity);
     if(desiredQuantity<200||desiredQuantity>5000)fail('Choose a preferred quantity between 200 and 5,000.');
-    if (!/^\d{5}$/.test(zip)) fail("Enter the mailing area's ZIP Code.", "invalid-argument");
+    if (!mailingPending && !/^\d{5}$/.test(zip)) fail("Enter the mailing area's ZIP Code.", "invalid-argument");
     let mapping = null;
     if (input.mappingCampaignId) { const c = await db.doc(`campaigns/${id(input.mappingCampaignId)}`).get(); if (!c.exists || c.data().businessId !== actor.uid || c.data().certificationFixture === true) fail("Choose your Business mailing area.", "permission-denied"); mapping = {campaignId: c.id, source: "Business-selected existing campaign area; USPS routes still require verification"}; }
-    const draftHash = hash({name,targetArea,zip,mapping,desiredQuantity,simulation:input.simulation === true});
+    const draftHash = hash({name,targetArea,zip,mapping,desiredQuantity,creationMode,simulation:input.simulation === true});
     const ref = orders.doc(orderId);
     await db.runTransaction(async tx => {
       const old = await tx.get(ref);
       if (old.exists) { if (old.data().draftHash !== draftHash) fail("This request already has different details."); return; }
       const at = FieldValue.serverTimestamp();
-      const order = {policy: POLICY, orderId, campaignId: orderId, businessId: actor.uid, name, targetArea, zip, mapping, desiredQuantity, draftHash, status: "DRAFT", mailingMethod: "eddm_retail", simulation: input.simulation === true, testMode: true, createdAt: at, updatedAt: at};
+      const order = {policy: POLICY, orderId, campaignId: orderId, businessId: actor.uid, name, targetArea, zip, mapping, desiredQuantity,creationMode,mailingPending,draftHash,status: "DRAFT", mailingMethod: "eddm_retail", simulation: input.simulation === true, testMode: true, createdAt: at, updatedAt: at};
       tx.create(ref, order);
       tx.create(db.doc(`campaigns/${orderId}`), {name, title:name, businessId: actor.uid, campaignType:"neighborhoodPostcards", distributionType:"directMail", status:"draft", postcardOrderId:orderId, targetArea, zip, sourceMapping:mapping, createdAt:at});
       audit(tx, order, actor, "created", "created");
     });
     return publicOrder((await ref.get()).data());
   }
+  async function mailing(input,actor){
+    const {ref,order}=await owned(input.orderId,actor);
+    const targetArea=label(input.targetArea),zip=String(input.zip||''),desiredQuantity=money(input.desiredQuantity);
+    if(!/^\d{5}$/.test(zip)||desiredQuantity<200||desiredQuantity>5000)fail('Choose a ZIP Code and preferred quantity from 200 to 5,000.','invalid-argument');
+    await db.runTransaction(async tx=>{const current=(await tx.get(ref)).data();if(current.status!=='DRAFT')fail('Mailing details are locked to the requested quote.');tx.update(ref,{targetArea,zip,desiredQuantity,mailingPending:false,updatedAt:FieldValue.serverTimestamp()});tx.update(db.doc(`campaigns/${order.campaignId}`),{targetArea,zip});});
+    return {orderId:ref.id,targetArea,zip,desiredQuantity,mailingPending:false};
+  }
   async function requestQuote(input, actor) {
     const {ref,order} = await owned(input.orderId, actor);
+    if(order.mailingPending||!order.targetArea||!/^\d{5}$/.test(order.zip||''))fail('Choose your mailing area and quantity before requesting a quote.');
     const [material, version, approval] = await Promise.all([db.doc(`marketingMaterials/${id(input.materialId)}`).get(), db.doc(`marketingMaterialVersions/${id(input.versionId)}`).get(), db.doc(`marketingMaterialApprovals/${id(input.versionId)}`).get()]);
     const v = version.data() || {}, m = material.data() || {};
     if (m.businessUid !== actor.uid || v.businessUid!==actor.uid || m.campaignId !== order.campaignId || m.approvedVersionId !== version.id || v.productSpecId !== "postcard_eddm_6x11" || v.materialId !== material.id || !approval.exists || approval.data().artifactId!==v.artifactId || approval.data().decision!=='approved' || !physical.versionOrderReady(v)) fail("Approve the exact EDDM-ready design before requesting a quote.");
@@ -122,6 +136,8 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
   }
   async function confirmQuote(input, actor) {
     const {ref,order} = await owned(input.orderId, actor, true);
+    const artifact=(await db.doc(`printReadyArtifacts/${id(order.artifactId)}`).get()).data();
+    if(artifact?.uploadPreflight && input.artworkReviewed!==true)fail('Review the uploaded original and final rendition for safe text placement, readable source images and an unobstructed mailing panel before confirming the quote.');
     const selection = routeSelection(input), amounts = quoteMath(input,selection.quantity);
     if (order.simulation ? input.simulationAcknowledged!==true : (input.uspsVerified !== true || input.mailpieceVerified !== true || input.costsConfirmed !== true)) fail("Confirm USPS route counts, physical stock eligibility and local costs, or explicitly acknowledge a software-only simulation.");
     if(order.simulation)selection.source='Software simulation — route counts and local costs are illustrative, not USPS/vendor verification';
@@ -230,7 +246,18 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
     if(order.refundEligibility==='full_refund_before_print'&&r.amount!==order.paidCents)fail("A full refund is required before print commitment.");
     await db.runTransaction(async tx=>{const receipt=db.doc(`postcardRefundReceipts/${ref.id}`);const [o,old]=await Promise.all([tx.get(ref),tx.get(receipt)]);if(old.exists){if(old.data().refundId!==r.id)fail("A different refund is already recorded.");return;}if(!['CANCEL_REQUESTED','REFUND_PENDING'].includes(o.data().status))fail("Refund state changed.");tx.create(receipt,{orderId:ref.id,refundId:r.id,paymentIntentId:r.payment_intent,amountCents:r.amount,reconciledAt:FieldValue.serverTimestamp()});tx.update(ref,{status:'REFUNDED',refundCents:r.amount,updatedAt:FieldValue.serverTimestamp()});audit(tx,order,actor,'refunded','refunded');});return {orderId:ref.id,status:'REFUNDED',refundCents:r.amount};
   }
-  async function artifact(input,actor) {const {order}=await owned(input.orderId,actor,input.admin===true);if(!order.storagePath)fail("Approve and prepare the print file first.");const [bytes]=await bucket().file(order.storagePath).download();if(physical.digest(bytes)!==order.artifactHash)fail("The print file integrity check failed.");return {base64:bytes.toString('base64'),sha256:crypto.createHash('sha256').update(bytes).digest('hex'),bindingHash:order.artifactHash,filename:'scaledcircle-neighborhood-mail.pdf'};}
+  async function artifact(input,actor) {
+    const {order}=await owned(input.orderId,actor,input.admin===true);
+    if(!order.storagePath)fail('Approve and prepare the print file first.');
+    if(input.originalIndex!=null){
+      actorCheck(actor,true);const v=(await db.doc(`marketingMaterialVersions/${id(order.versionId)}`).get()).data();
+      if(!Number.isInteger(input.originalIndex)||input.originalIndex<0)fail('Choose an original artwork file.');
+      const source=v?.artworkSnapshot?.originals?.[input.originalIndex];if(!source)fail('This version has no such original artwork file.');
+      const [bytes]=await bucket().file(source.storagePath).download();const sha=crypto.createHash('sha256').update(bytes).digest('hex');if(sha!==source.sha256)fail('Original artwork integrity check failed.');
+      return {base64:bytes.toString('base64'),sha256:sha,contentType:source.contentType,filename:`original-artwork-${input.originalIndex+1}.${source.contentType==='application/pdf'?'pdf':source.contentType==='image/png'?'png':'jpg'}`};
+    }
+    const [bytes]=await bucket().file(order.storagePath).download();if(physical.digest(bytes)!==order.artifactHash)fail('The print file integrity check failed.');return {base64:bytes.toString('base64'),sha256:crypto.createHash('sha256').update(bytes).digest('hex'),bindingHash:order.artifactHash,filename:'scaledcircle-neighborhood-mail.pdf'};
+  }
   async function sweep() {
     enabled();
     const pending=await orders.where('status','in',['PAYMENT_PENDING','PAYMENT_HOLD']).limit(25).get();
@@ -238,6 +265,6 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
     for(const doc of pending.docs){if(!doc.data().checkoutSessionId)continue;try{results.push(await reconcile({orderId:doc.id,admin:true},{uid:'postcard-test-reconciler',isAdmin:true}));}catch(_){results.push({orderId:doc.id,status:'RECONCILIATION_HOLD'});}}
     return results;
   }
-  return {workspace,create,requestQuote,confirmQuote,checkout,reconcile,evidence,advance,costs,cancel,refund,artifact,sweep};
+  return {workspace,create,mailing,requestQuote,confirmQuote,checkout,reconcile,evidence,advance,costs,cancel,refund,artifact,sweep};
 }
-module.exports={POLICY,USPS_REFERENCE,CUSTOMER_STATUS,STEPS,routeSelection,quoteMath,createPostcardService};
+module.exports={POLICY,FEE_POLICY,USPS_REFERENCE,CUSTOMER_STATUS,STEPS,routeSelection,quoteMath,createPostcardService};

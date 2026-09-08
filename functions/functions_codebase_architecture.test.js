@@ -418,7 +418,7 @@ test("creative-media-core exclusively owns private Business media processing", (
 
 test("physical-marketing-core owns immutable print and separately gated TEST postcard authority", () => {
   const names = [
-  "reconcilePendingPostcardTestPaymentsV1", "getPostcardWorkspaceV1", "createPostcardCampaignV1", "requestPostcardQuoteV1", "confirmPostcardQuoteV1", "createPostcardCheckoutV1", "reconcilePostcardPaymentV1", "recordPostcardEvidenceV1", "advancePostcardFulfillmentV1", "recordPostcardCostsV1", "requestPostcardCancellationV1", "reconcilePostcardRefundV1", "downloadPostcardArtifactV1",
+  "reconcilePendingPostcardTestPaymentsV1", "getPostcardWorkspaceV1", "createPostcardCampaignV1", "updatePostcardMailingV1", "requestPostcardQuoteV1", "confirmPostcardQuoteV1", "createPostcardCheckoutV1", "reconcilePostcardPaymentV1", "recordPostcardEvidenceV1", "advancePostcardFulfillmentV1", "recordPostcardCostsV1", "requestPostcardCancellationV1", "reconcilePostcardRefundV1", "downloadPostcardArtifactV1",
 "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
     "preparePhysicalMarketingVersion", "approvePhysicalMarketingVersion",
     "getPhysicalMarketingOperations"];
@@ -429,7 +429,7 @@ test("physical-marketing-core owns immutable print and separately gated TEST pos
     assert.doesNotMatch(creativeMediaCore, new RegExp(`exports\\.${name}\\s*=`));
   }
   assert.deepEqual(Object.keys(physicalMarketingPackage.dependencies).sort(), [
-    "@fontsource/roboto", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
+    "@fontsource/roboto", "@hyzyla/pdfium", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
     "pdf-lib", "qrcode", "sharp", "stripe",
   ]);
   for (const forbidden of ["STRIPE_SECRET_KEY", "OPENAI_API_KEY", "SMTP_PASSWORD",
@@ -708,7 +708,7 @@ test("generated codebase preparation installs dependencies after regeneration", 
     "firebase-admin", "firebase-functions",
   ]);
   assert.deepEqual(Object.keys(physicalMarketingPackage.dependencies).sort(), [
-    "@fontsource/roboto", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
+    "@fontsource/roboto", "@hyzyla/pdfium", "@pdf-lib/fontkit", "firebase-admin", "firebase-functions",
     "pdf-lib", "qrcode", "sharp", "stripe",
   ]);
   const preparation = fs.readFileSync(

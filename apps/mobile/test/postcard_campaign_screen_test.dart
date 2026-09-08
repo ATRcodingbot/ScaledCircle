@@ -64,51 +64,6 @@ Future<void> screen(
 
 void main() {
   testWidgets(
-    'draft form sends intended values and explicit simulation choice exactly once',
-    (tester) async {
-      final gateway = Gateway([]);
-      await screen(tester, gateway);
-      await tester.tap(find.text('Create Postcard Campaign'));
-      await tester.pumpAndSettle();
-      final fields = find.byType(TextField);
-      await tester.enterText(fields.at(0), 'Software certification');
-      await tester.enterText(fields.at(1), 'Illustrative mailing area');
-      await tester.enterText(fields.at(2), '21061');
-      await tester.enterText(fields.at(3), '200');
-      expect(
-        tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
-        false,
-      );
-      await tester.ensureVisible(find.byType(CheckboxListTile));
-      await tester.tap(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Create campaign'));
-      await tester.pumpAndSettle();
-      expect(gateway.calls.where((a) => a == 'create').length, 1);
-      final payload = gateway.payloads[gateway.calls.indexOf('create')];
-      expect(payload, containsPair('name', 'Software certification'));
-      expect(payload, containsPair('targetArea', 'Illustrative mailing area'));
-      expect(payload, containsPair('zip', '21061'));
-      expect(payload, containsPair('desiredQuantity', 200));
-      expect(payload, containsPair('simulation', true));
-    },
-  );
-  testWidgets('quiet status refresh does not erase a failed action message', (
-    tester,
-  ) async {
-    final gateway = Gateway([])..failCreate = true;
-    await screen(tester, gateway);
-    await tester.tap(find.text('Create Postcard Campaign'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Create campaign'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Create unavailable'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 31));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Create unavailable'), findsOneWidget);
-    expect(gateway.calls.where((a) => a == 'create').length, 1);
-  });
-  testWidgets(
     'Business sees clear quote, no vendor operations, and payment requires explicit acceptance',
     (tester) async {
       final gateway = Gateway([order('QUOTED')]);

@@ -16,8 +16,8 @@ test('complete route quantities are bounded and duplicate route credit is reject
   for(const input of [[],[...routes,...routes],[{...routes[0],quantity:199}],[{...routes[0],quantity:5001}],[{...routes[0],route:'made-up'}],[{...routes[0],quantity:200.5}]]) assert.throws(()=>routeSelection({routes:input}));
 });
 test('quote preserves USPS pass-through, variable local costs, explicit fee and margin',()=>{
-  const q={printingCents:9000,postageCents:5200,fulfillmentCents:2500,taxCents:0,printCostCents:8000,postageCostCents:5200,handlingCostCents:1000,postageRateCents:26};
-  const math=quoteMath(q,200);assert.equal(math.customer.totalCents,16700);assert.equal(math.internal.estimatedGrossMarginCents,2500);
+  const q={printingCents:9000,postageCents:5200,taxCents:0,printCostCents:8000,postageCostCents:5200,handlingCostCents:1000,postageRateCents:26};
+  const math=quoteMath(q,200);assert.equal(math.customer.totalCents,17040);assert.equal(math.internal.estimatedGrossMarginCents,2840);
   for(const x of [{postageCents:5300},{postageCostCents:5000},{printingCents:0},{taxCents:-1},{postageRateCents:0}])assert.throws(()=>quoteMath({...q,...x},200));
   assert.equal(quoteMath({...q,postageRateCents:27,postageCents:5400,postageCostCents:5400},200).customer.postageCents,5400,'future verified rates do not require source edits');
 });

@@ -11,10 +11,10 @@ Software certification orders have an immutable simulation marker. Quotes, fulfi
 ## Business flow
 
 1. Business Services → Neighborhood Postcards → Create Postcard Campaign.
-2. Enter campaign name, neighborhood, ZIP and preferred quantity. Final quantity must match complete USPS carrier routes confirmed by Admin.
-3. Select existing Business services, a published Landing Page and an approved Brand Asset, or a text layout. New uploaded artwork first goes through the maintained Brand Assets approval flow.
-4. Prepare and inspect both proof sides. Explicitly approve the immutable design/version before requesting a quote.
-5. Review printing, pass-through postage, ScaledCircle fulfillment and tax, the complete routes, quantity, estimated mailing window and cancellation policy. Intentionally accept the exact design and quote before TEST Checkout.
+2. Choose **Use My Design**, **Customize a Template**, or **Create It For Me**. The guided steps are Message → Image → Contact Method → QR/Destination → Preview → Mailing Area → Quantity → Quote → Pay.
+3. Templates and assisted starting copy use the Business's approved service information. Edit the name, headline, offer/message, service, CTA, contact and destination. Optional customization controls the approved logo and colors. Choose an approved photo/brand asset, use the maintained generated-service-image workflow, or choose no photo. Generated concepts retain an illustrative-image disclosure; generating a picture does not establish that the Business completed a project.
+4. Inspect useful FRONT/BACK previews and explicitly approve the immutable version. Then choose neighborhood, ZIP and preferred quantity. Final quantity must match complete USPS carrier routes confirmed by Admin. Requesting a quote does not charge the customer.
+5. Review printing, actual USPS postage, the 20% ScaledCircle Fulfillment & Creative fee and tax, complete routes, quantity, estimated mailing window and cancellation policy. Intentionally accept the exact design and quote before TEST Checkout.
 6. Server reconciliation confirms the existing provider payment. Status updates automatically at a bounded 30-second cadence. No payment is fabricated from the browser return URL.
 
 The service creates a canonical postcard campaign and binds the approved material, version, print artifact and existing response asset. An optional owned mapping-campaign reference is supported by the server; the current area form uses neighborhood and ZIP. It does not claim polygon-based USPS route selection. Targeted individual-address mail is outside V1.
@@ -45,11 +45,23 @@ The maintained print architecture generates two CMYK PDF pages with embedded fon
 
 The download verifies the maintained artifact binding hash and separately reports the raw file SHA-256. Those are distinct digests. Do not relabel the legacy serialized-buffer binding hash as a raw-file digest.
 
-The QR resolves through the existing response asset to the Business's published Landing Page. Campaign attribution remains linked. No response, delivery, conversion or ROI is inferred merely from printing, mailing or a simulation.
+QR is recommended and optional. When enabled, the response asset binds the immutable postcard version to a published owned Landing Page or explicitly approved HTTPS Business destination. Turning QR off does not prevent print approval. Customers can print their exact approved Business phone without claiming call attribution, or use an already-authorized active tracking number bound to the same campaign. This flow does not purchase/rebind numbers. No response, delivery, conversion or ROI is inferred merely from printing, mailing or a simulation.
+
+Image choices use the maintained Brand Assets workflow. New service-image generation remains subject to its existing capability and usage authority; choosing the postcard option does not enable generation or grant additional capacity. Approved generated assets can be reused with an illustrative-concept disclosure. Customer photo selection and generated imagery retain distinct provenance. A disabled generation service or unavailable campaign-bound phone is shown as unavailable, never represented as an executed provider action.
+
+### Customer artwork
+
+Web uploads accept one front or two front/back pages in PDF, PNG or JPG, at most two files totaling 8 MB. Native image selection supports a single PNG/JPG front; the UI directs PDF/front-back users to the website. Source originals and normalized print renditions are separate private, immutable records with raw SHA-256 integrity checks.
+
+Preflight rejects corrupt/encrypted/interactive PDFs, wrong page dimensions/orientation, excess pages, low-resolution raster images and artwork intruding into the reserved back mailing panel. The format is 11.25 × 6.25 inches including bleed; raster originals need at least 3375 × 1875 pixels. No silent stretching or cropping is used. PDFs render in an isolated maintained PDFium runtime. Rendering at 300 dpi does **not** certify the effective resolution of every embedded source image; Admin must inspect source quality and safe-area placement before quoting. Both originals and final files are available to that review.
+
+A front-only upload gets a generated contact/QR back. A two-sided upload can explicitly use that generated back or retain its fixed back artwork. Fixed uploaded backs do not receive newly claimed phone/QR attribution. Their original contact/QR artwork remains customer-supplied, and the reserved postal panel is normalized in the separately approved final rendition.
 
 ## Money, cancellation and notifications
 
-Final quotes expire after 48 hours and bind the route selection, quantity and exact approved artifact. Printing plus service revenue must cover confirmed print/handling estimates. Customer postage is exact pass-through; taxes are separately identified and require appropriate operational confirmation.
+Final quotes expire after 48 hours and bind the route selection, quantity and exact approved artifact. **PostcardFulfillmentCreative20V1** calculates the fee server-side: 20% of the customer printing line plus actual USPS postage, excluding tax, rounded to the nearest cent (half up), with no minimum. A client/Admin-supplied fee override that differs is rejected. Printing plus service revenue must cover confirmed print/handling estimates. Customer postage is exact pass-through; taxes are separately identified and require appropriate operational confirmation.
+
+Arithmetic example only: printing $90 + actual postage $52 = eligible subtotal $142; fee $28.40; pre-tax total $170.40. This is not an offered printer/postage quote. Private records retain vendor cost, actual postage, fee revenue, handling/tax inputs and margin. Existing approved/paid quotes are not silently repriced.
 
 Checkout creation has a deterministic provider idempotency key. An ambiguous create enters a hold; it never blindly creates another session. Reconciliation retrieves the existing Stripe TEST session/payment intent, validates exact identity, amount and successful provider state, then writes one durable payment receipt. A staging-only scheduler checks outstanding known sessions every five minutes.
 

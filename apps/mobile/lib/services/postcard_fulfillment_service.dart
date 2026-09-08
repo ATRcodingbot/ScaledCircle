@@ -12,6 +12,8 @@ class PostcardFulfillmentService implements PostcardGateway {
   static const endpoints = {
     'workspace': 'getPostcardWorkspaceV1',
     'create': 'createPostcardCampaignV1',
+    'mailing': 'updatePostcardMailingV1',
+    'uploadArtwork': 'mutatePhysicalMarketingMaterial',
     'requestQuote': 'requestPostcardQuoteV1',
     'confirmQuote': 'confirmPostcardQuoteV1',
     'checkout': 'createPostcardCheckoutV1',
@@ -28,6 +30,19 @@ class PostcardFulfillmentService implements PostcardGateway {
     String action,
     Map<String, dynamic> data,
   ) async => Map<String, dynamic>.from(
-    (await _functions.httpsCallable(endpoints[action]!).call(data)).data as Map,
+    (await _functions
+                .httpsCallable(
+                  endpoints[action]!,
+                  options: HttpsCallableOptions(
+                    timeout: const Duration(seconds: 120),
+                  ),
+                )
+                .call({
+                  if (action == 'uploadArtwork')
+                    'action': 'upload_postcard_artwork',
+                  ...data,
+                }))
+            .data
+        as Map,
   );
 }

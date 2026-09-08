@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'postcard_creation_screen.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -168,196 +169,30 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
     return result;
   }
 
-  Future<void> _create() async {
-    final values = await _form(
-      'Create Postcard Campaign',
-      {
-        'Campaign name': '',
-        'Neighborhood / mailing area': '',
-        'ZIP Code': '',
-        'Preferred quantity (200–5000; final complete routes confirmed in quote)':
-            '200',
-      },
-      optionalAcknowledgment:
-          'Software certification only — no physical printing or mailing.',
-      button: 'Create campaign',
-    );
-    if (values == null) return;
-    await _run(() async {
-      await _service.call('create', {
-        'requestId': 'postcard_${DateTime.now().microsecondsSinceEpoch}',
-        'name': values['Campaign name'],
-        'targetArea': values['Neighborhood / mailing area'],
-        'zip': values['ZIP Code'],
-        'desiredQuantity': int.tryParse(
-          values['Preferred quantity (200–5000; final complete routes confirmed in quote)'] ??
-              '',
-        ),
-        'simulation': values['_optional'] == 'true',
-      });
-    });
-  }
+  Future<void> _create() => _design(null);
 
-  Future<void> _design(Map<String, dynamic> order) async {
-    final physical = _map(_data?['physical']),
-        services = (physical['availableServices'] as List? ?? [])
-            .cast<String>(),
-        pages = _list(physical['landingPages']);
-    if (services.isEmpty || pages.isEmpty) {
-      setState(
-        () => _error =
-            'Add your Business services and publish a Landing Page in Grow before preparing your postcard.',
-      );
-      return;
-    }
-    final media = _list(physical['approvedMedia']);
-    var service = services.first,
-        pageId = pages.first['landingPageId'].toString();
-    String? assetId;
-    final headline = TextEditingController(),
-        supporting = TextEditingController(),
-        cta = TextEditingController(text: 'Scan to learn more');
-    final designRoute = DialogRoute<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, local) => AlertDialog(
-          title: const Text('Create your postcard'),
-          content: SizedBox(
-            width: 560,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'A two-sided 6 × 11 mailpiece, prepared for neighborhood mailing. Choose an approved Brand Asset or use a clean text layout. Upload new artwork through Brand Assets first.',
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: service,
-                    decoration: const InputDecoration(
-                      labelText: 'Business service',
-                    ),
-                    items: services
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
-                    onChanged: (v) => local(() => service = v!),
-                  ),
-                  DropdownButtonFormField<String>(
-                    initialValue: pageId,
-                    decoration: const InputDecoration(
-                      labelText: 'Landing Page / QR destination',
-                    ),
-                    items: pages
-                        .map(
-                          (p) => DropdownMenuItem(
-                            value: p['landingPageId'].toString(),
-                            child: Text(
-                              RegExp(
-                                    r'^[A-Z0-9]{20,}$',
-                                  ).hasMatch(p['title'].toString())
-                                  ? 'Published Business page'
-                                  : p['title'].toString(),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => local(() => pageId = v!),
-                  ),
-                  DropdownButtonFormField<String>(
-                    initialValue: '',
-                    decoration: const InputDecoration(
-                      labelText: 'Approved image',
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('Text layout'),
-                      ),
-                      ...media.map(
-                        (m) => DropdownMenuItem(
-                          value: m['assetId'].toString(),
-                          child: Text(m['title'].toString()),
-                        ),
-                      ),
-                    ],
-                    onChanged: (v) => local(() => assetId = v),
-                  ),
-                  TextField(
-                    controller: headline,
-                    maxLength: 90,
-                    decoration: const InputDecoration(labelText: 'Headline'),
-                  ),
-                  TextField(
-                    controller: supporting,
-                    maxLength: 180,
-                    decoration: const InputDecoration(
-                      labelText: 'Supporting text / approved offer',
-                    ),
-                  ),
-                  TextField(
-                    controller: cta,
-                    maxLength: 80,
-                    decoration: const InputDecoration(
-                      labelText: 'Call to action',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Back'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Prepare design'),
-            ),
-          ],
+  Future<void> _design(Map<String, dynamic>? order) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<bool>(
+        builder: (_) => PostcardCreationScreen(
+          service: _service,
+          physical: _physical,
+          workspace: _map(_data?['physical']),
+          order: order,
         ),
       ),
     );
-    final accepted = await Navigator.of(
-      context,
-      rootNavigator: true,
-    ).push(designRoute);
-    await designRoute.completed;
-    if (accepted == true) {
-      await _run(() async {
-        final selected = media
-            .where((m) => m['assetId'] == assetId)
-            .firstOrNull;
-        final created = await _physical.create(
-          requestId: 'design_${DateTime.now().microsecondsSinceEpoch}',
-          draft: {
-            'campaignId': order['campaignId'],
-            'landingPageId': pageId,
-            'productSpecId': 'postcard_eddm_6x11',
-            'sideCount': 2,
-            'service': service,
-            'headline': headline.text,
-            'offer': supporting.text,
-            'cta': cta.text,
-            if (selected != null)
-              'media': {
-                'assetId': selected['assetId'],
-                'revisionId': selected['revisionId'],
-              },
-          },
-        );
-        await _physical.prepare(created['materialId'].toString());
-      });
-    }
-    headline.dispose();
-    supporting.dispose();
-    cta.dispose();
+    await _load();
   }
 
   Future<void> _approveDesign(
     Map<String, dynamic> order,
     Map<String, dynamic> material,
   ) async {
+    if (order['mailingPending'] == true) {
+      await _design(order);
+      return;
+    }
     final version = _map(material['version']),
         artifact = _map(version['artifact']);
     var checked = false;
@@ -465,7 +300,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
 
   Future<void> _quote(Map<String, dynamic> order) async {
     final v = await _form(
-      'Confirm fulfillment quote',
+      'Confirm quote · Fulfillment & Creative is automatically 20% of printing + postage',
       {
         'USPS routes (ZIP, route, count, residential/all)': '',
         'Printer / vendor': '',
@@ -475,7 +310,6 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
         'Actual estimated print cost incl vendor tax (USD)': '',
         'Confirmed USPS rate per piece (USD)': '',
         'Postage total (USD)': '',
-        'ScaledCircle fulfillment (USD)': '',
         'Estimated handling cost (USD)': '0',
         'Customer tax (USD)': '0',
         'Stock thickness (inches)': '',
@@ -484,8 +318,8 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
         'Estimated mailing window': '',
       },
       acknowledgment: order['simulation'] == true
-          ? 'This is a software simulation. Counts, stock and local costs are illustrative; no USPS route verification, printer quote or physical mailing is claimed.'
-          : 'I checked current USPS rates, complete route counts, exclusions and daily ZIP limits; the physical stock is flexible, uniformly thick and eligible; print and handling costs are confirmed. No mailing date is guaranteed.',
+          ? 'I reviewed uploaded originals and final print files for image quality, safe text placement and clear mailing panel. This is a software simulation. Counts, stock and local costs are illustrative; no USPS route verification, printer quote or physical mailing is claimed.'
+          : 'I reviewed uploaded originals and final print files for image quality, safe text placement and clear mailing panel. I checked current USPS rates, complete route counts, exclusions and daily ZIP limits; the physical stock is flexible, uniformly thick and eligible; print and handling costs are confirmed. No mailing date is guaranteed.',
       button: 'Confirm final quote',
     );
     if (v == null) return;
@@ -510,6 +344,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
           .toList();
       await _service.call('confirmQuote', {
         'orderId': order['orderId'],
+        'artworkReviewed': true,
         'routes': routes,
         'vendor': v['Printer / vendor'],
         'printSpecification': v['Print specification'],
@@ -522,7 +357,6 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
         'postageRateCents': _cents(v['Confirmed USPS rate per piece (USD)']),
         'postageCents': _cents(v['Postage total (USD)']),
         'postageCostCents': _cents(v['Postage total (USD)']),
-        'fulfillmentCents': _cents(v['ScaledCircle fulfillment (USD)']),
         'handlingCostCents': _cents(v['Estimated handling cost (USD)']),
         'taxCents': _cents(v['Customer tax (USD)']),
         'stockThicknessInches': double.parse(v['Stock thickness (inches)']!),
@@ -566,15 +400,19 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
     });
   }
 
-  Future<void> _download(Map<String, dynamic> order) async => _run(() async {
+  Future<void> _download(
+    Map<String, dynamic> order, {
+    int? originalIndex,
+  }) async => _run(() async {
     final result = await _service.call('artifact', {
       'orderId': order['orderId'],
       'admin': widget.admin,
+      'originalIndex': ?originalIndex,
     });
     await downloadBinaryArtifact(
       filename: result['filename'].toString(),
       bytes: base64Decode(result['base64'].toString()),
-      mimeType: 'application/pdf',
+      mimeType: result['contentType']?.toString() ?? 'application/pdf',
     );
   });
   Future<void> _uploadEvidence(Map<String, dynamic> order) async {
@@ -712,7 +550,11 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
             Text(order['customerStatus']?.toString() ?? status),
             if (order['simulation'] == true)
               const Text('TEST simulation — no physical printing or mailing'),
-            Text('${order['targetArea']} · ${order['zip']}'),
+            Text(
+              order['mailingPending'] == true
+                  ? 'Mailing area chosen after design approval'
+                  : '${order['targetArea']} · ${order['zip']}',
+            ),
             if (q.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text('${q['quantity']} pieces · ${q['estimate']}'),
@@ -721,7 +563,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
                   '${route['zip']} ${route['route']} · ${route['quantity']} ${route['delivery'] == 'residential' ? 'residential addresses' : 'addresses'}',
                 ),
               Text(
-                'Printing ${_money(q['printingCents'])} · Postage ${_money(q['postageCents'])} · Fulfillment ${_money(q['fulfillmentCents'])} · Tax ${_money(q['taxCents'])}',
+                'Printing: ${_money(q['printingCents'])}\nUSPS Postage: ${_money(q['postageCents'])}\nScaledCircle Fulfillment & Creative${q['feePolicy'] != null ? ' (20%)' : ''}: ${_money(q['fulfillmentCents'])}\nTax: ${_money(q['taxCents'])}',
               ),
               Text(
                 'Total ${_money(q['totalCents'])}',
@@ -739,6 +581,22 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
               ),
             if (widget.admin) ...[
               const Divider(),
+              if (order['uploadReview'] != null)
+                const Text(
+                  'Uploaded artwork: review original image quality, safe text placement and the final mailing panel before quoting.',
+                ),
+              for (final source in _list(order['uploadSources']))
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => _download(
+                          order,
+                          originalIndex: source['index'] as int,
+                        ),
+                  child: Text(
+                    'Download original artwork ${(source['index'] as int) + 1}',
+                  ),
+                ),
               Text(
                 'Business: ${order['businessName'] ?? 'Business workspace'}',
               ),

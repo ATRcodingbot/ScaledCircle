@@ -139,7 +139,7 @@ const creativeMediaExports = new Set([
 ]);
 const physicalMarketingExports = new Set([
   "reconcilePendingPostcardTestPaymentsV1",
-  "getPostcardWorkspaceV1", "createPostcardCampaignV1", "requestPostcardQuoteV1", "confirmPostcardQuoteV1",
+  "getPostcardWorkspaceV1", "createPostcardCampaignV1", "updatePostcardMailingV1", "requestPostcardQuoteV1", "confirmPostcardQuoteV1",
   "createPostcardCheckoutV1", "reconcilePostcardPaymentV1", "recordPostcardEvidenceV1", "advancePostcardFulfillmentV1",
   "recordPostcardCostsV1", "requestPostcardCancellationV1", "reconcilePostcardRefundV1", "downloadPostcardArtifactV1",
   "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
@@ -383,9 +383,9 @@ function copyPackage(destination, mode) {
     if (mode === "application" && name.endsWith(".js") &&
         !["legal_consent.js", "tracking_security.js", "operational_layer.js"].includes(name)) continue;
     if (mode === "physical-marketing" && name.endsWith(".js") &&
-        !["physical_marketing.js", "physical_fulfillment_providers.js", "postcard_fulfillment.js",
+        !["physical_marketing.js", "physical_fulfillment_providers.js", "postcard_fulfillment.js", "postcard_artwork.js",
           "attribution_foundation.js"].includes(name)) continue;
-    if (mode !== "physical-marketing" && name === "postcard_fulfillment.js") continue;
+    if (mode !== "physical-marketing" && ["postcard_fulfillment.js", "postcard_artwork.js"].includes(name)) continue;
     if (mode === "business-profile" && name.endsWith(".js") &&
         !["managed_growth_profile.js", "subscription_entitlements.js"].includes(name)) continue;
     if (!["attribution", "physical-marketing"].includes(mode) &&
@@ -464,7 +464,7 @@ function writePackageManifest(mode, destination) {
         ? ["firebase-admin", "firebase-functions", "openai", "sharp"]
       : mode === "physical-marketing"
         ? ["firebase-admin", "firebase-functions", "sharp", "pdf-lib", "qrcode",
-          "@pdf-lib/fontkit", "@fontsource/roboto", "stripe"]
+          "@pdf-lib/fontkit", "@fontsource/roboto", "stripe", "@hyzyla/pdfium"]
       : mode === "business-profile"
         ? ["firebase-admin", "firebase-functions"]
       : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];

@@ -228,6 +228,8 @@ function suggestedCopy(service) {
 
 function normalizeDraft(input = {}) {
   const spec = productSpec(input.productSpecId);
+  const postcard=spec.mailingMethod==='eddm_retail';
+  const qrEnabled=!postcard||input.qrEnabled!==false;
   const sideCount = Number(input.sideCount || spec.defaultSides);
   if (!spec.sides.includes(sideCount)) throw new Error("physical_side_count_invalid");
   const media = input.media && typeof input.media === "object" ? {
@@ -242,7 +244,11 @@ function normalizeDraft(input = {}) {
     offer: text(input.offer, 180),
     cta: requiredText(input.cta || "Learn more", 50, "physical_cta_required"),
     includeBusinessPhone: input.includeBusinessPhone === true,
-    landingPageId: requiredText(input.landingPageId, 160, "physical_landing_page_required"),
+    landingPageId: postcard ? text(input.landingPageId,160)||null : requiredText(input.landingPageId, 160, "physical_landing_page_required"),
+    ...(postcard?{qrEnabled,destinationUrl:text(input.destinationUrl,1000)||null,responseDestinationId:text(input.responseDestinationId,160)||null,
+      businessPhone:text(input.businessPhone,40)||null,website:text(input.website,200)||null,
+      displayBusinessName:text(input.displayBusinessName,120)||null,includeLogo:input.includeLogo!==false,
+      artworkUploadId:text(input.artworkUploadId,160)||null,replaceUploadedBack:input.replaceUploadedBack===true,creationMode:['upload','assisted','template'].includes(input.creationMode)?input.creationMode:'template'}:{}),
     trackingPhoneAssetId: text(input.trackingPhoneAssetId, 160) || null,
     media: media?.assetId && media?.revisionId ? media : null,
     templateId: templateSpec(input.templateId ||
@@ -648,9 +654,9 @@ async function renderDoorHangerPrintMaster({version, trackedUrl, mediaBuffer, lo
       colorContrastRatio: readableColor(primaryHex).ratio}};
 }
 
-async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer}) {
+async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer,artworkPages}) {
   const spec = productSpec(version.productSpecId);
-  if (spec.mailingMethod === "eddm_retail") return renderEddmPrintMaster({version, trackedUrl, mediaBuffer});
+  if (spec.mailingMethod === "eddm_retail") return renderEddmPrintMaster({version, trackedUrl, mediaBuffer,logoBuffer,artworkPages});
   if (spec.productType === "door_hanger") return renderDoorHangerPrintMaster({version, trackedUrl,
     mediaBuffer, logoBuffer});
   const draft = version.content;
@@ -745,7 +751,7 @@ async function renderPrintMaster({version, trackedUrl, mediaBuffer, logoBuffer})
       effectiveRasterDpi: normalizedMedia?.effectiveDpi || null, vectorOnly: !normalizedMedia}};
 }
 
-async function renderEddmPrintMaster({version, trackedUrl, mediaBuffer}) {
+async function renderEddmPrintMaster({version, trackedUrl, mediaBuffer,logoBuffer,artworkPages=[]}) {
   const spec = productSpec(version.productSpecId), draft = version.content;
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
@@ -757,9 +763,24 @@ async function renderEddmPrintMaster({version, trackedUrl, mediaBuffer}) {
   addPdfXMetadata(pdf,await cmykOutputProfile());
   const bleed=9,width=810,height=450,left=27,top=423,bottom=27;
   const brand=version.brandSnapshot?.businessName || "";
-  const media=await normalizePlacedImage(mediaBuffer,{widthInches:4.8,heightInches:4.8});
+  // Postcard photos are contained, never cropped. Choose a useful physical size
+  // supported by the source pixels instead of stretching every image to 4.8 in.
+  let media=null;
+  if(mediaBuffer){
+    const source=sharp(mediaBuffer,{failOn:'error',limitInputPixels:40000000}).rotate();
+    const {data,info}=await source.toBuffer({resolveWithObject:true});
+    const widthInches=Math.min(4.8,info.width/MIN_EFFECTIVE_DPI,4.8*info.width/info.height);
+    const heightInches=widthInches*info.height/info.width;
+    if(widthInches<2||heightInches<1)throw new Error('physical_media_resolution_low');
+    const image=sharp(data);media={widthInches,heightInches,effectiveDpi:Math.floor(info.width/widthInches),
+      cmykJpeg:await image.clone().toColourspace('cmyk').jpeg({quality:96,chromaSubsampling:'4:4:4'}).withIccProfile('cmyk').toBuffer(),
+      proof:await image.clone().jpeg({quality:94}).toBuffer()};
+  }
   const img=media?await pdf.embedJpg(media.cmykJpeg):null;
-  const qr=qrMatrix(trackedUrl), primary=hexToCmyk(draft.primaryColor),dark=cmyk(0,0,0,1);
+  const qr=draft.qrEnabled===false?null:qrMatrix(trackedUrl), primary=hexToCmyk(draft.primaryColor),dark=cmyk(0,0,0,1);
+  const phone=version.trackingPhoneSnapshot?.displayNumber||version.brandSnapshot?.phone||null;
+  const logo=logoBuffer?await normalizeLogo(logoBuffer):null;
+  const logoImage=logo?await pdf.embedJpg(logo.cmykJpeg):null;
   const readable=readableColor(draft.primaryColor),ink=hexToCmyk(readable.hex);
   const white=cmyk(0,0,0,0),black=cmyk(0,0,0,1), proofs=[],pages=[],sideEvidence=[];
   const indicia=["PRSRT STD","ECRWSS","U.S. POSTAGE","PAID","EDDM RETAIL"];
@@ -772,19 +793,29 @@ async function renderEddmPrintMaster({version, trackedUrl, mediaBuffer}) {
       if(lines.length>5)throw new Error("physical_copy_does_not_fit");
       for(const line of lines){page.drawText(line,{x,y,size,font,color});svg+=`<text x="${x}" y="${height-y}" font-size="${size}" font-family="Arial,sans-serif" font-weight="${font===bold?700:400}" fill="${svgColor}">${xml(line)}</text>`;y-=size*1.25;}return y;
     };
-    if(side===1) {
-      let y=draw(brand,left,top-12,14,bold,ink,readable.hex,740)-26;
+    const artwork=artworkPages[side-1];
+    if(artwork){
+      const jpeg=await sharp(artwork).withIccProfile('cmyk').jpeg({quality:100,chromaSubsampling:'4:4:4'}).toBuffer();
+      const uploaded=await pdf.embedJpg(jpeg);page.drawImage(uploaded,{x:0,y:0,width,height});
+      svg+=`<image href="data:image/png;base64,${artwork.toString('base64')}" x="0" y="0" width="810" height="450"/>`;
+    }
+    if(side===1 && !artwork) {
+      let y=draw(brand,logoImage?110:left,top-12,14,bold,ink,readable.hex,logoImage?630:740)-26;
+      if(logoImage){const box=fittedImageBox(logoImage,65,32,left+32.5,top-14);page.drawImage(logoImage,box);svg+=`<image href="data:image/jpeg;base64,${logo.proof.toString('base64')}" x="${box.x}" y="${height-box.y-box.height}" width="${box.width}" height="${box.height}"/>`;}
       y=draw(draft.headline,left,y,img?29:44,bold,ink,readable.hex,img?365:570)-20;
       y=draw(draft.offer||customerServiceLanguage(draft.service).noun,left,y,16,regular,ink,readable.hex,img?365:710);
       if(y<90)throw new Error("physical_copy_does_not_fit");
       draw(draft.cta,left,55,16,bold,ink,readable.hex,740);
-      if(img){const box=fittedImageBox(img,345,345,600,240);page.drawImage(img,box);svg+=`<image href="data:image/jpeg;base64,${media.proof.toString('base64')}" x="${box.x}" y="${height-box.y-box.height}" width="${box.width}" height="${box.height}"/>`;}
-    } else {
-      draw(brand,left,top-18,22,bold,dark,draft.secondaryColor,420);
-      draw(draft.cta,left,top-80,22,bold,dark,draft.secondaryColor,420);
-      const q=drawQr(page,qr,left,75,108);sideEvidence.push({side,qr:q});svg+=svgQr(qr,left,height-75-108,108);
-      draw('Scan to learn more',left,51,11,regular,dark,draft.secondaryColor,420);
-      if(draft.phone)draw(draft.phone,160,105,14,bold,dark,draft.secondaryColor,275);
+      if(img){const box=fittedImageBox(img,media.widthInches*72,media.heightInches*72,600,240);page.drawImage(img,box);svg+=`<image href="data:image/jpeg;base64,${media.proof.toString('base64')}" x="${box.x}" y="${height-box.y-box.height}" width="${box.width}" height="${box.height}"/>`;}
+    } else if(side===2) {
+      if(!artwork){
+        draw(brand,left,top-18,22,bold,dark,draft.secondaryColor,420);
+        draw(draft.cta,left,top-80,22,bold,dark,draft.secondaryColor,420);
+        if(qr){const q=drawQr(page,qr,left,75,108);sideEvidence.push({side,qr:q});svg+=svgQr(qr,left,height-75-108,108);draw('Scan to learn more',left,51,11,regular,dark,draft.secondaryColor,420);}
+        if(phone)draw(phone,qr?160:left,150,14,bold,dark,draft.secondaryColor,qr?275:420);
+        if(draft.website)draw(draft.website,qr?160:left,112,11,regular,dark,draft.secondaryColor,qr?275:420);
+      }
+      page.drawRectangle({x:495,y:18,width:297,height:405,color:white});svg+='<rect x="495" y="27" width="297" height="405" fill="#fff"/>';
       // Reserved, unprinted right-hand mailing panel. Above/right of address,
       // >=0.5-inch indicia, >=4pt capitals, with >1/8-inch top/right clearance.
       page.drawRectangle({x:684,y:351,width:99,height:72,borderColor:black,borderWidth:.6});
@@ -800,7 +831,7 @@ async function renderEddmPrintMaster({version, trackedUrl, mediaBuffer}) {
   }
   return {pdf:Buffer.from(await pdf.save({useObjectStreams:false})),proofs,digitalJpg:proofs[0].jpg,
     evidence:{pdfXVersion:PDF_X_VERSION,outputIntent:'CMYK',fontsEmbedded:true,sideCount:2,pageEvidence:pages,sideEvidence,
-      effectiveRasterDpi:media?.effectiveDpi||null,vectorOnly:!media,eddmMailingPanel:true,physicalStockApprovalRequired:true,
+      effectiveRasterDpi:artworkPages.length?300:media?.effectiveDpi||null,vectorOnly:!media&&!artworkPages.length,eddmMailingPanel:true,physicalStockApprovalRequired:true,
       colorContrastRatio:readable.ratio,marketingLayout:{emptyRequiredRegions:brand?[]:['business_identity'],ctaInsideSafeArea:true,minimumVisualMarginPoints:18,qrBreathingRoomPoints:18,minimumFontPoints:9,frontBackDifferentiated:true,conceptualDisclosurePresent:version.mediaSnapshot?.origin==='generated_service_concept'}}};
 }
 
@@ -1069,7 +1100,7 @@ function preflightReport({version, renderEvidence, artifactHash}) {
     checks, printMaster: {format: "application/pdf", pdfXVersion: PDF_X_VERSION,
       widthInches: spec.widthInches, heightInches: spec.heightInches,
       bleedInches: spec.bleedInches, sideCount: version.content.sideCount},
-    qr: {vector: true, scanValidation: "matrix_round_trip_required"}};
+    qr: version.content.qrEnabled===false ? {enabled:false,vector:false,scanValidation:'not_applicable'} : {enabled:true,vector: true, scanValidation: "matrix_round_trip_required"}};
 }
 
 function marketingReadinessReport({version, renderEvidence}) {
@@ -1091,7 +1122,7 @@ function marketingReadinessReport({version, renderEvidence}) {
     placeholderFree: exactTexts.filter(Boolean).every((item) => !containsPlaceholder(item)),
     serviceAuthorized,
     ctaPresent: Boolean(text(draft.cta, 50)),
-    destinationPresent: Boolean(version.landingPage?.landingPageId && version.responseAssetId &&
+    destinationPresent: (draft.productSpecId==='postcard_eddm_6x11' && draft.qrEnabled===false) || Boolean((version.landingPage?.landingPageId || (draft.productSpecId==='postcard_eddm_6x11'&&version.landingPage?.destination)) && version.responseAssetId &&
       /^https:\/\//.test(String(version.trackedUrl || ""))),
     templateRequirements: (!template.requiresMedia || Boolean(version.mediaSnapshot)) &&
       (!template.requiresOffer || Boolean(text(draft.offer, 180))),
@@ -1100,7 +1131,7 @@ function marketingReadinessReport({version, renderEvidence}) {
     customerVisibleMediaEligible: !fixtureLikeMedia ||
       (media.customerSelected === true && media.approvalStatus === "approved"),
     verifiedContactOnly: !brand.phone || (draft.includeBusinessPhone === true &&
-      brand.phoneSource === "business_growth_profile"),
+      (brand.phoneSource === "business_growth_profile" || (draft.productSpecId==='postcard_eddm_6x11' && brand.phoneSource==='business_approved_design'))),
     meaningfulRequiredRegions: Array.isArray(layout.emptyRequiredRegions) &&
       layout.emptyRequiredRegions.length === 0,
     ctaSafePlacement: layout.ctaInsideSafeArea === true,
@@ -1139,7 +1170,7 @@ function validateAuthorizedDraft(draft, authority = {}) {
     throw new Error("physical_offer_not_authorized");
   }
   if (draft.includeBusinessPhone && (!authority.phone ||
-      authority.phoneSource !== "business_growth_profile")) {
+      !(['business_growth_profile',...(draft.productSpecId==='postcard_eddm_6x11'?['business_approved_design']:[])].includes(authority.phoneSource)))) {
     throw new Error("physical_verified_phone_missing");
   }
   return {template, businessName: authority.businessName, service: draft.service};
@@ -1183,6 +1214,61 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     }
     return {landingPageId: snap.id, landingPageVersionId: data.publishedVersionId,
       publicSlug: data.publicSlug, destination: `${publicBaseUrl}/p/${encodeURIComponent(data.publicSlug)}`};
+  }
+
+  function postcardInputError(message){const error=new Error(message);error.code='invalid-argument';return error;}
+  function approvedHttps(value) {
+    let url; try { url=new URL(value); } catch (_) { throw postcardInputError('Use a complete https:// Business website address.'); }
+    if(url.protocol!=='https:'||url.username||url.password||!url.hostname.includes('.')||url.hostname==='localhost') {
+      throw postcardInputError('Use a public https:// Business website address without credentials.');
+    }
+    return url.href;
+  }
+  async function destinationFor(uid,draft) {
+    if(draft.productSpecId!=='postcard_eddm_6x11')return ownedLandingPage(uid,draft.landingPageId);
+    if(draft.website)approvedHttps(draft.website);
+    if(!draft.qrEnabled)return null;
+    if(draft.landingPageId)return ownedLandingPage(uid,draft.landingPageId);
+    if(draft.responseDestinationId){
+      const record=await db.doc(`responseAssets/${draft.responseDestinationId}`).get();const value=record.data()||{};
+      if(!record.exists||value.businessUid!==uid||value.status!=='active')throw postcardInputError('Choose an active response destination owned by this Business.');
+      return {destination:approvedHttps(value.destination),responseDestinationId:record.id,landingPageId:null,landingPageVersionId:null};
+    }
+    return {destination:approvedHttps(draft.destinationUrl),source:'business_approved_website',landingPageId:null,landingPageVersionId:null};
+  }
+  async function uploadArtwork(input,uid) {
+    await ownedCampaign(uid,requiredText(input.campaignId,160,'physical_campaign_required'));
+    const order=await db.doc(`postcardOrders/${input.campaignId}`).get();
+    if(!order.exists||order.data().businessId!==uid||order.data().status!=='DRAFT'||order.data().testMode!==true)throw postcardInputError('Upload artwork into your editable staging postcard draft.');
+    const result=await require('./postcard_artwork').preflightArtwork(input.files);
+    const uploadId=`artwork_${digest({uid,campaignId:input.campaignId,hashes:result.originals.map(f=>f.sha256)}).slice(0,40)}`;
+    const ref=db.doc(`postcardArtworkUploads/${uploadId}`),old=await ref.get();
+    if(old.exists)return {uploadId,pageCount:old.data().pageCount,report:old.data().report};
+    const base=`physical_marketing_private/${uid}/uploads/${uploadId}`;const originals=[],pages=[];
+    for(const [i,file] of result.originals.entries()){
+      const storagePath=`${base}/original-${i+1}`;
+      await bucket().file(storagePath).save(file.bytes,{resumable:false,metadata:{contentType:file.contentType,cacheControl:'private,no-store'}});
+      originals.push({storagePath,sha256:file.sha256,contentType:file.contentType});
+    }
+    for(const [i,bytes] of result.pages.entries()){
+      const storagePath=`${base}/prepared-${i+1}.png`;
+      await bucket().file(storagePath).save(bytes,{resumable:false,metadata:{contentType:'image/png',cacheControl:'private,no-store'}});
+      pages.push({storagePath,sha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex')});
+    }
+    await db.runTransaction(async tx=>{if((await tx.get(ref)).exists)return;tx.create(ref,{uploadId,businessUid:uid,campaignId:input.campaignId,originals,pages,pageCount:pages.length,report:result.report,immutable:true,createdAt:FieldValue.serverTimestamp()});});
+    return {uploadId,pageCount:pages.length,report:result.report};
+  }
+  async function artworkFor(uid,draft) {
+    if(!draft.artworkUploadId)return {snapshot:null,pages:[]};
+    const record=await db.doc(`postcardArtworkUploads/${draft.artworkUploadId}`).get(),data=record.data()||{};
+    if(!record.exists||data.businessUid!==uid||data.campaignId!==draft.campaignId||draft.productSpecId!=='postcard_eddm_6x11')throw postcardInputError('This uploaded artwork is not available to this campaign.');
+    if(data.pageCount===2&&!draft.replaceUploadedBack&&(draft.qrEnabled||draft.trackingPhoneAssetId||draft.includeBusinessPhone))throw postcardInputError('Your uploaded back is fixed artwork. Choose a ScaledCircle back to add a new phone or QR code, or keep the existing artwork without new attribution.');
+    const pages=[];
+    for(const page of data.pages.slice(0,draft.replaceUploadedBack?1:2)){
+      const [bytes]=await bucket().file(page.storagePath).download();
+      if(require('node:crypto').createHash('sha256').update(bytes).digest('hex')!==page.sha256)throw postcardInputError('Uploaded artwork integrity check failed.');pages.push(bytes);
+    }
+    return {snapshot:{uploadId:record.id,originals:data.originals,pages:data.pages,report:data.report,replaceUploadedBack:draft.replaceUploadedBack},pages};
   }
 
   async function ownedMedia(uid, media, options = {}) {
@@ -1239,9 +1325,10 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     ]);
     const growth = growthSnap.data() || {}; const brand = brandSnap.data() || {};
     const user = userSnap.data() || {};
-    const businessName = text(growth.businessName || user.businessName || user.companyName ||
+    const custom=draft.productSpecId==='postcard_eddm_6x11';
+    const businessName = text((custom&&draft.displayBusinessName) || growth.businessName || user.businessName || user.companyName ||
       user.displayName, 120);
-    const businessNameSource = growth.businessName ? "business_growth_profile" :
+    const businessNameSource = custom&&draft.displayBusinessName?'business_approved_design':growth.businessName ? "business_growth_profile" :
       user.businessName || user.companyName || user.displayName ? "business_user_profile" : null;
     const growthServices = Array.isArray(growth.servicesOffered) ? growth.servicesOffered : [];
     const brandServices = Array.isArray(brand.approvedServiceCategories) ?
@@ -1249,7 +1336,8 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const services = (growthServices.length ? growthServices : brandServices)
       .slice(0, 20).map((item) => text(item, 80)).filter(Boolean);
     const verifiedPhone = text(growth.primaryPhone, 40);
-    const phone = draft.includeBusinessPhone === true && verifiedPhone ? verifiedPhone : null;
+    const phone = draft.includeBusinessPhone === true ? (custom&&draft.businessPhone?draft.businessPhone:verifiedPhone)||null : null;
+    if(phone&&(!/^[+\d().\s-]{7,40}$/.test(phone)||phone.replace(/\D/g,'').length<7))throw postcardInputError('Enter the Business phone number exactly as it should appear.');
     const approvedLogo = brand.approvedLogo?.assetId && brand.approvedLogo?.revisionId ?
       {assetId: text(brand.approvedLogo.assetId, 160),
         revisionId: text(brand.approvedLogo.revisionId, 160)} : null;
@@ -1258,7 +1346,9 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       primaryColor: validHexColor(brand.primaryColor, "#176FD1"),
       secondaryColor: validHexColor(brand.secondaryColor, "#10243E"),
       stylePreset: text(brand.stylePreset, 30) || "clean", approvedLogo,
-      phone, phoneSource: phone ? "business_growth_profile" : null,
+      phone, phoneSource: phone ? (custom&&draft.businessPhone?'business_approved_design':"business_growth_profile") : null,
+      website:text(growth.website||growth.websiteUrl||user.website,200)||null,
+      profilePhone:verifiedPhone||null,
       verifiedPhoneAvailable: Boolean(verifiedPhone),
       authorizedOffer: text(growth.directMailOffer, 180) || null,
       serviceAreas: Array.isArray(growth.serviceAreas) ? growth.serviceAreas.slice(0, 8)
@@ -1308,7 +1398,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       campaigns: campaignQuery.docs.map((doc) => ({campaignId: doc.id,
         name: text(doc.data()?.name || doc.data()?.title || "Campaign", 120)})),
       landingPages: pageQuery.docs.filter((doc) => doc.data()?.status === "published")
-        .map((doc) => ({landingPageId: doc.id, title: text(doc.data()?.title || doc.data()?.publicSlug || "Landing Page", 120)})),
+        .map((doc) => ({landingPageId: doc.id, title: text(doc.data()?.title || doc.data()?.headline || "Published Landing Page", 120)})),
       approvedMedia: media,
       trackingNumbers: trackingPhoneQuery.docs.filter((doc) => doc.data()?.status === "ACTIVE")
         .map((doc) => ({trackingPhoneAssetId: doc.id,
@@ -1317,7 +1407,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       businessIdentity: {businessName: authority.businessName,
         hasApprovedLogo: Boolean(authority.approvedLogo),
         primaryColor: authority.primaryColor, secondaryColor: authority.secondaryColor,
-        verifiedPhoneAvailable: authority.verifiedPhoneAvailable},
+        verifiedPhoneAvailable: authority.verifiedPhoneAvailable,phone:authority.profilePhone,website:authority.website},
       availableServices: authority.services,
       authorizedOffer: authority.authorizedOffer,
       templateSpecs: publicTemplateSpecs().map((template) => ({...template,
@@ -1335,11 +1425,13 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
   async function mutate(input, actor) {
     const uid = resolvePhysicalBusinessUid(actor, input?.businessUid);
     const action = text(input?.action, 40);
+    if(action==='upload_postcard_artwork')return uploadArtwork(input,uid);
     const draft = normalizeDraft(input?.draft || {});
     await ownedCampaign(uid, draft.campaignId);
-    const page = await ownedLandingPage(uid, draft.landingPageId);
+    const page = await destinationFor(uid,draft);
     const authority = await businessAuthority(uid, draft);
-    validateAuthorizedDraft(draft, {...authority, destination: page.destination});
+    validateAuthorizedDraft(draft, {...authority, destination: page?.destination});
+    await artworkFor(uid,draft);
     if (draft.media) await ownedMedia(uid, draft.media, {excludePurpose: "logo"});
     await ownedTrackingPhone(uid, draft.trackingPhoneAssetId, draft.campaignId);
     const now = FieldValue.serverTimestamp();
@@ -1383,27 +1475,28 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     if (!snap.exists || material.businessUid !== uid) throw new Error("physical_material_forbidden");
     const draft = normalizeDraft(material.draft || {}); const spec = productSpec(draft.productSpecId);
     const campaign = await ownedCampaign(uid, draft.campaignId);
-    const page = await ownedLandingPage(uid, draft.landingPageId);
+    const page = await destinationFor(uid,draft);
     const authority = await businessAuthority(uid, draft);
-    validateAuthorizedDraft(draft, {...authority, destination: page.destination});
+    validateAuthorizedDraft(draft, {...authority, destination: page?.destination});
+    const artwork=await artworkFor(uid,draft);
     const media = await ownedMedia(uid, draft.media, {excludePurpose: "logo"});
     const trackingPhoneSnapshot = await ownedTrackingPhone(uid, draft.trackingPhoneAssetId,
       draft.campaignId);
-    const logo = authority.approvedLogo ? await ownedMedia(uid, authority.approvedLogo,
+    const logo = authority.approvedLogo && draft.includeLogo!==false ? await ownedMedia(uid, authority.approvedLogo,
       {requiredPurpose: "logo"}) : {snapshot: null, buffer: null};
     const draftHash = digest({materialId, revision: material.draftRevision, draft, page, media: media.snapshot});
     const versionId = `version_${digest(`${materialId}:${material.draftRevision}:${draftHash}`).slice(0, 40)}`;
     const existing = await versions.doc(versionId).get();
     if (existing.exists) return {materialId, versionId, artifactId: existing.data()?.artifactId,
       status: material.status, idempotentReplay: true};
-    const response = await createResponseAsset({
+    const response = page ? await createResponseAsset({
       businessUid: uid, requestId: `physical:${versionId}`, type: "qr",
       label: `${spec.label}: ${draft.headline}`,
       destination: page.destination,
       attribution: {source: "qr", sourceDetail: "physical_marketing", campaignId: draft.campaignId,
         materialId, materialType: spec.productType, creativeVersion: versionId,
         landingPageId: page.landingPageId, landingPageVersionId: page.landingPageVersionId},
-    }, actor);
+    }, actor) : {responseAssetId:null,trackedUrl:null};
     const snapshot = {schemaVersion: SCHEMA_VERSION, versionId, materialId, businessUid: uid,
       campaign, productSpecId: spec.specId, productSpecVersion: spec.version, content: draft,
       templateId: templateSpec(draft.templateId, spec.productType).templateId,
@@ -1413,13 +1506,13 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
       brandSnapshot: {...authority, approvedLogo: logo.snapshot},
       layoutSnapshot: {templateId: draft.templateId,
         imageFit: "cover_attention", optionalRegionsRebalance: true},
-      mediaSnapshot: media.snapshot, landingPage: page,
+      mediaSnapshot: media.snapshot, artworkSnapshot:artwork.snapshot,landingPage: page,
       responseAssetId: response.responseAssetId, trackedUrl: response.trackedUrl,
       trackingPhoneAssetId: draft.trackingPhoneAssetId,
       trackingPhoneSnapshot, immutable: true};
     snapshot.contentHash = digest(snapshot);
     const rendered = await renderPrintMaster({version: snapshot, trackedUrl: response.trackedUrl,
-      mediaBuffer: media.buffer, logoBuffer: logo.buffer});
+      mediaBuffer: media.buffer, logoBuffer: logo.buffer,artworkPages:artwork.pages});
     const artifactHash = digest(rendered.pdf);
     const artifactId = `artifact_${digest(`${versionId}:${artifactHash}`).slice(0, 40)}`;
     const base = `physical_marketing_private/${uid}/${materialId}/${versionId}`;
@@ -1446,7 +1539,7 @@ function createPhysicalMarketingService({db, FieldValue, bucket, createResponseA
     const artifact = {schemaVersion: SCHEMA_VERSION, artifactId, businessUid: uid, materialId, versionId,
       contentHash: snapshot.contentHash, artifactHash, immutable: true, format: "PDF/X-4",
       storagePath: pdfPath, digitalJpgPath: jpgPath, proofs: proofRecords, preflight,
-      printReadiness: preflight, marketingReadiness,
+      printReadiness: preflight, uploadPreflight:artwork.snapshot?.report||null,marketingReadiness,
       providerArtifactHash: null, createdAt: at};
     await db.runTransaction(async (tx) => {
       const current = await tx.get(ref); const versionRef = versions.doc(versionId);

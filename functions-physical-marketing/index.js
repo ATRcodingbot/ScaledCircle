@@ -12430,6 +12430,7 @@ const physicalMarketingService = physicalMarketing.createPhysicalMarketingServic
 
 
 function physicalMarketingHttpsError(error) {
+  if (error?.code === "invalid-argument") return new HttpsError("invalid-argument", error.message);
   const code = String(error?.message || error);
   console.warn("physical_marketing_request_rejected", { category: code.slice(0, 120) });
   if (["physical_actor_forbidden", "physical_cross_tenant_forbidden", "physical_material_forbidden",
@@ -12576,7 +12577,7 @@ exports.getPhysicalMarketingWorkspace = onCall(
   businessOperation("getPhysicalMarketingWorkspace", (request) => physicalMarketingCall(request, physicalMarketingService.workspace))
 );
 exports.mutatePhysicalMarketingMaterial = onCall(
-  { enforceAppCheck: false, maxInstances: 4 },
+  { enforceAppCheck: false, maxInstances: 4, memory: "1GiB", timeoutSeconds: 120 },
   businessOperation("mutatePhysicalMarketingMaterial", (request) => physicalMarketingCall(request, physicalMarketingService.mutate))
 );
 exports.preparePhysicalMarketingVersion = onCall(
@@ -12607,6 +12608,7 @@ async function postcardCall(request, operation, admin = false) {
 }
 exports.getPostcardWorkspaceV1 = onCall({ maxInstances: 4 }, businessOperation('getPostcardWorkspaceV1', (r) => postcardCall(r, 'workspace', r.data?.admin === true)));
 exports.createPostcardCampaignV1 = onCall({ maxInstances: 4 }, businessOperation('createPostcardCampaignV1', (r) => postcardCall(r, 'create')));
+exports.updatePostcardMailingV1 = onCall({ maxInstances: 4 }, businessOperation('updatePostcardMailingV1', (r) => postcardCall(r, 'mailing')));
 exports.requestPostcardQuoteV1 = onCall({ maxInstances: 4 }, businessOperation('requestPostcardQuoteV1', (r) => postcardCall(r, 'requestQuote')));
 exports.confirmPostcardQuoteV1 = onCall({ maxInstances: 2 }, (r) => postcardCall(r, 'confirmQuote', true));
 exports.createPostcardCheckoutV1 = onCall({ maxInstances: 4, secrets: [POSTCARD_STRIPE_TEST_KEY] }, businessOperation('createPostcardCheckoutV1', (r) => postcardCall(r, 'checkout')));

@@ -23,9 +23,9 @@ async function fixture(simulation=true){
   assert.equal(version.preflight.status,'pass');assert.equal(version.marketingReadiness.status,'pass');
   await print.approve({materialId:material.materialId,versionId:version.versionId},business);
   await service.requestQuote({orderId:order.orderId,materialId:material.materialId,versionId:version.versionId},business);
-  const q=await service.confirmQuote({orderId:order.orderId,simulationAcknowledged:true,routes:[{zip:'21061',route:'C001',quantity:200,delivery:'residential'}],printingCents:9000,postageCents:5200,postageCostCents:5200,postageRateCents:26,fulfillmentCents:2500,taxCents:0,printCostCents:8000,handlingCostCents:1000,uspsVerified:true,mailpieceVerified:true,costsConfirmed:true,uspsVerifiedOn:new Date().toISOString().slice(0,10),stockThicknessInches:.012,pieceWeightOz:1,stockFlexible:true,vendor:'Emulator-only printer',printSpecification:'6 x 11 CMYK',routeEvidenceReference:'Emulator-only route selection',estimate:'Simulation only'},admin);
+  const q=await service.confirmQuote({orderId:order.orderId,simulationAcknowledged:true,routes:[{zip:'21061',route:'C001',quantity:200,delivery:'residential'}],printingCents:9000,postageCents:5200,postageCostCents:5200,postageRateCents:26,fulfillmentCents:2840,taxCents:0,printCostCents:8000,handlingCostCents:1000,uspsVerified:true,mailpieceVerified:true,costsConfirmed:true,uspsVerifiedOn:new Date().toISOString().slice(0,10),stockThicknessInches:.012,pieceWeightOz:1,stockFlexible:true,vendor:'Emulator-only printer',printSpecification:'6 x 11 CMYK',routeEvidenceReference:'Emulator-only route selection',estimate:'Simulation only'},admin);
   const checkout=()=>service.checkout({orderId:order.orderId,quoteId:q.quote.quoteId,artifactHash:q.quote.artifactHash,acceptTerms:true},business);
-  return {service,order,q,version,objects,checkout,get creates(){return creates;},get provider(){return provider;},pay:async()=>{await checkout();provider.payment_status='paid';await service.reconcile({orderId:order.orderId},business);},setRefund:r=>{refund=r;}};
+  return {service,print,order,q,version,objects,checkout,get creates(){return creates;},get provider(){return provider;},pay:async()=>{await checkout();provider.payment_status='paid';await service.reconcile({orderId:order.orderId},business);},setRefund:r=>{refund=r;}};
 }
 test('authoritative creative → quote → TEST payment → queue → simulation fulfilled, exactly once',async()=>{
   const f=await fixture();await assert.rejects(f.service.advance({orderId:f.order.orderId,status:'PRINT_READY',simulation:true},admin));
@@ -76,5 +76,39 @@ test('cancellation stops fulfillment; only confirmed provider refund changes ref
   assert.equal((await db.collection('postcardRefundReceipts').where('orderId','==',orderId).get()).size,1);
 });
 test('Rules deny direct order, payment, private evidence and cost reads/writes, including owner/Admin',async()=>{
-  for(const uid of ['postcard-owner','postcard-admin','other']){const client=env.authenticatedContext(uid,{admin:uid==='postcard-admin'}).firestore();for(const collection of ['postcardOrders','postcardFulfillmentPrivate','postcardPaymentReceipts','postcardRefundReceipts','postcardEvidence','postcardCostHistory','postcardAudit']){await assertFails(getDoc(doc(client,collection,'probe')));await assertFails(setDoc(doc(client,collection,'probe'),{status:'PAID'}));}}
+  for(const uid of ['postcard-owner','postcard-admin','other']){const client=env.authenticatedContext(uid,{admin:uid==='postcard-admin'}).firestore();for(const collection of ['postcardOrders','postcardFulfillmentPrivate','postcardPaymentReceipts','postcardRefundReceipts','postcardEvidence','postcardCostHistory','postcardAudit','postcardArtworkUploads']){await assertFails(getDoc(doc(client,collection,'probe')));await assertFails(setDoc(doc(client,collection,'probe'),{status:'PAID'}));}}
+});
+
+test('all creation modes allow preview before mailing; QR off and own number require no attribution object',async()=>{
+ const f=await fixture();
+ for(const creationMode of ['template','assisted','upload']){
+  const o=await f.service.create({requestId:`flow-${creationMode}`,name:'Creative flow',creationMode,simulation:true},business);assert.equal(o.mailingPending,true);
+  let upload=null;
+  if(creationMode==='upload'){
+   const {PDFDocument,StandardFonts}=require('pdf-lib');const pdf=await PDFDocument.create();const font=await pdf.embedFont(StandardFonts.Helvetica);pdf.addPage([810,450]).drawText('Attractive Remodel',{font,x:30,y:400});
+   upload=await f.print.mutate({action:'upload_postcard_artwork',campaignId:o.campaignId,files:[{base64:Buffer.from(await pdf.save()).toString('base64')}]},business);
+   const original=(await db.doc(`postcardArtworkUploads/${upload.uploadId}`).get()).data();assert.equal(original.immutable,true);assert.notEqual(original.originals[0].storagePath,original.pages[0].storagePath);
+   await assert.rejects(f.print.mutate({action:'upload_postcard_artwork',campaignId:o.campaignId,files:[]},{uid:'other',role:'business'}));
+  }
+  const draft={creationMode,campaignId:o.campaignId,productSpecId:'postcard_eddm_6x11',service:'Build decks',headline:'Plan your next deck',cta:'Call to discuss your project',qrEnabled:false,includeBusinessPhone:true,businessPhone:'(410) 732-6184',artworkUploadId:upload?.uploadId};
+  const material=await f.print.mutate({action:'create',requestId:`m-${creationMode}`,draft},business),version=await f.print.prepare({materialId:material.materialId},business);
+  assert.equal(version.marketingReadiness.status,'pass');const immutable=(await db.doc(`marketingMaterialVersions/${version.versionId}`).get()).data();assert.equal(immutable.responseAssetId,null);assert.equal(immutable.brandSnapshot.phone,'(410) 732-6184');
+  await f.print.approve({materialId:material.materialId,versionId:version.versionId},business);
+  const request={orderId:o.orderId,materialId:material.materialId,versionId:version.versionId};await assert.rejects(f.service.requestQuote(request,business),/mailing area/);
+  await f.service.mailing({orderId:o.orderId,targetArea:'Illustrative area',zip:'21061',desiredQuantity:200},business);await f.service.requestQuote(request,business);
+  if(upload){const original=await f.service.artifact({orderId:o.orderId,admin:true,originalIndex:0},admin);assert.equal(original.contentType,'application/pdf');assert.match(original.sha256,/^[a-f0-9]{64}$/);await assert.rejects(f.service.artifact({orderId:o.orderId,originalIndex:0},business),{code:'permission-denied'});}
+  await assert.rejects(f.service.mailing({orderId:o.orderId,targetArea:'Changed',zip:'21061',desiredQuantity:300},business),/locked/);
+  assert.deepEqual((await db.doc(`marketingMaterialVersions/${version.versionId}`).get()).data(),immutable);
+ }
+});
+
+test('QR website binding and campaign-specific tracking phone fail closed across owners/campaigns',async()=>{
+ const f=await fixture(),o=await f.service.create({requestId:'contact-binding',name:'Contact binding',creationMode:'template'},business);
+ const draft={campaignId:o.campaignId,productSpecId:'postcard_eddm_6x11',service:'Build decks',headline:'Plan your next deck',cta:'Explore our work',qrEnabled:true,destinationUrl:'https://business.example/services'};
+ await db.doc('trackingPhoneAssets/postcard-phone').set({businessUid:business.uid,status:'ACTIVE',activeBindingId:'postcard-binding',displayNumber:'(410) 732-6184'});
+ await db.doc('trackingPhoneBindings/postcard-binding').set({businessUid:business.uid,trackingPhoneAssetId:'postcard-phone',campaignId:o.campaignId});
+ const m=await f.print.mutate({action:'create',requestId:'valid-contact',draft:{...draft,trackingPhoneAssetId:'postcard-phone'}},business),v=await f.print.prepare({materialId:m.materialId},business);
+ const saved=(await db.doc(`marketingMaterialVersions/${v.versionId}`).get()).data();assert.equal(saved.landingPage.destination,draft.destinationUrl);assert.equal(saved.trackingPhoneSnapshot.campaignId,o.campaignId);
+ await assert.rejects(f.print.mutate({action:'create',requestId:'wrong-contact',draft:{...draft,campaignId:f.order.campaignId,trackingPhoneAssetId:'postcard-phone'}},business),/tracking_phone_forbidden/);
+ await assert.rejects(f.print.mutate({action:'create',requestId:'bad-url',draft:{...draft,destinationUrl:'http://insecure.example'}},business),/https/);
 });
