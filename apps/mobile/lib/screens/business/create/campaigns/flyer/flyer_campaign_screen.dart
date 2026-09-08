@@ -1125,8 +1125,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                     child: Column(
                       children:
                           [
-                            if (AppEnvironmentConfig.isStaging)
-                              'neighborhoodCanvassing',
+                            'neighborhoodCanvassing',
                             'flyer_distribution',
                             'door_hanger_distribution',
                             'business_card_distribution',
