@@ -62,7 +62,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
               ? 'Available Jobs'
               : currentIndex == 1
               ? 'Current Campaigns'
-              : 'My Earnings',
+              : 'Earnings',
         ),
         centerTitle: true,
         actions: [
@@ -127,7 +127,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
           ? _buildMarketplace()
           : currentIndex == 1
           ? const MyJobsScreen()
-          : const ScalerWalletScreen(),
+          : const ScalerWalletScreen(embedded: true),
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
         onDestinationSelected: (index) {

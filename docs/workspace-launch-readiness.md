@@ -29,3 +29,13 @@ Hosted checks cover actual authenticated Business and Scaler routing, Team, Acco
 ## Production release hold
 
 The production package must be regenerated from this candidate and reviewed as a whole. It preserves pinned production publication semantics, legacy financial behavior and prospective contract guards. Staging QA creators, identity allowlists, TEST contracts and secrets are excluded. Production Growth, Scale and Managed Growth Stripe price bindings still require authorized configuration. Existing held mobile artifacts predate this candidate and must be rebuilt before promotion. Production logistics-privacy deployment, legitimate LIVE payment smoke and final go/no-go remain separate release gates.
+
+## Scaler earnings presentation follow-up
+
+The staging Earnings screen and dashboard preview use the same read-only server summary. Available Balance comes only from the maintained Wallet available balance; submitted compensation is separate. Lifetime Earnings sums posted Scaler work-payment ledger entries with economic-identity deduplication. Pending payout totals require an actual pending withdrawal record; internal pending transfer reservations are not presented as bank payouts. TEST cash-out fixture reserves are never added to campaign balances.
+
+The screen has one page title, one dominant available balance, compact review/payout/lifetime states and plain-language activity. Unknown assessments and read failures remain explicit. Ordinary campaign cash-out is not currently enabled by the maintained payout authority; the page shows its availability explanation and does not expose the separate TEST payout fixture controls.
+
+Verification: 535 Flutter tests passed (one existing skip), 742 backend tests passed (two existing skips), and 14 local-emulator privacy/completion/earnings tests passed. The existing completion authority was exercised twice concurrently in the emulator: one $18 posting increases available and lifetime amounts once and removes that submission from awaiting review once. No real submission was approved or retried.
+
+Only staging Hosting and the read-only getScalerEarningsV1 Function are deployed for this follow-up. Native GPS, coverage, completion and economic write handlers are unchanged. Installed mobile artifacts predate this presentation; a later presentation-only refresh is required. Production promotion remains held and must include the reviewed read-only earnings endpoint with the matching client.

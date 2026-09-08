@@ -15,7 +15,7 @@ const {
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
-
+const logger = require("firebase-functions/logger");
 
 
 
@@ -1846,6 +1846,19 @@ async function authenticatedUserContext(request, message) {
  * It is not a cash ledger and cannot fund a Stripe marketplace campaign.
  * Development promotional value is granted only from trusted server state.
  */
+exports.getScalerEarningsV1 = onCall({ maxInstances: 10, timeoutSeconds: 60 }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to view your earnings.');
+  if (Object.keys(request.data || {}).length) throw new HttpsError('invalid-argument', 'This request does not accept another account.');
+  try {
+    return await require('./scaler_earnings_view').read({ db, uid: request.auth.uid,
+      staging: (process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === 'scaledcircle-staging' });
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error('Earnings summary read failed', { code: String(error.code || 'read_failed') });
+    throw new HttpsError('unavailable', 'Your earnings could not be loaded. Please retry.');
+  }
+});
+
 exports.ensureLegacyWalletProjection = onCall(
   { enforceAppCheck: false, maxInstances: 10 },
   async (request) => {

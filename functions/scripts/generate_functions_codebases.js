@@ -71,7 +71,7 @@ const platformExports = new Set([
 ]);
 
 const platformSecrets = new Set(["CENSUS_API_KEY", "OPENAI_API_KEY"]);
-const walletExports = new Set(["ensureLegacyWalletProjection"]);
+const walletExports = new Set(["ensureLegacyWalletProjection", "getScalerEarningsV1"]);
 const artifactEmailExports = new Set(["sendArtifactDeliveryEmailJob"]);
 const artifactEmailSecrets = new Set(["SUPPORT_EMAIL_SMTP_PASSWORD"]);
 const jobAlertEmailExports = new Set(["sendScalerJobAlertEmailJob"]);

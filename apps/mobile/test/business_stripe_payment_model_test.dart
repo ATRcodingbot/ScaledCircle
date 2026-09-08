@@ -53,11 +53,11 @@ void main() {
     final dashboard = source(
       'lib/screens/scaler/dashboard/scaler_dashboard_screen.dart',
     );
-    expect(wallet, contains('Scaler Wallet'));
-    expect(wallet, contains('Verified Earnings'));
-    expect(wallet, contains('ScalerCashoutCard'));
+    expect(wallet, contains('Available Balance'));
+    expect(wallet, contains('Awaiting Business Review'));
+    expect(wallet, contains('getScalerEarningsV1'));
     expect(dashboard, contains('Wallet'));
-    expect(dashboard, contains('View wallet'));
+    expect(dashboard, contains('ScalerWalletScreen(preview: true)'));
   });
 
   test('social ad spend and direct-mail policies stay distinct', () {

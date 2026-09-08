@@ -2846,6 +2846,19 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 const EXACT_LOCATION_TYPES = new Set([
 "service_point", "yard_sign_installation", "material_pickup",
 "material_dropoff", "dump_pickup", "dump_dropoff", "event_location"]

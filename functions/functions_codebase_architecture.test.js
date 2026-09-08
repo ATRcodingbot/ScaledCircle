@@ -511,8 +511,8 @@ test("assignment-core preserves ownership, Zone, duplicate, and rollout authorit
   assert.match(assignment, /type: "job_assignment"/);
 });
 
-test("wallet-core owns exactly one secret-free callable with no duplicate assignment", () => {
-  assert.deepEqual(exportsIn(wallet), ["ensureLegacyWalletProjection"]);
+test("wallet-core owns only wallet projection and read-only earnings, without secrets or duplicate assignment", () => {
+  assert.deepEqual(exportsIn(wallet).sort(), ["ensureLegacyWalletProjection", "getScalerEarningsV1"]);
   assert.doesNotMatch(legacy, /exports\.ensureLegacyWalletProjection\s*=/);
   for (const forbidden of [
     "STRIPE_THIN_WEBHOOK_SECRET", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",

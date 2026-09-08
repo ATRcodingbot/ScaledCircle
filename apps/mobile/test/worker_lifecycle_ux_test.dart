@@ -32,14 +32,14 @@ void main() {
   });
 
   test('Wallet describes earnings without implying cash-out', () {
-    expect(wallet, contains('Verified Earnings'));
-    expect(wallet, contains('ScalerCashoutCard'));
-    expect(wallet, contains('Verified work earnings will appear here'));
-    expect(wallet, isNot(contains("'Available Balance'")));
+    expect(wallet, contains('Available Balance'));
+    expect(wallet, contains('Cash out is not available for this account yet.'));
+    expect(wallet, contains('getScalerEarningsV1'));
+    expect(wallet, isNot(contains('Verified Earnings')));
   });
 
   test('Wallet errors are safe and do not render backend exceptions', () {
-    expect(wallet, contains('Your balance has not been changed'));
+    expect(wallet, contains('Your balance has not changed'));
     expect(wallet, isNot(contains(r'${walletSnapshot.error}')));
     expect(wallet, isNot(contains(r'${transactionSnapshot.error}')));
   });

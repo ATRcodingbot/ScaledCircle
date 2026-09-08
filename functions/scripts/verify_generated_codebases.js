@@ -146,7 +146,7 @@ assert.deepEqual(Object.keys(completion).sort(), [
   "reviewCampaignCompletion", "startCampaignCompletion",
   "submitCampaignCompletion", "submitZoneCompletion",
 ]);
-assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection"]);
+assert.deepEqual(Object.keys(wallet).sort(), ["ensureLegacyWalletProjection", "getScalerEarningsV1"]);
 assert.deepEqual(Object.keys(attribution).sort(), [
   "bridgeResponseLead", "createResponseAsset", "createScaledCircleXResponseAssetV1",
   "getAttributionOverview",

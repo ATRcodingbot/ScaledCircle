@@ -69,10 +69,22 @@ test('eligible finalized submission preserves full immutable base; exactly-once 
  const repeated=await call(completion.submitZoneCompletion,'coverage-scaler',{completionId:f.completionId});assert.equal(repeated.alreadySubmitted,true);
  const preview=await call(room,'coverage-owner',{zoneId:f.zoneId});assert.equal(preview.completionEvidence.policy.payableAmountCents,1800);
  assert.equal((await db.collection('walletTransactions').where('campaignId','==',f.campaignId).get()).size,0);
+ const earningsView=require('./scaler_earnings_view');
+ const beforeMoney=await earningsView.read({db,uid:'coverage-scaler',staging:true});
+ assert.equal(beforeMoney.activity.find(a=>a.zoneId===f.zoneId).kind,'awaiting_review');
+ assert.equal(beforeMoney.activity.find(a=>a.zoneId===f.zoneId).amountCents,1800);
  const [a,b]=await Promise.all([call(completion.finalizeZoneReview,'coverage-owner',{zoneId:f.zoneId,decision:'approve'}),call(completion.finalizeZoneReview,'coverage-owner',{zoneId:f.zoneId,decision:'approve'})]);
  assert.ok(a.earningRecorded||b.earningRecorded);assert.ok(a.alreadyProcessed||b.alreadyProcessed);
  const records=await db.collection('walletTransactions').where('campaignId','==',f.campaignId).get();assert.equal(records.size,1);assert.equal(records.docs[0].data().amountCents,1800);
  assert.equal((await db.doc('campaignZones/'+f.zoneId).get()).data().approvedBaseAmountCents,1500);
+ const afterMoney=await earningsView.read({db,uid:'coverage-scaler',staging:true});
+ assert.equal(afterMoney.availableCents,beforeMoney.availableCents+1800);
+ assert.equal(afterMoney.lifetimeCents,beforeMoney.lifetimeCents+1800);
+ assert.equal(afterMoney.awaitingReviewCents,beforeMoney.awaitingReviewCents-1800);
+ assert.equal(afterMoney.activity.filter(a=>a.zoneId===f.zoneId).length,1);
+ assert.equal(afterMoney.activity.find(a=>a.zoneId===f.zoneId).kind,'approved');
+ const replayMoney=await earningsView.read({db,uid:'coverage-scaler',staging:true});
+ assert.deepEqual(replayMoney,afterMoney);
 });
 test('off-route work cannot submit ordinary completion or obtain money through exception report',async()=>{
  const f=await seedEligible('off-route',{offRoute:true});

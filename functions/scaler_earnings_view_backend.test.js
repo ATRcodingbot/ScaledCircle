@@ -1,0 +1,30 @@
+'use strict';
+const {test,before,after}=require('node:test'),assert=require('node:assert/strict');
+if(!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||''))throw Error('Local emulator required');
+process.env.GCLOUD_PROJECT='scaledcircle-staging';
+const fft=require('firebase-functions-test')({projectId:'scaledcircle-staging'});
+const {getScalerEarningsV1}=require('../functions-wallet');
+const {getApps,initializeApp}=require('firebase-admin/app');
+if(!getApps().length)initializeApp({projectId:'scaledcircle-staging'});
+const {getFirestore}=require('firebase-admin/firestore');const db=getFirestore();
+const call=(uid,data={})=>fft.wrap(getScalerEarningsV1)({data,auth:uid?{uid,token:{email_verified:true}}:null});
+before(async()=>{
+ await db.doc('users/earnings-owner').set({role:'scaler',active:true});
+ await db.doc('users/earnings-other').set({role:'scaler',active:true});
+ await db.doc('users/earnings-business').set({role:'business',active:true});
+ await db.doc('users/earnings-disabled').set({role:'scaler',disabled:true});
+ await db.doc('wallets/earnings-owner').set({ownerId:'earnings-owner',availableBalance:2.64});
+ await db.doc('wallets/earnings-owner/transactions/one').set({type:'scaler_earnings',amountCents:264});
+});
+after(()=>fft.cleanup());
+test('summary is own-account only, rejects target payload, unauthenticated, wrong role and disabled',async()=>{
+ await assert.rejects(call(null),e=>e.code==='unauthenticated');
+ await assert.rejects(call('earnings-other',{uid:'earnings-owner'}),e=>e.code==='invalid-argument');
+ await assert.rejects(call('earnings-business'),e=>e.code==='permission-denied');
+ await assert.rejects(call('earnings-disabled'),e=>e.code==='permission-denied');
+ assert.equal((await call('earnings-other')).availableCents,0);
+ const before=await db.doc('wallets/earnings-owner').get();
+ const response=await call('earnings-owner');assert.equal(response.availableCents,264);assert.equal(response.lifetimeCents,264);
+ const after=await db.doc('wallets/earnings-owner').get();assert.ok(before.updateTime.isEqual(after.updateTime));
+ assert.equal(response.cashout.eligible,false);
+});

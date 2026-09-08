@@ -1,351 +1,305 @@
-import '../../widgets/campaign_card_header.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../services/scaler_cashout_service.dart';
 import '../../config/app_environment.dart';
-import '../../models/scaler_earnings_summary.dart';
-import '../../models/scaler_cashout_activity.dart';
-import '../../widgets/scaler_cashout_card.dart';
+import '../../services/secure_function_service.dart';
+import '../../widgets/campaign_card_header.dart';
 import '../../widgets/scaler_wallet_metrics.dart';
 
-class ScalerWalletScreen extends StatelessWidget {
-  const ScalerWalletScreen({super.key});
+/// All amounts and state transitions come from one server read snapshot.
+class ScalerWalletScreen extends StatefulWidget {
+  const ScalerWalletScreen({
+    super.key,
+    this.embedded = false,
+    this.preview = false,
+    this.loadSummary,
+    this.staging = AppEnvironmentConfig.isStaging,
+  });
+  final bool embedded;
+  final bool preview;
+  final bool staging;
+  final Future<Map<String, dynamic>> Function()? loadSummary;
+  @override
+  State<ScalerWalletScreen> createState() => _ScalerWalletScreenState();
+}
+
+class _ScalerWalletScreenState extends State<ScalerWalletScreen>
+    with WidgetsBindingObserver {
+  Map<String, dynamic>? _data;
+  String? _error;
+  bool _loading = false;
+  bool _foreground = true;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _load();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_foreground) _load();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) _load();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data =
+          await (widget.loadSummary?.call() ??
+                  const SecureFunctionService().call(
+                    functionName: 'getScalerEarningsV1',
+                    data: const {},
+                  ))
+              .timeout(const Duration(seconds: 20));
+      for (final field in [
+        'availableCents',
+        'lifetimeCents',
+        'awaitingReviewCents',
+        'payoutPendingCents',
+      ]) {
+        if (data[field] is! int || (data[field] as int) < 0) {
+          throw StateError('Incomplete earnings response');
+        }
+      }
+      if (data['currency'] != 'usd' ||
+          data['environment'] != (widget.staging ? 'staging' : 'production')) {
+        throw StateError('Earnings environment mismatch');
+      }
+      if (mounted) setState(() => _data = data);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _data = null;
+          _error =
+              "We couldn't load your earnings. Your balance has not changed.";
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text('You must be logged in.')),
-      );
-    }
-
-    final walletReference = FirebaseFirestore.instance
-        .collection('wallets')
-        .doc(user.uid);
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('My Earnings'), centerTitle: true),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: walletReference.snapshots(),
-        builder: (context, walletSnapshot) {
-          if (walletSnapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.cloud_off_outlined, size: 42),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "We couldn't load your earnings right now.",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Your balance has not been changed. Check your connection and try again.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          if (walletSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final walletData = walletSnapshot.data?.data() ?? <String, dynamic>{};
-
-          final verifiedEarnings =
-              (walletData['availableBalance'] as num?)?.toDouble() ?? 0.0;
-
-          final pendingBalance =
-              (walletData['pendingBalance'] as num?)?.toDouble() ?? 0.0;
-
-          final totalBalance = verifiedEarnings + pendingBalance;
-
-          return ListView(
-            padding: const EdgeInsets.all(20),
+    if (widget.preview) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Scaler Wallet',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                'Earnings',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                AppEnvironmentConfig.isProduction
-                    ? 'Track earnings from completed Scaled Circle campaigns.'
-                    : 'TEST / STAGING funds. Available includes campaign and payout-test balances; it is not a cash-out limit. No real money.',
-              ),
-
-              const SizedBox(height: 24),
-
-              if (ScalerCashoutService.enabled) const ScalerCashoutCard(),
-
-              if (!ScalerCashoutService.enabled)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(22),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Verified Earnings',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Text(
-                          '\$${verifiedEarnings.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        const Text(
-                          'Approved campaign earnings recorded in your ScaledCircle Wallet.',
-                        ),
-                      ],
-                    ),
+              const SizedBox(height: 12),
+              if (_data != null) ...[
+                Text(
+                  earningsMoney(_data!['availableCents'] as int),
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-
-              const SizedBox(height: 12),
-
-              ScalerWalletMetrics(
-                testDisplayAvailable: !AppEnvironmentConfig.isProduction
-                    ? ScalerEarningsSummary.displayAvailable(
-                        walletData,
-                        testEnvironment: true,
-                      )
-                    : null,
-                pendingEarnings: pendingBalance,
-                recordedEarnings: totalBalance,
-              ),
-
-              const SizedBox(height: 30),
-
-              const Text(
-                'Earnings Activity',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: walletReference.collection('transactions').snapshots(),
-                builder: (context, transactionSnapshot) {
-                  if (transactionSnapshot.hasError) {
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: const Text(
-                          "We couldn't load your earnings activity. Your balance has not been changed. Try again shortly.",
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }
-
-                  if (transactionSnapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-                  }
-
-                  final transactions =
-                      List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
-                        transactionSnapshot.data?.docs ?? [],
-                      ).where((transaction) {
-                        return _isScalerTransaction(transaction.data());
-                      }).toList();
-
-                  transactions.sort((a, b) {
-                    final aCreated = a.data()['createdAt'];
-
-                    final bCreated = b.data()['createdAt'];
-
-                    if (aCreated is Timestamp && bCreated is Timestamp) {
-                      return bCreated.compareTo(aCreated);
-                    }
-
-                    if (aCreated is Timestamp) {
-                      return -1;
-                    }
-
-                    if (bCreated is Timestamp) {
-                      return 1;
-                    }
-
-                    return 0;
-                  });
-
-                  if (transactions.isEmpty) {
-                    return const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(22),
-                        child: Column(
-                          children: [
-                            Icon(Icons.payments_outlined, size: 44),
-                            SizedBox(height: 12),
-                            Text(
-                              'No earnings yet',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'Verified work earnings will appear here after Business review.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  return Column(
-                    children: transactions.map((transaction) {
-                      return _transactionCard(transaction.data());
-                    }).toList(),
-                  );
-                },
+                const Text('Available Balance'),
+                const SizedBox(height: 8),
+                Text(
+                  _data!['reviewAmountUnknown'] == true
+                      ? 'Submitted work needs a payment assessment.'
+                      : '${earningsMoney(_data!['awaitingReviewCents'] as int)} awaiting Business review',
+                ),
+              ] else if (_loading)
+                const LinearProgressIndicator()
+              else
+                Text(_error ?? 'Earnings are temporarily unavailable.'),
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ScalerWalletScreen(),
+                  ),
+                ),
+                child: const Text('View earnings'),
               ),
             ],
-          );
-        },
+          ),
+        ),
+      );
+    }
+    final body = _error != null
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _loading ? null : _load,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : _data == null
+        ? const Center(child: CircularProgressIndicator())
+        : _content(_data!);
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Earnings')),
+      body: body,
+    );
+  }
+
+  Widget _content(Map<String, dynamic> data) {
+    final activity = (data['activity'] as List? ?? const []).whereType<Map>();
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        children: [
+          if (widget.staging) ...[
+            Text(
+              'Staging · Test funds only',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+            const SizedBox(height: 8),
+          ],
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    earningsMoney(data['availableCents'] as int),
+                    key: const ValueKey('available-balance'),
+                    style: const TextStyle(
+                      fontSize: 44,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    'Available Balance',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Approved money in your Wallet.'),
+                  const SizedBox(height: 16),
+                  Text(
+                    (data['cashout'] as Map?)?['message'] as String? ??
+                        'Cash out is not available for this account yet.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ScalerWalletMetrics(
+            awaitingReviewCents: data['awaitingReviewCents'] as int,
+            reviewAmountUnknown: data['reviewAmountUnknown'] == true,
+            payoutPendingCents: data['payoutPendingCents'] as int,
+            lifetimeCents: data['lifetimeCents'] as int,
+          ),
+          const SizedBox(height: 28),
+          Text(
+            'Recent Activity',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          if (activity.isEmpty)
+            const Text(
+              'Approved payments and work awaiting review will appear here.',
+            ),
+          for (final item in activity) _activity(item),
+          if (data['activityHasMore'] == true)
+            const Text('Showing your most recent 100 activities.'),
+        ],
       ),
     );
   }
 
-  Widget _transactionCard(Map<String, dynamic> data) {
-    final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-
-    final type = data['type']?.toString() ?? 'transaction';
-
-    final description =
-        scalerCashoutActivityLabel(data) ??
-        data['description']?.toString() ??
-        _transactionDescription(type);
-
-    final createdAt = data['createdAt'] ?? data['createdAtMillis'];
-
+  Widget _activity(Map item) {
+    final kind = item['kind'];
+    final pending = kind == 'awaiting_review';
+    final cents = item['amountCents'] as int?;
+    final amount = cents == null
+        ? 'Amount pending review'
+        : '${kind == 'approved' ? '+' : ''}${earningsMoney(cents)}${pending ? ' expected' : ''}';
+    final status = switch (kind) {
+      'approved' => 'Approved',
+      'awaiting_review' => 'Awaiting Business Review',
+      'payout_pending' => 'Payout Pending',
+      'payout_completed' => 'Paid out',
+      _ => 'Payout needs attention',
+    };
+    final at = item['at'] as int?;
+    final coverage = item['coveragePercentage'] as num?;
+    final base = item['baseCents'] as int?;
+    final bonus = item['bonusCents'] as int?;
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: CampaignCardHeader(
-          title: description,
-          icon: _transactionIcon(type),
-          subtitle: _formatTimestamp(createdAt),
-          status: Text(
-            '\$${amount.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (at != null)
+              Text(
+                MaterialLocalizations.of(
+                  context,
+                ).formatShortDate(DateTime.fromMillisecondsSinceEpoch(at)),
+              ),
+            const SizedBox(height: 6),
+            Text(
+              campaignDisplayName(item['title'] as String? ?? 'Campaign work'),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              amount,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            Text(status),
+            if (pending && coverage != null)
+              Text('${coverage.toStringAsFixed(2)}% Route Coverage Estimate'),
+            // Do not display an equation that contradicts a historical estimate.
+            // This only selects explanatory copy; it never calculates money state.
+            if (pending &&
+                base != null &&
+                bonus != null &&
+                cents == base + bonus)
+              Text(
+                '${earningsMoney(base)} base + ${earningsMoney(bonus)} bonus',
+              ),
+            if (pending &&
+                base != null &&
+                bonus != null &&
+                cents != base + bonus)
+              const Text('Previous estimate. Final payment requires review.'),
+            if (pending && item['technicalReview'] == true)
+              const Text('The review must resolve your expected payment.'),
+          ],
         ),
       ),
     );
-  }
-
-  bool _isScalerTransaction(Map<String, dynamic> data) {
-    final walletSide = data['walletSide']?.toString();
-
-    if (walletSide != null && walletSide.isNotEmpty) {
-      return walletSide == 'scaler';
-    }
-
-    final type = data['type']?.toString() ?? '';
-
-    // Legacy records predate walletSide. Only known Scaler ledger types are
-    // included so business reserves, subscriptions, and credits never appear
-    // as earnings when one login is used in both account views.
-    return const {
-      'scaler_earnings',
-      'scaler_payment',
-      'payout',
-      'withdrawal',
-    }.contains(type);
-  }
-
-  String _transactionDescription(String type) {
-    switch (type) {
-      case 'scaler_earnings':
-      case 'scaler_payment':
-        return 'Campaign Payment';
-
-      case 'payout':
-        return 'Campaign Payment';
-
-      case 'deposit':
-        return 'Wallet Credit';
-
-      case 'withdrawal':
-        return 'Withdrawal';
-
-      default:
-        return 'Wallet Activity';
-    }
-  }
-
-  IconData _transactionIcon(String type) {
-    switch (type) {
-      case 'scaler_earnings':
-      case 'scaler_payment':
-      case 'payout':
-      case 'deposit':
-        return Icons.arrow_downward;
-
-      case 'withdrawal':
-        return Icons.arrow_upward;
-
-      default:
-        return Icons.receipt_long_outlined;
-    }
-  }
-
-  String _formatTimestamp(dynamic value) {
-    if (value is int) value = Timestamp.fromMillisecondsSinceEpoch(value);
-    if (value is! Timestamp) {
-      return 'Date unavailable';
-    }
-
-    final date = value.toDate();
-
-    final hour = date.hour == 0
-        ? 12
-        : date.hour > 12
-        ? date.hour - 12
-        : date.hour;
-
-    final minute = date.minute.toString().padLeft(2, '0');
-
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-
-    return '${date.month}/${date.day}/${date.year} '
-        '$hour:$minute $period';
   }
 }
