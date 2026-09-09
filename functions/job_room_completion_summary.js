@@ -26,8 +26,8 @@ async function read({db, room, zone, zoneId, actor}) {
       earning:earning.type === 'scaler_earnings' && earning.scalerId === c.scalerId &&
         earning.zoneId === zoneId && earning.campaignId === room.campaignId ? {
           id:ledger.id,type:earning.type,status:earning.status || null,currency:earning.currency || 'usd',
-          amountCents:cents(earning.amountCents),baseAmountCents:cents(earning.baseAmountCents),
-          bonusAmountCents:cents(earning.bonusAmountCents),
+          amountCents:cents(earning.amountCents),
+          ...require('./job_room_approved_amounts').read({earning,zone,completion:c,zoneId}),
         } : null,
     }));
   return {participantLabels,completions};

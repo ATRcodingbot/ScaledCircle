@@ -99,7 +99,7 @@ def prepare(archive, output):
             policy_copy(relative + '.js')
     policy_copy('production_job_room_evidence.js')
     policy_copy('production_job_room_extras.js')
-    for name in ['job_room_completion_summary.js', 'job_room_participant_labels.js']:
+    for name in ['job_room_approved_amounts.js', 'job_room_completion_summary.js', 'job_room_participant_labels.js']:
         (output / name).write_bytes((root / 'functions' / name).read_bytes())
     for name in ['workspace_access.js', 'business_workspace.js', 'subscription_entitlements.js', 'legal_consent.js']:
         (output / name).write_bytes((root / 'functions' / name).read_bytes())

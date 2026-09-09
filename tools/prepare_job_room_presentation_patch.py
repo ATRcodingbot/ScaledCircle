@@ -30,7 +30,7 @@ def prepare(archive, output):
     index = index.replace(marker,
         "  Object.assign(response, await require('./job_room_completion_summary').read({db,room,zone,zoneId,actor:context}));\n" + marker, 1)
     (output / 'index.js').write_bytes(index.encode())
-    for name in ['job_room_completion_summary.js', 'job_room_participant_labels.js']:
+    for name in ['job_room_approved_amounts.js', 'job_room_completion_summary.js', 'job_room_participant_labels.js']:
         (output / name).write_bytes((root / 'functions' / name).read_bytes())
     privacy = (root / 'functions-logistics-access/job_room_privacy.js').read_bytes()
     # Approval and assignment gates must not change as a side effect of display work.
@@ -47,7 +47,7 @@ def prepare(archive, output):
         report.append({'file': path.name, 'beforeSha256': hashlib.sha256(old).hexdigest() if old else None,
             'afterSha256': hashlib.sha256(new).hexdigest(), 'changed': old != new})
     changed = [item['file'] for item in report if item['changed']]
-    assert changed == ['index.js', 'job_room_completion_summary.js', 'job_room_participant_labels.js', 'job_room_privacy.js']
+    assert changed == ['index.js', 'job_room_approved_amounts.js', 'job_room_completion_summary.js', 'job_room_participant_labels.js', 'job_room_privacy.js']
     (output.parent / 'job-room-overlay.private.json').write_text(json.dumps({
         'baseRevision': 'getjobroom-00002-niy', 'baseArchiveSha256': ARCHIVE_SHA,
         'changedFiles': changed, 'files': report}, indent=2))

@@ -2,12 +2,12 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const summary=require('./job_room_completion_summary');
 const room={businessId:'owner',campaignId:'campaign',scalerId:'scaler'};
-const zone={businessId:'owner',campaignId:'campaign',status:'completed',reviewStatus:'approved'};
+const zone={businessId:'owner',campaignId:'campaign',assignedScalerId:'scaler',status:'completed',reviewStatus:'approved'};
 function harness({otherLedger=false}={}) {
  const calls=[];
  const db={collection(name){calls.push(name);return {
   doc(id){return {get:async()=>({id,data:()=>name==='users'?{displayName:'Avery',email:'PRIVATE'}:
-    {type:'scaler_earnings',scalerId:otherLedger?'other':'scaler',zoneId:'zone',campaignId:'campaign',amountCents:1800,baseAmountCents:1500,bonusAmountCents:300}})};},
+    {type:'scaler_earnings',businessId:'owner',scalerId:otherLedger?'other':'scaler',zoneId:'zone',campaignId:'campaign',amountCents:1800,baseAmountCents:1500,bonusAmountCents:300}})};},
   where(){return {limit(){return {get:async()=>({docs:[
     {id:'completion',data:()=>({zoneId:'zone',campaignId:'campaign',scalerId:'scaler',status:'approved',gpsPointCount:35,scalerEmail:'PRIVATE',proofs:[{privateData:'PRIVATE'}]})},
     {id:'foreign',data:()=>({zoneId:'zone',campaignId:'other',scalerId:'scaler'})},

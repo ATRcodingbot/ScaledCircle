@@ -20,11 +20,11 @@ before(async()=>{
   await db.doc('users/'+uid).set({role,active:true,displayName:uid==='scaler'?'Avery Walker':uid,email:'PRIVATE'});
  }
  await db.doc('campaigns/campaign').set({businessId:'owner',status:'open',campaignName:'Completed work',campaignType:'flyerDistribution',materialFulfillmentType:'scaler_pickup_business',materialHandoffAddress:'PRIVATE'});
- await db.doc('campaignZones/zone').set({campaignId:'campaign',businessId:'owner',assignedScalerId:'scaler',status:'completed',reviewStatus:'approved'});
+ await db.doc('campaignZones/zone').set({campaignId:'campaign',businessId:'owner',assignedScalerId:'scaler',status:'completed',reviewStatus:'approved',approvedBaseAmountCents:1500,approvedBonusAmountCents:300,approvedTransferAmountCents:1800});
  await db.doc('jobRooms/zone').set({campaignId:'campaign',businessId:'owner',scalerId:'scaler',status:'open'});
  await db.doc('assignmentCompensations/zone').set({campaignId:'campaign',zoneId:'zone',businessId:'owner',scalerId:'scaler',baseAmountCents:1500,bonusAmountCents:300,immutable:true,acceptedMaterialLogistics:{location:'PRIVATE'}});
  await db.doc('campaignCompletions/completion').set({campaignId:'campaign',zoneId:'zone',scalerId:'scaler',status:'approved',gpsPointCount:35,submittedAt:Timestamp.fromMillis(1000),scalerEmail:'PRIVATE'});
- await db.doc('walletTransactions/earning_zone_v1').set({campaignId:'campaign',zoneId:'zone',scalerId:'scaler',type:'scaler_earnings',amountCents:1800,baseAmountCents:1500,bonusAmountCents:300});
+ await db.doc('walletTransactions/earning_zone_v1').set({campaignId:'campaign',businessId:'owner',zoneId:'zone',scalerId:'scaler',type:'scaler_earnings',amountCents:1800});
  preserved=await state();
 });
 async function state(){const out={};for(const n of ['users','campaigns','campaignZones','assignmentCompensations','campaignCompletions','walletTransactions','trackingSessions','scalerEarnings'])out[n]=(await db.collection(n).get()).docs.map(d=>({id:d.id,...d.data()}));return out;}
