@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/platform_billing_service.dart';
+import '../../widgets/billing_selection_editor.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -19,6 +20,71 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   String? _purchasingPlan;
   bool _creatingPromotion = false;
   String? _starterPromotionCode;
+  Map<String, dynamic> _selection = {'plan': 'starter'};
+
+  Future<void> _purchaseSelection(bool active) async {
+    if (active) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => const BusinessMembershipScreen(),
+        ),
+      );
+      return;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _purchasingPlan != null) return;
+    setState(() => _purchasingPlan = 'selection');
+    try {
+      final businessId = BusinessWorkspaceSession.businessIdFor(user.uid);
+      final quote = await BusinessWorkspaceService().call(
+        'previewBusinessMembershipChange',
+        {
+          'businessId': businessId,
+          'newMembership': true,
+          'selection': _selection,
+        },
+      );
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('Review your membership'),
+          content: Text(
+            '\$${((quote['monthlyCents'] as num) / 100).toStringAsFixed(2)} per month · ${quote['seatLimit']} total users, including the owner.\n\nThe selected Beta products provide research, recommendations and drafts. External actions need separate approval. Stripe shows any applicable tax before payment. You can cancel renewal in Billing / Plan.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Go Back'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('Continue to Secure Checkout'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await _billingService.purchaseSubscription(
+        businessId: businessId,
+        plan: _selection['plan']?.toString() ?? 'managed_growth',
+        selection: _selection,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Membership pricing could not be verified. Retry before making a payment.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _purchasingPlan = null);
+    }
+  }
 
   Future<void> _createStarterPromotion(String businessId) async {
     if (_creatingPromotion) return;
@@ -386,7 +452,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           'Call tracking — Coming Soon',
                           'Campaign landing pages — Coming Soon',
                           'Advanced analytics and ROI reporting',
-                          'Up to 5 team members',
+                          '3 total workspace users, including the owner',
                           'Exportable reports',
                         ],
                       ),
@@ -407,7 +473,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           'Unlimited active campaigns',
                           'Unlimited Scalers',
                           'Unlimited business locations',
-                          'Unlimited team members',
+                          '5 total workspace users, including the owner',
                           'Priority Scaler matching',
                           'Advanced reporting',
                           'API and integrations',
@@ -431,7 +497,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             'For 3–5 initial Businesses building one coordinated digital + physical growth system.',
                         currentPlan: currentPlan,
                         subscriptionActive: subscriptionActive,
-                        availableForPurchase: false,
+                        availableForPurchase: true,
                         features: const [
                           'Everything in Scale',
                           'AI Business Growth Analysis',
@@ -448,7 +514,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       ),
 
                       const SizedBox(height: 24),
-
+                      BillingSelectionEditor(
+                        enabled: _purchasingPlan == null,
+                        onChanged: (value) => _selection = value,
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: _purchasingPlan != null
+                            ? null
+                            : () => _purchaseSelection(subscriptionActive),
+                        child: Text(
+                          subscriptionActive
+                              ? 'Manage Plan & Add-ons'
+                              : 'Review Membership Total',
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(16),

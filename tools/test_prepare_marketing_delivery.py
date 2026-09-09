@@ -21,24 +21,25 @@ class DeliveryTest(unittest.TestCase):
         self.assertEqual(len(descriptions), 5)
 
     def test_referral_and_hash_product_navigation_without_network_or_attribution(self):
-        script = re.findall(r'<script>(.*?)</script>', documents()['/'], re.S)[0]
+        script = next(value for value in re.findall(r'<script>(.*?)</script>', documents()['/'], re.S) if 'function startProduct()' in value)
         harness = r'''
 const vm=require('node:vm'), assert=require('node:assert/strict');
 const script=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
-for(const ref of ['abc234','invalid-secret-value','']) {
+for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secret-value','']) {
  const anchors=['/#/businesses','/pricing','mailto:support@scaledcircle.com'].map(href=>({href,getAttribute(){return this.href},setAttribute(k,v){this.href=v}}));
- let appended=0,removed=0,listener;
- const location={href:'https://scaledcircle.com/?ref='+ref,origin:'https://scaledcircle.com',search:'?ref='+ref,hash:''};
- const context={URL,URLSearchParams,location,addEventListener:(k,v)=>listener=v,document:{querySelectorAll:()=>anchors,getElementById:()=>({remove:()=>removed++}),createElement:()=>({}),body:{appendChild:()=>appended++}}};
+ let appended=0,removed=0;const listeners={};
+ const location={href:'https://scaledcircle.com'+pathname+'?ref='+ref,pathname,origin:'https://scaledcircle.com',search:'?ref='+ref,hash:''};
+ const context={URL,URLSearchParams,location,setTimeout:()=>1,clearTimeout:()=>{},addEventListener:(k,v)=>listeners[k]=v,document:{querySelectorAll:()=>anchors,getElementById:()=>({remove:()=>removed++}),createElement:()=>({remove:()=>removed++}),body:{appendChild:()=>appended++}}};
  vm.runInNewContext(script,context);
- assert.equal(appended,0);
+ assert.equal(appended,pathname==='/'?2:0);
  assert.equal(anchors[0].href,ref==='abc234'? '/?ref=ABC234#/businesses':'/#/businesses');
  assert.equal(anchors[2].href,'mailto:support@scaledcircle.com');
- location.hash='#/job-room/example';listener();listener();
- assert.equal(appended,1);assert.equal(removed,1);
+ location.hash='#/job-room/example';listeners.hashchange();listeners.hashchange();
+ assert.equal(appended,2);assert.equal(removed,1);listeners['flutter-first-frame']();assert.equal(removed,2);
 }
 '''
-        subprocess.run(['node', '-e', harness], input=json.dumps(script), text=True, check=True, capture_output=True)
+        result = subprocess.run(['node', '-e', harness], input=json.dumps(script), text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_five_routes_have_visible_copy_and_distinct_canonicals(self):
         docs = documents()
@@ -50,8 +51,12 @@ for(const ref of ['abc234','invalid-secret-value','']) {
             self.assertIn('<nav aria-label="Main">', value)
             self.assertNotIn('$FLUTTER_BASE_HREF', value)
             self.assertNotIn('src="flutter_bootstrap.js" async', value)
-            self.assertIn("if (!location.hash.startsWith('#/') || appStarted) return;", value)
-        self.assertEqual([x[1] for x in content()['/pricing'][1:]], ['$99/month', '$299/month', '$499/month', '$999/month'])
+            self.assertIn("location.pathname !== '/' && location.pathname !== '/login'", value)
+        self.assertEqual([x[1] for x in content()['/pricing'][1:5]], ['$99/month', '$299/month', '$499/month', '$999/month'])
+        pricing = docs['/pricing']
+        for text in ['Add more intelligence', 'Business Assistant - Beta', '+$399/month', 'Lead Generation Research - Beta', '+$699/month', 'Growth Department - $2,000/month', 'Save $97/month', '10 total users']:
+            self.assertIn(text, pricing)
+        self.assertIn('Research does not authorize contact', pricing)
 
     def test_staging_indexing_and_truthful_conversion_paths(self):
         home = documents(staging=True)['/']

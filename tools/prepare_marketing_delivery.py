@@ -45,7 +45,11 @@ def content():
                   heading('_FieldCampaigns'), scaler, heading('_ManagedGrowth')], '/businesses': funnel('business_funnel_screen.dart'),
             '/scalers': funnel('scaler_funnel_screen.dart'),
             '/how-it-works': [('From a local campaign to work you can review.', 'One clear workflow for the Business and the Scaler.'), *steps],
-            '/pricing': [('Choose how much help you want.', 'Software access is clear. Variable campaign costs are approved separately.'), *pricing]}
+            '/pricing': [('Choose your plan', 'One Business workspace. Total users including the owner: Starter 1, Growth 3, Scale 5, Managed Growth 10.'), *pricing,
+                         ('Add more intelligence', 'Optional recurring add-ons; these never add seats.'),
+                         ('Business Assistant - Beta', '+$399/month. Business state, recommendations and next actions; approval remains required.'),
+                         ('Lead Generation Research - Beta', '+$699/month. Prospect research, evidence and drafts. Research does not authorize contact or automatic cold outreach.'),
+                         ('Growth Department - $2,000/month', 'Managed Growth + Business Assistant Beta + Lead Generation Research Beta. 10 total users. Save $97/month ($1,164/year) versus $2,097 separately. One bundle replaces the three individual recurring charges. Included agent capabilities remain Beta.')]}
 
 
 def documents(*, staging=False):
@@ -80,7 +84,7 @@ def documents(*, staging=False):
         if route == '/':
             blocks.append('<section><h2>Pricing</h2><p>Subscription access and campaign costs are separate. Review compensation and platform fees before funding.</p><div class="capabilities">' + ''.join(
                 f'<article><h3>{html.escape(name)}</h3><p>{html.escape(price)}</p></article>'
-                for name, price in content()['/pricing'][1:]) + '</div><a href="/pricing">Compare plans</a></section>')
+                for name, price in content()['/pricing'][1:5]) + '</div><p>Optional Business Assistant Beta +$399/month and Lead Generation Research Beta +$699/month. Growth Department bundles all three with Managed Growth for $2,000/month; save $97/month.</p><a href="/pricing">Compare plans and add-ons</a></section>')
         blocks.append(cta('Create Scaler Account' if route == '/scalers' else 'Create Business Account'))
         picture = '' if route in ('/', '/pricing') else '<img width="1200" height="630" loading="lazy" src="https://scaledcircle.com/social/2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png" alt="ScaledCircle Smart Mapping: public Baltimore planning demo with estimated homes and an unverified route">'
         body = '<body><main id="marketing"><nav aria-label="Main">' + navigation + '<a class="cta" href="/#/businesses">Get Started</a></nav>' + ''.join(blocks) + picture + '''

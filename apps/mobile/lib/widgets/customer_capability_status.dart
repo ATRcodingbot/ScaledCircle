@@ -12,9 +12,9 @@ class CustomerCapabilityStatus extends StatelessWidget {
           'Plan content, review recommendations, and approve supported publishing. ScaledCircle is testing it on its own channels; results are still being measured.',
     ),
     (
-      title: 'Lead Generation — Beta',
+      title: 'Lead Generation Research — Beta',
       description:
-          'Explore opportunities and plan follow-up. Emerging premium capability; delivered leads and sales are not guaranteed.',
+          'Prospect research, evidence, qualification and drafts. Research does not authorize outreach; delivered leads and sales are not guaranteed.',
     ),
     (
       title: 'Business Assistant — Beta',

@@ -151,13 +151,18 @@ class PlatformBillingService {
     required String businessId,
     required String plan,
     bool manageExisting = false,
+    Map<String, dynamic>? selection,
   }) async {
     final result = await _callSecureFunction(
       businessId: businessId,
       functionName: manageExisting
           ? 'createBillingPortalSession'
           : 'createSubscriptionCheckoutSession',
-      data: {'plan': plan.toLowerCase()},
+      data: {
+        'businessId': businessId,
+        'plan': plan.toLowerCase(),
+        'selection': ?selection,
+      },
     );
     final url = result['url']?.toString();
     if (url == null || url.isEmpty) return result['comped'] == true;

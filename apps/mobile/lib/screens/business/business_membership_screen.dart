@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/business_workspace_service.dart';
 import '../../services/platform_billing_service.dart';
 import 'subscription_screen.dart';
+import '../../widgets/billing_selection_editor.dart';
 
 class BusinessMembershipScreen extends StatefulWidget {
   const BusinessMembershipScreen({super.key, this.service, this.businessId});
@@ -19,6 +20,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
   Map<String, dynamic>? _data;
   bool _busy = false;
   String? _error, _requestId;
+  Map<String, dynamic>? _selection;
   String get _businessId =>
       widget.businessId ??
       BusinessWorkspaceSession.businessIdFor(
@@ -163,6 +165,104 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
     }
   }
 
+  Future<void> _changeSelection() async {
+    if (_busy || _selection == null) return;
+    setState(() => _busy = true);
+    try {
+      final quote = await _service.call('previewBusinessMembershipChange', {
+        'businessId': _businessId,
+        'selection': _selection,
+      });
+      if (!mounted) return;
+      final effective = DateTime.fromMillisecondsSinceEpoch(
+        (quote['effectiveAtMs'] as num).toInt(),
+      ).toLocal();
+      final date = MaterialLocalizations.of(
+        context,
+      ).formatMediumDate(effective);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('Review plan & add-on change'),
+          content: Text(
+            'New recurring total: \$${((quote['monthlyCents'] as num) / 100).toStringAsFixed(2)}/month. ${quote['seatLimit']} total users, including the owner.\n\nEffective $date at renewal. Your current paid access continues until then. No change charge today.\n\nStripe next-invoice preview: \$${((quote['amountDueCents'] as num) / 100).toStringAsFixed(2)}. Taxes and any existing credits are reflected in the provider preview. The bundle replaces its individual components; it never adds duplicate charges.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Keep Current Membership'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('Confirm Change at Renewal'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await _service.call('changeBusinessMembership', {
+        'businessId': _businessId,
+        'action': 'changeSelection',
+        'quoteId': quote['quoteId'],
+        'requestId':
+            'selection_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}',
+      });
+      await _load();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The selection change is not confirmed. Refresh membership to reconcile the provider result. No access is granted by this screen.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _removeScheduledChange() async {
+    if (_busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Keep your current membership?'),
+        content: const Text(
+          'Remove the future plan/add-on change. Your current membership continues. You can then cancel renewal or choose a different selection.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Go Back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Remove Scheduled Change'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _service.call('changeBusinessMembership', {
+        'businessId': _businessId,
+        'action': 'cancelScheduledChange',
+        'requestId':
+            'unschedule_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}',
+      });
+      await _load();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The scheduled change could not be cleared. Refresh to verify provider state.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _data;
@@ -184,11 +284,35 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
               if (data == null && _error == null)
                 const Center(child: CircularProgressIndicator()),
               if (data != null) ...[
+                const Text('Your Plan'),
                 Text(
                   data['planName']?.toString() ?? 'Membership',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 Text('\$${data['price']} per month'),
+                const SizedBox(height: 12),
+                const Text(
+                  'Add-ons',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if ((data['addons'] as List? ?? []).isEmpty)
+                  const Text('No paid add-ons'),
+                for (final addon in (data['addons'] as List? ?? []))
+                  Text(
+                    data['bundle'] == 'growth_department'
+                        ? '${addon == 'business_assistant' ? 'Business Assistant — Beta' : 'Lead Generation Research — Beta'} · Included in Growth Department'
+                        : billingAddOnLabels[addon] ?? 'Verified add-on',
+                  ),
+                if (data['scheduledChange'] is Map) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Scheduled at renewal: \$${(((data['scheduledChange'] as Map)['monthlyCents'] as num) / 100).toStringAsFixed(2)}/month. Current access remains through $_end.',
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy ? null : _removeScheduledChange,
+                    child: const Text('Remove Scheduled Change'),
+                  ),
+                ],
                 Text(
                   data['cancelAtPeriodEnd'] == true
                       ? 'Paid access ends $_end. No further subscription renewal is scheduled.'
@@ -199,7 +323,9 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                   'Your funded campaigns and accepted Scaler contracts continue independently of subscription cancellation. You can still sign in to view your historical records after the paid term ends, subject to our retention policy.',
                 ),
                 const SizedBox(height: 16),
-                if (data['canCancel'] == true && data['changePending'] != true)
+                if (data['canCancel'] == true &&
+                    data['changePending'] != true &&
+                    data['scheduledChange'] == null)
                   OutlinedButton(
                     onPressed: _busy ? null : () => _change('cancel'),
                     child: const Text('Cancel Membership'),
@@ -210,7 +336,11 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     onPressed: _busy ? null : () => _change('reactivate'),
                     child: const Text('Reactivate Membership'),
                   ),
-                if (data['paidAccess'] == true && data['changePending'] != true)
+                if (data['paidAccess'] == true &&
+                    data['changePending'] != true &&
+                    data['scheduledChange'] == null &&
+                    data['bundle'] == null &&
+                    (data['addons'] as List? ?? []).isEmpty)
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(labelText: 'Change Plan'),
                     items: const [
@@ -239,6 +369,32 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                             }
                           },
                   ),
+                if (data['paidAccess'] == true &&
+                    data['changePending'] != true &&
+                    data['scheduledChange'] == null &&
+                    data['cancelAtPeriodEnd'] != true) ...[
+                  const SizedBox(height: 24),
+                  BillingSelectionEditor(
+                    key: ValueKey(
+                      '${data['plan']}:${data['bundle']}:${data['addons']}',
+                    ),
+                    initial: {
+                      'plan': data['plan'],
+                      'bundle': data['bundle'],
+                      'addons': data['bundle'] == null
+                          ? data['addons'] ?? []
+                          : [],
+                    },
+                    enabled: !_busy,
+                    onChanged: (value) => setState(() => _selection = value),
+                  ),
+                  FilledButton(
+                    onPressed: _busy || _selection == null
+                        ? null
+                        : _changeSelection,
+                    child: const Text('Review Plan & Add-on Changes'),
+                  ),
+                ],
                 if (data['changePending'] == true)
                   const Text(
                     'A previous membership change is being reconciled. Refresh to confirm it.',

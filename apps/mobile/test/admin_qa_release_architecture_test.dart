@@ -141,11 +141,13 @@ void main() {
     },
   );
 
-  test('public Managed Growth checkout remains disabled', () {
+  test('authorized catalog exposes Managed Growth through verified Checkout', () {
     final subscriptions = source(
       'lib/screens/business/subscription_screen.dart',
     );
     expect(subscriptions, contains("plan: 'managed_growth'"));
-    expect(subscriptions, contains('availableForPurchase: false'));
+    expect(subscriptions, contains('availableForPurchase: true'));
+    expect(subscriptions, contains('previewBusinessMembershipChange'));
+    expect(subscriptions, contains('Beta'));
   });
 }

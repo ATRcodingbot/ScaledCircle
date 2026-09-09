@@ -552,6 +552,9 @@ setGlobalOptions({
 
 
 
+
+
+
 async function authenticatedUserContext(request, message) {
   if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
@@ -582,6 +585,10 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
 
 
 
@@ -13039,13 +13046,25 @@ exports.getBusinessWorkspaceContext = workspaceEndpoint(async (request, service)
     subscriptionActive: subscriptionEntitlements.hasActivePaidBusinessEntitlement(a.entitlement),
     planId: String(a.entitlement.planId || a.entitlement.plan || ""),
     propertyIntelligenceAvailable: subscriptionEntitlements.hasActiveScaleEntitlement(a.entitlement),
-    managedGrowthAvailable: subscriptionEntitlements.hasActiveManagedGrowthEntitlement(a.entitlement), seatLimit: a.capacity };
+    managedGrowthAvailable: subscriptionEntitlements.hasActiveManagedGrowthEntitlement(a.entitlement), seatLimit: a.capacity,
+    businessAssistantAvailable: subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement, 'business_assistant'),
+    leadGenerationResearchAvailable: subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement, 'lead_generation_research'),
+    billingBundle: a.entitlement.bundle || null };
 });
 exports.selectBusinessWorkspace = workspaceEndpoint(async (request, service) => {
   const a = await service.authority({ uid: request.auth.uid, businessId: request.data?.businessId, allowExpired: true });
   await db.doc(`users/${request.auth.uid}`).update({ activeBusinessId: a.businessId });
   return { businessId: a.businessId };
 });
+
+
+
+
+
+
+
+
+
 
 
 

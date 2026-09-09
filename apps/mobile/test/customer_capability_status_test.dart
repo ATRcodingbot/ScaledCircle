@@ -15,7 +15,7 @@ void main() {
     );
     for (final title in [
       'Social Manager — Beta',
-      'Lead Generation — Beta',
+      'Lead Generation Research — Beta',
       'Business Assistant — Beta',
       'Ad Manager — Beta',
       'Printing — Coming Soon',

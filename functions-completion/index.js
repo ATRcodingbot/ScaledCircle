@@ -546,6 +546,9 @@ setGlobalOptions({
 
 
 
+
+
+
 const MINIMUM_PAYABLE_COMPLETION_PERCENTAGE = 10;
 
 
@@ -582,6 +585,10 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
 
 
 

@@ -552,6 +552,9 @@ const DEVELOPMENT_HOMES_PER_ACRE = 2.5;
 
 
 
+
+
+
 async function authenticatedUserContext(request, message) {
   if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
@@ -582,6 +585,10 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
 
 
 

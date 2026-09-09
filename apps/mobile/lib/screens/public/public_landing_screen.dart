@@ -564,6 +564,58 @@ class _Pricing extends StatelessWidget {
         ),
         const SizedBox(height: 22),
         _PricingGrid(children: cards),
+        const SizedBox(height: 28),
+        const _Heading(
+          eyebrow: 'ADD-ONS',
+          title: 'Add more intelligence',
+          subtitle: 'Add to one workspace plan. Add-ons do not add seats.',
+        ),
+        const SizedBox(height: 18),
+        _PricingGrid(
+          children: [
+            _Price(
+              name: 'BUSINESS ASSISTANT',
+              price: '+\$399/month',
+              badge: 'BETA',
+              body:
+                  'Review business information, recommendations and next actions. Your approval stays in control.',
+              features: const [
+                'Current business and campaign state',
+                'Recommendations and observations',
+                'No autonomous accomplishments claimed',
+              ],
+              onGetStarted: onGetStarted,
+            ),
+            _Price(
+              name: 'LEAD GENERATION RESEARCH',
+              price: '+\$699/month',
+              badge: 'BETA',
+              body:
+                  'Prospect research, evidence, qualification and drafts. Research never authorizes contact.',
+              features: const [
+                'Evidence and provenance',
+                'Research and draft preparation',
+                'No automatic cold outreach',
+              ],
+              onGetStarted: onGetStarted,
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+        _Price(
+          name: 'GROWTH DEPARTMENT',
+          price: '\$2,000/month',
+          badge: 'SAVE \$97/MONTH',
+          body:
+              'The full current ScaledCircle growth stack: Managed Growth + Business Assistant Beta + Lead Generation Research Beta.',
+          features: const [
+            '10 total workspace users, including the owner',
+            '\$2,097 separately · save \$1,164/year',
+            'One bundle replaces the three individual recurring charges',
+            'Included agent capabilities remain Beta',
+          ],
+          onGetStarted: onGetStarted,
+        ),
         const SizedBox(height: 18),
         OutlinedButton(
           onPressed: onCompare,
@@ -587,11 +639,14 @@ class _PricingGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final columns = constraints.maxWidth >= 1080
+      final availableColumns = constraints.maxWidth >= 1080
           ? 4
           : constraints.maxWidth >= 680
           ? 2
           : 1;
+      final columns = availableColumns > children.length
+          ? children.length
+          : availableColumns;
       final width = (constraints.maxWidth - (16 * (columns - 1))) / columns;
       return Wrap(
         spacing: 16,

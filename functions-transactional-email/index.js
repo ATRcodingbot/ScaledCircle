@@ -1214,6 +1214,9 @@ const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
 
 
 
+
+
+
 function signupEmailError(error) {
   const code = error?.message || "signup_email_failed";
   if (["signup_input_invalid", "referrer_required"].includes(code)) {
@@ -1344,6 +1347,10 @@ exports.sendTransactionalEmailJob = onDocumentCreated(
 );
 
 /** Deliver only user-requested Managed Growth artifacts from an isolated queue. */
+
+
+
+
 
 
 

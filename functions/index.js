@@ -530,6 +530,9 @@ const STRIPE_STARTER_PRICE_ID = defineSecret("STRIPE_STARTER_PRICE_ID");
 const STRIPE_GROWTH_PRICE_ID = defineSecret("STRIPE_GROWTH_PRICE_ID");
 const STRIPE_SCALE_PRICE_ID = defineSecret("STRIPE_SCALE_PRICE_ID");
 const STRIPE_MANAGED_GROWTH_PRICE_ID = defineSecret("STRIPE_MANAGED_GROWTH_PRICE_ID");
+const STRIPE_BUSINESS_ASSISTANT_PRICE_ID = defineSecret("STRIPE_BUSINESS_ASSISTANT_PRICE_ID");
+const STRIPE_LEAD_GENERATION_RESEARCH_PRICE_ID = defineSecret("STRIPE_LEAD_GENERATION_RESEARCH_PRICE_ID");
+const STRIPE_GROWTH_DEPARTMENT_PRICE_ID = defineSecret("STRIPE_GROWTH_DEPARTMENT_PRICE_ID");
 
 
 const SUBSCRIPTION_PRICES = {
@@ -1987,6 +1990,9 @@ function stripePriceForPlan(plan) {
     growth: STRIPE_GROWTH_PRICE_ID.value(),
     scale: STRIPE_SCALE_PRICE_ID.value(),
     managed_growth: STRIPE_MANAGED_GROWTH_PRICE_ID.value(),
+    business_assistant: STRIPE_BUSINESS_ASSISTANT_PRICE_ID.value(),
+    lead_generation_research: STRIPE_LEAD_GENERATION_RESEARCH_PRICE_ID.value(),
+    growth_department: STRIPE_GROWTH_DEPARTMENT_PRICE_ID.value(),
   };
   return prices[plan] || "";
 }
@@ -1997,6 +2003,9 @@ function planForStripePrice(priceId) {
     [STRIPE_GROWTH_PRICE_ID.value()]: "growth",
     [STRIPE_SCALE_PRICE_ID.value()]: "scale",
     [STRIPE_MANAGED_GROWTH_PRICE_ID.value()]: "managed_growth",
+    [STRIPE_BUSINESS_ASSISTANT_PRICE_ID.value()]: "business_assistant",
+    [STRIPE_LEAD_GENERATION_RESEARCH_PRICE_ID.value()]: "lead_generation_research",
+    [STRIPE_GROWTH_DEPARTMENT_PRICE_ID.value()]: "growth_department",
   };
   return prices[priceId] || null;
 }
@@ -2028,6 +2037,9 @@ const STRIPE_CHECKOUT_SECRETS = [
   STRIPE_GROWTH_PRICE_ID,
   STRIPE_SCALE_PRICE_ID,
   STRIPE_MANAGED_GROWTH_PRICE_ID,
+  STRIPE_BUSINESS_ASSISTANT_PRICE_ID,
+  STRIPE_LEAD_GENERATION_RESEARCH_PRICE_ID,
+  STRIPE_GROWTH_DEPARTMENT_PRICE_ID,
 ];
 
 const STARTER_FREE_MONTH_PROMOTION_CODE = "SCALEDFREE99";
@@ -2171,7 +2183,7 @@ exports.createSubscriptionCheckoutSession = onCall(
     ).toLowerCase();
     if (
       activeStripeSubscriptionId &&
-      ["active", "trialing", "past_due"].includes(subscriptionStatus)
+      !["canceled", "incomplete_expired"].includes(subscriptionStatus)
     ) {
       throw new HttpsError(
         "already-exists",
@@ -2180,46 +2192,41 @@ exports.createSubscriptionCheckoutSession = onCall(
       );
     }
 
-    const plan = readText(request.data?.plan, 20).toLowerCase();
-    if (!SUBSCRIPTION_PRICES[plan]) {
-      throw new HttpsError("invalid-argument", "Choose a valid plan.");
-    }
-    const price = stripePriceForPlan(plan);
-    if (!price) {
-      throw new HttpsError(
-        "failed-precondition",
-        `Stripe pricing for the ${plan} plan is not configured.`,
-      );
-    }
-
+    const contract=require('./subscription_contract');
+    let selected;
+    try{selected=contract.selectionTerms(request.data?.selection||{plan:readText(request.data?.plan,32).toLowerCase()});}
+    catch(_){throw new HttpsError('invalid-argument','Choose one plan with optional add-ons, or Growth Department.');}
+    const plan=selected.plan,selectionKey=JSON.stringify({plan,bundle:selected.bundle,addons:selected.addons});
     const stripe = subscriptionStripeClient();
-    await require('./subscription_contract').certifyPrice(stripe,price,
-      {...subscriptionConfiguration(),requireActive:true});
+    const lineItems=[];
+    for(const itemId of selected.items){const price=stripePriceForPlan(itemId);await contract.certifyPrice(stripe,price,{...subscriptionConfiguration(),requireActive:true});lineItems.push({price,quantity:1});}
     const customer = await getOrCreateStripeCustomer(stripe, context);
     const checkoutWallet = db.doc(`wallets/${context.uid}`);
     let checkoutRequestId;
     await db.runTransaction(async tx => {
       const current = (await tx.get(checkoutWallet)).data() || {};
+      if(current.stripeSubscriptionId&&!['canceled','incomplete_expired'].includes(current.subscriptionStatus))throw new HttpsError('already-exists','A membership is already linked. Use Billing / Plan.');
       if (current.pendingSubscriptionExpiresMs > Date.now()) {
-        if (current.pendingSubscriptionPlan !== plan) throw new HttpsError('failed-precondition', 'Complete or let the existing subscription Checkout expire before choosing another plan.');
+        const sameSelection=current.pendingSubscriptionSelection===selectionKey||(!current.pendingSubscriptionSelection&&!selected.bundle&&!selected.addons.length&&current.pendingSubscriptionPlan===plan);
+        if (!sameSelection) throw new HttpsError('failed-precondition', 'Complete or let the existing subscription Checkout expire before choosing another selection.');
         checkoutRequestId = current.pendingSubscriptionRequestId;
       } else {
         checkoutRequestId = crypto.randomUUID();
         tx.set(checkoutWallet, {pendingSubscriptionRequestId: checkoutRequestId,
-          pendingSubscriptionPlan: plan, pendingSubscriptionExpiresMs: Date.now()+24*60*60*1000}, {merge:true});
+          pendingSubscriptionPlan: plan,pendingSubscriptionSelection:selectionKey, pendingSubscriptionExpiresMs: Date.now()+24*60*60*1000}, {merge:true});
       }
     });
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer,
-      line_items: [{price, quantity: 1}],
-      allow_promotion_codes: true,
+      line_items: lineItems,
+      allow_promotion_codes: !selected.bundle&&selected.addons.length===0,
       success_url: `${publicAppBaseUrl()}/?billing=success`,
       cancel_url: `${publicAppBaseUrl()}/?billing=cancelled`,
-      metadata: {firebaseUid: context.uid, purchaseType: "subscription", plan},
-      subscription_data: {metadata: {firebaseUid: context.uid, plan, checkoutRequestId}},
+      metadata: {firebaseUid: context.uid, purchaseType: "subscription", ...contract.selectionMetadata(selected)},
+      subscription_data: {metadata: {firebaseUid: context.uid, ...contract.selectionMetadata(selected), checkoutRequestId}},
     }, {idempotencyKey: `workspace_subscription_${checkoutRequestId}`});
-    return {url: session.url, sessionId: session.id, plan, comped: false};
+    return {url: session.url, sessionId: session.id, plan,bundle:selected.bundle,addons:selected.addons,monthlyCents:selected.monthlyCents, comped: false};
   }),
 );
 
@@ -13039,7 +13046,10 @@ exports.getBusinessWorkspaceContext = workspaceEndpoint(async(request,service)=>
     subscriptionActive:subscriptionEntitlements.hasActivePaidBusinessEntitlement(a.entitlement),
     planId:String(a.entitlement.planId||a.entitlement.plan||""),
     propertyIntelligenceAvailable:subscriptionEntitlements.hasActiveScaleEntitlement(a.entitlement),
-    managedGrowthAvailable:subscriptionEntitlements.hasActiveManagedGrowthEntitlement(a.entitlement),seatLimit:a.capacity};
+    managedGrowthAvailable:subscriptionEntitlements.hasActiveManagedGrowthEntitlement(a.entitlement),seatLimit:a.capacity,
+    businessAssistantAvailable:subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement,'business_assistant'),
+    leadGenerationResearchAvailable:subscriptionEntitlements.hasActiveProductEntitlement(a.entitlement,'lead_generation_research'),
+    billingBundle:a.entitlement.bundle||null};
 });
 exports.selectBusinessWorkspace = workspaceEndpoint(async(request,service)=>{
   const a=await service.authority({uid:request.auth.uid,businessId:request.data?.businessId,allowExpired:true});
@@ -13053,7 +13063,16 @@ function businessBillingService(service) {
     planForPrice:planForStripePrice,priceForPlan:stripePriceForPlan,sync:syncStripeSubscription});
 }
 exports.getBusinessMembership = workspaceEndpoint((request,service)=>businessBillingService(service).get({uid:request.auth.uid,businessId:request.data?.businessId}),{secrets:STRIPE_CHECKOUT_SECRETS});
-exports.previewBusinessMembershipChange = workspaceEndpoint((request,service)=>businessBillingService(service).preview({uid:request.auth.uid,businessId:request.data?.businessId,plan:request.data?.plan}),{secrets:STRIPE_CHECKOUT_SECRETS});
+exports.previewBusinessMembershipChange = workspaceEndpoint(async(request,service)=>{
+  if(request.data?.newMembership===true){
+    await service.authority({uid:request.auth.uid,businessId:request.data?.businessId,permission:'billing',allowExpired:true});
+    let chosen;try{chosen=require('./subscription_contract').selectionTerms(request.data?.selection);}catch(_){throw new HttpsError('invalid-argument','Choose a valid membership selection.');}
+    let monthlyCents=0;const stripe=subscriptionStripeClient();
+    for(const item of chosen.items){const verified=await require('./subscription_contract').certifyPrice(stripe,stripePriceForPlan(item),{...subscriptionConfiguration(),requireActive:true});monthlyCents+=verified.price.unit_amount;}
+    return {selection:require('./subscription_contract').selection(chosen),monthlyCents,seatLimit:chosen.seats,planName:chosen.name||chosen.plan,providerVerified:true};
+  }
+  return businessBillingService(service).preview({uid:request.auth.uid,businessId:request.data?.businessId,plan:request.data?.plan,selection:request.data?.selection});
+},{secrets:STRIPE_CHECKOUT_SECRETS});
 exports.changeBusinessMembership = workspaceEndpoint((request,service)=>businessBillingService(service).change({uid:request.auth.uid,businessId:request.data?.businessId,
   action:request.data?.action,requestId:request.data?.requestId,plan:request.data?.plan,quoteId:request.data?.quoteId}),{secrets:STRIPE_CHECKOUT_SECRETS});
 

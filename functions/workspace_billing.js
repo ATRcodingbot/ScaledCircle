@@ -1,16 +1,23 @@
 'use strict';
 const crypto=require('node:crypto');
 const {PLANS}=require('./business_workspace');
+const catalog=require('./subscription_contract');
 function error(code,message){const e=new Error(message);e.code=code;throw e;}
 function subscriptionView(subscription,expected,{planForPrice,now=Date.now()}) {
  const customer=typeof subscription.customer==='string'?subscription.customer:subscription.customer?.id;
  if(subscription.id!==expected.subscriptionId||customer!==expected.customerId||subscription.metadata?.firebaseUid!==expected.businessId)error('permission-denied','The subscription is not bound to this Business.');
- const item=subscription.items?.data?.[0];
- const plan=planForPrice(item?.price?.id);
+ const allItems=subscription.items?.data||[],ids=allItems.map(i=>planForPrice(i.price?.id));
+ if(new Set(ids).size!==ids.length||allItems.some(i=>(i.quantity||1)!==1))error('failed-precondition','The subscription items need reconciliation.');
+ const bundle=ids.includes(catalog.BUNDLE)?catalog.BUNDLE:null;
+ if(bundle&&ids.length!==1||!bundle&&ids.filter(i=>PLANS[i]).length!==1||ids.some(i=>!catalog.ITEMS[i]))error('failed-precondition','The subscription selection needs reconciliation.');
+ const selected=catalog.selectionTerms(bundle?{bundle}:{plan:ids.find(i=>PLANS[i]),addons:ids.filter(i=>catalog.ADDONS[i])});
+ const item=allItems[0],plan=selected.plan;
  const end=Number(item?.current_period_end||subscription.current_period_end)*1000;
  if(!PLANS[plan]||!Number.isFinite(end)||end<=0)error('failed-precondition','The subscription terms need reconciliation.');
  const active=['active','trialing'].includes(subscription.status)&&end>now;
- return {businessId:expected.businessId,subscriptionId:subscription.id,plan,planName:PLANS[plan].name,price:PLANS[plan].price,
+ if(allItems.some(i=>Number(i.current_period_end||subscription.current_period_end)*1000!==end))error('failed-precondition','The billing periods need reconciliation.');
+ return {businessId:expected.businessId,subscriptionId:subscription.id,plan,planName:bundle?'Growth Department':PLANS[plan].name,price:selected.monthlyCents/100,
+  basePrice:PLANS[plan].price,bundle,addons:bundle?Object.keys(catalog.ADDONS):selected.addons,monthlyCents:selected.monthlyCents,seatLimit:selected.seats,
   status:subscription.status,cancelAtPeriodEnd:subscription.cancel_at_period_end===true,periodEndMs:end,paidAccess:active,
   canWithdrawCancellation:active&&subscription.cancel_at_period_end===true,canCancel:active&&subscription.cancel_at_period_end!==true};
 }
@@ -45,11 +52,13 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
    return {...view,changePending:true};
  }
 
+ const selections=require('./workspace_billing_catalog').createSelectionService({db,FieldValue,workspace,stripe,read,planForPrice,priceForPlan,validatePrice,now});
  return {
-  async get({uid,businessId}) {const r=await read(uid,businessId);return reconcile(r.a,r.provider,r.view);},
-  async preview({uid,businessId,plan}) {
+  async get({uid,businessId}) {const r=await read(uid,businessId);const view=await reconcile(r.a,r.provider,r.view);return selections.decorate({...r,view});},
+  async preview({uid,businessId,plan,selection}) {
+   if(selection)return selections.preview({uid,businessId,selection});
    const {a,provider,view}=await read(uid,businessId);
-   if(!PLANS[plan]||!priceForPlan(plan)||!view.paidAccess||plan===view.plan||provider.items.data.length!==1||provider.schedule)error('failed-precondition','Choose a different plan for this active membership.');
+   if(!PLANS[plan]||!priceForPlan(plan)||!view.paidAccess||plan===view.plan||view.bundle||provider.items.data.length!==1||provider.schedule)error('failed-precondition','Use the membership selection to change a bundle or add-ons.');
    if(validatePrice)await validatePrice(priceForPlan(plan));
    const prorationDate=Math.floor(now()/1000),upgrade=PLANS[plan].price>PLANS[view.plan].price;
    const params={items:[{id:provider.items.data[0].id,price:priceForPlan(plan)}],metadata:{...provider.metadata,plan},proration_behavior:upgrade?'always_invoice':'create_prorations',proration_date:prorationDate,payment_behavior:'error_if_incomplete'};
@@ -60,9 +69,12 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
    return {quoteId:ref.id,plan,planName:PLANS[plan].name,price:PLANS[plan].price,seatLimit:PLANS[plan].seats,amountDueCents:invoice.amount_due,totalCents:invoice.total,upgrade,expiresAtMs:quote.expiresAtMs};
   },
   async change({uid,businessId,action,requestId,plan,quoteId}) {
+   if(['changeSelection','cancelScheduledChange'].includes(action))return selections.change({uid,businessId,action,requestId,quoteId});
    if(!['cancel','reactivate','changePlan'].includes(action))error('invalid-argument','Choose a supported membership action.');
    if(typeof requestId!=='string'||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))error('invalid-argument','A unique request is required.');
-   const {a,provider,view}=await read(uid,businessId);
+   const {a,provider,view}=await selections.ensureEditable(await read(uid,businessId));
+   if(provider.schedule)error('failed-precondition','Remove the scheduled membership change first, then cancel, reactivate or change the current plan.');
+   if(action==='changePlan'&&(view.bundle||provider.items.data.length!==1))error('failed-precondition','Use the membership selection to change a bundle or add-ons.');
    if(action==='changePlan' && validatePrice)await validatePrice(priceForPlan(plan));
    await reconcile(a,provider,view);
    const operationId=crypto.createHash('sha256').update(`${a.businessId}:${requestId}`).digest('hex'),ref=db.doc(`businessBillingOperations/${operationId}`);

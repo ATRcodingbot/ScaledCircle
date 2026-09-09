@@ -36,6 +36,13 @@ function hasActivePaidBusinessEntitlement(record, {nowMillis = Date.now()} = {})
     Number.isFinite(expiresAtMillis) && expiresAtMillis > nowMillis;
 }
 
+function hasActiveProductEntitlement(record, product, options = {}) {
+  if(!['business_assistant','lead_generation_research'].includes(product))return false;
+  return hasActivePaidBusinessEntitlement(record,options) && record.source==='stripe' &&
+    Array.isArray(record.addons) && record.addons.includes(product) &&
+    Array.isArray(record.productEntitlements) && record.productEntitlements.includes(product);
+}
+
 module.exports = {
   SCALE_PLAN_ID,
   MANAGED_GROWTH_PLAN_ID,
@@ -44,4 +51,5 @@ module.exports = {
   hasActiveScaleEntitlement,
   hasActiveManagedGrowthEntitlement,
   hasActivePaidBusinessEntitlement,
+  hasActiveProductEntitlement,
 };

@@ -20,7 +20,7 @@ const STRIPE_SECRET_KEY = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live"
   "STRIPE_LIVE_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live" ?
   "STRIPE_LIVE_WEBHOOK_SECRET" : "STRIPE_TEST_WEBHOOK_SECRET");
-const SUBSCRIPTION_PRICES = Object.fromEntries(['starter','growth','scale','managed_growth']
+const SUBSCRIPTION_PRICES = Object.fromEntries(['starter','growth','scale','managed_growth','business_assistant','lead_generation_research','growth_department']
   .map(plan=>[plan,defineSecret(`STRIPE_${plan.toUpperCase()}_PRICE_ID`)]));
 function subscriptionPlanForPrice(id) {
   return Object.keys(SUBSCRIPTION_PRICES).find(plan=>SUBSCRIPTION_PRICES[plan].value()===id);
