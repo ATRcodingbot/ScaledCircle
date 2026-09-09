@@ -5,6 +5,11 @@ import '../../widgets/reserve_settlement_panel.dart';
 import 'job_details_screen.dart';
 import '../../widgets/campaign_card_header.dart';
 import '../../widgets/business_live_progress_panel.dart';
+import '../../widgets/job_room_completion_result.dart';
+import '../../widgets/completion_evidence_panel.dart';
+import '../../models/canvassing_photo_policy.dart';
+import '../../navigation/context_back_button.dart';
+import '../../navigation/app_routes.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/job_room_service.dart';
@@ -106,9 +111,15 @@ String jobRoomEarningOutcome(Map<String, dynamic> completion) {
 }
 
 class JobRoomScreen extends StatefulWidget {
-  const JobRoomScreen({super.key, required this.zoneId, this.service});
+  const JobRoomScreen({
+    super.key,
+    required this.zoneId,
+    this.service,
+    this.tilesEnabled = true,
+  });
   final String zoneId;
   final JobRoomService? service;
+  final bool tilesEnabled;
 
   @override
   State<JobRoomScreen> createState() => _JobRoomScreenState();
@@ -568,11 +579,20 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Job Room'),
+          leading: const ContextBackButton(),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
     if (_loadFailed) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Job Room')),
+        appBar: AppBar(
+          title: const Text('Job Room'),
+          leading: const ContextBackButton(),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -642,8 +662,31 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
         (room['scalerId'] == null ? 0 : 1);
     final share = (compensation['initialShareCents'] as num?)?.round();
     final workerPool = (group['workerPoolCents'] as num?)?.round();
+    final completed =
+        ['approved', 'completed', 'paid', 'settled'].contains(zone['status']) ||
+        (completions.isNotEmpty &&
+            completions.every(
+              (c) =>
+                  c['status'] == 'approved' || c['reviewStatus'] == 'approved',
+            ));
+    final submitted = completions.isNotEmpty;
+    final canvassing = prohibitsResidentialPhotos(
+      campaign['campaignType'] ?? zone['campaignType'],
+    );
+    final evidence = Map<String, dynamic>.from(
+      data['completionEvidence'] as Map? ?? {},
+    );
     return Scaffold(
-      appBar: AppBar(title: const Text('Job Room')),
+      appBar: AppBar(
+        title: const Text('Job Room'),
+        leading: ContextBackButton(
+          fallback: viewerRole == 'scaler'
+              ? AppRoutes.myWork
+              : viewerRole == 'admin'
+              ? AppRoutes.adminDashboard
+              : AppRoutes.businessDashboard,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -656,7 +699,9 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           Text('$scalerCount assigned Scaler${scalerCount == 1 ? '' : 's'}'),
-          if (['business', 'admin'].contains(data['viewerRole']))
+          if (!submitted &&
+              !completed &&
+              ['business', 'admin'].contains(data['viewerRole']))
             BusinessLiveProgressPanel(zoneId: widget.zoneId),
           if (data['pausedWork'] is Map &&
               [
@@ -707,10 +752,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
             ...completions.map((completion) {
               final status = completion['status']?.toString();
               final reviewStatus = completion['reviewStatus']?.toString();
-              final scaler =
-                  completion['scalerEmail']?.toString().isNotEmpty == true
-                  ? completion['scalerEmail'].toString()
-                  : completion['scalerId']?.toString() ?? 'Assigned Scaler';
+              final scaler = jobRoomScalerName(data, completion);
               final feedback = completion['reviewFeedback']?.toString();
               final canReview = jobRoomReviewActionVisible(
                 viewerRole: viewerRole,
@@ -731,8 +773,27 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       Text('Scaler: $scaler'),
-                      Text('Evidence: ${jobRoomEvidenceSummary(completion)}'),
-                      Text(jobRoomEarningOutcome(completion)),
+                      if (canvassing)
+                        JobRoomCompletionResult(
+                          completion: completion,
+                          evidence: evidence,
+                          compensation: compensation,
+                        )
+                      else
+                        Text(jobRoomEarningOutcome(completion)),
+                      if (evidence.isEmpty || !canvassing)
+                        ExpansionTile(
+                          title: const Text('Evidence Details'),
+                          children: [Text(jobRoomEvidenceSummary(completion))],
+                        ),
+                      if (completion['submittedAt'] != null)
+                        Text(
+                          'Submitted: ${_formatDate(completion['submittedAt'])}',
+                        ),
+                      if (completion['reviewedAt'] != null)
+                        Text(
+                          'Reviewed: ${_formatDate(completion['reviewedAt'])}',
+                        ),
                       if (feedback != null && feedback.trim().isNotEmpty)
                         Text('Business review: $feedback'),
                       if (canReview) ...[
@@ -751,317 +812,344 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
                 ),
               );
             }),
-          const Divider(height: 28),
-          const Text(
-            'MATERIALS',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          if (!privateLogisticsAvailable)
-            Text(
-              data['pausedWork'] is Map
-                  ? 'Saved work and messages remain available. Private pickup details are hidden while work is paused.'
-                  : 'Exact logistics and coordination actions are no longer available for this assignment.',
-            )
-          else ...[
-            Text('Fulfillment: ${_fulfillmentLabel(fulfillmentType)}'),
-            if (logistics['printingShopName'] != null)
-              Text('Printing shop: ${logistics['printingShopName']}'),
-            if (logistics['location'] != null)
-              Text('Location: ${logistics['location']}'),
-            if (logistics['scheduledAt'] != null)
-              Text('Date/time: ${_formatDate(logistics['scheduledAt'])}'),
-            if (logistics['instructions'] != null)
-              Text('Instructions: ${logistics['instructions']}'),
-            Text(
-              'Your materials: ${materialHandoffStatusLabel(status: handoff['status']?.toString(), fulfillmentType: fulfillmentType, materialsRequired: materialsRequired)}',
+          if (evidence.isNotEmpty)
+            CompletionEvidencePanel(
+              evidence: evidence,
+              tilesEnabled: widget.tilesEnabled,
             ),
-            Text(
-              logisticsLocked
-                  ? 'Status: Locked to the accepted assignment'
-                  : 'Status: Editable until a Scaler is assigned',
-            ),
-            const Text(
-              'Shared logistics never completes another participant’s material receipt.',
-            ),
-            if (proposal != null) ...[
-              const SizedBox(height: 12),
-              const Text(
-                'PROPOSED LOGISTICS CHANGE',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text('Reason: ${proposal['reason']}'),
-              Text('Status: ${proposal['status']}'),
-              Text(
-                'Accepted: ${(proposal['acceptedScalerIds'] as List?)?.length ?? 0}',
-              ),
-              Text(
-                'Pending: ${(proposal['pendingScalerIds'] as List?)?.length ?? 0}',
-              ),
-              Text(
-                'Declined: ${(proposal['declinedScalerIds'] as List?)?.length ?? 0}',
-              ),
-              if (viewerRole == 'scaler' &&
-                  proposal['status'] == 'pending_acknowledgment')
-                Row(
-                  children: [
-                    FilledButton(
-                      onPressed: _respondingToProposal
-                          ? null
-                          : () => _respondToProposal(
-                              proposalId: proposal['id'].toString(),
-                              accept: true,
-                            ),
-                      child: Text(
-                        _respondingToProposal
-                            ? 'Recording...'
-                            : 'Accept Change',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: _respondingToProposal
-                          ? null
-                          : () => _respondToProposal(
-                              proposalId: proposal['id'].toString(),
-                              accept: false,
-                            ),
-                      child: const Text('Decline'),
-                    ),
-                  ],
-                ),
-            ],
-            if (viewerRole == 'business') ...[
-              Text(
-                'Material status: ${readiness['receivedCount'] ?? 0} / ${readiness['assignedCount'] ?? scalerCount} received',
-              ),
-              if (groupMaterialStatuses.isEmpty && materialsRequired)
+          if (completed)
+            const ExpansionTile(
+              title: Text('Earlier coordination'),
+              children: [
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
                   title: Text(
-                    materialHandoffStatusLabel(
-                      status: handoff['status']?.toString(),
-                      fulfillmentType: fulfillmentType,
-                      materialsRequired: true,
-                    ),
+                    'Materials and pre-start coordination are closed.',
                   ),
                   subtitle: Text(
-                    'Business confirmation: ${handoff['businessConfirmedAt'] != null ? 'Confirmed' : 'Pending'}\n'
-                    'Scaler confirmation: ${handoff['scalerConfirmedAt'] != null ? 'Confirmed' : 'Pending'}',
-                  ),
-                  trailing:
-                      handoff['status'] != 'received' &&
-                          handoff['businessConfirmedAt'] == null
-                      ? TextButton(
-                          onPressed: _activeBusinessDeliveryHandoffId == null
-                              ? () => _confirmBusinessMaterials(
-                                  handoff['id']?.toString() ?? widget.zoneId,
-                                )
-                              : null,
-                          child: Text(
-                            _businessConfirmationAction(fulfillmentType),
-                          ),
-                        )
-                      : null,
-                ),
-              ...groupMaterialStatuses.map((item) {
-                final itemStatus = item['status']?.toString() ?? 'scheduled';
-                final itemHandoffId = item['handoffId']?.toString() ?? '';
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${item['scalerId']}: ${materialHandoffStatusLabel(status: itemStatus, fulfillmentType: item['fulfillmentType']?.toString() ?? fulfillmentType, materialsRequired: item['required'] == true || materialsRequired)}',
-                  ),
-                  subtitle: Text(
-                    'Business confirmation: ${item['businessConfirmed'] == true ? 'Confirmed' : 'Pending'}\n'
-                    'Scaler confirmation: ${item['scalerConfirmed'] == true ? 'Confirmed' : 'Pending'}',
-                  ),
-                  trailing:
-                      itemStatus != 'received' &&
-                          item['businessConfirmed'] != true &&
-                          itemHandoffId.isNotEmpty
-                      ? TextButton(
-                          onPressed: _activeBusinessDeliveryHandoffId == null
-                              ? () => _confirmBusinessMaterials(itemHandoffId)
-                              : null,
-                          child: Text(
-                            _activeBusinessDeliveryHandoffId == itemHandoffId
-                                ? 'Recording...'
-                                : _businessConfirmationAction(
-                                    item['fulfillmentType']?.toString() ??
-                                        fulfillmentType,
-                                  ),
-                          ),
-                        )
-                      : null,
-                );
-              }),
-              if (logisticsLocked)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'Material logistics cannot be overwritten after assignment. Use Edit Campaign to propose a change.',
-                  ),
-                )
-              else if (materialReceiptActionVisible(
-                materialsRequired: materialsRequired,
-                status: handoff['status']?.toString(),
-              )) ...[
-                DropdownButtonFormField<String>(
-                  initialValue: _fulfillmentType,
-                  decoration: const InputDecoration(
-                    labelText: 'Material fulfillment',
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'no_materials_required',
-                      child: Text('No Materials Required'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'scaler_pickup_print_shop',
-                      child: Text('Printing Shop Pickup'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'scaler_pickup_business',
-                      child: Text('Business Pickup'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'business_delivery',
-                      child: Text('Business Delivery'),
-                    ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _fulfillmentType = value!),
-                ),
-                if (_fulfillmentType != 'no_materials_required') ...[
-                  OutlinedButton(
-                    onPressed: _pickSchedule,
-                    child: Text(
-                      _scheduledAt == null
-                          ? 'Set pickup / delivery date and time'
-                          : _scheduledAt.toString(),
-                    ),
-                  ),
-                  if (_fulfillmentType == 'scaler_pickup_print_shop')
-                    TextField(
-                      controller: _printingShop,
-                      decoration: const InputDecoration(
-                        labelText: 'Printing shop name',
-                      ),
-                    ),
-                  TextField(
-                    controller: _location,
-                    decoration: const InputDecoration(
-                      labelText: 'Pickup / delivery location',
-                    ),
-                  ),
-                  TextField(
-                    controller: _orderReference,
-                    decoration: const InputDecoration(
-                      labelText: 'Order / reference instructions',
-                    ),
-                  ),
-                ],
-                TextField(
-                  controller: _instructions,
-                  decoration: const InputDecoration(
-                    labelText: 'Material logistics instructions',
-                  ),
-                  maxLines: 3,
-                ),
-                FilledButton(
-                  onPressed: _savingLogistics ? null : _saveLogistics,
-                  child: Text(
-                    _savingLogistics ? 'Saving...' : 'Save Material Logistics',
+                    'The completed work and review evidence remain available above.',
                   ),
                 ),
               ],
-            ] else ...[
-              if (viewerReadiness['acknowledged'] == true)
-                const ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.check_circle, color: Colors.green),
-                  title: Text('Ready Confirmed'),
-                  subtitle: Text(
-                    'Job details confirmed. This is not attendance or proof of work.',
-                  ),
-                )
-              else
-                FilledButton.icon(
-                  onPressed: _acknowledgingReadiness
-                      ? null
-                      : () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          setState(() => _acknowledgingReadiness = true);
-                          try {
-                            await _service.acknowledgeReadiness(widget.zoneId);
-                            await _load();
-                            if (!mounted) return;
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Job details acknowledged. This is not attendance or proof of work.',
-                                ),
+            )
+          else ...[
+            const Divider(height: 28),
+            const Text(
+              'MATERIALS',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            if (!privateLogisticsAvailable)
+              Text(
+                data['pausedWork'] is Map
+                    ? 'Saved work and messages remain available. Private pickup details are hidden while work is paused.'
+                    : 'Exact logistics and coordination actions are no longer available for this assignment.',
+              )
+            else ...[
+              Text('Fulfillment: ${_fulfillmentLabel(fulfillmentType)}'),
+              if (logistics['printingShopName'] != null)
+                Text('Printing shop: ${logistics['printingShopName']}'),
+              if (logistics['location'] != null)
+                Text('Location: ${logistics['location']}'),
+              if (logistics['scheduledAt'] != null)
+                Text('Date/time: ${_formatDate(logistics['scheduledAt'])}'),
+              if (logistics['instructions'] != null)
+                Text('Instructions: ${logistics['instructions']}'),
+              Text(
+                'Your materials: ${materialHandoffStatusLabel(status: handoff['status']?.toString(), fulfillmentType: fulfillmentType, materialsRequired: materialsRequired)}',
+              ),
+              Text(
+                logisticsLocked
+                    ? 'Status: Locked to the accepted assignment'
+                    : 'Status: Editable until a Scaler is assigned',
+              ),
+              const Text(
+                'Shared logistics never completes another participant’s material receipt.',
+              ),
+              if (proposal != null) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'PROPOSED LOGISTICS CHANGE',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text('Reason: ${proposal['reason']}'),
+                Text('Status: ${proposal['status']}'),
+                Text(
+                  'Accepted: ${(proposal['acceptedScalerIds'] as List?)?.length ?? 0}',
+                ),
+                Text(
+                  'Pending: ${(proposal['pendingScalerIds'] as List?)?.length ?? 0}',
+                ),
+                Text(
+                  'Declined: ${(proposal['declinedScalerIds'] as List?)?.length ?? 0}',
+                ),
+                if (viewerRole == 'scaler' &&
+                    proposal['status'] == 'pending_acknowledgment')
+                  Row(
+                    children: [
+                      FilledButton(
+                        onPressed: _respondingToProposal
+                            ? null
+                            : () => _respondToProposal(
+                                proposalId: proposal['id'].toString(),
+                                accept: true,
                               ),
-                            );
-                          } finally {
-                            if (mounted) {
-                              setState(() => _acknowledgingReadiness = false);
-                            }
-                          }
-                        },
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: Text(
-                    _acknowledgingReadiness ? 'Confirming...' : 'Confirm Ready',
+                        child: Text(
+                          _respondingToProposal
+                              ? 'Recording...'
+                              : 'Accept Change',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _respondingToProposal
+                            ? null
+                            : () => _respondToProposal(
+                                proposalId: proposal['id'].toString(),
+                                accept: false,
+                              ),
+                        child: const Text('Decline'),
+                      ),
+                    ],
                   ),
-                ),
-              if (!materialsRequired)
-                const Text('No physical materials required')
-              else if (handoff['status'] == 'received')
-                const ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.verified, color: Colors.green),
-                  title: Text('Material receipt confirmed'),
-                )
-              else ...[
+              ],
+              if (viewerRole == 'business') ...[
                 Text(
-                  'Business confirmation: ${handoff['businessConfirmedAt'] != null ? 'Confirmed' : 'Pending'}',
+                  'Material status: ${readiness['receivedCount'] ?? 0} / ${readiness['assignedCount'] ?? scalerCount} received',
                 ),
-                Text(
-                  'Your confirmation: ${handoff['scalerConfirmedAt'] != null ? 'Confirmed' : 'Pending'}',
-                ),
-                if (handoff['scalerConfirmedAt'] == null)
-                  FilledButton.icon(
-                    onPressed: _submittingMaterialReceipt
-                        ? null
-                        : () => _confirmMaterialReceipt(handoff: handoff),
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    label: Text(
-                      _submittingMaterialReceipt
-                          ? 'Confirming receipt...'
-                          : 'Confirm Materials Received',
+                if (groupMaterialStatuses.isEmpty && materialsRequired)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      materialHandoffStatusLabel(
+                        status: handoff['status']?.toString(),
+                        fulfillmentType: fulfillmentType,
+                        materialsRequired: true,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Business confirmation: ${handoff['businessConfirmedAt'] != null ? 'Confirmed' : 'Pending'}\n'
+                      'Scaler confirmation: ${handoff['scalerConfirmedAt'] != null ? 'Confirmed' : 'Pending'}',
+                    ),
+                    trailing:
+                        handoff['status'] != 'received' &&
+                            handoff['businessConfirmedAt'] == null
+                        ? TextButton(
+                            onPressed: _activeBusinessDeliveryHandoffId == null
+                                ? () => _confirmBusinessMaterials(
+                                    handoff['id']?.toString() ?? widget.zoneId,
+                                  )
+                                : null,
+                            child: Text(
+                              _businessConfirmationAction(fulfillmentType),
+                            ),
+                          )
+                        : null,
+                  ),
+                ...groupMaterialStatuses.map((item) {
+                  final itemStatus = item['status']?.toString() ?? 'scheduled';
+                  final itemHandoffId = item['handoffId']?.toString() ?? '';
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '${item['scalerId']}: ${materialHandoffStatusLabel(status: itemStatus, fulfillmentType: item['fulfillmentType']?.toString() ?? fulfillmentType, materialsRequired: item['required'] == true || materialsRequired)}',
+                    ),
+                    subtitle: Text(
+                      'Business confirmation: ${item['businessConfirmed'] == true ? 'Confirmed' : 'Pending'}\n'
+                      'Scaler confirmation: ${item['scalerConfirmed'] == true ? 'Confirmed' : 'Pending'}',
+                    ),
+                    trailing:
+                        itemStatus != 'received' &&
+                            item['businessConfirmed'] != true &&
+                            itemHandoffId.isNotEmpty
+                        ? TextButton(
+                            onPressed: _activeBusinessDeliveryHandoffId == null
+                                ? () => _confirmBusinessMaterials(itemHandoffId)
+                                : null,
+                            child: Text(
+                              _activeBusinessDeliveryHandoffId == itemHandoffId
+                                  ? 'Recording...'
+                                  : _businessConfirmationAction(
+                                      item['fulfillmentType']?.toString() ??
+                                          fulfillmentType,
+                                    ),
+                            ),
+                          )
+                        : null,
+                  );
+                }),
+                if (logisticsLocked)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Material logistics cannot be overwritten after assignment. Use Edit Campaign to propose a change.',
                     ),
                   )
-                else
+                else if (materialReceiptActionVisible(
+                  materialsRequired: materialsRequired,
+                  status: handoff['status']?.toString(),
+                )) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _fulfillmentType,
+                    decoration: const InputDecoration(
+                      labelText: 'Material fulfillment',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'no_materials_required',
+                        child: Text('No Materials Required'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'scaler_pickup_print_shop',
+                        child: Text('Printing Shop Pickup'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'scaler_pickup_business',
+                        child: Text('Business Pickup'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'business_delivery',
+                        child: Text('Business Delivery'),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _fulfillmentType = value!),
+                  ),
+                  if (_fulfillmentType != 'no_materials_required') ...[
+                    OutlinedButton(
+                      onPressed: _pickSchedule,
+                      child: Text(
+                        _scheduledAt == null
+                            ? 'Set pickup / delivery date and time'
+                            : _scheduledAt.toString(),
+                      ),
+                    ),
+                    if (_fulfillmentType == 'scaler_pickup_print_shop')
+                      TextField(
+                        controller: _printingShop,
+                        decoration: const InputDecoration(
+                          labelText: 'Printing shop name',
+                        ),
+                      ),
+                    TextField(
+                      controller: _location,
+                      decoration: const InputDecoration(
+                        labelText: 'Pickup / delivery location',
+                      ),
+                    ),
+                    TextField(
+                      controller: _orderReference,
+                      decoration: const InputDecoration(
+                        labelText: 'Order / reference instructions',
+                      ),
+                    ),
+                  ],
+                  TextField(
+                    controller: _instructions,
+                    decoration: const InputDecoration(
+                      labelText: 'Material logistics instructions',
+                    ),
+                    maxLines: 3,
+                  ),
+                  FilledButton(
+                    onPressed: _savingLogistics ? null : _saveLogistics,
+                    child: Text(
+                      _savingLogistics
+                          ? 'Saving...'
+                          : 'Save Material Logistics',
+                    ),
+                  ),
+                ],
+              ] else ...[
+                if (viewerReadiness['acknowledged'] == true)
                   const ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.check_circle, color: Colors.green),
-                    title: Text('Your material confirmation is recorded'),
-                    subtitle: Text('Awaiting the Business confirmation.'),
+                    title: Text('Ready Confirmed'),
+                    subtitle: Text(
+                      'Job details confirmed. This is not attendance or proof of work.',
+                    ),
+                  )
+                else
+                  FilledButton.icon(
+                    onPressed: _acknowledgingReadiness
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            setState(() => _acknowledgingReadiness = true);
+                            try {
+                              await _service.acknowledgeReadiness(
+                                widget.zoneId,
+                              );
+                              await _load();
+                              if (!mounted) return;
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Job details acknowledged. This is not attendance or proof of work.',
+                                  ),
+                                ),
+                              );
+                            } finally {
+                              if (mounted) {
+                                setState(() => _acknowledgingReadiness = false);
+                              }
+                            }
+                          },
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: Text(
+                      _acknowledgingReadiness
+                          ? 'Confirming...'
+                          : 'Confirm Ready',
+                    ),
                   ),
-                OutlinedButton.icon(
-                  onPressed: _reportingMaterialIssue
-                      ? null
-                      : _reportMaterialIssue,
-                  icon: const Icon(Icons.report_problem_outlined),
-                  label: Text(
-                    _reportingMaterialIssue
-                        ? 'Reporting...'
-                        : 'Report Material Issue',
+                if (!materialsRequired)
+                  const Text('No physical materials required')
+                else if (handoff['status'] == 'received')
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.verified, color: Colors.green),
+                    title: Text('Material receipt confirmed'),
+                  )
+                else ...[
+                  Text(
+                    'Business confirmation: ${handoff['businessConfirmedAt'] != null ? 'Confirmed' : 'Pending'}',
                   ),
-                ),
-                const Text(
-                  'Receipt proof is participant-specific. It does not record attendance, start GPS work, complete the job, or authorize payout.',
-                ),
+                  Text(
+                    'Your confirmation: ${handoff['scalerConfirmedAt'] != null ? 'Confirmed' : 'Pending'}',
+                  ),
+                  if (handoff['scalerConfirmedAt'] == null)
+                    FilledButton.icon(
+                      onPressed: _submittingMaterialReceipt
+                          ? null
+                          : () => _confirmMaterialReceipt(handoff: handoff),
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      label: Text(
+                        _submittingMaterialReceipt
+                            ? 'Confirming receipt...'
+                            : 'Confirm Materials Received',
+                      ),
+                    )
+                  else
+                    const ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.check_circle, color: Colors.green),
+                      title: Text('Your material confirmation is recorded'),
+                      subtitle: Text('Awaiting the Business confirmation.'),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _reportingMaterialIssue
+                        ? null
+                        : _reportMaterialIssue,
+                    icon: const Icon(Icons.report_problem_outlined),
+                    label: Text(
+                      _reportingMaterialIssue
+                          ? 'Reporting...'
+                          : 'Report Material Issue',
+                    ),
+                  ),
+                  const Text(
+                    'Receipt proof is participant-specific. It does not record attendance, start GPS work, complete the job, or authorize payout.',
+                  ),
+                ],
               ],
             ],
           ],
@@ -1091,9 +1179,10 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
             ),
           ],
           const SizedBox(height: 8),
-          const Text(
-            'Readiness does not record GPS attendance, material receipt, job start, completion, or no-show status.',
-          ),
+          if (!completed)
+            const Text(
+              'Readiness does not record GPS attendance, material receipt, job start, completion, or no-show status.',
+            ),
         ],
       ),
     );

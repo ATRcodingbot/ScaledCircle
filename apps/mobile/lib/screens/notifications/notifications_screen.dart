@@ -1,17 +1,21 @@
-import '../../services/staging_qa_discovery.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../../navigation/app_routes.dart';
-import '../../navigation/app_router.dart';
+import '../../models/notification_destination.dart';
+import '../../navigation/context_back_button.dart';
 
 import '../campaigns/campaign_applicants_screen.dart';
-import '../jobs/job_details_screen.dart';
 import '../jobs/scaler_wallet_screen.dart';
 import '../business/weather_alerts_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({
+    super.key,
+    this.currentUserId,
+    this.notificationsStream,
+  });
+  final String? currentUserId;
+  final Stream<QuerySnapshot>? notificationsStream;
 
   Future<void> _markAsRead(DocumentReference reference) async {
     await reference.update({
@@ -50,141 +54,45 @@ class NotificationsScreen extends StatelessWidget {
     QueryDocumentSnapshot notification,
   ) async {
     final data = notification.data() as Map<String, dynamic>;
-
-    final type = data['type']?.toString() ?? '';
-
-    final campaignId = data['campaignId']?.toString();
-    final zoneId = data['zoneId']?.toString();
-    final deepLink = data['deepLink'] is Map
-        ? Map<String, dynamic>.from(data['deepLink'] as Map)
-        : const <String, dynamic>{};
-
+    final target = notificationDestination(data);
+    if (target == null) return;
     try {
-      if (data['read'] != true) {
-        await _markAsRead(notification.reference);
-      }
-
-      if (!context.mounted) {
-        return;
-      }
-
-      final destination = deepLink['destination']?.toString();
-      if (destination == 'landing_page') {
-        final pageId = deepLink['pageId']?.toString();
-        AppNavigation.push(
-          context,
-          '${AppRoutes.businessLandingPages}${pageId != null && pageId.isNotEmpty ? '?pageId=${Uri.encodeQueryComponent(pageId)}' : ''}',
-        );
-        return;
-      }
-      if (destination == 'brand_assets') {
-        AppNavigation.push(context, AppRoutes.businessBrandAssets);
-        return;
-      }
-      final linkedZoneId = deepLink['zoneId']?.toString() ?? zoneId;
-      if ({'job_room', 'material_change_review'}.contains(destination) &&
-          linkedZoneId != null &&
-          linkedZoneId.isNotEmpty) {
-        AppNavigation.push(context, AppRoutes.jobRoom(linkedZoneId));
-        return;
-      }
-
-      if (type == 'payout_approved') {
+      if (data['read'] != true) await _markAsRead(notification.reference);
+      if (!context.mounted) return;
+      if (target.kind == 'earnings') {
         await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const ScalerWalletScreen()),
         );
-        return;
-      }
-
-      if (type == 'weather_opportunity') {
+      } else if (target.kind == 'weather') {
         await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const WeatherAlertsScreen()),
         );
-        return;
-      }
-
-      if (campaignId == null || campaignId.isEmpty) {
-        _showMessage(
+      } else if (target.kind == 'route') {
+        // Keep Notifications on the real Navigator stack for visible/system Back.
+        await Navigator.of(context).pushNamed(target.route!);
+      } else if (target.kind == 'applicants') {
+        final campaign = await FirebaseFirestore.instance
+            .collection('campaigns')
+            .doc(target.campaignId)
+            .get();
+        if (!context.mounted) return;
+        if (!campaign.exists) {
+          _showMessage(context, 'This campaign is no longer available.');
+          return;
+        }
+        await Navigator.push(
           context,
-          'This notification does not have a campaign attached.',
+          MaterialPageRoute(
+            builder: (_) => CampaignApplicantsScreen(campaign: campaign),
+          ),
         );
-        return;
-      }
-
-      DocumentSnapshot<Map<String, dynamic>> campaign;
-      try {
-        campaign = await FirebaseFirestore.instance.collection('campaigns').doc(campaignId).get();
-      } on FirebaseException catch (error) {
-        if (error.code != 'permission-denied') rethrow;
-        campaign = await FirebaseFirestore.instance.collection(scalerCampaignCollection).doc(campaignId).get();
-      }
-
-      if (!context.mounted) {
-        return;
-      }
-
-      if (!campaign.exists) {
-        _showMessage(context, 'This campaign no longer exists.');
-        return;
-      }
-
-      switch (type) {
-        case 'application_received':
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CampaignApplicantsScreen(campaign: campaign),
-            ),
-          );
-          break;
-
-        case 'job_assignment':
-        case 'job_room_message':
-        case 'material_logistics_locked':
-        case 'material_change_proposed':
-        case 'material_change_accept':
-        case 'material_change_decline':
-        case 'material_change_confirmed':
-        case 'job_readiness_acknowledged':
-        case 'material_received':
-        case 'material_issue_reported':
-        case 'group_assignment_progress':
-          if (zoneId != null && zoneId.isNotEmpty) {
-            AppNavigation.push(context, AppRoutes.jobRoom(zoneId));
-          }
-          break;
-
-        case 'zone_completion_submitted':
-        case 'completion_submitted':
-          AppNavigation.push(context, AppRoutes.campaignDetail(campaign.id));
-          break;
-
-        case 'application_accepted':
-        case 'application_rejected':
-        case 'changes_requested':
-        case 'campaign_completed':
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => JobDetailsScreen(campaign: campaign),
-            ),
-          );
-          break;
-
-        default:
-          _showMessage(
-            context,
-            'This notification does not have a destination yet.',
-          );
       }
     } catch (_) {
-      if (!context.mounted) {
-        return;
+      if (context.mounted) {
+        _showMessage(context, "We couldn't open this notification. Try again.");
       }
-
-      _showMessage(context, "We couldn't open this notification. Try again.");
     }
   }
 
@@ -200,9 +108,9 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final userId = currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
 
-    if (user == null) {
+    if (userId == null) {
       return const Scaffold(
         body: Center(
           child: Text('You must be logged in to view notifications.'),
@@ -212,6 +120,7 @@ class NotificationsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const ContextBackButton(),
         title: const Text('Notifications'),
         centerTitle: true,
         actions: [
@@ -219,7 +128,7 @@ class NotificationsScreen extends StatelessWidget {
             icon: const Icon(Icons.done_all),
             tooltip: 'Mark all as read',
             onPressed: () async {
-              await _markAllAsRead(user.uid);
+              await _markAllAsRead(userId);
 
               if (!context.mounted) {
                 return;
@@ -231,11 +140,13 @@ class NotificationsScreen extends StatelessWidget {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('notifications')
-            .where('userId', isEqualTo: user.uid)
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
+        stream:
+            notificationsStream ??
+            FirebaseFirestore.instance
+                .collection('notifications')
+                .where('userId', isEqualTo: userId)
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text(snapshot.error.toString()));
@@ -282,31 +193,16 @@ class NotificationsScreen extends StatelessWidget {
 
     final createdAt = data['createdAt'];
 
-    final action = switch (type) {
-      'zone_completion_submitted' => 'Review Zone',
-      'payout_approved' => 'View Earnings',
-      'weather_opportunity' => 'View Weather',
-      'job_room_message' => 'Open Job Room',
-      'job_assignment' => 'View Job',
-      'material_change_proposed' => 'Review Change',
-      'material_logistics_locked' ||
-      'material_change_accept' ||
-      'material_change_decline' ||
-      'material_change_confirmed' ||
-      'job_readiness_acknowledged' ||
-      'material_received' ||
-      'material_issue_reported' ||
-      'group_assignment_progress' => 'Open Job Room',
-      _ => 'View',
-    };
+    final target = notificationDestination(data);
+    final action = target?.label;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          _openNotification(context, notification);
-        },
+        onTap: target == null
+            ? null
+            : () => _openNotification(context, notification),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -359,14 +255,16 @@ class NotificationsScreen extends StatelessWidget {
                           ),
                         ),
 
-                        Text(
-                          action,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                        if (action != null) ...[
+                          Text(
+                            action,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
 
-                        const SizedBox(width: 5),
+                          const SizedBox(width: 5),
 
-                        const Icon(Icons.arrow_forward, size: 18),
+                          const Icon(Icons.arrow_forward, size: 18),
+                        ],
                       ],
                     ),
                   ],

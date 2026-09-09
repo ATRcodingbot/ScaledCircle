@@ -480,7 +480,9 @@ function historicalJobRoomProjection(response) {
     zone: pick(response.zone, ['id', 'campaignId', 'businessId', 'status', 'zoneName', 'reviewStatus']),
     handoff: {required: false, status: 'unavailable'},
     compensation: pick(response.compensation, ['currency', 'baseAmountCents', 'bonusAmountCents', 'immutable']),
-    completions: response.completions.map(c => pick(c, ['id', 'campaignId', 'zoneId', 'status', 'reviewStatus', 'proofCount', 'gpsPointCount', 'submittedAt', 'reviewedAt', 'earning'])),
+    participantLabels: {available: response.participantLabels?.available === true,
+      participants: (response.participantLabels?.participants || []).map(p => pick(p, ['uid', 'displayName']))},
+    completions: response.completions.map(c => pick(c, ['id', 'campaignId', 'zoneId', 'scalerId', 'status', 'reviewStatus', 'proofCount', 'gpsPointCount', 'submittedAt', 'reviewedAt', 'approvedAt', 'earning'])),
     messages: [], events: [],
     startEligibility: {allowed: false, reasons: ['This assignment is no longer active.']},
   };

@@ -4,6 +4,8 @@ import '../../config/app_environment.dart';
 import '../../services/secure_function_service.dart';
 import '../../widgets/campaign_card_header.dart';
 import '../../widgets/scaler_wallet_metrics.dart';
+import '../../navigation/context_back_button.dart';
+import '../../navigation/app_routes.dart';
 
 /// All amounts and state transitions come from one server read snapshot.
 class ScalerWalletScreen extends StatefulWidget {
@@ -163,7 +165,10 @@ class _ScalerWalletScreenState extends State<ScalerWalletScreen>
         : _content(_data!);
     if (widget.embedded) return body;
     return Scaffold(
-      appBar: AppBar(title: const Text('Earnings')),
+      appBar: AppBar(
+        title: const Text('Earnings'),
+        leading: const ContextBackButton(fallback: AppRoutes.scalerDashboard),
+      ),
       body: body,
     );
   }

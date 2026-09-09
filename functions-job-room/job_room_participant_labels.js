@@ -10,7 +10,9 @@ async function load(db, room, actor) {
   try {
     const participants=await Promise.all(visible.map(async uid=>{
       const profile=(await db.collection("users").doc(uid).get()).data()||{};
-      const name=typeof profile.displayName==="string"?profile.displayName.trim().slice(0,120):null;
+      const display=typeof profile.displayName==="string"?profile.displayName.trim():'';
+      const legacy=[profile.firstName,profile.lastName].filter(v=>typeof v==='string'&&v.trim()).map(v=>v.trim()).join(' ');
+      const name=(display||legacy).slice(0,120)||null;
       return {uid,displayName:name||null};
     }));
     return {available:true,participants};

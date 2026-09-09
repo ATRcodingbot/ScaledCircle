@@ -8539,6 +8539,8 @@ exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoo
       id: earningSnapshot.id,
       status: earning.status || null,
       amountCents: Number(earning.amountCents || 0),
+      baseAmountCents: Number.isSafeInteger(earning.baseAmountCents) ? earning.baseAmountCents : null,
+      bonusAmountCents: Number.isSafeInteger(earning.bonusAmountCents) ? earning.bonusAmountCents : null,
       currency: earning.currency || "usd",
       type: earning.type || null
     } : null

@@ -65,6 +65,7 @@ def prepare(archive, output):
     if handler.count(marker) != 1:
         raise ValueError('Unexpected deployed response tail')
     handler = handler.replace(marker, '''  };
+  Object.assign(response, await require('./job_room_completion_summary').read({db,room,zone,zoneId,actor:context}));
   const evidence = await require('./production_job_room_evidence').read({db,zoneId,uid:context.uid,isAdmin:context.isAdmin});
   if (evidence) response.completionEvidence = evidence;
   const extras=await require('./production_job_room_extras').read({db,FieldValue,Timestamp,zoneId,uid:context.uid,isAdmin:context.isAdmin,evidence});
@@ -98,6 +99,8 @@ def prepare(archive, output):
             policy_copy(relative + '.js')
     policy_copy('production_job_room_evidence.js')
     policy_copy('production_job_room_extras.js')
+    for name in ['job_room_completion_summary.js', 'job_room_participant_labels.js']:
+        (output / name).write_bytes((root / 'functions' / name).read_bytes())
     for name in ['workspace_access.js', 'business_workspace.js', 'subscription_entitlements.js', 'legal_consent.js']:
         (output / name).write_bytes((root / 'functions' / name).read_bytes())
     manifest = {p.relative_to(output).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()

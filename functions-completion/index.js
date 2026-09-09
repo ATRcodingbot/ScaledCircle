@@ -10537,6 +10537,8 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
 
 
 
+
+
 const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   enforceAppCheck: false,
   maxInstances: 10,

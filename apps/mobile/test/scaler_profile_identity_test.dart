@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/scaler/profile/scaler_profile_screen.dart';
 import 'package:flutter_app/services/discovery_preferences_service.dart';
@@ -51,6 +52,73 @@ Widget _screen({
 );
 
 void main() {
+  testWidgets('phone keyboard and long name keep Save and Cancel usable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpWidget(
+      _screen(profile: Stream.value({'displayName': 'Avery'})),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('EDIT PROFILE'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 310);
+    await tester.enterText(
+      find.byKey(const ValueKey('display-name-field')),
+      'A' * 80,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Save Profile').hitTestable(), findsOneWidget);
+    expect(find.text('Cancel').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+    'failed save keeps edited name and bio and permits a successful single retry',
+    (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(
+        _screen(
+          profile: Stream.value({'displayName': 'Original'}),
+          update: ({required displayName, required bio}) async {
+            calls++;
+            if (calls == 1) {
+              throw FirebaseFunctionsException(
+                code: 'unavailable',
+                message: 'private transport data',
+              );
+            }
+            return {'displayName': displayName, 'bio': bio};
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('EDIT PROFILE'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('display-name-field')),
+        'Changed Name',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('profile-bio-field')),
+        'Changed bio',
+      );
+      await tester.tap(find.text('Save Profile'));
+      await tester.pumpAndSettle();
+      expect(find.text('Changed Name'), findsOneWidget);
+      expect(find.text('Changed bio'), findsOneWidget);
+      expect(find.textContaining('Your edits are still here'), findsOneWidget);
+      expect(find.textContaining('private transport'), findsNothing);
+      await tester.tap(find.text('Save Profile'));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Profile updated.'), findsOneWidget);
+    },
+  );
   testWidgets('signup displayName is distinct from role and modern subtitle', (
     tester,
   ) async {

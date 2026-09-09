@@ -29,7 +29,7 @@ class AppRouterDelegate extends RouterDelegate<Uri>
 
   Uri _location = Uri(path: '/');
   Object? _arguments;
-  final List<Uri> _appHistory = <Uri>[];
+  final List<({Uri location, Object? arguments})> _appHistory = [];
   bool _browserBackPending = false;
 
   @override
@@ -45,7 +45,9 @@ class AppRouterDelegate extends RouterDelegate<Uri>
     if (next == _location) return;
 
     void update() {
-      if (!replace) _appHistory.add(_location);
+      if (!replace) {
+        _appHistory.add((location: _location, arguments: _arguments));
+      }
       _location = next;
       _arguments = arguments;
       notifyListeners();
@@ -72,20 +74,44 @@ class AppRouterDelegate extends RouterDelegate<Uri>
     if (_browserBackPending) return true;
     while (_appHistory.isNotEmpty) {
       final previous = _appHistory.removeLast();
-      if (!_isBusinessRoute(previous)) continue;
+      if (!_isBusinessRoute(previous.location)) continue;
       if (canUseBrowserHistoryBack) {
         _browserBackPending = true;
         browserHistoryBack();
       } else {
         Router.neglect(context, () {
-          _location = previous;
-          _arguments = null;
+          _location = previous.location;
+          _arguments = previous.arguments;
           notifyListeners();
         });
       }
       return true;
     }
     return false;
+  }
+
+  bool popPreviousRoute(BuildContext context) {
+    if (_browserBackPending) return true;
+    if (_appHistory.isEmpty) return false;
+    final previous = _appHistory.removeLast();
+    if (canUseBrowserHistoryBack) {
+      _browserBackPending = true;
+      browserHistoryBack();
+    } else {
+      Router.neglect(context, () {
+        _location = previous.location;
+        _arguments = previous.arguments;
+        notifyListeners();
+      });
+    }
+    return true;
+  }
+
+  @override
+  Future<bool> popRoute() async {
+    if (await navigatorKey.currentState?.maybePop() ?? false) return true;
+    final context = navigatorKey.currentContext;
+    return context != null && context.mounted && popPreviousRoute(context);
   }
 
   static bool _isBusinessRoute(Uri location) =>

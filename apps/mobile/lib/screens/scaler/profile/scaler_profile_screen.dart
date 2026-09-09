@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../services/discovery_preferences_service.dart';
@@ -17,6 +18,24 @@ typedef ScalerProfileUpdater =
       required String displayName,
       required String bio,
     });
+
+String scalerProfileSaveError(Object error) {
+  if (error is FirebaseFunctionsException) {
+    return switch (error.code) {
+      'invalid-argument' =>
+        'Display name must be 1–80 characters. Bio must be 500 characters or fewer.',
+      'unauthenticated' =>
+        'Your session has expired. Sign in again; your edits are still here.',
+      'permission-denied' =>
+        'Use your verified Scaler account to edit this profile.',
+      'unavailable' || 'deadline-exceeded' =>
+        'Connection interrupted. Your edits are still here. Try again when connected.',
+      _ =>
+        "We couldn't update your profile. Your edits are still here. Try again.",
+    };
+  }
+  return "We couldn't update your profile. Your edits are still here. Try again.";
+}
 
 class ScalerProfileScreen extends StatelessWidget {
   const ScalerProfileScreen({
@@ -369,11 +388,11 @@ class _EditScalerProfileDialogState extends State<_EditScalerProfileDialog> {
         bio: _bioController.text.trim(),
       );
       if (mounted) Navigator.pop(context, true);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = "We couldn't update your profile. Try again.";
+          _error = scalerProfileSaveError(error);
         });
       }
     }

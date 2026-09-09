@@ -13025,6 +13025,8 @@ exports.saveBusinessGrowthProfile = onCall(
 
 
 
+
+
 exports.listBusinessWorkspaceRecordIds = workspaceEndpoint(async (request, service) => {
   const type = request.data?.collection;
   if (!['campaigns', 'campaignZones'].includes(type)) throw new HttpsError('invalid-argument', 'Choose a supported workspace view.');
