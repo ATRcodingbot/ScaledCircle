@@ -37,6 +37,9 @@ test('Job Room terminal response cannot retain private payloads or restore cross
  const room={id:'zone',campaignId:'campaign',businessId:'owner',materialLogistics:{location:'PRIVATE'}};
  const zone={id:'zone',campaignId:'campaign',businessId:'owner',assignedScalerId:'scaler',status:'assigned'};
  assert.equal(activeAssignment('scaler',room,zone,base,null),true);
+ assert.equal(activeAssignment('scaler',room,{...zone,status:'paused_work_window'},base,null),true);
+ assert.equal(activeAssignment('other',room,{...zone,status:'paused_work_window'},base,null),false);
+ assert.equal(activeAssignment('scaler',room,{...zone,status:'incomplete_review'},base,null),false);
  assert.equal(activeAssignment('other',room,zone,base,null),false);
  assert.equal(activeAssignment('scaler',room,{...zone,status:'submitted'},base,null),false);
  assert.equal(activeAssignment('scaler',room,zone,{...base,businessId:'other'},null),false);

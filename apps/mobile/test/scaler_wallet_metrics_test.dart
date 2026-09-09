@@ -39,7 +39,12 @@ void main() {
       (data['activity'] as List).first['bonusCents'] = 0;
       data['awaitingReviewCents'] = 311;
       await tester.pumpWidget(
-        MaterialApp(home: ScalerWalletScreen(loadSummary: () async => data)),
+        MaterialApp(
+          home: ScalerWalletScreen(
+            staging: true,
+            loadSummary: () async => data,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
@@ -61,7 +66,10 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(
         MaterialApp(
-          home: ScalerWalletScreen(loadSummary: () async => summary()),
+          home: ScalerWalletScreen(
+            staging: true,
+            loadSummary: () async => summary(),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -117,6 +125,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ScalerWalletScreen(
+            staging: true,
             loadSummary: () async => summary(approved: approved),
           ),
         ),
@@ -151,6 +160,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ScalerWalletScreen(
+            staging: true,
             loadSummary: () async {
               if (fail) throw Exception('read failed');
               return summary(payout: 500);

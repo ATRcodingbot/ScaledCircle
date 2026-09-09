@@ -2,9 +2,13 @@
 const {test,after}=require('node:test'),assert=require('node:assert/strict');
 if(!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||''))throw Error('Local emulator required');
 const {initializeApp}=require('firebase-admin/app'),{getFirestore,FieldValue,Timestamp}=require('firebase-admin/firestore');
-const app=initializeApp({projectId:'demo-paused-work'},'paused-work-tests'),db=getFirestore(app);
-const finance=require('./campaign_reserve_settlement'),pause=require('./paused_work'),route=require('./route_progress');
-const project='scaledcircle-staging';let ticks=2000000;
+const production=process.env.PRODUCTION_SETTLEMENT_TEST==='true';
+const project=production?'demo-production-engineering':'scaledcircle-staging';
+if(production){process.env.APP_ENV='production';process.env.UNUSED_WORK_REFUNDS_ENABLED='true';}
+const app=initializeApp({projectId:production?project:'demo-paused-work'},'paused-work-tests'),db=getFirestore(app);
+const finance=require(production?'../.firebase/production-engineering/package/campaign-funding/campaign_reserve_settlement':'./campaign_reserve_settlement');
+const pause=require(production?'../.firebase/production-engineering/package/job-room-core/paused_work':'./paused_work'),route=require('./route_progress');
+let ticks=2000000;
 const svc=()=>pause.createService({db,FieldValue,Timestamp,project,clock:()=>ticks});
 let counter=0;
 async function seed({fraction=1}={}) {
@@ -14,10 +18,25 @@ async function seed({fraction=1}={}) {
  const points=Array.from({length:24},(_,i)=>({latitude:.002*fraction*i/23,longitude:0,sequence:i+1,accepted:true,horizontalAccuracy:5,timestampMs:1000+i*10000}));
  const zone={campaignId,businessId,assignedScalerId:scalerId,status:'in_progress',activeTrackingSessionId:sessionId,gpsTracking:true,fundingPaymentId:paymentId,
   serviceArea:corridor,executionRoute:{centerline:line,routeHash:route.hash(line),corridorHash:route.hash(corridor),denominatorMeters:route.distance(...line)}};
+ let productionFields={},paymentFields={};
+ if(production){
+  const c=require('./production_canvassing_contract');
+  zone.executionRoute.uniqueRouteMeters=require('./canvassing_completion').coverage(zone,[]).denominatorMeters;
+  zone.coverageAuthority={version:c.ROUTE_AUTHORITY_VERSION,zoneId,campaignId,routeHash:zone.executionRoute.routeHash,
+   corridorHash:zone.executionRoute.corridorHash,uniqueRouteMeters:zone.executionRoute.uniqueRouteMeters,sourceSnapshotDigest:'a'.repeat(64),accessReviewed:true,state:'approved'};
+  const offer=c.prepareOffer({project:'scaled-circle',campaign:{id:campaignId,businessId,status:'draft',campaignType:'neighborhoodCanvassing',createdAtMs:10000},
+   zones:[{...zone,id:zoneId,status:'unassigned',assignedScalerId:null}],routeAuthorities:{[zoneId]:zone.coverageAuthority},
+   baseAmountCents:1500,bonusAmountCents:300,effectiveFromMs:1,createdAtMs:10000});
+  Object.assign(contract,c.acceptOffer({offer,zone:{...zone,id:zoneId,status:'unassigned',assignedScalerId:null},routeAuthority:zone.coverageAuthority,
+   application:{campaignId,zoneId,scalerId,status:'pending',acceptedOfferDigest:offer.offerDigest},
+   payment:{campaignId,businessId,status:'funded',currency:'usd',offerDigest:offer.offerDigest,workerAmountCents:1800},serverAcceptedAtMs:11000}));
+  productionFields={completionPolicyVersion:c.VERSION};paymentFields={offerDigest:offer.offerDigest,acceptedOffer:offer};
+  Object.assign(zone,productionFields);
+ }
  await Promise.all([
-  db.doc('campaignZones/'+zoneId).set(zone),db.doc('campaigns/'+campaignId).set({businessId,campaignType:'neighborhoodCanvassing',fundingPaymentId:paymentId}),
+  db.doc('campaignZones/'+zoneId).set(zone),db.doc('campaigns/'+campaignId).set({businessId,campaignType:'neighborhoodCanvassing',fundingPaymentId:paymentId,...productionFields}),
   db.doc('assignmentCompensations/'+zoneId).set(contract),
-  db.doc('campaignPayments/'+paymentId).set({campaignId,businessId,status:'paid',paidAt:Timestamp.now(),stripeMode:'test',stripePaymentIntentId:'pi_'+id,currency:'usd',workerAmountCents:1800,platformFeeCents:360,businessChargeCents:2160}),
+  db.doc('campaignPayments/'+paymentId).set({campaignId,businessId,status:'paid',paidAt:Timestamp.now(),stripeMode:production?'live':'test',stripePaymentIntentId:'pi_'+id,currency:'usd',workerAmountCents:1800,platformFeeCents:360,businessChargeCents:2160,...paymentFields}),
   db.doc('trackingSessions/'+sessionId).set({zoneId,campaignId,scalerId,status:'active',startedAt:Timestamp.now(),pointCount:24,chunkCount:1,currentSegmentId:'segment_1'}),
   db.doc(`trackingSessions/${sessionId}/chunks/one`).set({zoneId,sessionId,scalerId,startSequence:1,endSequence:24,payloadDigest:'test',points}),
   db.doc('activeTrackingSessions/'+scalerId).set({sessionId})]);
@@ -71,11 +90,11 @@ async function settleBase(){
 }
 function providerFor(f,{ambiguous=false,status='succeeded'}={}) {
  let calls=0,refund=null;
- return {get calls(){return calls;},get refund(){return refund;},api:{paymentIntents:{retrieve:async()=>({livemode:false,status:'succeeded',currency:'usd',amount_received:2160})},refunds:{
-  create:async(data,options)=>{calls++;assert.ok(options.idempotencyKey);refund={...data,id:'re_test_'+f.zoneId,currency:'usd',livemode:false,status};if(ambiguous)throw Error('response lost');return refund;},
+ return {get calls(){return calls;},get refund(){return refund;},api:{paymentIntents:{retrieve:async()=>({livemode:production,status:'succeeded',currency:'usd',amount_received:2160})},refunds:{
+  create:async(data,options)=>{calls++;assert.ok(options.idempotencyKey);refund={...data,id:'re_test_'+f.zoneId,currency:'usd',livemode:production,status};if(ambiguous)throw Error('response lost');return refund;},
   retrieve:async()=>refund,list:async()=>({data:refund?[refund]:[],has_more:false})}}};
 }
-test('exactly one earning, Wallet effect and Stripe TEST refund; no stranded reserve or excess fee',async()=>{
+test('exactly one earning, Wallet effect and injected refund; no stranded reserve or excess fee',async()=>{
  const f=await settleBase(),before=(await db.doc('campaignSettlements/'+f.zoneId).get()).data(),p=providerFor(f);
  assert.equal(before.businessReturnCents,360);assert.equal(before.returnStatus,'refund_pending');
  const service=finance.createService({db,FieldValue,project,stripe:()=>p.api});
@@ -95,12 +114,12 @@ test('ambiguous create holds, then known provider reconciliation closes once wit
  assert.equal((await db.doc('campaignSettlements/'+f.zoneId).get()).data().returnStatus,'refund_pending');
  assert.equal((await service.reconcile(s.refundOperationId)).status,'refunded');assert.equal(p.calls,1);
 });
-test('pending provider refund is not returned money; LIVE and mismatched amounts fail closed',async()=>{
+test('pending provider refund is not returned money; wrong provider mode fails closed',async()=>{
  const f=await settleBase(),s=(await db.doc('campaignSettlements/'+f.zoneId).get()).data(),p=providerFor(f,{status:'pending'});
  const service=finance.createService({db,FieldValue,project,stripe:()=>p.api});await service.reconcile(s.refundOperationId);await service.reconcile(s.refundOperationId);assert.equal(p.calls,1);
  assert.equal((await db.doc('campaignSettlements/'+f.zoneId).get()).data().returnStatus,'refund_pending');
  assert.equal((await db.doc('campaignPayments/'+f.paymentId).get()).data().refundedTotalCents,undefined);
- await db.doc('campaignPayments/'+f.paymentId).update({stripeMode:'live'});await assert.rejects(service.reconcile(s.refundOperationId));assert.equal(p.calls,1);
+ await db.doc('campaignPayments/'+f.paymentId).update({stripeMode:production?'test':'live'});await assert.rejects(service.reconcile(s.refundOperationId));assert.equal(p.calls,1);
 });
 test('late provider refund failure restores the Business return obligation exactly once, never revenue',async()=>{
  const f=await settleBase(),s=(await db.doc('campaignSettlements/'+f.zoneId).get()).data(),p=providerFor(f);
@@ -116,11 +135,12 @@ test('late provider refund failure restores the Business return obligation exact
 test('maintained funding webhook reconciles reserve refunds without freezing or canceling the campaign',async()=>{
  const f=await settleBase(),s=(await db.doc('campaignSettlements/'+f.zoneId).get()).data(),p=providerFor(f);
  const intent=(await db.doc('campaignPayments/'+f.paymentId).get()).data().stripePaymentIntentId;
- p.api.charges={retrieve:async()=>({id:'ch_test',livemode:false,payment_intent:intent,amount_refunded:360})};
+ p.api.charges={retrieve:async()=>({id:'ch_test',livemode:production,payment_intent:intent,amount_refunded:360})};
  await db.doc('campaigns/'+f.campaignId).update({status:'open',fundingStatus:'funded'});
  await finance.createService({db,FieldValue,project,stripe:()=>p.api}).reconcile(s.refundOperationId);
- const fs=require('node:fs'),source=fs.readFileSync(require.resolve('../functions-campaign-funding/index.js'),'utf8');
- const body=source.slice(source.indexOf('async function processEvent('),source.indexOf('exports.stripeWebhook ='));
+ const fs=require('node:fs'),source=fs.readFileSync(require.resolve(production?'../.firebase/production-engineering/package/campaign-funding/index.js':'../functions-campaign-funding/index.js'),'utf8');
+ const node=require('@babel/parser').parse(source).program.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='processEvent');
+ const body=source.slice(node.start,node.end);
  const processEvent=new Function('db','FieldValue','require','process',body+';return processEvent;')(
    db,FieldValue,()=>finance,{env:{GCLOUD_PROJECT:project}});
  const snapshot=(await db.doc('campaigns/'+f.campaignId).get()).data();
@@ -130,4 +150,22 @@ test('maintained funding webhook reconciles reserve refunds without freezing or 
  assert.equal((await db.doc('campaignPayments/'+f.paymentId).get()).data().status,'paid');
  assert.equal((await db.doc('campaignPayments/'+f.paymentId).get()).data().refundedTotalCents,360);
  assert.equal(p.calls,1);
+});
+
+test('production refund activation is held; reserved Scaler pay cannot be refunded', {skip:!production},async()=>{
+ const f=await settleBase(),s=(await db.doc('campaignSettlements/'+f.zoneId).get()).data(),p=providerFor(f);
+ const service=finance.createService({db,FieldValue,project,stripe:()=>p.api});
+ process.env.UNUSED_WORK_REFUNDS_ENABLED='false';
+ assert.equal((await service.reconcile(s.refundOperationId)).status,'held_pending_activation');assert.equal(p.calls,0);
+ process.env.UNUSED_WORK_REFUNDS_ENABLED='true';
+ await db.doc('financialOperations/'+s.refundOperationId).update({amountCents:2160});
+ await assert.rejects(service.reconcile(s.refundOperationId));assert.equal(p.calls,0);
+ assert.equal((await db.doc('wallets/'+f.scalerId).get()).data().availableBalance,15);
+ assert.equal((await db.doc('campaignPayments/'+f.paymentId).get()).data().reservedWorkerAmountCents,1500);
+});
+test('production authority rejects historical contracts without reinterpretation', {skip:!production},async()=>{
+ const f=await seed();await db.doc('assignmentCompensations/'+f.zoneId).update({completionPolicyVersion:'HistoricalPolicy'});
+ const before=(await db.doc('assignmentCompensations/'+f.zoneId).get()).data();
+ await assert.rejects(paused(f));await noMoney(f);
+ assert.deepEqual((await db.doc('assignmentCompensations/'+f.zoneId).get()).data(),before);
 });

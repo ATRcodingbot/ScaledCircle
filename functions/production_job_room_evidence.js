@@ -10,7 +10,7 @@ async function read({db,zoneId,uid,isAdmin=false}) {
   const campaign=(await tx.get(db.doc('campaigns/'+zone.campaignId))).data();
   if(!campaign||campaign.businessId!==zone.businessId||!policy.applies(campaign))return null;
   if(!isAdmin&&uid!==zone.businessId&&!(uid===zone.assignedScalerId&&
-    ['assigned','accepted','in_progress','paused_work_window','submitted','completed','approved'].includes(zone.status)))return null;
+    ['assigned','accepted','in_progress','paused_work_window','incomplete_review','submitted','completed','approved'].includes(zone.status)))return null;
   const contract=(await tx.get(db.doc('assignmentCompensations/'+zoneId))).data();
   if(!contract)return null;
   const sessions=await tx.get(db.collection('trackingSessions').where('zoneId','==',zoneId));

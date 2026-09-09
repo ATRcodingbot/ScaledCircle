@@ -24,6 +24,24 @@ class FakeWorkService extends JobRoomService {
 }
 
 void main() {
+  test(
+    'pause presentation is available only in staging or the accepted production policy',
+    () {
+      expect(supportsWorkPause(staging: true), isTrue);
+      expect(
+        supportsWorkPause(
+          staging: false,
+          policyVersion: 'CanvassingRoute80_95V1',
+        ),
+        isTrue,
+      );
+      expect(supportsWorkPause(staging: false), isFalse);
+      expect(
+        supportsWorkPause(staging: false, policyVersion: 'HistoricalPolicy'),
+        isFalse,
+      );
+    },
+  );
   testWidgets(
     'pending refund never claims returned money; confirmed receipt does',
     (t) async {

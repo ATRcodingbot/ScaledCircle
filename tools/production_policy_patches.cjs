@@ -126,8 +126,8 @@ function patch(source) {
       throw new HttpsError('failed-precondition','Use the original review authority for historical contracts.');
     }
     const canvassingReview = canvassingCompletion.applies`);
-    s=once(s,"payment.status !== marketplace.PAYMENT_STATES.funded || payment.settlementFrozen === true",
-      "payment.status !== 'paid' || payment.stripeMode !== 'live' || payment.offerDigest !== contractSnapshot.data()?.offerDigest || payment.settlementFrozen === true");
+    s=once(s,"!require('./campaign_reserve_settlement').funded(payment)",
+      "!require('./campaign_reserve_settlement').funded(payment) || payment.status !== 'paid' || payment.stripeMode !== 'live' || payment.offerDigest !== contractSnapshot.data()?.offerDigest");
     s=once(s,'!receipt || receipt.policyVersion !== canvassingCompletion.VERSION',
       "!receipt || completion.status!=='submitted' || receipt.contractDigest!==contractSnapshot.data()?.contractDigest || receipt.policyVersion !== canvassingCompletion.VERSION");
     return s;

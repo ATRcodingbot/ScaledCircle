@@ -56,6 +56,12 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
   bool get _photoFree => prohibitsResidentialPhotos(
     _campaignData['campaignType'] ?? _campaignData['type'],
   );
+  bool get _pauseAvailable =>
+      _photoFree &&
+      supportsWorkPause(
+        staging: AppEnvironmentConfig.isStaging,
+        policyVersion: _campaignData['completionPolicyVersion'],
+      );
 
   Map<String, dynamic> get _campaignData =>
       Map<String, dynamic>.from(widget.campaign.data() as Map);
@@ -728,13 +734,13 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
             TextButton(
               onPressed: _working
                   ? null
-                  : _photoFree && AppEnvironmentConfig.isStaging
+                  : _pauseAvailable
                   ? _pauseWork
                   : !_state.active
                   ? null
                   : _stopWithoutCompleting,
               child: Text(
-                _photoFree && AppEnvironmentConfig.isStaging
+                _pauseAvailable
                     ? 'Pause & Finish Later'
                     : 'Stop tracking without completing',
               ),

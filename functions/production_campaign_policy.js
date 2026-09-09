@@ -55,9 +55,21 @@ function quote(lifecycle,campaignId,campaign,zones) {
   const offer=offerFor(campaignId,campaign,zones);
   if(!offer)return lifecycle.quoteForCampaign(campaign);
   if(zones.some(z=>z.assignedScalerId||z.status!=='unassigned'))throw Error('unworked_zones_required');
-  const base=lifecycle.quoteForCampaign({...campaign,workerCompensationCents:offer.workerReserveCents});
+  const base=settlementQuote(lifecycle,offer);
   return {...base,completionPolicyVersion:version,offerDigest:offer.offerDigest,acceptedOffer:offer,
     quoteDigest:hash({pricingDigest:base.quoteDigest,offerDigest:offer.offerDigest})};
+}
+function settlementQuote(lifecycle,offer){
+  contracts.validateOffer(offer);
+  const base=lifecycle.quoteForCampaign({workerCompensationCents:offer.workerReserveCents});
+  // Funding and settlement must round at the same boundary. Each accepted Zone
+  // is settled separately; rounding the aggregate can strand a cent or prevent
+  // the last Scaler's otherwise valid base payment.
+  const platformFeeCents=require('./campaign_funding_quote').feeForWorkerAmount(
+    offer.baseAmountCents+offer.bonusAmountCents,base.platformFeeRateBasisPoints)*offer.bindings.length;
+  const result={...base,platformFeeCents,totalChargeCents:base.workerAmountCents+platformFeeCents,
+    businessChargeCents:base.workerAmountCents+platformFeeCents,settlementFeeBasis:'per_assignment_half_up'};
+  return {...result,quoteDigest:lifecycle.quoteDigest(result)};
 }
 function assertFundedOffer(campaignId,campaign,zones,payment) {
   const offer=offerFor(campaignId,campaign,zones);
@@ -98,4 +110,4 @@ function publicOffer(campaign) {
     baseThresholdBasisPoints:8000,bonusThresholdBasisPoints:9500,coverageBasis:o.coverageBasis}};
 }
 module.exports={version,applies,prospective,planWithRoutes,mappedZone,quote,offerFor,
-  assertFundedOffer,applicationFields,assignment,publicOffer};
+  assertFundedOffer,applicationFields,assignment,publicOffer,settlementQuote};

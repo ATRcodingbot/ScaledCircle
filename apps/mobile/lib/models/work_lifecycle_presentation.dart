@@ -1,6 +1,9 @@
 /// Presentation of authoritative work state, independent of device GPS state.
 enum WorkSection { active, review, completed, other }
 
+bool supportsWorkPause({required bool staging, Object? policyVersion}) =>
+    staging || policyVersion == 'CanvassingRoute80_95V1';
+
 WorkSection workSection(String? status) => switch (status) {
   'submitted' ||
   'review_pending' ||

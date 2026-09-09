@@ -7,7 +7,8 @@ const {selectedProgram}=require('../functions/scripts/select_function_program');
 const TRACKING=['startAssignedZone','startTrackingSession','getTrackingSessionState','uploadTrackingChunk',
   'completeTrackingSession','cancelTrackingSession','registerTrackingCheckpoint'];
 const POLICY=['getSmartZonePlan','applySmartZonePlan','analyzeCampaignZone','applyToCampaign','assignScalerToZone',
-  'initializeCampaignCompletion','submitZoneCompletion','reviewCampaignCompletion','finalizeZoneReview'];
+  'initializeCampaignCompletion','submitZoneCompletion','reviewCampaignCompletion','finalizeZoneReview',
+  'pauseAssignedWorkV1','reviewPausedWorkV1','expirePausedWorkV1'];
 function replaceFunction(source,name,replacement) {
   const ast=parser.parse(source,{sourceType:'unambiguous'});
   const node=ast.program.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name===name);
@@ -73,6 +74,9 @@ function prepareSource(){
       throw new HttpsError('permission-denied','This active assignment is unavailable.');
     }`);
   source=require('./production_policy_patches.cjs').patch(source);
+  source=require('./production_settlement_adapter.cjs').exportsSource(source);
+  source=source.replace('try {await assertProductionEnvironment(request);return await handler(request);}',
+    'try {await assertProductionEnvironment(request,name!==\'reviewPausedWorkV1\');return await handler(request);}');
   source=source.replace('await assertProductionEnvironment(request);\n      return await handler(request);',
     `await assertProductionEnvironment(request, ${JSON.stringify([...TRACKING,'applyToCampaign'])}.includes(name));\n      return await handler(request);`);
   // Financial review has its own Business/zone authorization in the handler.
@@ -95,6 +99,7 @@ function prepare(output=path.join(root,'.firebase','production-engineering','tra
       if(copied.has(name))continue;copied.add(name);
       if(name.includes('staging')||name.includes('fixture'))throw Error('Forbidden dependency '+name);
       let content=fs.readFileSync(path.join(root,'functions',name),'utf8');
+      content=require('./production_settlement_adapter.cjs').moduleSource(name,content);
       if(name==='canvassing_completion.js') {
         content=content.replace("const VERSION = 'StagingCanvassingLaunch80_95V1';","const VERSION = 'CanvassingRoute80_95V1';")
           .replace("return project === 'scaledcircle-staging' && isCanvassing(campaign.campaignType || campaign.type);",

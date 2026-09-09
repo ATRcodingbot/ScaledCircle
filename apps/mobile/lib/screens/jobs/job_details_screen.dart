@@ -142,7 +142,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       if (status != 'assigned' &&
           status != 'accepted' &&
-          !(AppEnvironmentConfig.isStaging && status == 'paused_work_window') &&
+          !(supportsWorkPause(
+                staging: AppEnvironmentConfig.isStaging,
+                policyVersion: data['completionPolicyVersion'],
+              ) &&
+              status == 'paused_work_window') &&
           !(status == 'in_progress' && redoRequired)) {
         throw Exception('Zone cannot be started.');
       }
@@ -524,7 +528,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             status == 'in_progress' && data['redoRequired'] == true;
         if (status == 'assigned' ||
             status == 'accepted' ||
-            (AppEnvironmentConfig.isStaging &&
+            (supportsWorkPause(
+                  staging: AppEnvironmentConfig.isStaging,
+                  policyVersion: data['completionPolicyVersion'],
+                ) &&
                 status == 'paused_work_window') ||
             restartRedo) {
           return SizedBox(

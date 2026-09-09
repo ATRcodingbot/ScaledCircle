@@ -91,6 +91,15 @@
       ]
     },
     {
+      "source": ".firebase/production-engineering/package/wallet-core",
+      "codebase": "wallet-core",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "candidate-manifest.json"
+      ]
+    },
+    {
       "source": ".firebase/production-engineering/package/legal-core",
       "codebase": "legal-core",
       "ignore": [

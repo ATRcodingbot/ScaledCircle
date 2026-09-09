@@ -71,3 +71,12 @@ test('group and exact-location private reads revoke after terminal state',async(
  });
  for(const path of ['zoneScalerParticipations/group__assigned','campaignLocations/exact']) await assertFails(db('assigned').doc(path).get());
 });
+test('intentional resume window retains only intended assignment logistics; expired review revokes them',async()=>{
+ await env.withSecurityRulesDisabled(ctx=>ctx.firestore().doc('campaignZones/z').update({status:'paused_work_window',pauseReason:'intentional_finish_later'}));
+ await assertSucceeds(db('assigned').doc('assignmentCompensations/z').get());
+ for(const uid of ['unassigned','applicant','cross','tenant'])await assertFails(db(uid).doc('assignmentCompensations/z').get());
+ await assertFails(db('assigned').doc('campaignZones/z').update({status:'assigned'}));
+ await env.withSecurityRulesDisabled(ctx=>ctx.firestore().doc('campaignZones/z').update({status:'incomplete_review'}));
+ await assertFails(db('assigned').doc('assignmentCompensations/z').get());
+ await assertSucceeds(db('owner').doc('assignmentCompensations/z').get());
+});

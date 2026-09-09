@@ -95,6 +95,13 @@ class _CompensationAcceptanceState extends State<CompensationAcceptanceDialog> {
             'homes were serviced. Report access restrictions; never enter unauthorized '
             'areas. Platform faults can be referred for technical review.',
           ),
+          const SizedBox(height: 12),
+          const Text(
+            'Pause & Finish Later saves your route for up to 24 hours. Secured '
+            'base pay cannot be reduced. Below 80%, the Business may offer '
+            'partial payment for saved work; it is not guaranteed and requires '
+            'your acceptance of the exact amount.',
+          ),
           CheckboxListTile(
             value: _accepted,
             onChanged: (value) => setState(() => _accepted = value == true),

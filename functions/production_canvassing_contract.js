@@ -140,4 +140,4 @@ function evaluate({contract, zone, routeAuthority, session, chunks, route,
     householdCoverage:null};
 }
 
-module.exports = {VERSION, ROUTE_AUTHORITY_VERSION, prepareOffer, acceptOffer, evaluate, validateOffer};
+module.exports = {VERSION, ROUTE_AUTHORITY_VERSION, prepareOffer, acceptOffer, evaluate, validateOffer, routeBinding};

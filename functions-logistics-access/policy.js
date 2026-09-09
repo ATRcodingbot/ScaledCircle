@@ -3,7 +3,7 @@
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const VERSION = 'logistics_privacy_v1';
 const ACTIVE_LOCATION = new Set(['assigned', 'in_progress']);
-const ACTIVE_ZONE = new Set(['assigned', 'accepted', 'in_progress', 'paused', 'paused_out_of_window', 'ready']);
+const ACTIVE_ZONE = new Set(['assigned', 'accepted', 'in_progress', 'paused', 'paused_work_window', 'paused_out_of_window', 'ready']);
 
 // This is a positive public-field contract. Private free-text, contacts,
 // addresses, exact coordinates and assignment records are never copied.

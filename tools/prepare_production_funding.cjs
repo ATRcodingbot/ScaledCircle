@@ -74,7 +74,9 @@ function prepare() {
  const parser=require(path.join(root,'functions/node_modules/@babel/parser'));
  const generate=require(path.join(root,'functions/node_modules/@babel/generator')).default;
  const {selectedProgram}=require('../functions/scripts/select_function_program');
- source=generate(selectedProgram(parser.parse(source),new Set(['quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','stripeWebhook']))).code;
+ source=source.replace("if(project!=='scaledcircle-staging')return;",
+   "require('./production_work_settlement_policy').environment(project);");
+ source=generate(selectedProgram(parser.parse(source),new Set(['quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','stripeWebhook','reconcileUnusedWorkReservesV1']))).code;
  fs.writeFileSync(path.join(output,'index.js'),source);
  const copied=new Set();
  function copyDependencies(text) {
@@ -83,6 +85,7 @@ function prepare() {
    let filename=path.join(root,'functions-campaign-funding',name);
    if(!fs.existsSync(filename))filename=path.join(root,'functions',name);
    let content=fs.readFileSync(filename,'utf8');
+   content=require('./production_settlement_adapter.cjs').moduleSource(name,content);
    if(name==='campaign_funding_lifecycle.js') {
     content=replaceFunction(content,'paymentEnvironment',`function paymentEnvironment(environment={}) {
       const project=environment.GCLOUD_PROJECT||environment.GOOGLE_CLOUD_PROJECT;

@@ -140,7 +140,7 @@ service cloud.firestore {
           && z.campaignId == campaignId && z.businessId == businessId
           && get(/databases/$(database)/documents/campaigns/$(campaignId)).data.businessId == businessId
           && !(get(/databases/$(database)/documents/campaigns/$(campaignId)).data.status in ['completed', 'cancelled', 'canceled', 'archived'])
-        && z.status in ['assigned', 'accepted', 'in_progress', 'paused', 'paused_out_of_window', 'ready'];
+        && z.status in ['assigned', 'accepted', 'in_progress', 'paused', 'paused_work_window', 'paused_out_of_window', 'ready'];
     }
     match /campaignDiscovery/{campaignId} {
       allow read: if isApprovedAccount() && request.auth.token.email_verified == true;

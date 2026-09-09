@@ -67,10 +67,13 @@ def prepare(archive, output):
     handler = handler.replace(marker, '''  };
   const evidence = await require('./production_job_room_evidence').read({db,zoneId,uid:context.uid,isAdmin:context.isAdmin});
   if (evidence) response.completionEvidence = evidence;
+  const extras=await require('./production_job_room_extras').read({db,FieldValue,Timestamp,zoneId,uid:context.uid,isAdmin:context.isAdmin,evidence});
+  Object.assign(response,extras);
   if (context.isAdmin || (context.role === 'business' && context.uid === campaign.businessId)) return response;
   if (context.role !== 'scaler') throw new HttpsError('permission-denied', 'Scaler authority required.');
   const safe = privacy.scalerResponse(response, privateAllowed);
   if (evidence) safe.completionEvidence = evidence;
+  Object.assign(safe,extras);
   return safe;
 });''', 1)
     path.write_text(before + handler, encoding='utf-8', newline='\n')
@@ -88,12 +91,13 @@ def prepare(archive, output):
         if name in copied:
             return
         copied.add(name)
-        source_path = root / 'functions' / name if name == 'production_job_room_evidence.js' else candidate / name
+        source_path = root / 'functions' / name if name in ['production_job_room_evidence.js','production_job_room_extras.js'] else candidate / name
         content = source_path.read_text(encoding='utf-8')
         (output / name).write_text(content, encoding='utf-8', newline='\n')
         for relative in re.findall(r"require\(['\"]\./([\w_-]+)['\"]\)", content):
             policy_copy(relative + '.js')
     policy_copy('production_job_room_evidence.js')
+    policy_copy('production_job_room_extras.js')
     for name in ['workspace_access.js', 'business_workspace.js', 'subscription_entitlements.js', 'legal_consent.js']:
         (output / name).write_bytes((root / 'functions' / name).read_bytes())
     manifest = {p.relative_to(output).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()

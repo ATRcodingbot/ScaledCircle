@@ -8,14 +8,14 @@ const {selectedProgram}=require('../functions/scripts/select_function_program');
 const TRACKING=require('./prepare_production_engineering.cjs').TRACKING;
 const GROUPS=[
  {codebase:'logistics-access',from:path.join(root,'functions-logistics-access'),names:['projectCampaignDiscoveryV1','seedCampaignDiscoveryV1','listAssignedLocationIdsV1','getReputationCompletionCountV1']},
- {codebase:'job-room-core',from:path.join(root,'.firebase/production-launch/job-room'),names:['getJobRoom']},
+ {codebase:'job-room-core',from:path.join(root,'.firebase/production-launch/job-room'),names:['getJobRoom'],extra:{}},
  {codebase:'discovery-core',from:path.join(privateRoot,'tracking'),names:['getSmartZonePlan','applySmartZonePlan','analyzeCampaignZone']},
  {codebase:'application-core',from:path.join(privateRoot,'tracking'),names:['applyToCampaign']},
  {codebase:'assignment-core',from:path.join(privateRoot,'tracking'),names:['assignScalerToZone'],extra:{configureZoneGroupAssignment:'legacy-group'}},
  {codebase:'completion-authority-core',from:path.join(privateRoot,'tracking'),names:['initializeCampaignCompletion','submitZoneCompletion','reviewCampaignCompletion','finalizeZoneReview']},
  // startAssignedZone is a legacy source entry, explicitly unused by the mobile client.
  {codebase:'tracking-core',from:path.join(privateRoot,'tracking'),names:TRACKING.filter(n=>n!=='startAssignedZone')},
- {codebase:'campaign-funding',from:path.join(privateRoot,'funding'),names:['quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','stripeWebhook']},
+ {codebase:'campaign-funding',from:path.join(privateRoot,'funding'),names:['quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','stripeWebhook','reconcileUnusedWorkReservesV1']},
  {codebase:'default',from:path.join(privateRoot,'tracking/legacy-payout'),names:['approveZonePayout'],packageFrom:path.join(privateRoot,'tracking')},
 ];
 const digest=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
@@ -51,7 +51,7 @@ function prepare(){
   const pkg=JSON.parse(fs.readFileSync(path.join(group.packageFrom||group.from,'package.json')));pkg.name='scaledcircle-production-'+group.codebase;
   fs.writeFileSync(path.join(out,'package.json'),JSON.stringify(pkg,null,2)+'\n');
   fs.writeFileSync(path.join(out,'.env.scaled-circle'),
-    'APP_ENV=production\nCANVASSING_POLICY_EFFECTIVE_FROM_MS=1788825600000\nCANVASSING_NEW_CONTRACTS_ENABLED=false\n');
+    'APP_ENV=production\nCANVASSING_POLICY_EFFECTIVE_FROM_MS=1788825600000\nCANVASSING_NEW_CONTRACTS_ENABLED=false\nUNUSED_WORK_REFUNDS_ENABLED=false\n');
   // Avoid accidentally including stale files on a repeated preparation.
   const keep=new Set(['index.js','package.json','package-lock.json','.env.scaled-circle',...seen]);
   for(const n of filesIn(out))if(!keep.has(n))fs.unlinkSync(path.join(out,n));

@@ -145,6 +145,17 @@ test('normal production-compatible create → map → signed mock funding → ac
  const upload=points.map((p,i)=>({...p,sequence:i+1,timestampMs:startMs+i*10000,horizontalAccuracy:5,speed:1,heading:0}));
  for(let i=0;i<upload.length;i+=100) {const chunk=upload.slice(i,i+100);
   await call('uploadTrackingChunk','scaler',{sessionId:started.sessionId,startSequence:chunk[0].sequence,endSequence:chunk.at(-1).sequence,points:chunk});}
+ if(packaged){
+  await assert.rejects(invoke(jobRoom,'pauseAssignedWorkV1','other',{zoneId,sessionId:started.sessionId,expectedPointCount:upload.length}));
+  const pause=await invoke(jobRoom,'pauseAssignedWorkV1','scaler',{zoneId,sessionId:started.sessionId,expectedPointCount:upload.length});
+  assert.equal(pause.status,'paused');assert.equal((await db.doc('activeTrackingSessions/scaler').get()).exists,false);
+  const saved=await invoke(jobRoom,'getJobRoom','business',{zoneId,privacyVersion:'logistics_privacy_v1'});
+  assert.equal(saved.pausedWork.canResume,true);assert.ok(saved.completionEvidence.path.length>2);
+  assert.equal((await db.collection('walletTransactions').get()).size,0);
+  const resumed=await call('startTrackingSession','scaler',{campaignId:'ordinary',zoneId});
+  assert.equal(resumed.sessionId,started.sessionId);
+  assert.equal((await db.doc('trackingSessions/'+started.sessionId).get()).data().pointCount,upload.length);
+ }
  const finished=await call('completeTrackingSession','scaler',{sessionId:started.sessionId});
  assert.equal(finished.status,'completed');
  assert.equal((await call('completeTrackingSession','scaler',{sessionId:started.sessionId})).routeId,finished.routeId);
@@ -160,6 +171,9 @@ test('normal production-compatible create → map → signed mock funding → ac
  assert.equal(room.completionEvidence.policy.payableAmountCents,17500);
  assert.equal(room.completionEvidence.checkpoints.length,0);
  assert.equal(room.completionEvidence.estimate.householdCoverage,null);
+ assert.equal(room.reserveSettlement.earnedWorkerCents,17500);
+ assert.equal(room.reserveSettlement.earnedFeeCents,3500);
+ assert.equal(room.reserveSettlement.businessReturnCents,0);
  await assert.rejects(call('finalizeZoneReview','scaler',{zoneId,decision:'approve'}));
  const attempts=await Promise.all([call('finalizeZoneReview','business',{zoneId,decision:'approve'}),
    call('finalizeZoneReview','business',{zoneId,decision:'approve'})]);
