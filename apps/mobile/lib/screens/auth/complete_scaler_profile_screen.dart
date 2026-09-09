@@ -9,6 +9,7 @@ import '../preferences/areas_preferences_screen.dart';
 import '../public/early_access_pending_screen.dart';
 import '../scaler/dashboard/scaler_dashboard_screen.dart';
 import 'login_screen.dart';
+import '../../services/auth/refresh_identity.dart';
 
 class CompleteScalerProfileScreen extends StatefulWidget {
   const CompleteScalerProfileScreen({super.key});
@@ -58,7 +59,7 @@ class _CompleteScalerProfileScreenState
       );
       return;
     }
-    await user.reload().timeout(const Duration(seconds: 20));
+    await refreshIdentity().timeout(const Duration(seconds: 20));
     if (!mounted) return;
     if (FirebaseAuth.instance.currentUser?.emailVerified != true) {
       if (mounted) {
@@ -77,12 +78,7 @@ class _CompleteScalerProfileScreenState
     if (!mounted) return;
     final data = profile.data() ?? const <String, dynamic>{};
     if (data['role'] != 'scaler') {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _message = 'Scaler profile setup is not available for this account.';
-        });
-      }
+      AppNavigation.replace(context, '/');
       return;
     }
     final approved = data['active'] == true || data['betaAccess'] == 'approved';

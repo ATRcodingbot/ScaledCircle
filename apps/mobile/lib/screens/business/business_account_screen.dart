@@ -4,6 +4,7 @@ import '../../widgets/authenticated_sign_out_button.dart';
 import 'business_team_screen.dart';
 import 'business_membership_screen.dart';
 import 'profile/business_profile_screen.dart';
+import '../auth/complete_business_profile_screen.dart';
 
 class BusinessAccountScreen extends StatelessWidget {
   const BusinessAccountScreen({super.key});
@@ -24,6 +25,17 @@ class BusinessAccountScreen extends StatelessWidget {
                   'Business Account',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
+            if (BusinessWorkspaceSession.value?['isOwner'] == true)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit Business profile'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CompleteBusinessProfileScreen(),
+                  ),
+                ),
+              ),
             if (BusinessWorkspaceSession.value?['isOwner'] == true)
               ListTile(
                 leading: const Icon(Icons.business_outlined),

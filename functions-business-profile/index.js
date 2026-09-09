@@ -13132,3 +13132,78 @@ exports.auditBusinessCampaignDraft = onDocumentWrittenWithAuthContext({ document
   const ref = db.doc(`businessWorkspaces/${campaign.businessId}/activity/draft_${id}`);
   await db.runTransaction(async (tx) => {if ((await tx.get(ref)).exists) return;tx.create(ref, { businessId: campaign.businessId, actorUid, action: before?.exists ? 'campaign_draft_edited' : 'campaign_draft_created', campaignId: event.params.campaignId, createdAt: FieldValue.serverTimestamp(), sourceEventTime: event.time });});
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Verified owner onboarding grants no paid or marketplace authority.
+exports.getBusinessOnboarding = onCall(
+  { enforceAppCheck: false, maxInstances: 4 },
+  async (request) => {
+    try {return await require('./business_onboarding').createService({ db, auth: getAuth(), FieldValue }).load({ uid: request.auth?.uid });}
+    catch (e) {
+      const safe = ['unauthenticated', 'permission-denied', 'failed-precondition', 'invalid-argument'].includes(e.code);
+      throw new HttpsError(safe ? e.code : 'internal', safe ? e.message : 'Unable to load Business setup. Please retry.');
+    }
+  }
+);
+exports.saveBusinessOnboarding = onCall(
+  { enforceAppCheck: false, maxInstances: 4 },
+  async (request) => {
+    try {
+      if (Object.keys(request.data || {}).some((k) => k !== 'profile')) throw new HttpsError('invalid-argument', 'Only your Business profile can be updated.');
+      return await require('./business_onboarding').createService({ db, auth: getAuth(), FieldValue }).save({ uid: request.auth?.uid, input: request.data?.profile });
+    } catch (e) {
+      const safe = ['unauthenticated', 'permission-denied', 'failed-precondition', 'invalid-argument'].includes(e.code);
+      throw new HttpsError(safe ? e.code : 'internal', safe ? e.message : 'Unable to save Business setup. Please retry.');
+    }
+  }
+);

@@ -53,6 +53,8 @@ dependencies:
   url_launcher: ^6.3.2
 
 dev_dependencies:
+  # Official Firebase core initialization harness for onboarding widget tests.
+  firebase_core_platform_interface: 8.1.1
   flutter_test:
     sdk: flutter
   integration_test:

@@ -5,15 +5,26 @@ import 'public_landing_screen.dart';
 import '../preferences/areas_preferences_screen.dart';
 import '../../services/discovery_preferences_service.dart';
 import '../../services/transactional_email_service.dart';
+import '../../navigation/app_router.dart';
+import '../../navigation/app_routes.dart';
+import '../../services/auth/refresh_identity.dart';
+import '../../screens/auth/complete_business_profile_screen.dart';
 
 class EarlyAccessPendingScreen extends StatefulWidget {
   final String email;
   final String? role;
 
-  const EarlyAccessPendingScreen({super.key, required this.email, this.role});
+  const EarlyAccessPendingScreen({
+    super.key,
+    required this.email,
+    this.role,
+    this.onboardingComplete = false,
+  });
+  final bool onboardingComplete;
 
   @override
-  State<EarlyAccessPendingScreen> createState() => _EarlyAccessPendingScreenState();
+  State<EarlyAccessPendingScreen> createState() =>
+      _EarlyAccessPendingScreenState();
 }
 
 class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
@@ -30,18 +41,39 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
   }
 
   Future<void> _refreshVerification() async {
-    await FirebaseAuth.instance.currentUser?.reload();
-    if (mounted) setState(() => _emailVerified = FirebaseAuth.instance.currentUser?.emailVerified == true);
+    try {
+      final user = await refreshIdentity();
+      if (mounted) setState(() => _emailVerified = user?.emailVerified == true);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _verificationNotice =
+              'We could not refresh your account. Please retry.',
+        );
+      }
+    }
   }
 
   Future<void> _resendVerification() async {
     if (_resending) return;
-    setState(() { _resending = true; _verificationNotice = null; });
+    setState(() {
+      _resending = true;
+      _verificationNotice = null;
+    });
     try {
       await TransactionalEmailService().resendVerification();
-      if (mounted) setState(() => _verificationNotice = 'A new verification email is on its way.');
+      if (mounted) {
+        setState(
+          () => _verificationNotice = 'A new verification email is on its way.',
+        );
+      }
     } catch (_) {
-      if (mounted) setState(() => _verificationNotice = 'Please wait a few minutes before requesting another email.');
+      if (mounted) {
+        setState(
+          () => _verificationNotice =
+              'Please wait a few minutes before requesting another email.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _resending = false);
     }
@@ -82,8 +114,10 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                       size: 64,
                     ),
                     const SizedBox(height: 22),
-                    const Text(
-                      "YOU'RE SET UP",
+                    Text(
+                      widget.onboardingComplete
+                          ? 'Your account is ready.'
+                          : "YOU'RE SET UP",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -93,8 +127,10 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Your ScaledCircle account has been created for ${widget.email}. '
-                      "We're rolling out marketplace access in stages. We'll let you know when your account is ready.",
+                      widget.onboardingComplete
+                          ? 'ScaledCircle is currently in early access. We’ll notify you when full ${widget.role == 'business' ? 'Business' : 'Scaler'} access is available.'
+                          : 'Your ScaledCircle account has been created for ${widget.email}. '
+                                "We're rolling out marketplace access in stages. We'll let you know when your account is ready.",
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Color(0xFFB8C9D8),
@@ -102,18 +138,48 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    if (widget.role == 'business') ...[
+                      FilledButton(
+                        onPressed: () => widget.onboardingComplete
+                            ? Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const CompleteBusinessProfileScreen(),
+                                ),
+                              )
+                            : AppNavigation.replace(context, '/'),
+                        child: Text(
+                          widget.onboardingComplete
+                              ? 'Edit Business profile'
+                              : 'Continue account setup',
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () =>
+                            AppNavigation.replace(context, AppRoutes.login),
+                        child: const Text('Check access status'),
+                      ),
+                    ],
                     if (!_emailVerified) ...[
                       OutlinedButton.icon(
                         onPressed: _resending ? null : _resendVerification,
                         icon: _resending
-                            ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.mark_email_unread_outlined),
                         label: const Text('Resend Verification Email'),
                       ),
                       if (_verificationNotice != null) ...[
                         const SizedBox(height: 8),
-                        Text(_verificationNotice!, textAlign: TextAlign.center,
-                          style: const TextStyle(color: Color(0xFFB8C9D8))),
+                        Text(
+                          _verificationNotice!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFFB8C9D8)),
+                        ),
                       ],
                       const SizedBox(height: 18),
                     ],
@@ -133,37 +199,49 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                       FilledButton.tonalIcon(
                         onPressed: () async {
                           await FirebaseAuth.instance.currentUser?.reload();
-                          if (FirebaseAuth.instance.currentUser?.emailVerified != true) {
+                          if (FirebaseAuth
+                                  .instance
+                                  .currentUser
+                                  ?.emailVerified !=
+                              true) {
                             if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Verify your email first, then try again.'),
-                            ));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Verify your email first, then try again.',
+                                ),
+                              ),
+                            );
                             return;
                           }
                           if (!context.mounted) return;
-                          await Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => AreasPreferencesScreen(
-                              role: 'scaler',
-                              onboarding: true,
-                              loadPreferences: _preferences.loadPendingScaler,
-                              savePreferences: _preferences.savePendingScaler,
-                              completePreferences:
-                                  _preferences.completePendingScalerSetup,
-                              onSaved: (saved) {
-                                setState(() => _summary = saved);
-                              },
-                              onCompleted: (saved) {
-                                setState(() => _summary = saved);
-                                Navigator.of(context).pop();
-                              },
-                              onSkip: () => Navigator.of(context).pop(),
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AreasPreferencesScreen(
+                                role: 'scaler',
+                                onboarding: true,
+                                loadPreferences: _preferences.loadPendingScaler,
+                                savePreferences: _preferences.savePendingScaler,
+                                completePreferences:
+                                    _preferences.completePendingScalerSetup,
+                                onSaved: (saved) {
+                                  setState(() => _summary = saved);
+                                },
+                                onCompleted: (saved) {
+                                  setState(() => _summary = saved);
+                                  Navigator.of(context).pop();
+                                },
+                                onSkip: () => Navigator.of(context).pop(),
+                              ),
                             ),
-                          ));
+                          );
                         },
                         icon: const Icon(Icons.work_outline),
-                        label: Text(_summary == null
-                            ? 'Set Up Work Preferences'
-                            : 'Edit Work Preferences'),
+                        label: Text(
+                          _summary == null
+                              ? 'Set Up Work Preferences'
+                              : 'Edit Work Preferences',
+                        ),
                       ),
                       const SizedBox(height: 12),
                       const Text(

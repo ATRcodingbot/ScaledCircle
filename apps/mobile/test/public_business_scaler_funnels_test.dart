@@ -280,7 +280,9 @@ void main() {
     expect(funnelSource, contains('WaitlistScreen(initialRole: role)'));
     expect(profileSource, contains("'active': false"));
     expect(profileSource, contains("'betaAccess': 'pending'"));
-    expect(registerSource, contains('EarlyAccessPendingScreen('));
+    expect(registerSource, contains("AppNavigation.replace(context, '/')"));
+    expect(loginSource, contains('StartupDestination.pending'));
+    expect(loginSource, contains('EarlyAccessPendingScreen('));
     expect(registerSource, contains('role: UserProfile.roleValue(_role)'));
     expect(loginSource, contains("role == 'admin'"));
     expect(loginSource, contains("profile['active'] != true"));

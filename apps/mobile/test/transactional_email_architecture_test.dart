@@ -20,8 +20,9 @@ void main() {
     }
     expect(source, contains('applyActionCode'));
     expect(source, isNot(contains('error.message')));
-    expect(source, contains('success ? AppColors.textPrimary'));
-    expect(source, contains('success ? const TextStyle(color: AppColors.textSecondary)'));
+    final formatted = source.replaceAll(RegExp(r'\s+'), ' ');
+    expect(formatted, contains('success ? AppColors.textPrimary'));
+    expect(formatted, contains('success ? const TextStyle(color: AppColors.textSecondary)'));
   });
 
   test('profile continuation preserves login destination and pending authority', () {

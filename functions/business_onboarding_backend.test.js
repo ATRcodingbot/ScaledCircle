@@ -1,0 +1,42 @@
+'use strict';
+const {test,before,after}=require('node:test'),assert=require('assert/strict');
+const admin=require('firebase-admin');
+const {createService,sanitize}=require('./business_onboarding');
+const {createWorkspaceService}=require('./business_workspace');
+const {initializeTestEnvironment,assertFails}=require('@firebase/rules-unit-testing');
+const {doc,getDoc,setDoc}=require('firebase/firestore');
+const fs=require('fs');
+let app,db,auth,svc,seq=0,rules;
+const valid={businessName:'Test Business',contactName:'Owner',businessDescription:'Local repair service',servicesOffered:['Repair'],serviceAreas:['Maryland'],website:'https://example.com',primaryPhone:'',businessAddress:'',brandVoice:'Friendly'};
+before(async()=>{for(const k of ['FIRESTORE_EMULATOR_HOST','FIREBASE_AUTH_EMULATOR_HOST'])assert.match(process.env[k]||'',/^(127\.0\.0\.1|localhost):\d+$/);
+app=admin.initializeApp({projectId:'demo-business-onboarding'},'onboarding');db=app.firestore();auth=app.auth();svc=createService({db,auth,FieldValue:admin.firestore.FieldValue});
+rules=await initializeTestEnvironment({projectId:'demo-business-onboarding',firestore:{rules:fs.readFileSync('../firestore.production.rules','utf8')}});});
+after(async()=>{await rules?.cleanup();await db?.terminate();await app?.delete();});
+async function fixture(overrides={},authOptions={}){const uid='onboarding_'+(++seq);await auth.createUser({uid,email:uid+'@example.test',emailVerified:true,...authOptions});await db.doc('users/'+uid).set({role:'business',active:false,betaAccess:'pending',companyName:'Original',...overrides});return uid;}
+test('verified pending owner saves/reloads profile without approval, consent, subscription or Wallet effects',async()=>{
+ const uid=await fixture(),user=(await db.doc('users/'+uid).get()).data();
+ assert.equal((await svc.load({uid})).profileComplete,false);
+ const result=await svc.save({uid,input:valid});assert.equal(result.profileComplete,true);assert.equal(result.approved,false);assert.equal(result.missingAgreements.length,2);
+ assert.deepEqual((await db.doc('users/'+uid).get()).data(),user);
+ assert.equal((await svc.load({uid})).profile.businessName,valid.businessName);
+ for(const col of ['wallets','businessSubscriptions','businessWorkspaces'])assert.equal((await db.doc(col+'/'+uid).get()).exists,false);
+ for(const type of ['terms','privacy'])assert.equal((await db.doc(`legalConsents/${uid}_${type}_${type}-2026-08-v1`).get()).exists,false);
+ const workspace=createWorkspaceService({db,auth,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp});
+ await assert.rejects(workspace.authority({uid,businessId:uid,permission:'payments',allowExpired:true}),{code:'permission-denied'});
+});
+test('later edits preserve completion timestamp, grounding, and real consent records',async()=>{
+ const uid=await fixture();await db.doc('businessGrowthProfiles/'+uid).set({claimsToAvoid:['No guarantees'],profileVersion:4});
+ await db.doc(`legalConsents/${uid}_terms_terms-2026-08-v1`).set({uid,agreementType:'terms',agreementVersion:'terms-2026-08-v1',acceptedAt:admin.firestore.Timestamp.now()});
+ const before=(await db.doc(`legalConsents/${uid}_terms_terms-2026-08-v1`).get()).data();
+ await svc.save({uid,input:valid});const at=(await db.doc('businessOnboarding/'+uid).get()).data().completedAt;
+ await svc.save({uid,input:{...valid,brandVoice:'Clear'}});const profile=(await db.doc('businessGrowthProfiles/'+uid).get()).data();
+ assert.deepEqual(profile.claimsToAvoid,['No guarantees']);assert.equal(profile.profileVersion,6);assert.equal(profile.contactName,undefined);
+ assert.deepEqual((await db.doc('businessOnboarding/'+uid).get()).data().completedAt,at);
+ assert.deepEqual((await db.doc(`legalConsents/${uid}_terms_terms-2026-08-v1`).get()).data(),before);
+});
+for(const [label,profile,opts] of [['unverified',{}, {emailVerified:false}],['disabled',{}, {disabled:true}],['Scaler',{role:'scaler'},{}],['Admin',{role:'admin'},{}],['rejected',{betaAccess:'rejected'},{}],['team invitation',{signupPurpose:'team_invitation'},{}]])test(label+' denied',async()=>{const uid=await fixture(profile,opts);await assert.rejects(svc.load({uid}));await assert.rejects(svc.save({uid,input:valid}));assert.equal((await db.doc('businessOnboarding/'+uid).get()).exists,false);});
+test('signed out, wrong owner and injected authority fields denied',async()=>{await assert.rejects(svc.load({uid:null}));const uid=await fixture();await db.doc('businessWorkspaces/'+uid).set({ownerId:'another'});await assert.rejects(svc.save({uid,input:valid}));for(const k of ['businessId','active','role','stripeCustomerId','onboardingCompletedAt'])assert.throws(()=>sanitize({...valid,[k]:'forged'}));});
+test('no empty profile or invalid URL accepted',()=>{for(const p of [{...valid,servicesOffered:[]},{...valid,contactName:''},{...valid,website:'javascript:alert(1)'},{...valid,website:'https://user:password@example.com'}])assert.throws(()=>sanitize(p));});
+test('existing approved owner and comped grant survive profile editing',async()=>{const uid=await fixture({active:true,betaAccess:'approved'});const grant={plan:'managed_growth',comped:true,status:'active'};await db.doc('businessSubscriptions/'+uid).set(grant);await svc.save({uid,input:valid});assert.deepEqual((await db.doc('businessSubscriptions/'+uid).get()).data(),grant);});
+test('production Rules deny direct onboarding writes and unapproved private profile reads',async()=>{const uid=await fixture();await svc.save({uid,input:valid});const own=rules.authenticatedContext(uid,{email_verified:true}).firestore(),other=rules.authenticatedContext('unrelated',{email_verified:true}).firestore();
+await assertFails(setDoc(doc(own,'businessOnboarding/'+uid),{completedAt:1}));await assertFails(setDoc(doc(own,'businessGrowthProfiles/'+uid),valid));await assertFails(getDoc(doc(other,'businessOnboarding/'+uid)));await assertFails(getDoc(doc(other,'businessGrowthProfiles/'+uid)));await assertFails(getDoc(doc(rules.unauthenticatedContext().firestore(),'businessOnboarding/'+uid)));});

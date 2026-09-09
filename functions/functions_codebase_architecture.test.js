@@ -444,7 +444,7 @@ test("physical-marketing-core owns immutable print and separately gated TEST pos
 });
 
 test("business-profile-core exclusively owns the zero-secret customer profile save authority", () => {
-  assert.deepEqual(exportsIn(businessProfileCore).sort(), ["saveBusinessGrowthProfile", "listBusinessWorkspaceRecordIds", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "auditBusinessCampaignDraft"].sort());
+  assert.deepEqual(exportsIn(businessProfileCore).sort(), ["getBusinessOnboarding", "saveBusinessOnboarding", "saveBusinessGrowthProfile", "listBusinessWorkspaceRecordIds", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "auditBusinessCampaignDraft"].sort());
   for (const source of [platform, legacy, physicalMarketingCore]) {
     assert.doesNotMatch(source, /exports\.saveBusinessGrowthProfile\s*=/);
   }

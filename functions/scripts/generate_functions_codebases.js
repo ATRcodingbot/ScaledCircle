@@ -147,7 +147,7 @@ const physicalMarketingExports = new Set([
   "preparePhysicalMarketingVersion", "approvePhysicalMarketingVersion",
   "getPhysicalMarketingOperations",
 ]);
-const businessProfileExports = new Set(["saveBusinessGrowthProfile", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "listBusinessWorkspaceRecordIds", "auditBusinessCampaignDraft"]);
+const businessProfileExports = new Set(["getBusinessOnboarding", "saveBusinessOnboarding", "saveBusinessGrowthProfile", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "listBusinessWorkspaceRecordIds", "auditBusinessCampaignDraft"]);
 const migratedLegacyExports = new Set(["sendOutboundEmailJob"]);
 // Retired production endpoints stay in the monolithic source only for audit
 // history. No configured Firebase codebase may regenerate or deploy them.

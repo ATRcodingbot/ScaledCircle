@@ -27,6 +27,7 @@ abstract final class AppRoutes {
   static const scalerTerms = '/scaler-terms';
   static const support = '/support';
   static const completeScalerProfile = '/complete-scaler-profile';
+  static const completeBusinessProfile = '/complete-business-profile';
   static const campaignDetailPrefix = '/campaign';
   static const jobRoomPrefix = '/job-room';
 

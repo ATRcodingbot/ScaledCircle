@@ -9,6 +9,10 @@ import '../screens/auth/complete_scaler_profile_screen.dart';
 import '../screens/public/early_access_pending_screen.dart';
 import '../services/legal_consent_service.dart';
 import '../services/transactional_email_service.dart';
+import '../services/auth/refresh_identity.dart';
+import '../services/business_onboarding_service.dart';
+import '../screens/auth/complete_business_profile_screen.dart';
+import '../screens/public/legal_document_screen.dart';
 import '../widgets/authenticated_sign_out_button.dart';
 import 'app_router.dart';
 import 'app_routes.dart';
@@ -18,6 +22,7 @@ enum StartupDestination {
   verifyEmail,
   consent,
   scalerProfile,
+  businessProfile,
   pending,
   business,
   scaler,
@@ -34,6 +39,11 @@ StartupDestination resolveStartupDestination(Map<String, dynamic> state) {
   if (role == 'admin') return StartupDestination.admin;
   if (role != 'scaler' && role != 'business') {
     return StartupDestination.profileMissing;
+  }
+  if (role == 'business' &&
+      state['workspaceReady'] != true &&
+      state['businessProfileComplete'] == false) {
+    return StartupDestination.businessProfile;
   }
   if ((state['missingAgreements'] as List? ?? []).isNotEmpty) {
     return StartupDestination.consent;
@@ -60,7 +70,8 @@ class StartupSessionGate extends StatefulWidget {
   State<StartupSessionGate> createState() => _StartupSessionGateState();
 }
 
-class _StartupSessionGateState extends State<StartupSessionGate> {
+class _StartupSessionGateState extends State<StartupSessionGate>
+    with WidgetsBindingObserver {
   Map<String, dynamic>? _state;
   String? _error;
   bool _checked = false, _busy = false;
@@ -75,6 +86,7 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.load != null) {
       _refresh();
     } else {
@@ -88,10 +100,21 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _generation++;
     _authChanges?.cancel();
     _authDeadline?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        !_busy &&
+        _state != null &&
+        resolveStartupDestination(_state!) == StartupDestination.verifyEmail) {
+      _refresh();
+    }
   }
 
   void _fail() {
@@ -108,7 +131,7 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
     final user = auth.currentUser;
     if (user == null) return {'signedIn': false};
     try {
-      await user.reload();
+      await refreshIdentity(auth: auth);
     } on FirebaseAuthException catch (error) {
       if ([
         'user-disabled',
@@ -134,9 +157,7 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
     final missing = <String>[];
     if (profile != null && profile['role'] != 'admin') {
       final required = await LegalConsentService().missingFor('account');
-      missing.addAll(
-        required.map((agreement) => agreement['type']!).toList(),
-      );
+      missing.addAll(required.map((agreement) => agreement['type']!).toList());
     }
 
     bool workspaceReady = false;
@@ -150,6 +171,15 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
       }
     }
     Map<String, dynamic>? preferences;
+    bool? businessProfileComplete;
+    if (profile?['role'] == 'business' &&
+        profile?['signupPurpose'] != 'team_invitation' &&
+        !workspaceReady &&
+        profile?['active'] != true &&
+        profile?['betaAccess'] != 'approved') {
+      businessProfileComplete =
+          (await BusinessOnboardingService().load())['profileComplete'] == true;
+    }
     if (profile?['role'] == 'scaler') {
       final approved =
           profile?['active'] == true || profile?['betaAccess'] == 'approved';
@@ -168,6 +198,7 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
       'email': user.email,
       'profile': profile,
       'workspaceReady': workspaceReady,
+      'businessProfileComplete': businessProfileComplete,
       'missingAgreements': missing,
       'workProfileComplete':
           preferences?['initialSetupCompletedAt'] != null ||
@@ -233,10 +264,13 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
         return widget.signedOut;
       case StartupDestination.scalerProfile:
         return const CompleteScalerProfileScreen();
+      case StartupDestination.businessProfile:
+        return CompleteBusinessProfileScreen(onCompleted: _refresh);
       case StartupDestination.pending:
         return EarlyAccessPendingScreen(
           email: state['email']?.toString() ?? '',
           role: (state['profile'] as Map)['role']?.toString(),
+          onboardingComplete: true,
         );
       case StartupDestination.verifyEmail:
         return _shell([
@@ -282,13 +316,13 @@ class _StartupSessionGateState extends State<StartupSessionGate> {
             state['missingAgreements'] as List,
           )) ...[
             TextButton(
-              onPressed: () => AppNavigation.push(
+              onPressed: () => openLegalDocument(
                 context,
                 type == 'terms'
-                    ? AppRoutes.terms
+                    ? LegalDocumentKind.terms
                     : type == 'privacy'
-                    ? AppRoutes.privacy
-                    : AppRoutes.scalerTerms,
+                    ? LegalDocumentKind.privacy
+                    : LegalDocumentKind.scalerTerms,
               ),
               child: Text(
                 type == 'terms'

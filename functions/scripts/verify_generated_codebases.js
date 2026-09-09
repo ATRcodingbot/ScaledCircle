@@ -202,7 +202,7 @@ assert.deepEqual(Object.keys(physicalMarketing).sort(), [
   "getPhysicalMarketingWorkspace", "mutatePhysicalMarketingMaterial",
   "preparePhysicalMarketingVersion",
 ].sort());
-assert.deepEqual(Object.keys(businessProfile).sort(), ["saveBusinessGrowthProfile", "listBusinessWorkspaceRecordIds", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "auditBusinessCampaignDraft"].sort());
+assert.deepEqual(Object.keys(businessProfile).sort(), ["getBusinessOnboarding", "saveBusinessOnboarding", "saveBusinessGrowthProfile", "listBusinessWorkspaceRecordIds", "prepareInvitedBusinessAccount", "getBusinessTeam", "inviteBusinessTeamMember", "acceptBusinessTeamInvitation", "updateBusinessTeamMember", "getBusinessWorkspaceContext", "selectBusinessWorkspace", "auditBusinessCampaignDraft"].sort());
 const canonicalEntitlements = fs.readFileSync(
   path.join(root, "functions", "subscription_entitlements.js"), "utf8");
 const creativeMediaEntitlements = fs.readFileSync(

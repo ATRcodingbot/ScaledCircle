@@ -5,11 +5,10 @@ import '../../models/user/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/public_site_service.dart';
 import '../../services/affiliate_service.dart';
-import '../public/early_access_pending_screen.dart';
+import '../public/legal_document_screen.dart';
 import '../../widgets/referral_source_fields.dart';
 import '../../widgets/scaled_circle_brand.dart';
 import '../../navigation/app_router.dart';
-import '../../navigation/app_routes.dart';
 
 class RegisterScreen extends StatefulWidget {
   final UserRole initialRole;
@@ -123,16 +122,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EarlyAccessPendingScreen(
-            email: email,
-            role: UserProfile.roleValue(_role),
-          ),
-        ),
-        (_) => false,
-      );
+      AppNavigation.replace(context, '/');
     } on FirebaseAuthException catch (error) {
       _showError(_authMessage(error));
     } catch (_) {
@@ -360,30 +350,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ? 'I confirm I am at least 18 and authorized to act for this Business. I agree to the Terms and acknowledge the Privacy Policy.'
                           : 'I confirm I am at least 18. I agree to the Terms and Scaler Work Terms and acknowledge the Privacy Policy.',
                     ),
-                    subtitle: Wrap(
-                      spacing: 4,
-                      children: [
-                        TextButton(
-                          onPressed: () =>
-                              AppNavigation.push(context, AppRoutes.terms),
-                          child: const Text('Read Terms'),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              AppNavigation.push(context, AppRoutes.privacy),
-                          child: const Text('Read Privacy Policy'),
-                        ),
-                        if (_role == UserRole.scaler)
-                          TextButton(
-                            onPressed: () => AppNavigation.push(
-                              context,
-                              AppRoutes.scalerTerms,
-                            ),
-                            child: const Text('Scaler Work & Earnings'),
-                          ),
-                      ],
-                    ),
                     controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  Wrap(
+                    spacing: 4,
+                    children: [
+                      TextButton(
+                        onPressed: () =>
+                            openLegalDocument(context, LegalDocumentKind.terms),
+                        child: const Text('Read Terms'),
+                      ),
+                      TextButton(
+                        onPressed: () => openLegalDocument(
+                          context,
+                          LegalDocumentKind.privacy,
+                        ),
+                        child: const Text('Read Privacy Policy'),
+                      ),
+                      if (_role == UserRole.scaler)
+                        TextButton(
+                          onPressed: () => openLegalDocument(
+                            context,
+                            LegalDocumentKind.scalerTerms,
+                          ),
+                          child: const Text('Scaler Work & Earnings'),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
