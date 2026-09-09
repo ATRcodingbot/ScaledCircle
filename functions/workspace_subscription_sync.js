@@ -49,7 +49,8 @@ function createSubscriptionSync({db, FieldValue, Timestamp, planForPrice, enviro
         subscriptionComped: false, subscriptionSource: 'stripe', stripeSubscriptionId: subscription.id,
         subscriptionCancelAtPeriodEnd: subscription.cancel_at_period_end === true,
         ...(releaseCheckout ? {pendingSubscriptionRequestId: FieldValue.delete(),
-          pendingSubscriptionPlan: FieldValue.delete(),pendingSubscriptionSelection:FieldValue.delete(), pendingSubscriptionExpiresMs: FieldValue.delete()} : {}),
+          pendingSubscriptionPlan: FieldValue.delete(),pendingSubscriptionSelection:FieldValue.delete(), pendingSubscriptionExpiresMs: FieldValue.delete(),
+          ...(w.data()?.pendingSubscriptionCertificationIntentId===subscription.metadata?.certificationIntentId ? {pendingSubscriptionCertificationIntentId:FieldValue.delete()} : {})} : {}),
         updatedAt: FieldValue.serverTimestamp()}, {merge: true});
       tx.set(entitlement, {businessId: uid, plan: terms.plan, planId: terms.plan, price: terms.price,
         bundle:terms.bundle,addons:terms.bundle?['business_assistant','lead_generation_research']:terms.addons,

@@ -2163,10 +2163,23 @@ exports.createSubscriptionCheckoutSession = onCall(
     secrets: STRIPE_CHECKOUT_SECRETS,
   },
   businessOperation("createSubscriptionCheckoutSession", async (request) => {
+    const certification = require('./subscription_certification');
+    certification.rejectClientDiscounts(request.data);
     const context = await requireVerifiedUser(
       request,
       "You must be logged in to subscribe.",
     );
+    if (request.data?.certificationIntentId !== undefined) {
+      if (context.isAdmin) throw new HttpsError('permission-denied', 'Use the designated Business owner account.');
+      return certification.createService({db, FieldValue, workspace: businessWorkspaceService(),
+        legal: legalConsent.createLegalConsentService({db, FieldValue}), stripe: subscriptionStripeClient(),
+        runtime: {environment: scaledCircleEnvironment(), projectId: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+          enabled: process.env.INTERNAL_SUBSCRIPTION_CERTIFICATION_ENABLED === 'true',
+          sourceSha: process.env.RELEASE_SOURCE_SHA, packageSeal: process.env.RELEASE_PACKAGE_SEAL},
+        priceId: stripePriceForPlan('starter')}).checkout({uid: request.auth.uid, businessId: context.uid,
+          intentId: request.data.certificationIntentId, data: request.data,
+          selection: request.data.selection || {plan: request.data.plan}});
+    }
     if (context.isAdmin) {
       return {...await grantAdminScaleSubscription(context.uid), url: null};
     }
@@ -2205,6 +2218,7 @@ exports.createSubscriptionCheckoutSession = onCall(
     let checkoutRequestId;
     await db.runTransaction(async tx => {
       const current = (await tx.get(checkoutWallet)).data() || {};
+      if (current.pendingSubscriptionCertificationIntentId) throw new HttpsError('failed-precondition', 'An internal certification requires reconciliation before another Checkout.');
       if(current.stripeSubscriptionId&&!['canceled','incomplete_expired'].includes(current.subscriptionStatus))throw new HttpsError('already-exists','A membership is already linked. Use Billing / Plan.');
       if (current.pendingSubscriptionExpiresMs > Date.now()) {
         const sameSelection=current.pendingSubscriptionSelection===selectionKey||(!current.pendingSubscriptionSelection&&!selected.bundle&&!selected.addons.length&&current.pendingSubscriptionPlan===plan);

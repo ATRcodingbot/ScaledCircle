@@ -126,7 +126,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
           title: Text('Change to ${quote['planName']}?'),
           content: Text(
             '${quote['seatLimit']} total seats, including the owner. \$${quote['price']} per month.\n\n'
-            'Stripe invoice preview: \$${amount.toStringAsFixed(2)} due. '
+            'Invoice preview: \$${amount.toStringAsFixed(2)} due. '
             '${quote['upgrade'] == true ? 'The prorated upgrade is invoiced now. Access changes only if payment succeeds.' : 'Changes take effect now; any unused-time credit is applied to the next invoice. Review Team first to choose who remains.'}\n\n'
             'Funded campaigns, accepted pay and history remain unchanged.',
           ),
@@ -185,7 +185,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
         builder: (dialog) => AlertDialog(
           title: const Text('Review plan & add-on change'),
           content: Text(
-            'New recurring total: \$${((quote['monthlyCents'] as num) / 100).toStringAsFixed(2)}/month. ${quote['seatLimit']} total users, including the owner.\n\nEffective $date at renewal. Your current paid access continues until then. No change charge today.\n\nStripe next-invoice preview: \$${((quote['amountDueCents'] as num) / 100).toStringAsFixed(2)}. Taxes and any existing credits are reflected in the provider preview. The bundle replaces its individual components; it never adds duplicate charges.',
+            'New recurring total: \$${((quote['monthlyCents'] as num) / 100).toStringAsFixed(2)}/month. ${quote['seatLimit']} total users, including the owner.\n\nEffective $date at renewal. Your current paid access continues until then. No change charge today.\n\nNext-invoice preview: \$${((quote['amountDueCents'] as num) / 100).toStringAsFixed(2)}. Taxes and any existing credits are included in this preview. The bundle replaces its individual components; it never adds duplicate charges.',
           ),
           actions: [
             TextButton(
@@ -284,15 +284,41 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
               if (data == null && _error == null)
                 const Center(child: CircularProgressIndicator()),
               if (data != null) ...[
-                const Text('Your Plan'),
+                const Text('Current Plan'),
                 Text(
                   data['planName']?.toString() ?? 'Membership',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 Text('\$${data['price']} per month'),
                 const SizedBox(height: 12),
+                if (data['seatStatus'] == 'verified' &&
+                    data['seatsUsed'] is num &&
+                    data['seatLimit'] is num &&
+                    data['seatsAvailable'] is num) ...[
+                  Text(
+                    '${data['seatsUsed']} of ${data['seatLimit']} seats used',
+                  ),
+                  Text(
+                    '${data['seatsAvailable']} seats available · Owner included',
+                  ),
+                  if ((data['seatsReserved'] as num? ?? 0) > 0)
+                    Text(
+                      '${data['seatsReserved']} ${data['seatsReserved'] == 1 ? 'seat' : 'seats'} reserved for invitations',
+                    ),
+                  if ((data['seatsUsed'] as num) > (data['seatLimit'] as num))
+                    const Text(
+                      'Review your team: current membership exceeds this plan’s capacity.',
+                    ),
+                ] else ...[
+                  const Text('Seat availability could not be verified.'),
+                  TextButton(
+                    onPressed: _busy ? null : _load,
+                    child: const Text('Retry Seat Availability'),
+                  ),
+                ],
+                const SizedBox(height: 12),
                 const Text(
-                  'Add-ons',
+                  'Active Add-ons',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 if ((data['addons'] as List? ?? []).isEmpty)
@@ -316,7 +342,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                 Text(
                   data['cancelAtPeriodEnd'] == true
                       ? 'Paid access ends $_end. No further subscription renewal is scheduled.'
-                      : 'Current renewal date: $_end',
+                      : 'Next renewal date: $_end',
                 ),
                 const SizedBox(height: 20),
                 const Text(
@@ -342,6 +368,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     data['bundle'] == null &&
                     (data['addons'] as List? ?? []).isEmpty)
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Change Plan'),
                     items: const [
                       DropdownMenuItem(

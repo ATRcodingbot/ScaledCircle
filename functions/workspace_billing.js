@@ -54,7 +54,17 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
 
  const selections=require('./workspace_billing_catalog').createSelectionService({db,FieldValue,workspace,stripe,read,planForPrice,priceForPlan,validatePrice,now});
  return {
-  async get({uid,businessId}) {const r=await read(uid,businessId);const view=await reconcile(r.a,r.provider,r.view);return selections.decorate({...r,view});},
+  async get({uid,businessId}) {
+   const r=await read(uid,businessId),view=await selections.decorate({...r,view:await reconcile(r.a,r.provider,r.view)});
+   // Seat counts use maintained inventory after Billing authorization. Do not
+   // expose member identities or block cancellation when counts need recovery.
+   try {
+    const inv=await workspace.inventory(r.a.businessId),capacity=view.paidAccess?view.seatLimit:1;
+    const seatsUsed=1+inv.members.filter(m=>m.status==='active').length;
+    const seatsReserved=inv.invitations.filter(i=>i.status==='pending'&&i.expiresAt?.toMillis()>now()).length;
+    return {...view,seatLimit:capacity,seatsUsed,seatsReserved,seatsAvailable:Math.max(0,capacity-seatsUsed-seatsReserved),seatStatus:'verified'};
+   } catch (_) {return {...view,seatStatus:'unavailable'};}
+  },
   async preview({uid,businessId,plan,selection}) {
    if(selection)return selections.preview({uid,businessId,selection});
    const {a,provider,view}=await read(uid,businessId);

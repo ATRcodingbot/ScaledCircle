@@ -51,7 +51,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         builder: (dialog) => AlertDialog(
           title: const Text('Review your membership'),
           content: Text(
-            '\$${((quote['monthlyCents'] as num) / 100).toStringAsFixed(2)} per month · ${quote['seatLimit']} total users, including the owner.\n\nThe selected Beta products provide research, recommendations and drafts. External actions need separate approval. Stripe shows any applicable tax before payment. You can cancel renewal in Billing / Plan.',
+            '\$${((quote['monthlyCents'] as num) / 100).toStringAsFixed(2)} per month · ${quote['seatLimit']} total users, including the owner.\n\nThe selected Beta products provide research, recommendations and drafts. External actions need separate approval. Checkout shows any applicable tax before payment. You can cancel renewal in Billing / Plan.',
           ),
           actions: [
             TextButton(
@@ -139,9 +139,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           title: Text(upgrading ? 'Confirm Upgrade' : 'Confirm Subscription'),
           content: Text(
             upgrading
-                ? 'Open the secure Stripe billing portal to manage or upgrade your subscription?'
+                ? 'Open the secure billing portal to manage or upgrade your subscription?'
                 : 'Subscribe to the ${_planName(plan)} plan for '
-                      '\$${charge.toStringAsFixed(0)} per month through secure Stripe Checkout?',
+                      '\$${charge.toStringAsFixed(0)} per month through secure Checkout?',
           ),
           actions: [
             TextButton(
@@ -185,7 +185,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           content: Text(
             activatedImmediately
                 ? 'Your complimentary Scale plan is active.'
-                : 'Secure Stripe billing opened. Your plan updates after payment is confirmed.',
+                : 'Secure billing opened. Your plan updates after payment is confirmed.',
           ),
         ),
       );
@@ -283,7 +283,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       const Text(
                         'An active monthly subscription is required '
                         'to publish campaigns. Subscriptions renew '
-                        'automatically through Stripe.',
+                        'automatically through secure billing.',
                       ),
 
                       const SizedBox(height: 8),
@@ -542,8 +542,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                               Expanded(
                                 child: Text(
-                                  'Use Stripe’s secure billing portal to '
-                                  'change or cancel an active plan. Stripe '
+                                  'Use the secure billing portal to '
+                                  'change or cancel an active plan. Checkout '
                                   'shows any proration and the next renewal '
                                   'amount before a plan change is confirmed.',
                                 ),
@@ -679,7 +679,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
             if (isUpgrade) ...[
               Text(
-                'Manage in Stripe',
+                'Manage Membership',
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -697,7 +697,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               const SizedBox(height: 4),
 
               Text(
-                'Stripe securely manages plan changes and automatic renewal.',
+                'Manage plan changes and automatic renewal securely.',
                 style: TextStyle(
                   color: Colors.green.shade800,
                   fontWeight: FontWeight.w600,
@@ -772,7 +772,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             : isDowngrade
                             ? 'Lower Plan'
                             : isUpgrade
-                            ? 'Manage Upgrade in Stripe'
+                            ? 'Manage Upgrade'
                             : 'Choose $title',
                       ),
               ),

@@ -11,18 +11,20 @@ function createHandler({db,FieldValue,Timestamp,auth,stripe,environment,planForP
  return async event=>{
   if(!handles(event))return false;
   contract.assertMode(event,environment);
-  let invoice,subId;
+  let invoice,subId,checkoutSession;
   if(INVOICE_EVENTS.has(event.type)){
    invoice=await stripe.invoices.retrieve(event.data.object.id);contract.assertMode(invoice,environment);subId=subscriptionId(invoice);
    if(!subId)return true; // A non-subscription invoice must not become a campaign payment.
   } else if(event.type.startsWith('checkout.session.')){
    const session=await stripe.checkout.sessions.retrieve(event.data.object.id);contract.assertMode(session,environment);
+   checkoutSession=session;
    if(session.mode!=='subscription' || session.metadata?.purchaseType!=='subscription')throw Error('subscription_checkout_binding_mismatch');
    subId=id(session.subscription);if(!subId)return true; // Expired/unpaid Checkout grants nothing.
   } else subId=event.data.object.id;
   let subscription=await stripe.subscriptions.retrieve(subId);
   subscription=await contract.certifySubscription(stripe,subscription,config);
   if(invoice && (id(invoice.customer)!==id(subscription.customer) || subscriptionId(invoice)!==subscription.id))throw Error('subscription_invoice_binding_mismatch');
+  await require('./subscription_certification').reconcile({db,FieldValue,stripe,subscription,invoice,session:checkoutSession});
   const result=await sync(subscription,`${event.id}_subscription`);
   if(result.ignored || !invoice || event.type!=='invoice.paid')return true;
   if(invoice.status!=='paid' || invoice.currency!=='usd' || !Number.isSafeInteger(invoice.amount_paid) || invoice.amount_paid<0 || invoice.amount_remaining!==0)
@@ -38,7 +40,8 @@ function createHandler({db,FieldValue,Timestamp,auth,stripe,environment,planForP
    if(e.data()?.stripeSubscriptionId!==subscription.id || w.data()?.stripeCustomerId!==id(invoice.customer))throw Error('subscription_receipt_authority_changed');
    const text=`Subscription payment received\nCustomer charge: USD ${(invoice.amount_paid/100).toFixed(2)}\nSubscription revenue: USD ${(revenue/100).toFixed(2)}\nTax collected: USD ${(tax/100).toFixed(2)}\nStripe mode: ${environment==='production'?'LIVE':'TEST'}`;
    tx.create(ref,{invoiceId:invoice.id,subscriptionId:subscription.id,businessId:uid,eventId:event.id,
-    amountCents:invoice.amount_paid,revenueCents:revenue,taxCents:tax,currency:'usd',stripeMode:environment==='production'?'live':'test',createdAt:FieldValue.serverTimestamp()});
+    amountCents:invoice.amount_paid,revenueCents:revenue,taxCents:tax,currency:'usd',stripeMode:environment==='production'?'live':'test',
+    positiveAmountCollected:invoice.amount_paid>0,internalCertification:subscription.metadata?.purpose==='INTERNAL_LIVE_CERTIFICATION',createdAt:FieldValue.serverTimestamp()});
    if(admin){
     tx.create(notification,{userId:admin.uid,type:'admin_subscription_payment_received',title:'Subscription payment received',message:text,read:false,invoiceId:invoice.id,revenueCents:revenue,createdAt:FieldValue.serverTimestamp()});
     tx.create(mail,{to:'support@scaledcircle.com',fromAddress:'support@scaledcircle.com',fromName:'Scaled Circle Support',replyTo:'support@scaledcircle.com',subject:'Subscription payment received',text,

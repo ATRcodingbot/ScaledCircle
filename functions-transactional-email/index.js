@@ -12690,6 +12690,20 @@ exports.sendTransactionalEmailJob = onDocumentCreated(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /** Process an explicitly reconciled job without replaying arbitrary updates. */
 exports.retryTransactionalEmailJob = onDocumentUpdated(
   {

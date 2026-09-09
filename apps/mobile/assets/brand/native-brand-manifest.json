@@ -1,0 +1,174 @@
+{
+  "version": "ScaledCircleNativeBrandV1",
+  "source": "apps/mobile/assets/brand/scaledcircle-symbol.png",
+  "sourceSha256": "1b21dabe8d32acd3e62fd413359caecd39534be6170bb869c6ab35030df420c1",
+  "composition": "Exact proportional symbol; pale brand canvas for launcher and OS launch in both light/dark appearance.",
+  "background": "#f5f9ff",
+  "files": {
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png": {
+      "sha256": "602138dcd9a3cd3fa0bdeda88a4045b6215a07776d6e249f2f8993dcca39f036",
+      "size": 1024,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@1x.png": {
+      "sha256": "47230eb4739fac077a54285061009eb3da85cd4cac8da43094ad174b68f3d550",
+      "size": 20,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@2x.png": {
+      "sha256": "bf8bf1de36d62f5626eb176d6f33ecbaf50e1425b1eb4ad726d45453bff7a325",
+      "size": 40,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@3x.png": {
+      "sha256": "0dab53ac98604820bc7533a5bbcf72b96ff32604d70003aa6241f7688f7bc3bc",
+      "size": 60,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@1x.png": {
+      "sha256": "1f7d55876c3680d195084c2c6bca58f9f28921601fc92474895e62b7dee28512",
+      "size": 29,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@2x.png": {
+      "sha256": "6a370b674c59d14a777f2a32c56f2c2c2a69b4d9162743eb1d0d90bdd104ba74",
+      "size": 58,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@3x.png": {
+      "sha256": "49d3162edfb59d96af50454cb9daf602fb5c14ddda14f25ded525d9c722b7c5d",
+      "size": 87,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@1x.png": {
+      "sha256": "bf8bf1de36d62f5626eb176d6f33ecbaf50e1425b1eb4ad726d45453bff7a325",
+      "size": 40,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@2x.png": {
+      "sha256": "a169aab22cec31b3b372deccc6391a724116b5ef75f7924e0c87303d855bf733",
+      "size": 80,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@3x.png": {
+      "sha256": "3a5afce13d26bc4cb414ea80e798fba1473a510354fc1c25805e428bb2cd2e61",
+      "size": 120,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png": {
+      "sha256": "3a5afce13d26bc4cb414ea80e798fba1473a510354fc1c25805e428bb2cd2e61",
+      "size": 120,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@3x.png": {
+      "sha256": "808dfe9293a8d47acc23f180bd294e11fc3ca44b92f4623b3ef3c87b137baebe",
+      "size": 180,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@1x.png": {
+      "sha256": "b3ea0195ab98091ec0cd313ec0f56a3740069d207462ae64b214737a83685b5a",
+      "size": 76,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@2x.png": {
+      "sha256": "ffa177add65a30214863a18ae7b74870611636bd0af828b0e1ca934b2f3dc222",
+      "size": 152,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-83.5x83.5@2x.png": {
+      "sha256": "4d7535decb3c908e1f040ca00aeef27be8a41055e28c6d80577fbcd41d43d820",
+      "size": 167,
+      "opaque": true
+    },
+    "ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage.png": {
+      "sha256": "71638b7bd9dc6b2ea398002d610bbf6119e1b1bc69b505a7ae46f29b6638e1f9",
+      "size": 144,
+      "opaque": false
+    },
+    "ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@2x.png": {
+      "sha256": "5f2c724cbb5fb1c4de8bce761125218cbb4e98a8a6967e8b817f96b3b9550d16",
+      "size": 288,
+      "opaque": false
+    },
+    "ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png": {
+      "sha256": "6155f62d0eca0cedf620762fe5ab7ce14b75c47da750de13d806597aec5fa8c1",
+      "size": 432,
+      "opaque": false
+    },
+    "android/app/src/main/res/mipmap-mdpi/ic_launcher.png": {
+      "sha256": "8c4b5526d26f026b22742bcceb1042fe26e2a5579b6f63fbcdbf6178b7413436",
+      "size": 48,
+      "opaque": true
+    },
+    "android/app/src/main/res/drawable-mdpi/ic_launcher_foreground.png": {
+      "sha256": "9716d38fe7c1288efde4e1376d28a2c9f7ebea799eaf204da246baf1c45b78c4",
+      "size": 108,
+      "opaque": false
+    },
+    "android/app/src/main/res/drawable-mdpi/launch_symbol.png": {
+      "sha256": "71638b7bd9dc6b2ea398002d610bbf6119e1b1bc69b505a7ae46f29b6638e1f9",
+      "size": 144,
+      "opaque": false
+    },
+    "android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
+      "sha256": "26f51c117e6ac310a2ab12b54d21f20a8ba7eeaf9f55d0b9ab9d2943af3b2260",
+      "size": 72,
+      "opaque": true
+    },
+    "android/app/src/main/res/drawable-hdpi/ic_launcher_foreground.png": {
+      "sha256": "fc667d7813b4d16eea12241a0bb97fdb50a5bdc41943df745833ab459e7caf42",
+      "size": 162,
+      "opaque": false
+    },
+    "android/app/src/main/res/drawable-hdpi/launch_symbol.png": {
+      "sha256": "0408088c8273454b89c6b962aeee002cdf1c140458394be739e2b4ef76405a57",
+      "size": 216,
+      "opaque": false
+    },
+    "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": {
+      "sha256": "6de4684451f85448b2911415d860a537ee44d3cecbc0c3a680725780fe891325",
+      "size": 96,
+      "opaque": true
+    },
+    "android/app/src/main/res/drawable-xhdpi/ic_launcher_foreground.png": {
+      "sha256": "3652be84f6b8ec182c1bfd3943bc7ec1ecf5aae269674991280445721918ec8f",
+      "size": 216,
+      "opaque": false
+    },
+    "android/app/src/main/res/drawable-xhdpi/launch_symbol.png": {
+      "sha256": "5f2c724cbb5fb1c4de8bce761125218cbb4e98a8a6967e8b817f96b3b9550d16",
+      "size": 288,
+      "opaque": false
+    },
+    "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": {
+      "sha256": "1dc3ffc6d2d4cfcb66cdbf239e87934a6528325c6397963992f5f194524d2ab3",
+      "size": 144,
+      "opaque": true
+    },
+    "android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png": {
+      "sha256": "7ace807df1e57885c299a40edfae23a6b5025cc7bc448158776472b02567d642",
+      "size": 324,
+      "opaque": false
+    },
+    "android/app/src/main/res/drawable-xxhdpi/launch_symbol.png": {
+      "sha256": "6155f62d0eca0cedf620762fe5ab7ce14b75c47da750de13d806597aec5fa8c1",
+      "size": 432,
+      "opaque": false
+    },
+    "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": {
+      "sha256": "3111345ffb8f5858a81e557052810f3f2e2d00f8555ee3ffe1f9bdc05c4b6f26",
+      "size": 192,
+      "opaque": true
+    },
+    "android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png": {
+      "sha256": "05f3c18e681e27f3a267c6876b09dc44b5926bc5e5e1953cd0690d2e6e5ff7d0",
+      "size": 432,
+      "opaque": false
+    },
+    "android/app/src/main/res/drawable-xxxhdpi/launch_symbol.png": {
+      "sha256": "6f0e8fabd4ef5d04825756bc176c6a053e944b657aa246b9c178acd817261928",
+      "size": 576,
+      "opaque": false
+    }
+  }
+}

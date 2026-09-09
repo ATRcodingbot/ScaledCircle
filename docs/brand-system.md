@@ -69,9 +69,13 @@ source or request an authoritative source asset. Do not invent one.
   generated placeholder PNG icons, core public/authenticated header wordmarks,
   and the social preview's placeholder mark.
 - Prepared now: transparent web/PWA favicon and maskable icon derivatives.
-- Deferred to native release certification: Android and iOS launcher-icon
-  replacement and store artwork, so the physical-device-gated build is not
-  disturbed by a cosmetic release change.
+- Native launcher and launch assets now derive mechanically from the exact
+  approved symbol using `tools/generate_native_brand_assets.cjs`. The iOS icon,
+  Android legacy/adaptive launcher and both launch surfaces share a pale brand
+  canvas intentionally in light/dark OS appearance. The symbol is neither
+  redrawn nor recolored. `tools/verify_native_branding.py` checks the sealed
+  native inventory and compiled artifact evidence. Store listing artwork is
+  separate. These presentation changes do not alter physical tracking authority.
 - Deferred to comprehensive visual certification: verification, payment/refund,
   signup, support, and marketing email header artwork. Their copy is maintained,
   but broad transactional-email deployment is outside this Sales promotion.

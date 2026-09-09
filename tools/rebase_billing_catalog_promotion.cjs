@@ -22,7 +22,7 @@ function rebase(baseline,destination,legacyBaseline){
  source=source.replace(/const STRIPE_SUBSCRIPTION_SECRET_KEY = defineSecret\([\s\S]*?\);/,'const STRIPE_SUBSCRIPTION_SECRET_KEY=defineSecret("STRIPE_SUBSCRIPTION_LIVE_SECRET_KEY");');
  const groups={default:['getBusinessMembership','previewBusinessMembershipChange','changeBusinessMembership','createSubscriptionCheckoutSession','createBillingPortalSession'],
   'business-profile-core':['prepareInvitedBusinessAccount','getBusinessTeam','inviteBusinessTeamMember','acceptBusinessTeamInvitation','updateBusinessTeamMember','getBusinessWorkspaceContext','selectBusinessWorkspace','listBusinessWorkspaceRecordIds','auditBusinessCampaignDraft']};
- const reviewed=new Set(['workspace_billing.js','workspace_billing_catalog.js','workspace_subscription_sync.js','subscription_contract.js','subscription_entitlements.js']);
+ const reviewed=new Set(['workspace_billing.js','workspace_billing_catalog.js','workspace_subscription_sync.js','subscription_contract.js','subscription_entitlements.js','subscription_certification.js']);
  function dependencies(group,body,sourceDirectory=path.join(root,'functions'),seen=new Set()){
   for(const m of body.matchAll(/require\(['"]\.\/([A-Za-z0-9_-]+)['"]\)/g)){
    const name=m[1]+'.js';if(seen.has(name))continue;seen.add(name);
@@ -47,12 +47,17 @@ function rebase(baseline,destination,legacyBaseline){
  fs.writeFileSync(path.join(out,'default/legacy-commerce-exports.js'),legacyBody);
  dependencies('default',legacyBody,legacyFolder);
  let index=fs.readFileSync(path.join(out,'default/index.js'),'utf8');
- for(const name of legacyNames){const anchor=`exports.${name}=require('./workspace-exports').${name};`;if(index.split(anchor).length!==2)throw Error('Legacy alias missing: '+name);index=index.replace(anchor,`exports.${name}=require('./legacy-commerce-exports').${name};`);}
+ for(const name of legacyNames){
+  const anchor=`exports.${name}=require('./workspace-exports').${name};`, restored=`exports.${name}=require('./legacy-commerce-exports').${name};`;
+  const originalCount=index.split(anchor).length-1, restoredCount=index.split(restored).length-1;
+  if(originalCount+restoredCount!==1)throw Error('Legacy alias missing or duplicated: '+name);
+  if(originalCount===1)index=index.replace(anchor,restored);
+ }
  fs.writeFileSync(path.join(out,'default/index.js'),index);
  // Billing-only additions in the maintained funding adapter. Its publication,
  // reserve/refund and campaign Checkout exports must remain byte-equivalent ASTs.
  const funding=require('./prepare_production_funding.cjs').prepare().output;
- for(const name of ['index.js','workspace_subscription_sync.js','subscription_contract.js','subscription_entitlements.js'])fs.copyFileSync(path.join(funding,name),path.join(out,'campaign-funding',name));
+ for(const name of ['index.js','workspace_subscription_sync.js','workspace_subscription_events.js','subscription_certification.js','subscription_contract.js','subscription_entitlements.js'])fs.copyFileSync(path.join(funding,name),path.join(out,'campaign-funding',name));
  const preserved=['publishFundedCampaign','quoteCampaignFunding','createCampaignFundingCheckoutSession','reconcileUnusedWorkReservesV1'];
  for(const name of preserved)if(exported(fs.readFileSync(path.join(baseline,'package/campaign-funding/index.js'),'utf8'),name)!==exported(fs.readFileSync(path.join(out,'campaign-funding/index.js'),'utf8'),name))throw Error('Unreviewed funding export drift: '+name);
  const files={},changes=[];function walk(dir,prefix=''){for(const e of fs.readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){if(['node_modules','candidate-manifest.json'].includes(e.name))continue;const file=prefix+e.name,p=path.join(dir,e.name);if(e.isDirectory()){walk(p,file+'/');continue;}const bytes=fs.readFileSync(p);files[file]=hash(bytes);if(e.name.endsWith('.js')&&/scaledcircle-staging|stagingPhysicalQa|physical_qa_v[123]|StagingCanvassing|STRIPE_TEST_SECRET/.test(bytes.toString()))throw Error('Forbidden production marker: '+file);if(!fs.existsSync(path.join(baseline,'package',file))||hash(fs.readFileSync(path.join(baseline,'package',file)))!==files[file])changes.push(file);}}
