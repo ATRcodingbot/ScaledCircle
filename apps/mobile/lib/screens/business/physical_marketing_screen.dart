@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/app_environment.dart';
 import '../../navigation/business_back_button.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/binary_artifact_download.dart';
@@ -426,7 +427,9 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                     ListTile(
                       title: const Text('Neighborhood Postcards — Beta'),
                       subtitle: const Text(
-                        'Fulfilled by ScaledCircle. Review your design and confirmed quote before payment. Staging TEST orders only.',
+                        AppEnvironmentConfig.isStaging
+                            ? 'Fulfilled by ScaledCircle. Review your design and confirmed quote before payment. Staging TEST orders only.'
+                            : 'Plan your territory-to-mail campaign. Coming soon — ordering is not available yet.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.pushNamed(

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_app/config/app_environment.dart';
 import 'package:flutter_app/screens/business/physical_marketing_screen.dart';
 import 'package:flutter_app/services/physical_marketing_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -143,6 +144,24 @@ Widget _screen(_FakePhysicalMarketing service) =>
     MaterialApp(home: PhysicalMarketingScreen(service: service));
 
 void main() {
+  testWidgets('postcard availability copy matches the actual environment', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_screen(_FakePhysicalMarketing(_workspace())));
+    await tester.pumpAndSettle();
+    if (AppEnvironmentConfig.isStaging) {
+      expect(find.textContaining('Staging TEST orders only'), findsOneWidget);
+    } else {
+      expect(find.textContaining('Staging TEST'), findsNothing);
+      expect(
+        find.text(
+          'Plan your territory-to-mail campaign. Coming soon — ordering is not available yet.',
+        ),
+        findsOneWidget,
+      );
+    }
+  });
+
   testWidgets('desktop shows exact proof and honest fulfillment choices', (
     tester,
   ) async {
