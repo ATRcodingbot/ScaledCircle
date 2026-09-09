@@ -671,7 +671,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
             ));
     final submitted = completions.isNotEmpty;
     final canvassing = prohibitsResidentialPhotos(
-      campaign['campaignType'] ?? zone['campaignType'],
+      campaign['campaignType'] ?? campaign['type'] ?? zone['campaignType'],
     );
     final evidence = Map<String, dynamic>.from(
       data['completionEvidence'] as Map? ?? {},

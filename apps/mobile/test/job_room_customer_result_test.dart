@@ -5,13 +5,17 @@ import 'package:flutter_app/services/job_room_service.dart';
 import 'package:flutter_app/widgets/job_room_completion_result.dart';
 
 class _FinishedRoom extends JobRoomService {
+  const _FinishedRoom({this.legacyType = false});
+  final bool legacyType;
   @override
   Future<Map<String, dynamic>> load(String id) async => {
     'viewerRole': 'scaler',
     'privateLogisticsAvailable': false,
     'room': {'scalerId': 'scaler'},
     'zone': {'status': 'completed', 'zoneName': 'Neighborhood route'},
-    'campaign': {'campaignType': 'neighborhoodCanvassing'},
+    'campaign': {
+      (legacyType ? 'type' : 'campaignType'): 'neighborhoodCanvassing',
+    },
     'participantLabels': {
       'participants': [
         {'uid': 'scaler', 'displayName': 'Avery Walker'},
@@ -46,6 +50,24 @@ class _FinishedRoom extends JobRoomService {
 }
 
 void main() {
+  testWidgets('legacy campaign type uses the same canvassing result hierarchy', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: JobRoomScreen(
+          zoneId: 'zone',
+          service: _FinishedRoom(legacyType: true),
+          tilesEnabled: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Route Coverage Estimate'), findsOneWidget);
+    expect(find.text('Total Approved'), findsOneWidget);
+    expect(find.text('98.60%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'completed phone-width Job Room prioritizes recorded results and hides setup',
     (tester) async {
