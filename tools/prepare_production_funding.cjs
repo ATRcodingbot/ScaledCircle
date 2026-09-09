@@ -77,6 +77,7 @@ function prepare() {
  source=source.replace("if(project!=='scaledcircle-staging')return;",
    "require('./production_work_settlement_policy').environment(project);");
  source=generate(selectedProgram(parser.parse(source),new Set(['quoteCampaignFunding','createCampaignFundingCheckoutSession','publishFundedCampaign','stripeWebhook','reconcileUnusedWorkReservesV1']))).code;
+ source=require('./production_payment_runtime.cjs').deferProductionPaymentEnvironment(source);
  fs.writeFileSync(path.join(output,'index.js'),source);
  const copied=new Set();
  function copyDependencies(text) {
