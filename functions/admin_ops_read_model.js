@@ -37,6 +37,26 @@ function safeIdentity(data = {}) {
   };
 }
 
+// Reporting only: this classification must never grant marketplace access.
+function scalerReportingState(data = {}) {
+  if (text(data.role, 40).toLowerCase() !== "scaler") return null;
+  const access = text(data.betaAccess, 40).toLowerCase();
+  const account = text(data.accountStatus, 40).toLowerCase();
+  if (data.disabled === true) return "disabled";
+  for (const state of ["disabled", "deleted", "suspended", "restricted", "rejected", "inactive"]) {
+    if (access === state || account === state) return state;
+  }
+  if ([access, account].some((state) => ["pending", "requested", "waitlisted"].includes(state))) {
+    return "pending";
+  }
+  const approved = access === "approved" || data.betaAccess === true ||
+    data.approved === true || account === "active";
+  // Legacy accountStatus=active supplies active state only when it is absent.
+  const active = data.active === true || (data.active == null && account === "active");
+  if (approved) return active ? "approved" : "inactive";
+  return "pending";
+}
+
 function issue({id, category, severity, summary, status, entityType, entityId,
   campaignId, userId, createdAt, recommendedAction, detailKind}) {
   return {id, category, severity, summary, status, entityType, entityId,
@@ -279,10 +299,8 @@ function createAdminOpsReadService({db, FieldValue, now = () => Date.now()}) {
       unavailableSources: failures,
       metrics: {
         businesses: users.filter((r) => text(r.data.role, 40).toLowerCase() === "business").length,
-        approvedScalers: users.filter((r) => text(r.data.role, 40).toLowerCase() === "scaler" &&
-          (r.data.approved === true || r.data.betaAccess === true || r.data.accountStatus === "active")).length,
-        pendingScalers: users.filter((r) => text(r.data.role, 40).toLowerCase() === "scaler" &&
-          !(r.data.approved === true || r.data.betaAccess === true || r.data.accountStatus === "active")).length,
+        approvedScalers: users.filter((r) => scalerReportingState(r.data) === "approved").length,
+        pendingScalers: users.filter((r) => scalerReportingState(r.data) === "pending").length,
         openCampaigns: campaigns.filter((r) => ["open", "active", "in_progress"].includes(
           text(r.data.status, 50).toLowerCase())).length,
         awaitingReview: data.campaignCompletions.filter((r) => ["submitted", "verification_pending", "review_pending"]
@@ -344,4 +362,5 @@ function createAdminOpsReadService({db, FieldValue, now = () => Date.now()}) {
 module.exports = {OPS_SCHEMA_VERSION, STALE_PAYMENT_MS, STALE_REFUND_MS,
   STALE_COMPLETION_MS, STALE_EMAIL_MS, text, millis, safeReference, safeIdentity,
   paymentIssues, completionIssues, emailIssues, supportIssues, healthFromIssues,
-  assertSupportStatusTransition, timelineEvents, createAdminOpsReadService};
+  assertSupportStatusTransition, timelineEvents, createAdminOpsReadService,
+  scalerReportingState};

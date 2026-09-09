@@ -9,6 +9,63 @@ const model = require("./admin_ops_read_model");
 const now = Date.parse("2026-08-23T20:00:00.000Z");
 const record = (id, data) => ({id, data});
 
+test("Scaler reporting recognizes canonical approval and guarded legacy forms", () => {
+  for (const approval of [{betaAccess: "approved"}, {betaAccess: true},
+    {approved: true}, {accountStatus: "active"}]) {
+    assert.equal(model.scalerReportingState({role: "scaler", active: true, ...approval}), "approved");
+    assert.equal(model.scalerReportingState({role: "scaler", active: false, ...approval}), "inactive");
+    assert.equal(model.scalerReportingState({role: "scaler", active: true,
+      ...approval, disabled: true}), "disabled");
+  }
+  assert.equal(model.scalerReportingState({role: "scaler", accountStatus: "active"}), "approved");
+  assert.equal(model.scalerReportingState({role: "scaler", betaAccess: "approved"}), "inactive");
+});
+
+test("pending, restricted and missing states never silently become approved", () => {
+  for (const state of ["pending", "requested", "waitlisted", "disabled", "rejected",
+    "suspended", "restricted", "deleted", "inactive"]) {
+    for (const field of ["betaAccess", "accountStatus"]) {
+      const data = {role: "scaler", active: true, approved: true, [field]: state};
+      assert.equal(model.scalerReportingState(data),
+        ["pending", "requested", "waitlisted"].includes(state) ? "pending" : state);
+    }
+  }
+  for (const data of [{}, {active: true}, {active: false}, {betaAccess: false}]) {
+    assert.equal(model.scalerReportingState({role: "scaler", ...data}), "pending");
+  }
+  assert.equal(model.scalerReportingState({role: "business", active: true, betaAccess: "approved"}), null);
+});
+
+test("overview counts agree with reporting states and perform no user or authority writes", async () => {
+  const users = [
+    {role: "scaler", active: true, betaAccess: "approved"},
+    {role: "scaler", active: true, betaAccess: true},
+    {role: "scaler", active: false, betaAccess: "pending"},
+    {role: "scaler", active: true},
+    {role: "scaler", active: true, betaAccess: "rejected"},
+    {role: "scaler", active: false, betaAccess: "approved"},
+    {role: "scaler", active: true, betaAccess: "approved", disabled: true},
+    {role: "business", active: true, betaAccess: "approved"},
+  ];
+  const before = structuredClone(users);
+  const reads = [];
+  // The adapter intentionally exposes reads only; any mutation fails the test.
+  const db = {collection: (name) => ({limit: () => ({get: async () => {
+    reads.push(name);
+    return {docs: (name === "users" ? users : []).map((data, index) =>
+      ({id: `user-${index}`, data: () => data}))};
+  }})})};
+  const overview = await model.createAdminOpsReadService({db, now: () => now}).getOverview();
+  assert.equal(overview.metrics.approvedScalers, 2);
+  assert.equal(overview.metrics.pendingScalers, 2);
+  for (const [metric, state] of [["approvedScalers", "approved"], ["pendingScalers", "pending"]]) {
+    assert.equal(overview.metrics[metric], users.filter((user) => model.scalerReportingState(user) === state).length);
+  }
+  assert.equal(overview.partial, false);
+  assert.equal(reads.filter((name) => name === "users").length, 1);
+  assert.deepEqual(users, before);
+});
+
 test("normal payments and completed refunds are not operational exceptions", () => {
   assert.deepEqual(model.paymentIssues([
     record("paid", {status: "paid", updatedAt: now - 1000}),
