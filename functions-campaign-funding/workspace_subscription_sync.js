@@ -3,12 +3,12 @@
 // This projection never touches campaign funding, contracts or Wallet balances.
 const PRICES = {starter: 99, growth: 299, scale: 499, managed_growth: 999};
 const terminal = new Set(['canceled', 'incomplete_expired']);
-function subscriptionTerms(subscription, planForPrice) {
+function subscriptionTerms(subscription, planForPrice, environment) {
   const items = subscription.items?.data || [];
   const price = items[0]?.price;
-  const configured = planForPrice?.(price?.id);
-  const plan = configured || subscription.metadata?.plan;
-  if (items.length !== 1 || !PRICES[plan] || Number(items[0].quantity || 1) !== 1 ||
+  const {plan}=require('./subscription_contract').priceTerms(price,{planForPrice,environment});
+  require('./subscription_contract').assertMode(subscription,environment);
+  if (subscription.metadata?.plan!==plan || items.length !== 1 || !PRICES[plan] || Number(items[0].quantity) !== 1 ||
       price?.currency !== 'usd' || price.unit_amount !== PRICES[plan] * 100 ||
       price.recurring?.interval !== 'month' || Number(price.recurring?.interval_count || 1) !== 1) {
     throw new Error('subscription_terms_mismatch');
@@ -17,12 +17,12 @@ function subscriptionTerms(subscription, planForPrice) {
   if (!Number.isFinite(end) || end <= 0) throw new Error('subscription_period_required');
   return {plan, price: PRICES[plan], end};
 }
-function createSubscriptionSync({db, FieldValue, Timestamp, planForPrice}) {
+function createSubscriptionSync({db, FieldValue, Timestamp, planForPrice, environment}) {
   return async function sync(subscription, eventId) {
     const uid = subscription.metadata?.firebaseUid;
     if (!/^[A-Za-z0-9_-]{1,160}$/.test(uid || '')) return {ignored: 'unbound'};
     const customer = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
-    const terms = subscriptionTerms(subscription, planForPrice);
+    const terms = subscriptionTerms(subscription, planForPrice, environment);
     return db.runTransaction(async tx => {
       const event = db.doc(`stripeEvents/${eventId}`);
       const wallet = db.doc(`wallets/${uid}`), entitlement = db.doc(`businessSubscriptions/${uid}`);

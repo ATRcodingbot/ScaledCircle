@@ -40,11 +40,12 @@ for (const directory of ["functions"]) {
     const start = source.indexOf("function stripeClient() {");
     const end = source.indexOf("\nfunction scaledCircleEnvironment()", start);
     assert.ok(start >= 0 && end > start);
-    for (const environment of ["local", "staging", "production", "typo"]) {
+    for (const environment of [undefined,"local", "staging", "production", "typo"]) {
       for (const key of ["", "garbage", "pk_test_fake", "sk_test_fake", "sk_live_fake"]) {
         let constructions = 0;
         const context = {STRIPE_SECRET_KEY: {value: () => key},
-          process: {env: {SCALEDCIRCLE_ENV: environment}},
+          require:name=>name==='./subscription_contract'?require(name):null,
+          process: {env: {APP_ENV: environment}},
           HttpsError: class extends Error {},
           Stripe: class {constructor() { constructions += 1; }}};
         vm.createContext(context);

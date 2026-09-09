@@ -542,6 +542,10 @@ setGlobalOptions({
 
 
 
+
+
+
+
 const MINIMUM_PAYABLE_COMPLETION_PERCENTAGE = 10;
 
 
@@ -578,6 +582,19 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -8586,6 +8603,13 @@ exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoo
     ...((ownSubmittedEvidence || ownPausedEvidence) && response.completionEvidence ? { completionEvidence: response.completionEvidence } : {}),
     ...(ownPausedEvidence ? { pausedWork: response.pausedWork, messages: response.messages, canMessage: true } : {}) };
 }));
+
+
+
+
+
+
+
 
 
 

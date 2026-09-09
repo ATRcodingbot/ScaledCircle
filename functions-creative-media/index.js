@@ -548,6 +548,10 @@ setGlobalOptions({
 
 
 
+
+
+
+
 async function authenticatedUserContext(request, message) {
   if (request[workspaceAccess.CONTEXT]) return request[workspaceAccess.CONTEXT];
   if (!request.auth) {
@@ -578,6 +582,24 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

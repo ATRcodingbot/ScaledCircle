@@ -27,6 +27,8 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
   const grossCents = Number(payment.totalChargeCents || 0);
   const workerCents = Number(payment.workerCompensationCents || payment.workerAmountCents || 0);
   const feeCents = Number(payment.platformFeeCents || 0);
+  const recognizedCents = Number(payment.platformFeeRecognizedCents || 0);
+  const remainingFeeReserveCents = Math.max(0,feeCents-recognizedCents-Number(payment.platformFeeRefundedCents || 0));
   const refundCents = Number(payment.refundableAmountCents || grossCents);
   const currency = String(payment.currency || "usd").toLowerCase();
   const isRefund = kind === "refund";
@@ -47,8 +49,9 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
     `Campaign ID: ${campaignId}`,
     `Business: ${businessIdentity}`,
     `Customer payment: ${money(grossCents, currency)}`,
-    `Worker compensation: ${money(workerCents, currency)}`,
-    `ScaledCircle platform fee: ${money(feeCents, currency)}`,
+    `Worker reserve: ${money(workerCents, currency)}`,
+    `ScaledCircle fee reserve: ${money(remainingFeeReserveCents, currency)}`,
+    `ScaledCircle recognized revenue: ${money(recognizedCents, currency)}`,
     "Payment status: Paid",
   ];
   lines.push(
@@ -66,7 +69,12 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
       campaignId,
       paymentId,
       amountCents: isRefund ? refundCents : grossCents,
-      revenueCents: isRefund ? -feeCents : feeCents,
+      // Funding/refunding a reserve does not recognize/reverse earned revenue.
+      revenueCents: 0,
+      recognizedRevenueToDateCents: recognizedCents,
+      workerReserveCents: workerCents,
+      platformFeeReserveCents: isRefund ? 0 : remainingFeeReserveCents,
+      accountingVersion: 'funding_reserve_notice_v2',
       currency,
       read: false,
     },
@@ -79,7 +87,8 @@ function financialEvent({kind, paymentId, campaign, payment, occurredAt}) {
       text: lines.join("\n"),
       template: isRefund ? "support_campaign_refund_completed" : "support_campaign_payment_received",
       eventType: isRefund ? "campaign.refund.completed" : "campaign.payment.paid",
-      metadata: {campaignId, kind, grossCents, feeCents, refundCents, currency},
+      metadata: {campaignId, kind, grossCents, workerReserveCents:workerCents,
+        feeReserveCents:remainingFeeReserveCents, recognizedCents, refundCents, currency},
       status: "queued",
       attempts: 0,
     },

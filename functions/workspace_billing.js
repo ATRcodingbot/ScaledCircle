@@ -14,7 +14,7 @@ function subscriptionView(subscription,expected,{planForPrice,now=Date.now()}) {
   status:subscription.status,cancelAtPeriodEnd:subscription.cancel_at_period_end===true,periodEndMs:end,paidAccess:active,
   canWithdrawCancellation:active&&subscription.cancel_at_period_end===true,canCancel:active&&subscription.cancel_at_period_end!==true};
 }
-function createBillingService({db,FieldValue,workspace,stripe,planForPrice,priceForPlan,sync,now=Date.now}) {
+function createBillingService({db,FieldValue,workspace,stripe,planForPrice,priceForPlan,sync,validateProvider,validatePrice,now=Date.now}) {
  async function context(uid,businessId) {
   await workspace.actor(uid);const a=await workspace.authority({uid,businessId,permission:'billing',allowExpired:true});
   const wallet=(await db.doc(`wallets/${a.businessId}`).get()).data()||{};
@@ -22,7 +22,7 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
   if(!subscriptionId||!customerId)error('failed-precondition','No Stripe membership is linked. Choose a plan to activate membership.');
   return {...a,subscriptionId,customerId};
  }
- async function read(uid,businessId) {const a=await context(uid,businessId),provider=await stripe().subscriptions.retrieve(a.subscriptionId);return {a,provider,view:subscriptionView(provider,a,{planForPrice,now:now()})};}
+ async function read(uid,businessId) {const a=await context(uid,businessId);let provider=await stripe().subscriptions.retrieve(a.subscriptionId);if(validateProvider)provider=await validateProvider(provider);return {a,provider,view:subscriptionView(provider,a,{planForPrice,now:now()})};}
  const digest=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
  const terms=provider=>digest({id:provider.id,status:provider.status,cancel:provider.cancel_at_period_end,items:provider.items.data.map(i=>({id:i.id,price:i.price.id,quantity:i.quantity||1,end:i.current_period_end||provider.current_period_end}))});
  async function finish(ref,a,result,action) {
@@ -50,6 +50,7 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
   async preview({uid,businessId,plan}) {
    const {a,provider,view}=await read(uid,businessId);
    if(!PLANS[plan]||!priceForPlan(plan)||!view.paidAccess||plan===view.plan||provider.items.data.length!==1||provider.schedule)error('failed-precondition','Choose a different plan for this active membership.');
+   if(validatePrice)await validatePrice(priceForPlan(plan));
    const prorationDate=Math.floor(now()/1000),upgrade=PLANS[plan].price>PLANS[view.plan].price;
    const params={items:[{id:provider.items.data[0].id,price:priceForPlan(plan)}],metadata:{...provider.metadata,plan},proration_behavior:upgrade?'always_invoice':'create_prorations',proration_date:prorationDate,payment_behavior:'error_if_incomplete'};
    const invoice=await stripe().invoices.createPreview({customer:a.customerId,subscription:a.subscriptionId,subscription_details:{items:params.items,proration_behavior:params.proration_behavior,proration_date:prorationDate}});
@@ -62,6 +63,7 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
    if(!['cancel','reactivate','changePlan'].includes(action))error('invalid-argument','Choose a supported membership action.');
    if(typeof requestId!=='string'||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))error('invalid-argument','A unique request is required.');
    const {a,provider,view}=await read(uid,businessId);
+   if(action==='changePlan' && validatePrice)await validatePrice(priceForPlan(plan));
    await reconcile(a,provider,view);
    const operationId=crypto.createHash('sha256').update(`${a.businessId}:${requestId}`).digest('hex'),ref=db.doc(`businessBillingOperations/${operationId}`);
    const inputDigest=crypto.createHash('sha256').update(JSON.stringify({uid,action,plan:plan||null,quoteId:quoteId||null})).digest('hex');

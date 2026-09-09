@@ -84,6 +84,11 @@ test('intentional pause resumes through the maintained tracking callable in the 
 });
 test('eligible finalized submission preserves full immutable base; exactly-once review uses accepted bonus only',async()=>{
  const f=await seedEligible('eligible',{bonus:300});
+ // Actual maintained funding shape: reconciled payment bound to campaign,
+ // including older assignments created without a redundant zone pointer.
+ await db.doc('campaigns/'+f.campaignId).update({fundingPaymentId:'eligible-p',fundingVersion:1});
+ await db.doc('campaignPayments/eligible-p').update({fundingVersion:1});
+ await db.doc('campaignZones/'+f.zoneId).update({fundingPaymentId:require('firebase-admin/firestore').FieldValue.delete()});
  const result=await call(completion.submitZoneCompletion,'coverage-scaler',{completionId:f.completionId});
  assert.equal(result.calculatedTransferAmountCents,1800);
  const repeated=await call(completion.submitZoneCompletion,'coverage-scaler',{completionId:f.completionId});assert.equal(repeated.alreadySubmitted,true);

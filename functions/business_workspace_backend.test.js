@@ -101,11 +101,11 @@ test('invitation is delivered once by maintained outbound-email worker',async()=
  assert.equal((await processDeliveryJob(input)).status,'sent');await processDeliveryJob(input);assert.equal(sends,1);
 });
 async function subscriptionFixture(){
- const b=await owner();const s={id:`sub_sync_${b}`,customer:`cus_sync_${b}`,metadata:{firebaseUid:b,plan:'growth'},status:'active',cancel_at_period_end:false,items:{data:[{quantity:1,price:{id:'test_price_growth',currency:'usd',unit_amount:29900,recurring:{interval:'month',interval_count:1}},current_period_end:Math.floor(Date.now()/1000)+86400}]}};
+ const b=await owner();const s={id:`sub_sync_${b}`,livemode:false,customer:`cus_sync_${b}`,metadata:{firebaseUid:b,plan:'growth'},status:'active',cancel_at_period_end:false,items:{data:[{quantity:1,price:{id:'price_growth',livemode:false,product:'scaledcircle_workspace_staging_v1',metadata:{plan:'growth',purpose:'workspace_membership_staging_v1'},currency:'usd',unit_amount:29900,recurring:{interval:'month',interval_count:1,usage_type:'licensed'}},current_period_end:Math.floor(Date.now()/1000)+86400}]}};
  await db.doc(`wallets/${b}`).set({stripeCustomerId:s.customer,balance:42});
  await db.doc(`campaigns/${b}_funded`).set({businessId:b,status:'open',fundingStatus:'funded'});
  await db.doc(`assignmentCompensations/${b}_accepted`).set({businessId:b,immutable:true,basePayCents:1500});
- return {b,s,sync:createSubscriptionSync({db,FieldValue,Timestamp})};
+ return {b,s,sync:createSubscriptionSync({db,FieldValue,Timestamp,environment:'staging',planForPrice:id=>id==='price_growth'?'growth':null})};
 }
 test('subscription cancellation preserves paid term, balances and funded contracts',async()=>{
  const f=await subscriptionFixture();assert.equal((await f.sync(f.s,`created_${f.b}`)).synced,true);
@@ -127,7 +127,7 @@ test('ended membership reactivation requires current Checkout binding',async()=>
  assert.equal((await f.sync(replacement,`new_${f.b}`)).ignored,'subscription_binding');await db.doc(`wallets/${f.b}`).update({pendingSubscriptionRequestId:'checkout_current'});assert.equal((await f.sync(replacement,`new_${f.b}`)).synced,true);assert.equal((await f.sync({...f.s,status:'canceled'},`late_${f.b}`)).ignored,'subscription_binding');
 });
 test('mismatched price/currency/period cannot grant membership',async()=>{
- const f=await subscriptionFixture();for(const price of [{...f.s.items.data[0].price,unit_amount:99},{...f.s.items.data[0].price,currency:'eur'},{...f.s.items.data[0].price,recurring:{interval:'year'}}])await assert.rejects(f.sync({...f.s,items:{data:[{...f.s.items.data[0],price}]}},`invalid_${f.b}`),/terms_mismatch/);
+ const f=await subscriptionFixture();for(const price of [{...f.s.items.data[0].price,unit_amount:99},{...f.s.items.data[0].price,currency:'eur'},{...f.s.items.data[0].price,recurring:{interval:'year'}}])await assert.rejects(f.sync({...f.s,items:{data:[{...f.s.items.data[0],price}]}},`invalid_${f.b}`),/binding_mismatch/);
 });
 test('ended subscription releases its Checkout reservation without clearing a newer request',async()=>{
  const f=await subscriptionFixture();f.s.metadata.checkoutRequestId='old_checkout';

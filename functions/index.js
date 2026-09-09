@@ -516,6 +516,10 @@ const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
 const CENSUS_API_KEY = defineSecret("CENSUS_API_KEY");
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) === "scaledcircle-staging" ? "STRIPE_TEST_SECRET_KEY" : "STRIPE_SECRET_KEY");
+// Membership has a separate production credential. Do not silently repurpose
+// the legacy or campaign-funding credential during subscription promotion.
+const STRIPE_SUBSCRIPTION_SECRET_KEY = defineSecret(process.env.APP_ENV === 'production' ?
+  'STRIPE_SUBSCRIPTION_LIVE_SECRET_KEY' : 'STRIPE_TEST_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 // Dedicated TEST endpoint signing secret; provision only during supervised setup.
 const STRIPE_CASHOUT_TEST_API_KEY = defineSecret("STRIPE_TEST_SECRET_KEY");
@@ -1927,7 +1931,7 @@ function stripeClient() {
       "Stripe billing is not configured yet.",
     );
   }
-  const environment = String(process.env.SCALEDCIRCLE_ENV || "local").toLowerCase();
+  const environment = require('./subscription_contract').environment(process.env);
   if (!["local", "staging", "production"].includes(environment)) {
     throw new HttpsError("failed-precondition", "Stripe environment is invalid.");
   }
@@ -1952,11 +1956,20 @@ function stripeClient() {
 }
 
 function scaledCircleEnvironment() {
-  const value = String(process.env.SCALEDCIRCLE_ENV || "local").toLowerCase();
-  if (!["local", "staging", "production"].includes(value)) {
+  try { return require('./subscription_contract').environment(process.env); }
+  catch (_) {
     throw new HttpsError("failed-precondition", "Runtime environment is invalid.");
   }
-  return value;
+}
+
+function subscriptionStripeClient() {
+  try { return new Stripe(require('./subscription_contract').credential(
+    STRIPE_SUBSCRIPTION_SECRET_KEY.value(), scaledCircleEnvironment())); }
+  catch (_) { throw new HttpsError('failed-precondition','Membership billing is not safely configured.'); }
+}
+
+function subscriptionConfiguration() {
+  return {environment:scaledCircleEnvironment(),planForPrice:planForStripePrice};
 }
 
 function publicAppBaseUrl() {
@@ -2010,7 +2023,7 @@ async function getOrCreateStripeCustomer(stripe, context) {
 }
 
 const STRIPE_CHECKOUT_SECRETS = [
-  STRIPE_SECRET_KEY,
+  STRIPE_SUBSCRIPTION_SECRET_KEY,
   STRIPE_STARTER_PRICE_ID,
   STRIPE_GROWTH_PRICE_ID,
   STRIPE_SCALE_PRICE_ID,
@@ -2179,7 +2192,9 @@ exports.createSubscriptionCheckoutSession = onCall(
       );
     }
 
-    const stripe = stripeClient();
+    const stripe = subscriptionStripeClient();
+    await require('./subscription_contract').certifyPrice(stripe,price,
+      {...subscriptionConfiguration(),requireActive:true});
     const customer = await getOrCreateStripeCustomer(stripe, context);
     const checkoutWallet = db.doc(`wallets/${context.uid}`);
     let checkoutRequestId;
@@ -2257,7 +2272,7 @@ exports.createBillingPortalSession = onCall(
   {
     enforceAppCheck: false,
     maxInstances: 10,
-    secrets: [STRIPE_SECRET_KEY],
+    secrets: [STRIPE_SUBSCRIPTION_SECRET_KEY],
   },
   businessOperation("createBillingPortalSession", async (request) => {
     const context = await requireVerifiedUser(
@@ -2267,7 +2282,7 @@ exports.createBillingPortalSession = onCall(
     if (context.isAdmin) {
       return {...await grantAdminScaleSubscription(context.uid), url: null};
     }
-    const stripe = stripeClient();
+    const stripe = subscriptionStripeClient();
     const customer = await getOrCreateStripeCustomer(stripe, context);
     const configurationRef=db.doc('businessBillingPortalConfigurations/workspace_v1');
     let configurationId=(await configurationRef.get()).data()?.configurationId;
@@ -2292,8 +2307,10 @@ exports.createBillingPortalSession = onCall(
 );
 
 async function syncStripeSubscription(subscription, eventId) {
+  const config=subscriptionConfiguration();
+  subscription=await require('./subscription_contract').certifySubscription(subscriptionStripeClient(),subscription,config);
   return require('./workspace_subscription_sync').createSubscriptionSync({
-    db, FieldValue, Timestamp, planForPrice: planForStripePrice,
+    db, FieldValue, Timestamp, ...config,
   })(subscription, eventId);
 }
 
@@ -11539,8 +11556,10 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
     const contractRef = db.collection("assignmentCompensations").doc(zoneId);
     const completionRef = db.collection("campaignCompletions")
       .doc(cleanId(zone.submittedCompletionId) || "missing");
-    const paymentRef = db.collection("campaignPayments")
-      .doc(cleanId(zone.fundingPaymentId) || "missing");
+    const fundingBinding = require('./settlement_funding_binding');
+    const binding = fundingBinding.resolve({campaignId: zone.campaignId,
+      campaign: reviewCampaign.data(), zone});
+    const paymentRef = db.collection("campaignPayments").doc(binding.paymentId);
     const [contractSnapshot, completionSnapshot, paymentSnapshot] = await Promise.all([
       transaction.get(contractRef), transaction.get(completionRef), transaction.get(paymentRef),
     ]);
@@ -11549,6 +11568,9 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
     }
     const completion = completionSnapshot.data() || {};
     const payment = paymentSnapshot.data() || {};
+    fundingBinding.validate({paymentId: paymentSnapshot.id, payment,
+      campaignId: zone.campaignId, campaign: reviewCampaign.data(), zoneId, zone,
+      contract: contractSnapshot.data(), completion});
     if (completion.zoneId !== zoneId || completion.scalerId !== zone.assignedScalerId ||
         completion.campaignId !== zone.campaignId || payment.campaignId !== zone.campaignId ||
         payment.businessId !== zone.businessId) {
@@ -13025,7 +13047,9 @@ exports.selectBusinessWorkspace = workspaceEndpoint(async(request,service)=>{
   return {businessId:a.businessId};
 });
 function businessBillingService(service) {
-  return workspaceBilling.createBillingService({db,FieldValue,workspace:service,stripe:stripeClient,
+  return workspaceBilling.createBillingService({db,FieldValue,workspace:service,stripe:subscriptionStripeClient,
+    validateProvider:s=>require('./subscription_contract').certifySubscription(subscriptionStripeClient(),s,subscriptionConfiguration()),
+    validatePrice:id=>require('./subscription_contract').certifyPrice(subscriptionStripeClient(),id,{...subscriptionConfiguration(),requireActive:true}),
     planForPrice:planForStripePrice,priceForPlan:stripePriceForPlan,sync:syncStripeSubscription});
 }
 exports.getBusinessMembership = workspaceEndpoint((request,service)=>businessBillingService(service).get({uid:request.auth.uid,businessId:request.data?.businessId}),{secrets:STRIPE_CHECKOUT_SECRETS});

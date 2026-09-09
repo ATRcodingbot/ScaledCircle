@@ -542,6 +542,10 @@ setGlobalOptions({
 
 
 
+
+
+
+
 const MINIMUM_PAYABLE_COMPLETION_PERCENTAGE = 10;
 
 
@@ -578,6 +582,19 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -11539,8 +11556,10 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
       const contractRef = db.collection("assignmentCompensations").doc(zoneId);
       const completionRef = db.collection("campaignCompletions").
       doc(cleanId(zone.submittedCompletionId) || "missing");
-      const paymentRef = db.collection("campaignPayments").
-      doc(cleanId(zone.fundingPaymentId) || "missing");
+      const fundingBinding = require('./settlement_funding_binding');
+      const binding = fundingBinding.resolve({ campaignId: zone.campaignId,
+        campaign: reviewCampaign.data(), zone });
+      const paymentRef = db.collection("campaignPayments").doc(binding.paymentId);
       const [contractSnapshot, completionSnapshot, paymentSnapshot] = await Promise.all([
       transaction.get(contractRef), transaction.get(completionRef), transaction.get(paymentRef)]
       );
@@ -11549,6 +11568,9 @@ exports.finalizeZoneReview = safeMarketplaceAuthorityCallable(
       }
       const completion = completionSnapshot.data() || {};
       const payment = paymentSnapshot.data() || {};
+      fundingBinding.validate({ paymentId: paymentSnapshot.id, payment,
+        campaignId: zone.campaignId, campaign: reviewCampaign.data(), zoneId, zone,
+        contract: contractSnapshot.data(), completion });
       if (completion.zoneId !== zoneId || completion.scalerId !== zone.assignedScalerId ||
       completion.campaignId !== zone.campaignId || payment.campaignId !== zone.campaignId ||
       payment.businessId !== zone.businessId) {

@@ -1339,6 +1339,10 @@ const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
 
 
 
+
+
+
+
 /** Deliver only user-requested Managed Growth artifacts from an isolated queue. */
 exports.sendArtifactDeliveryEmailJob = onDocumentCreated(
   {
@@ -1402,6 +1406,19 @@ exports.sendArtifactDeliveryEmailJob = onDocumentCreated(
 );
 
 /** Sends one deterministic, server-authored matching-job alert to one Scaler. */
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

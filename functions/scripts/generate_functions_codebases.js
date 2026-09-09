@@ -572,5 +572,5 @@ console.log("Generated isolated legacy, platform-core, assignment-core, discover
 
 fs.copyFileSync(path.join(sourceRoot, "staging_physical_qa.js"), path.join(campaignFundingRoot, "staging_physical_qa.js"));
 
-copyRequiredLocalModules(campaignFundingRoot, `require("./business_workspace");require("./workspace_subscription_sync")`);
+copyRequiredLocalModules(campaignFundingRoot, `require("./business_workspace");require("./workspace_subscription_sync");require("./workspace_subscription_events")`);
 copyRequiredLocalModules(campaignFundingRoot, `require("./campaign_reserve_settlement")`);

@@ -1401,6 +1401,10 @@ const SUPPORT_EMAIL_SMTP_PASSWORD = defineSecret("SUPPORT_EMAIL_SMTP_PASSWORD");
 
 
 
+
+
+
+
 /** Sends one deterministic, server-authored matching-job alert to one Scaler. */
 exports.sendScalerJobAlertEmailJob = onDocumentCreated(
   {
@@ -1447,6 +1451,19 @@ exports.sendScalerJobAlertEmailJob = onDocumentCreated(
  * module. Weather facts remain separate from Scaled Circle's experimental
  * lead-lift estimate.
  */
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

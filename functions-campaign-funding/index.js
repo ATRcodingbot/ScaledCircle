@@ -20,6 +20,11 @@ const STRIPE_SECRET_KEY = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live"
   "STRIPE_LIVE_SECRET_KEY" : "STRIPE_TEST_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret(PAYMENT_ENVIRONMENT.stripeMode === "live" ?
   "STRIPE_LIVE_WEBHOOK_SECRET" : "STRIPE_TEST_WEBHOOK_SECRET");
+const SUBSCRIPTION_PRICES = Object.fromEntries(['starter','growth','scale','managed_growth']
+  .map(plan=>[plan,defineSecret(`STRIPE_${plan.toUpperCase()}_PRICE_ID`)]));
+function subscriptionPlanForPrice(id) {
+  return Object.keys(SUBSCRIPTION_PRICES).find(plan=>SUBSCRIPTION_PRICES[plan].value()===id);
+}
 const OPTIONS = {region: "us-east1", timeoutSeconds: 60, memory: "256MiB", maxInstances: 10};
 const cleanId = (value) => /^[A-Za-z0-9_-]{1,160}$/.test(String(value || "").trim()) ? String(value).trim() : "";
 
@@ -345,14 +350,13 @@ exports.archiveCanceledCampaign = onCall(OPTIONS, async (request) => {
 });
 
 async function processEvent(stripe, event) {
+  lifecycle.assertStripeEvent(event, PAYMENT_ENVIRONMENT.stripeMode);
+  if(require('./workspace_subscription_events').handles(event)){
+    return require('./workspace_subscription_events').createHandler({db,FieldValue,Timestamp,auth,stripe,
+      environment:require('./subscription_contract').environment(process.env),planForPrice:subscriptionPlanForPrice})(event);
+  }
   if(await require('./campaign_reserve_settlement').createService({db,FieldValue,
     project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,stripe:()=>stripe}).handleStripeEvent(event))return;
-  // The existing signed endpoint also reconciles membership lifecycle events.
-  if (event.type.startsWith('customer.subscription.')) {
-    const subscription = await stripe.subscriptions.retrieve(event.data.object.id);
-    await require('./workspace_subscription_sync').createSubscriptionSync({db,FieldValue,Timestamp})(subscription, `${event.id}_subscription`);
-    return;
-  }
 
   lifecycle.assertStripeEvent(event, PAYMENT_ENVIRONMENT.stripeMode);
   const object = event.data?.object || {};
@@ -404,7 +408,7 @@ async function processEvent(stripe, event) {
   if (state.paymentStatus === "refunded") await notifyAdminFinancialEvent("refund", paymentId);
 }
 
-exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET]}, async (request, response) => {
+exports.stripeWebhook = onRequest({...OPTIONS, secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, ...Object.values(SUBSCRIPTION_PRICES)]}, async (request, response) => {
   if (request.method !== "POST") return response.status(405).send("Method Not Allowed");
   let event;
   try {

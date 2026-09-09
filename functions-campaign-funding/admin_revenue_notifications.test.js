@@ -28,10 +28,12 @@ test("paid campaign notification reports gross, worker compensation, and revenue
   const event = input();
   assert.equal(event.stableId, "admin-revenue-payment_campaign-payment_authority-1");
   assert.equal(event.notification.amountCents, 960);
-  assert.equal(event.notification.revenueCents, 160);
+  assert.equal(event.notification.revenueCents, 0);
+  assert.equal(event.notification.platformFeeReserveCents, 160);
   assert.match(event.email.text, /Customer payment: USD 9\.60/);
-  assert.match(event.email.text, /Worker compensation: USD 8\.00/);
-  assert.match(event.email.text, /ScaledCircle platform fee: USD 1\.60/);
+  assert.match(event.email.text, /Worker reserve: USD 8\.00/);
+  assert.match(event.email.text, /ScaledCircle fee reserve: USD 1\.60/);
+  assert.match(event.email.text, /ScaledCircle recognized revenue: USD 0\.00/);
   assert.match(event.email.text, /Stripe mode: LIVE/);
   assert.match(event.email.text, /Business: Attractive Remodel/);
   assert.match(event.email.text, /Timestamp: 2026-08-22T23:02:27Z/);

@@ -141,11 +141,12 @@ test('maintained funding webhook reconciles reserve refunds without freezing or 
  const fs=require('node:fs'),source=fs.readFileSync(require.resolve(production?'../.firebase/production-engineering/package/campaign-funding/index.js':'../functions-campaign-funding/index.js'),'utf8');
  const node=require('@babel/parser').parse(source).program.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='processEvent');
  const body=source.slice(node.start,node.end);
- const processEvent=new Function('db','FieldValue','require','process',body+';return processEvent;')(
-   db,FieldValue,()=>finance,{env:{GCLOUD_PROJECT:project}});
+ const processEvent=new Function('db','FieldValue','require','process','lifecycle','PAYMENT_ENVIRONMENT',body+';return processEvent;')(
+   db,FieldValue,name=>name==='./workspace_subscription_events'?require('./workspace_subscription_events'):finance,{env:{GCLOUD_PROJECT:project}},
+   require('../functions-campaign-funding/campaign_funding_lifecycle'),{stripeMode:production?'live':'test'});
  const snapshot=(await db.doc('campaigns/'+f.campaignId).get()).data();
- await processEvent(p.api,{type:'refund.updated',data:{object:p.refund}});
- await processEvent(p.api,{type:'charge.refunded',data:{object:{id:'ch_test',payment_intent:intent}}});
+ await processEvent(p.api,{livemode:production,type:'refund.updated',data:{object:p.refund}});
+ await processEvent(p.api,{livemode:production,type:'charge.refunded',data:{object:{id:'ch_test',payment_intent:intent}}});
  assert.deepEqual((await db.doc('campaigns/'+f.campaignId).get()).data(),snapshot);
  assert.equal((await db.doc('campaignPayments/'+f.paymentId).get()).data().status,'paid');
  assert.equal((await db.doc('campaignPayments/'+f.paymentId).get()).data().refundedTotalCents,360);
