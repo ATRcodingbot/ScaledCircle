@@ -22,14 +22,15 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
   final type = data['type'];
   final link = data['deepLink'] is Map ? data['deepLink'] as Map : const {};
   final destination = link['destination'];
-  if (destination == 'growth_agents') {
+  if (destination == 'growth_agents' ||
+      destination == 'business_growth_agents') {
     final prospect = id(link['prospectId']);
     final report = id(link['reportId']);
     return NotificationDestination(
       'route',
       'Review Agent Activity',
       route:
-          '/growth-agents${prospect != null
+          '${destination == 'business_growth_agents' ? '/business' : ''}/growth-agents${prospect != null
               ? '?prospect=${Uri.encodeQueryComponent(prospect)}'
               : report != null
               ? '?report=${Uri.encodeQueryComponent(report)}'

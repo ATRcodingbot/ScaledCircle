@@ -178,13 +178,17 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => const ScalerFunnelScreen(),
       );
     }
-    if (route?.path == '/growth-agents') {
+    if (route?.path == '/growth-agents' ||
+        route?.path == '/business/growth-agents') {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => ProtectedRouteGate(
           routeName: settings.name!,
-          audience: ProtectedRouteAudience.admin,
+          audience: route?.path == '/business/growth-agents'
+              ? ProtectedRouteAudience.business
+              : ProtectedRouteAudience.admin,
           builder: (_, _) => GrowthAgentsScreen(
+            customer: route?.path == '/business/growth-agents',
             focusId:
                 route?.queryParameters['prospect'] ??
                 route?.queryParameters['report'],

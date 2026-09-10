@@ -76,6 +76,15 @@ void main() {
     });
   }
   test('Agent notifications open exact decision package', () {
+    expect(
+      notificationDestination({
+        'deepLink': {
+          'destination': 'business_growth_agents',
+          'reportId': 'report_customer',
+        },
+      })?.route,
+      '/business/growth-agents?report=report_customer',
+    );
     final route = notificationDestination({
       'deepLink': {
         'destination': 'growth_agents',
@@ -90,4 +99,31 @@ void main() {
       '/growth-agents?report=report_123',
     );
   });
+
+  testWidgets(
+    'customer workspace has normal activation and no Admin registration',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GrowthAgentsScreen(
+            customer: true,
+            loadOverride: () async => {
+              'businessContext': {'businessName': 'Example Builder'},
+              'initialized': false,
+              'workspace': {'registered': false, 'scope': {}},
+              'preferences': {'mode': 'important'},
+              'summary': {},
+              'agents': [],
+              'social': {},
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Example Builder · Private Beta'), findsOneWidget);
+      expect(find.text('Activate research and drafts'), findsOneWidget);
+      expect(find.text('Register internal Growth workspace'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

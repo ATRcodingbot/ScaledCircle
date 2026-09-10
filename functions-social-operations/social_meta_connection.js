@@ -32,7 +32,7 @@ function connectionConfig(config, businessUid, purpose = null) {
   if (config?.provider !== "meta" || !config.metaDogfood) return config;
   const restricted = policy(config);
   if (businessUid === restricted.businessUid) return config;
-  if (purpose && purpose !== "read_only_connection") {
+  if (purpose && !["read_only_connection", "meta_customer_managed"].includes(purpose)) {
     throw new Error("social_oauth_meta_restricted_identity_mismatch");
   }
   const {metaDogfood, ...ordinary} = config;

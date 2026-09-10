@@ -5,7 +5,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'growth_territories_dialog.dart';
 
 class GrowthAgentsScreen extends StatefulWidget {
-  const GrowthAgentsScreen({super.key, this.focusId, this.loadOverride});
+  const GrowthAgentsScreen({
+    super.key,
+    this.focusId,
+    this.loadOverride,
+    this.customer = false,
+  });
+  final bool customer;
   final String? focusId;
   final Future<Map<String, dynamic>> Function()? loadOverride;
   @override
@@ -25,6 +31,19 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     String name, [
     Map<String, dynamic>? input,
   ]) async {
+    if (widget.customer) {
+      const operations = {
+        'getGrowthDogfoodWorkspaceV1': 'load',
+        'runGrowthDogfoodResearchV1': 'research',
+        'updateGrowthCommunicationPreferencesV1': 'preferences',
+        'reviewGrowthProspectV1': 'review',
+        'initializeCustomerGrowth': 'initialize',
+      };
+      final operation = operations[name];
+      if (operation == null) throw StateError('Unsupported customer action');
+      input = {'operation': operation, 'input': ?input};
+      name = 'customerGrowthOperationsV1';
+    }
     final response = await FirebaseFunctions.instanceFor(region: 'us-east1')
         .httpsCallable(name)
         .call(input ?? {})
@@ -61,8 +80,9 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     } catch (_) {
       if (mounted) {
         setState(
-          () => _error =
-              'Unable to load this private workspace. Sign in as the ScaledCircle dogfood Admin, then retry.',
+          () => _error = widget.customer
+              ? 'Unable to load your Growth workspace. Use your invited Business account with an active Managed Growth membership, then retry.'
+              : 'Unable to load this private workspace. Sign in as the ScaledCircle dogfood Admin, then retry.',
         );
       }
     }
@@ -149,9 +169,11 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text(
-          'ScaledCircle · Private dogfood',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        Text(
+          widget.customer
+              ? '${d['businessContext']?['businessName'] ?? 'Your Business'} · Private Beta'
+              : 'ScaledCircle · Private dogfood',
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
         const Text(
@@ -163,7 +185,12 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
             child: Text(_error!, style: const TextStyle(color: Colors.red)),
           ),
         const SizedBox(height: 18),
-        if (d['workspace'] is Map)
+        if (widget.customer && d['initialized'] != true)
+          FilledButton(
+            onPressed: _busy ? null : () => _action('initializeCustomerGrowth'),
+            child: const Text('Activate research and drafts'),
+          ),
+        if (!widget.customer && d['workspace'] is Map)
           OutlinedButton(
             onPressed: _busy
                 ? null
@@ -244,7 +271,9 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: _busy ? null : () => _action('runGrowthDogfoodResearchV1'),
+          onPressed: _busy || (widget.customer && d['initialized'] != true)
+              ? null
+              : () => _action('runGrowthDogfoodResearchV1'),
           icon: const Icon(Icons.search),
           label: Text(
             _busy
@@ -252,13 +281,17 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                 : 'Run today’s bounded research',
           ),
         ),
-        _line(
-          'Upcoming official-source recheck',
-          _time(d['nextResearchAfter']),
+        if (!widget.customer)
+          _line(
+            'Upcoming official-source recheck',
+            _time(d['nextResearchAfter']),
+          ),
+        Text(
+          widget.customer
+              ? 'Checks official sources using your saved services and service areas. Repeating today’s action returns the saved cycle, not duplicate prospects.'
+              : 'The maintained source pool is rechecked daily. A recheck is not counted as a new prospect.',
         ),
-        const Text(
-          'The maintained source pool is rechecked daily. A recheck is not counted as a new prospect.',
-        ),
+        if (widget.customer) ..._customerOverview(d),
         const SizedBox(height: 24),
         Text(
           'Prospects and approval queue',
@@ -311,7 +344,9 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                 const SizedBox(height: 12),
                 Text(
                   p['approvalState'] == 'awaiting_approval'
-                      ? 'Needs Founder approval'
+                      ? (widget.customer
+                            ? 'Needs your approval'
+                            : 'Needs Founder approval')
                       : p['approvalState'] == 'do_not_contact'
                       ? 'Do not contact'
                       : p['approvalState'] == 'ready_for_founder_send'
@@ -362,7 +397,11 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         const SizedBox(height: 20),
         ExpansionTile(
           title: const Text('Growth notifications'),
-          subtitle: const Text('Saved alerts from this internal workspace'),
+          subtitle: Text(
+            widget.customer
+                ? 'Saved alerts for your Business'
+                : 'Saved alerts from this internal workspace',
+          ),
           children: _list(d['notifications'])
               .map(
                 (n) => ListTile(
@@ -436,4 +475,86 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
       ],
     );
   }
+
+  List<Widget> _customerOverview(Map<String, dynamic> d) {
+    final social = Map<String, dynamic>.from(d['social'] as Map? ?? {});
+    return [
+      const SizedBox(height: 24),
+      Text(
+        'Social strategy and baseline',
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
+      _line('Draft plans', social['planCount'] ?? 0),
+      _line('Saved provider baselines', _list(social['baselines']).length),
+      for (final baseline in _list(social['baselines']))
+        ExpansionTile(
+          title: Text(
+            '${baseline['provider'] == 'facebook' ? 'Facebook' : 'Instagram'} baseline',
+          ),
+          subtitle: Text(
+            'Observed: ${baseline['observedAt'] ?? 'Not recorded'}',
+          ),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final entry in (baseline['metrics'] as Map? ?? {}).entries)
+              _line(
+                _metricName(entry.key.toString()),
+                entry.value is Map
+                    ? (entry.value['value'] ?? 'Unavailable')
+                    : 'Unavailable',
+              ),
+            _line(
+              'Recent provider posts observed',
+              _list(baseline['latest']).length,
+            ),
+            const Text(
+              'Provider metrics keep their original period. Missing values remain unavailable; reach is not summed across days.',
+            ),
+          ],
+        ),
+      const Text(
+        'Existing account history belongs to your Business. It is not counted as ScaledCircle publication.',
+      ),
+      OutlinedButton(
+        onPressed: () =>
+            Navigator.of(context).pushNamed('/business/social-operations'),
+        child: const Text('Review Social accounts and content plan'),
+      ),
+      const SizedBox(height: 16),
+      Text(
+        'Case-study progress',
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
+      const Text(
+        'Prospects: Found → Qualified → Contacted → Appointment → Estimate → Won → Attributed Revenue',
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Workforce: Found → Qualified → Contacted → Available → Used / Hired',
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Social: Baseline → Published → Reach and engagement → Attributed traffic and leads',
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Contacted: 0. Appointments, estimates, won work, hires and attributed revenue: No Data. Research is not a sale or a hire.',
+      ),
+    ];
+  }
+
+  String _metricName(String key) =>
+      const {
+        'followers': 'Followers',
+        'impressions': 'Impressions',
+        'views': 'Views',
+        'reach': 'Reach',
+        'mediaCount': 'Account media count',
+        'page_media_view': 'Page media views',
+        'page_post_engagements': 'Page post engagements',
+        'page_views_total': 'Page views',
+        'total_interactions': 'Interactions',
+        'profile_links_taps': 'Profile link taps',
+      }[key] ??
+      'Other provider metric';
 }

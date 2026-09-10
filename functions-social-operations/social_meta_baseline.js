@@ -66,7 +66,7 @@ async function collect({surface, account, tokens, fetchImpl = globalThis.fetch, 
   }
   const identity = await get(`/${id}`, {fields: ig ? "id,username,followers_count,media_count" : "id,name,followers_count,instagram_business_account{id}"});
   if (identity.id !== id || (ig ? identity.username !== account.linkedHandle :
-    identity.instagram_business_account?.id !== account.linkedAccountId ||
+    (account.linkedAccountId && identity.instagram_business_account?.id !== account.linkedAccountId) ||
       (account.pageName && identity.name !== account.pageName))) throw Error("meta_baseline_identity_mismatch");
   const result = {schemaVersion: "MetaBaselineV1", provider: surface, providerAccountId: id,
     observedAt: new Date(now).toISOString(), apiVersion: VERSION, source: "meta_graph_read_only",

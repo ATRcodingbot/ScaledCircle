@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/customer_social_plan_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/attribution_service.dart';
 import '../../services/social_operations_service.dart';
 import '../../widgets/social_runtime_status_card.dart';
+import '../../widgets/social_connection_card.dart';
 
 class SocialOperationsScreen extends StatefulWidget {
   const SocialOperationsScreen({super.key});
@@ -29,6 +31,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   bool _approvingFirstX = false;
   bool _publishingFirstX = false;
   String? _error;
+  Timer? _connectionRefresh;
+  bool _connecting = false;
+  bool _reviewingConnection = false;
 
   @override
   void initState() {
@@ -36,9 +41,15 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _connectionRefresh?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool quiet = false}) async {
     setState(() {
-      _loading = true;
+      if (!quiet) _loading = true;
       _error = null;
     });
     try {
@@ -52,6 +63,16 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           _workspace = value;
           _firstX = firstX;
         });
+        _connectionRefresh?.cancel();
+        if (value.connections.any(
+          (c) =>
+              c['provider'] == 'facebook' &&
+              (c['pendingAttemptId']?.toString().isNotEmpty ?? false),
+        )) {
+          _connectionRefresh = Timer(const Duration(seconds: 30), () {
+            if (mounted) _load(quiet: true);
+          });
+        }
       }
     } on FirebaseFunctionsException catch (error) {
       if (mounted) {
@@ -304,22 +325,16 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     'error',
   }.contains(status);
 
-  String _connectLabel(Map<String, dynamic> connection) {
-    final status = connection['status']?.toString() ?? 'disconnected';
-    final provider = connection['provider']?.toString() ?? '';
-    if (_connectionNeedsReconnect(status)) {
-      return 'Reconnect ${_providerLabel(provider)}';
-    }
-    if (_oauthProvider(provider) == 'meta') {
-      return 'Connect Facebook & Instagram';
-    }
-    return 'Connect ${_providerLabel(provider)}';
-  }
-
-  Future<void> _beginConnection(String provider) async {
+  Future<void> _beginConnection(
+    String provider, {
+    bool managedPublishing = false,
+  }) async {
+    if (_connecting) return;
+    setState(() => _connecting = true);
     try {
       final result = await _service.beginReadOnlyConnection(
         _oauthProvider(provider),
+        managedPublishing: managedPublishing,
       );
       final uri = Uri.tryParse(result['authorizationUrl']?.toString() ?? '');
       await _load();
@@ -336,7 +351,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Authorization is already in progress. Return from $providerLabel, then check and confirm.',
+                'Finish connecting with $providerLabel, then choose your Business account.',
               ),
             ),
           );
@@ -354,19 +369,23 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Complete read-only authorization, then return here to confirm the exact account.',
+              'Finish the Facebook steps, then choose your Business Page here.',
             ),
           ),
         );
       }
-    } on FirebaseFunctionsException catch (error) {
+    } on FirebaseFunctionsException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'This connection is not ready yet.'),
+            content: Text(
+              "We couldn't connect this account. Please try again.",
+            ),
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _connecting = false);
     }
   }
 
@@ -380,11 +399,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('$providerLabel authorization is ready'),
+        title: Text('Connect with $providerLabel'),
         content: Text(
           popupOpened
-              ? 'Complete $providerLabel consent in the opened tab. If it is unavailable, continue here in this tab.'
-              : 'Your browser blocked the authorization window. Continue securely in this tab.',
+              ? 'Review the permissions in the $providerLabel tab. If it did not open, continue here.'
+              : 'Continue to $providerLabel to review the permissions for your Business.',
         ),
         actions: [
           TextButton(
@@ -412,7 +431,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         await _reviewConnection(connection);
         return;
       }
-      if (attempt['status'] == 'expired') {
+      if (['expired', 'error', 'canceled'].contains(attempt['status'])) {
         await _beginConnection(connection['provider']?.toString() ?? '');
         return;
       }
@@ -425,7 +444,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'The existing authorization is still open. Return from $providerLabel, then check and confirm.',
+                'Finish connecting with $providerLabel, then choose your Business account.',
               ),
             ),
           );
@@ -437,11 +456,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         provider: connection['provider']?.toString() ?? '',
         popupOpened: false,
       );
-    } on FirebaseFunctionsException catch (error) {
+    } on FirebaseFunctionsException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'Unable to continue authorization.'),
+            content: Text("We couldn't finish connecting. Please try again."),
           ),
         );
       }
@@ -449,8 +468,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   }
 
   Future<void> _reviewConnection(Map<String, dynamic> connection) async {
+    if (_reviewingConnection) return;
     final attemptId = connection['pendingAttemptId']?.toString() ?? '';
     if (attemptId.isEmpty) return;
+    _reviewingConnection = true;
     try {
       final attempt = await _service.connectionAttempt(attemptId);
       final candidates = (attempt['candidates'] as List? ?? const [])
@@ -463,7 +484,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Authorization is not ready for identity confirmation yet.',
+                'Finish the Facebook steps first. Then choose your Business Page here.',
               ),
             ),
           );
@@ -471,68 +492,34 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         return;
       }
       if (!mounted) return;
+      final isMeta =
+          _oauthProvider(connection['provider']?.toString() ?? '') == 'meta';
       final selected = await showDialog<Map<String, dynamic>>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Use this account?'),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Only read-only identity and analytics access will be connected. Publishing remains off.',
-                ),
-                const SizedBox(height: 12),
-                for (final candidate in candidates)
-                  Card(
-                    child: ListTile(
-                      title: Text(
-                        candidate['accountDisplayName']?.toString() ??
-                            'Provider account',
-                      ),
-                      subtitle: Text(
-                        [
-                              candidate['handle']?.toString(),
-                              candidate['linkedAccountDisplayName']?.toString(),
-                              candidate['linkedHandle']?.toString(),
-                              candidate['candidateId']?.toString(),
-                            ]
-                            .whereType<String>()
-                            .where((value) => value.isNotEmpty)
-                            .join(' · '),
-                      ),
-                      trailing: FilledButton.tonal(
-                        onPressed: () => Navigator.pop(context, candidate),
-                        child: const Text('Use this account'),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
+        builder: (context) =>
+            SocialAccountPicker(candidates: candidates, isMeta: isMeta),
       );
-      if (selected == null) return;
+      if (selected == null) {
+        if (isMeta) await _service.cancelConnectionAttempt(attemptId);
+        await _load();
+        return;
+      }
       await _service.confirmReadOnlyConnection(
         attemptId: attemptId,
         candidateId: selected['candidateId']?.toString() ?? '',
       );
       await _load();
-    } on FirebaseFunctionsException catch (error) {
+    } on FirebaseFunctionsException {
+      await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'Unable to confirm this account.'),
+            content: Text("Facebook wasn't connected. Please try again."),
           ),
         );
       }
+    } finally {
+      _reviewingConnection = false;
     }
   }
 
@@ -928,9 +915,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   Widget _notice() => const Card(
     child: ListTile(
       leading: Icon(Icons.shield_outlined),
-      title: Text('Read-only connection phase'),
+      title: Text('Your accounts. Your approval.'),
       subtitle: Text(
-        'Connections and analytics do not grant publication approval. Existing approved schedules have separate execution controls. Bulk email delivery and ad changes are not enabled here.',
+        'Connect your Business accounts to view performance, prepare content and measure results. Publishing follows your approval settings and the permissions shown below.',
       ),
     ),
   );
@@ -950,106 +937,159 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     ),
   );
 
+  Future<void> _cancelConnection(Map<String, dynamic> connection) async {
+    try {
+      await _service.cancelConnectionAttempt(
+        connection['pendingAttemptId']?.toString() ?? '',
+      );
+      await _load();
+    } on FirebaseFunctionsException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "We couldn't cancel this connection. Please try again.",
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _enablePublishing(String provider) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enable Managed Publishing'),
+        content: const Text(
+          'Allow ScaledCircle to schedule and publish Social content according to your approval settings. You will review permissions with Facebook. No content will be published by connecting. Your current setting requires approval for each plan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue with Facebook'),
+          ),
+        ],
+      ),
+    );
+    if (accepted == true) {
+      await _beginConnection(provider, managedPublishing: true);
+    }
+  }
+
+  Future<void> _manageConnection(Map<String, dynamic> connection) async {
+    final provider = connection['provider']?.toString() ?? '';
+    final instagram = _workspace?.connections
+        .where((c) => c['provider'] == 'instagram')
+        .firstOrNull;
+    final update = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Manage Connection'),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  connection['accountDisplayName']?.toString() ??
+                      socialProviderName(provider),
+                ),
+                if (provider == 'facebook')
+                  Text(
+                    instagram != null && socialAccountConnected(instagram)
+                        ? 'Linked Instagram: ${instagram['handle'] ?? instagram['accountDisplayName']}'
+                        : "Instagram isn't connected yet.",
+                  ),
+                const SizedBox(height: 12),
+                Text(
+                  'Analytics: ${socialAnalyticsEnabled(connection) ? 'On' : 'Off'}',
+                ),
+                Text(
+                  'Managed Publishing: ${socialPublishingEnabled(connection, _workspace?.publishingEnabled == true) ? 'Ready' : 'Off'}',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'You control which Business account is connected. Review permissions to restore missing analytics or reconnect your account.',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Connection permission does not approve posts. Your content approval settings still apply.',
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (socialAnalyticsEnabled(connection))
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+                unawaited(_syncPerformance(provider));
+              },
+              child: const Text('Refresh Analytics'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Done'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Update Permissions'),
+          ),
+        ],
+      ),
+    );
+    if (update == true) await _beginConnection(provider);
+  }
+
   Widget _connections(
     SocialOperationsWorkspace workspace,
     bool wide,
-  ) => GridView.count(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    crossAxisCount: wide ? 4 : 2,
-    childAspectRatio: wide ? 1.55 : 1.25,
-    crossAxisSpacing: 8,
-    mainAxisSpacing: 8,
-    children: workspace.connections
-        .map((connection) {
-          final status = connection['status']?.toString() ?? 'disconnected';
-          final connected = const {
-            'connected_read_only',
-            'connected_write',
-          }.contains(status);
-          final authorizing =
-              status == 'authorizing' || status == 'identity_pending';
-          final needsAttention = _connectionNeedsReconnect(status);
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _providerLabel(connection['provider'].toString()),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  Text(
-                    connected
-                        ? status == 'connected_write'
-                              ? 'Connected · Approval required before posting'
-                              : 'Connected · Read only'
-                        : authorizing
-                        ? 'Authorizing'
-                        : needsAttention
-                        ? 'Needs attention'
-                        : 'Not connected',
-                  ),
-                  if (connected)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          [
-                                connection['accountDisplayName'],
-                                connection['handle'],
-                              ]
-                              .whereType<String>()
-                              .where((value) => value.isNotEmpty)
-                              .join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        TextButton(
-                          onPressed: () => _syncPerformance(
-                            connection['provider']?.toString() ?? '',
-                          ),
-                          child: const Text('Sync insights'),
-                        ),
-                      ],
-                    )
-                  else
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: authorizing
-                          ? Wrap(
-                              spacing: 4,
-                              children: [
-                                TextButton(
-                                  onPressed: () =>
-                                      _continueConnection(connection),
-                                  child: Text(
-                                    'Continue with ${_providerLabel(connection['provider']?.toString() ?? '')}',
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () =>
-                                      _reviewConnection(connection),
-                                  child: const Text('Check & confirm'),
-                                ),
-                              ],
-                            )
-                          : TextButton(
-                              onPressed: () => _beginConnection(
-                                connection['provider']?.toString() ?? '',
-                              ),
-                              child: Text(_connectLabel(connection)),
-                            ),
-                    ),
-                ],
+  ) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth < 560
+          ? 1
+          : wide
+          ? 4
+          : 2;
+      final width = (constraints.maxWidth - 8 * (columns - 1)) / columns;
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final connection in workspace.connections)
+            SizedBox(
+              width: width,
+              child: SocialConnectionCard(
+                connection: connection,
+                publishingEnabled: workspace.publishingEnabled,
+                busy: _connecting,
+                onConnect: () =>
+                    _beginConnection(connection['provider']?.toString() ?? ''),
+                onContinue: () => _continueConnection(connection),
+                onChoose: () => _reviewConnection(connection),
+                onCancel: () => _cancelConnection(connection),
+                onManage: () => _manageConnection(connection),
+                onEnablePublishing:
+                    workspace.managedPublishingAvailable &&
+                        [
+                          'facebook',
+                          'instagram',
+                        ].contains(connection['provider'])
+                    ? () => _enablePublishing(connection['provider'].toString())
+                    : null,
               ),
             ),
-          );
-        })
-        .toList(growable: false),
+        ],
+      );
+    },
   );
 
   Widget _firstXPublishCard() {
@@ -1229,22 +1269,51 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
       children: [
-        for (final plan in workspace.plans)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.calendar_month_outlined),
-              title: Text(plan['goal']?.toString() ?? '30-day content plan'),
-              subtitle: Text(
-                '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',
-              ),
-              trailing: plan['status'] == 'ready_for_review'
-                  ? FilledButton.tonal(
-                      onPressed: () => _approvePlan(plan),
-                      child: const Text('Review & Approve'),
-                    )
-                  : const Chip(label: Text('APPROVED')),
-            ),
+        if (workspace.managedPublishingAvailable && workspace.plans.isEmpty)
+          FilledButton.icon(
+            onPressed: _loading
+                ? null
+                : () async {
+                    setState(() => _loading = true);
+                    try {
+                      await _service.prepareCustomerPlan();
+                      await _load();
+                    } catch (_) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'The plan could not be confirmed. Refresh to check saved plans before retrying.',
+                            ),
+                          ),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _loading = false);
+                    }
+                  },
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('Prepare my 30-day draft strategy'),
           ),
+        for (final plan in workspace.plans)
+          if (plan['strategy'] is Map)
+            CustomerSocialPlanCard(plan: plan)
+          else
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.calendar_month_outlined),
+                title: Text(plan['goal']?.toString() ?? '30-day content plan'),
+                subtitle: Text(
+                  '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',
+                ),
+                trailing: plan['status'] == 'ready_for_review'
+                    ? FilledButton.tonal(
+                        onPressed: () => _approvePlan(plan),
+                        child: const Text('Review & Approve'),
+                      )
+                    : const Chip(label: Text('APPROVED')),
+              ),
+            ),
         Card(
           child: ListTile(
             leading: const Icon(Icons.add_circle_outline),

@@ -118,3 +118,16 @@ test("ordinary customer callback selects their granted Page rather than the inte
   assert.equal(selected.privateAccount.linkedAccountId, "987");
   assert.notEqual(selected.safeCandidate.capabilities.publishImage, true);
 });
+
+test("Meta optional analytics and Instagram grants do not block basic read-only Page discovery", async () => {
+  const ordinary = policy.connectionConfig(config, "customer-business");
+  const attempt = oauth.createAttempt({businessUid: "customer-business", provider: "meta", config: ordinary, encryptionKey: key, now: 1000});
+  const responses = [{access_token:"short"},{access_token:"long"}, {data:['pages_show_list','pages_read_engagement','pages_manage_posts'].map(permission=>({permission,status:'granted'}))},
+    {data:[{id:'111',name:'Customer',access_token:'page'}]}, {id:'111',name:'Customer'}];
+  let i=0;
+  const result=await oauth.completeExchange({attempt:attempt.record,code:'test',config:ordinary,clientSecret:'fixture',encryptionKey:key,now:1100,
+    fetchImpl:async url=>{if(String(url).includes('/111?')) assert.equal(new URL(url).searchParams.get('fields'),'id,name');return {ok:true,json:async()=>responses[i++]};}});
+  assert.equal(result.status,'identity_pending');assert.deepEqual(result.missingScopes,[]);
+  assert.equal(result.optionalMissingScopes.length,3);assert.equal(result.safeCandidates[0].capabilities.publishText,false);
+  assert.equal(result.safeCandidates[0].capabilities.analytics,false);assert.equal(result.safeCandidates[0].instagramCapabilities.profile,false);
+});

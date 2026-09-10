@@ -86,6 +86,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "approveSocialGrowthWeekV1",
     "beginFirstXPublishAuthorizationV1",
     "beginSocialOAuthConnectionV1",
+    "cancelSocialOAuthAttemptV1",
     "configureSocialProviderV1",
     "confirmFirstXPublishAuthorizationV1",
     "confirmSocialOAuthConnectionV1",
@@ -104,6 +105,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "getSocialOperationsWorkspace",
     "ingestScaledCircleLaunchPlanV1",
     "inspectMetaGrowthRuntimeV1","inspectMetaPageExecutionCredentialV1",
+    "prepareCustomerSocialPlanV1",
     "prepareFirstXPublishFoundationV1",
     "prepareMetaGrowthWeekV1",
     "proposeScheduledSocialReplacementV1",
@@ -227,7 +229,7 @@ test("production X connection authority is exact-scope, confirmation-gated, and 
   assert.match(begin, /config\?\.writeScopesEnabled === true/);
   assert.match(begin, /socialOAuth\.X_PUBLISH_SCOPES/);
   assert.match(begin, /requestWriteScopes \? "x_connection_authority" : "read_only_connection"/);
-  assert.match(begin, /purpose: metaWrite \? "meta_connection_authority"/);
+  assert.match(begin, /purpose: customerManaged \? metaCustomer.PURPOSE : metaWrite \? "meta_connection_authority"/);
   assert.match(begin, /event: "social_oauth_begin_rejected"/);
   assert.match(begin, /safeSocialOAuthFailureCode\(error\)/);
   assert.doesNotMatch(begin, /console\.error\([^\n]*encryptionKey\.value/);

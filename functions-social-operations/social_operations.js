@@ -347,21 +347,25 @@ function connectionProjection(input = {}) {
     "error", "attention_required", "write_scope_pending"]
     .includes(input.status) ? input.status : "disconnected";
   return {schemaVersion: SCHEMA_VERSION, provider, status,
+    customerMessage: provider === "facebook" && status === "not_connected" && input.lastAuthorizationFailure ?
+      "Facebook wasn't connected. Try again." : null,
     accountDisplayName: text(input.accountDisplayName, 180) || null,
     accountType: text(input.accountType, 80) || null,
     handle: text(input.handle, 180) || null,
     providerAccountId: text(input.providerAccountId, 240) || null,
     pendingAttemptId: text(input.pendingAttemptId, 128) || null,
+    pendingManagedPublishing: input.pendingManagedPublishing === true,
+    managedPublishingPermissionGranted: health.healthy && input.managedPublishingPermissionGranted === true,
     grantedScopes: list(input.grantedScopes, 20, 180),
     writeScopesGranted: status === "connected_write" && input.writeScopesGranted === true,
     readOnly: status === "connected_read_only",
     requiresReconnect: health.requiresReconnect,
     capabilities: {
       profile: health.healthy && input.capabilities?.profile === true,
-      publishText: health.healthy && input.capabilities?.publishText === true,
-      publishImage: health.healthy && input.capabilities?.publishImage === true,
-      publishVideo: health.healthy && input.capabilities?.publishVideo === true,
-      schedule: health.healthy && input.capabilities?.schedule === true,
+      publishText: status === "connected_write" && health.healthy && input.capabilities?.publishText === true,
+      publishImage: status === "connected_write" && health.healthy && input.capabilities?.publishImage === true,
+      publishVideo: status === "connected_write" && health.healthy && input.capabilities?.publishVideo === true,
+      schedule: status === "connected_write" && health.healthy && input.capabilities?.schedule === true,
       analytics: health.healthy && input.capabilities?.analytics === true,
     },
     // Tokens, provider secrets, and raw credential records never enter this projection.

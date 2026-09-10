@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Social Operations is honest, responsive, and read-only', () {
+  test('Social Operations uses customer language and preserves approval authority', () {
     final screen = File(
       'lib/screens/business/social_operations_screen.dart',
     ).readAsStringSync();
@@ -12,25 +12,23 @@ void main() {
       screen,
       contains('Connect → Plan → Review → Schedule → Measure → Improve'),
     );
-    expect(screen, contains('Read-only connection phase'));
-    expect(screen, contains('Connect Facebook & Instagram'));
-    expect(screen, contains("return 'Connect \${_providerLabel(provider)}'"));
-    expect(screen, contains("return 'Reconnect \${_providerLabel(provider)}'"));
+    expect(screen, contains('Your accounts. Your approval.'));
+    expect(screen, contains('SocialConnectionCard'));
+    expect(screen, contains('SocialAccountPicker'));
+    expect(screen, contains('Manage Connection'));
     expect(screen, contains("'reauth_required'"));
-    expect(screen, contains("? 'Needs attention'"));
     expect(screen, contains('final connectionNeedsAttention'));
     expect(screen, contains('attemptId.isEmpty'));
     expect(screen, contains("? 'Start fresh X authorization'"));
     expect(screen, contains('attemptId.isNotEmpty'));
     expect(screen, contains("child: const Text('Check & confirm X account')"));
-    expect(screen, contains('Use this account?'));
+    expect(screen, contains('cancelConnectionAttempt'));
     expect(screen, contains("'Continue with \$providerLabel'"));
     expect(screen, contains("webOnlyWindowName: '_self'"));
-    expect(screen, contains("'\$providerLabel authorization is ready'"));
     expect(screen, contains('Check & confirm'));
     expect(
       screen,
-      contains('Existing approved schedules have separate execution controls'),
+      contains('Publishing follows your approval settings'),
     );
     expect(screen, contains('30-Day Email Content'));
     expect(screen, contains('Ads — Read Only'));

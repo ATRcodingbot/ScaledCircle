@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const metaConnection = require("./social_meta_connection");
+const metaCustomer = require("./social_meta_customer");
 
 const OAUTH_ATTEMPT_TTL_MS = 10 * 60 * 1000;
 const PROVIDERS = Object.freeze(["meta", "x", "youtube"]);
@@ -96,6 +97,37 @@ function exactScopeSet(scopes, expected) {
     throw new Error("social_oauth_scope_mismatch");
   }
   return actual;
+}
+
+function readOnlyMetaScopes(scopes) {
+  const granted = new Set(scopes || []);
+  const required = ["pages_show_list", "pages_read_engagement"];
+  const missing = required.filter(s => !granted.has(s));
+  return {missing, effective: PROVIDER_SCOPES.meta.filter(s => granted.has(s)),
+    optionalMissing: PROVIDER_SCOPES.meta.filter(s => !required.includes(s) && !granted.has(s))};
+}
+
+function candidateForAttempt(candidate, attempt) {
+  const ordinaryMeta = attempt.provider === "meta" && ["read_only_connection", metaCustomer.PURPOSE].includes(attempt.purpose);
+  const safe = safeIdentityCandidate(candidate, ordinaryMeta ?
+    readOnlyMetaScopes(attempt.grantedScopes).effective : attempt.grantedScopes);
+  if (ordinaryMeta) {
+    safe.capabilities.analytics = (attempt.grantedScopes || []).includes("read_insights");
+    safe.instagramCapabilities = {profile: Boolean(candidate.linkedAccountId) &&
+      (attempt.grantedScopes || []).includes("instagram_basic"),
+    analytics: Boolean(candidate.linkedAccountId) &&
+      ["instagram_basic", "instagram_manage_insights"].every(s => (attempt.grantedScopes || []).includes(s)),
+    publishText: false, publishImage: false, publishVideo: false, schedule: false};
+  }
+  if (attempt.purpose === metaCustomer.PURPOSE) {
+    safe.capabilities = metaConnection.capabilities(attempt.grantedScopes || [], "facebook");
+    safe.capabilities.publishText = safe.capabilities.publishText && Boolean(candidate.pageAccessToken);
+    safe.capabilities.publishImage = safe.capabilities.publishImage && Boolean(candidate.pageAccessToken);
+    safe.instagramCapabilities = candidate.linkedAccountId ?
+      metaConnection.capabilities(attempt.grantedScopes || [], "instagram") :
+      {profile: false, analytics: false, publishText: false, publishImage: false, publishVideo: false, schedule: false};
+  }
+  return safe;
 }
 
 function credentialGeneration(credential = {}) {
@@ -272,7 +304,7 @@ function authorizationUrl({provider, config, state, codeChallenge, scopes: reque
 }
 
 function createAttempt({businessUid, provider, config, encryptionKey, now = Date.now(), randomBytes,
-  scopes = null, purpose = "read_only_connection"}) {
+  scopes = null, purpose = "read_only_connection", customerTarget = null}) {
   const normalized = normalizeProvider(provider);
   const valid = validateProviderConfig({...config, provider: normalized});
   if (!valid.enabled) throw new Error("social_oauth_provider_disabled");
@@ -285,10 +317,12 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
   const aad = `${uid}:${normalized}:${attemptId}`;
   const requiredScopes = requestedScopes(normalized, scopes);
   const normalizedPurpose = text(purpose, 80);
-  const metaDogfood = normalized === "meta" && requiredScopes.includes("pages_manage_posts") ?
+  const customerManaged = normalized === "meta" && normalizedPurpose === metaCustomer.PURPOSE;
+  if (customerManaged && (!/^\d+$/.test(customerTarget?.pageId || "") || !customerTarget?.credentialId)) throw Error("social_oauth_customer_read_connection_required");
+  const metaDogfood = normalized === "meta" && requiredScopes.includes("pages_manage_posts") && !customerManaged ?
     metaConnection.authorize(valid, uid) : null;
   if (normalized === "meta" && requiredScopes.includes("pages_manage_posts") &&
-      normalizedPurpose !== "meta_connection_authority") {
+      normalizedPurpose !== "meta_connection_authority" && !customerManaged) {
     throw new Error("social_oauth_scope_purpose_mismatch");
   }
   if (requiredScopes.includes("tweet.write") &&
@@ -307,6 +341,7 @@ function createAttempt({businessUid, provider, config, encryptionKey, now = Date
       provider: normalized,
       purpose: normalizedPurpose,
       ...(metaDogfood ? {metaDogfood} : {}),
+      ...(customerManaged ? {customerTarget} : {}),
       requestedScopes: requiredScopes,
       environment: valid.environment,
       status: "authorizing",
@@ -407,7 +442,7 @@ function form(values) {
   return body;
 }
 
-async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
+async function exchangeMeta({code, config, clientSecret, fetchImpl, managed = false}) {
   const graphVersion = "v23.0";
   const graphBase = `https://graph.facebook.com/${graphVersion}`;
   const tokenUrl = new URL(`${graphBase}/oauth/access_token`);
@@ -469,7 +504,19 @@ async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
     return {candidates: [candidate], scopes: explicitScopes};
   }
   const accountFields = "id,name,access_token,tasks";
-  const pageIdentityFields = "id,name,instagram_business_account{id,username,name}";
+  const basicFields = managed ? "id,name,access_token" : "id,name";
+  const pageIdentityFields = grantedScopes.includes("instagram_basic") ?
+    `${basicFields},instagram_business_account{id,username,name}` : basicFields;
+  async function pageIdentity(url, diagnostic) {
+    try { return await fetchJson(fetchImpl, url, {}, diagnostic); }
+    catch (error) {
+      if (!pageIdentityFields.includes("instagram_business_account")) throw error;
+      // Instagram is optional. A successful basic Page read is still required.
+      const basic = new URL(url); basic.searchParams.set("fields", basicFields);
+      try { return await fetchJson(fetchImpl, basic, {}, {...diagnostic, providerFields: "id,name"}); }
+      catch (_) { throw error; }
+    }
+  }
   const accountUrl = new URL(`${graphBase}/me/accounts`);
   accountUrl.searchParams.set("fields", accountFields);
   accountUrl.searchParams.set("limit", "100");
@@ -479,20 +526,30 @@ async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
     providerGraphVersion: graphVersion, providerObjectType: "user_accounts_edge",
     providerFields: accountFields, providerTokenClass: "long_lived_user", grantedScopes,
   });
+  let pageBatch = accounts;
+  const seenCursors = new Set();
+  while (pageBatch.paging?.next) {
+    const after = pageBatch.paging?.cursors?.after;
+    if (!after || seenCursors.has(after) || seenCursors.size >= 20) throw new Error("social_oauth_page_list_incomplete");
+    seenCursors.add(after);
+    const next = new URL(accountUrl); next.searchParams.set("after", after);
+    pageBatch = await fetchJson(fetchImpl, next, {}, {providerStage: "meta_page_enumeration"});
+    accounts.data = [...(accounts.data || []), ...(pageBatch.data || [])];
+  }
   let pages = await Promise.all((accounts.data || []).map(async (page) => {
     const pageId = text(page.id, 180);
     const pageToken = text(page.access_token, 10000) || text(token.access_token, 10000);
     const pageUrl = new URL(`${graphBase}/${encodeURIComponent(pageId)}`);
     pageUrl.searchParams.set("fields", pageIdentityFields);
     pageUrl.searchParams.set("access_token", pageToken);
-    const identity = await fetchJson(fetchImpl, pageUrl, {}, {
+    const identity = await pageIdentity(pageUrl, {
       providerStage: "meta_page_identity", providerEndpoint: "/{page-id}",
       providerGraphVersion: graphVersion, providerObjectType: "page",
       providerFields: pageIdentityFields,
       providerTokenClass: page.access_token ? "page" : "long_lived_user",
       selectedPageId: pageId, grantedScopes,
     });
-    return {...page, ...identity, access_token: text(page.access_token, 10000)};
+    return {...page, ...identity, access_token: text(identity.access_token || page.access_token, 10000)};
   }));
   if (!pages.length) {
     const debugUrl = new URL(`${graphBase}/debug_token`);
@@ -513,7 +570,7 @@ async function exchangeMeta({code, config, clientSecret, fetchImpl}) {
       const pageUrl = new URL(`${graphBase}/${encodeURIComponent(pageId)}`);
       pageUrl.searchParams.set("fields", pageIdentityFields);
       pageUrl.searchParams.set("access_token", token.access_token);
-      return fetchJson(fetchImpl, pageUrl, {}, {
+      return pageIdentity(pageUrl, {
         providerStage: "meta_page_identity", providerEndpoint: "/{page-id}",
         providerGraphVersion: graphVersion, providerObjectType: "page",
         providerFields: pageIdentityFields, providerTokenClass: "long_lived_user",
@@ -600,20 +657,23 @@ async function completeExchange({attempt, code, config, clientSecret, encryption
   const aad = `${attempt.businessUid}:${attempt.provider}:${attempt.stateDigest}`;
   const verifier = decryptJson(attempt.verifierEnvelope, encryptionKey, aad).verifier;
   let result;
-  if (attempt.provider === "meta") result = await exchangeMeta({code, config, clientSecret, fetchImpl});
+  if (attempt.provider === "meta") result = await exchangeMeta({code, config, clientSecret, fetchImpl, managed: attempt.purpose === metaCustomer.PURPOSE});
   else if (attempt.provider === "x") {
     result = await exchangeX({code, verifier, config, clientSecret, fetchImpl});
   } else result = await exchangeYouTube({code, verifier, config, clientSecret, fetchImpl});
   if (!result.candidates.length) throw new Error("social_oauth_no_owned_identity");
   const scopeStatus = normalizeScopes(attempt.provider, result.scopes,
     attempt.requestedScopes || PROVIDER_SCOPES[attempt.provider]);
+  const ordinaryMeta = attempt.provider === "meta" && ["read_only_connection", metaCustomer.PURPOSE].includes(attempt.purpose);
+  const requiredMissing = ordinaryMeta ? readOnlyMetaScopes(scopeStatus.granted).missing : scopeStatus.missing;
   return {
-    status: scopeStatus.missing.length ? "error" : "identity_pending",
+    status: requiredMissing.length ? "error" : "identity_pending",
     safeCandidates: result.candidates.map((candidate) =>
-      safeIdentityCandidate(candidate, scopeStatus.granted)),
+      candidateForAttempt(candidate, {...attempt, grantedScopes: scopeStatus.granted})),
     candidateEnvelope: encryptJson({candidates: result.candidates}, encryptionKey, aad),
     grantedScopes: scopeStatus.granted,
-    missingScopes: scopeStatus.missing,
+    missingScopes: requiredMissing,
+    optionalMissingScopes: ordinaryMeta ? readOnlyMetaScopes(scopeStatus.granted).optionalMissing : [],
     completedAtMillis: now,
   };
 }
@@ -631,13 +691,15 @@ function selectCandidate({attempt, candidateId, encryptionKey, now = Date.now()}
     exactScopeSet(attempt.grantedScopes, META_PUBLISH_SCOPES);
     metaConnection.identity(candidate, attempt.metaDogfood);
   }
+  if (attempt.provider === "meta" && ["read_only_connection", metaCustomer.PURPOSE].includes(attempt.purpose) &&
+      readOnlyMetaScopes(attempt.grantedScopes).missing.length) throw new Error("social_oauth_required_scope_missing");
   const credentialAad = `${attempt.businessUid}:${attempt.provider}:${candidate.accountId}`;
   const secretFields = {};
   for (const key of ["accessToken", "refreshToken", "userAccessToken", "pageAccessToken"] ) {
     if (candidate[key]) secretFields[key] = candidate[key];
   }
   return {
-    safeCandidate: safeIdentityCandidate(candidate, attempt.grantedScopes),
+    safeCandidate: candidateForAttempt(candidate, attempt),
     credentialRecord: {
       schemaVersion: "SocialConnectionCredentialV2",
       businessUid: attempt.businessUid,
@@ -791,7 +853,7 @@ async function readHistoricalPerformance({provider, surface, tokens, account,
 module.exports = {
   OAUTH_ATTEMPT_TTL_MS, CREDENTIAL_REFRESH_LEASE_TTL_MS,
   PROVIDERS, PROVIDER_SCOPES, X_PUBLISH_SCOPES, META_PUBLISH_SCOPES, digest,
-  normalizeProvider, requestedScopes, normalizeScopes, exactScopeSet,
+  normalizeProvider, requestedScopes, normalizeScopes, exactScopeSet, readOnlyMetaScopes,
   credentialGeneration, connectionRevision, beginCredentialRefresh,
   completeCredentialRefresh, failCredentialRefresh,
   encryptJson, decryptJson, validateProviderConfig, authorizationUrl, createAttempt,

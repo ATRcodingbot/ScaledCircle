@@ -5,6 +5,8 @@ class SocialOperationsWorkspace {
   final Map<String, dynamic> data;
 
   bool get managedGrowth => data['managedGrowth'] == true;
+  bool get managedPublishingAvailable =>
+      data['managedPublishingAvailable'] == true;
   bool get publishingEnabled => data['externalPublishingEnabled'] == true;
   bool get firstXCertificationAvailable =>
       data['firstXCertificationAvailable'] == true;
@@ -49,10 +51,16 @@ class SocialOperationsService {
     );
   }
 
-  Future<Map<String, dynamic>> beginReadOnlyConnection(String provider) async {
+  Future<Map<String, dynamic>> beginReadOnlyConnection(
+    String provider, {
+    bool managedPublishing = false,
+  }) async {
     final result = await _functions
         .httpsCallable('beginSocialOAuthConnectionV1')
-        .call({'provider': provider});
+        .call({
+          'provider': provider,
+          if (managedPublishing) 'capability': 'managed_publishing',
+        });
     return Map<String, dynamic>.from(result.data as Map);
   }
 
@@ -61,6 +69,12 @@ class SocialOperationsService {
         .httpsCallable('getSocialOAuthAttemptV1')
         .call({'attemptId': attemptId});
     return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<void> cancelConnectionAttempt(String attemptId) async {
+    await _functions.httpsCallable('cancelSocialOAuthAttemptV1').call({
+      'attemptId': attemptId,
+    });
   }
 
   Future<Map<String, dynamic>> confirmReadOnlyConnection({
@@ -183,6 +197,10 @@ class SocialOperationsService {
         .httpsCallable('ingestScaledCircleLaunchPlanV1')
         .call();
     return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<void> prepareCustomerPlan() async {
+    await _functions.httpsCallable('prepareCustomerSocialPlanV1').call({});
   }
 
   Future<Map<String, dynamic>> prepareFirstXPublishFoundation() async {

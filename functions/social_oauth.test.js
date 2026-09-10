@@ -338,6 +338,8 @@ test("Meta callback returns the exact owned Page and linked professional account
     candidateId: "meta_page_1198660363339503", provider: "meta",
     accountDisplayName: "Scaled Circle", accountType: "facebook_page", handle: null,
     linkedAccountDisplayName: "Scaled Circle", linkedHandle: "scaledcircleapp",
+    instagramCapabilities: {profile: true, analytics: true, publishText: false,
+      publishImage: false, publishVideo: false, schedule: false},
     capabilities: {profile: true, analytics: true, publishText: false,
       publishImage: false, publishVideo: false, schedule: false},
   });

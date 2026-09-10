@@ -15,9 +15,45 @@ const {getAuth} = require('firebase-admin/auth');
 const internalWorkspace = require('./internal_growth_workspace');
 const maintainedGeography = require('./shared/business_geography');
 const maintainedResolver = require('./shared/service_area_resolution');
+const customerGrowth = require('./customer_growth');
 
 const db = getFirestore(getApps().find(app => app.name === '[DEFAULT]') || initializeApp());
 setGlobalOptions({region: "us-east1"});
+
+exports.customerGrowthOperationsV1 = onCall({enforceAppCheck:false,maxInstances:2,timeoutSeconds:180}, async request => {
+  try {
+    return await customerGrowth.createService({db,auth:getAuth(),FieldValue,
+      Timestamp:require('firebase-admin/firestore').Timestamp,
+      project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,
+      allowedBusinesses:process.env.GROWTH_CUSTOMER_BETA_UIDS||''}).execute(request);
+  } catch(error) {
+    console.error('Customer Growth action held',{code:error.code||'unavailable',message:error.message});
+    throw new HttpsError(error.code||'unavailable',error.code?error.message:'This action could not finish. Refresh to check saved activity.');
+  }
+});
+
+exports.queueCustomerGrowthReportEmailV1 = onDocumentCreated({document:'agentReports/{reportId}',maxInstances:2,retry:true},async event=>{
+  const report=event.data?.data(),uid=report?.businessUid;
+  if(report?.workspaceKind!=='customer'||!(process.env.GROWTH_CUSTOMER_BETA_UIDS||'').split(',').map(s=>s.trim()).includes(uid))return;
+  const account=await getAuth().getUser(uid);
+  if(account.disabled||!account.emailVerified||!account.email)return;
+  await db.runTransaction(async tx=>{
+    const prefs=(await tx.get(db.doc('agentCommunicationPreferences/'+uid))).data()||growth.preferences();
+    const health=(await tx.get(db.doc('agentHealth/'+uid))).data();
+    if(health?.workspaceKind!=='customer')return;
+    const kind=report.kind==='daily'&&!prefs.daily&&prefs.important&&report.summary.newApprovalsToday>0?'important':report.kind;
+    if(!prefs[kind]||(kind==='important'&&!report.summary.newApprovalsToday))return;
+    const ref=db.doc('outboundEmailJobs/customer_growth_'+event.params.reportId);
+    if((await tx.get(ref)).exists)return;
+    const prospects=(await tx.get(db.collection('agentProspects').where('businessUid','==',uid).limit(20))).docs.map(d=>d.data());
+    const details=prospects.slice(0,12).map(p=>`${p.displayName}\n${p.geography}\n${p.reason}\nSource: ${p.sourceUrl}\nContact: ${p.email||p.phone||p.contactPath||'Unknown'}\nRecommended: ${p.recommendedCta||'Review source'}\nDraft — NOT SENT: ${p.draft||'Further source review required'}\nStatus: ${p.approvalState==='awaiting_approval'?'Needs your approval':'Source review required'}\n`).join('\n');
+    const s=report.summary;
+    tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
+      subject:kind==='weekly'?'Your Growth Weekly Report':kind==='daily'?'Your Growth Daily Brief':'Your Growth Agents need your review',
+      text:`${report.businessName}\n\n${s.businessesFound} potential project/referral opportunities; ${s.partnersFound} workforce organization partners. ${s.individualScalersFound} individual candidates.\n${s.awaitingApproval} drafts await review.\n\n${details}\nSocial: Review the connected-account baseline and draft plan in Social Operations. No new publication is authorized by this report.\n\nContacted: 0. Appointments, estimates, won work, hires and attributed revenue: No Data.\n\nNext: review the evidence and drafts. No outreach or ad spend has occurred.\n\nReview your workspace: https://scaledcircle.com/#/business/growth-agents\n\nManage important alerts and daily/weekly emails in Growth Agents.`,
+      template:'growth_agent_report_v1',preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
+  });
+});
 
 function growthService() {return growth.createService({db,FieldValue,
   project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID,areaPriorityIds:(process.env.GROWTH_RESEARCH_AREA_PRIORITY_IDS||'').split(',').filter(Boolean)});}

@@ -6,7 +6,6 @@ import '../../services/artifact_download.dart';
 import '../../services/artifact_export_service.dart';
 import '../../services/managed_growth_service.dart';
 import 'business_growth_profile_wizard.dart';
-import 'agentic_growth_screen.dart';
 import 'social_approval_screen.dart';
 import 'social_operations_screen.dart';
 import '../../widgets/customer_capability_status.dart';
@@ -685,11 +684,9 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                     'Marketing review, draft support, research, and recommendations. External actions are off.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AgenticGrowthScreen(),
-                    ),
-                  ),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pushNamed('/business/growth-agents'),
                 ),
               ),
               Card(

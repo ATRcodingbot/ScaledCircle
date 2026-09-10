@@ -1,0 +1,69 @@
+import 'package:flutter/material.dart';
+import 'social_connection_card.dart';
+
+class CustomerSocialPlanCard extends StatelessWidget {
+  const CustomerSocialPlanCard({super.key, required this.plan});
+  final Map<String, dynamic> plan;
+  @override
+  Widget build(BuildContext context) {
+    final strategy = plan['strategy'] as Map? ?? {};
+    return Card(
+      child: ExpansionTile(
+        title: Text(plan['goal']?.toString() ?? '30-day Social strategy'),
+        subtitle: const Text('Draft · Needs your review · Nothing scheduled'),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        childrenPadding: const EdgeInsets.all(16),
+        children: [
+          for (final key in [
+            'cadence',
+            'timingBasis',
+            'objective',
+            'measurement',
+            'creativeState',
+            'nextAction',
+          ])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(strategy[key]?.toString() ?? ''),
+            ),
+          for (final item in (plan['items'] as List? ?? []).whereType<Map>())
+            ExpansionTile(
+              title: Text(item['pillar']?.toString() ?? 'Proposed post'),
+              subtitle: Text(
+                'Proposed: ${DateTime.tryParse(item['scheduledFor']?.toString() ?? '')?.toLocal().toString().substring(0, 16) ?? 'Review timing'}',
+              ),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Why: ${item['goal']}'),
+                for (final v
+                    in (item['variants'] as List? ?? []).whereType<Map>())
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          socialProviderName(v['provider']?.toString() ?? ''),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        SelectableText(v['copy']?.toString() ?? ''),
+                        Text('Next step: ${v['callToAction'] ?? 'Review'}'),
+                        Text(
+                          'Destination: ${v['destinationUrl'] ?? 'Needs review'}',
+                        ),
+                        Text(
+                          'Creative: ${v['mediaRequirement'] ?? 'Needs approved media'}',
+                        ),
+                        Text(
+                          'Measurement: ${v['responseAssetRequirement'] ?? 'No measurement recorded yet'}',
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
