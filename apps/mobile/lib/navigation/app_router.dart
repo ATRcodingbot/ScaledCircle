@@ -4,6 +4,22 @@ import 'browser_history.dart';
 
 typedef AppRouteFactory = Route<dynamic> Function(RouteSettings settings);
 
+Uri? initialBillingRoute(Uri browserLocation) {
+  final route = Uri.tryParse(browserLocation.fragment);
+  return route != null &&
+          const {
+            '/billing',
+            '/billing/cancel',
+            '/billing/history',
+            '/billing/upgrade',
+            '/billing/addons',
+          }.contains(route.path) &&
+          !route.hasAuthority &&
+          !route.hasScheme
+      ? route
+      : null;
+}
+
 class AppRouteInformationParser extends RouteInformationParser<Uri> {
   const AppRouteInformationParser();
 

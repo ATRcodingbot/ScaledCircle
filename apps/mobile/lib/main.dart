@@ -424,6 +424,16 @@ class ScaledCircleApp extends StatelessWidget {
   static final AppRouterDelegate _routerDelegate = AppRouterDelegate(
     _generateRoute,
   );
+  // Preserve explicit email destinations while web Firebase startup resolves.
+  // Native routing and ordinary public/role-home startup remain unchanged.
+  static final _billingLaunchRoute = kIsWeb
+      ? initialBillingRoute(Uri.base)
+      : null;
+  static final _billingRouteInformation = _billingLaunchRoute == null
+      ? null
+      : PlatformRouteInformationProvider(
+          initialRouteInformation: RouteInformation(uri: _billingLaunchRoute!),
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -435,6 +445,7 @@ class ScaledCircleApp extends StatelessWidget {
       title: 'Scaled Circle',
       theme: AppTheme.lightTheme,
       routerDelegate: _routerDelegate,
+      routeInformationProvider: _billingRouteInformation,
       routeInformationParser: const AppRouteInformationParser(),
       builder: (context, child) {
         if (AppEnvironmentConfig.isProduction) {

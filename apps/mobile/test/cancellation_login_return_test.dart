@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/auth/login_screen.dart';
 import 'package:flutter_app/screens/business/business_membership_screen.dart';
 import 'billing_communications_ui_test.dart' show BillingHistoryService;
+import 'package:flutter_app/navigation/app_router.dart';
 
 class LocalCore extends FirebasePlatform {
   @override
@@ -51,6 +52,35 @@ class LocalAuth extends FirebaseAuthPlatform {
 }
 
 void main() {
+  test(
+    'explicit web Billing hash is preserved before authenticated startup',
+    () {
+      expect(
+        initialBillingRoute(
+          Uri.parse('https://scaledcircle.com/#/billing/cancel'),
+        ),
+        Uri.parse('/billing/cancel'),
+      );
+      expect(
+        initialBillingRoute(
+          Uri.parse('https://scaledcircle.com/#/billing/history'),
+        ),
+        Uri.parse('/billing/history'),
+      );
+      expect(
+        initialBillingRoute(Uri.parse('https://scaledcircle.com/')),
+        isNull,
+      );
+      expect(
+        initialBillingRoute(
+          Uri.parse(
+            'https://scaledcircle.com/#//unrelated.test/billing/cancel',
+          ),
+        ),
+        isNull,
+      );
+    },
+  );
   testWidgets(
     'signed-out cancellation destination survives the real Login screen',
     (tester) async {
