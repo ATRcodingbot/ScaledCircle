@@ -14,6 +14,10 @@ const url=arg('--url','http://127.0.0.1:18622/how-it-works/'),output=path.resolv
   assert.equal(await page.locator('.intelligence-grid > article').count(),4);assert.equal(await page.locator('.tools-grid > article').count(),6);
   assert.equal(await page.locator('main').count(),1);assert.equal(await page.locator('img').count(),0);
   assert.equal(await page.locator('.button.primary').count(),2);
+  // The maintained <base href="/"> must not send a skip link to app startup.
+  await page.locator('.skip-link').focus();await page.keyboard.press('Enter');
+  await page.waitForURL(u=>u.pathname.startsWith('/how-it-works')&&u.hash==='#workflow');
+  assert.equal(await page.locator('#marketing').count(),1);await page.evaluate(()=>scrollTo(0,0));
   const layout=await page.evaluate(()=>({viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,headerHeight:document.querySelector('nav').getBoundingClientRect().height,
    overflowing:[...document.querySelectorAll('#marketing *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.right>innerWidth+1;}).map(e=>e.tagName+'.'+e.className).filter(n=>!n.includes('skip-link'))}));
   assert.ok(layout.scrollWidth<=width,JSON.stringify(layout));assert.deepEqual(layout.overflowing,[]);

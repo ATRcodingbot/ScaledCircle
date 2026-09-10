@@ -95,6 +95,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertNotIn('checkout', body.lower())
         self.assertNotIn('Build My First Campaign', body)
         self.assertIn('<details class="mobile-menu">', body)
+        self.assertIn('href="/how-it-works/#workflow"', body)
         self.assertIn('summary', body)
         ids = set(re.findall(r'\bid="([^"]+)"', body))
         for labelled_by in re.findall(r'aria-labelledby="([^"]+)"', body):
