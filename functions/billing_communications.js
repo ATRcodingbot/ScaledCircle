@@ -37,7 +37,7 @@ function changes(previous, current) {
   if (previous.status !== 'canceled' && current.status === 'canceled') result.push('ended');
   return result;
 }
-function render({type,businessName,current,previous,invoice,environment,effectiveAt}) {
+function render({type,businessName,current,previous,invoice,environment,effectiveAt,changeFinancials}) {
   if (!TYPES.includes(type)) throw Error('billing_email_type_invalid');
   const plan=NAMES[current.plan] || 'ScaledCircle membership', actions=links(environment);
   const subjects={welcome:`Welcome to ScaledCircle ${plan}`,receipt:'Your ScaledCircle payment receipt',plan_changed:'Your ScaledCircle plan has changed',addons_changed:'Your ScaledCircle add-ons have changed',cancellation:'Your ScaledCircle membership is scheduled to cancel',reactivation:'Your ScaledCircle membership is active again',payment_failed:"We couldn't process your ScaledCircle payment",payment_action_required:'Your ScaledCircle payment needs attention',ended:'Your ScaledCircle membership has ended'};
@@ -48,7 +48,11 @@ function render({type,businessName,current,previous,invoice,environment,effectiv
     const tax=(invoice.total_taxes || invoice.total_tax_amounts || []).reduce((n,t)=>n+t.amount,0);
     if (tax) rows.push(['Tax',money(tax)]);
   }
-  if (type==='plan_changed') rows.push(['Previous plan',NAMES[previous.plan] || 'Previous membership'],['Charge or credit for this change','See reconciled invoices in Billing History']);
+  if (type==='plan_changed') {
+    rows.push(['Previous plan',`${NAMES[previous.plan] || 'Previous membership'} — ${money(previous.monthlyCents)}/month`],['New plan',`${plan} — ${money(current.monthlyCents)}/month`]);
+    if(changeFinancials?.verified===true && changeFinancials.chargedCents===0) rows.push(['Charged today',money(0)]);
+    else rows.push(['Charge or credit for this change','See reconciled invoices in Billing History']);
+  }
   if (['plan_changed','addons_changed'].includes(type)) rows.push(['Effective date',date(effectiveAt)]);
   if (type==='addons_changed') {
     for(const addon of current.addons) rows.push([NAMES[addon],current.plan==='growth_department'?'Included in Growth Department':`${money(contract.ADDONS[addon].cents)}/month`]);
@@ -76,6 +80,12 @@ async function reconcile({db,FieldValue,auth,event,subscription,invoice,environm
     const [state,user,wallet]=await Promise.all([tx.get(stateRef),tx.get(db.doc(`users/${businessId}`)),tx.get(db.doc(`wallets/${businessId}`))]);
     if (String(user.data()?.role).toLowerCase()!=='business' || wallet.data()?.stripeCustomerId!==customer || wallet.data()?.stripeSubscriptionId!==subscription.id) throw Error('billing_email_binding_mismatch');
     const old=state.data(), messages=[];
+    let changeFinancials;
+    const operation=subscription.metadata?.founderUpgradeCertification;
+    if(event.type==='customer.subscription.updated' && /^[a-f0-9]{64}$/.test(operation||'') && event.request?.idempotency_key==='founder_upgrade_'+operation) {
+      const proof=(await tx.get(db.doc('subscriptionChangeCertificationAudits/'+operation))).data();
+      if(proof?.version==='no_proration_upgrade_v1' && proof.businessId===businessId && proof.subscriptionId===subscription.id && proof.customerId===customer && proof.sourcePlan===old?.snapshot?.plan && proof.targetPlan===current.plan && proof.previousMonthlyCents===old?.snapshot?.monthlyCents && proof.monthlyCents===current.monthlyCents && proof.periodEnd===current.end && proof.dueNowCents===0 && proof.proration==='none' && proof.latestInvoiceId===id(subscription.latest_invoice) && proof.latestInvoiceId===id(event.data?.object?.latest_invoice) && proof.createdAtSeconds<=event.created && proof.expiresAtSeconds>=event.created && subscription.items.data.length===1 && subscription.items.data[0].price.id===proof.targetPrice && id(event.data?.object?.customer)===customer && event.data?.object?.metadata?.founderUpgradeCertification===operation) changeFinancials={verified:true,chargedCents:0};
+    }
     const newer=!old || event.created >= old.eventCreated;
     if (newer) for (const type of changes(old?.snapshot,current)) messages.push({type,key:`${subscription.id}_${(old?.revision||0)+1}_${type}`});
     if (event.type==='invoice.paid' && invoice?.status==='paid') {
@@ -87,7 +97,7 @@ async function reconcile({db,FieldValue,auth,event,subscription,invoice,environm
     const existing=await Promise.all(refs.map(ref=>tx.get(ref)));
     messages.forEach((message,index)=>{
       if (existing[index].exists) return;
-      tx.create(refs[index],{...render({...message,current,previous:old?.snapshot,invoice,environment,effectiveAt:event.created,businessName:user.data()?.companyName || user.data()?.businessName || user.data()?.displayName || 'Your Business'}),
+      tx.create(refs[index],{...render({...message,current,previous:old?.snapshot,invoice,changeFinancials,environment,effectiveAt:event.created,businessName:user.data()?.companyName || user.data()?.businessName || user.data()?.displayName || 'Your Business'}),
         to:owner.email,fromAddress:SUPPORT_EMAIL,fromName:'ScaledCircle',replyTo:SUPPORT_EMAIL,businessId,subscriptionId:subscription.id,sourceEventId:event.id,
         status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
     });

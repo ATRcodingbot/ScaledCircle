@@ -46,3 +46,29 @@ test('provider invoice URLs fail closed and unsupported billing templates cannot
  assert.equal(TEMPLATES.has('billing_arbitrary'),false);
  assert.equal(validateDeliveryJob({template:'billing_arbitrary',to:'owner@example.com',fromAddress:'support@scaledcircle.com',text:'bad'}),false);
 });
+test('verified no-proration change email separates zero charged from full recurring price',()=>{
+ const next={...current,plan:'managed_growth',monthlyCents:99900,seats:10};
+ for(const verified of [true,false]){
+  const mail=render({type:'plan_changed',previous:current,current:next,environment:'production',businessName:'Business',changeFinancials:{verified,chargedCents:0}});
+  assert.match(mail.text,/Previous plan: Starter — \$99.00\/month/);assert.match(mail.text,/New plan: Managed Growth — \$999.00\/month/);
+  assert.match(mail.text,/Next renewal: \$999.00 on October 10, 2026/);
+  if(verified)assert.match(mail.text,/Charged today: \$0.00/);else assert.doesNotMatch(mail.text,/Charged today:/);
+  assert.doesNotMatch(mail.text,/Payment received:/);
+ }
+});
+test('signed exact audit binding yields one plan-change email; mismatches cannot claim zero',async()=>{
+ const {reconcile}=require('./billing_communications');
+ for(const fault of [null,'customerId','expired','request']){
+  const operation='a'.repeat(64),sub={id:'sub_example',customer:'cus_example',livemode:true,status:'active',cancel_at_period_end:false,latest_invoice:'in_previous',metadata:{firebaseUid:'owner',plan:'managed_growth',billingPackage:'individual',founderUpgradeCertification:operation},items:{data:[{quantity:1,current_period_end:current.end,price:{id:'price_target',livemode:true,active:true,currency:'usd',unit_amount:99900,recurring:{interval:'month',interval_count:1,usage_type:'licensed'},product:'scaledcircle_workspace_production_v1',metadata:{plan:'managed_growth',purpose:'workspace_membership_production_v1'}}}]}};
+  const event={id:'evt_change',type:'customer.subscription.updated',created:100,request:{idempotency_key:'founder_upgrade_'+operation},data:{object:sub}};
+  const proof={version:'no_proration_upgrade_v1',businessId:'owner',subscriptionId:sub.id,customerId:'cus_example',sourcePlan:'starter',targetPlan:'managed_growth',previousMonthlyCents:9900,monthlyCents:99900,periodEnd:current.end,dueNowCents:0,proration:'none',latestInvoiceId:'in_previous',createdAtSeconds:99,expiresAtSeconds:101,targetPrice:'price_target'};
+  if(fault==='customerId')proof.customerId='unrelated';if(fault==='expired')proof.expiresAtSeconds=99;if(fault==='request')event.request.idempotency_key='unrelated';
+  const docs=new Map([['subscriptionCommunicationStates/'+sub.id,{snapshot:current,eventCreated:90,revision:0}],['users/owner',{role:'business'}],['wallets/owner',{stripeCustomerId:'cus_example',stripeSubscriptionId:sub.id}],['subscriptionChangeCertificationAudits/'+operation,proof]]);
+  const db={doc:p=>({path:p}),runTransaction:async fn=>fn({get:async r=>({exists:docs.has(r.path),data:()=>docs.get(r.path)}),create:(r,d)=>{assert.ok(!docs.has(r.path));docs.set(r.path,d)},set:(r,d)=>docs.set(r.path,d)})};
+  const args={db,FieldValue:{serverTimestamp:()=>100},auth:{getUser:async()=>({email:'owner@example.com',emailVerified:true,disabled:false})},event,subscription:sub,environment:'production',planForPrice:()=> 'managed_growth'};
+  await reconcile(args);await reconcile(args);
+  const mails=[...docs.entries()].filter(([k])=>k.startsWith('outboundEmailJobs/')).map(([,v])=>v);
+  assert.equal(mails.length,1);assert.equal(mails[0].template,'billing_plan_changed_v1');
+  if(!fault)assert.match(mails[0].text,/Charged today: \$0.00/);else assert.doesNotMatch(mails[0].text,/Charged today:/);
+ }
+});
