@@ -547,10 +547,10 @@ class _Pricing extends StatelessWidget {
             key: Key('public-plan-$planId'),
             name: name.toUpperCase(),
             price: '\$${price.toStringAsFixed(0)}/month',
-            badge: planId == 'managed_growth' ? 'LIMITED BETA' : null,
+            badge: planId == 'managed_growth' ? 'PRIVATE BETA / INVITE ONLY' : null,
             body: _descriptions[planId]!,
             features: _highlights(planId, plan),
-            onGetStarted: onGetStarted,
+            onGetStarted: planId == 'managed_growth' ? null : onGetStarted,
           );
         })
         .toList(growable: false);
@@ -576,7 +576,7 @@ class _Pricing extends StatelessWidget {
             _Price(
               name: 'BUSINESS ASSISTANT',
               price: '+\$399/month',
-              badge: 'BETA',
+              badge: 'BETA / COMING SOON',
               body:
                   'Review business information, recommendations and next actions. Your approval stays in control.',
               features: const [
@@ -584,12 +584,12 @@ class _Pricing extends StatelessWidget {
                 'Recommendations and observations',
                 'No autonomous accomplishments claimed',
               ],
-              onGetStarted: onGetStarted,
+              onGetStarted: null,
             ),
             _Price(
               name: 'LEAD GENERATION RESEARCH',
               price: '+\$699/month',
-              badge: 'BETA',
+              badge: 'BETA / COMING SOON',
               body:
                   'Prospect research, evidence, qualification and drafts. Research never authorizes contact.',
               features: const [
@@ -597,7 +597,7 @@ class _Pricing extends StatelessWidget {
                 'Research and draft preparation',
                 'No automatic cold outreach',
               ],
-              onGetStarted: onGetStarted,
+              onGetStarted: null,
             ),
           ],
         ),
@@ -605,7 +605,7 @@ class _Pricing extends StatelessWidget {
         _Price(
           name: 'GROWTH DEPARTMENT',
           price: '\$2,000/month',
-          badge: 'SAVE \$97/MONTH',
+          badge: 'PRIVATE BETA / COMING SOON',
           body:
               'The full current ScaledCircle growth stack: Managed Growth + Business Assistant Beta + Lead Generation Research Beta.',
           features: const [
@@ -614,7 +614,7 @@ class _Pricing extends StatelessWidget {
             'One bundle replaces the three individual recurring charges',
             'Included agent capabilities remain Beta',
           ],
-          onGetStarted: onGetStarted,
+          onGetStarted: null,
         ),
         const SizedBox(height: 18),
         OutlinedButton(
@@ -623,7 +623,7 @@ class _Pricing extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'Campaign compensation and platform fees are shown before funding. Paid advertising needs separate approval. Printing and postcards are Coming Soon; ordering is not available.',
+          'Campaign compensation and platform fees are shown before funding. Paid advertising needs separate approval. Printing is Coming Soon. Postcards are Private Beta for selected Businesses while real-world fulfillment testing is completed.',
           style: TextStyle(color: _muted),
           textAlign: TextAlign.center,
         ),
@@ -829,7 +829,7 @@ class _Price extends StatelessWidget {
   final String price;
   final String body;
   final List<String> features;
-  final VoidCallback onGetStarted;
+  final VoidCallback? onGetStarted;
   final String? badge;
   @override
   Widget build(BuildContext context) => _Panel(
@@ -887,7 +887,7 @@ class _Price extends StatelessWidget {
                 backgroundColor: _green,
                 foregroundColor: _bg,
               ),
-              child: const Text('Get Started'),
+              child: Text(onGetStarted == null ? 'Private Beta / Coming Soon' : 'Get Started'),
             ),
           ),
         ],

@@ -1,3 +1,4 @@
+import 'screens/business/growth_agents_screen.dart';
 import 'screens/public/referral_program_screen.dart';
 import 'screens/scaler/affiliate/scaler_affiliate_screen.dart';
 import 'screens/jobs/jobs_marketplace_screen.dart';
@@ -175,6 +176,20 @@ class ScaledCircleApp extends StatelessWidget {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => const ScalerFunnelScreen(),
+      );
+    }
+    if ((AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isLocal) &&
+        route?.path == '/growth-agents') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => StartupSessionGate(
+          signedOut: const LoginScreen(returnRoute: '/growth-agents'),
+          authenticatedChild: GrowthAgentsScreen(
+            focusId:
+                route?.queryParameters['prospect'] ??
+                route?.queryParameters['report'],
+          ),
+        ),
       );
     }
     if (route?.path == stagingPrivacyRoute) {

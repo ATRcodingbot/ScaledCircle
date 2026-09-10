@@ -115,7 +115,7 @@ void main() {
     expect(find.text('\$299/month'), findsOneWidget);
     expect(find.text('\$499/month'), findsOneWidget);
     expect(find.text('\$999/month'), findsOneWidget);
-    expect(find.text('LIMITED BETA'), findsOneWidget);
+    expect(find.text('PRIVATE BETA / INVITE ONLY'), findsOneWidget);
     expect(find.textContaining('connection requires approval'), findsOneWidget);
     expect(find.text('Flyer Distribution Results'), findsOneWidget);
     expect(find.text('SAMPLE RESULTS'), findsOneWidget);

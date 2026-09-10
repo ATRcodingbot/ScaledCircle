@@ -15,18 +15,18 @@ class CatalogWorkspace extends BusinessWorkspaceService {
     if (name == 'previewBusinessMembershipChange') {
       return {
         'quoteId': 'quote_verified',
-        'monthlyCents': 200000,
-        'amountDueCents': 200000,
+        'monthlyCents': 29900,
+        'amountDueCents': 29900,
         'seatLimit': 10,
         'effectiveAtMs': DateTime(2026, 10, 9).millisecondsSinceEpoch,
       };
     }
     return {
-      'plan': 'managed_growth',
-      'planName': 'Managed Growth',
-      'price': 2097,
+      'plan': 'starter',
+      'planName': 'Starter',
+      'price': 99,
       'bundle': null,
-      'addons': ['business_assistant', 'lead_generation_research'],
+      'addons': <String>[],
       'periodEndMs': DateTime(2026, 10, 9).millisecondsSinceEpoch,
       'paidAccess': true,
       'canCancel': true,
@@ -62,11 +62,12 @@ void main() {
       );
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
-      expect(selected, {'bundle': 'growth_department'});
+      expect(selected, isNull);
+      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
       for (final tile in tester.widgetList<CheckboxListTile>(
         find.byType(CheckboxListTile),
       )) {
-        expect(tile.value, true);
+        expect(tile.value, false);
         expect(tile.onChanged, isNull);
       }
       expect(find.textContaining('Save \$97/month'), findsOneWidget);
@@ -88,13 +89,25 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byType(Switch));
-      await tester.tap(find.byType(Switch));
+      await tester.ensureVisible(
+        find.descendant(
+          of: find.byType(BillingSelectionEditor),
+          matching: find.byType(DropdownButtonFormField<String>),
+        ),
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BillingSelectionEditor),
+          matching: find.byType(DropdownButtonFormField<String>),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Growth — \$299/month · 3 users').last);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Review Plan & Add-on Changes'));
       await tester.tap(find.text('Review Plan & Add-on Changes'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('2000.00/month'), findsOneWidget);
+      expect(find.textContaining('299.00/month'), findsOneWidget);
       expect(find.textContaining('No change charge today'), findsOneWidget);
       expect(
         service.calls.where((c) => c.$1 == 'changeBusinessMembership'),

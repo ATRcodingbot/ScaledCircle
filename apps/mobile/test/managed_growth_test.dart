@@ -46,7 +46,7 @@ void main() {
     final screen = File(
       'lib/screens/business/managed_growth_screen.dart',
     ).readAsStringSync();
-    expect(screen, contains('LIMITED BETA'));
+    expect(screen, contains('PRIVATE BETA / INVITE ONLY'));
     expect(screen, contains('No ad launch'));
     expect(screen, contains('No scraped lists or automatic sending'));
     expect(screen, contains('printing, postage, fulfillment, vendor costs'));
@@ -115,7 +115,7 @@ void main() {
     final subscription = File(
       'lib/screens/business/subscription_screen.dart',
     ).readAsStringSync();
-    expect(public, contains("planId == 'managed_growth' ? 'LIMITED BETA'"));
+    expect(public, contains("planId == 'managed_growth' ? 'PRIVATE BETA / INVITE ONLY'"));
     expect(public, contains('SubscriptionPlanService.plans[planId]'));
     expect(public, contains('Campaign compensation and platform fees are shown before funding.'));
     expect(subscription, contains("plan: 'managed_growth'"));

@@ -710,7 +710,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
                 child: Padding(
                   padding: EdgeInsets.all(16),
                   child: Text(
-                    'LIMITED BETA • Drafts require Business approval. No channel launches automatically. Unknown facts remain unknown.',
+                    'PRIVATE BETA / INVITE ONLY • Drafts require Business approval. No channel launches automatically. Unknown facts remain unknown.',
                   ),
                 ),
               ),

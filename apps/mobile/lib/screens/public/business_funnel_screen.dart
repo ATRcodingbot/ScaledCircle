@@ -634,7 +634,7 @@ class _BusinessPricing extends StatelessWidget {
               ),
               if (id == 'managed_growth')
                 const Text(
-                  'LIMITED BETA',
+                  'PRIVATE BETA / INVITE ONLY',
                   style: TextStyle(
                     color: businessGreen,
                     fontWeight: FontWeight.w800,
@@ -647,8 +647,8 @@ class _BusinessPricing extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               OutlinedButton(
-                onPressed: onStart,
-                child: const Text('Get Started'),
+                onPressed: id == 'managed_growth' ? null : onStart,
+                child: Text(id == 'managed_growth' ? 'Invite Only' : 'Get Started'),
               ),
             ],
           ),

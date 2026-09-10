@@ -52,6 +52,7 @@ function createSelectionService({db,FieldValue,workspace,stripe,read,planForPric
  async function preview({uid,businessId,selection}){
   const r=await read(uid,businessId),{a,provider,view}=r;const chosen=contract.selectionTerms(selection);standardBilling(provider);
   if(!view.paidAccess||view.cancelAtPeriodEnd||await hasPendingChange(r))fail('failed-precondition','Withdraw cancellation or remove the scheduled change before changing your selection.');
+  await require('./product_availability').assertPurchase({db,businessId:a.businessId,selection:chosen,now:now()});
   const current=contract.selection({plan:view.plan,bundle:view.bundle,addons:view.bundle?[]:view.addons});
   if(JSON.stringify(current)===JSON.stringify(contract.selection(chosen)))fail('invalid-argument','This is already your membership selection.');
   const items=[];let monthlyCents=0;
@@ -79,6 +80,7 @@ function createSelectionService({db,FieldValue,workspace,stripe,read,planForPric
     if(provider.schedule||view.cancelAtPeriodEnd)fail('failed-precondition','Remove the pending change or cancellation first.');standardBilling(provider);
     if(!/^[A-Za-z0-9_-]{1,128}$/.test(quoteId||''))fail('invalid-argument','Review the next invoice before confirming.');
     quote=(await tx.get(db.doc(`businessBillingQuotes/${quoteId}`))).data();
+    if(quote)await require('./product_availability').assertPurchase({db,businessId:a.businessId,selection:quote.selection,transaction:tx,now:now()});
     if(!quote||quote.action!==action||quote.businessId!==a.businessId||quote.actorUid!==uid||quote.expiresAtMs<=now()||quote.sourceTerms!==sourceTerms(provider))fail('failed-precondition','The preview expired or membership changed. Request a new preview.');
     const inventory=await workspace.inventory(a.businessId,tx);
     if(inventory.members.filter(m=>m.status==='active').length+1+inventory.invitations.filter(i=>i.status==='pending'&&i.expiresAt?.toMillis()>now()).length>quote.seatLimit)fail('failed-precondition','Review Team and remove extra seats or invitations before reducing capacity. The owner remains.');

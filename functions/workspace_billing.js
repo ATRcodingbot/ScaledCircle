@@ -71,6 +71,7 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
    if(selection)return selections.preview({uid,businessId,selection});
    const {a,provider,view}=await read(uid,businessId);
    if(provider.metadata?.offerId==='starter_intro_1_dollar_v1'&&(provider.discount||provider.discounts?.length))error('failed-precondition','The introductory discount does not transfer to another plan. Review a separately verified upgrade amount before changing this membership.');
+   await require('./product_availability').assertPurchase({db,businessId:a.businessId,selection:{plan},now:now()});
    if(!PLANS[plan]||!priceForPlan(plan)||!view.paidAccess||plan===view.plan||view.bundle||provider.items.data.length!==1||provider.schedule)error('failed-precondition','Use the membership selection to change a bundle or add-ons.');
    if(validatePrice)await validatePrice(priceForPlan(plan));
    const prorationDate=Math.floor(now()/1000),upgrade=PLANS[plan].price>PLANS[view.plan].price;
@@ -114,6 +115,7 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
       if(typeof quoteId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(quoteId))error('invalid-argument','Review the invoice preview first.');
       const quote=(await tx.get(db.doc(`businessBillingQuotes/${quoteId}`))).data();
       if(!quote||quote.businessId!==a.businessId||quote.actorUid!==uid||quote.plan!==plan||quote.expiresAtMs<=now()||quote.sourceTerms!==terms(provider))error('failed-precondition','The preview expired or terms changed. Review a fresh preview.');
+      await require('./product_availability').assertPurchase({db,businessId:a.businessId,selection:{plan},transaction:tx,now:now()});
       const {members,invitations}=await workspace.inventory(a.businessId,tx),active=members.filter(m=>m.status==='active');
       const target=PLANS[plan].seats;
       if(active.length+1+invitations.filter(i=>i.status==='pending'&&i.expiresAt?.toMillis()>now()).length>target)error('failed-precondition','Review Team first: choose which members remain and revoke extra invitations before reducing seats. The owner always remains.');

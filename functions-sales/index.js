@@ -12121,6 +12121,7 @@ async function authenticatedUserContext(request, message) {
 
 
 
+
 // Sales is intentionally appended so generation of existing isolated codebases
 // remains byte-stable when the Sales boundary evolves.
 const salesFunnel = require("./sales_funnel");

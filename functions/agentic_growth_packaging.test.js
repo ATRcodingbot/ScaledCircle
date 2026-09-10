@@ -24,6 +24,7 @@ test("Agentic callable surface contains only provider-free read/observe authorit
   const exports = [...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
   assert.deepEqual(exports.sort(), [
     "getAgenticGrowthAdminSummaryV1", "getAgenticGrowthWorkspaceV1",
+    "getGrowthDogfoodWorkspaceV1", "runGrowthDogfoodResearchV1", "updateGrowthCommunicationPreferencesV1", "reviewGrowthProspectV1", "runScheduledGrowthDogfoodV1", "queueGrowthReportEmailV1",
     "initializeAgenticGrowthDogfoodV1", "runMarketingManagerObserveV1",
-  ]);
+  ].sort());
 });

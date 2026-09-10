@@ -408,7 +408,7 @@ function copyPackage(destination, mode) {
     if (mode === "application" && name.endsWith(".js") &&
         !["legal_consent.js", "tracking_security.js", "operational_layer.js"].includes(name)) continue;
     if (mode === "physical-marketing" && name.endsWith(".js") &&
-        !["physical_marketing.js", "physical_fulfillment_providers.js", "postcard_fulfillment.js", "postcard_artwork.js",
+        !["physical_marketing.js", "physical_fulfillment_providers.js", "postcard_fulfillment.js", "postcard_artwork.js", "product_availability.js",
           "attribution_foundation.js"].includes(name)) continue;
     if (mode !== "physical-marketing" && ["postcard_fulfillment.js", "postcard_artwork.js"].includes(name)) continue;
     if (mode === "business-profile" && name.endsWith(".js") &&

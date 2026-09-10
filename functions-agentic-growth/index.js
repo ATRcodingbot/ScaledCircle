@@ -6,16 +6,60 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const agentic = require("./agentic_growth");
+const growth = require('./growth_operations');
+const {onSchedule} = require('firebase-functions/v2/scheduler');
+const {onDocumentCreated} = require('firebase-functions/v2/firestore');
+const {getAuth} = require('firebase-admin/auth');
 
-if (getApps().length === 0) initializeApp();
-const db = getFirestore();
+const db = getFirestore(getApps().find(app => app.name === '[DEFAULT]') || initializeApp());
 setGlobalOptions({region: "us-east1"});
 
+function growthService() {return growth.createService({db,FieldValue,
+  project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID});}
+async function growthActor(request) {
+  if(!request.auth)throw new HttpsError('unauthenticated','Sign in to inspect ScaledCircle agents.');
+  const user=(await db.doc('users/'+request.auth.uid).get()).data();
+  const identity=await getAuth().getUser(request.auth.uid);
+  try{growth.assertScope({project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID,
+    actor:{uid:request.auth.uid,verified:request.auth.token.email_verified===true&&identity.emailVerified===true,active:user?.active===true&&!identity.disabled,role:user?.role}});}
+  catch(_){throw new HttpsError('permission-denied','This private dogfood workspace is not available to this account.');}
+}
+const growthEndpoint=handler=>onCall({enforceAppCheck:false,maxInstances:2,timeoutSeconds:180},async request=>{
+  await growthActor(request);try{return await handler(request,growthService());}catch(e){throw new HttpsError(e.code||'unavailable',e.code?e.message:'Research could not finish. Retry to check saved state.');}});
+exports.getGrowthDogfoodWorkspaceV1=growthEndpoint((request,service)=>service.load());
+exports.runGrowthDogfoodResearchV1=growthEndpoint((request,service)=>{
+  if(Object.keys(request.data||{}).length)throw new HttpsError('invalid-argument','The research scope is maintained by ScaledCircle.');return service.run();});
+exports.updateGrowthCommunicationPreferencesV1=growthEndpoint((request,service)=>service.savePreferences(request.data));
+exports.reviewGrowthProspectV1=growthEndpoint((request,service)=>service.review(request.data||{}));
+exports.runScheduledGrowthDogfoodV1=onSchedule({schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async()=>{
+  if(process.env.GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
+  await growthService().run();
+});
+exports.queueGrowthReportEmailV1=onDocumentCreated({document:'agentReports/{reportId}',maxInstances:2,retry:true},async event=>{
+  if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)!=='scaledcircle-staging')return;
+  const report=event.data?.data(),uid=process.env.GROWTH_DOGFOOD_UID;
+  if(!report||report.businessUid!==uid)return;
+  const account=await getAuth().getUser(uid);
+  if(account.disabled||!account.emailVerified||!account.email)return;
+  await db.runTransaction(async tx=>{
+    const prefs=(await tx.get(db.doc('agentCommunicationPreferences/'+uid))).data()||growth.preferences();
+    const kind=report.kind==='daily'&&!prefs.daily&&prefs.important&&report.summary.newApprovalsToday>0?'important':report.kind;
+    if(!prefs[kind])return;
+    const ref=db.doc('outboundEmailJobs/growth_'+event.params.reportId);if((await tx.get(ref)).exists)return;
+    const s=report.summary;
+    if(kind==='important'&&!s.newApprovalsToday)return;
+    tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
+      subject:kind==='weekly'?'ScaledCircle Weekly Performance Report':kind==='daily'?'ScaledCircle Daily Brief':'ScaledCircle agents need your review',
+      text:`Needs your attention\n${s.awaitingApproval} sourced drafts await review.\n\nLead Generator: ${s.businessesFound} Business prospects.\nWorkforce Recruiter: ${s.partnersFound} organization partners; ${s.individualScalersFound} individual Scalers.\n\nNo outreach was sent. Replies, meetings, signups and revenue: No Data.\n\n${s.learned}\n\n${s.next}\n\nReview actions: https://scaledcircle-staging.web.app/#/growth-agents\n\nEmail preferences are available in Growth Agents.`,
+      template:'growth_agent_report_v1',preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
+  });
+});
+
 const SAFE_AGENT_LABELS = Object.freeze({
-  marketing_manager: Object.freeze({name: "Marketing Manager", state: "Observing"}),
+  marketing_manager: Object.freeze({name: "Social Manager", state: "Observing"}),
   business_assistant: Object.freeze({name: "Business Assistant", state: "Draft only"}),
-  lead_generation: Object.freeze({name: "Lead Generation", state: "Research only"}),
-  growth_strategist: Object.freeze({name: "Growth Strategist", state: "Observing"}),
+  lead_generation: Object.freeze({name: "Lead Generator", state: "Research only"}),
+  growth_strategist: Object.freeze({name: "Growth Manager", state: "Observing"}),
   supervisor: Object.freeze({name: "Supervisor", state: "Safety active"}),
 });
 
@@ -190,7 +234,7 @@ exports.getAgenticGrowthWorkspaceV1 = onCall(
       safeText(left.platform, 60).localeCompare(safeText(right.platform, 60)));
     return {schemaVersion: agentic.SCHEMA_VERSION, title: "AI Team",
       initialized: profiles.size > 0,
-      agents: agentic.AGENT_TYPES.map((type) => ({type, ...SAFE_AGENT_LABELS[type],
+      agents: agentic.AGENT_TYPES.filter(type => type !== 'supervisor').map((type) => ({type, ...SAFE_AGENT_LABELS[type],
         enabled: profileMap.get(type)?.enabled === true})),
       runs: runRecords.map((item) => ({id: item.id, status: item.status,
         agentType: item.agentType, createdAt: item.createdAt || null})),

@@ -90,10 +90,13 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
         if(item.versionId){const v=(await db.doc(`marketingMaterialVersions/${item.versionId}`).get()).data();item.uploadReview=v?.artworkSnapshot?.report||null;item.uploadSources=(v?.artworkSnapshot?.originals||[]).map((s,index)=>({index,contentType:s.contentType,sha256:s.sha256}));}
       }
     }
-    return {policy: POLICY, available: true, environment: "staging", fulfilledBy: "ScaledCircle", orders: items.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))), usps: admin ? USPS_REFERENCE : null, physical: admin ? null : await physicalService.workspace({}, actor)};
+    const grant=(await db.doc('privateProductAccess/'+actor.uid).get()).data();
+    const creationAvailable=!admin&&require('./product_availability').allowed({product:'postcards',businessId:actor.uid,grant,now:now()});
+    return {policy: POLICY, available: true, creationAvailable, availabilityLabel:'Private Beta', environment: "staging", fulfilledBy: "ScaledCircle", orders: items.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))), usps: admin ? USPS_REFERENCE : null, physical: admin ? null : await physicalService.workspace({}, actor)};
   }
   async function create(input, actor) {
     actorCheck(actor);
+    await require('./product_availability').assertPurchase({db,businessId:actor.uid,selection:{items:['postcards']},now:now()});
     const requestId = id(input.requestId), orderId = `postcard_${hash([actor.uid, requestId]).slice(0,40)}`;
     const creationMode=['upload','template','assisted'].includes(input.creationMode)?input.creationMode:null;
     const mailingPending=creationMode!==null && input.targetArea==null;
@@ -151,6 +154,8 @@ function createPostcardService({db, FieldValue, bucket, physicalService, stripe,
     return {orderId:ref.id,status:'QUOTED',quote};
   }
   async function checkout(input, actor) {
+    actorCheck(actor);
+    await require('./product_availability').assertPurchase({db,businessId:actor.uid,selection:{items:['postcards']},now:now()});
     const {ref,order} = await owned(input.orderId,actor);
     if (input.quoteId !== order.quote?.quoteId || input.artifactHash !== order.artifactHash || input.acceptTerms !== true) fail("Review and accept this exact quote and approved design.");
     if (order.checkoutSessionId) return {orderId:ref.id,url:order.checkoutUrl,status:order.status};

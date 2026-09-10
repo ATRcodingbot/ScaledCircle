@@ -11,6 +11,7 @@ class Gateway implements PostcardGateway {
   final payloads = <Map<String, dynamic>>[];
   bool fail = false;
   bool failCreate = false;
+  bool creationAvailable = true;
   @override
   Future<Map<String, dynamic>> call(
     String action,
@@ -24,6 +25,7 @@ class Gateway implements PostcardGateway {
     }
     return {
       'orders': orders,
+      'creationAvailable': creationAvailable,
       'physical': {'materials': []},
     };
   }
@@ -127,11 +129,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Customer payments'), findsNothing);
       expect(
-        find.textContaining('customer payments are not available yet'),
+        find.textContaining('currently available to selected Businesses'),
         findsOneWidget,
       );
       expect(find.byType(FilledButton), findsNothing);
     },
     skip: AppEnvironmentConfig.isStaging,
   );
+  testWidgets('uninvited Business sees history without a new purchase action', (
+    tester,
+  ) async {
+    final gateway = Gateway([order('QUOTED')])..creationAvailable = false;
+    await screen(tester, gateway);
+    expect(find.text('Autumn neighborhood mail'), findsOneWidget);
+    expect(find.text('Create Postcard Campaign'), findsNothing);
+    expect(find.text('Review quote & pay'), findsNothing);
+  });
 }

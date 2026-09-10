@@ -690,7 +690,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
                             : () => _approveDesign(order, m),
                         child: const Text('Review prepared design'),
                       ),
-                  if (status == 'QUOTED')
+                  if (status == 'QUOTED' && _data?['creationAvailable'] == true)
                     FilledButton(
                       onPressed: _busy ? null : () => _pay(order),
                       child: const Text('Review quote & pay'),
@@ -765,12 +765,12 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const Text(
-              'Choose where you want to reach. Create your postcard. ScaledCircle handles printing and mailing.',
+              'Private Beta for selected Businesses while real-world fulfillment testing is completed.',
             ),
             const SizedBox(height: 12),
             if (!_available)
               const Text(
-                'Postcard Campaigns — Beta. Managed fulfillment is being verified; customer payments are not available yet.',
+                'Postcards — Private Beta. ScaledCircle Postcards are currently available to selected Businesses while we complete real-world fulfillment testing.',
               )
             else ...[
               const Text('STAGING · TEST payments only'),
@@ -791,7 +791,9 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
                 ),
               if (_busy || (_data == null && _error == null))
                 const LinearProgressIndicator(),
-              if (_data != null && !widget.admin)
+              if (_data != null &&
+                  !widget.admin &&
+                  _data?['creationAvailable'] == true)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: FilledButton.icon(

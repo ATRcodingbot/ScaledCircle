@@ -2215,6 +2215,7 @@ exports.createSubscriptionCheckoutSession = onCall(
     let selected;
     try{selected=contract.selectionTerms(request.data?.selection||{plan:readText(request.data?.plan,32).toLowerCase()});}
     catch(_){throw new HttpsError('invalid-argument','Choose one plan with optional add-ons, or Growth Department.');}
+    await require('./product_availability').assertPurchase({db,businessId:context.uid,selection:selected});
     const plan=selected.plan,selectionKey=JSON.stringify({plan,bundle:selected.bundle,addons:selected.addons});
     const stripe = subscriptionStripeClient();
     const lineItems=[];

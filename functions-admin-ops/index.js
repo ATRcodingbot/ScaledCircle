@@ -5003,6 +5003,7 @@ async function authenticatedUserContext(request, message) {
 
 
 
+
 function adminOperationsHttpsError(error) {
   const code = String(error?.message || "");
   if (code === "trusted_admin_required") {

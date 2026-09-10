@@ -8,7 +8,7 @@ Uri? initialReferralRoute(Uri browserLocation, {required bool enabled}) {
   if (!enabled) return null;
   final route = Uri.tryParse(browserLocation.fragment);
   if (route == null || route.hasAuthority || route.hasScheme) return null;
-  if (const {'/referrals', '/referral-portal'}.contains(route.path)) {
+  if (const {'/referrals', '/referral-portal', '/growth-agents'}.contains(route.path)) {
     return route;
   }
   final code =

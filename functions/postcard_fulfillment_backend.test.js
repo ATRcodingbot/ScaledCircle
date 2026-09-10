@@ -13,6 +13,7 @@ const business={uid:'postcard-owner',role:'business'},admin={uid:'postcard-admin
 before(async()=>{assert.ok(process.env.FIRESTORE_EMULATOR_HOST,'Firestore emulator required');app=initializeApp({projectId},'postcards');db=getFirestore(app);const [host,port]=process.env.FIRESTORE_EMULATOR_HOST.split(':');env=await initializeTestEnvironment({projectId,firestore:{host,port:+port,rules:fs.readFileSync('../firestore.rules','utf8')}});await db.doc('users/postcard-owner').set({role:'business',businessName:'Attractive Remodel'});await db.doc('businessGrowthProfiles/postcard-owner').set({businessName:'Attractive Remodel',servicesOffered:['Build decks']});await db.doc('landingPages/postcard-page').set({businessUid:business.uid,status:'published',publishedVersionId:'page-version',publicSlug:'remodel'});});
 after(async()=>{await env?.cleanup();await db?.terminate();if(app)await deleteApp(app);});
 async function fixture(simulation=true){
+  await db.doc('privateProductAccess/'+business.uid).set({businessId:business.uid,status:'approved',products:['postcards'],expiresAtMillis:Date.now()+86400000});
   const n=++sequence,objects=new Map();let provider,creates=0,refund;
   const bucket=()=>({file:p=>({save:async b=>{objects.set(p,Buffer.from(b));},download:async()=>{if(!objects.has(p))throw Error('not found');return [objects.get(p)];}})});
   const print=physical.createPhysicalMarketingService({db,FieldValue,bucket,publicBaseUrl:'https://scaledcircle.test',createResponseAsset:async(input)=>({responseAssetId:`response-${n}`,trackedUrl:`https://scaledcircle.test/r?code=POSTCARD${n}`})});
@@ -46,6 +47,14 @@ test('cross-Business, Scaler and non-Admin access denied; forged paid/version/am
   await assert.rejects(f.service.advance({orderId:f.order.orderId,status:'PRINT_READY',simulation:true},business),{code:'permission-denied'});
   await assert.rejects(f.service.checkout({orderId:f.order.orderId,quoteId:f.q.quote.quoteId,artifactHash:'changed',acceptTerms:true},business));assert.equal(f.creates,0);
   await f.checkout();f.provider.payment_status='paid';f.provider.amount_total++;await assert.rejects(f.service.reconcile({orderId:f.order.orderId},business));assert.equal((await db.doc(`postcardPaymentReceipts/${f.order.orderId}`).get()).exists,false);
+});
+
+test('private beta blocks new orders and Checkout without hiding existing order history',async()=>{
+  const f=await fixture();await db.doc('privateProductAccess/'+business.uid).delete();
+  const view=await f.service.workspace({},business);
+  assert.equal(view.creationAvailable,false);assert.ok(view.orders.some(o=>o.orderId===f.order.orderId));
+  await assert.rejects(f.service.create({requestId:'uninvited',name:'Held',targetArea:'Area',zip:'21061',simulation:true},business),{code:'failed-precondition'});
+  await assert.rejects(f.checkout(),{code:'failed-precondition'});assert.equal(f.creates,0);
 });
 test('real fulfillment requires matching private receipts; hold resumes without duplicate milestone',async()=>{
   const f=await fixture(false);await f.pay();const orderId=f.order.orderId;

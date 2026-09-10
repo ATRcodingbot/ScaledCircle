@@ -1,3 +1,5 @@
+import '../business/growth_agents_screen.dart';
+import '../../config/app_environment.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
@@ -50,6 +52,14 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
     appBar: AppBar(
       title: const Text('AI Team operations'),
       actions: [
+        if (AppEnvironmentConfig.isStaging)
+          IconButton(
+            tooltip: 'ScaledCircle Growth Agents',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const GrowthAgentsScreen()),
+            ),
+            icon: const Icon(Icons.trending_up),
+          ),
         IconButton(
           onPressed: _load,
           tooltip: 'Refresh',

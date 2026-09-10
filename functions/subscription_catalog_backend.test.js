@@ -7,7 +7,8 @@ before(()=>{assert.match(process.env.FIRESTORE_EMULATOR_HOST||'',/^(127\.0\.0\.1
 after(async()=>{await db.terminate();await app.delete();});
 async function fixture(selection={plan:'managed_growth',addons:Object.keys(c.ADDONS)}){
  const uid='catalog_owner_'+(++n);let now=Date.now();const periodStart=Math.floor(now/1000)-1000,periodEnd=periodStart+2592000;
- await auth.createUser({uid,email:uid+'@example.test',emailVerified:true});await db.doc('users/'+uid).set({role:'business',active:true,email:uid+'@example.test'});
+ await auth.createUser({uid,email:uid+'@example.test',emailVerified:true});
+ await db.doc('privateProductAccess/'+uid).set({businessId:uid,status:'approved',products:['managed_growth','business_assistant','lead_generation_research','growth_department'],expiresAtMillis:now+365*86400000});await db.doc('users/'+uid).set({role:'business',active:true,email:uid+'@example.test'});
  for(const [type,version]of [['terms','terms-2026-08-v1'],['privacy','privacy-2026-08-v1']])await db.doc(`legalConsents/${uid}_${type}_${version}`).set({uid,agreementType:type,agreementVersion:version,acceptedAt:admin.firestore.Timestamp.now()});
  const chosen=c.selectionTerms(selection),providers=Object.fromEntries(Object.keys(c.ITEMS).map(id=>[price(id).id,price(id)]));
  let provider={id:'sub_'+uid,livemode:true,customer:'cus_'+uid,status:'active',cancel_at_period_end:false,metadata:{firebaseUid:uid,...c.selectionMetadata(chosen)},items:{data:chosen.items.map(id=>({id:'si_'+id,quantity:1,price:price(id),current_period_start:periodStart,current_period_end:periodEnd}))},schedule:null};

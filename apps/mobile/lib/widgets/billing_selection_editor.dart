@@ -7,8 +7,8 @@ const billingPlanLabels = {
   'managed_growth': 'Managed Growth — \$999/month · 10 users',
 };
 const billingAddOnLabels = {
-  'business_assistant': 'Business Assistant — Beta · +\$399/month',
-  'lead_generation_research': 'Lead Generation Research — Beta · +\$699/month',
+  'business_assistant': 'Business Assistant — Beta / Coming Soon',
+  'lead_generation_research': 'Lead Generation Research — Beta / Coming Soon',
 };
 
 /// Selection only; the server verifies provider prices and calculates billing.
@@ -28,7 +28,7 @@ class BillingSelectionEditor extends StatefulWidget {
 
 class _BillingSelectionEditorState extends State<BillingSelectionEditor> {
   late String _plan = widget.initial['plan']?.toString() ?? 'starter';
-  late bool _bundle = widget.initial['bundle'] == 'growth_department';
+  late final bool _bundle = widget.initial['bundle'] == 'growth_department';
   late final Set<String> _addons = (widget.initial['addons'] as List? ?? [])
       .cast<String>()
       .toSet();
@@ -52,7 +52,9 @@ class _BillingSelectionEditorState extends State<BillingSelectionEditor> {
         isExpanded: true,
         decoration: const InputDecoration(labelText: 'Workspace plan'),
         items: [
-          for (final item in billingPlanLabels.entries)
+          for (final item in billingPlanLabels.entries.where(
+            (item) => item.key != 'managed_growth' || _plan == 'managed_growth',
+          ))
             DropdownMenuItem(
               value: item.key,
               child: Text(item.value, overflow: TextOverflow.ellipsis),
@@ -68,7 +70,7 @@ class _BillingSelectionEditorState extends State<BillingSelectionEditor> {
               },
       ),
       const Text(
-        'The owner counts as one user. Managed Growth agent capabilities remain Beta.',
+        'The owner counts as one user. Managed Growth is Private Beta / Invite Only. Existing memberships remain visible.',
       ),
       const SizedBox(height: 24),
       const Text(
@@ -85,34 +87,17 @@ class _BillingSelectionEditorState extends State<BillingSelectionEditor> {
                 : 'Prospect research, evidence and drafts. This does not authorize outreach.',
           ),
           value: _bundle || _addons.contains(item.key),
-          onChanged: !widget.enabled || _bundle
-              ? null
-              : (value) {
-                  setState(
-                    () => value == true
-                        ? _addons.add(item.key)
-                        : _addons.remove(item.key),
-                  );
-                  _emit();
-                },
+          onChanged: null,
         ),
       const SizedBox(height: 16),
       Card(
         child: SwitchListTile(
-          title: const Text('Growth Department — \$2,000/month'),
+          title: const Text('Growth Department — Private Beta / Coming Soon'),
           subtitle: const Text(
             'Managed Growth + Business Assistant Beta + Lead Generation Research Beta. 10 total users. Save \$97/month (\$1,164/year) versus \$2,097 separately. Replaces those individual charges.',
           ),
           value: _bundle,
-          onChanged: widget.enabled
-              ? (value) {
-                  setState(() {
-                    _bundle = value;
-                    if (value) _plan = 'managed_growth';
-                  });
-                  _emit();
-                }
-              : null,
+          onChanged: null,
         ),
       ),
       const SizedBox(height: 8),
