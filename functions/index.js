@@ -13368,7 +13368,7 @@ const STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET = defineSecret('STRIPE_REFERR
 // Bind only the maintained staging base-plan catalog. Add-on/bundle prices
 // remain ineligible until their staging catalog is separately provisioned.
 function referralFinancialSecrets() {
-  return [STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY,
+  return [STRIPE_CASHOUT_TEST_API_KEY,
     STRIPE_STARTER_PRICE_ID,STRIPE_GROWTH_PRICE_ID,STRIPE_SCALE_PRICE_ID,STRIPE_MANAGED_GROWTH_PRICE_ID];
 }
 function referralPlanForPrice(priceId) {
@@ -13379,7 +13379,7 @@ function referralFinancialRuntime() {
   referralLaunchRuntime();
   return require('./referral_runtime').createRuntime({db,FieldValue,auth:getAuth(),
     project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,environment:process.env.APP_ENV,
-    key:STRIPE_CASHOUT_TEST_API_KEY.value(),invoiceKey:STRIPE_SUBSCRIPTION_SECRET_KEY.value(),
+    key:STRIPE_CASHOUT_TEST_API_KEY.value(),invoiceKey:STRIPE_CASHOUT_TEST_API_KEY.value(),
     planForPrice:referralPlanForPrice,executionEnabled:process.env.REFERRAL_TEST_EXECUTION_ENABLED==='true'});
 }
 function referralFinancialCall(method) {

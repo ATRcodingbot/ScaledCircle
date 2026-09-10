@@ -722,3 +722,10 @@ test("generated codebase preparation installs dependencies after regeneration", 
   assert.match(preparation, /"functions-physical-marketing"/);
   assert.match(preparation, /"functions-business-profile"/);
 });
+
+test('referral deployment binds each staging secret once and excludes unrelated add-on credentials',()=>{
+ const {execFileSync}=require('node:child_process');
+ const output=execFileSync(process.execPath,['-e',`const f=require('./functions-platform'); console.log(JSON.stringify(Object.entries(f).filter(([n])=>['getReferralFinancialsV1','setupReferralPayoutsV1','cashOutReferralEarningsV1','reconcileReferralPayoutV1','referralTestPayoutWebhookV1','referralTestConnectWebhookV1','referralTestEconomicWebhookV1','releaseStagingReferralHoldsV1'].includes(n)).map(([name,v])=>({name,keys:v.__endpoint.secretEnvironmentVariables.map(s=>s.key)}))));`],{cwd:root,env:{...process.env,APP_ENV:'staging'},encoding:'utf8'});
+ const definitions=JSON.parse(output);assert.equal(definitions.length,8);
+ for(const d of definitions){assert.equal(new Set(d.keys).size,d.keys.length);assert.ok(d.keys.includes('STRIPE_TEST_SECRET_KEY'));assert.ok(d.keys.includes('STRIPE_MANAGED_GROWTH_PRICE_ID'));assert.equal(d.keys.some(k=>k.includes('LIVE')||k.includes('BUSINESS_ASSISTANT')),false);}
+});
