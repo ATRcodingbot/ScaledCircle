@@ -56,6 +56,8 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
  return {
   async get({uid,businessId}) {
    const r=await read(uid,businessId),view=await selections.decorate({...r,view:await reconcile(r.a,r.provider,r.view)});
+   try {view.billingHistory=await require('./billing_history').history({db,stripe:stripe(),businessId:r.a.businessId,customerId:r.a.customerId});view.billingHistoryStatus='verified';}
+   catch (_) {view.billingHistoryStatus='unavailable';}
    // Seat counts use maintained inventory after Billing authorization. Do not
    // expose member identities or block cancellation when counts need recovery.
    try {

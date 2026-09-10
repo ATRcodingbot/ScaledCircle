@@ -1,4 +1,5 @@
 import 'screens/jobs/jobs_marketplace_screen.dart';
+import 'screens/business/business_membership_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -125,6 +126,23 @@ class ScaledCircleApp extends StatelessWidget {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => const AuthenticatedLandingGate(),
+      );
+    }
+    if (const {
+      '/billing',
+      '/billing/upgrade',
+      '/billing/addons',
+      '/billing/cancel',
+      '/billing/history',
+    }.contains(route?.path)) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) =>
+              BusinessMembershipScreen(section: route!.path.split('/').last),
+        ),
       );
     }
     if (route?.path == '/team-invitation') {

@@ -12,9 +12,9 @@ async function fixture(plan='growth'){
  await db.doc('campaigns/'+uid).set({businessId:uid,status:'open',fundingStatus:'funded'});await db.doc('assignmentCompensations/'+uid).set({immutable:true,baseAmountCents:1500});
  const stripe={prices:{retrieve:async()=>price},products:{retrieve:async()=>({id:price.product,livemode:false,active:true,metadata:{purpose}})},
   subscriptions:{retrieve:async()=>subscription},invoices:{retrieve:async()=>invoice},checkout:{sessions:{retrieve:async()=>({id:'cs_'+n,livemode:false,mode:'subscription',metadata:{purchaseType:'subscription'},subscription:subscription.id})}}};
- const handler=createHandler({db,FieldValue,Timestamp,auth:{getUserByEmail:async()=>({uid:'support'})},stripe,environment:'staging',planForPrice:id=>id===price.id?plan:null});
- let seq=0;const event=(type,id)=>({id:id||`evt_${uid}_${++seq}`,type,livemode:false,data:{object:type.startsWith('invoice')?{id:invoice.id}:type.startsWith('checkout')?{id:'cs_'+n,mode:'subscription',metadata:{purchaseType:'subscription'}}:{id:subscription.id}}});
- return {uid,price,handler,event,get subscription(){return subscription;},get invoice(){return invoice;},get stripe(){return stripe;},renew(){invoice={...invoice,id:invoice.id+'r'};subscription.items.data[0].current_period_end+=86400;}};
+ const handler=createHandler({db,FieldValue,Timestamp,auth:{getUserByEmail:async()=>({uid:'support'}),getUser:async()=>({email:'owner@example.com',emailVerified:true,disabled:false})},stripe,environment:'staging',planForPrice:id=>id===price.id?plan:null});
+ let seq=0;const event=(type,id)=>({id:id||`evt_${uid}_${++seq}`,created:1788948284+seq,type,livemode:false,data:{object:type.startsWith('invoice')?{id:invoice.id}:type.startsWith('checkout')?{id:'cs_'+n,mode:'subscription',metadata:{purchaseType:'subscription'}}:{id:subscription.id}}});
+ return {uid,price,handler,event,get subscription(){return subscription;},get invoice(){return invoice;},get stripe(){return stripe;},changePlan(next){plan=next;price.id='price_'+next.replace('_','');price.unit_amount=PLANS[next].cents;price.metadata.plan=next;subscription.metadata.plan=next;},renew(){invoice={...invoice,id:invoice.id+'r',billing_reason:'subscription_cycle'};subscription.items.data[0].current_period_end+=86400;}};
 }
 for(const plan of Object.keys(PLANS))test(`${plan}: signed creation, invoice and renewal reconcile exact price/seats with zero Wallet mutations`,async()=>{
  const f=await fixture(plan);f.subscription.status='incomplete';await f.handler(f.event('customer.subscription.created'));
@@ -47,5 +47,21 @@ test('signed current invoice revenue excludes collected tax; duplicate notificat
  const f=await fixture('starter');f.invoice.amount_paid=10000;f.invoice.total_taxes=[{amount:100}];await f.handler(f.event('invoice.paid'));
  const notification=db.doc('notifications/subscription_revenue_'+f.invoice.id),before=await notification.get();assert.equal(before.data().revenueCents,9900);
  await f.handler(f.event('invoice.paid'));assert.ok(before.updateTime.isEqual((await notification.get()).updateTime));
+});
+test('concurrent paid events queue one customer welcome and receipt; transitions never duplicate mail',async()=>{
+ const f=await fixture('starter');f.invoice.amount_paid=100;f.invoice.billing_reason='subscription_create';
+ const e=f.event('invoice.paid');await Promise.all([f.handler(e),f.handler(e)]);await f.handler(f.event('invoice.paid'));
+ const mails=async()=> (await db.collection('outboundEmailJobs').where('businessId','==',f.uid).get()).docs.map(d=>d.data());
+ let jobs=await mails();assert.equal(jobs.filter(j=>j.template==='billing_welcome_v1').length,1);assert.equal(jobs.filter(j=>j.template==='billing_receipt_v1').length,1);
+ assert.match(jobs.find(j=>j.template==='billing_receipt_v1').text,/Payment received: \$1.00/);
+ f.subscription.cancel_at_period_end=true;await f.handler(f.event('customer.subscription.updated'));await f.handler(f.event('customer.subscription.updated'));
+ f.subscription.cancel_at_period_end=false;await f.handler(f.event('customer.subscription.updated'));
+ jobs=await mails();assert.equal(jobs.filter(j=>j.template==='billing_cancellation_v1').length,1);assert.equal(jobs.filter(j=>j.template==='billing_reactivation_v1').length,1);
+ const before=jobs.length;await f.handler(e);assert.equal((await mails()).length,before);
+ f.changePlan('managed_growth');await f.handler(f.event('customer.subscription.updated'));await f.handler(f.event('customer.subscription.updated'));
+ jobs=await mails();assert.equal(jobs.filter(j=>j.template==='billing_plan_changed_v1').length,1);assert.match(jobs.find(j=>j.template==='billing_plan_changed_v1').text,/\$999.00/);
+ f.invoice.status='open';f.invoice.amount_remaining=99900;await f.handler(f.event('invoice.payment_failed'));await f.handler(f.event('invoice.payment_failed'));
+ jobs=await mails();assert.equal(jobs.filter(j=>j.template==='billing_payment_failed_v1').length,1);
+ assert.equal((await db.doc('wallets/'+f.uid).get()).data().balance,42);
 });
 after(async()=>{await db.terminate();await app.delete();});

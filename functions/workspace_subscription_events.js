@@ -27,7 +27,9 @@ function createHandler({db,FieldValue,Timestamp,auth,stripe,environment,planForP
   await require('./subscription_certification').reconcile({db,FieldValue,stripe,subscription,invoice,session:checkoutSession});
   await require('./starter_intro_offer').reconcile({db,FieldValue,stripe,subscription,invoice});
   const result=await sync(subscription,`${event.id}_subscription`);
-  if(result.ignored || !invoice || event.type!=='invoice.paid')return true;
+  if(result.ignored)return true;
+  const communicate=()=>require('./billing_communications').reconcile({db,FieldValue,auth,event,subscription,invoice,environment,planForPrice});
+  if(!invoice || event.type!=='invoice.paid'){await communicate();return true;}
   if(invoice.status!=='paid' || invoice.currency!=='usd' || !Number.isSafeInteger(invoice.amount_paid) || invoice.amount_paid<0 || invoice.amount_remaining!==0)
    throw Error('subscription_invoice_not_paid');
   const tax=(invoice.total_taxes || invoice.total_tax_amounts || []).reduce((n,t)=>n+Number(t.amount||0),0);
@@ -48,7 +50,7 @@ function createHandler({db,FieldValue,Timestamp,auth,stripe,environment,planForP
     tx.create(mail,{to:'support@scaledcircle.com',fromAddress:'support@scaledcircle.com',fromName:'Scaled Circle Support',replyTo:'support@scaledcircle.com',subject:'Subscription payment received',text,
      template:'support_subscription_payment_received',eventType:'subscription.invoice.paid',status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
    }
-  });return true;
+  });await communicate();return true;
  };
 }
 module.exports={INVOICE_EVENTS,subscriptionId,handles,createHandler};

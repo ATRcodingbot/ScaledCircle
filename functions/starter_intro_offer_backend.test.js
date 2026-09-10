@@ -41,9 +41,9 @@ test('signed positive invoice creates one $1 receipt, one notification and Start
  const f=await fixture();await f.service.checkout(f.input);f.complete();
  f.invoice.livemode=true;f.invoice.parent={subscription_details:{subscription:f.subscription.id}};
  f.stripe.subscriptions.retrieve=async()=>f.subscription;
- const handler=require('./workspace_subscription_events').createHandler({db,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,auth:{getUserByEmail:async()=>({uid:'test_intro_admin'})},stripe:f.stripe,environment:'production',planForPrice:p=>p===f.price.id?'starter':null});
+ const handler=require('./workspace_subscription_events').createHandler({db,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,auth:{getUserByEmail:async()=>({uid:'test_intro_admin'}),getUser:async()=>({email:'owner@example.com',emailVerified:true,disabled:false})},stripe:f.stripe,environment:'production',planForPrice:p=>p===f.price.id?'starter':null});
  const Stripe=require('stripe'),secret='local_emulator_signing_fixture';
- const payload=JSON.stringify({id:'evt_intro_paid_'+f.uid,type:'invoice.paid',livemode:true,data:{object:{id:f.invoice.id}}});
+ const payload=JSON.stringify({id:'evt_intro_paid_'+f.uid,created:1788948284,type:'invoice.paid',livemode:true,data:{object:{id:f.invoice.id}}});
  const header=Stripe.webhooks.generateTestHeaderString({payload,secret});
  const event=Stripe.webhooks.constructEvent(payload,header,secret);
  await handler(event);await handler(event);

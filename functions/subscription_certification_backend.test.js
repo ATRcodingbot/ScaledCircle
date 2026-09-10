@@ -44,9 +44,9 @@ async function fixture() {
   const service=cert.createService({db,FieldValue:admin.firestore.FieldValue,workspace,legal:createLegalConsentService({db,FieldValue:admin.firestore.FieldValue}),stripe,runtime,priceId:price.id,now:()=>now});
   const input={uid,businessId:uid,intentId,selection:{plan:'starter'}};
   const config={environment:'production',planForPrice:id=>id===price.id?'starter':null};
-  const handler=createHandler({db,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,auth:{getUserByEmail:async()=>({uid:'cert_admin'})},stripe,...config});
+  const handler=createHandler({db,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,auth:{getUserByEmail:async()=>({uid:'cert_admin'}),getUser:async()=>({email:'owner@example.com',emailVerified:true,disabled:false})},stripe,...config});
   async function signed(type) {
-    const event={id:'evt_local_'+n+'_'+type,type,livemode:true,data:{object:type.startsWith('invoice')?{id:invoice.id}:{...session}}};
+    const event={id:'evt_local_'+n+'_'+type,created:Math.floor(now/1000),type,livemode:true,data:{object:type.startsWith('invoice')?{id:invoice.id}:{...session}}};
     const secret='emulator_signature_fixture',payload=JSON.stringify(event),header=Stripe.webhooks.generateTestHeaderString({payload,secret});
     return handler(Stripe.webhooks.constructEvent(payload,header,secret));
   }
