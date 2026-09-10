@@ -2,6 +2,10 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const discovery=require('../functions-agentic-growth/customer_discovery'),op=require('../functions-agentic-growth/growth_opportunities');
 const now=Date.parse('2026-09-10T12:00:00Z'),profile={servicesOffered:['decks','general contracting']};
+test('public bid titles with HTML entities retain their evidence match',()=>{
+ const {analyzeSource}=require('../functions-agentic-growth/growth_operations');
+ assert.equal(analyzeSource({signals:['Blinds & Repairs'],url:'https://example.org'},'<div>Blinds &amp; Repairs</div>',now).qualified,true);
+});
 const row=(title,id,date,status='open')=>`<div class="fw-bold text-body d-none d-lg-block">${title}</div><span class="status-${status}-pill">${status}</span><strong>RFQ Number:</strong> ${id}<strong>Deadline:</strong> ${date}`;
 test('live bid discovery is dynamic, service-aware and excludes expired or closed listings',()=>{
  const html=row('Office Renovation','RFQ-123','09/15/2026')+row('Fence Repair','RFQ-124','09/09/2026')+row('Fence Repair','RFQ-125','09/19/2026','closed')+row('Software supply','RFQ-126','09/19/2026');

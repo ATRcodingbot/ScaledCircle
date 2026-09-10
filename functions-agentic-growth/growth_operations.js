@@ -19,7 +19,7 @@ function preferences(input={}) {
   return {mode,important:mode!=='off',daily:['daily','daily_weekly'].includes(mode),weekly:['weekly','daily_weekly'].includes(mode)};
 }
 function analyzeSource(source,html,now) {
-  const text=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&[^;]+;/g,' ').replace(/\s+/g,' ');
+  const text=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&[^;]+;/g,' ').replace(/\s+/g,' ');
   const qualified=source.signals.every(s=>text.toLowerCase().includes(s.toLowerCase()));
   const email=source.email&&html.toLowerCase().includes(source.email.toLowerCase())?source.email:null;
   const digits=text.replace(/\D/g,'');
@@ -50,7 +50,7 @@ function report(rows,runs,scope={status:'MISSING_MAINTAINED_GEOGRAPHY',areas:[]}
   const count=k=>rows.filter(x=>x.kind===k).length;
   const groups=geography.groupedDiscovery(rows.map(r=>({...r,serviceArea:r.serviceArea||sourceCatalog.find(s=>s.url===r.sourceUrl)?.serviceArea})),scope);
   const latest=[...runs].filter(r=>r.status==='completed').sort((a,b)=>b.createdAt-a.createdAt)[0];
-  for(const group of groups){const checked=observations.filter(o=>o.runId===latest?.id&&geography.matchArea(sourceCatalog.find(s=>s.url===o.sourceUrl)||{},scope)?.id===group.serviceAreaId);
+  for(const group of groups){const checked=observations.filter(o=>o.runId===latest?.id&&geography.matchArea(o.serviceArea?o:sourceCatalog.find(s=>s.url===o.sourceUrl)||{},scope)?.id===group.serviceAreaId);
     group.researched=latest?checked.length:null;group.unavailable=latest?checked.filter(o=>o.evidenceState==='UNAVAILABLE').length:null;}
   return {serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),discoveryByServiceArea:groups,businessesFound:count('business'),partnersFound:count('referral_partner'),individualScalersFound:count('scaler'),qualified:rows.filter(x=>x.qualified).length,awaitingApproval:rows.filter(x=>x.approvalState==='awaiting_approval').length,
     completedSourceChecks:runs.filter(r=>r.status==='completed').reduce((n,r)=>n+(r.sourceChecks||0),0),contacted:0,replied:null,meetings:null,signedUp:null,paid:null,externalActions:0,
@@ -87,7 +87,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
       const pref=await tx.get(db.doc('agentCommunicationPreferences/'+target));
       for(const result of records){const {source,observation:o,id,old}=result,agentType=source.kind==='business'?'lead_generation':'workforce_recruiter';
         const obsId='growth_observation_'+hash([runId,source.key]).slice(0,40);
-        tx.create(db.doc('agentObservations/'+obsId),{businessUid:target,agentType,runId,schemaVersion:VERSION,sourceUrl:source.url,...(o||{}),evidenceState:o?'AVAILABLE':'UNAVAILABLE',safeSummary:o?'Verified an official organization source.':result.error,createdAt:now()});
+        tx.create(db.doc('agentObservations/'+obsId),{businessUid:target,agentType,runId,schemaVersion:VERSION,sourceUrl:source.url,...(source.serviceArea?{serviceArea:source.serviceArea}:{}),...(o||{}),evidenceState:o?'AVAILABLE':'UNAVAILABLE',safeSummary:o?'Checked a public source; inspect its supported signals before acting.':result.error,createdAt:now()});
         if(!o){if(old.exists)tx.update(result.ref,{sourceAvailable:false,nextAction:result.error});continue;}
         if(old.exists){tx.update(result.ref,{lastCheckedAt:now(),sourceAvailable:o.qualified,latestSourceHash:o.sourceHash});continue;}
         const qualified=o.qualified,partner=source.kind==='referral_partner';
