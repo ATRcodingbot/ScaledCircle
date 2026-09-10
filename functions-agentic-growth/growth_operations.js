@@ -2,6 +2,7 @@
 const crypto=require('node:crypto');
 const agentic=require('./agentic_growth');
 const sources=require('./growth_sources');
+const geography=require('./growth_geography');
 const VERSION='GrowthDogfoodResearchV1';
 const hash=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const day=ms=>new Date(ms).toISOString().slice(0,10);
@@ -44,23 +45,26 @@ function networkPattern(observations) {
   return {status:'AVAILABLE',sample:valid.length,tenantSupport:tenants.size,confidence:'medium',patterns:['Review supported channel outcomes within their industry segment.']};
 }
 function recommendationEvidence({local=[],network=[]}) {return local.length?{source:'business',evidence:local}:network.length?{source:'network',evidence:network}:{source:'generic',confidence:'low',evidence:[]};}
-function report(rows,runs) {
+function report(rows,runs,scope={status:'MISSING_MAINTAINED_GEOGRAPHY',areas:[]}) {
   const count=k=>rows.filter(x=>x.kind===k).length;
-  return {businessesFound:count('business'),partnersFound:count('referral_partner'),individualScalersFound:count('scaler'),qualified:rows.filter(x=>x.qualified).length,awaitingApproval:rows.filter(x=>x.approvalState==='awaiting_approval').length,
+  return {serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),discoveryByServiceArea:geography.groupedDiscovery(rows.map(r=>({...r,serviceArea:r.serviceArea||sources.find(s=>s.url===r.sourceUrl)?.serviceArea})),scope),businessesFound:count('business'),partnersFound:count('referral_partner'),individualScalersFound:count('scaler'),qualified:rows.filter(x=>x.qualified).length,awaitingApproval:rows.filter(x=>x.approvalState==='awaiting_approval').length,
     completedSourceChecks:runs.filter(r=>r.status==='completed').reduce((n,r)=>n+(r.sourceChecks||0),0),contacted:0,replied:null,meetings:null,signedUp:null,paid:null,externalActions:0,
     learned:'Published service areas and recruitment channels support initial fit. Buying interest, candidate availability and conversion performance remain unknown.',
     next:'Review the sourced decision packages and outreach drafts. No prospect will be contacted automatically.'};
 }
-function createService({db,FieldValue,project,target,readSource=fetchSource,now=Date.now}) {
+function createService({db,FieldValue,project,target,readSource=fetchSource,now=Date.now,areaPriorityIds=[]}) {
   const query=async c=>(await db.collection(c).where('businessUid','==',target).limit(250).get()).docs.map(d=>({id:d.id,...d.data()}));
+  async function areaScope(){return geography.serviceAreaScope((await db.doc('discoveryPreferences/'+target).get()).data(),target,areaPriorityIds);}
   async function check(){if(project!=='scaledcircle-staging'&&!project?.startsWith('demo-'))fail('Staging dogfood only.');if(!target)fail('Dogfood binding required.');const h=(await db.doc('agentHealth/'+target).get()).data();if(!h||h.businessUid!==target||h.externalActionsEnabled!==false||h.killSwitchActive!==true)fail('Existing Supervisor safety state must be preserved.');if(h.researchPaused===true)fail('Research is paused by the Supervisor.');return h;}
   async function run() {
     await check();const started=now(),runId='growth_research_'+hash([target,day(started),VERSION]).slice(0,40),ref=db.doc('agentRuns/'+runId);
     const claim=crypto.randomUUID();
     const duplicate=await db.runTransaction(async tx=>{const old=await tx.get(ref);if(old.data()?.status==='completed')return true;if(old.exists&&old.data().leaseUntil>now())fail('Research is already running.');tx.set(ref,{businessUid:target,agentType:'growth_strategist',schemaVersion:VERSION,status:'running',claim,leaseUntil:now()+180000,createdAt:old.data()?.createdAt||started,externalMutationEnabled:false},{merge:true});return false;});
     if(duplicate){await makeReport('daily');await makeReport('weekly');return {runId,reused:true};}
+    const [scope,existing]=await Promise.all([areaScope(),query('agentProspects')]);
+    const selected=geography.prioritizeSources(sources,scope,existing.map(p=>p.sourceUrl));
     const results=[];
-    for(const source of sources){try{results.push({source,observation:analyzeSource(source,await readSource(source),now())});}catch(_){results.push({source,error:'Official source could not be verified; retry on the next research cycle.'});}}
+    for(const source of selected){try{results.push({source,observation:analyzeSource(source,await readSource(source),now())});}catch(_){results.push({source,error:'Official source could not be verified; retry on the next research cycle.'});}}
     await db.runTransaction(async tx=>{
       const current=await tx.get(ref),health=await tx.get(db.doc('agentHealth/'+target));if(current.data()?.claim!==claim||health.data()?.researchPaused===true||health.data()?.externalActionsEnabled!==false||health.data()?.killSwitchActive!==true)fail('Research commit held by Supervisor.');
       const records=[];for(const result of results){const id='growth_prospect_'+hash([target,result.source.key]).slice(0,40),p=db.doc('agentProspects/'+id);records.push({...result,id,ref:p,old:await tx.get(p)});}
@@ -73,7 +77,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
         const qualified=o.qualified,partner=source.kind==='referral_partner';
         const draft=partner?`Hello ${source.name} team, ScaledCircle is preparing clearly described local canvassing opportunities in Maryland. Your published services include workforce connections. Could you advise whether your channel accepts contract-work opportunities and what review requirements apply? We would follow your process before sharing any opportunity. No candidate details are requested at this stage.`:
           `Hello ${source.name} team, your website lists landscaping services in ${source.region}. ScaledCircle helps Businesses organize authorized neighborhood campaigns with route evidence and response tracking. Would a short product overview be useful for evaluating a small local campaign? We have not assumed a current marketing need or budget. If this is not relevant, we will not follow up.`;
-        const prospect={businessUid:target,displayName:source.name,kind:source.kind,candidateClassification:partner?'REFERRAL PARTNER':null,geography:source.region,category:source.industry,source:'official_website',sourceRecordId:source.url,sourceEvidenceIds:[obsId],provenanceImmutable:true,sourceUrl:source.url,sourceHash:o.sourceHash,discoveredAt:now(),lastCheckedAt:now(),sourceAvailable:o.qualified,email:o.email,phone:o.phone,contactPath:o.contactPath,contactConfidence:o.contactConfidence,confidence:o.confidence,qualified,fit:qualified?'potential_fit':'research_needed',reason:source.reason,useCase:source.useCase,skills:null,transportation:null,availability:null,workInterests:null,doNotContact:false,lifecycleState:qualified?'drafted':'discovered',approvalState:qualified?'awaiting_approval':'research_required',lastAction:'Official source reviewed',result:qualified?'Initial fit supported; interest remains unknown':'Source requires more review',nextAction:qualified?'Founder reviews channel, exact draft and CTA':'Recheck source evidence',recommendedChannel:o.email?'email':'website',recommendedCta:partner?'Confirm recruiting-channel eligibility':'Review a short product overview',draft:qualified?draft:null,outreachAuthorized:false,externalMessageSent:false};
+        const prospect={businessUid:target,displayName:source.name,kind:source.kind,candidateClassification:partner?'REFERRAL PARTNER':null,geography:source.region,serviceArea:source.serviceArea,category:source.industry,source:'official_website',sourceRecordId:source.url,sourceEvidenceIds:[obsId],provenanceImmutable:true,sourceUrl:source.url,sourceHash:o.sourceHash,discoveredAt:now(),lastCheckedAt:now(),sourceAvailable:o.qualified,email:o.email,phone:o.phone,contactPath:o.contactPath,contactConfidence:o.contactConfidence,confidence:o.confidence,qualified,fit:qualified?'potential_fit':'research_needed',reason:source.reason,useCase:source.useCase,skills:null,transportation:null,availability:null,workInterests:null,doNotContact:false,lifecycleState:qualified?'drafted':'discovered',approvalState:qualified?'awaiting_approval':'research_required',lastAction:'Official source reviewed',result:qualified?'Initial fit supported; interest remains unknown':'Source requires more review',nextAction:qualified?'Founder reviews channel, exact draft and CTA':'Recheck source evidence',recommendedChannel:o.email?'email':'website',recommendedCta:partner?'Confirm recruiting-channel eligibility':'Review a short product overview',draft:qualified?draft:null,outreachAuthorized:false,externalMessageSent:false};
         tx.create(result.ref,prospect);
         if(qualified){const qualification={status:'AVAILABLE',score:70,fit:'medium_fit',reasonCodes:['OFFICIAL_SOURCE','INTEREST_UNKNOWN']};
           const crm=agentic.crmProspectProjection({businessUid:target,prospect:{...prospect,prospectId:id,prospectType:partner?'scaler':'business'},qualification,now:now()});
@@ -83,7 +87,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
           tx.create(db.doc('notifications/'+id),{userId:target,type:partner?'agent_referral_partner':'agent_qualified_prospect',title:partner?'Referral partner opportunity':'New qualified prospect',message:source.name+' is ready for source and draft review. No contact has occurred.',deepLink:{destination:'growth_agents',prospectId:id},read:false,createdAt:FieldValue.serverTimestamp()});
         }
       }
-      tx.update(ref,{status:'completed',sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
+      tx.update(ref,{status:'completed',serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
       tx.set(db.doc('agentHealth/'+target),{researchEnabled:true,nextResearchAfter:Date.parse(day(started)+'T13:00:00Z')+86400000,lastResearchRunId:runId,updatedAt:FieldValue.serverTimestamp()},{merge:true});
       if(!pref.exists)tx.create(pref.ref,{businessUid:target,...preferences(),updatedAt:FieldValue.serverTimestamp()});
     });
@@ -91,14 +95,14 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
   }
   async function makeReport(kind) {
     if(!['daily','weekly'].includes(kind))fail('Invalid report.');
-    const [rows,runs]=await Promise.all([query('agentProspects'),query('agentRuns')]);
+    const [rows,runs,scope]=await Promise.all([query('agentProspects'),query('agentRuns'),areaScope()]);
     const period=kind==='daily'?day(now()):day(now()-((new Date(now()).getUTCDay()+6)%7)*86400000);
-    const id='growth_report_'+hash([target,kind,period]).slice(0,40),summary={...report(rows,runs.filter(r=>r.schemaVersion===VERSION)),newApprovalsToday:rows.filter(r=>r.qualified&&day(r.discoveredAt)===day(now())).length};
+    const id='growth_report_'+hash([target,kind,period]).slice(0,40),summary={...report(rows,runs.filter(r=>r.schemaVersion===VERSION),scope),newApprovalsToday:rows.filter(r=>r.qualified&&day(r.discoveredAt)===day(now())).length};
     await db.runTransaction(async tx=>{const ref=db.doc('agentReports/'+id),old=await tx.get(ref);if(old.exists)return;tx.create(ref,{businessUid:target,kind,period,summary,scope:'Cumulative research inventory through report creation; no conversion telemetry is connected.',createdAt:now(),emailStatus:'preference_controlled'});tx.create(db.doc('notifications/'+id),{userId:target,type:kind==='daily'?'agent_daily_brief':'agent_weekly_report',title:kind==='daily'?'Daily brief ready':'Weekly report ready',message:`${summary.businessesFound} Business prospects, ${summary.partnersFound} partner prospects. ${summary.awaitingApproval} drafts awaiting review.`,deepLink:{destination:'growth_agents',reportId:id},read:false,createdAt:FieldValue.serverTimestamp()});});return id;
   }
   async function load() {
-    const [rows,runs,reports,health,pref]=await Promise.all([query('agentProspects'),query('agentRuns'),query('agentReports'),db.doc('agentHealth/'+target).get(),db.doc('agentCommunicationPreferences/'+target).get()]);
-    const history=runs.filter(r=>r.schemaVersion===VERSION).sort((a,b)=>b.createdAt-a.createdAt),summary=report(rows,history);
+    const [rows,runs,reports,health,pref,scope]=await Promise.all([query('agentProspects'),query('agentRuns'),query('agentReports'),db.doc('agentHealth/'+target).get(),db.doc('agentCommunicationPreferences/'+target).get(),areaScope()]);
+    const history=runs.filter(r=>r.schemaVersion===VERSION).sort((a,b)=>b.createdAt-a.createdAt),summary=report(rows,history,scope);
     return {title:'ScaledCircle Growth Agents',schemaVersion:VERSION,prospects:rows.sort((a,b)=>Number(b.qualified)-Number(a.qualified)||a.displayName.localeCompare(b.displayName)),reports:reports.sort((a,b)=>b.createdAt-a.createdAt),runs:history,summary,preferences:pref.data()||preferences(),externalActionsEnabled:false,killSwitchActive:health.data()?.killSwitchActive!==false,researchPaused:health.data()?.researchPaused===true,nextResearchAfter:health.data()?.nextResearchAfter||null,
       agents:AGENTS.map(([type,name])=>({type,name,status:['lead_generation','workforce_recruiter','growth_strategist'].includes(type)?history.length?'Waiting for review':'Ready for research':'Needs approved input',lastAction:['lead_generation','workforce_recruiter','growth_strategist'].includes(type)&&history.length?'Official-source research and report generation':'No new run performed in this research cycle',result:type==='lead_generation'?`${summary.businessesFound} sourced Business prospects`:type==='workforce_recruiter'?`${summary.partnersFound} organization partner prospects; ${summary.individualScalersFound} individual Scalers`:type==='growth_strategist'?`${summary.awaitingApproval} drafts awaiting review`:'Existing specialist authority preserved; no send or spend',nextAction:type==='marketing_manager'?'Review existing Social evidence without changing schedules':type==='ad_manager'?'Prepare a budget-free proposal when campaign input is approved':type==='business_assistant'?'Wait for an authorized Business inquiry': 'Review evidence and proposed next actions',needsApproval:true})),network:networkPattern([])};
   }

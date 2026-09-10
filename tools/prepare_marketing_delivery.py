@@ -121,6 +121,11 @@ function startProduct() {
 }
 addEventListener('hashchange', startProduct); startProduct();
 </script></body>'''
+        if route == '/how-it-works':
+            # Keep the same referral and authenticated product bootstrap below.
+            # Only this public page receives the new presentation.
+            presentation = (ROOT / 'apps/mobile/web/marketing/how-it-works.html').read_text(encoding='utf-8')
+            body = '<body class="how-page"><div id="marketing">' + presentation + '</div>\n<script>' + body.split('<script>', 1)[1]
         document = re.sub(r'<body>.*?</body>', lambda _: body, document, flags=re.S)
         document = document.replace('</head>', '''<script>if(location.pathname==='/'||location.pathname==='/login'||location.hash.startsWith('#/')){document.documentElement.classList.add('resolving-session');}</script><style>
 .resolving-session #marketing{display:none}
@@ -133,6 +138,13 @@ a:focus-visible{outline:3px solid white;outline-offset:5px}nav a,footer a{displa
 h1{font-size:clamp(32px,5vw,58px);line-height:1.1}h2{font-size:27px}p{max-width:760px;color:#c6d5e1}
 img{max-width:100%;height:auto;margin-top:30px;border-radius:18px}
 </style></head>''')
+        if route == '/how-it-works':
+            styles = (ROOT / 'apps/mobile/web/marketing/how-it-works.css').read_text(encoding='utf-8')
+            # Replace only the delivery stylesheet, never the maintained head,
+            # structured metadata or auth-resolution script.
+            document = re.sub(r'<style>\s*\.resolving-session #marketing.*?</style>',
+                              lambda _: '<style>' + styles + '</style>', document, flags=re.S)
+            document = document.replace('<html>', '<html lang="en">')
         if staging:
             document = document.replace('</head>', '<meta name="robots" content="noindex,nofollow"></head>')
         result[route] = document
@@ -143,17 +155,24 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--staging', action='store_true', help='Prevent staging indexing; retain future production canonicals')
+    parser.add_argument('--route', choices=list(ROUTES), help='Overlay only this route; preserve other Hosting files, robots and sitemap')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     for route, document in documents(staging=args.staging).items():
+        if args.route and route != args.route:
+            continue
         target = args.output / ('index.html' if route == '/' else route.strip('/') + '/index.html')
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(document, encoding='utf-8')
+    if args.route:
+        print(f'Prepared only {args.route}; other Hosting paths were not changed. No deployment performed.')
+        raise SystemExit(0)
     (args.output / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join(
         '<url><loc>https://scaledcircle.com' + route + '</loc></url>' for route in ROUTES) + '</urlset>', encoding='utf-8')
     (args.output / 'robots.txt').write_text('User-agent: *\nDisallow: /\n' if args.staging else 'User-agent: *\nAllow: /\nSitemap: https://scaledcircle.com/sitemap.xml\n', encoding='utf-8')
     sources = [SCREENS / f for f in ['public_landing_screen.dart', 'business_funnel_screen.dart', 'scaler_funnel_screen.dart']]
     sources += [ROOT / 'apps/mobile/lib/services/subscription_plan_service.dart']
+    sources += [ROOT / 'apps/mobile/web/marketing' / name for name in ['how-it-works.html', 'how-it-works.css']]
     manifest = {'status': 'LOCAL_CANDIDATE_NOT_PRODUCTION_APPROVED',
                 'copyScope': 'Existing hero and workflow copy; full visual/feature parity review remains',
                 'sourceHashes': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}}

@@ -15,7 +15,7 @@ const db = getFirestore(getApps().find(app => app.name === '[DEFAULT]') || initi
 setGlobalOptions({region: "us-east1"});
 
 function growthService() {return growth.createService({db,FieldValue,
-  project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID});}
+  project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID,areaPriorityIds:(process.env.GROWTH_RESEARCH_AREA_PRIORITY_IDS||'').split(',').filter(Boolean)});}
 async function growthActor(request) {
   if(!request.auth)throw new HttpsError('unauthenticated','Sign in to inspect ScaledCircle agents.');
   const user=(await db.doc('users/'+request.auth.uid).get()).data();
@@ -47,10 +47,11 @@ exports.queueGrowthReportEmailV1=onDocumentCreated({document:'agentReports/{repo
     if(!prefs[kind])return;
     const ref=db.doc('outboundEmailJobs/growth_'+event.params.reportId);if((await tx.get(ref)).exists)return;
     const s=report.summary;
+    const byArea=(s.discoveryByServiceArea||[]).map(g=>`${g.serviceArea}: ${g.businesses} Business prospects, ${g.partners} organization partners, ${g.individualScalers} individual Scalers`).join('\n');
     if(kind==='important'&&!s.newApprovalsToday)return;
     tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
       subject:kind==='weekly'?'ScaledCircle Weekly Performance Report':kind==='daily'?'ScaledCircle Daily Brief':'ScaledCircle agents need your review',
-      text:`Needs your attention\n${s.awaitingApproval} sourced drafts await review.\n\nLead Generator: ${s.businessesFound} Business prospects.\nWorkforce Recruiter: ${s.partnersFound} organization partners; ${s.individualScalersFound} individual Scalers.\n\nNo outreach was sent. Replies, meetings, signups and revenue: No Data.\n\n${s.learned}\n\n${s.next}\n\nReview actions: https://scaledcircle-staging.web.app/#/growth-agents\n\nEmail preferences are available in Growth Agents.`,
+      text:`Needs your attention\n${s.awaitingApproval} sourced drafts await review.\n\nLead Generator: ${s.businessesFound} Business prospects.\nWorkforce Recruiter: ${s.partnersFound} organization partners; ${s.individualScalersFound} individual Scalers.\n\nNo outreach was sent. Replies, meetings, signups and revenue: No Data.\n\nDiscovery by service area\n${byArea}\n${s.serviceAreaStatus==='AVAILABLE'?'Priority follows this Business’s saved areas.':'Service-area priority is not yet configured for this workspace; existing research is preserved.'}\n\n${s.learned}\n\n${s.next}\n\nReview actions: https://scaledcircle-staging.web.app/#/growth-agents\n\nEmail preferences are available in Growth Agents.`,
       template:'growth_agent_report_v1',preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
   });
 });

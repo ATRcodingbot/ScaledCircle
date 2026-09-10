@@ -7,9 +7,10 @@ const growth=require('../functions-agentic-growth/growth_operations');
 const rules=require('@firebase/rules-unit-testing');
 let service,clock,checks;
 beforeEach(async()=>{
-  for(const c of ['agentProspects','agentCrmProspects','agentActions','agentApprovals','agentRuns','agentReports','agentObservations','agentHealth','agentCommunicationPreferences','notifications'])for(const d of await db.collection(c).listDocuments())await db.recursiveDelete(d);
+  for(const c of ['discoveryPreferences','agentProspects','agentCrmProspects','agentActions','agentApprovals','agentRuns','agentReports','agentObservations','agentHealth','agentCommunicationPreferences','notifications'])for(const d of await db.collection(c).listDocuments())await db.recursiveDelete(d);
   clock=Date.parse('2026-09-10T14:00:00Z');checks=0;
   await db.doc('agentHealth/owner').set({businessUid:'owner',killSwitchActive:true,externalActionsEnabled:false});
+  await db.doc('discoveryPreferences/owner').set({schemaVersion:'ServiceAreaPreferencesV1',userUid:'owner',role:'business',preferenceVersion:1,areas:['Anne Arundel County','Baltimore County'].map((county,i)=>({id:'area'+i,type:'place',geographyType:'county',county,state:'Maryland',displayName:county+', Maryland',enabled:true}))});
   service=growth.createService({db,FieldValue,project:'demo-growth-agents',target:'owner',now:()=>clock,readSource:async s=>{checks++;return s.signals.join(' ')+' '+(s.email||'')+' '+(s.phone||'');}});
 });
 after(async()=>{await db.terminate();await app.delete();});
@@ -40,6 +41,14 @@ test('Supervisor pause blocks run; cross-tenant review and external-send decisio
 test('source failures stay unknown and create no fabricated prospect',async()=>{
   const s=growth.createService({db,FieldValue,project:'demo-growth-agents',target:'owner',readSource:async()=>{throw Error('offline');}});
   await s.run();assert.equal((await db.collection('agentProspects').get()).size,0);assert.equal((await s.load()).summary.qualified,0);
+});
+test('missing or changed tenant scope preserves old records and provenance without broadening discovery',async()=>{
+  await service.run();const before=(await db.collection('agentProspects').get()).docs.map(d=>({id:d.id,...d.data()}));
+  await db.doc('discoveryPreferences/owner').delete();clock+=86400000;await service.run();
+  const after=(await db.collection('agentProspects').get()).docs.map(d=>({id:d.id,...d.data()}));
+  assert.equal(after.length,before.length);
+  for(const old of before){const current=after.find(p=>p.id===old.id);for(const key of ['sourceHash','discoveredAt','sourceEvidenceIds','draft','approvalState','qualified'])assert.deepEqual(current[key],old[key]);}
+  const loaded=await service.load();assert.equal(loaded.summary.serviceAreaStatus,'MISSING_MAINTAINED_GEOGRAPHY');assert.equal(loaded.summary.discoveryByServiceArea.length,2);
 });
 test('new collections and private-beta grants deny client reads/writes, including unrelated tenants',async()=>{
   const env=await rules.initializeTestEnvironment({projectId:'demo-growth-rules',firestore:{rules:fs.readFileSync(require('node:path').join(__dirname,'..','firestore.rules'),'utf8')}});

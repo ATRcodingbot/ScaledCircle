@@ -20,6 +20,22 @@ void main() {
                 'partnersFound': 0,
                 'individualScalersFound': 0,
                 'next': 'Review sources',
+                'serviceAreaStatus': 'AVAILABLE',
+                'serviceAreaPriority': ['Example City', 'Example County'],
+                'discoveryByServiceArea': [
+                  {
+                    'serviceArea': 'Example City',
+                    'businesses': 1,
+                    'partners': 0,
+                    'individualScalers': 0,
+                  },
+                  {
+                    'serviceArea': 'Example County',
+                    'businesses': 0,
+                    'partners': 0,
+                    'individualScalers': 0,
+                  },
+                ],
               },
               'preferences': {'mode': 'important'},
               'agents': [],
@@ -42,6 +58,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Individual Scaler candidates: 0'), findsOneWidget);
+      expect(find.text('Discovery by service area'), findsOneWidget);
+      expect(
+        find.text('Priority: Example City → Example County'),
+        findsOneWidget,
+      );
       await tester.scrollUntilVisible(
         find.text('Example organization'),
         250,

@@ -2,6 +2,8 @@ import unittest
 import json
 import re
 import subprocess
+import tempfile
+from pathlib import Path
 from prepare_marketing_delivery import documents, content
 
 
@@ -46,7 +48,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertEqual(len(docs), 5)
         self.assertEqual(len(set(docs.values())), 5)
         for route, value in docs.items():
-            self.assertEqual(value.count('<h1>'), 1)
+            self.assertEqual(len(re.findall(r'<h1(?:\s[^>]*)?>', value)), 1)
             self.assertIn('href="https://scaledcircle.com' + route + '"', value)
             self.assertIn('<nav aria-label="Main">', value)
             self.assertNotIn('$FLUTTER_BASE_HREF', value)
@@ -71,6 +73,45 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertNotIn('422 homes analyzed', home)
         self.assertNotIn('checkout', home.split('<script>')[1])
         self.assertNotIn('noindex,nofollow', documents()['/'])
+
+    def test_how_it_works_has_complete_truthful_story_without_image_dependency(self):
+        page = documents(staging=True)['/how-it-works']
+        for copy in ['Turn a local market into a measurable growth system.',
+                     'Choose the market', 'Build the campaign', 'Real people execute it',
+                     'Measure what happened', 'Smart Mapping +', 'Weather Intelligence',
+                     'Tracking + Attribution', 'Growth Intelligence',
+                     'A workflow example, not a case study', 'properly completed work',
+                     'where recorded', 'platform fees before funding',
+                     'Private Beta / Invite Only', 'Coming Soon']:
+            self.assertIn(copy, page)
+        body = page.split('<body', 1)[1].split('<script>', 1)[0]
+        self.assertEqual(body.count('class="button primary"'), 2)
+        self.assertIn('Grow My Business', body)
+        self.assertIn('Find Work', body)
+        self.assertIn('Start Growing', body)
+        self.assertNotIn('<img', body)
+        self.assertNotIn('Network Intelligence', body)
+        self.assertNotIn('Master Agent', body)
+        self.assertNotIn('checkout', body.lower())
+        self.assertNotIn('Build My First Campaign', body)
+        self.assertIn('<details class="mobile-menu">', body)
+        self.assertIn('summary', body)
+        ids = set(re.findall(r'\bid="([^"]+)"', body))
+        for labelled_by in re.findall(r'aria-labelledby="([^"]+)"', body):
+            for referenced in labelled_by.split():
+                self.assertIn(referenced, ids)
+
+    def test_narrow_overlay_preserves_existing_hosting_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)
+            for name in ['index.html', 'robots.txt', 'sitemap.xml', 'main.dart.js']:
+                (output / name).write_text('preserved ' + name)
+            process = subprocess.run(['python', str(Path(__file__).with_name('prepare_marketing_delivery.py')),
+                                      '--output', folder, '--route', '/how-it-works', '--staging'], capture_output=True, text=True)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            for name in ['index.html', 'robots.txt', 'sitemap.xml', 'main.dart.js']:
+                self.assertEqual((output / name).read_text(), 'preserved ' + name)
+            self.assertIn('noindex,nofollow', (output / 'how-it-works/index.html').read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

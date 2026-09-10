@@ -170,6 +170,28 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         _line('Organization partner prospects', s['partnersFound']),
         _line('Individual Scaler candidates', s['individualScalersFound']),
         _line('Recommended next', s['next']),
+        const SizedBox(height: 18),
+        Text(
+          'Discovery by service area',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        if (s['serviceAreaStatus'] != 'AVAILABLE')
+          const Text(
+            'Service-area priority is not configured for this workspace. Existing prospects and their source history are preserved.',
+          )
+        else
+          _line(
+            'Priority',
+            (s['serviceAreaPriority'] as List? ?? []).join(' → '),
+          ),
+        ..._list(s['discoveryByServiceArea']).map(
+          (area) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              '${area['serviceArea']}\n${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers',
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
         ..._list(d['agents']).map(
           (a) => Card(
@@ -320,6 +342,12 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                 Text(r['scope'].toString()),
                 _line('What we learned', r['summary']['learned']),
                 _line('Next', r['summary']['next']),
+                ..._list(r['summary']['discoveryByServiceArea']).map(
+                  (area) => _line(
+                    area['serviceArea'].toString(),
+                    '${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers',
+                  ),
+                ),
                 const Text(
                   'Contacted: 0 · Replies, meetings, signups, paid conversions: No Data. No performance result is inferred from research.',
                 ),

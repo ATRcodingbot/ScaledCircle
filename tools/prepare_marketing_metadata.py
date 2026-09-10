@@ -13,7 +13,7 @@ ROUTES = {
     '/scalers': ('Scaler Field Work in Maryland — ScaledCircle',
                  'Explore local field assignments, agreed compensation, job evidence, and earnings with ScaledCircle.'),
     '/how-it-works': ('How ScaledCircle Works',
-                      'Follow the ScaledCircle workflow from campaign planning and assignment to completion evidence and Business review.'),
+                      'Choose a local market, build a campaign, coordinate Scalers and connect execution with mapping, response tracking and growth intelligence.'),
     '/pricing': ('ScaledCircle Pricing',
                  'Compare ScaledCircle Business tools and plans. Review subscription options separately from campaign fulfillment costs.'),
 }
