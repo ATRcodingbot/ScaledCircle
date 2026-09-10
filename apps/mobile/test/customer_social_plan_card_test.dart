@@ -53,7 +53,7 @@ void main() {
       expect(find.text('Write down your project goals.'), findsOneWidget);
       expect(find.text('Creative: Owner-approved checklist'), findsOneWidget);
       expect(
-        find.text('Draft · Needs your review · Nothing scheduled'),
+        find.text('Draft · Needs your review'),
         findsOneWidget,
       );
       expect(find.text('Approve'), findsNothing);

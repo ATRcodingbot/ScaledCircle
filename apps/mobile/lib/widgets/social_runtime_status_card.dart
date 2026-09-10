@@ -20,6 +20,7 @@ class SocialRuntimeStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final channels = (status['channels'] as List? ?? const []).whereType<Map>();
+    final summary = status['summary'] as Map?;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -31,14 +32,18 @@ class SocialRuntimeStatusCard extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Saved publication status. Refresh checks platform records without contacting social providers or publishing.',
-            ),
+            if (status['available'] == true && summary != null) ...[
+              Text(
+                summary['title']?.toString() ?? 'Review your Social plan',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Text(summary['description']?.toString() ?? ''),
+            ],
             if (status['available'] != true)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  'Execution status is unavailable. Refresh to check the saved state; do not assume publishing is paused.',
+                  'We could not confirm the latest status. Refresh to check before taking action.',
                 ),
               )
             else
@@ -67,7 +72,7 @@ class SocialRuntimeStatusCard extends StatelessWidget {
               ],
             const SizedBox(height: 12),
             const Text(
-              'Approval and pause controls remain separate from this read-only status.',
+              'Account permissions do not approve posts. Your content approval and scheduling controls remain separate.',
             ),
             TextButton.icon(
               onPressed: onRefresh,

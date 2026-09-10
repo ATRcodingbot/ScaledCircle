@@ -12,6 +12,10 @@ const construction = [
 ];
 function select(profile) {
   const services=[...(profile.priorityServices||[]),...(profile.servicesOffered||[])].join(' ');
-  return /\b(deck|decks|fence|fences|contracting|construction|remodeling|remodel|repair)\b/i.test(services) ? construction : [];
+  return /\b(deck|decks|fence|fences|contracting|construction|remodeling|remodel|repair)\b/i.test(services) ? [...construction,...propertyManagers] : [];
 }
-module.exports={select,construction};
+const propertyManagers=[
+ {key:'pmi_baltimore_vendors',kind:'business',name:'PMI Baltimore — Vendor Resources',region:'Baltimore County, Maryland',serviceArea:{type:'county',locality:'Baltimore County',state:'Maryland'},industry:'property management',opportunityType:'property_management',url:'https://www.baltimorespropertymanagement.com/vendors',signals:['Vendor Resources','Catonsville'],useCase:'Review the public vendor process for property maintenance services.',reason:'Property manager with a public vendor page and Baltimore County office. Contractor fit is plausible; no current project or purchase intent is established.',cta:'Review vendor requirements and ask whether your listed services fit',unknowns:'Managed property inventory, current projects, procurement terms and interest are unknown.'},
+ {key:'aspen_vendors',kind:'business',name:'Aspen Property Management — Vendor Proposals',region:'Baltimore County, Maryland',serviceArea:{type:'county',locality:'Baltimore County',state:'Maryland'},industry:'HOA / community management',opportunityType:'property_management',url:'https://aspenpropertymgmt.com/join-our-team/',signals:['Baltimore County','Vendor'],email:'info@aspenpropertymgmt.com',useCase:'Assess the community-management vendor proposal process, including insurance and tax-document requirements.',reason:'The vendor form explicitly includes Baltimore County. This is a potential account fit, not a promised contract or active repair project.',cta:'Review the vendor form and confirm services and service footprint before sharing documents',unknowns:'Specific communities, available contracts, pricing and acceptance are unknown.'},
+];
+module.exports={select,construction,propertyManagers};

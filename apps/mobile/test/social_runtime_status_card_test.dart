@@ -57,7 +57,7 @@ void main() {
       ),
     );
     expect(
-      find.textContaining('do not assume publishing is paused'),
+      find.textContaining('could not confirm the latest status'),
       findsOneWidget,
     );
     expect(find.textContaining('No approved scheduled work'), findsNothing);

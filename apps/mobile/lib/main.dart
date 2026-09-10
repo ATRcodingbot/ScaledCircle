@@ -1,4 +1,5 @@
 import 'screens/business/growth_agents_screen.dart';
+import 'screens/business/business_growth_home.dart';
 import 'screens/public/referral_program_screen.dart';
 import 'screens/scaler/affiliate/scaler_affiliate_screen.dart';
 import 'screens/jobs/jobs_marketplace_screen.dart';
@@ -178,20 +179,26 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => const ScalerFunnelScreen(),
       );
     }
+    if (route?.path == '/business/growth') {
+      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
+        routeName: settings.name!, audience: ProtectedRouteAudience.business,
+        builder: (_, _) => const BusinessGrowthHome()));
+    }
     if (route?.path == '/growth-agents' ||
+        route?.path == '/business/ai-team' ||
         route?.path == '/business/growth-agents') {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => ProtectedRouteGate(
           routeName: settings.name!,
-          audience: route?.path == '/business/growth-agents'
+          audience: route?.path != '/growth-agents'
               ? ProtectedRouteAudience.business
               : ProtectedRouteAudience.admin,
           builder: (_, _) => GrowthAgentsScreen(
-            customer: route?.path == '/business/growth-agents',
+            customer: route?.path != '/growth-agents',
             focusId:
                 route?.queryParameters['prospect'] ??
-                route?.queryParameters['report'],
+                route?.queryParameters['report'] ?? route?.queryParameters['agent'],
           ),
         ),
       );

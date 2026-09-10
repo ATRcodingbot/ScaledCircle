@@ -9,6 +9,7 @@ import 'business_growth_profile_wizard.dart';
 import 'social_approval_screen.dart';
 import 'social_operations_screen.dart';
 import '../../widgets/customer_capability_status.dart';
+import '../../navigation/app_router.dart';
 
 class ManagedGrowthScreen extends StatefulWidget {
   const ManagedGrowthScreen({super.key, this.postcardHandoff, this.service});
@@ -679,14 +680,12 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.groups_2_outlined),
-                  title: const Text('AI Team — Beta'),
+                  title: const Text('Growth Team — Private Beta'),
                   subtitle: const Text(
                     'Marketing review, draft support, research, and recommendations. External actions are off.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(
-                    context,
-                  ).pushNamed('/business/growth-agents'),
+                  onTap: () => AppNavigation.push(context,'/business/growth-agents'),
                 ),
               ),
               Card(

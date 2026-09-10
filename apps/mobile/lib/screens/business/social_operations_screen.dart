@@ -9,6 +9,7 @@ import '../../services/attribution_service.dart';
 import '../../services/social_operations_service.dart';
 import '../../widgets/social_runtime_status_card.dart';
 import '../../widgets/social_connection_card.dart';
+import '../../navigation/context_back_button.dart';
 
 class SocialOperationsScreen extends StatefulWidget {
   const SocialOperationsScreen({super.key});
@@ -851,7 +852,13 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Social Operations — Beta')),
+      appBar: AppBar(
+        leading: const ContextBackButton(
+          fallback: '/business/growth',
+          businessOnly: true,
+        ),
+        title: const Text('Social Operations — Beta'),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -1264,6 +1271,48 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     );
   }
 
+  Future<void> _reviewSavedPlans(SocialOperationsWorkspace workspace) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .85,
+            child: Column(
+              children: [
+                ListTile(
+                  title: const Text('Review 30-Day Plan'),
+                  trailing: IconButton(
+                    tooltip: 'Close review',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'Reviewing does not approve or schedule any content.',
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      for (final plan in workspace.plans)
+                        CustomerSocialPlanCard(
+                          plan: plan,
+                          initiallyExpanded: true,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
   Widget _plans(SocialOperationsWorkspace workspace) {
     final alignment = workspace.internalPlanAlignment;
     final migrationAvailable = alignment?['migrationAvailable'] == true;
@@ -1324,8 +1373,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               'Platform-specific versions remain drafts until explicitly approved.',
             ),
             trailing: FilledButton(
-              onPressed: _createPlan,
-              child: const Text('Start Plan'),
+              onPressed: workspace.plans.isEmpty
+                  ? _createPlan
+                  : () => _reviewSavedPlans(workspace),
+              child: Text(
+                workspace.plans.isEmpty ? 'Start Plan' : 'Review 30-Day Plan',
+              ),
             ),
           ),
         ),

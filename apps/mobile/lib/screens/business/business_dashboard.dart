@@ -22,7 +22,6 @@ import '../../widgets/reputation_card.dart';
 import 'business_account_screen.dart';
 import '../../services/business_workspace_service.dart';
 import 'property_intelligence_center_screen.dart';
-import 'scaled_circle_services_screen.dart';
 import 'internal_beta_entitlements_screen.dart';
 import 'business_campaigns_screen.dart';
 
@@ -597,14 +596,9 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             },
           ),
           TextButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const ScaledCircleServicesScreen(),
-              ),
-            ),
+            onPressed: () => AppNavigation.push(context, '/business/growth'),
             icon: const Icon(Icons.apps_outlined),
-            label: const Text('Grow'),
+            label: const Text('Growth'),
           ),
           PopupMenuButton<String>(
             tooltip: 'Business navigation',
@@ -619,12 +613,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             ],
             onSelected: (value) {
               if (value == 'grow') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ScaledCircleServicesScreen(),
-                  ),
-                );
+                AppNavigation.push(context, '/business/growth');
               } else if (value == 'campaigns') {
                 _openCampaigns(
                   context,

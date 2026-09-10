@@ -3,6 +3,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'growth_territories_dialog.dart';
+import '../../navigation/context_back_button.dart';
+import '../../navigation/app_router.dart';
 
 class GrowthAgentsScreen extends StatefulWidget {
   const GrowthAgentsScreen({
@@ -127,6 +129,12 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
+      leading: widget.customer
+          ? const ContextBackButton(
+              fallback: '/business/growth',
+              businessOnly: true,
+            )
+          : null,
       title: const Text('Growth Agents'),
       actions: [
         IconButton(
@@ -226,9 +234,15 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           'Needs attention: ${s['awaitingApproval'] ?? 0} drafts',
           style: Theme.of(context).textTheme.titleLarge,
         ),
-        _line('Business prospects', s['businessesFound']),
-        _line('Organization partner prospects', s['partnersFound']),
-        _line('Individual Scaler candidates', s['individualScalersFound']),
+        if (widget.customer && s['opportunityGroups'] is List)
+          ..._list(
+            s['opportunityGroups'],
+          ).map((g) => _line(g['label'].toString(), g['count']))
+        else ...[
+          _line('Business prospects', s['businessesFound']),
+          _line('Organization partner prospects', s['partnersFound']),
+          _line('Individual Scaler candidates', s['individualScalersFound']),
+        ],
         _line('Recommended next', s['next']),
         const SizedBox(height: 18),
         Text(
@@ -248,7 +262,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           (area) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
-              '${area['serviceArea']}\n${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers\n${area['qualified'] ?? 0} qualified · ${area['drafts'] ?? 0} drafts\nLatest cycle: ${area['researched'] ?? 'No Data'} source checks · ${area['unavailable'] ?? 'No Data'} unavailable',
+              '${area['serviceArea']}\n${widget.customer && area['opportunityGroups'] is List ? _list(area['opportunityGroups']).map((g) => '${g['count']} ${g['label']}').join(' · ') : '${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers'}\n${area['qualified'] ?? 0} qualified · ${area['drafts'] ?? 0} drafts\nLatest cycle: ${area['researched'] ?? 'No Data'} source checks · ${area['unavailable'] ?? 'No Data'} unavailable',
             ),
           ),
         ),
@@ -256,6 +270,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         ..._list(d['agents']).map(
           (a) => Card(
             child: ExpansionTile(
+              initiallyExpanded: a['type'] == widget.focusId,
               title: Text(a['name'].toString()),
               subtitle: Text(a['status'].toString()),
               childrenPadding: const EdgeInsets.all(16),
@@ -305,7 +320,11 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
               initiallyExpanded: p['id'] == widget.focusId,
               title: Text(p['displayName'].toString()),
               subtitle: Text(
-                '${p['kind'] == 'business' ? 'Business prospect' : 'Organization referral partner'} · ${p['geography']}',
+                '${p['opportunityLabel'] ?? (p['kind'] == 'business'
+                        ? 'Business prospect'
+                        : p['kind'] == 'scaler'
+                        ? 'Workforce candidate'
+                        : 'Organization referral partner')} · ${p['geography']}',
               ),
               childrenPadding: const EdgeInsets.all(16),
               expandedCrossAxisAlignment: CrossAxisAlignment.start,
@@ -313,6 +332,30 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                 _line('Fit', p['reason']),
                 _line('Confidence', p['confidence']),
                 _line('Possible use', p['useCase']),
+                if (widget.customer) ...[
+                  _line(
+                    'Project / need',
+                    p['currentOpportunity'] == true
+                        ? 'Specific published requirement — eligibility needs review'
+                        : 'Buying intent / current availability unknown',
+                  ),
+                  if (p['sourceRecordId'] != p['sourceUrl'])
+                    _line('Public reference', p['sourceRecordId']),
+                  if (p['deadline'] != null)
+                    _line('Published deadline', p['deadline']),
+                  _line('What we do not know', p['unknowns']),
+                  if (p['ranking'] is Map)
+                    ExpansionTile(
+                      title: const Text('Why this ranks here'),
+                      children: [
+                        for (final factor in _list(p['ranking']['factors']))
+                          ListTile(
+                            title: Text('${factor['label']}'),
+                            subtitle: Text('${factor['reason']}'),
+                          ),
+                      ],
+                    ),
+                ],
                 _line('Email', p['email']),
                 _line('Phone', p['phone']),
                 if (p['kind'] != 'business') ...[
@@ -325,7 +368,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                     Uri.parse(p['sourceUrl'].toString()),
                     mode: LaunchMode.externalApplication,
                   ),
-                  child: const Text('Open official source'),
+                  child: const Text('Open public source'),
                 ),
                 _line('Source checked', _time(p['lastCheckedAt'])),
                 _line('Recommended channel', p['recommendedChannel']),
@@ -517,7 +560,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
       ),
       OutlinedButton(
         onPressed: () =>
-            Navigator.of(context).pushNamed('/business/social-operations'),
+            AppNavigation.push(context, '/business/social-operations'),
         child: const Text('Review Social accounts and content plan'),
       ),
       const SizedBox(height: 16),

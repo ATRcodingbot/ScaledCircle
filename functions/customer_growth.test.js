@@ -4,7 +4,7 @@ const catalog=require('../functions-agentic-growth/customer_growth_sources'),geo
 const planner=require('../functions-social-operations/social_customer_plan');
 test('customer research uses saved service type and exact enabled tenant geography',()=>{
  assert.equal(catalog.select({servicesOffered:['dentistry']}).length,0);
- const sources=catalog.select({servicesOffered:['build decks','fences']});assert.equal(sources.length,6);
+ const sources=catalog.select({servicesOffered:['build decks','fences']});assert.equal(sources.length,8);
  const scope=geo.serviceAreaScope({schemaVersion:'ServiceAreaPreferencesV1',userUid:'owner',role:'business',areas:[{id:'city',type:'place',geographyType:'city',city:'Baltimore',state:'Maryland',displayName:'Baltimore City',enabled:true}]},'owner');
  assert.equal(geo.prioritizeSources(sources,scope).length,2);
  assert.equal(geo.prioritizeSources(sources,geo.serviceAreaScope({userUid:'other'},'owner')).length,0);

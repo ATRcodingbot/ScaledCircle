@@ -183,7 +183,9 @@ exports.getSocialOperationsWorkspace = onCall(
         assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),
         ratings: pastPostRatings.docs.map((doc) => ({id: doc.id, ...doc.data()})),
       }),
-      runtimeStatus: await require("./social_runtime_status").load(db, business.uid),
+      runtimeStatus: await require("./social_runtime_status").load(db, business.uid, {
+        plans: plans.docs.map(doc => doc.data()), connections: safeConnections,
+      }),
       contentQualityLearning: socialOperations.qualityLearningComparison({
         businessUid: business.uid,
         assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),

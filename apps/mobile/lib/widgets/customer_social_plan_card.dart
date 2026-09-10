@@ -2,15 +2,25 @@ import 'package:flutter/material.dart';
 import 'social_connection_card.dart';
 
 class CustomerSocialPlanCard extends StatelessWidget {
-  const CustomerSocialPlanCard({super.key, required this.plan});
+  const CustomerSocialPlanCard({
+    super.key,
+    required this.plan,
+    this.initiallyExpanded = false,
+  });
   final Map<String, dynamic> plan;
+  final bool initiallyExpanded;
   @override
   Widget build(BuildContext context) {
     final strategy = plan['strategy'] as Map? ?? {};
     return Card(
       child: ExpansionTile(
+        initiallyExpanded: initiallyExpanded,
         title: Text(plan['goal']?.toString() ?? '30-day Social strategy'),
-        subtitle: const Text('Draft · Needs your review · Nothing scheduled'),
+        subtitle: Text(
+          plan['status'] == 'approved'
+              ? 'Plan approved · Post approval and scheduling are separate'
+              : 'Draft · Needs your review',
+        ),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         childrenPadding: const EdgeInsets.all(16),
         children: [

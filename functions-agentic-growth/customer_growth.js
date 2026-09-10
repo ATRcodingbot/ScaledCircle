@@ -2,6 +2,8 @@
 const growth=require('./growth_operations');
 const agentic=require('./agentic_growth');
 const sources=require('./customer_growth_sources');
+const discovery=require('./customer_discovery');
+const opportunities=require('./growth_opportunities');
 const workspace=require('./shared/business_workspace');
 const legal=require('./shared/legal_consent');
 const entitlements=require('./shared/subscription_entitlements');
@@ -28,9 +30,11 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
     if(profile.businessUid!==a.businessId||!clean(profile.businessName)||!(profile.servicesOffered||[]).length)
       fail('failed-precondition','Complete your Business Growth profile first.');
     const services=(profile.priorityServices?.length?profile.priorityServices:profile.servicesOffered).map(x=>clean(x,120)).filter(Boolean).slice(0,6);
-    return {businessUid:a.businessId,authorized:true,name:clean(profile.businessName,160),profile,
+    return {businessUid:a.businessId,authorized:true,name:clean(profile.businessName,160),profile,researchVersion:discovery.VERSION,
+      discover:(scope,reader)=>discovery.discover({profile,scope,readSource:reader,now:now()}),
       draft:(source,partner)=>partner?
         `Hello ${source.name} team, ${clean(profile.businessName,160)} lists ${services.join(', ')} among its services. We are reviewing legitimate recruitment channels for construction and marketing work. Could you share your employer requirements and appropriate next steps? We have not assumed candidate availability or eligibility, and will follow your review process before sharing any opening.`:
+        source.opportunityType==='public_bid'?`Hello procurement team, ${clean(profile.businessName,160)} provides ${services.join(', ')}. We are reviewing ${source.sourceRecordId}. Please confirm where to review the official scope, eligibility requirements and permitted question process. This is an inquiry draft, not a bid or commitment. We have not assumed qualification or an award.`:
         `Hello ${source.name} team, ${clean(profile.businessName,160)} provides ${services.join(', ')}. We found your public contractor information and would like to understand whether these services fit your program. ${source.cta}. We have not assumed a current project, qualification or award. Please direct us to the appropriate published application process.`};
   }
   function research(a,c) {return growth.createService({db,FieldValue,project,target:a.businessId,customerContext:c,
@@ -59,6 +63,9 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
   }
   async function load(a,c) {
     const result=await research(a,c).load();
+    result.prospects=result.prospects.map(p=>opportunities.project(p,now())).sort((a,b)=>b.ranking.score-a.ranking.score||a.displayName.localeCompare(b.displayName));
+    result.summary.opportunityGroups=opportunities.summarize(result.prospects);
+    result.summary.discoveryByServiceArea=result.summary.discoveryByServiceArea.map(area=>({...area,opportunityGroups:opportunities.summarize(result.prospects.filter(p=>p.serviceArea&&require('./growth_geography').matchArea(p,result.workspace.scope)?.id===area.serviceAreaId))}));
     const health=(await db.doc('agentHealth/'+a.businessId).get()).data();
     const [plans,snapshots,connections]=await Promise.all([
       db.collection('socialContentPlans').where('businessUid','==',a.businessId).limit(30).get(),
@@ -73,6 +80,8 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
       connections:connections.docs.map(d=>({provider:d.id,status:d.data().status,name:d.data().accountDisplayName})),
       attribution:'Existing provider history is not evidence of ScaledCircle publication.',approvalMode:'approval_required'};
     for(const a of result.agents){
+      if(a.type==='lead_generation')a.result=result.summary.opportunityGroups.filter(g=>!['Workforce candidates','Excluded paid sources'].includes(g.label)).map(g=>`${g.count} ${g.label.toLowerCase()}`).join('; ');
+      if(a.type==='workforce_recruiter')a.result=`${result.prospects.filter(p=>p.opportunityType==='workforce_candidate').length} individual candidates; ${result.prospects.filter(p=>p.opportunityType==='recruitment_channel').length} recruitment channels. Organizations are not counted as candidates.`;
       if(a.type==='marketing_manager'){a.status=plans.size?'Plan awaiting review':'Prepare a content plan';a.result=`${plans.size} saved plans; ${result.social.baselines.length} provider baseline snapshots.`;a.nextAction='Review the strategy and each proposed post before approval.';}
       if(a.type==='business_assistant'){a.status='Private Beta · Recommendations only';a.result='No customer messages sent. Confirm current offer, project examples and brand assets before drafting replies.';a.nextAction='Review the saved profile and any outdated free-text service areas.';}
       if(a.type==='ad_manager'){a.status='Approval required · No spend';a.result=`Saved budget preference: ${c.profile.plannedAdBudget||'Not provided'}. No advertising changes made.`;a.nextAction='Review organic results first; approve a separate budget before advertising.';}

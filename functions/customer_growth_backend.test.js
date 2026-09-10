@@ -51,6 +51,26 @@ test('Supervisor pause and tenant geography limit source reads; no custom URL or
  await db.doc('discoveryPreferences/owner').update({userUid:'other'});await call('research');assert.equal(reads,0);assert.equal((await db.collection('agentProspects').get()).size,0);
 });
 
+test('expanded customer cycle preserves prior prospects and drafts while adding current bid evidence exactly once',async()=>{
+ await db.doc('businessSubscriptions/owner').update({expiresAt:Timestamp.fromMillis(Date.now()+7*86400000)});
+ await call('initialize');await call('research');
+ const original=(await db.collection('agentProspects').get()).docs.map(d=>({id:d.id,data:d.data()}));
+ const actions=(await db.collection('agentActions').get()).docs.map(d=>({id:d.id,data:d.data()}));
+ // Existing day/version is reused. Simulate a new UTC research day for a legitimate next cycle.
+ await db.doc('discoveryPreferences/owner').update({areas:[{id:'city',type:'place',geographyType:'city',city:'Baltimore',state:'Maryland',enabled:true,displayName:'Baltimore City'}]});
+ const next=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',allowedBusinesses:'owner',now:()=>Date.now()+86400000,
+  readSource:async source=>source.key==='baltimore_city_bids'?'<div class="fw-bold text-body d-none d-lg-block">Office Renovation</div><span class="status-open-pill">Open</span><strong>RFQ Number:</strong> RFQ-EXAMPLE<strong>Deadline:</strong> 09/20/2099':source.signals.join(' ')});
+ const request={auth:{uid:'owner'},data:{operation:'research'}};
+ const r=await next.execute(request);assert.equal(r.reused,false);assert.equal((await next.execute(request)).reused,true);
+ for(const p of original)assert.deepEqual((await db.doc('agentProspects/'+p.id).get()).data(),p.data);
+ for(const p of actions)assert.deepEqual((await db.doc('agentActions/'+p.id).get()).data(),p.data);
+ const result=await next.execute({auth:{uid:'owner'},data:{operation:'load'}});
+ assert.equal(result.summary.opportunityGroups.find(g=>g.label==='Direct opportunities').count,1);
+ assert.equal(result.summary.opportunityGroups.find(g=>g.label==='Workforce candidates').count,0);
+ const bid=result.prospects.find(p=>p.sourceRecordId==='RFQ-EXAMPLE');assert.equal(bid.outreachAuthorized,false);assert.equal(bid.externalMessageSent,false);assert.match(bid.draft,/not a bid or commitment/);
+ assert.equal((await db.collection('socialPublishingJobs').get()).size,0);
+});
+
 test('customer report email is owner-bound, preference-controlled and deduplicated through delivery',async()=>{
  const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
  const source=fs.readFileSync(path.join(__dirname,'../functions-agentic-growth/index.js'),'utf8');
