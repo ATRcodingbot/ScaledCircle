@@ -178,8 +178,7 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => const ScalerFunnelScreen(),
       );
     }
-    if ((AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isLocal) &&
-        route?.path == '/growth-agents') {
+    if (route?.path == '/growth-agents') {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => ProtectedRouteGate(

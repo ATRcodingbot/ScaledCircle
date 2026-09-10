@@ -1,5 +1,4 @@
 import '../business/growth_agents_screen.dart';
-import '../../config/app_environment.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
@@ -34,11 +33,9 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
       if (mounted) {
         setState(() => _summary = summary);
       }
-    } on FirebaseFunctionsException catch (error) {
+    } on FirebaseFunctionsException catch (_) {
       if (mounted) {
-        setState(
-          () => _error = error.message ?? 'Unable to load AI Team health.',
-        );
+        setState(() => _error = "We couldn't load AI Team operations.");
       }
     } catch (_) {
       if (mounted) {
@@ -52,14 +49,13 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
     appBar: AppBar(
       title: const Text('AI Team operations'),
       actions: [
-        if (AppEnvironmentConfig.isStaging)
-          IconButton(
-            tooltip: 'ScaledCircle Growth Agents',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const GrowthAgentsScreen()),
-            ),
-            icon: const Icon(Icons.trending_up),
-          ),
+        IconButton(
+          tooltip: 'ScaledCircle Growth Agents',
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const GrowthAgentsScreen())),
+          icon: const Icon(Icons.trending_up),
+        ),
         IconButton(
           onPressed: _load,
           tooltip: 'Refresh',
@@ -83,6 +79,20 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
         : ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              Card(
+                child: ListTile(
+                  title: const Text('ScaledCircle Growth Agents'),
+                  subtitle: const Text(
+                    'Sourced prospects, drafts, territory priorities and reports.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const GrowthAgentsScreen(),
+                    ),
+                  ),
+                ),
+              ),
               const Card(
                 child: ListTile(
                   leading: Icon(Icons.shield_outlined),

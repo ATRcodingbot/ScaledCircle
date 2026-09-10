@@ -27,9 +27,11 @@ function prioritizeSources(catalog,scope,existingUrls=[]) {
     .sort((a,b)=>(rank.get(matchArea(a,scope)?.id)??Number.MAX_SAFE_INTEGER)-(rank.get(matchArea(b,scope)?.id)??Number.MAX_SAFE_INTEGER));
 }
 function groupedDiscovery(rows,scope) {
-  const groups=scope.areas.map(a=>({serviceAreaId:a.id,serviceArea:a.label,businesses:0,partners:0,individualScalers:0,total:0}));
+  const empty=(id,label)=>({serviceAreaId:id,serviceArea:label,businesses:0,partners:0,individualScalers:0,total:0,qualified:0,drafts:0});
+  const groups=scope.areas.map(a=>empty(a.id,a.label));
   for(const row of rows){const area=matchArea(row,scope);let group=groups.find(g=>area?g.serviceAreaId===area.id:!g.serviceAreaId&&g.serviceArea===row.geography);
-    if(!group){group={serviceAreaId:null,serviceArea:row.geography||'Area not recorded',businesses:0,partners:0,individualScalers:0,total:0};groups.push(group);}
+    if(!group){group=empty(null,row.geography||'Area not recorded');groups.push(group);}
+    if(row.qualified)group.qualified++;if(row.draft)group.drafts++;
     group.total++;if(row.kind==='business')group.businesses++;else if(row.kind==='referral_partner')group.partners++;else if(row.kind==='scaler')group.individualScalers++;
   }
   return groups;

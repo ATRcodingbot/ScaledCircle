@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'growth_territories_dialog.dart';
 
 class GrowthAgentsScreen extends StatefulWidget {
   const GrowthAgentsScreen({super.key, this.focusId, this.loadOverride});
@@ -162,6 +163,38 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
             child: Text(_error!, style: const TextStyle(color: Colors.red)),
           ),
         const SizedBox(height: 18),
+        if (d['workspace'] is Map)
+          OutlinedButton(
+            onPressed: _busy
+                ? null
+                : () async {
+                    final workspace = Map<String, dynamic>.from(
+                      d['workspace'] as Map,
+                    );
+                    if (workspace['registered'] != true) {
+                      await _action('configureInternalGrowthWorkspaceV1', {
+                        'action': 'register',
+                      });
+                      return;
+                    }
+                    await showDialog<bool>(
+                      context: context,
+                      builder: (_) => GrowthTerritoriesDialog(
+                        scope: Map<String, dynamic>.from(
+                          workspace['scope'] as Map,
+                        ),
+                        call: (input) =>
+                            _call('configureInternalGrowthWorkspaceV1', input),
+                      ),
+                    );
+                    await _load();
+                  },
+            child: Text(
+              (d['workspace'] as Map)['registered'] == true
+                  ? 'Growth territories'
+                  : 'Register internal Growth workspace',
+            ),
+          ),
         Text(
           'Needs attention: ${s['awaitingApproval'] ?? 0} drafts',
           style: Theme.of(context).textTheme.titleLarge,
@@ -188,7 +221,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           (area) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
-              '${area['serviceArea']}\n${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers',
+              '${area['serviceArea']}\n${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers\n${area['qualified'] ?? 0} qualified · ${area['drafts'] ?? 0} drafts',
             ),
           ),
         ),

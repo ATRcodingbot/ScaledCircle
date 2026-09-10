@@ -11,7 +11,8 @@ const firebase = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "firebase
 
 test("agentic runtime is isolated, secret-free, and has no provider execution export", () => {
   assert.equal(source.includes("defineSecret"), false);
-  assert.equal(source.includes("onRequest"), false);
+  assert.deepEqual([...source.matchAll(/exports\.([A-Za-z0-9_]+)\s*=\s*onRequest/g)].map(m=>m[1]), ['internalGrowthWorkspaceBridgeV1']);
+  assert.ok(source.includes("invoker:process.env.GROWTH_PRODUCTION_PROXY_ACCOUNT||'private'"));
   assert.equal(source.includes("send_customer_reply"), false);
   assert.equal(source.includes("publish_social"), false);
   assert.equal(source.includes("tweet.write"), false);
@@ -26,5 +27,6 @@ test("Agentic callable surface contains only provider-free read/observe authorit
     "getAgenticGrowthAdminSummaryV1", "getAgenticGrowthWorkspaceV1",
     "getGrowthDogfoodWorkspaceV1", "runGrowthDogfoodResearchV1", "updateGrowthCommunicationPreferencesV1", "reviewGrowthProspectV1", "runScheduledGrowthDogfoodV1", "queueGrowthReportEmailV1",
     "initializeAgenticGrowthDogfoodV1", "runMarketingManagerObserveV1",
+    "configureInternalGrowthWorkspaceV1", "internalGrowthWorkspaceBridgeV1",
   ].sort());
 });

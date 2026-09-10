@@ -4,12 +4,17 @@ const crypto = require("node:crypto");
 const {getApps, initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {setGlobalOptions} = require("firebase-functions/v2");
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
+const {GoogleAuth} = require('google-auth-library');
+const internalBridge = require('./internal_growth_bridge');
 const agentic = require("./agentic_growth");
 const growth = require('./growth_operations');
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {onDocumentCreated} = require('firebase-functions/v2/firestore');
 const {getAuth} = require('firebase-admin/auth');
+const internalWorkspace = require('./internal_growth_workspace');
+const maintainedGeography = require('./shared/business_geography');
+const maintainedResolver = require('./shared/service_area_resolution');
 
 const db = getFirestore(getApps().find(app => app.name === '[DEFAULT]') || initializeApp());
 setGlobalOptions({region: "us-east1"});
@@ -20,17 +25,57 @@ async function growthActor(request) {
   if(!request.auth)throw new HttpsError('unauthenticated','Sign in to inspect ScaledCircle agents.');
   const user=(await db.doc('users/'+request.auth.uid).get()).data();
   const identity=await getAuth().getUser(request.auth.uid);
+  if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle') {
+    try{internalBridge.authorizeProductionActor({expectedUid:process.env.GROWTH_PRODUCTION_ADMIN_UID,uid:request.auth.uid,
+      tokenVerified:request.auth.token.email_verified,user,identity});}catch(_){
+      throw new HttpsError('permission-denied','This internal workspace is not available to this account.');
+    }
+    return;
+  }
   try{growth.assertScope({project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID,
     actor:{uid:request.auth.uid,verified:request.auth.token.email_verified===true&&identity.emailVerified===true,active:user?.active===true&&!identity.disabled,role:user?.role}});}
   catch(_){throw new HttpsError('permission-denied','This private dogfood workspace is not available to this account.');}
 }
-const growthEndpoint=handler=>onCall({enforceAppCheck:false,maxInstances:2,timeoutSeconds:180},async request=>{
-  await growthActor(request);try{return await handler(request,growthService());}catch(e){throw new HttpsError(e.code||'unavailable',e.code?e.message:'Research could not finish. Retry to check saved state.');}});
-exports.getGrowthDogfoodWorkspaceV1=growthEndpoint((request,service)=>service.load());
+const growthEndpoint=(handler,operation)=>onCall({enforceAppCheck:false,maxInstances:2,timeoutSeconds:180},async request=>{
+  await growthActor(request);try{
+    if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle')
+      return await internalBridge.forward({url:process.env.GROWTH_INTERNAL_BRIDGE_URL,actorUid:request.auth.uid,operation,input:request.data,auth:new GoogleAuth()});
+    return await handler(request,growthService());
+  }catch(e){console.error('Internal Growth operation failed',{operation,code:e.code||'unavailable',message:e.message});throw new HttpsError(e.code||'unavailable',e.code?e.message:'Research could not finish. Retry to check saved state.');}});
+exports.getGrowthDogfoodWorkspaceV1=growthEndpoint((request,service)=>service.load(),'load');
+async function configureGrowthWorkspace(actor,input) {
+  if(Object.keys(input).some(k=>!['action','input'].includes(k)))throw new HttpsError('invalid-argument','Unsupported workspace request.');
+  const service=internalWorkspace.createService({db,FieldValue,target:process.env.GROWTH_DOGFOOD_UID,
+    project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,
+    resolvePlace:maintainedResolver.resolvePlace,canonicalPlace:maintainedGeography.canonicalPlace});
+  if(input.action==='register'&&!input.input)return service.register(actor);
+  if(input.action==='search')return service.search(actor,input.input);
+  if(input.action==='save')return service.save(actor,input.input);
+  throw new HttpsError('invalid-argument','Choose a supported workspace action.');
+}
+exports.configureInternalGrowthWorkspaceV1=growthEndpoint(request=>configureGrowthWorkspace({uid:request.auth.uid,role:'admin',verified:true,active:true},request.data||{}),'configure');
 exports.runGrowthDogfoodResearchV1=growthEndpoint((request,service)=>{
-  if(Object.keys(request.data||{}).length)throw new HttpsError('invalid-argument','The research scope is maintained by ScaledCircle.');return service.run();});
-exports.updateGrowthCommunicationPreferencesV1=growthEndpoint((request,service)=>service.savePreferences(request.data));
-exports.reviewGrowthProspectV1=growthEndpoint((request,service)=>service.review(request.data||{}));
+  if(Object.keys(request.data||{}).length)throw new HttpsError('invalid-argument','The research scope is maintained by ScaledCircle.');return service.run();},'research');
+exports.updateGrowthCommunicationPreferencesV1=growthEndpoint((request,service)=>service.savePreferences(request.data),'preferences');
+exports.reviewGrowthProspectV1=growthEndpoint((request,service)=>service.review(request.data||{}),'review');
+exports.internalGrowthWorkspaceBridgeV1=onRequest({invoker:process.env.GROWTH_PRODUCTION_PROXY_ACCOUNT||'private',maxInstances:2,timeoutSeconds:180},async(req,res)=>{
+  // Cloud Run IAM authenticates only the designated production proxy service
+  // account. The proxy has already checked the real production Admin account.
+  if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)!=='scaledcircle-staging'||req.method!=='POST')return res.status(403).json({error:'Unavailable'});
+  let body;try{body=internalBridge.validateEnvelope(req.body,process.env.GROWTH_PRODUCTION_ADMIN_UID);}catch(_){return res.status(403).json({error:'Denied'});}
+  try{
+    const service=growthService();let result;
+    const target=process.env.GROWTH_DOGFOOD_UID;
+    const [user,identity]=await Promise.all([db.doc('users/'+target).get(),getAuth().getUser(target)]);
+    growth.assertScope({project:'scaledcircle-staging',target,actor:{uid:target,role:user.data()?.role,active:user.data()?.active===true&&!identity.disabled,verified:identity.emailVerified}});
+    if(body.operation==='load')result=await service.load();
+    if(body.operation==='research')result=await service.run();
+    if(body.operation==='configure')result=await configureGrowthWorkspace({uid:target,auditUid:body.actorUid,role:'admin',verified:true,active:true},body.input||{});
+    if(body.operation==='preferences')result=await service.savePreferences(body.input);
+    if(body.operation==='review')result=await service.review(body.input||{},body.actorUid);
+    return res.json({result});
+  }catch(e){console.error('Internal workspace bridge failed',{code:e.code||'unavailable',message:e.message});return res.json({error:{code:e.code||'unavailable',message:e.code?e.message:'Internal workspace unavailable. Retry.'}});}
+});
 exports.runScheduledGrowthDogfoodV1=onSchedule({schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async()=>{
   if(process.env.GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
   await growthService().run();
@@ -348,6 +393,14 @@ exports.runMarketingManagerObserveV1 = onCall(
 exports.getAgenticGrowthAdminSummaryV1 = onCall(
   {enforceAppCheck: false, maxInstances: 2},
   async (request) => {
+    if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle') {
+      await growthActor(request);
+      const view=await internalBridge.forward({url:process.env.GROWTH_INTERNAL_BRIDGE_URL,actorUid:request.auth.uid,operation:'load',input:{},auth:new GoogleAuth()});
+      return {schemaVersion:view.schemaVersion,agentCount:view.agents.length,runCount:view.runs.length,
+        observationCount:view.summary.completedSourceChecks,recommendationCount:view.summary.qualified,
+        actionObjectCount:view.summary.awaitingApproval,killSwitchActiveCount:view.killSwitchActive?1:0,
+        latestRunId:view.runs[0]?.id||null,evidenceStates:['SOURCED_RESEARCH'],externalActionsEnabled:false,externalExecutionRouteCount:0};
+    }
     await requireAgenticActor(request, {adminOnly: true});
     const [profiles, runs, observations, recommendations, actions, health] = await Promise.all([
       db.collection("agentProfiles").limit(200).get(), db.collection("agentRuns").limit(200).get(),

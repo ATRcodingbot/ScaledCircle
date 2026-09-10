@@ -3,6 +3,7 @@ const crypto=require('node:crypto');
 const agentic=require('./agentic_growth');
 const sources=require('./growth_sources');
 const geography=require('./growth_geography');
+const internalWorkspace=require('./internal_growth_workspace');
 const VERSION='GrowthDogfoodResearchV1';
 const hash=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const day=ms=>new Date(ms).toISOString().slice(0,10);
@@ -52,21 +53,27 @@ function report(rows,runs,scope={status:'MISSING_MAINTAINED_GEOGRAPHY',areas:[]}
     learned:'Published service areas and recruitment channels support initial fit. Buying interest, candidate availability and conversion performance remain unknown.',
     next:'Review the sourced decision packages and outreach drafts. No prospect will be contacted automatically.'};
 }
-function createService({db,FieldValue,project,target,readSource=fetchSource,now=Date.now,areaPriorityIds=[]}) {
+function createService({db,FieldValue,project,target,readSource=fetchSource,now=Date.now,areaPriorityIds=[],sourceCatalog=sources}) {
   const query=async c=>(await db.collection(c).where('businessUid','==',target).limit(250).get()).docs.map(d=>({id:d.id,...d.data()}));
-  async function areaScope(){return geography.serviceAreaScope((await db.doc('discoveryPreferences/'+target).get()).data(),target,areaPriorityIds);}
+  async function areaScope(){const registry=await db.doc('internalGrowthWorkspaces/'+target).get();
+    if(registry.exists)return internalWorkspace.scope(registry.data(),target);
+    return geography.serviceAreaScope((await db.doc('discoveryPreferences/'+target).get()).data(),target,areaPriorityIds);}
   async function check(){if(project!=='scaledcircle-staging'&&!project?.startsWith('demo-'))fail('Staging dogfood only.');if(!target)fail('Dogfood binding required.');const h=(await db.doc('agentHealth/'+target).get()).data();if(!h||h.businessUid!==target||h.externalActionsEnabled!==false||h.killSwitchActive!==true)fail('Existing Supervisor safety state must be preserved.');if(h.researchPaused===true)fail('Research is paused by the Supervisor.');return h;}
   async function run() {
-    await check();const started=now(),runId='growth_research_'+hash([target,day(started),VERSION]).slice(0,40),ref=db.doc('agentRuns/'+runId);
+    await check();const initialScope=await areaScope();
+    const scopeVersion=(await db.doc('internalGrowthWorkspaces/'+target).get()).exists?initialScope.preferenceVersion:null;
+    const started=now(),runId='growth_research_'+hash([target,day(started),VERSION,...(scopeVersion===null?[]:[scopeVersion])]).slice(0,40),ref=db.doc('agentRuns/'+runId);
     const claim=crypto.randomUUID();
     const duplicate=await db.runTransaction(async tx=>{const old=await tx.get(ref);if(old.data()?.status==='completed')return true;if(old.exists&&old.data().leaseUntil>now())fail('Research is already running.');tx.set(ref,{businessUid:target,agentType:'growth_strategist',schemaVersion:VERSION,status:'running',claim,leaseUntil:now()+180000,createdAt:old.data()?.createdAt||started,externalMutationEnabled:false},{merge:true});return false;});
     if(duplicate){await makeReport('daily');await makeReport('weekly');return {runId,reused:true};}
     const [scope,existing]=await Promise.all([areaScope(),query('agentProspects')]);
-    const selected=geography.prioritizeSources(sources,scope,existing.map(p=>p.sourceUrl));
+    const selected=geography.prioritizeSources(sourceCatalog,scope,existing.map(p=>p.sourceUrl));
     const results=[];
     for(const source of selected){try{results.push({source,observation:analyzeSource(source,await readSource(source),now())});}catch(_){results.push({source,error:'Official source could not be verified; retry on the next research cycle.'});}}
     await db.runTransaction(async tx=>{
       const current=await tx.get(ref),health=await tx.get(db.doc('agentHealth/'+target));if(current.data()?.claim!==claim||health.data()?.researchPaused===true||health.data()?.externalActionsEnabled!==false||health.data()?.killSwitchActive!==true)fail('Research commit held by Supervisor.');
+      const currentWorkspace=await tx.get(db.doc('internalGrowthWorkspaces/'+target));
+      if(scopeVersion!==null&&currentWorkspace.data()?.revision!==scopeVersion)fail('Territories changed during research. Retry using the current priority.');
       const records=[];for(const result of results){const id='growth_prospect_'+hash([target,result.source.key]).slice(0,40),p=db.doc('agentProspects/'+id);records.push({...result,id,ref:p,old:await tx.get(p)});}
       const pref=await tx.get(db.doc('agentCommunicationPreferences/'+target));
       for(const result of records){const {source,observation:o,id,old}=result,agentType=source.kind==='business'?'lead_generation':'workforce_recruiter';
@@ -97,17 +104,18 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
     if(!['daily','weekly'].includes(kind))fail('Invalid report.');
     const [rows,runs,scope]=await Promise.all([query('agentProspects'),query('agentRuns'),areaScope()]);
     const period=kind==='daily'?day(now()):day(now()-((new Date(now()).getUTCDay()+6)%7)*86400000);
-    const id='growth_report_'+hash([target,kind,period]).slice(0,40),summary={...report(rows,runs.filter(r=>r.schemaVersion===VERSION),scope),newApprovalsToday:rows.filter(r=>r.qualified&&day(r.discoveredAt)===day(now())).length};
+    const registered=(await db.doc('internalGrowthWorkspaces/'+target).get()).exists;
+    const id='growth_report_'+hash([target,kind,period,...(registered?[scope.preferenceVersion]:[])]).slice(0,40),summary={...report(rows,runs.filter(r=>r.schemaVersion===VERSION),scope),newApprovalsToday:rows.filter(r=>r.qualified&&day(r.discoveredAt)===day(now())).length};
     await db.runTransaction(async tx=>{const ref=db.doc('agentReports/'+id),old=await tx.get(ref);if(old.exists)return;tx.create(ref,{businessUid:target,kind,period,summary,scope:'Cumulative research inventory through report creation; no conversion telemetry is connected.',createdAt:now(),emailStatus:'preference_controlled'});tx.create(db.doc('notifications/'+id),{userId:target,type:kind==='daily'?'agent_daily_brief':'agent_weekly_report',title:kind==='daily'?'Daily brief ready':'Weekly report ready',message:`${summary.businessesFound} Business prospects, ${summary.partnersFound} partner prospects. ${summary.awaitingApproval} drafts awaiting review.`,deepLink:{destination:'growth_agents',reportId:id},read:false,createdAt:FieldValue.serverTimestamp()});});return id;
   }
   async function load() {
     const [rows,runs,reports,health,pref,scope]=await Promise.all([query('agentProspects'),query('agentRuns'),query('agentReports'),db.doc('agentHealth/'+target).get(),db.doc('agentCommunicationPreferences/'+target).get(),areaScope()]);
     const history=runs.filter(r=>r.schemaVersion===VERSION).sort((a,b)=>b.createdAt-a.createdAt),summary=report(rows,history,scope);
-    return {title:'ScaledCircle Growth Agents',schemaVersion:VERSION,prospects:rows.sort((a,b)=>Number(b.qualified)-Number(a.qualified)||a.displayName.localeCompare(b.displayName)),reports:reports.sort((a,b)=>b.createdAt-a.createdAt),runs:history,summary,preferences:pref.data()||preferences(),externalActionsEnabled:false,killSwitchActive:health.data()?.killSwitchActive!==false,researchPaused:health.data()?.researchPaused===true,nextResearchAfter:health.data()?.nextResearchAfter||null,
+    return {title:'ScaledCircle Growth Agents',workspace:{registered:(await db.doc('internalGrowthWorkspaces/'+target).get()).exists,scope},schemaVersion:VERSION,prospects:rows.sort((a,b)=>Number(b.qualified)-Number(a.qualified)||a.displayName.localeCompare(b.displayName)),reports:reports.sort((a,b)=>b.createdAt-a.createdAt),runs:history,summary,preferences:pref.data()||preferences(),externalActionsEnabled:false,killSwitchActive:health.data()?.killSwitchActive!==false,researchPaused:health.data()?.researchPaused===true,nextResearchAfter:health.data()?.nextResearchAfter||null,
       agents:AGENTS.map(([type,name])=>({type,name,status:['lead_generation','workforce_recruiter','growth_strategist'].includes(type)?history.length?'Waiting for review':'Ready for research':'Needs approved input',lastAction:['lead_generation','workforce_recruiter','growth_strategist'].includes(type)&&history.length?'Official-source research and report generation':'No new run performed in this research cycle',result:type==='lead_generation'?`${summary.businessesFound} sourced Business prospects`:type==='workforce_recruiter'?`${summary.partnersFound} organization partner prospects; ${summary.individualScalersFound} individual Scalers`:type==='growth_strategist'?`${summary.awaitingApproval} drafts awaiting review`:'Existing specialist authority preserved; no send or spend',nextAction:type==='marketing_manager'?'Review existing Social evidence without changing schedules':type==='ad_manager'?'Prepare a budget-free proposal when campaign input is approved':type==='business_assistant'?'Wait for an authorized Business inquiry': 'Review evidence and proposed next actions',needsApproval:true})),network:networkPattern([])};
   }
   async function savePreferences(input){const p=preferences(input);await db.doc('agentCommunicationPreferences/'+target).set({businessUid:target,...p,updatedAt:FieldValue.serverTimestamp()});return p;}
-  async function review({prospectId,decision}){if(!/^growth_prospect_[a-f0-9]{40}$/.test(prospectId)||!['ready_for_founder_send','do_not_contact'].includes(decision))fail('Choose a supported review decision.');return db.runTransaction(async tx=>{const ref=db.doc('agentProspects/'+prospectId),p=(await tx.get(ref)).data();if(!p||p.businessUid!==target)fail('Prospect is not in this workspace.');if(!p.qualified||!p.draft||p.sourceAvailable!==true||now()-p.lastCheckedAt>7*86400000)fail('Source review is incomplete.');const audit=db.doc('agentApprovals/'+hash([target,prospectId,decision]));if((await tx.get(audit)).exists)return {duplicate:true};tx.create(audit,{businessUid:target,prospectId,actorUid:target,decision,draftHash:hash(p.draft),executionAuthorized:false,createdAt:FieldValue.serverTimestamp()});tx.update(ref,{approvalState:decision,doNotContact:decision==='do_not_contact',outreachAuthorized:false,nextAction:decision==='do_not_contact'?'No contact permitted':'Founder may separately authorize exact external contact'});return {saved:true,externalMessageSent:false};});}
+  async function review({prospectId,decision},actorUid=target){if(!/^growth_prospect_[a-f0-9]{40}$/.test(prospectId)||!['ready_for_founder_send','do_not_contact'].includes(decision))fail('Choose a supported review decision.');return db.runTransaction(async tx=>{const ref=db.doc('agentProspects/'+prospectId),p=(await tx.get(ref)).data();if(!p||p.businessUid!==target)fail('Prospect is not in this workspace.');if(!p.qualified||!p.draft||p.sourceAvailable!==true||now()-p.lastCheckedAt>7*86400000)fail('Source review is incomplete.');const audit=db.doc('agentApprovals/'+hash([target,prospectId,decision]));if((await tx.get(audit)).exists)return {duplicate:true};tx.create(audit,{businessUid:target,prospectId,actorUid,decision,draftHash:hash(p.draft),executionAuthorized:false,createdAt:FieldValue.serverTimestamp()});tx.update(ref,{approvalState:decision,doNotContact:decision==='do_not_contact',outreachAuthorized:false,nextAction:decision==='do_not_contact'?'No contact permitted':'Founder may separately authorize exact external contact'});return {saved:true,externalMessageSent:false};});}
   return {run,load,savePreferences,review,makeReport};
 }
 module.exports={VERSION,AGENTS,assertScope,preferences,analyzeSource,fetchSource,networkPattern,recommendationEvidence,report,createService};

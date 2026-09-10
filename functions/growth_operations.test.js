@@ -13,7 +13,7 @@ test('organization sources never invent individual workforce facts or contacts',
   assert.equal(r.qualified,false);assert.equal(r.email,null);assert.equal(r.phone,null);
   const valid=growth.analyzeSource(s,'Glen Burnie Landscape 443-782-5489',100);
   assert.equal(valid.qualified,true);assert.equal(valid.phone,'443-782-5489');assert.equal(valid.contactConfidence,'source_published_not_contact_authorized');
-  assert.equal(catalog.filter(x=>x.kind==='referral_partner').length,3);
+  assert.equal(catalog.filter(x=>x.kind==='referral_partner').length,4);
 });
 test('hidden learning suppresses small cohorts and rejects private/freeform dimensions',()=>{
   const rows=Array.from({length:20},(_,i)=>({businessUid:'b'+i%5,industry:'landscaping',channel:'email',outcome:'positive_reply',verifiedOutcome:true,email:'secret@example.org',privateText:'private'}));

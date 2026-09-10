@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/admin/admin_agentic_growth_screen.dart';
 import 'package:flutter_app/screens/business/agentic_growth_screen.dart';
@@ -39,7 +40,12 @@ class _FakeAgenticGateway implements AgenticGrowthGateway {
 
   @override
   Future<Map<String, dynamic>> loadAdminSummary() async {
-    if (fail) throw StateError('fixture failure');
+    if (fail) {
+      throw FirebaseFunctionsException(
+        code: 'internal',
+        message: 'internal [0]',
+      );
+    }
     return {
       'agentCount': 5,
       'runCount': 1,
@@ -164,6 +170,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Marketing Manager'), findsOneWidget);
   });
+
+  testWidgets(
+    'Admin errors are readable and retry without exposing raw server messages',
+    (tester) async {
+      final service = _FakeAgenticGateway(fail: true);
+      await _pumpAt(tester, AdminAgenticGrowthScreen(service: service));
+      expect(find.text("We couldn't load AI Team operations."), findsOneWidget);
+      expect(find.text('internal [0]'), findsNothing);
+      service.fail = false;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.text('ScaledCircle Growth Agents'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'Admin AI Team health is responsive and exposes no internal secrets',
