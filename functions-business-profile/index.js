@@ -5440,6 +5440,13 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
 async function requireManagedGrowthBusiness(request) {
   const context = await requireVerifiedUser(
     request,
@@ -13096,6 +13103,20 @@ exports.selectBusinessWorkspace = workspaceEndpoint(async (request, service) => 
   await db.doc(`users/${request.auth.uid}`).update({ activeBusinessId: a.businessId });
   return { businessId: a.businessId };
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

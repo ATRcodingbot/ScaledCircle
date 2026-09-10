@@ -68,6 +68,7 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
   async preview({uid,businessId,plan,selection}) {
    if(selection)return selections.preview({uid,businessId,selection});
    const {a,provider,view}=await read(uid,businessId);
+   if(provider.metadata?.offerId==='starter_intro_1_dollar_v1'&&(provider.discount||provider.discounts?.length))error('failed-precondition','The introductory discount does not transfer to another plan. Review a separately verified upgrade amount before changing this membership.');
    if(!PLANS[plan]||!priceForPlan(plan)||!view.paidAccess||plan===view.plan||view.bundle||provider.items.data.length!==1||provider.schedule)error('failed-precondition','Use the membership selection to change a bundle or add-ons.');
    if(validatePrice)await validatePrice(priceForPlan(plan));
    const prorationDate=Math.floor(now()/1000),upgrade=PLANS[plan].price>PLANS[view.plan].price;

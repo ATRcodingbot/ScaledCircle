@@ -6490,6 +6490,13 @@ exports.sendScalerJobAlertEmailJob = onDocumentCreated(
 
 
 
+
+
+
+
+
+
+
 function readText(value, maximumLength = 500) {
   if (typeof value !== "string") {
     return "";

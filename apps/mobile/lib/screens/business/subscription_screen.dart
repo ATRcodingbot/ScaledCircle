@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/platform_billing_service.dart';
 import '../../widgets/billing_selection_editor.dart';
+import '../../widgets/starter_intro_offer_card.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -270,6 +271,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   return ListView(
                     padding: const EdgeInsets.all(20),
                     children: [
+                      StarterIntroOfferCard(
+                        key: ValueKey(
+                          'starter-intro-${user.uid}-${BusinessWorkspaceSession.businessIdFor(user.uid)}',
+                        ),
+                        businessId: BusinessWorkspaceSession.businessIdFor(
+                          user.uid,
+                        ),
+                      ),
                       const Text(
                         'Scaled Circle Subscription',
                         style: TextStyle(

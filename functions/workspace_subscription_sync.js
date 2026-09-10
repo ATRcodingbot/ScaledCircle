@@ -50,6 +50,7 @@ function createSubscriptionSync({db, FieldValue, Timestamp, planForPrice, enviro
         subscriptionCancelAtPeriodEnd: subscription.cancel_at_period_end === true,
         ...(releaseCheckout ? {pendingSubscriptionRequestId: FieldValue.delete(),
           pendingSubscriptionPlan: FieldValue.delete(),pendingSubscriptionSelection:FieldValue.delete(), pendingSubscriptionExpiresMs: FieldValue.delete(),
+          ...(w.data()?.pendingStarterIntroClaimId===subscription.metadata?.introClaimId && subscription.metadata?.introClaimId ? {pendingStarterIntroClaimId:FieldValue.delete()} : {}),
           ...(w.data()?.pendingSubscriptionCertificationIntentId===subscription.metadata?.certificationIntentId ? {pendingSubscriptionCertificationIntentId:FieldValue.delete()} : {})} : {}),
         updatedAt: FieldValue.serverTimestamp()}, {merge: true});
       tx.set(entitlement, {businessId: uid, plan: terms.plan, planId: terms.plan, price: terms.price,

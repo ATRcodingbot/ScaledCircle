@@ -2180,6 +2180,12 @@ exports.createSubscriptionCheckoutSession = onCall(
           intentId: request.data.certificationIntentId, data: request.data,
           selection: request.data.selection || {plan: request.data.plan}});
     }
+    if (request.data?.offerId !== undefined) {
+      if(context.isAdmin)throw new HttpsError('permission-denied','Use the designated Business owner account.');
+      return starterIntroService(context).checkout({uid:request.auth.uid,businessId:context.uid,
+        selection:request.data.selection||{plan:request.data.plan},data:request.data});
+    }
+
     if (context.isAdmin) {
       return {...await grantAdminScaleSubscription(context.uid), url: null};
     }
@@ -2218,6 +2224,7 @@ exports.createSubscriptionCheckoutSession = onCall(
     let checkoutRequestId;
     await db.runTransaction(async tx => {
       const current = (await tx.get(checkoutWallet)).data() || {};
+      if (current.pendingStarterIntroClaimId) throw new HttpsError('failed-precondition', 'An introductory purchase requires reconciliation before another Checkout.');
       if (current.pendingSubscriptionCertificationIntentId) throw new HttpsError('failed-precondition', 'An internal certification requires reconciliation before another Checkout.');
       if(current.stripeSubscriptionId&&!['canceled','incomplete_expired'].includes(current.subscriptionStatus))throw new HttpsError('already-exists','A membership is already linked. Use Billing / Plan.');
       if (current.pendingSubscriptionExpiresMs > Date.now()) {
@@ -13096,6 +13103,16 @@ exports.selectBusinessWorkspace = workspaceEndpoint(async(request,service)=>{
   await db.doc(`users/${request.auth.uid}`).update({activeBusinessId:a.businessId});
   return {businessId:a.businessId};
 });
+function starterIntroService(context) {
+  const stripe=subscriptionStripeClient();
+  return require('./starter_intro_offer').createService({db,FieldValue,workspace:businessWorkspaceService(),
+    legal:legalConsent.createLegalConsentService({db,FieldValue}),stripe,
+    environment:scaledCircleEnvironment(),projectId:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,
+    priceId:stripePriceForPlan('starter'),ensureCustomer:async uid=>{
+      if(!context||uid!==context.uid||context.isAdmin)throw new HttpsError('permission-denied','Use the Business owner account.');
+      return getOrCreateStripeCustomer(stripe,context);
+    }});
+}
 function businessBillingService(service) {
   return workspaceBilling.createBillingService({db,FieldValue,workspace:service,stripe:subscriptionStripeClient,
     validateProvider:s=>require('./subscription_contract').certifySubscription(subscriptionStripeClient(),s,subscriptionConfiguration()),
@@ -13105,6 +13122,10 @@ function businessBillingService(service) {
 exports.getBusinessMembership = workspaceEndpoint((request,service)=>businessBillingService(service).get({uid:request.auth.uid,businessId:request.data?.businessId}),{secrets:STRIPE_CHECKOUT_SECRETS});
 exports.previewBusinessMembershipChange = workspaceEndpoint(async(request,service)=>{
   if(request.data?.newMembership===true){
+    if(request.data?.offerId!==undefined){
+      if(request.data.offerId!==require('./starter_intro_offer').OFFER)throw new HttpsError('invalid-argument','Unknown offer.');
+      return starterIntroService(null).availability({uid:request.auth.uid,businessId:request.data?.businessId});
+    }
     await service.authority({uid:request.auth.uid,businessId:request.data?.businessId,permission:'billing',allowExpired:true});
     let chosen;try{chosen=require('./subscription_contract').selectionTerms(request.data?.selection);}catch(_){throw new HttpsError('invalid-argument','Choose a valid membership selection.');}
     let monthlyCents=0;const stripe=subscriptionStripeClient();
