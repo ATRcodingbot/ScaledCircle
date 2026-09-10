@@ -2171,12 +2171,13 @@ exports.beginSocialOAuthConnectionV1 = onCall(
     const business = await requireSocialOperationsBusiness(request);
     const provider = socialOAuth.normalizeProvider(request.data?.provider);
     const environment = runtimeEnvironment();
-    const config = (await providerConfigRef(provider, environment).get()).data();
-    const metaWrite = provider === "meta" && config?.writeScopesEnabled === true;
-    if (metaWrite) metaConnection.authorize(config, business.uid);
-    const requestWriteScopes = (provider === "x" || metaWrite) && config?.writeScopesEnabled === true;
-    let proposed;
+    let config, metaWrite, requestWriteScopes, proposed;
     try {
+      config = metaConnection.connectionConfig(
+        (await providerConfigRef(provider, environment).get()).data(), business.uid);
+      metaWrite = provider === "meta" && config?.writeScopesEnabled === true;
+      if (metaWrite) metaConnection.authorize(config, business.uid);
+      requestWriteScopes = (provider === "x" || metaWrite) && config?.writeScopesEnabled === true;
       proposed = socialOAuth.createAttempt({
         businessUid: business.uid,
         provider,
@@ -2685,10 +2686,10 @@ function socialOAuthCallbackHandler(expectedProvider, providerSecretParameter) {
         return {...current, status: "exchanging"};
       });
       requireRuntimeProvider(expectedProvider, attempt.provider);
-      const config = socialOAuth.validateProviderConfig({
+      const config = socialOAuth.validateProviderConfig(metaConnection.connectionConfig({
         ...(await providerConfigRef(attempt.provider, attempt.environment).get()).data(),
         provider: attempt.provider,
-      });
+      }, attempt.businessUid, attempt.purpose));
       const completed = await socialOAuth.completeExchange({
         attempt,
         code,

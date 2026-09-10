@@ -25,6 +25,20 @@ function authorize(config, businessUid, expectedPolicy = null) {
   return p;
 }
 
+// The bounded publishing pilot is not the identity policy for ordinary
+// customer read-only onboarding. Never lend its Page or write scopes to a
+// different workspace, and never modify the stored provider configuration.
+function connectionConfig(config, businessUid, purpose = null) {
+  if (config?.provider !== "meta" || !config.metaDogfood) return config;
+  const restricted = policy(config);
+  if (businessUid === restricted.businessUid) return config;
+  if (purpose && purpose !== "read_only_connection") {
+    throw new Error("social_oauth_meta_restricted_identity_mismatch");
+  }
+  const {metaDogfood, ...ordinary} = config;
+  return {...ordinary, writeScopesEnabled: false, externalPublishingEnabled: false};
+}
+
 function identity(candidate, p) {
   if (candidate?.provider !== "meta" || candidate.accountId !== p.pageId ||
       candidate.accountDisplayName !== p.pageName || candidate.linkedAccountId !== p.instagramId ||
@@ -61,4 +75,4 @@ function capabilities(scopes, surface) {
     publishVideo: false, schedule: false};
 }
 
-module.exports = {policy, authorize, identity, confirmation, capabilities};
+module.exports = {policy, authorize, connectionConfig, identity, confirmation, capabilities};

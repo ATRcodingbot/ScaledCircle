@@ -73,3 +73,48 @@ test("Meta exchange verifies live linkage and professional identity using GET on
     assert.deepEqual(completed.grantedScopes, [...oauth.META_PUBLISH_SCOPES].sort());
   }
 });
+
+test("ordinary Business onboarding never inherits the internal Meta Page or publishing scopes", () => {
+  const before = JSON.stringify(config);
+  const ordinary = policy.connectionConfig(config, "customer-business");
+  assert.equal(ordinary.metaDogfood, undefined);
+  assert.equal(ordinary.writeScopesEnabled, false);
+  assert.equal(ordinary.externalPublishingEnabled, false);
+  const result = oauth.createAttempt({businessUid: "customer-business", provider: "meta", config: ordinary,
+    encryptionKey: key, now: 1000});
+  assert.equal(result.record.purpose, "read_only_connection");
+  assert.equal(result.record.metaDogfood, undefined);
+  assert.equal(result.record.requestedScopes.includes("pages_manage_posts"), false);
+  assert.equal(result.record.requestedScopes.includes("instagram_content_publish"), false);
+  assert.deepEqual(policy.connectionConfig(config, "customer-business", result.record.purpose), ordinary);
+  assert.throws(() => policy.connectionConfig(config, "customer-business", "meta_connection_authority"));
+  assert.throws(() => oauth.createAttempt({businessUid: "customer-business", provider: "meta", config: ordinary,
+    encryptionKey: key, now: 1000, scopes: oauth.META_PUBLISH_SCOPES, purpose: "meta_connection_authority"}));
+  assert.equal(policy.connectionConfig(config, p.businessUid), config);
+  assert.equal(JSON.stringify(config), before);
+});
+
+test("ordinary customer callback selects their granted Page rather than the internal dogfood Page", async () => {
+  const ordinary = policy.connectionConfig(config, "customer-business");
+  const attempt = oauth.createAttempt({businessUid: "customer-business", provider: "meta", config: ordinary,
+    encryptionKey: key, now: 1000});
+  const responses = [{access_token: "short-fixture"}, {access_token: "long-fixture", expires_in: 3600},
+    {data: oauth.PROVIDER_SCOPES.meta.map(permission => ({permission, status: "granted"}))},
+    {data: [{id: "789", name: "Customer Page", access_token: "customer-page-fixture"}]},
+    {id: "789", name: "Customer Page", instagram_business_account: {id: "987", username: "customer"}}];
+  let calls = 0;
+  const completed = await oauth.completeExchange({attempt: attempt.record, code: "fixture-code",
+    config: policy.connectionConfig(config, attempt.record.businessUid, attempt.record.purpose),
+    clientSecret: "fixture-secret", encryptionKey: key, now: 1100,
+    fetchImpl: async (url, init) => {
+      assert.equal(init?.method || "GET", "GET");
+      assert.notEqual(new URL(url).pathname.split("/").pop(), p.pageId);
+      return {ok: true, json: async () => responses[calls++]};
+    }});
+  assert.equal(calls, 5);
+  assert.equal(completed.status, "identity_pending");
+  const selected = oauth.selectCandidate({attempt: {...attempt.record, ...completed}, candidateId: "meta_page_789", encryptionKey: key, now: 1200});
+  assert.equal(selected.privateAccount.accountId, "789");
+  assert.equal(selected.privateAccount.linkedAccountId, "987");
+  assert.notEqual(selected.safeCandidate.capabilities.publishImage, true);
+});
