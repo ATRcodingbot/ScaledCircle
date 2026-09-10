@@ -36,10 +36,10 @@ function fakeEnvironment() {
     Timestamp, randomBytes: () => Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])})};
 }
 
-test("affiliate V1 defaults to 10 percent and caps admin rates at 30 percent", () => {
+test("affiliate V1 defaults to 10 percent and holds launch rates at 10 percent", () => {
   assert.equal(affiliate.DEFAULT_RATE_BPS, 1000);
   assert.equal(affiliate.assertRateBps(1000), 1000);
-  assert.equal(affiliate.assertRateBps(3000), 3000);
+  assert.throws(() => affiliate.assertRateBps(3000), /affiliate_rate_invalid/);
   assert.throws(() => affiliate.assertRateBps(3100), /affiliate_rate_invalid/);
   assert.throws(() => affiliate.assertRateBps(1501), /affiliate_rate_invalid/);
 });
@@ -111,8 +111,8 @@ test("join, first-touch attribution, dashboard privacy, and admin rate authority
   assert.equal(dashboard.commissionAccountingAvailable, false);
 
   await env.service.setRate({adminUid: "admin-one", affiliateUid: "scaler-one",
-    rateBps: 1500, reason: "Reviewed tier adjustment"});
-  assert.equal(env.documents.get("scalerAffiliateProfiles/scaler-one").commissionRateBps, 1500);
+    rateBps: 1000, reason: "Maintain launch policy"});
+  assert.equal(env.documents.get("scalerAffiliateProfiles/scaler-one").commissionRateBps, 1000);
   assert.equal([...env.documents.keys()].filter((key) =>
     key.startsWith("affiliateAdminAuditEvents/")).length, 1);
 });
@@ -128,4 +128,32 @@ test("self-referral and non-Business attribution fail closed", async () => {
   await assert.rejects(() => env.service.attributeBusiness({businessUid: "scaler-two",
     businessUser: {role: "scaler"}, code: profile.referralCode,
     capturedAtMillis: Date.now()}), /business_required/);
+});
+test('Scaler signup attribution is immutable, private and non-economic with one signup notification',async()=>{
+ const e=fakeEnvironment(),p=await e.service.join({uid:'referrer',user:{role:'scaler',active:true},acceptedTermsVersion:affiliate.TERMS_VERSION});
+ const input={scalerUid:'new-scaler',scalerUser:{role:'scaler'},code:p.referralCode,capturedAtMillis:Date.now()};
+ await e.service.attributeScaler(input);await e.service.attributeScaler(input);
+ assert.equal(e.documents.get('scalerReferralAttributions/new-scaler').affiliateUid,'referrer');
+ assert.equal([...e.documents.keys()].filter(k=>k.startsWith('notifications/')).length,1);
+ const n=e.documents.get('notifications/referral_signup_scaler_new-scaler');assert.equal(n.referralState,'SIGNED_UP');assert.doesNotMatch(n.message,/earned|paid/i);
+ const d=await e.service.dashboard('referrer');assert.equal(d.scalerRewardRule.rateBps,100);assert.equal(d.referrals[0].referredRole,'scaler');assert.equal(d.referrals[0].status,'SIGNED_UP');assert.equal(d.commissionAccountingAvailable,false);
+ assert.equal('scalerUid' in d.referrals[0],false);assert.equal('email' in d.referrals[0],false);
+ assert.deepEqual([...e.documents.keys()].filter(k=>/earning|wallet|payment|commissionLedger/i.test(k)),[]);
+ await assert.rejects(()=>e.service.attributeScaler({...input,scalerUid:'referrer'}),/self_referral_denied/);
+ await assert.rejects(()=>e.service.attributeScaler({...input,scalerUid:'business',scalerUser:{role:'business'}}),/scaler_required/);
+});
+test('historical rate above launch cap is retained and flagged, never raised automatically',async()=>{
+ const e=fakeEnvironment(),p=await e.service.join({uid:'referrer',user:{role:'scaler',active:true},acceptedTermsVersion:affiliate.TERMS_VERSION});
+ e.documents.set('scalerAffiliateProfiles/referrer',{...p,commissionRateBps:1500});
+ const d=await e.service.dashboard('referrer');assert.equal(d.commissionRateBps,1500);assert.equal(d.launchBusinessRateBps,1000);assert.equal(d.rateReviewRequired,true);
+ await assert.rejects(()=>e.service.setRate({adminUid:'admin',affiliateUid:'referrer',rateBps:1500,reason:'Not authorized'}),/affiliate_rate_invalid/);
+ assert.equal(e.documents.get('scalerAffiliateProfiles/referrer').commissionRateBps,1500);
+});
+
+test('Business owner enrollment requires independently verified workspace ownership',async()=>{
+ const env=fakeEnvironment(),business={role:'business',active:true};
+ await assert.rejects(()=>env.service.join({uid:'business-owner',user:business,acceptedTermsVersion:affiliate.LAUNCH_TERMS_VERSION}),/approved_scaler_required/);
+ const p=await env.service.join({uid:'business-owner',user:business,businessOwnerVerified:true,acceptedTermsVersion:affiliate.LAUNCH_TERMS_VERSION});
+ assert.equal(p.referrerRole,'business');assert.equal(p.commissionRateBps,1000);
+ await assert.rejects(()=>env.service.join({uid:'disabled',user:{...business,disabled:true},businessOwnerVerified:true,acceptedTermsVersion:affiliate.LAUNCH_TERMS_VERSION}),/approved_scaler_required/);
 });

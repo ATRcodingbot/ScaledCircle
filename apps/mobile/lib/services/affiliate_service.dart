@@ -1,6 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../config/app_environment.dart';
 
 enum AffiliateEligibility { pending, unverified, eligible }
 
@@ -10,12 +11,16 @@ class AffiliateDashboard {
     this.referralCode,
     this.commissionRateBps,
     this.referralCount = 0,
+    this.referrals = const [],
+    this.requiresPolicyAcceptance = false,
   });
 
   final bool joined;
   final String? referralCode;
   final int? commissionRateBps;
   final int referralCount;
+  final List<Map<String, dynamic>> referrals;
+  final bool requiresPolicyAcceptance;
 }
 
 abstract interface class AffiliateGateway {
@@ -34,7 +39,7 @@ class AffiliateService implements AffiliateGateway {
        _auth = auth ?? FirebaseAuth.instance,
        _firestore = firestore ?? FirebaseFirestore.instance;
 
-  static const termsVersion = 'scaler-affiliate-v1-2026-08-20';
+  static const termsVersion = 'referral-launch-v2-2026-09-10';
   final FirebaseFunctions _functions;
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -51,8 +56,10 @@ class AffiliateService implements AffiliateGateway {
     final profile = await _firestore.collection('users').doc(current.uid).get();
     final data = profile.data() ?? const <String, dynamic>{};
     final role = data['role']?.toString().toLowerCase();
-    if (role != 'scaler') {
-      throw StateError('The referral program is available only to Scalers.');
+    if (role != 'scaler' && role != 'business') {
+      throw StateError(
+        'The referral program is available to approved Scalers and Business owners.',
+      );
     }
     final approved = data['active'] == true || data['betaAccess'] == 'approved';
     if (!approved) return AffiliateEligibility.pending;
@@ -76,20 +83,24 @@ class AffiliateService implements AffiliateGateway {
   @override
   Future<AffiliateDashboard> dashboard() async {
     final result = await _functions
-        .httpsCallable('getScalerAffiliateDashboard')
+        .httpsCallable('getReferralPortalV1')
         .call<Map<String, dynamic>>();
     final data = Map<String, dynamic>.from(result.data);
     return AffiliateDashboard(
       joined: data['joined'] == true,
+      requiresPolicyAcceptance: data['requiresPolicyAcceptance'] == true,
       referralCode: data['referralCode']?.toString(),
       commissionRateBps: (data['commissionRateBps'] as num?)?.toInt(),
       referralCount: (data['referrals'] as List?)?.length ?? 0,
+      referrals: (data['referrals'] as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
   }
 
   @override
   Future<AffiliateDashboard> join() async {
-    await _functions.httpsCallable('joinScalerAffiliateProgram').call({
+    await _functions.httpsCallable('joinReferralProgramV1').call({
       'termsVersion': termsVersion,
     });
     return dashboard();
@@ -100,6 +111,24 @@ class AffiliateService implements AffiliateGateway {
     required int capturedAtMillis,
   }) async {
     await _functions.httpsCallable('recordBusinessReferralAttribution').call({
+      'referralCode': referralCode,
+      'capturedAtMillis': capturedAtMillis,
+    });
+  }
+
+  static String referralUrl(String code, {required bool scaler}) =>
+      AppEnvironmentConfig.publicBaseUrl
+          .replace(
+            queryParameters: {'ref': code},
+            fragment: '/create-account?role=${scaler ? 'scaler' : 'business'}',
+          )
+          .toString();
+
+  Future<void> recordScalerAttribution({
+    required String referralCode,
+    required int capturedAtMillis,
+  }) async {
+    await _functions.httpsCallable('recordScalerReferralAttribution').call({
       'referralCode': referralCode,
       'capturedAtMillis': capturedAtMillis,
     });

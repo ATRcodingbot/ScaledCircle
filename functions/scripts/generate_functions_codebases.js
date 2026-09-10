@@ -65,6 +65,13 @@ const platformExports = new Set([
   "joinScalerAffiliateProgram",
   "getScalerAffiliateDashboard",
   "recordBusinessReferralAttribution",
+  "recordScalerReferralAttribution",
+  "getReferralPortalV1",
+  "joinReferralProgramV1",
+  "reconcileStagingScalerReferralSettlementV1",
+  "reconcileStagingScalerReferralFundingV1",
+  "reconcileStagingScalerReferralTransferV1",
+  "reconcileStagingScalerReferralReviewV1",
   "adminSetScalerAffiliateRate",
   "adminGetScalerAffiliateOverview",
   "updateScalerProfile",
@@ -172,6 +179,11 @@ const allSecretNames = new Set([
 function transformIndex(mode) {
   const source = fs.readFileSync(path.join(sourceRoot, "index.js"), "utf8");
   const ast = parser.parse(source, {sourceType: "script", plugins: ["optionalChaining"]});
+  if (mode !== 'platform') {
+    const helpers = new Set(['referralLaunchRuntime','referralPortalContext','stagingReferralRewardService']);
+    ast.program.body = ast.program.body.filter(statement =>
+      statement.type !== 'FunctionDeclaration' || !helpers.has(statement.id?.name));
+  }
   if (mode === "platform") selectedProgram(ast, platformExports);
   if (mode === "wallet") selectedProgram(ast, walletExports);
   if (mode === "artifact-email") selectedProgram(ast, artifactEmailExports);
@@ -339,6 +351,7 @@ function copyPackage(destination, mode) {
     const source = path.join(sourceRoot, name);
     if (!fs.statSync(source).isFile()) continue;
     if (name.endsWith(".test.js")) continue;
+    if (mode !== 'platform' && name === 'scaler_referral_rewards.js') continue;
     if (["staging_physical_qa.js", "route_progress.js", "canvassing_completion.js"].includes(name)) {
       if (transformIndex(mode).includes(`require("./${name.slice(0, -3)}")`)) {
         fs.copyFileSync(source, path.join(destination, name));

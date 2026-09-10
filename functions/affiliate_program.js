@@ -3,10 +3,13 @@
 const crypto = require("node:crypto");
 
 const TERMS_VERSION = "scaler-affiliate-v1-2026-08-20";
+const LAUNCH_TERMS_VERSION = "referral-launch-v2-2026-09-10";
 const ATTRIBUTION_WINDOW_DAYS = 30;
 const DEFAULT_RATE_BPS = 1000;
 const MIN_RATE_BPS = 1000;
-const MAX_RATE_BPS = 3000;
+// Launch changes are capped at the Founder-approved 10%. Existing records are
+// retained for review; no automatic progression or monetary posting is enabled.
+const MAX_RATE_BPS = 1000;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function cleanText(value, maxLength = 160) {
@@ -37,7 +40,8 @@ function assertRateBps(value) {
 }
 
 function isApprovedScaler(user) {
-  return cleanText(user?.role, 24).toLowerCase() === "scaler" &&
+  return user?.disabled !== true && !['rejected','revoked','suspended','disabled'].includes(user?.betaAccess) &&
+    cleanText(user?.role, 24).toLowerCase() === "scaler" &&
     (user?.active === true || user?.betaAccess === "approved");
 }
 
@@ -48,9 +52,10 @@ function attributionIsFresh(capturedAtMillis, nowMillis = Date.now()) {
 }
 
 function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto.randomBytes}) {
-  async function join({uid, user, acceptedTermsVersion}) {
-    if (!isApprovedScaler(user)) throw new Error("approved_scaler_required");
-    if (acceptedTermsVersion !== TERMS_VERSION) throw new Error("affiliate_terms_required");
+  async function join({uid, user, acceptedTermsVersion, businessOwnerVerified = false}) {
+    if (!isApprovedScaler(user) && !(businessOwnerVerified === true && user?.role === 'business' &&
+        user.disabled !== true && (user.active === true || user.betaAccess === 'approved'))) throw new Error("approved_scaler_required");
+    if (![TERMS_VERSION, LAUNCH_TERMS_VERSION].includes(acceptedTermsVersion)) throw new Error("affiliate_terms_required");
 
     const profileRef = db.collection("scalerAffiliateProfiles").doc(uid);
     const existing = await profileRef.get();
@@ -78,7 +83,8 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
             status: "active",
             referralCode: code,
             commissionRateBps: DEFAULT_RATE_BPS,
-            termsVersion: TERMS_VERSION,
+            termsVersion: acceptedTermsVersion,
+            referrerRole: user.role,
             termsAcceptedAt: timestamp,
             createdAt: timestamp,
             updatedAt: timestamp,
@@ -97,12 +103,24 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
     if (!profile.exists) return {joined: false, termsVersion: TERMS_VERSION};
     const referrals = await db.collection("affiliateBusinessReferrals")
       .where("affiliateUid", "==", uid).limit(100).get();
-    const items = referrals.docs.map((doc, index) => {
+    const scalerReferrals = await db.collection("affiliateScalerReferrals")
+      .where("affiliateUid", "==", uid).limit(100).get();
+    const rewards = await db.collection('referralRewards').where('affiliateUid','==',uid).limit(1001).get();
+    if (rewards.docs.length > 1000) throw new Error('referral_history_requires_review');
+    const items = [...referrals.docs.map(doc => ({doc, role:"business"})),
+      ...scalerReferrals.docs.map(doc => ({doc, role:"scaler"}))].map(({doc,role}, index) => {
       const value = doc.data() || {};
+      const qualifying = rewards.docs.map(r=>r.data()).filter(r=>role==='scaler' &&
+        r.referredScalerUid===doc.id && r.status==='EARNED');
       return {
         displayId: `Referral ${index + 1}`,
-        status: cleanText(value.status, 32) || "attributed",
-        subscriptionStatus: cleanText(value.subscriptionStatus, 32) || "awaiting_subscription",
+        referredRole: role,
+        status: qualifying.length ? "EARNING" : "SIGNED_UP",
+        qualifyingJobCount: qualifying.length,
+        earnedCents: qualifying.reduce((sum,r)=>sum+r.amountCents,0),
+        availableCents: 0,
+        paidCents: 0,
+        subscriptionStatus: role === "business" ? cleanText(value.subscriptionStatus, 32) || "awaiting_subscription" : "not_applicable",
         attributedAtMillis: value.attributedAt?.toMillis?.() || null,
       };
     });
@@ -112,6 +130,12 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
       status: value.status,
       referralCode: value.referralCode,
       commissionRateBps: value.commissionRateBps,
+      launchBusinessRateBps: DEFAULT_RATE_BPS,
+      rateReviewRequired: value.commissionRateBps !== DEFAULT_RATE_BPS,
+      scalerRewardRule: {version:'ScalerReferralOnePercentV1',rateBps:100,basis:'final_approved_scaler_compensation',fundingSource:'platform_economics',singleLevel:true},
+      requiresPolicyAcceptance: value.acceptedLaunchPolicyVersion !== LAUNCH_TERMS_VERSION,
+      scalerRewardAccountingAvailable: true,
+      referralPayoutAvailable: false,
       termsVersion: value.termsVersion,
       referrals: items,
       commissionAccountingAvailable: false,
@@ -119,17 +143,17 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
     };
   }
 
-  async function attributeBusiness({businessUid, businessUser, code, capturedAtMillis}) {
-    if (cleanText(businessUser?.role, 24).toLowerCase() !== "business") {
-      throw new Error("business_required");
+  async function attribute({uid, user, role, code, capturedAtMillis}) {
+    if (cleanText(user?.role, 24).toLowerCase() !== role) {
+      throw new Error(role === "business" ? "business_required" : "scaler_required");
     }
     const canonicalCode = normalizeReferralCode(code);
     if (!canonicalCode || !attributionIsFresh(capturedAtMillis)) {
       throw new Error("referral_invalid_or_expired");
     }
     const codeRef = db.collection("scalerAffiliateCodes").doc(canonicalCode);
-    const attributionRef = db.collection("businessReferralAttributions").doc(businessUid);
-    const referralRef = db.collection("affiliateBusinessReferrals").doc(businessUid);
+    const attributionRef = db.collection(role === "business" ? "businessReferralAttributions" : "scalerReferralAttributions").doc(uid);
+    const referralRef = db.collection(role === "business" ? "affiliateBusinessReferrals" : "affiliateScalerReferrals").doc(uid);
     await db.runTransaction(async (transaction) => {
       const [codeSnapshot, existingAttribution] = await Promise.all([
         transaction.get(codeRef),
@@ -140,32 +164,43 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
         throw new Error("referral_code_not_found");
       }
       const affiliateUid = cleanText(codeSnapshot.data()?.affiliateUid, 160);
-      if (!affiliateUid || affiliateUid === businessUid) throw new Error("self_referral_denied");
+      if (!affiliateUid || affiliateUid === uid) throw new Error("self_referral_denied");
       const affiliate = await transaction.get(db.collection("scalerAffiliateProfiles").doc(affiliateUid));
       if (!affiliate.exists || affiliate.data()?.status !== "active") {
         throw new Error("affiliate_not_active");
       }
       const timestamp = FieldValue.serverTimestamp();
       transaction.create(attributionRef, {
-        businessUid,
+        ...(role === "business" ? {businessUid:uid} : {scalerUid:uid}),
         affiliateUid,
         referralCode: canonicalCode,
         attributionWindowDays: ATTRIBUTION_WINDOW_DAYS,
         capturedAt: Timestamp.fromMillis(Number(capturedAtMillis)),
         attributedAt: timestamp,
         authorityVersion: "affiliate-attribution-v1",
+        ...(role === 'scaler' ? {policyVersion:'ScalerReferralOnePercentV1'} : {}),
       });
       transaction.create(referralRef, {
-        businessUid,
+        ...(role === "business" ? {businessUid:uid} : {scalerUid:uid}),
         affiliateUid,
         status: "attributed",
-        subscriptionStatus: "awaiting_subscription",
+        ...(role === "business" ? {subscriptionStatus:"awaiting_subscription"} : {rewardStatus:"awaiting_qualifying_work"}),
         attributedAt: timestamp,
         updatedAt: timestamp,
+      });
+      transaction.create(db.collection("notifications").doc(`referral_signup_${role}_${uid}`), {
+        userId: affiliateUid, type: "referral_signed_up", title: "New referral",
+        message: `A new ${role === "business" ? "Business" : "Scaler"} joined ScaledCircle using your referral link. Signup does not create a monetary reward.`,
+        referralState: "SIGNED_UP", read: false, createdAt: timestamp,
       });
     });
     return {attributed: true};
   }
+
+  const attributeBusiness = ({businessUid,businessUser,...input}) =>
+    attribute({uid:businessUid,user:businessUser,role:"business",...input});
+  const attributeScaler = ({scalerUid,scalerUser,...input}) =>
+    attribute({uid:scalerUid,user:scalerUser,role:"scaler",...input});
 
   async function setRate({adminUid, affiliateUid, rateBps, reason}) {
     const rate = assertRateBps(rateBps);
@@ -210,10 +245,11 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
     });
   }
 
-  return {join, dashboard, attributeBusiness, setRate, adminOverview};
+  return {join, dashboard, attributeBusiness, attributeScaler, setRate, adminOverview};
 }
 
 module.exports = {
+  LAUNCH_TERMS_VERSION,
   TERMS_VERSION,
   ATTRIBUTION_WINDOW_DAYS,
   DEFAULT_RATE_BPS,

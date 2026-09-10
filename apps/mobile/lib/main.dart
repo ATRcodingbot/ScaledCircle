@@ -1,3 +1,5 @@
+import 'screens/public/referral_program_screen.dart';
+import 'screens/scaler/affiliate/scaler_affiliate_screen.dart';
 import 'screens/jobs/jobs_marketplace_screen.dart';
 import 'screens/business/business_membership_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -179,6 +181,15 @@ class ScaledCircleApp extends StatelessWidget {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => const StagingPrivacyScreen(),
+      );
+    }
+    if ((AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isLocal) &&
+        (route?.path == '/referrals' || route?.path == '/referral-portal')) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => route?.path == '/referrals'
+            ? const ReferralProgramScreen()
+            : const ScalerAffiliateScreen(),
       );
     }
     if (LegalDocumentKind.fromPath(route?.path) case final legalKind?) {

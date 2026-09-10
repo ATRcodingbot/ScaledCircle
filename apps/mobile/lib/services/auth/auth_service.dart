@@ -99,7 +99,8 @@ class AuthService {
     }
 
     User? user = _auth.currentUser;
-    if (user == null || user.email?.toLowerCase() != email.trim().toLowerCase()) {
+    if (user == null ||
+        user.email?.toLowerCase() != email.trim().toLowerCase()) {
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
@@ -122,14 +123,19 @@ class AuthService {
       await LegalConsentService().acceptAccountAgreements(
         scaler: role == UserRole.scaler,
       );
-      if (role == UserRole.business &&
-          affiliateReferralCode != null &&
-          affiliateCapturedAtMillis != null) {
+      if (affiliateReferralCode != null && affiliateCapturedAtMillis != null) {
         try {
-          await AffiliateService().recordBusinessAttribution(
-            referralCode: affiliateReferralCode,
-            capturedAtMillis: affiliateCapturedAtMillis,
-          );
+          if (role == UserRole.business) {
+            await AffiliateService().recordBusinessAttribution(
+              referralCode: affiliateReferralCode,
+              capturedAtMillis: affiliateCapturedAtMillis,
+            );
+          } else {
+            await AffiliateService().recordScalerAttribution(
+              referralCode: affiliateReferralCode,
+              capturedAtMillis: affiliateCapturedAtMillis,
+            );
+          }
         } catch (_) {
           // Account creation and normal pricing never depend on referral
           // attribution. Invalid/expired codes fail closed without changing

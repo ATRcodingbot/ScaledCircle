@@ -602,7 +602,7 @@ function affiliateError(error) {
     "affiliate_rate_reason_required", "referral_invalid_or_expired",
   ]);
   const denied = new Set([
-    "approved_scaler_required", "business_required", "self_referral_denied",
+    "approved_scaler_required", "business_required", "scaler_required", "self_referral_denied",
   ]);
   const missing = new Set(["referral_code_not_found", "affiliate_not_found"]);
   if (invalid.has(code)) return new HttpsError("invalid-argument", code.replaceAll("_", " "));
@@ -13274,4 +13274,88 @@ exports.getBusinessServiceAreaSuggestions = workspaceEndpoint(async(request,serv
   const businessId=request.data?.businessId||user?.activeBusinessId||request.auth.uid;
   const authority=await service.authority({uid:request.auth.uid,businessId,permission:'campaigns',allowExpired:true});
   return require('./business_geography').createService({db,FieldValue}).suggestions(authority.businessId);
+});
+
+exports.recordScalerReferralAttribution = onCall(
+  {enforceAppCheck: false, maxInstances: 10},
+  async request => {
+    referralLaunchRuntime();
+    const context = await authenticatedUserContext(request, "Log in to record a referral.");
+    const account = await getAuth().getUser(context.uid);
+    const createdAt = Date.parse(account.metadata.creationTime);
+    const capturedAt = Number(request.data?.capturedAtMillis);
+    const priorWork = await db.collection('scalerTransfers').where('scalerId','==',context.uid).limit(1).get();
+    if(account.disabled || !Number.isFinite(createdAt) || Date.now()-createdAt > 30*86400000 ||
+        capturedAt > createdAt+300000 || !priorWork.empty)
+      throw new HttpsError('failed-precondition','This referral must belong to a new Scaler signup.');
+    try {
+      return await require("./affiliate_program").createAffiliateService({db, FieldValue, Timestamp})
+        .attributeScaler({scalerUid:context.uid,scalerUser:context.user,
+          code:request.data?.referralCode,capturedAtMillis:request.data?.capturedAtMillis});
+    } catch(error) { throw affiliateError(error); }
+  },
+);
+
+function referralLaunchRuntime() {
+  if ((process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) !== 'scaledcircle-staging' || process.env.APP_ENV !== 'staging') {
+    throw new HttpsError('failed-precondition','This referral release is staging only.');
+  }
+}
+async function referralPortalContext(request) {
+  referralLaunchRuntime();
+  const context = await requireVerifiedUser(request,'Sign in and verify your email to view referrals.');
+  const account = await getAuth().getUser(context.uid);
+  if(account.disabled || !account.emailVerified) throw new HttpsError('permission-denied','An enabled verified account is required.');
+  let businessOwnerVerified = false;
+  if(context.role === 'business') {
+    const service = require('./business_workspace').createWorkspaceService({db,auth:getAuth(),FieldValue,Timestamp});
+    const authority = await service.authority({uid:context.uid,businessId:context.uid,allowExpired:true});
+    businessOwnerVerified = authority.isOwner === true;
+  } else if(!require('./affiliate_program').isApprovedScaler(context.user)) {
+    throw new HttpsError('permission-denied','Approved Scalers and Business owners may use referrals.');
+  }
+  return {...context,businessOwnerVerified};
+}
+exports.getReferralPortalV1 = onCall({maxInstances:5},async request=>{
+  const context = await referralPortalContext(request);
+  return require('./affiliate_program').createAffiliateService({db,FieldValue,Timestamp}).dashboard(context.uid);
+});
+exports.joinReferralProgramV1 = onCall({maxInstances:5},async request=>{
+  const context = await referralPortalContext(request), program = require('./affiliate_program');
+  if(request.data?.termsVersion !== program.LAUNCH_TERMS_VERSION || Object.keys(request.data||{}).some(k=>k!=='termsVersion'))
+    throw new HttpsError('invalid-argument','Explicit acceptance of the current referral terms is required.');
+  const service = program.createAffiliateService({db,FieldValue,Timestamp});
+  await service.join({uid:context.uid,user:context.user,businessOwnerVerified:context.businessOwnerVerified,acceptedTermsVersion:program.LAUNCH_TERMS_VERSION});
+  await db.runTransaction(async tx=>{
+    const ref=db.doc('scalerAffiliateProfiles/'+context.uid), profile=await tx.get(ref);
+    if(profile.data()?.acceptedLaunchPolicyVersion===program.LAUNCH_TERMS_VERSION)return;
+    tx.create(db.doc('referralPolicyAcceptances/'+context.uid+'_'+program.LAUNCH_TERMS_VERSION),{
+      uid:context.uid,version:program.LAUNCH_TERMS_VERSION,acceptedAt:FieldValue.serverTimestamp()});
+    tx.update(ref,{acceptedLaunchPolicyVersion:program.LAUNCH_TERMS_VERSION,launchPolicyAcceptedAt:FieldValue.serverTimestamp()});
+  });
+  return service.dashboard(context.uid);
+});
+function stagingReferralRewardService() {
+  referralLaunchRuntime();
+  return require('./scaler_referral_rewards').createService({db,FieldValue,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT});
+}
+exports.reconcileStagingScalerReferralSettlementV1 = onDocumentWritten({document:'campaignSettlements/{zoneId}',region:'us-east1',maxInstances:2,retry:true},async event=>{
+  if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging')return;
+  await stagingReferralRewardService().reconcile(event.params.zoneId);
+});
+exports.reconcileStagingScalerReferralFundingV1 = onDocumentWritten({document:'campaignPayments/{paymentId}',region:'us-east1',maxInstances:2,retry:true},async event=>{
+  if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging')return;
+  await stagingReferralRewardService().reconcilePayment(event.params.paymentId);
+});
+exports.reconcileStagingScalerReferralTransferV1 = onDocumentWritten({document:'scalerTransfers/{transferId}',region:'us-east1',maxInstances:2,retry:true},async event=>{
+  if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging')return;
+  const value=event.data?.after.data()||event.data?.before.data();
+  if(value?.zoneId)await stagingReferralRewardService().reconcile(value.zoneId);
+});
+exports.reconcileStagingScalerReferralReviewV1 = onDocumentWritten({document:'campaignZones/{zoneId}',region:'us-east1',maxInstances:2,retry:true},async event=>{
+  if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging')return;
+  const before=event.data?.before.data()||{},after=event.data?.after.data()||{};
+  const fields=['status','reviewStatus','disputeOpen','settlementBlocked','approvedTransferAmountCents','approvedBaseAmountCents','approvedBonusAmountCents'];
+  if(!fields.some(field=>before[field]!==after[field]))return;
+  await stagingReferralRewardService().reconcile(event.params.zoneId);
 });

@@ -1,3 +1,4 @@
+import '../../../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -416,7 +417,12 @@ class ScalerDashboardScreen extends StatelessWidget {
                         builder: (_) => const ScalerAffiliateScreen(),
                       ),
                     ),
-                    child: const Text('Referral Program — Coming Soon'),
+                    child: const Text(
+                      AppEnvironmentConfig.isStaging ||
+                              AppEnvironmentConfig.isLocal
+                          ? 'Referrals'
+                          : 'Referral Program — Coming Soon',
+                    ),
                   ),
                 ],
               ),

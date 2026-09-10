@@ -1,3 +1,5 @@
+import '../../config/app_environment.dart';
+import '../scaler/affiliate/scaler_affiliate_screen.dart';
 import 'package:flutter/material.dart';
 import '../../services/business_workspace_service.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
@@ -65,6 +67,20 @@ class BusinessAccountScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const BusinessMembershipScreen(),
+                  ),
+                ),
+              ),
+            if ((AppEnvironmentConfig.isStaging ||
+                    AppEnvironmentConfig.isLocal) &&
+                BusinessWorkspaceSession.value?['isOwner'] == true)
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: const Text('Referrals'),
+                subtitle: const Text('Businesses and Scalers you referred'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ScalerAffiliateScreen(),
                   ),
                 ),
               ),

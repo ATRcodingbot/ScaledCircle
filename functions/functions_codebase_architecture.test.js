@@ -32,6 +32,9 @@ const expected = [
   "getMarketplaceWorkTypes", "getPendingScalerPreferences", "savePendingScalerPreferences",
   "joinScalerAffiliateProgram", "getScalerAffiliateDashboard",
   "recordBusinessReferralAttribution", "adminSetScalerAffiliateRate",
+  "recordScalerReferralAttribution", "getReferralPortalV1", "joinReferralProgramV1",
+  "reconcileStagingScalerReferralSettlementV1", "reconcileStagingScalerReferralFundingV1",
+  "reconcileStagingScalerReferralTransferV1", "reconcileStagingScalerReferralReviewV1",
   "adminGetScalerAffiliateOverview",
   "updateScalerProfile",
 ];

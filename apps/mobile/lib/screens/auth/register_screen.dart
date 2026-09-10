@@ -47,6 +47,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ? UserRole.scaler
         : UserRole.business;
     _affiliateReferralCode = AffiliateService.referralCodeFromUri(Uri.base);
+    if (_affiliateReferralCode != null &&
+        Uri.tryParse(Uri.base.fragment)?.queryParameters['role'] == 'scaler') {
+      _role = UserRole.scaler;
+    }
     _affiliateCapturedAtMillis = DateTime.now().millisecondsSinceEpoch;
   }
 
@@ -87,11 +91,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         referrerName: _discoverySource == ReferralSourceFields.personalReferral
             ? _referrerNameController.text.trim()
             : '',
-        affiliateReferralCode: _role == UserRole.business
-            ? _affiliateReferralCode
-            : null,
-        affiliateCapturedAtMillis:
-            _role == UserRole.business && _affiliateReferralCode != null
+        affiliateReferralCode: _affiliateReferralCode,
+        affiliateCapturedAtMillis: _affiliateReferralCode != null
             ? _affiliateCapturedAtMillis
             : null,
       );
