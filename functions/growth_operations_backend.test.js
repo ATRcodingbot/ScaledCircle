@@ -73,3 +73,7 @@ test('new internal territory revision permits one bounded cycle, preserving old 
  assert.equal((await db.collection('agentProspects').get()).size,8);
  const data=await current.load();assert.deepEqual(data.summary.serviceAreaPriority,['Baltimore City, Maryland','Anne Arundel County, Maryland']);
 });
+test('internal notification view excludes unrelated tenants and non-growth account alerts',async()=>{
+ await service.run();await db.doc('notifications/unrelated').set({userId:'other',type:'agent_daily_brief',title:'private'});await db.doc('notifications/billing').set({userId:'owner',type:'invoice_paid',title:'private billing'});
+ const view=await service.load();assert.equal(view.notifications.length,8);assert.ok(view.notifications.every(n=>!n.title.includes('private')));assert.ok(view.notifications.every(n=>n.userId===undefined));
+});

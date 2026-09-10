@@ -194,7 +194,7 @@ void main() {
       );
       expect(find.text('External actions'), findsOneWidget);
       expect(find.text('Provider execution routes: 0'), findsOneWidget);
-      expect(find.text('Executable actions'), findsOneWidget);
+      expect(find.text('Recorded actions'), findsOneWidget);
       expect(find.text('agent_run_one'), findsOneWidget);
       expect(find.text('NO_DATA'), findsOneWidget);
       expect(find.text('client secret'), findsNothing);

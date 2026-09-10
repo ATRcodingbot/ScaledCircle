@@ -111,7 +111,7 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
               ),
               _status('Observations', _summary!['observationCount']),
               _status('Recommendations', _summary!['recommendationCount']),
-              _status('Executable actions', _summary!['actionObjectCount']),
+              _status('Recorded actions', _summary!['actionObjectCount']),
               _status(
                 'Safety controls active',
                 _summary!['killSwitchActiveCount'],

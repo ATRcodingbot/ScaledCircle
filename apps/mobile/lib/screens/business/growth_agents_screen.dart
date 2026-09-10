@@ -221,7 +221,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           (area) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
-              '${area['serviceArea']}\n${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers\n${area['qualified'] ?? 0} qualified · ${area['drafts'] ?? 0} drafts',
+              '${area['serviceArea']}\n${area['businesses']} Business prospects · ${area['partners']} organization partners · ${area['individualScalers']} individual Scalers\n${area['qualified'] ?? 0} qualified · ${area['drafts'] ?? 0} drafts\nLatest cycle: ${area['researched'] ?? 'No Data'} source checks · ${area['unavailable'] ?? 'No Data'} unavailable',
             ),
           ),
         ),
@@ -360,6 +360,18 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           ),
         ),
         const SizedBox(height: 20),
+        ExpansionTile(
+          title: const Text('Growth notifications'),
+          subtitle: const Text('Saved alerts from this internal workspace'),
+          children: _list(d['notifications'])
+              .map(
+                (n) => ListTile(
+                  title: Text('${n['title']}'),
+                  subtitle: Text('${n['message']}\n${_time(n['createdAt'])}'),
+                ),
+              )
+              .toList(),
+        ),
         Text('Reports', style: Theme.of(context).textTheme.titleLarge),
         ..._list(d['reports']).map(
           (r) => Card(

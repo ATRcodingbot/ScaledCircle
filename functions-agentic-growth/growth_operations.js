@@ -46,9 +46,13 @@ function networkPattern(observations) {
   return {status:'AVAILABLE',sample:valid.length,tenantSupport:tenants.size,confidence:'medium',patterns:['Review supported channel outcomes within their industry segment.']};
 }
 function recommendationEvidence({local=[],network=[]}) {return local.length?{source:'business',evidence:local}:network.length?{source:'network',evidence:network}:{source:'generic',confidence:'low',evidence:[]};}
-function report(rows,runs,scope={status:'MISSING_MAINTAINED_GEOGRAPHY',areas:[]}) {
+function report(rows,runs,scope={status:'MISSING_MAINTAINED_GEOGRAPHY',areas:[]},observations=[]) {
   const count=k=>rows.filter(x=>x.kind===k).length;
-  return {serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),discoveryByServiceArea:geography.groupedDiscovery(rows.map(r=>({...r,serviceArea:r.serviceArea||sources.find(s=>s.url===r.sourceUrl)?.serviceArea})),scope),businessesFound:count('business'),partnersFound:count('referral_partner'),individualScalersFound:count('scaler'),qualified:rows.filter(x=>x.qualified).length,awaitingApproval:rows.filter(x=>x.approvalState==='awaiting_approval').length,
+  const groups=geography.groupedDiscovery(rows.map(r=>({...r,serviceArea:r.serviceArea||sources.find(s=>s.url===r.sourceUrl)?.serviceArea})),scope);
+  const latest=[...runs].filter(r=>r.status==='completed').sort((a,b)=>b.createdAt-a.createdAt)[0];
+  for(const group of groups){const checked=observations.filter(o=>o.runId===latest?.id&&geography.matchArea(sources.find(s=>s.url===o.sourceUrl)||{},scope)?.id===group.serviceAreaId);
+    group.researched=latest?checked.length:null;group.unavailable=latest?checked.filter(o=>o.evidenceState==='UNAVAILABLE').length:null;}
+  return {serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),discoveryByServiceArea:groups,businessesFound:count('business'),partnersFound:count('referral_partner'),individualScalersFound:count('scaler'),qualified:rows.filter(x=>x.qualified).length,awaitingApproval:rows.filter(x=>x.approvalState==='awaiting_approval').length,
     completedSourceChecks:runs.filter(r=>r.status==='completed').reduce((n,r)=>n+(r.sourceChecks||0),0),contacted:0,replied:null,meetings:null,signedUp:null,paid:null,externalActions:0,
     learned:'Published service areas and recruitment channels support initial fit. Buying interest, candidate availability and conversion performance remain unknown.',
     next:'Review the sourced decision packages and outreach drafts. No prospect will be contacted automatically.'};
@@ -102,16 +106,20 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
   }
   async function makeReport(kind) {
     if(!['daily','weekly'].includes(kind))fail('Invalid report.');
-    const [rows,runs,scope]=await Promise.all([query('agentProspects'),query('agentRuns'),areaScope()]);
+    const [rows,runs,scope,observations]=await Promise.all([query('agentProspects'),query('agentRuns'),areaScope(),query('agentObservations')]);
     const period=kind==='daily'?day(now()):day(now()-((new Date(now()).getUTCDay()+6)%7)*86400000);
     const registered=(await db.doc('internalGrowthWorkspaces/'+target).get()).exists;
-    const id='growth_report_'+hash([target,kind,period,...(registered?[scope.preferenceVersion]:[])]).slice(0,40),summary={...report(rows,runs.filter(r=>r.schemaVersion===VERSION),scope),newApprovalsToday:rows.filter(r=>r.qualified&&day(r.discoveredAt)===day(now())).length};
+    const id='growth_report_'+hash([target,kind,period,...(registered?[scope.preferenceVersion]:[])]).slice(0,40),summary={...report(rows,runs.filter(r=>r.schemaVersion===VERSION),scope,observations),newApprovalsToday:rows.filter(r=>r.qualified&&day(r.discoveredAt)===day(now())).length};
     await db.runTransaction(async tx=>{const ref=db.doc('agentReports/'+id),old=await tx.get(ref);if(old.exists)return;tx.create(ref,{businessUid:target,kind,period,summary,scope:'Cumulative research inventory through report creation; no conversion telemetry is connected.',createdAt:now(),emailStatus:'preference_controlled'});tx.create(db.doc('notifications/'+id),{userId:target,type:kind==='daily'?'agent_daily_brief':'agent_weekly_report',title:kind==='daily'?'Daily brief ready':'Weekly report ready',message:`${summary.businessesFound} Business prospects, ${summary.partnersFound} partner prospects. ${summary.awaitingApproval} drafts awaiting review.`,deepLink:{destination:'growth_agents',reportId:id},read:false,createdAt:FieldValue.serverTimestamp()});});return id;
   }
   async function load() {
     const [rows,runs,reports,health,pref,scope]=await Promise.all([query('agentProspects'),query('agentRuns'),query('agentReports'),db.doc('agentHealth/'+target).get(),db.doc('agentCommunicationPreferences/'+target).get(),areaScope()]);
-    const history=runs.filter(r=>r.schemaVersion===VERSION).sort((a,b)=>b.createdAt-a.createdAt),summary=report(rows,history,scope);
-    return {title:'ScaledCircle Growth Agents',workspace:{registered:(await db.doc('internalGrowthWorkspaces/'+target).get()).exists,scope},schemaVersion:VERSION,prospects:rows.sort((a,b)=>Number(b.qualified)-Number(a.qualified)||a.displayName.localeCompare(b.displayName)),reports:reports.sort((a,b)=>b.createdAt-a.createdAt),runs:history,summary,preferences:pref.data()||preferences(),externalActionsEnabled:false,killSwitchActive:health.data()?.killSwitchActive!==false,researchPaused:health.data()?.researchPaused===true,nextResearchAfter:health.data()?.nextResearchAfter||null,
+    const alerts=(await db.collection('notifications').where('userId','==',target).limit(250).get()).docs
+      .filter(d=>['agent_qualified_prospect','agent_referral_partner','agent_daily_brief','agent_weekly_report'].includes(d.data().type))
+      .map(d=>({id:d.id,title:d.data().title,message:d.data().message,createdAt:d.data().createdAt?.toMillis?.()||null}))
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    const history=runs.filter(r=>r.schemaVersion===VERSION).sort((a,b)=>b.createdAt-a.createdAt),summary=report(rows,history,scope,await query('agentObservations'));
+    return {title:'ScaledCircle Growth Agents',notifications:alerts,workspace:{registered:(await db.doc('internalGrowthWorkspaces/'+target).get()).exists,scope},schemaVersion:VERSION,prospects:rows.sort((a,b)=>Number(b.qualified)-Number(a.qualified)||a.displayName.localeCompare(b.displayName)),reports:reports.sort((a,b)=>b.createdAt-a.createdAt),runs:history,summary,preferences:pref.data()||preferences(),externalActionsEnabled:false,killSwitchActive:health.data()?.killSwitchActive!==false,researchPaused:health.data()?.researchPaused===true,nextResearchAfter:health.data()?.nextResearchAfter||null,
       agents:AGENTS.map(([type,name])=>({type,name,status:['lead_generation','workforce_recruiter','growth_strategist'].includes(type)?history.length?'Waiting for review':'Ready for research':'Needs approved input',lastAction:['lead_generation','workforce_recruiter','growth_strategist'].includes(type)&&history.length?'Official-source research and report generation':'No new run performed in this research cycle',result:type==='lead_generation'?`${summary.businessesFound} sourced Business prospects`:type==='workforce_recruiter'?`${summary.partnersFound} organization partner prospects; ${summary.individualScalersFound} individual Scalers`:type==='growth_strategist'?`${summary.awaitingApproval} drafts awaiting review`:'Existing specialist authority preserved; no send or spend',nextAction:type==='marketing_manager'?'Review existing Social evidence without changing schedules':type==='ad_manager'?'Prepare a budget-free proposal when campaign input is approved':type==='business_assistant'?'Wait for an authorized Business inquiry': 'Review evidence and proposed next actions',needsApproval:true})),network:networkPattern([])};
   }
   async function savePreferences(input){const p=preferences(input);await db.doc('agentCommunicationPreferences/'+target).set({businessUid:target,...p,updatedAt:FieldValue.serverTimestamp()});return p;}
