@@ -7,7 +7,7 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 
 
 const { initializeApp, getApp } = require("firebase-admin/app");
-
+const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
@@ -5026,6 +5026,31 @@ async function requireTrustedAdmin(request) {
     throw adminOperationsHttpsError(error);
   }
 }
+
+/** Verified Admin-only Business access; never grants a subscription. */
+async function businessAccessApprovalCall(request, operation) {
+  const actor = await requireTrustedAdmin(request);
+  const businessAccessApprovalService = require('./business_access_approval').createService({
+    db, auth: getAuth(), FieldValue, environment: process.env.APP_ENV
+  });
+  try {
+    return await businessAccessApprovalService[operation]({ input: request.data, actor });
+  } catch (error) {
+    if (['invalid-argument', 'permission-denied', 'failed-precondition', 'not-found'].includes(error.code))
+    throw new HttpsError(error.code, error.message);
+    throw new HttpsError('internal', 'Business access could not be updated. Please retry.');
+  }
+}
+
+exports.getBusinessAccessApproval = onCall(
+  { enforceAppCheck: false, maxInstances: 2, invoker: 'public' },
+  (request) => businessAccessApprovalCall(request, 'load')
+);
+
+exports.approveBusinessAccess = onCall(
+  { enforceAppCheck: false, maxInstances: 2, invoker: 'public' },
+  (request) => businessAccessApprovalCall(request, 'approve')
+);
 
 /** Promotes or demotes an application administrator with last-admin protection. */
 

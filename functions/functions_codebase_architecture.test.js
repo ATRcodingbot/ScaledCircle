@@ -277,8 +277,8 @@ test("completion-authority-core exclusively owns completion and earning-establis
     entry.codebase === "completion-authority-core")?.source, "functions-completion");
 });
 
-test("admin-ops-core exclusively owns the secret-free operational read boundary", () => {
-  const names = ["getAdminOperationsOverview", "getAdminCampaignTimeline",
+test("admin-ops-core exclusively owns secret-free operational reads and Business access approval", () => {
+  const names = ["getBusinessAccessApproval", "approveBusinessAccess", "getAdminOperationsOverview", "getAdminCampaignTimeline",
     "updateAdminSupportCaseStatus"];
   assert.deepEqual(exportsIn(adminOps).sort(), [...names].sort());
   for (const name of names) {

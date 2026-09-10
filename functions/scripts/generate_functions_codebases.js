@@ -112,6 +112,7 @@ const transactionalEmailExports = new Set([
   "retryTransactionalEmailJob",
 ]);
 const adminOpsExports = new Set([
+  "getBusinessAccessApproval", "approveBusinessAccess",
   "getAdminOperationsOverview",
   "getAdminCampaignTimeline",
   "updateAdminSupportCaseStatus",
@@ -378,7 +379,7 @@ function copyPackage(destination, mode) {
     if (mode === "transactional-email" && name.endsWith(".js") &&
         name !== "transactional_email.js") continue;
     if (mode === "admin-ops" && name.endsWith(".js") &&
-        !["admin_operations.js", "admin_ops_read_model.js"].includes(name)) continue;
+        !["admin_operations.js", "admin_ops_read_model.js", "business_access_approval.js"].includes(name)) continue;
     if (mode === "sales" && name.endsWith(".js") && name !== "sales_funnel.js") continue;
     if (mode === "legal" && name.endsWith(".js") && name !== "legal_consent.js") continue;
     if (mode === "application" && name.endsWith(".js") &&

@@ -175,6 +175,7 @@ assert.deepEqual(Object.keys(transactionalEmail).sort(), [
   "retryTransactionalEmailJob",
 ].sort());
 assert.deepEqual(Object.keys(adminOps).sort(), [
+  "getBusinessAccessApproval", "approveBusinessAccess",
   "getAdminCampaignTimeline", "getAdminOperationsOverview", "updateAdminSupportCaseStatus",
 ].sort());
 assert.deepEqual(Object.keys(sales).sort(), [

@@ -5494,6 +5494,31 @@ exports.applySmartZonePlan = onCall(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /** Saves owner preferences without changing identity, entitlement, or search authority. */
 exports.saveDiscoveryPreferences = onCall(
   { enforceAppCheck: false, maxInstances: 4 },

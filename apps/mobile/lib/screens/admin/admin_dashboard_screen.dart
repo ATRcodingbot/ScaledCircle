@@ -16,6 +16,7 @@ import 'staging_scaler_approval_screen.dart';
 import 'admin_role_management_screen.dart';
 import 'admin_social_operations_screen.dart';
 import 'admin_subscription_overview_screen.dart';
+import 'business_access_approval_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key, this.service});
@@ -72,6 +73,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
         actions: [
+          IconButton(
+            tooltip: 'Business access',
+            icon: const Icon(Icons.business_outlined),
+            onPressed: () => _push(const BusinessAccessApprovalScreen()),
+          ),
           if (AppEnvironmentConfig.isStaging)
             IconButton(
               tooltip: 'Postcard fulfillment',
