@@ -20,7 +20,7 @@ async function fixture(){
   prices:{retrieve:async()=>price},products:{retrieve:async()=>({id:price.product,livemode:true,active:true,metadata:{purpose:'workspace_membership_production_v1'}})},
   customers:{list:async()=>({data:priorCustomers,has_more:false}),retrieve:async()=>customer},subscriptions:{list:async()=>({data:priorSubs,has_more:false})},invoiceItems:{list:async()=>({data:[],has_more:false})},
   invoices:{list:async()=>({data:[],has_more:false}),createPreview:async()=>({currency:'usd',amount_due:9900,total:9900,lines:{has_more:false,data:[{period:{end:Math.floor(now/1000)+2678400}}]}}),retrieve:async()=>invoice},
-  coupons:{create:async(p,o)=>{couponCreates++;assert.ok(o.idempotencyKey);coupon={...p,livemode:true,valid:true,times_redeemed:0};return coupon;},retrieve:async()=>coupon},
+  coupons:{create:async(p,o)=>{couponCreates++;assert.ok(o.idempotencyKey);assert.deepEqual(p.expand,['applies_to']);coupon={...p,livemode:true,valid:true,times_redeemed:0};return coupon;},retrieve:async(id,p)=>{assert.deepEqual(p.expand,['applies_to']);return coupon;}},
   checkout:{sessions:{create:async(p,o)=>{checkoutCreates++;assert.ok(o.idempotencyKey);params=p;session={...p,id:'cs_live_intro'+n,livemode:true,currency:'usd',amount_subtotal:9900,amount_total:badTotal?9900:100,total_details:{amount_discount:9800,amount_tax:0,amount_shipping:0},status:'open',payment_status:'unpaid',url:'https://checkout.stripe.com/c/pay/local_test'};if(loseCheckout)throw Error('unknown');return session;},retrieve:async()=>session,listLineItems:async()=>lines()}}};
  const deps={db,auth,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp};
  const service=offer.createService({...deps,workspace:createWorkspaceService({...deps,now:()=>now}),legal:createLegalConsentService(deps),stripe,environment:'production',projectId:'scaled-circle',priceId:price.id,now:()=>now,ensureCustomer:async()=>{customerCreates++;customer={id:customerId,livemode:true,metadata:{firebaseUid:uid},balance:0,invoice_settings:{}};if(loseCustomer)throw Error('unknown');await db.doc('wallets/'+uid).set({ownerId:uid,stripeCustomerId:customerId},{merge:true});return customerId;}});
@@ -54,3 +54,21 @@ test('signed positive invoice creates one $1 receipt, one notification and Start
  assert.equal((await f.claim()).status,'consumed');
  assert.equal((await db.doc('wallets/'+f.uid).get()).data().balance,undefined);
 });
+
+ test('operator-scoped coupon expansion recovery reuses Customer/coupon and creates only one Checkout',async()=>{
+ const f=await fixture(),create=f.stripe.coupons.create;
+ f.stripe.coupons.create=async(...args)=>{const c=await create(...args);const response={...c};delete response.applies_to;return response;};
+ f.stripe.checkout.sessions.list=async()=>({has_more:false,data:[]});
+ await assert.rejects(f.service.checkout(f.input));assert.deepEqual(f.effects,{customerCreates:1,couponCreates:1,checkoutCreates:0});
+ await assert.rejects(f.service.checkout(f.input));
+ const q=await f.claim();await db.doc(offer.CONFIG).update({resumeCouponExpansionClaims:[q.claimId]});
+ assert.equal((await f.service.availability(f.input)).eligible,true);
+ const r=await Promise.allSettled([f.service.checkout(f.input),f.service.checkout(f.input)]);assert.ok(r.some(x=>x.status==='fulfilled'));
+ assert.deepEqual(f.effects,{customerCreates:1,couponCreates:1,checkoutCreates:1});assert.equal((await f.claim()).recoveryReason,'coupon_applies_to_expansion');
+ assert.equal((await f.service.checkout(f.input)).amountDueCents,100);assert.equal(f.effects.checkoutCreates,1);
+ });
+ test('coupon recovery denies an existing Checkout and never creates a second one',async()=>{
+ const f=await fixture(),create=f.stripe.coupons.create;f.stripe.coupons.create=async(...args)=>{const c=await create(...args);return {...c,applies_to:undefined};};
+ await assert.rejects(f.service.checkout(f.input));const q=await f.claim();await db.doc(offer.CONFIG).update({resumeCouponExpansionClaims:[q.claimId]});
+ f.stripe.checkout.sessions.list=async()=>({has_more:false,data:[{id:'cs_existing'}]});await assert.rejects(f.service.checkout(f.input));assert.equal(f.effects.checkoutCreates,0);
+ });
