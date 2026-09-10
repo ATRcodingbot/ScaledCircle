@@ -300,7 +300,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           (r) => ListTile(
             title: Text('${r['sourceChecks'] ?? 0} official sources checked'),
             subtitle: Text(
-              '${_time(r['createdAt'])} · ${r['result'] ?? r['status']}',
+              '${_time(r['createdAt'])} · ${r['result'] ?? r['status']}\nSources unavailable: ${r['unavailableSources'] ?? 0}. Unavailable sources are not treated as verified prospects.',
             ),
           ),
         ),

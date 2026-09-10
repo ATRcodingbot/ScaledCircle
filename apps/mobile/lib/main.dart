@@ -182,9 +182,10 @@ class ScaledCircleApp extends StatelessWidget {
         route?.path == '/growth-agents') {
       return MaterialPageRoute(
         settings: settings,
-        builder: (_) => StartupSessionGate(
-          signedOut: const LoginScreen(returnRoute: '/growth-agents'),
-          authenticatedChild: GrowthAgentsScreen(
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.admin,
+          builder: (_, _) => GrowthAgentsScreen(
             focusId:
                 route?.queryParameters['prospect'] ??
                 route?.queryParameters['report'],
