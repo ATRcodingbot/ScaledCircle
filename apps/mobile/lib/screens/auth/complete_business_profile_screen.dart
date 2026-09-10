@@ -3,6 +3,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../navigation/app_router.dart';
 import '../../services/business_onboarding_service.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
+import '../../services/address_search_service.dart';
+import '../../widgets/business_geography_editor.dart';
 
 class CompleteBusinessProfileScreen extends StatefulWidget {
   const CompleteBusinessProfileScreen({
@@ -10,10 +12,12 @@ class CompleteBusinessProfileScreen extends StatefulWidget {
     this.load,
     this.save,
     this.onCompleted,
+    this.searchPlaces,
   });
   final Future<Map<String, dynamic>> Function()? load;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic>)? save;
   final VoidCallback? onCompleted;
+  final Future<List<AddressSuggestion>> Function(String, bool)? searchPlaces;
   @override
   State<CompleteBusinessProfileScreen> createState() =>
       _CompleteBusinessProfileScreenState();
@@ -34,6 +38,10 @@ class _CompleteBusinessProfileScreenState
   };
   final _form = GlobalKey<FormState>();
   final _fields = {for (final k in labels.keys) k: TextEditingController()};
+  final _baseSearch = TextEditingController(),
+      _areaSearch = TextEditingController();
+  AddressSuggestion? _base;
+  List<AddressSuggestion> _areas = [];
   Map<String, dynamic>? _state;
   bool _busy = false;
   String? _error;
@@ -46,6 +54,8 @@ class _CompleteBusinessProfileScreenState
 
   @override
   void dispose() {
+    _baseSearch.dispose();
+    _areaSearch.dispose();
     for (final c in _fields.values) {
       c.dispose();
     }
@@ -67,12 +77,24 @@ class _CompleteBusinessProfileScreenState
         final v = p[k];
         _fields[k]!.text = v is List ? v.join(', ') : v?.toString() ?? '';
       }
+      final geography = value['geography'] as Map?;
+      _base = AddressSearchService.parseSuggestion(geography?['base']);
+      _baseSearch.text = _base?.fullAddress ?? '';
+      _areas = (geography?['serviceAreas'] as List? ?? [])
+          .map(AddressSearchService.parseSuggestion)
+          .whereType<AddressSuggestion>()
+          .toList();
       setState(() => _state = value);
     } catch (e) {
       if (mounted) {
         setState(() {
-          _returnToAccount = e is FirebaseFunctionsException &&
-              ['unauthenticated', 'permission-denied', 'failed-precondition'].contains(e.code);
+          _returnToAccount =
+              e is FirebaseFunctionsException &&
+              [
+                'unauthenticated',
+                'permission-denied',
+                'failed-precondition',
+              ].contains(e.code);
           _error = _returnToAccount
               ? 'Return to your account to sign in or finish verifying your email.'
               : 'We could not load your Business profile. Please retry.';
@@ -85,6 +107,16 @@ class _CompleteBusinessProfileScreenState
 
   Future<void> _save() async {
     if (_busy || !(_form.currentState?.validate() ?? false)) return;
+    // Also validate outside the lazy form viewport before calling the server.
+    if (_base?.selectionId.isNotEmpty != true ||
+        _areas.isEmpty ||
+        _areas.any((a) => a.selectionId.isEmpty)) {
+      setState(
+        () => _error =
+            'Search and select your Business base and service areas before saving.',
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -100,6 +132,11 @@ class _CompleteBusinessProfileScreenState
           .where((v) => v.isNotEmpty)
           .toList();
     }
+    p['serviceAreas'] = _areas.map((a) => a.fullAddress).toList();
+    p['geography'] = {
+      'baseSelectionId': _base!.selectionId,
+      'serviceAreaSelectionIds': _areas.map((a) => a.selectionId).toList(),
+    };
     try {
       final result = await (widget.save ?? BusinessOnboardingService().save)(
         p,
@@ -146,8 +183,12 @@ class _CompleteBusinessProfileScreenState
                   if (_error != null) ...[
                     Text(_error!),
                     FilledButton(
-                      onPressed: _returnToAccount ? () => AppNavigation.replace(context, '/') : _load,
-                      child: Text(_returnToAccount ? 'Return to account' : 'Retry'),
+                      onPressed: _returnToAccount
+                          ? () => AppNavigation.replace(context, '/')
+                          : _load,
+                      child: Text(
+                        _returnToAccount ? 'Return to account' : 'Retry',
+                      ),
                     ),
                   ],
                 ],
@@ -169,7 +210,10 @@ class _CompleteBusinessProfileScreenState
                       'Prepare your profile now. Funding, subscriptions and marketplace access remain subject to approval.',
                     ),
                     const SizedBox(height: 20),
-                    for (final e in labels.entries)
+                    for (final e in labels.entries.where(
+                      (e) =>
+                          !['serviceAreas', 'businessAddress'].contains(e.key),
+                    ))
                       Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: TextFormField(
@@ -228,6 +272,22 @@ class _CompleteBusinessProfileScreenState
                           },
                         ),
                       ),
+                    BusinessGeographyEditor(
+                      baseController: _baseSearch,
+                      areaController: _areaSearch,
+                      base: _base,
+                      areas: _areas,
+                      enabled: !_busy,
+                      legacyAreas:
+                          (_state!['legacyServiceAreas'] as List? ?? [])
+                              .map((v) => v.toString())
+                              .toList(),
+                      search:
+                          widget.searchPlaces ??
+                          BusinessOnboardingService().searchPlaces,
+                      onBaseChanged: (v) => setState(() => _base = v),
+                      onAreasChanged: (v) => setState(() => _areas = v),
+                    ),
                     if (_error != null)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),

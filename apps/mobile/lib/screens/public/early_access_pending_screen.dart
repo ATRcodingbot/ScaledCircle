@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import 'public_landing_screen.dart';
+import '../../widgets/authenticated_sign_out_button.dart';
 import '../preferences/areas_preferences_screen.dart';
 import '../../services/discovery_preferences_service.dart';
 import '../../services/transactional_email_service.dart';
@@ -80,18 +80,13 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
   }
 
   Future<void> _returnToSite(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    if (!context.mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const PublicLandingScreen()),
-      (_) => false,
-    );
+    AppNavigation.replace(context, '/');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(actions: const [AuthenticatedSignOutButton()]),
       backgroundColor: const Color(0xFF020914),
       body: Center(
         child: SingleChildScrollView(

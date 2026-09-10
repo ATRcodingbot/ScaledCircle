@@ -22,6 +22,10 @@ class AddressSuggestion {
     this.geographyType = '',
     this.geographicId = '',
     this.sourceVintage = '',
+    this.selectionId = '',
+    this.canonicalId = '',
+    this.country = '',
+    this.countryCode = '',
   });
 
   final String id;
@@ -44,6 +48,10 @@ class AddressSuggestion {
   final String geographyType;
   final String geographicId;
   final String sourceVintage;
+  final String selectionId;
+  final String canonicalId;
+  final String country;
+  final String countryCode;
 
   bool get hasAuthoritativeBoundary => geometry.length >= 3;
 }
@@ -210,6 +218,10 @@ class AddressSearchService {
       geographyType: rawResult['geographyType']?.toString() ?? '',
       geographicId: rawResult['geographicId']?.toString() ?? '',
       sourceVintage: rawResult['sourceVintage']?.toString() ?? '',
+      selectionId: rawResult['selectionId']?.toString() ?? '',
+      canonicalId: rawResult['canonicalId']?.toString() ?? '',
+      country: rawResult['country']?.toString() ?? '',
+      countryCode: rawResult['countryCode']?.toString() ?? '',
     );
   }
 

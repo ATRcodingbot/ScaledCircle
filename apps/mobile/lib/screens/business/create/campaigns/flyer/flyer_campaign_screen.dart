@@ -12,6 +12,7 @@ import '../../../../../navigation/app_router.dart';
 import '../../../../../services/platform_billing_service.dart';
 import '../../../../../services/discovery_preferences_service.dart';
 import '../../../../../services/property_area_context_service.dart';
+import '../../../../../services/business_onboarding_service.dart';
 
 import '../../../campaign_zones_screen.dart';
 
@@ -31,6 +32,7 @@ class FlyerCampaignScreen extends StatefulWidget {
   final PlatformBillingService? billingService;
   final Future<CampaignCostQuote> Function(double workerBudget)? quoteLoader;
   final Future<Map<String, dynamic>?> Function()? loadPreferences;
+  final Future<List<Map<String, dynamic>>> Function()? loadProfileAreas;
   final Future<void> Function(BuildContext context)? draftAndAreaFlowOverride;
 
   const FlyerCampaignScreen({
@@ -44,6 +46,7 @@ class FlyerCampaignScreen extends StatefulWidget {
     this.billingService,
     this.quoteLoader,
     this.loadPreferences,
+    this.loadProfileAreas,
     this.draftAndAreaFlowOverride,
   });
 
@@ -95,6 +98,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   List<Map<String, double>> _campaignArea = const [];
   String? _campaignAreaName;
   List<SavedPropertyAreaContext> _savedAreas = const [];
+  List<SavedPropertyAreaContext> _profileAreas = const [];
   String? _businessAddress;
   double? _businessLatitude;
   double? _businessLongitude;
@@ -114,6 +118,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       ].join('\n');
     }
     _loadSavedAreas();
+    _loadProfileAreas();
     _loadBusinessPickupAddress();
   }
 
@@ -181,7 +186,11 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   }
 
   Future<void> _chooseServiceArea() async {
-    if (_savedAreas.isEmpty) {
+    final suggestions = {
+      ...{for (final a in _savedAreas) a.id: a},
+      ...{for (final a in _profileAreas) a.id: a},
+    }.values.toList();
+    if (suggestions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -196,7 +205,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       builder: (dialogContext) => SimpleDialog(
         title: const Text('Use a Service Area'),
         children: [
-          for (final area in _savedAreas)
+          for (final area in suggestions)
             SimpleDialogOption(
               onPressed: () => Navigator.pop(dialogContext, area),
               child: ListTile(
@@ -209,6 +218,30 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
       ),
     );
     if (area == null || !mounted) return;
+    _useArea(area);
+  }
+
+  Future<void> _loadProfileAreas() async {
+    try {
+      // Existing injected preference loaders keep isolated previews/tests offline.
+      if (widget.loadProfileAreas == null && widget.loadPreferences != null) {
+        return;
+      }
+      final areas =
+          await (widget.loadProfileAreas ??
+              BusinessOnboardingService().serviceAreaSuggestions)();
+      if (mounted) {
+        setState(
+          () => _profileAreas = const PropertyAreaContextService()
+              .resolveEnabledAreas({'areas': areas}),
+        );
+      }
+    } catch (_) {
+      // Profile suggestions are optional; the map step remains available.
+    }
+  }
+
+  void _useArea(SavedPropertyAreaContext area) {
     setState(() {
       _campaignAreaName = area.name;
       _campaignArea = area.polygon
@@ -1069,6 +1102,26 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                                 : 'Starting with: $_campaignAreaName',
                           ),
                           const SizedBox(height: 10),
+                          if (_profileAreas.isNotEmpty) ...[
+                            const Text('Suggested from your Business profile'),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final area in _profileAreas)
+                                  ActionChip(
+                                    label: Text(area.name),
+                                    onPressed: publishing
+                                        ? null
+                                        : () => _useArea(area),
+                                  ),
+                              ],
+                            ),
+                            const Text(
+                              'Choose a suggestion to start, then narrow or change it on the map.',
+                            ),
+                            const SizedBox(height: 10),
+                          ],
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,

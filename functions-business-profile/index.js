@@ -13199,11 +13199,33 @@ exports.saveBusinessOnboarding = onCall(
   { enforceAppCheck: false, maxInstances: 4 },
   async (request) => {
     try {
-      if (Object.keys(request.data || {}).some((k) => k !== 'profile')) throw new HttpsError('invalid-argument', 'Only your Business profile can be updated.');
-      return await require('./business_onboarding').createService({ db, auth: getAuth(), FieldValue }).save({ uid: request.auth?.uid, input: request.data?.profile });
+      if (Object.keys(request.data || {}).some((k) => !['profile', 'geography'].includes(k))) throw new HttpsError('invalid-argument', 'Only your Business profile can be updated.');
+      return await require('./business_onboarding').createService({ db, auth: getAuth(), FieldValue }).save({ uid: request.auth?.uid, input: request.data?.profile, geography: request.data?.geography });
     } catch (e) {
       const safe = ['unauthenticated', 'permission-denied', 'failed-precondition', 'invalid-argument'].includes(e.code);
       throw new HttpsError(safe ? e.code : 'internal', safe ? e.message : 'Unable to save Business setup. Please retry.');
     }
   }
 );
+
+exports.searchBusinessProfilePlaces = onCall(
+  { enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 30 },
+  async (request) => {
+    try {
+      if (Object.keys(request.data || {}).some((k) => !['query', 'kind'].includes(k)))
+      throw new HttpsError('invalid-argument', 'Choose a location search.');
+      return await require('./business_onboarding').createService({ db, auth: getAuth(), FieldValue }).
+      search({ uid: request.auth?.uid, query: request.data?.query, kind: request.data?.kind });
+    } catch (e) {
+      const safe = ['unauthenticated', 'permission-denied', 'failed-precondition', 'invalid-argument', 'resource-exhausted', 'unavailable'].includes(e.code);
+      throw new HttpsError(safe ? e.code : 'internal', safe ? e.message : 'Location search is unavailable. Please retry.');
+    }
+  }
+);
+exports.getBusinessServiceAreaSuggestions = workspaceEndpoint(async (request, service) => {
+  if (Object.keys(request.data || {}).some((k) => k !== 'businessId')) throw new HttpsError('invalid-argument', 'Choose a Business workspace.');
+  const user = (await db.doc(`users/${request.auth.uid}`).get()).data();
+  const businessId = request.data?.businessId || user?.activeBusinessId || request.auth.uid;
+  const authority = await service.authority({ uid: request.auth.uid, businessId, permission: 'campaigns', allowExpired: true });
+  return require('./business_geography').createService({ db, FieldValue }).suggestions(authority.businessId);
+});

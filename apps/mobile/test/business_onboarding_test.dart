@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'business_geography_test.dart' show place;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
@@ -150,8 +151,11 @@ void main() {
           ('Read Terms', 'Terms of Service'),
           ('Read Privacy Policy', 'Privacy Policy'),
         ]) {
-          await t.scrollUntilVisible(find.text(pair.$1), 400,
-              scrollable: find.byType(Scrollable).first);
+          await t.scrollUntilVisible(
+            find.text(pair.$1),
+            400,
+            scrollable: find.byType(Scrollable).first,
+          );
           await t.pumpAndSettle();
           await t.tap(find.text(pair.$1));
           await t.pumpAndSettle();
@@ -167,8 +171,11 @@ void main() {
                 .value,
             false,
           );
-          await t.scrollUntilVisible(find.text('Remember Me'), -400,
-              scrollable: find.byType(Scrollable).first);
+          await t.scrollUntilVisible(
+            find.text('Remember Me'),
+            -400,
+            scrollable: find.byType(Scrollable).first,
+          );
           expect(find.text('Remember Me'), findsOneWidget);
         }
         expect(t.takeException(), isNull);
@@ -177,6 +184,10 @@ void main() {
   }
   Map<String, dynamic> profile() => {
     'email': 'owner@example.test',
+    'geography': {
+      'base': place('base'),
+      'serviceAreas': [place('county')],
+    },
     'profile': {
       'businessName': 'Existing',
       'contactName': 'Owner',
@@ -185,14 +196,31 @@ void main() {
       'serviceAreas': ['Maryland'],
     },
   };
-  testWidgets('first-time empty profile resolves to a blank editable form', (t) async {
-    await t.pumpWidget(MaterialApp(home: CompleteBusinessProfileScreen(
-      load: () async => {'email':'owner@example.test', 'profile':<String,dynamic>{}},
-    )));
+  testWidgets('first-time empty profile resolves to a blank editable form', (
+    t,
+  ) async {
+    await t.pumpWidget(
+      MaterialApp(
+        home: CompleteBusinessProfileScreen(
+          load: () async => {
+            'email': 'owner@example.test',
+            'profile': <String, dynamic>{},
+          },
+        ),
+      ),
+    );
     await t.pumpAndSettle();
     expect(find.text('Complete your Business profile'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(t.widget<TextFormField>(find.byKey(const Key('business-profile-businessName'))).controller!.text, isEmpty);
+    expect(
+      t
+          .widget<TextFormField>(
+            find.byKey(const Key('business-profile-businessName')),
+          )
+          .controller!
+          .text,
+      isEmpty,
+    );
   });
   testWidgets(
     'pending owner sees existing form and saved server result controls completion',
@@ -214,8 +242,11 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Existing'), findsOneWidget);
       expect(find.text('✓ Email verified'), findsOneWidget);
-      await t.scrollUntilVisible(find.text('Save and continue'), 400,
-          scrollable: find.byType(Scrollable).first);
+      await t.scrollUntilVisible(
+        find.text('Save and continue'),
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
       await t.tap(find.text('Save and continue'));
       await t.pumpAndSettle();
       expect(calls, 1);
@@ -244,8 +275,11 @@ void main() {
       fail = false;
       await t.tap(find.text('Retry'));
       await t.pumpAndSettle();
-      await t.scrollUntilVisible(find.text('Save and continue'), 400,
-          scrollable: find.byType(Scrollable).first);
+      await t.scrollUntilVisible(
+        find.text('Save and continue'),
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
       await t.tap(find.text('Save and continue'));
       await t.pumpAndSettle();
       expect(find.textContaining('not confirmed saved'), findsOneWidget);
