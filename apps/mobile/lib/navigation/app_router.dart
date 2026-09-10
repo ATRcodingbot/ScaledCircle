@@ -4,6 +4,23 @@ import 'browser_history.dart';
 
 typedef AppRouteFactory = Route<dynamic> Function(RouteSettings settings);
 
+Uri? initialReferralRoute(Uri browserLocation, {required bool enabled}) {
+  if (!enabled) return null;
+  final route = Uri.tryParse(browserLocation.fragment);
+  if (route == null || route.hasAuthority || route.hasScheme) return null;
+  if (const {'/referrals', '/referral-portal'}.contains(route.path)) {
+    return route;
+  }
+  final code =
+      browserLocation.queryParameters['ref'] ?? route.queryParameters['ref'];
+  if (route.path == '/create-account' &&
+      code != null &&
+      RegExp(r'^[A-HJ-NP-Z2-9]{6,16}$').hasMatch(code.toUpperCase())) {
+    return route;
+  }
+  return null;
+}
+
 Uri? initialBillingRoute(Uri browserLocation) {
   final route = Uri.tryParse(browserLocation.fragment);
   return route != null &&

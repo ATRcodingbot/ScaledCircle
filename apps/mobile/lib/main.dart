@@ -438,7 +438,13 @@ class ScaledCircleApp extends StatelessWidget {
   // Preserve explicit email destinations while web Firebase startup resolves.
   // Native routing and ordinary public/role-home startup remain unchanged.
   static final _billingLaunchRoute = kIsWeb
-      ? initialBillingRoute(Uri.base)
+      ? initialBillingRoute(Uri.base) ??
+            initialReferralRoute(
+              Uri.base,
+              enabled:
+                  AppEnvironmentConfig.isStaging ||
+                  AppEnvironmentConfig.isLocal,
+            )
       : null;
   static final _billingRouteInformation = _billingLaunchRoute == null
       ? null
