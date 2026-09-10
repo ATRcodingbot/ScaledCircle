@@ -201,10 +201,10 @@ void main() {
       await t.pumpAndSettle();
       expect(service.calls, ['getBusinessMembership']);
       expect(
-        find.textContaining('Funded campaigns, accepted Scaler compensation'),
+        find.textContaining('Funded campaigns, accepted Scaler obligations'),
         findsOneWidget,
       );
-      await t.tap(find.text('Keep Current Settings'));
+      await t.tap(find.text('Go Back'));
       await t.pumpAndSettle();
       expect(service.calls, ['getBusinessMembership']);
     },
