@@ -9,6 +9,8 @@ test('$1 receipt and welcome separate collected amount from $99 recurrence',()=>
   const mail=render({type,current,invoice,environment:'production',businessName:'Healthy <Business>'});
   assert.match(mail.text,/Payment received: \$1\.00/);assert.match(mail.text,/Recurring monthly total: \$99\.00/);
   assert.match(mail.text,/October 10, 2026/);assert.doesNotMatch(mail.html,/<Business>/);
+  assert.doesNotMatch(mail.text,/Existing funded campaigns and accepted Scaler obligations/);
+  assert.doesNotMatch(mail.html,/Existing funded campaigns and accepted Scaler obligations/);
   assert.equal(validateDeliveryJob({...mail,to:'owner@example.com',fromAddress:'support@scaledcircle.com'}),true);
  }
 });

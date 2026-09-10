@@ -58,7 +58,7 @@ function render({type,businessName,current,previous,invoice,environment,effectiv
   if (current.cancel) rows.push(['Access remains through',date(current.end)],['Next renewal','$0.00 — renewal canceled']);
   else if (current.status==='canceled') rows.push(['Membership status','Ended']);
   else rows.push(['Next renewal',`${money(current.monthlyCents)} on ${date(current.end)}`],['Membership status',current.status==='active'?'Active':'Payment or membership needs attention']);
-  const footer='Existing funded campaigns and accepted Scaler obligations are not canceled by subscription cancellation.';
+  const footer=type==='cancellation' ? 'Existing funded campaigns and accepted Scaler obligations are not canceled by subscription cancellation.' : '';
   const labels={home:'Open ScaledCircle',billing:['payment_failed','payment_action_required'].includes(type)?'Update Payment Method / Manage Billing':'Manage Billing',upgrade:'Change or Upgrade Plan',addons:'Manage Add-ons',cancel:'Cancel Membership',history:'View Invoice / Billing History',...(current.cancel?{reactivate:'Reactivate Membership'}:{})};
   const actionText=Object.entries(labels).map(([key,label])=>`${label}: ${actions[key]}`).join('\n');
   const text=`${subjects[type]}\n\n${rows.map(([key,value])=>`${key}: ${value}`).join('\n')}\n\n${footer}\n\n${actionText}\n\nSupport: ${SUPPORT_EMAIL}`;

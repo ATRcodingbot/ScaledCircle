@@ -6,6 +6,7 @@ import '../../services/platform_billing_service.dart';
 import 'subscription_screen.dart';
 import '../../widgets/billing_selection_editor.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../navigation/app_router.dart';
 
 class BusinessMembershipScreen extends StatefulWidget {
   const BusinessMembershipScreen({
@@ -72,7 +73,142 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
     final ms = _data?['periodEndMs'];
     if (ms is! num) return 'the verified end of your paid period';
     final d = DateTime.fromMillisecondsSinceEpoch(ms.toInt()).toLocal();
-    return MaterialLocalizations.of(context).formatMediumDate(d);
+    return widget.section == 'cancel'
+        ? MaterialLocalizations.of(context).formatFullDate(d)
+        : MaterialLocalizations.of(context).formatMediumDate(d);
+  }
+
+  String get _recurring {
+    final cents = _data?['monthlyCents'];
+    final price = cents is num ? cents / 100 : _data?['price'];
+    return price is num ? '\$${price.toStringAsFixed(2)}' : 'verified';
+  }
+
+  Widget _cancellationView(BuildContext context) {
+    final data = _data;
+    final scheduled = data?['cancelAtPeriodEnd'] == true;
+    final ended = data?['status'] == 'canceled';
+    final status = switch (data?['status']) {
+      'active' => 'Active',
+      'trialing' => 'Trial active',
+      'past_due' => 'Payment overdue',
+      'canceled' => 'Ended',
+      _ => 'Membership needs attention',
+    };
+    void account() => AppNavigation.replace(context, '/billing');
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cancel Membership'),
+        leading: BackButton(onPressed: _busy ? null : account),
+      ),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (data == null && _error == null)
+                  const Center(child: CircularProgressIndicator()),
+                if (_error != null) ...[
+                  Text(
+                    'Membership status could not be confirmed. Please refresh before making a change.',
+                  ),
+                  TextButton(
+                    onPressed: _busy ? null : _load,
+                    child: const Text('Refresh Membership'),
+                  ),
+                ],
+                if (data != null) ...[
+                  Text(
+                    scheduled
+                        ? 'Cancellation Scheduled'
+                        : ended
+                        ? 'Membership Ended'
+                        : 'Cancel Membership',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  Text('Current plan: ${data['planName']} — $_recurring/month'),
+                  Text('Current status: $status'),
+                  if (!scheduled && !ended)
+                    Text('Next renewal: $_recurring on $_end'),
+                  const SizedBox(height: 24),
+                  if (scheduled) ...[
+                    Text(
+                      'Your ${data['planName']} membership remains active until $_end.',
+                    ),
+                    const Text(
+                      'You will not be charged another membership renewal unless you reactivate.',
+                    ),
+                  ] else if (!ended) ...[
+                    const Text(
+                      'If you cancel now:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text('Your membership remains active until $_end.'),
+                    const Text(
+                      'You will not be charged the next recurring membership payment.',
+                    ),
+                  ],
+                  const Text(
+                    'Existing funded campaigns and accepted Scaler obligations continue. Billing and account history remain available according to our retention policy.',
+                  ),
+                  const SizedBox(height: 24),
+                  if (scheduled && data['canWithdrawCancellation'] == true)
+                    FilledButton(
+                      onPressed: _busy || _error != null
+                          ? null
+                          : () => _change('reactivate'),
+                      child: const Text('Reactivate Membership'),
+                    ),
+                  if (!scheduled && !ended) ...[
+                    FilledButton(
+                      onPressed: _busy ? null : account,
+                      child: const Text('Keep My Membership'),
+                    ),
+                    if (data['scheduledChange'] != null) ...[
+                      const Text(
+                        'A future plan change is scheduled. Remove that change first, then schedule cancellation.',
+                      ),
+                      OutlinedButton(
+                        onPressed: _busy || _error != null
+                            ? null
+                            : _removeScheduledChange,
+                        child: const Text('Remove Scheduled Change'),
+                      ),
+                    ] else if (data['canCancel'] == true &&
+                        data['changePending'] != true)
+                      OutlinedButton(
+                        onPressed: _busy || _error != null
+                            ? null
+                            : () => _change('cancel'),
+                        child: const Text('Cancel at End of Billing Period'),
+                      ),
+                    if (data['changePending'] == true)
+                      const Text(
+                        'A membership change is still being confirmed. Refresh to check its status.',
+                      ),
+                  ],
+                  if (scheduled || ended)
+                    TextButton(
+                      onPressed: _busy ? null : account,
+                      child: const Text('Return to Account'),
+                    ),
+                  TextButton(
+                    onPressed: _busy ? null : _load,
+                    child: const Text('Refresh Membership'),
+                  ),
+                  if (_busy) const LinearProgressIndicator(),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _change(String action) async {
@@ -81,21 +217,23 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text(cancel ? 'Cancel Membership?' : 'Reactivate Membership?'),
+        title: Text(
+          cancel ? 'Schedule cancellation?' : 'Reactivate Membership?',
+        ),
         content: Text(
           cancel
-              ? 'Your ${_data?['planName']} plan remains active through $_end. You will not be charged another subscription renewal after cancellation is confirmed.\n\nFunded campaigns, accepted Scaler compensation and your history remain intact.'
+              ? 'Your ${_data?['planName']} membership remains active through $_end. After that date your paid membership benefits will end. You will not be charged the next $_recurring membership renewal after cancellation is confirmed.\n\nFunded campaigns, accepted Scaler obligations and your history remain intact.'
               : 'Withdraw the pending cancellation and continue your existing subscription at its next renewal. Existing campaign obligations remain unchanged.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Keep Current Settings'),
+            child: Text(cancel ? 'Go Back' : 'Keep Current Settings'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialog, true),
             child: Text(
-              cancel ? 'Confirm Cancellation' : 'Confirm Reactivation',
+              cancel ? 'Schedule Cancellation' : 'Confirm Reactivation',
             ),
           ),
         ],
@@ -280,6 +418,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.section == 'cancel') return _cancellationView(context);
     final data = _data;
     return Scaffold(
       appBar: AppBar(title: const Text('Billing / Plan')),
