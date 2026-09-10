@@ -13365,16 +13365,26 @@ exports.reconcileStagingScalerReferralReviewV1 = onDocumentWritten({document:'ca
 const STRIPE_REFERRAL_TEST_WEBHOOK_SECRET = defineSecret('STRIPE_REFERRAL_TEST_WEBHOOK_SECRET');
 const STRIPE_REFERRAL_TEST_CONNECT_WEBHOOK_SECRET = defineSecret('STRIPE_REFERRAL_TEST_CONNECT_WEBHOOK_SECRET');
 const STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET = defineSecret('STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET');
+// Bind only the maintained staging base-plan catalog. Add-on/bundle prices
+// remain ineligible until their staging catalog is separately provisioned.
+function referralFinancialSecrets() {
+  return [STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY,
+    STRIPE_STARTER_PRICE_ID,STRIPE_GROWTH_PRICE_ID,STRIPE_SCALE_PRICE_ID,STRIPE_MANAGED_GROWTH_PRICE_ID];
+}
+function referralPlanForPrice(priceId) {
+  return new Map([[STRIPE_STARTER_PRICE_ID.value(),'starter'],[STRIPE_GROWTH_PRICE_ID.value(),'growth'],
+    [STRIPE_SCALE_PRICE_ID.value(),'scale'],[STRIPE_MANAGED_GROWTH_PRICE_ID.value(),'managed_growth']]).get(priceId)||null;
+}
 function referralFinancialRuntime() {
   referralLaunchRuntime();
   return require('./referral_runtime').createRuntime({db,FieldValue,auth:getAuth(),
     project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,environment:process.env.APP_ENV,
     key:STRIPE_CASHOUT_TEST_API_KEY.value(),invoiceKey:STRIPE_SUBSCRIPTION_SECRET_KEY.value(),
-    planForPrice:planForStripePrice,executionEnabled:process.env.REFERRAL_TEST_EXECUTION_ENABLED==='true'});
+    planForPrice:referralPlanForPrice,executionEnabled:process.env.REFERRAL_TEST_EXECUTION_ENABLED==='true'});
 }
 function referralFinancialCall(method) {
   return onCall({region:'us-east1',maxInstances:2,timeoutSeconds:120,
-    secrets:[STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY]},async request=>{
+    secrets:referralFinancialSecrets()},async request=>{
     if(!request.auth?.uid)throw new HttpsError('unauthenticated','Sign in to use Referrals.');
     await referralPortalContext(request);
     try{return await referralFinancialRuntime()[method](request.auth.uid,request.data||{});}
@@ -13388,7 +13398,7 @@ exports.cashOutReferralEarningsV1=referralFinancialCall('request');
 exports.reconcileReferralPayoutV1=referralFinancialCall('reconcilePayout');
 function referralFinancialWebhook(secret,scope) {
   return onRequest({region:'us-east1',maxInstances:2,timeoutSeconds:120,
-    secrets:[STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY,secret]},async(request,response)=>{
+    secrets:[...referralFinancialSecrets(),secret]},async(request,response)=>{
     try{
       const input={secret:secret.value(),rawBody:request.rawBody,signature:request.headers['stripe-signature'],endpointScope:scope};
       const runtime=referralFinancialRuntime();
@@ -13411,7 +13421,7 @@ exports.queueStagingReferralEmailV1=onDocumentWritten({document:'referralMilesto
   await require('./referral_communications').queue({db,FieldValue,auth:getAuth(),project:'scaledcircle-staging',milestoneId:event.params.milestoneId});
 });
 exports.releaseStagingReferralHoldsV1=onSchedule({schedule:'every 30 minutes',region:'us-east1',maxInstances:1,timeoutSeconds:540,
-  secrets:[STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY]},async()=>{
+  secrets:referralFinancialSecrets()},async()=>{
   if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging')return;
   const results=await referralFinancialRuntime().refreshAll();
   logger.info('Referral hold recheck',{checked:results.length,held:results.filter(r=>!r.ok).length});

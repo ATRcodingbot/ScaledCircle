@@ -184,7 +184,7 @@ function transformIndex(mode) {
   const ast = parser.parse(source, {sourceType: "script", plugins: ["optionalChaining"]});
   if (mode !== 'platform') {
     const helpers = new Set(['referralLaunchRuntime','referralPortalContext','stagingReferralRewardService',
-      'referralFinancialRuntime','referralFinancialCall','referralFinancialWebhook',
+      'referralFinancialRuntime','referralFinancialCall','referralFinancialWebhook','referralFinancialSecrets','referralPlanForPrice',
       'STRIPE_REFERRAL_TEST_WEBHOOK_SECRET','STRIPE_REFERRAL_TEST_CONNECT_WEBHOOK_SECRET','STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET']);
     ast.program.body = ast.program.body.flatMap(statement => {
       if(statement.type==='FunctionDeclaration' && helpers.has(statement.id?.name))return [];
@@ -311,7 +311,8 @@ function transformIndex(mode) {
       const identifier = declaration.id?.type === "Identifier" ? declaration.id.name : null;
       if (mode === "legacy" && identifier === "transactionalEmail") return false;
       if (!identifier || !allSecretNames.has(identifier)) return true;
-      if (mode === "platform") return platformSecrets.has(identifier);
+      if (mode === "platform") return platformSecrets.has(identifier) ||
+        ['STRIPE_STARTER_PRICE_ID','STRIPE_GROWTH_PRICE_ID','STRIPE_SCALE_PRICE_ID','STRIPE_MANAGED_GROWTH_PRICE_ID'].includes(identifier);
       if (mode === "wallet") return false;
       if (mode === "artifact-email") return artifactEmailSecrets.has(identifier);
       if (mode === "job-alert-email") return jobAlertEmailSecrets.has(identifier);
