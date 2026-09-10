@@ -31,7 +31,7 @@ class ReferralProgramScreen extends StatelessWidget {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             Text('Earn 1% from qualifying completed work.'),
-            Text("Your reward does not reduce the Scaler's pay."),
+            Text("Your reward does not come out of the Scaler's pay."),
             Text(scalerProtection),
             Text(platformFunding),
             SizedBox(height: 24),
@@ -57,10 +57,13 @@ class ReferralProgramScreen extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(
-              'Earned, available and paid are different states. Earned rewards remain held until release and payment requirements are established. Referral payout is not available in this staging release. Business subscription reward accounting is also not active yet. No income or payment date is guaranteed.',
+              r'Business rewards have a 30-calendar-day hold after a qualifying paid invoice. Scaler rewards have a 7-calendar-day hold after qualifying approved compensation is settled. Rewards become available only after eligibility and payment checks pass. Cash out manually when your available referral balance reaches $10. No income or payment date is guaranteed.',
             ),
             Text(
               'Rewards remain subject to eligibility, valid attribution and authoritative economic reconciliation. Refunds, reversals and disputes may prevent or reverse a reward. Worker pay is never reduced to fund it.',
+            ),
+            Text(
+              'A later refund can reduce your referral balance. If the reward was already paid, an adjustment offsets future referral earnings; we do not silently debit your bank account. Stripe processing fees do not reduce the qualifying Business referral basis. Taxes and unrelated purchases are excluded.',
             ),
             SizedBox(height: 16),
             Text('Program terms: September 10, 2026 · Referral Launch V2'),

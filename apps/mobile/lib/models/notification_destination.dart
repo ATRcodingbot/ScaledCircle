@@ -22,6 +22,21 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
   final type = data['type'];
   final link = data['deepLink'] is Map ? data['deepLink'] as Map : const {};
   final destination = link['destination'];
+  if (destination == 'referrals' ||
+      const {
+        'referral_signed_up',
+        'referral_reward_earned',
+        'referral_earned',
+        'referral_available',
+        'referral_paid',
+        'referral_adjusted',
+      }.contains(type)) {
+    return const NotificationDestination(
+      'route',
+      'View Referrals',
+      route: '/referral-portal',
+    );
+  }
   if ([
         'worker_earning_established',
         'payout_approved',

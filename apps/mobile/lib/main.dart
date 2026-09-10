@@ -189,7 +189,10 @@ class ScaledCircleApp extends StatelessWidget {
         settings: settings,
         builder: (_) => route?.path == '/referrals'
             ? const ReferralProgramScreen()
-            : const ScalerAffiliateScreen(),
+            : const StartupSessionGate(
+                signedOut: LoginScreen(returnRoute: '/referral-portal'),
+                authenticatedChild: ScalerAffiliateScreen(),
+              ),
       );
     }
     if (LegalDocumentKind.fromPath(route?.path) case final legalKind?) {

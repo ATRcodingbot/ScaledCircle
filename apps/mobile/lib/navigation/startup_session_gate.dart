@@ -63,8 +63,14 @@ StartupDestination resolveStartupDestination(Map<String, dynamic> state) {
 /// Identity is resolved before marketing or login can paint. A failed read is
 /// recoverable; it is never interpreted as a signed-out or completed profile.
 class StartupSessionGate extends StatefulWidget {
-  const StartupSessionGate({super.key, required this.signedOut, this.load});
+  const StartupSessionGate({
+    super.key,
+    required this.signedOut,
+    this.load,
+    this.authenticatedChild,
+  });
   final Widget signedOut;
+  final Widget? authenticatedChild;
   final Future<Map<String, dynamic>> Function()? load;
   @override
   State<StartupSessionGate> createState() => _StartupSessionGateState();
@@ -355,6 +361,10 @@ class _StartupSessionGateState extends State<StartupSessionGate>
       case StartupDestination.scaler:
       case StartupDestination.admin:
         final destination = resolveStartupDestination(state);
+        if (destination != StartupDestination.admin &&
+            widget.authenticatedChild != null) {
+          return widget.authenticatedChild!;
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             AppNavigation.replace(

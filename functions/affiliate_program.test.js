@@ -157,3 +157,12 @@ test('Business owner enrollment requires independently verified workspace owners
  assert.equal(p.referrerRole,'business');assert.equal(p.commissionRateBps,1000);
  await assert.rejects(()=>env.service.join({uid:'disabled',user:{...business,disabled:true},businessOwnerVerified:true,acceptedTermsVersion:affiliate.LAUNCH_TERMS_VERSION}),/approved_scaler_required/);
 });
+
+test('team invitations and cross-workspace identities cannot create duplicate Business referrals',async()=>{
+ const env=fakeEnvironment(),profile=await env.service.join({uid:'referrer',user:{role:'scaler',active:true},acceptedTermsVersion:affiliate.LAUNCH_TERMS_VERSION});
+ for(const user of [{role:'business',signupPurpose:'team_invitation'},{role:'business',activeBusinessId:'other-workspace'}])
+   await assert.rejects(env.service.attributeBusiness({businessUid:'team-user',businessUser:user,code:profile.referralCode,capturedAtMillis:Date.now()}),/workspace_owner/);
+ env.documents.set('businessWorkspaces/team-user',{ownerId:'other-owner'});
+ await assert.rejects(env.service.attributeBusiness({businessUid:'team-user',businessUser:{role:'business'},code:profile.referralCode,capturedAtMillis:Date.now()}),/workspace_owner/);
+ assert.equal([...env.documents.keys()].filter(p=>p.startsWith('businessReferralAttributions/')).length,0);
+});

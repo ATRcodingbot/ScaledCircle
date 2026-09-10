@@ -41,7 +41,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text("Your reward does not reduce the Scaler's pay."),
+          find.text("Your reward does not come out of the Scaler's pay."),
           findsOneWidget,
         );
         expect(
@@ -95,6 +95,7 @@ void main() {
     final button = find.widgetWithText(FilledButton, 'Create My Referral Link');
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
     expect(g.joins, 0);
+    await tester.ensureVisible(find.byType(CheckboxListTile));
     await tester.tap(find.byType(CheckboxListTile));
     await tester.pump();
     await tester.ensureVisible(button);

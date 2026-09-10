@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../navigation/app_router.dart';
 import '../../navigation/app_routes.dart';
+import '../../config/app_environment.dart';
 
 class PublicLegalFooter extends StatelessWidget {
   const PublicLegalFooter({super.key, this.dark = true});
@@ -26,12 +27,22 @@ class PublicLegalFooter extends StatelessWidget {
               spacing: 8,
               runSpacing: 4,
               children: [
-                Text('ScaledCircle · operated by Scaled Circle LLC', style: TextStyle(color: foreground)),
+                Text(
+                  'ScaledCircle · operated by Scaled Circle LLC',
+                  style: TextStyle(color: foreground),
+                ),
                 _FooterLink('Legal', AppRoutes.legal, foreground),
                 _FooterLink('Terms', AppRoutes.terms, foreground),
                 _FooterLink('Privacy', AppRoutes.privacy, foreground),
-                _FooterLink('Payments & Refunds', AppRoutes.refunds, foreground),
+                _FooterLink(
+                  'Payments & Refunds',
+                  AppRoutes.refunds,
+                  foreground,
+                ),
                 _FooterLink('Support', AppRoutes.support, foreground),
+                if (AppEnvironmentConfig.isStaging ||
+                    AppEnvironmentConfig.isLocal)
+                  _FooterLink('Referral Program', '/referrals', foreground),
               ],
             ),
           ),
@@ -50,6 +61,9 @@ class _FooterLink extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextButton(
     onPressed: () => AppNavigation.push(context, route),
-    child: Text(label, style: TextStyle(color: color, decoration: TextDecoration.underline)),
+    child: Text(
+      label,
+      style: TextStyle(color: color, decoration: TextDecoration.underline),
+    ),
   );
 }

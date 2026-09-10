@@ -35,6 +35,9 @@ const expected = [
   "recordScalerReferralAttribution", "getReferralPortalV1", "joinReferralProgramV1",
   "reconcileStagingScalerReferralSettlementV1", "reconcileStagingScalerReferralFundingV1",
   "reconcileStagingScalerReferralTransferV1", "reconcileStagingScalerReferralReviewV1",
+  "getReferralFinancialsV1", "setupReferralPayoutsV1", "cashOutReferralEarningsV1", "reconcileReferralPayoutV1",
+  "referralTestPayoutWebhookV1", "referralTestConnectWebhookV1", "referralTestEconomicWebhookV1",
+  "mirrorStagingReferralLiabilityV1", "queueStagingReferralEmailV1", "releaseStagingReferralHoldsV1",
   "adminGetScalerAffiliateOverview",
   "updateScalerProfile",
 ];

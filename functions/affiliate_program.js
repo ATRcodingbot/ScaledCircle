@@ -98,7 +98,7 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
     throw new Error("affiliate_code_generation_failed");
   }
 
-  async function dashboard(uid) {
+  async function dashboard(uid, {financialLifecycle = false} = {}) {
     const profile = await db.collection("scalerAffiliateProfiles").doc(uid).get();
     if (!profile.exists) return {joined: false, termsVersion: TERMS_VERSION};
     const referrals = await db.collection("affiliateBusinessReferrals")
@@ -107,19 +107,25 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
       .where("affiliateUid", "==", uid).limit(100).get();
     const rewards = await db.collection('referralRewards').where('affiliateUid','==',uid).limit(1001).get();
     if (rewards.docs.length > 1000) throw new Error('referral_history_requires_review');
+    const liabilityRows=financialLifecycle?await db.collection('referralLiabilities').where('beneficiaryUid','==',uid).limit(401).get():null;
+    if(liabilityRows?.size>400)throw new Error('referral_history_requires_review');
     const items = [...referrals.docs.map(doc => ({doc, role:"business"})),
       ...scalerReferrals.docs.map(doc => ({doc, role:"scaler"}))].map(({doc,role}, index) => {
       const value = doc.data() || {};
       const qualifying = rewards.docs.map(r=>r.data()).filter(r=>role==='scaler' &&
         r.referredScalerUid===doc.id && r.status==='EARNED');
+      const economic=liabilityRows?.docs.map(d=>d.data()).filter(e=>e.referredId===doc.id &&
+        e.type===(role==='scaler'?'SCALER_COMPLETED_WORK_REFERRAL':'BUSINESS_SUBSCRIPTION_REFERRAL')) || [];
+      const totals=economic.reduce((s,e)=>({earned:s.earned+e.currentCents,paid:s.paid+e.paidCents,
+        available:s.available+(e.released?e.currentCents-e.paidCents-e.reservedCents:Math.min(0,e.currentCents-e.paidCents-e.reservedCents))}),{earned:0,paid:0,available:0});
       return {
         displayId: `Referral ${index + 1}`,
         referredRole: role,
-        status: qualifying.length ? "EARNING" : "SIGNED_UP",
-        qualifyingJobCount: qualifying.length,
-        earnedCents: qualifying.reduce((sum,r)=>sum+r.amountCents,0),
-        availableCents: 0,
-        paidCents: 0,
+        status: financialLifecycle?(economic.length?(totals.paid>0&&totals.paid>=totals.earned?'PAID':totals.available>0?'AVAILABLE':'EARNING'):'SIGNED_UP'):qualifying.length ? "EARNING" : "SIGNED_UP",
+        qualifyingJobCount: financialLifecycle?economic.filter(e=>role==='scaler'&&e.currentCents>0).length:qualifying.length,
+        earnedCents: financialLifecycle?totals.earned:qualifying.reduce((sum,r)=>sum+r.amountCents,0),
+        availableCents: financialLifecycle?totals.available:0,
+        paidCents: financialLifecycle?totals.paid:0,
         subscriptionStatus: role === "business" ? cleanText(value.subscriptionStatus, 32) || "awaiting_subscription" : "not_applicable",
         attributedAtMillis: value.attributedAt?.toMillis?.() || null,
       };
@@ -135,11 +141,14 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
       scalerRewardRule: {version:'ScalerReferralOnePercentV1',rateBps:100,basis:'final_approved_scaler_compensation',fundingSource:'platform_economics',singleLevel:true},
       requiresPolicyAcceptance: value.acceptedLaunchPolicyVersion !== LAUNCH_TERMS_VERSION,
       scalerRewardAccountingAvailable: true,
-      referralPayoutAvailable: false,
+      referralPayoutAvailable: financialLifecycle,
       termsVersion: value.termsVersion,
       referrals: items,
-      commissionAccountingAvailable: false,
-      commissionSummary: {pendingCents: 0, earnedCents: 0, paidCents: 0, currency: "usd"},
+      commissionAccountingAvailable: financialLifecycle,
+      commissionSummary: financialLifecycle ? {
+        ...require('./referral_liability').summary(liabilityRows.docs.map(d=>d.data())),
+        earnedCents: liabilityRows.docs.reduce((sum,d)=>sum+d.data().currentCents,0),currency:'usd',
+      } : {pendingCents: 0, earnedCents: 0, paidCents: 0, currency: "usd"},
     };
   }
 
@@ -147,6 +156,8 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
     if (cleanText(user?.role, 24).toLowerCase() !== role) {
       throw new Error(role === "business" ? "business_required" : "scaler_required");
     }
+    if(role==='business' && (user.signupPurpose==='team_invitation' ||
+      (user.activeBusinessId && user.activeBusinessId!==uid))) throw new Error('business_workspace_owner_required');
     const canonicalCode = normalizeReferralCode(code);
     if (!canonicalCode || !attributionIsFresh(capturedAtMillis)) {
       throw new Error("referral_invalid_or_expired");
@@ -159,6 +170,11 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
         transaction.get(codeRef),
         transaction.get(attributionRef),
       ]);
+      if(role==='business'){
+        const workspace=await transaction.get(db.collection('businessWorkspaces').doc(uid));
+        if(workspace.exists && workspace.data()?.ownerId && workspace.data().ownerId!==uid)
+          throw new Error('business_workspace_owner_required');
+      }
       if (existingAttribution.exists) return;
       if (!codeSnapshot.exists || codeSnapshot.data()?.status !== "active") {
         throw new Error("referral_code_not_found");
@@ -191,7 +207,7 @@ function createAffiliateService({db, FieldValue, Timestamp, randomBytes = crypto
       transaction.create(db.collection("notifications").doc(`referral_signup_${role}_${uid}`), {
         userId: affiliateUid, type: "referral_signed_up", title: "New referral",
         message: `A new ${role === "business" ? "Business" : "Scaler"} joined ScaledCircle using your referral link. Signup does not create a monetary reward.`,
-        referralState: "SIGNED_UP", read: false, createdAt: timestamp,
+        referralState: "SIGNED_UP", deepLink:{destination:'referrals'}, read: false, createdAt: timestamp,
       });
     });
     return {attributed: true};

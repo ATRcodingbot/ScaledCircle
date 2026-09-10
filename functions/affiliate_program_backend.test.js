@@ -14,7 +14,8 @@ test('staging and production Rules both deny client referral writes and cross-us
   const ruleEnv=await initializeTestEnvironment({projectId:file.includes('production')?'demo-referral-production':'demo-referral-staging',firestore:{rules:fs.readFileSync(file,'utf8')}});
   for(const uid of ['referrer','referred','unrelated']){
    const store=ruleEnv.authenticatedContext(uid,{email_verified:true}).firestore();
-   for(const col of ['scalerReferralAttributions','affiliateScalerReferrals','businessReferralAttributions','scalerAffiliateProfiles','referralRewards','referralPolicyAcceptances']){
+   for(const col of ['scalerReferralAttributions','affiliateScalerReferrals','businessReferralAttributions','scalerAffiliateProfiles','referralRewards','referralPolicyAcceptances',
+     'referralLiabilities','referralBalances','referralRecipients','referralMilestones','referralEconomicClaims','referralInvoiceSignatures','referralPayoutEvents']){
     await assertFails(store.doc(col+'/referred').set({affiliateUid:uid,commissionRateBps:1000}));
     await assertFails(store.doc(col+'/referred').get());
    }
@@ -33,6 +34,7 @@ test('concurrent settlement notification creates one held referral liability; or
   'campaignSettlements/job':f.settlement,'campaignZones/job':f.zone,'campaignPayments/payment':f.payment,
   ['scalerTransfers/'+id]:f.transfer,'assignmentCompensations/job':f.contract,
   'wallets/worker':{availableBalance:100},'walletTransactions/worker-earning':{amountCents:10000,baseAmountCents:9000,bonusAmountCents:1000,status:'available'},
+  'walletTransactions/earning_job_v1':{scalerId:'worker',zoneId:'job',amountCents:10000,baseAmountCents:9000,bonusAmountCents:1000,status:'available'},
  };
  for(const [path,value] of Object.entries(originals))await db.doc(path).set(value);
  const snapshot=async()=>JSON.stringify(await Promise.all(Object.keys(originals).map(async p=>(await db.doc(p).get()).data())));
@@ -44,6 +46,12 @@ test('concurrent settlement notification creates one held referral liability; or
  assert.equal(reward.data().availabilityStatus,'held_pending_release_authority');assert.equal(await snapshot(),before);
  assert.equal((await reward.ref.collection('journal').get()).size,1);
  assert.equal((await db.collection('notifications').where('type','==','referral_reward_earned').get()).size,1);
+ await db.doc('users/referrer').set({role:'scaler',active:true});
+ const bridge=require('./referral_scaler_reconciliation').createReconciler({db,FieldValue:admin.firestore.FieldValue,project:'demo-referral-authority'});
+ await Promise.all([bridge.reconcile('job'),bridge.reconcile('job')]);
+ const liabilities=await db.collection('referralLiabilities').get();assert.equal(liabilities.size,1);
+ assert.equal(liabilities.docs[0].data().currentCents,100);assert.equal(liabilities.docs[0].data().paidCents,0);
+ assert.equal(liabilities.docs[0].data().holdUntilMillis,2+7*86400000);assert.equal(await snapshot(),before);
  const history=await service.reconcile('job');assert.equal(history.duplicate,true);
  // Client cannot label the held reward paid, nor debit the worker for it.
  const client=env.authenticatedContext('referrer',{email_verified:true}).firestore();
@@ -53,6 +61,7 @@ test('concurrent settlement notification creates one held referral liability; or
  // A later signed economic reversal removes the referral liability once.
  await db.doc('campaignPayments/payment').update({status:'refunded'});
  await Promise.all([service.reconcile('job'),service.reconcilePayment('payment')]);
+ await bridge.reconcile('job');assert.equal((await liabilities.docs[0].ref.get()).data().currentCents,0);
  assert.equal((await reward.ref.get()).data().status,'REVERSED');assert.equal((await reward.ref.collection('journal').get()).size,2);
  assert.equal((await db.doc('wallets/worker').get()).data().availableBalance,100);
  assert.deepEqual((await db.doc('assignmentCompensations/job').get()).data(),f.contract);

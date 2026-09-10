@@ -4,15 +4,20 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../config/app_environment.dart';
 import '../../../services/affiliate_service.dart';
 import '../../public/referral_program_screen.dart';
+import '../../../services/referral_financial_service.dart';
+import '../../../services/referral_share_service.dart';
+import '../../../widgets/referral_earnings_panel.dart';
 
 class ScalerAffiliateScreen extends StatefulWidget {
   const ScalerAffiliateScreen({
     super.key,
     this.service,
+    this.financialService,
     this.enableAttribution =
         AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isLocal,
   });
   final AffiliateGateway? service;
+  final ReferralFinancialGateway? financialService;
   final bool enableAttribution;
   @override
   State<ScalerAffiliateScreen> createState() => _ScalerAffiliateScreenState();
@@ -23,6 +28,32 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
   AffiliateDashboard? _dashboard;
   bool _busy = false, _accepted = false, _scaler = true;
   String? _error;
+  Future<void> _share(
+    String url,
+    BuildContext anchor, {
+    bool saveQr = false,
+  }) async {
+    final box = anchor.findRenderObject() as RenderBox;
+    final origin = box.localToGlobal(Offset.zero) & box.size;
+    try {
+      if (saveQr) {
+        await saveReferralQr(url, origin);
+      } else {
+        await shareReferral(url, origin);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sharing is unavailable here. Use Copy Referral Link or try another browser.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -97,7 +128,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Business referrals: 10% of qualifying retained recurring subscription revenue. Business reward accounting is not active yet.',
+              'Business referrals: 10% of qualifying retained recurring subscription revenue.',
             ),
             const Text(
               'Scaler referrals: 1% of final approved compensation from qualifying completed work.',
@@ -127,7 +158,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
                     ? null
                     : (v) => setState(() => _accepted = v ?? false),
                 title: const Text(
-                  'I accept Referral Launch V2 terms (September 10, 2026). I understand that rewards require qualifying economics and referral payouts are not available yet.',
+                  'I accept Referral Launch V2 terms (September 10, 2026), including qualifying economics, settlement holds and referral adjustments.',
                 ),
               ),
               FilledButton(
@@ -162,6 +193,25 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
                   backgroundColor: Colors.white,
                 ),
               ),
+              Builder(
+                builder: (anchor) => Wrap(
+                  spacing: 12,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _share(url, anchor),
+                      icon: const Icon(Icons.share),
+                      label: const Text('Share'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _share(url, anchor, saveQr: true),
+                      icon: const Icon(Icons.download),
+                      label: const Text('Save / Download QR'),
+                    ),
+                  ],
+                ),
+              ),
+              if (widget.service == null || widget.financialService != null)
+                ReferralEarningsPanel(service: widget.financialService),
               const Text(
                 'Referral history',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -190,7 +240,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
             ],
             const SizedBox(height: 20),
             const Text(
-              'Signed up: attribution recorded.\nEarned: qualifying economic work creates a held reward.\nAvailable: funds are released for payment.\nPaid: payment is confirmed.\nReferral payouts are not available yet. Earned does not mean paid.',
+              'Signed up: attribution recorded, no cash reward.\nPending: earned reward in its settlement hold.\nAvailable: eligible referral funds.\nPaid: payout confirmed. Earned does not mean paid.',
             ),
           ],
         ),
@@ -205,10 +255,18 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
         : DateTime.fromMillisecondsSinceEpoch(
             joined,
           ).toLocal().toString().split(' ').first;
-    final earning = r['status'] == 'EARNING';
+    final status =
+        const {
+          'EARNING': 'Earning',
+          'AVAILABLE': 'Available',
+          'PAID': 'Paid',
+        }[r['status']] ??
+        'Signed up';
     final amount = ((r['earnedCents'] as num?) ?? 0) / 100;
-    return '${r['referredRole'] == 'scaler' ? 'Scaler' : 'Business'} · ${earning ? 'Earning' : 'Signed up'}'
+    final available = ((r['availableCents'] as num?) ?? 0) / 100;
+    final paid = ((r['paidCents'] as num?) ?? 0) / 100;
+    return '${r['referredRole'] == 'scaler' ? 'Scaler' : 'Business'} · $status'
         '${date.isEmpty ? '' : '\nJoined $date'}\nQualifying jobs: ${r['qualifyingJobCount'] ?? 0}'
-        '\nEarned: \$${amount.toStringAsFixed(2)} · Available: \$0.00 · Paid: \$0.00';
+        '\nEarned: \$${amount.toStringAsFixed(2)} · Available: \$${available.toStringAsFixed(2)} · Paid: \$${paid.toStringAsFixed(2)}';
   }
 }

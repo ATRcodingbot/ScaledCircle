@@ -72,6 +72,9 @@ const platformExports = new Set([
   "reconcileStagingScalerReferralFundingV1",
   "reconcileStagingScalerReferralTransferV1",
   "reconcileStagingScalerReferralReviewV1",
+  "getReferralFinancialsV1", "setupReferralPayoutsV1", "cashOutReferralEarningsV1", "reconcileReferralPayoutV1",
+  "referralTestPayoutWebhookV1", "referralTestConnectWebhookV1", "referralTestEconomicWebhookV1",
+  "mirrorStagingReferralLiabilityV1", "queueStagingReferralEmailV1", "releaseStagingReferralHoldsV1",
   "adminSetScalerAffiliateRate",
   "adminGetScalerAffiliateOverview",
   "updateScalerProfile",
@@ -180,9 +183,15 @@ function transformIndex(mode) {
   const source = fs.readFileSync(path.join(sourceRoot, "index.js"), "utf8");
   const ast = parser.parse(source, {sourceType: "script", plugins: ["optionalChaining"]});
   if (mode !== 'platform') {
-    const helpers = new Set(['referralLaunchRuntime','referralPortalContext','stagingReferralRewardService']);
-    ast.program.body = ast.program.body.filter(statement =>
-      statement.type !== 'FunctionDeclaration' || !helpers.has(statement.id?.name));
+    const helpers = new Set(['referralLaunchRuntime','referralPortalContext','stagingReferralRewardService',
+      'referralFinancialRuntime','referralFinancialCall','referralFinancialWebhook',
+      'STRIPE_REFERRAL_TEST_WEBHOOK_SECRET','STRIPE_REFERRAL_TEST_CONNECT_WEBHOOK_SECRET','STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET']);
+    ast.program.body = ast.program.body.flatMap(statement => {
+      if(statement.type==='FunctionDeclaration' && helpers.has(statement.id?.name))return [];
+      if(statement.type!=='VariableDeclaration')return [statement];
+      const declarations=statement.declarations.filter(d=>!helpers.has(d.id?.name));
+      return declarations.length?[{...statement,declarations}]:[];
+    });
   }
   if (mode === "platform") selectedProgram(ast, platformExports);
   if (mode === "wallet") selectedProgram(ast, walletExports);

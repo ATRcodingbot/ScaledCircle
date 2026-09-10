@@ -18,13 +18,18 @@ A separate staging reward reconciler rereads settlement, final review, immutable
 
 Each qualifying job creates one deterministic EARNED liability and a balanced journal: debit platform referral expense, credit referral held liability. There is no worker or Business debit. Duplicate events create no duplicate liability or notification. Loss of eligibility reverses the held liability once and preserves the journal. No historical replay or QA fixture mutation is performed.
 
-## States and release boundaries
+## Dedicated lifecycle candidate
 
-- SIGNED_UP: referral relationship only, no money.
-- EARNED / Earning: qualifying economic event creates a held reward.
-- AVAILABLE: requires a separately verified release authority; unavailable in this release.
-- PAID: requires confirmed disbursement; unavailable in this release.
+The staging candidate adds a separate ReferralLiabilityV1 ledger. Business rewards use 10% of actual collected qualifying recurring subscription revenue after discounts, credits, tax exclusions and subsequent proportional refunds. Processing fees do not reduce that basis. Scaler rewards use the preserved 1% final approved compensation authority and additionally require the settled worker earning. Worker and Business balances are never debited by referral accounting.
 
-The public-page copy, portal and program FAQ explicitly protect Scaler pay. No payout date or guaranteed income is promised. Business subscription reward accounting remains inactive until retained-revenue eligibility, refund/chargeback adjustments and release authority are certified. Referral payout execution is not implemented or activated by this change. No fake available/paid notification is sent.
+Business rewards have a 30-calendar-day hold; Scaler rewards have a 7-calendar-day hold. Release rereads authoritative economics and recipient eligibility. Below $10, released balances remain Available. Cashout is manual. Atomic reservations bind exact liability entries; the separate referral adapter reuses the maintained Connect operation engine without using worker Wallet balances or its bounded-test-fixture source.
 
-All new triggers and owner-portal endpoints fail closed outside staging. Production referral enrollment remains Coming Soon. This change does not deploy production, create Stripe objects, alter subscription membership, post worker earnings, change Wallets, or modify historical QA evidence.
+Business owners receive a separate Connect recipient; their subscription Customer is not a payout destination. Scalers reuse their verified maintained Connect recipient. Stripe-hosted onboarding keeps bank details outside the app. Signed payout reconciliation is required for Paid. Failed or ambiguous operations retain auditable liability, reconcile before retry, and do not duplicate transfers. Later economic reversals preserve paid receipts and create negative adjustments against future referral rewards, never bank or worker debits.
+
+The portal distinguishes Pending, Available, Paid and payout processing, with adjustment history, Copy Link, Share and QR export. Important milestone notifications and email jobs have deterministic identities. Referral email links return through authenticated onboarding/consent gates to Referrals. Team invitation acceptance cannot create a second Business referral relationship.
+
+## Certification boundary
+
+Emulator and source tests are software evidence, not actual signup, phone-scan, email delivery or provider payout evidence. Stripe TEST success/failure, signed provider reconciliation and attended referral signup/QR evidence must be recorded separately before claiming staging completion. Financial execution defaults disabled. Mixed or ambiguous invoice allocations and unsupported partial work settlements remain held for authoritative review.
+
+Production referral promotion remains held. A future promotion must explicitly review the referral functions, signed endpoint configurations, transactional-email templates, client routes, hold scheduler and liability adapters. No Rules broadening is required. Production financial activation, recipient tax-reporting readiness and any new mobile share-plugin artifacts need separate release review. No production subscription, Social, worker Wallet or historical QA change is included.

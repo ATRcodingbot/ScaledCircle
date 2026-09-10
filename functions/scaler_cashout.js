@@ -203,7 +203,7 @@ function createStore(db, now = Date.now) {
   };
 }
 
-function createService({store, provider, runtime, now = Date.now}) {
+function createService({store, provider, runtime, now = Date.now, assertRecipient = assertAccount}) {
   const guard = () => assertTestRuntime(runtime());
   async function run(key, uid, {readOnly = false, retryPayout = false} = {}) {
     guard();
@@ -276,7 +276,7 @@ function createService({store, provider, runtime, now = Date.now}) {
   return {run, async request(uid, data, account) {
     guard();
     if (Object.keys(data || {}).some((key) => !["requestId", "amountCents"].includes(key))) fail("cashout_request_invalid");
-    assertAccount(account, uid);
+    assertRecipient(account, uid);
     const current = await provider.getAccount(account.stripeAccountId);
     if (!eligibility(current, account.stripeAccountId).ready) fail("cashout_not_ready");
     const limit = runtime().certificationLimit;

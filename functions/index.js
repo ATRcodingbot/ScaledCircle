@@ -13318,7 +13318,7 @@ async function referralPortalContext(request) {
 }
 exports.getReferralPortalV1 = onCall({maxInstances:5},async request=>{
   const context = await referralPortalContext(request);
-  return require('./affiliate_program').createAffiliateService({db,FieldValue,Timestamp}).dashboard(context.uid);
+  return require('./affiliate_program').createAffiliateService({db,FieldValue,Timestamp}).dashboard(context.uid,{financialLifecycle:true});
 });
 exports.joinReferralProgramV1 = onCall({maxInstances:5},async request=>{
   const context = await referralPortalContext(request), program = require('./affiliate_program');
@@ -13358,4 +13358,61 @@ exports.reconcileStagingScalerReferralReviewV1 = onDocumentWritten({document:'ca
   const fields=['status','reviewStatus','disputeOpen','settlementBlocked','approvedTransferAmountCents','approvedBaseAmountCents','approvedBonusAmountCents'];
   if(!fields.some(field=>before[field]!==after[field]))return;
   await stagingReferralRewardService().reconcile(event.params.zoneId);
+});
+
+// Dedicated staging referral execution. Shared work/Wallet authorities are not
+// promoted or repurposed by these explicitly selected exports.
+const STRIPE_REFERRAL_TEST_WEBHOOK_SECRET = defineSecret('STRIPE_REFERRAL_TEST_WEBHOOK_SECRET');
+const STRIPE_REFERRAL_TEST_CONNECT_WEBHOOK_SECRET = defineSecret('STRIPE_REFERRAL_TEST_CONNECT_WEBHOOK_SECRET');
+const STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET = defineSecret('STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET');
+function referralFinancialRuntime() {
+  referralLaunchRuntime();
+  return require('./referral_runtime').createRuntime({db,FieldValue,auth:getAuth(),
+    project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,environment:process.env.APP_ENV,
+    key:STRIPE_CASHOUT_TEST_API_KEY.value(),invoiceKey:STRIPE_SUBSCRIPTION_SECRET_KEY.value(),
+    planForPrice:planForStripePrice,executionEnabled:process.env.REFERRAL_TEST_EXECUTION_ENABLED==='true'});
+}
+function referralFinancialCall(method) {
+  return onCall({region:'us-east1',maxInstances:2,timeoutSeconds:120,
+    secrets:[STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY]},async request=>{
+    if(!request.auth?.uid)throw new HttpsError('unauthenticated','Sign in to use Referrals.');
+    await referralPortalContext(request);
+    try{return await referralFinancialRuntime()[method](request.auth.uid,request.data||{});}
+    catch(error){logger.warn('Referral action held',{method,code:String(error.code||error.message||'held').slice(0,100)});
+      throw new HttpsError('failed-precondition','Referral funds could not be safely verified for this action. Refresh your referral status or contact support.');}
+  });
+}
+exports.getReferralFinancialsV1=referralFinancialCall('dashboard');
+exports.setupReferralPayoutsV1=referralFinancialCall('setup');
+exports.cashOutReferralEarningsV1=referralFinancialCall('request');
+exports.reconcileReferralPayoutV1=referralFinancialCall('reconcilePayout');
+function referralFinancialWebhook(secret,scope) {
+  return onRequest({region:'us-east1',maxInstances:2,timeoutSeconds:120,
+    secrets:[STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY,secret]},async(request,response)=>{
+    try{
+      const input={secret:secret.value(),rawBody:request.rawBody,signature:request.headers['stripe-signature'],endpointScope:scope};
+      const runtime=referralFinancialRuntime();
+      const result=scope==='economic'?await runtime.economicWebhook(input):await runtime.payoutWebhook(input);
+      response.status(200).json(result);
+    }catch(error){logger.warn('Referral webhook requires reconciliation',{code:String(error.code||error.message||'held').slice(0,100)});
+      response.status(400).json({error:'Referral reconciliation did not complete.'});}
+  });
+}
+exports.referralTestPayoutWebhookV1=referralFinancialWebhook(STRIPE_REFERRAL_TEST_WEBHOOK_SECRET,'platform');
+exports.referralTestConnectWebhookV1=referralFinancialWebhook(STRIPE_REFERRAL_TEST_CONNECT_WEBHOOK_SECRET,'connected');
+exports.referralTestEconomicWebhookV1=referralFinancialWebhook(STRIPE_REFERRAL_TEST_ECONOMIC_WEBHOOK_SECRET,'economic');
+exports.mirrorStagingReferralLiabilityV1=onDocumentWritten({document:'referralRewards/{rewardId}',region:'us-east1',maxInstances:2,retry:true},async event=>{
+  if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging')return;
+  const reward=event.data?.after.data()||event.data?.before.data();if(!reward?.zoneId)return;
+  await require('./referral_scaler_reconciliation').createReconciler({db,FieldValue,project:'scaledcircle-staging'}).reconcile(reward.zoneId);
+});
+exports.queueStagingReferralEmailV1=onDocumentWritten({document:'referralMilestones/{milestoneId}',region:'us-east1',maxInstances:2,retry:true},async event=>{
+  if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging'||!event.data?.after.exists)return;
+  await require('./referral_communications').queue({db,FieldValue,auth:getAuth(),project:'scaledcircle-staging',milestoneId:event.params.milestoneId});
+});
+exports.releaseStagingReferralHoldsV1=onSchedule({schedule:'every 30 minutes',region:'us-east1',maxInstances:1,timeoutSeconds:540,
+  secrets:[STRIPE_CASHOUT_TEST_API_KEY,STRIPE_SUBSCRIPTION_SECRET_KEY]},async()=>{
+  if(process.env.GCLOUD_PROJECT!=='scaledcircle-staging')return;
+  const results=await referralFinancialRuntime().refreshAll();
+  logger.info('Referral hold recheck',{checked:results.length,held:results.filter(r=>!r.ok).length});
 });

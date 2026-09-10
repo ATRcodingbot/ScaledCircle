@@ -51,6 +51,7 @@ dependencies:
   pdf: ^3.12.0
   printing: ^5.14.3
   url_launcher: ^6.3.2
+  share_plus: ^13.3.0
 
 dev_dependencies:
   # Official Firebase core initialization harness for onboarding widget tests.
