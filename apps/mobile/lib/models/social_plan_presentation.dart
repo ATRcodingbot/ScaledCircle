@@ -1,3 +1,8 @@
+import 'package:flutter/foundation.dart';
+
+// Invalidates customer read models after an authoritative approval receipt.
+final socialReviewRevision = ValueNotifier<int>(0);
+
 bool socialPlanApproved(Map plan) =>
     plan['status'] == 'approved' &&
     plan['planVersion'] is num &&
@@ -58,7 +63,11 @@ class SocialPlanPresentation {
 class SocialPlanApprovalReadback {
   final Map<String, int> _receipts = {};
   bool get pending => _receipts.isNotEmpty;
-  void acknowledge(String planId, int version) => _receipts[planId] = version;
+  void acknowledge(String planId, int version) {
+    _receipts[planId] = version;
+    socialReviewRevision.value++;
+  }
+
   void reconcile(List<Map<String, dynamic>> plans) {
     _receipts.removeWhere(
       (id, version) => plans.any(

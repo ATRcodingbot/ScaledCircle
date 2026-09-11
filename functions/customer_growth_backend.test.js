@@ -17,6 +17,22 @@ beforeEach(async()=>{
  reads=0;service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',allowedBusinesses:'owner',readSource:async source=>{reads++;return source.signals.join(' ')+' '+(source.email||'');}});
 });
 after(()=>app.delete());
+test('Growth uses exact Social plan approval version and preserves all source records',async()=>{
+ await call('initialize');
+ const ref=db.doc('socialContentPlans/approved-social');
+ const plan={businessUid:'owner',status:'approved',planVersion:1,approvedVersion:1,items:Array.from({length:8},()=>({variants:[{status:'ready_for_review'},{status:'ready_for_review'}]}))};
+ await ref.set(plan);
+ const result=await call();
+ const social=result.agents.find(a=>a.type==='marketing_manager');
+ assert.equal(social.status,'Plan approved · 8 posts need review');
+ assert.equal(social.lastAction,'30-Day strategy approved');
+ assert.equal(social.destination,'/business/social-operations?review=posts');
+ assert.equal(result.social.review.draftPosts,8);
+ assert.deepEqual((await ref.get()).data(),plan);
+ await ref.update({planVersion:2,status:'ready_for_review'});
+ assert.equal((await call()).social.review.title,'New Plan Version Needs Review');
+ await ref.delete();
+});
 test('normal owner customer authority, legal consent, plan and isolated data are required',async()=>{
  await assert.rejects(call('load',null),/Sign in/);await assert.rejects(call('load','other'),/access/);
  await assert.rejects(call('load','owner','other'),/invitation/);

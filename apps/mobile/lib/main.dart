@@ -336,7 +336,9 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => ProtectedRouteGate(
           routeName: AppRoutes.businessSocialOperations,
           audience: ProtectedRouteAudience.business,
-          builder: (_, _) => const SocialOperationsScreen(),
+          builder: (_, _) => SocialOperationsScreen(
+            initialReview: route?.queryParameters['review'],
+          ),
         ),
       );
     }

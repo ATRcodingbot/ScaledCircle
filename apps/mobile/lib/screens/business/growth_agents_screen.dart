@@ -1,3 +1,4 @@
+import '../../models/social_plan_presentation.dart';
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ class GrowthAgentsScreen extends StatefulWidget {
 
 class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
   Map<String, dynamic>? _data;
+  int _loadGeneration = 0;
   String? _error;
   bool _busy = false;
   Timer? _timer;
@@ -55,9 +57,16 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     return Map<String, dynamic>.from(response.data as Map);
   }
 
+  void _socialChanged() {
+    if (!mounted) return;
+    setState(() => _data = null);
+    _load();
+  }
+
   @override
   void initState() {
     super.initState();
+    socialReviewRevision.addListener(_socialChanged);
     _load();
     _timer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!_busy && ModalRoute.of(context)?.isCurrent == true) _load();
@@ -66,23 +75,25 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
 
   @override
   void dispose() {
+    socialReviewRevision.removeListener(_socialChanged);
     _timer?.cancel();
     super.dispose();
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     try {
       final data =
           await (widget.loadOverride?.call() ??
               _call('getGrowthDogfoodWorkspaceV1'));
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _data = data;
           _error = null;
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(
           () => _error = widget.customer
               ? 'Unable to load your Growth workspace. Use your invited Business account with an active Managed Growth membership, then retry.'
@@ -615,7 +626,10 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         'Social strategy and baseline',
         style: Theme.of(context).textTheme.titleLarge,
       ),
-      _line('Draft plans', social['planCount'] ?? 0),
+      _line(
+        'Plan status',
+        social['review']?['title'] ?? 'Checking saved status',
+      ),
       _line('Saved provider baselines', _list(social['baselines']).length),
       for (final baseline in _list(social['baselines']))
         ExpansionTile(
@@ -647,9 +661,16 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         'Existing account history belongs to your Business. It is not counted as ScaledCircle publication.',
       ),
       OutlinedButton(
-        onPressed: () =>
-            AppNavigation.push(context, '/business/social-operations'),
-        child: const Text('Review Social accounts and content plan'),
+        onPressed: () => AppNavigation.push(
+          context,
+          social['review']?['destination']?.toString() ??
+              '/business/social-operations',
+        ),
+        child: Text(
+          social['review']?['planApprovalState'] == 'approved'
+              ? 'Review Draft Posts'
+              : 'Review 30-Day Plan',
+        ),
       ),
       const SizedBox(height: 16),
       Text(

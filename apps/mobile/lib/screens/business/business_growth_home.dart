@@ -1,3 +1,4 @@
+import '../../models/social_plan_presentation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../../navigation/app_router.dart';
@@ -14,20 +15,39 @@ class BusinessGrowthHome extends StatefulWidget {
 
 class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
   Map<String, dynamic>? _data;
+  int _loadGeneration = 0;
   bool _failed = false;
-  @override
-  void initState() {
-    super.initState();
+  void _socialChanged() {
+    if (!mounted) return;
+    setState(() => _data = null);
     _load();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    socialReviewRevision.addListener(_socialChanged);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    socialReviewRevision.removeListener(_socialChanged);
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     setState(() => _failed = false);
     try {
       final data = await (widget.loadOverride?.call() ?? _loadCustomer());
-      if (mounted) setState(() => _data = data);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _data = data);
+      }
     } catch (_) {
-      if (mounted) setState(() => _failed = true);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _failed = true);
+      }
     }
   }
 
@@ -109,8 +129,15 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
                     child: Text('${group['count']} ${group['label']}'),
                   ),
               if ((_data?['social']?['planCount'] ?? 0) > 0)
-                Text(
-                  '${_data?['social']?['planCount']} saved Social plans · Review their current status in Social Manager',
+                TextButton(
+                  onPressed: () => AppNavigation.push(
+                    context,
+                    _data?['social']?['review']?['destination']?.toString() ??
+                        '/business/social-operations',
+                  ),
+                  child: Text(
+                    '${_data?['social']?['review']?['attention'] ?? 'Checking Social review status…'}',
+                  ),
                 ),
               const SizedBox(height: 16),
               FilledButton.icon(
@@ -150,7 +177,8 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
                         onTap: () => AppNavigation.push(
                           context,
                           type == 'marketing_manager'
-                              ? '/business/social-operations'
+                              ? (agent['destination']?.toString() ??
+                                    '/business/social-operations')
                               : '/business/growth-agents?agent=$type',
                         ),
                       ),

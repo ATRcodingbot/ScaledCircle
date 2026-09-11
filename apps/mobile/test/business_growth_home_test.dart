@@ -2,8 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/business_growth_home.dart';
 import 'package:flutter_app/widgets/social_runtime_status_card.dart';
+import 'package:flutter_app/models/social_plan_presentation.dart';
 
 void main() {
+  testWidgets('authoritative approval receipt refreshes the open Growth summary', (tester) async {
+    var loads = 0;
+    await tester.pumpWidget(MaterialApp(home: BusinessGrowthHome(loadOverride: () async {
+      loads++;
+      return {'social':{'planCount':1,'review':{'attention': loads == 1 ? 'Social plan needs review' : '8 Social posts need review', 'destination':'/business/social-operations?review=posts'}},'agents':[]};
+    })));
+    await tester.pumpAndSettle();
+    expect(find.text('Social plan needs review'), findsOneWidget);
+    socialReviewRevision.value++;
+    await tester.pumpAndSettle();
+    expect(loads, 2);
+    expect(find.text('Social plan needs review'), findsNothing);
+    expect(find.text('8 Social posts need review'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    socialReviewRevision.value++;
+    expect(loads,2); // Disposed surfaces do not retain listeners.
+  });
   for (final width in [320.0, 390.0, 1440.0]) {
     testWidgets('Growth has six clear team destinations at $width', (
       tester,

@@ -90,7 +90,7 @@ void main() {
         ),
       );
       await show(false);
-      expect(find.text('30-Day Plan · Approved ✓'), findsOneWidget);
+      expect(find.text('Draft Posts'), findsOneWidget);
       expect(find.text('Draft Posts: 8 ready for review'), findsOneWidget);
       expect(find.text('Scheduled: 0'), findsOneWidget);
       expect(find.text('Review 30-Day Plan'), findsNothing);

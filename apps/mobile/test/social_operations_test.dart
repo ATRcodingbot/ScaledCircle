@@ -43,7 +43,8 @@ void main() {
     expect(screen, contains('Strong Posts'));
     expect(screen, contains('Scheduled'));
     expect(screen, contains('Past Posts'));
-    expect(screen, contains('Review scheduled content'));
+    expect(File('lib/models/social_plan_presentation.dart').readAsStringSync(), contains('Review scheduled content'));
+    expect(screen, contains('presentation.contentAction'));
     expect(screen, contains('Staging plan alignment verified'));
     expect(screen, contains('Align Plan'));
     expect(screen, contains('Rate past posts'));
@@ -55,8 +56,8 @@ void main() {
     );
     expect(screen, contains('NO AUTO-DELETE'));
     expect(
-      screen,
-      contains('Missing provider evidence stays unavailable—not zero.'),
+      File('lib/widgets/social_plan_overview.dart').readAsStringSync(),
+      contains('Not confirmed'),
     );
     expect(screen, contains('First X publish candidate'));
     expect(screen, contains('Founder publish approval required'));
@@ -146,6 +147,6 @@ void main() {
     expect(routes, contains("'/business/social-operations'"));
     expect(main, contains('AppRoutes.businessSocialOperations'));
     expect(main, contains('ProtectedRouteAudience.business'));
-    expect(main, contains('const SocialOperationsScreen()'));
+    expect(main, contains('initialReview: route?.queryParameters'));
   });
 }

@@ -6,10 +6,12 @@ class SocialRuntimeStatusCard extends StatelessWidget {
     required this.status,
     required this.onRefresh,
     this.compact = false,
+    this.onReviewPosts,
   });
   final Map<String, dynamic> status;
   final VoidCallback onRefresh;
   final bool compact;
+  final VoidCallback? onReviewPosts;
 
   String _time(BuildContext context, dynamic raw) {
     final value = DateTime.tryParse(raw?.toString() ?? '');
@@ -77,6 +79,13 @@ class SocialRuntimeStatusCard extends StatelessWidget {
             else
               ...details,
             const SizedBox(height: 12),
+            if (onReviewPosts != null &&
+                summary?['review']?['planApprovalState'] == 'approved' &&
+                (summary?['counters']?['draftPosts'] ?? 0) > 0)
+              FilledButton(
+                onPressed: onReviewPosts,
+                child: const Text('Review Draft Posts'),
+              ),
             const Text(
               'Account permissions do not approve posts. Your content approval and scheduling controls remain separate.',
             ),

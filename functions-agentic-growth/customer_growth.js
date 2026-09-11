@@ -79,10 +79,11 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
       baselines:snapshots.docs.filter(d=>d.data().schemaVersion==='MetaBaselineV1').map(d=>({id:d.id,...d.data()})),
       connections:connections.docs.map(d=>({provider:d.id,status:d.data().status,name:d.data().accountDisplayName})),
       attribution:'Existing provider history is not evidence of ScaledCircle publication.',approvalMode:'approval_required'};
+    result.social.review=require('./social_plan_state').project(result.social.plans);
     for(const a of result.agents){
       if(a.type==='lead_generation')a.result=result.summary.opportunityGroups.filter(g=>!['Workforce candidates','Excluded paid sources'].includes(g.label)).map(g=>`${g.count} ${g.label.toLowerCase()}`).join('; ');
       if(a.type==='workforce_recruiter')a.result=`${result.prospects.filter(p=>p.opportunityType==='workforce_candidate').length} individual candidates; ${result.prospects.filter(p=>p.opportunityType==='recruitment_channel').length} recruitment channels. Organizations are not counted as candidates.`;
-      if(a.type==='marketing_manager'){a.status=plans.size?'Plan awaiting review':'Prepare a content plan';a.result=`${plans.size} saved plans; ${result.social.baselines.length} provider baseline snapshots.`;a.nextAction='Review the strategy and each proposed post before approval.';}
+      if(a.type==='marketing_manager'){const review=result.social.review;a.status=review.title;a.lastAction=review.lastAction;a.result=review.result;a.nextAction=review.nextAction;a.destination=review.destination;}
       if(a.type==='business_assistant'){a.status='Private Beta · Recommendations only';a.result='No customer messages sent. Confirm current offer, project examples and brand assets before drafting replies.';a.nextAction='Review the saved profile and any outdated free-text service areas.';}
       if(a.type==='ad_manager'){a.status='Approval required · No spend';a.result=`Saved budget preference: ${c.profile.plannedAdBudget||'Not provided'}. No advertising changes made.`;a.nextAction='Review organic results first; approve a separate budget before advertising.';}
     }

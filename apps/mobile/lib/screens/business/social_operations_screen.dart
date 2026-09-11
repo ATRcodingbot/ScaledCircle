@@ -14,7 +14,8 @@ import '../../widgets/social_connection_card.dart';
 import '../../navigation/context_back_button.dart';
 
 class SocialOperationsScreen extends StatefulWidget {
-  const SocialOperationsScreen({super.key});
+  const SocialOperationsScreen({super.key, this.initialReview});
+  final String? initialReview;
 
   @override
   State<SocialOperationsScreen> createState() => _SocialOperationsScreenState();
@@ -31,6 +32,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   Timer? _approvalRefresh;
   final _approvalReadback = SocialPlanApprovalReadback();
   bool _reviewingContent = false;
+  bool _initialReviewOpened = false;
   bool _ratingPosts = false;
   bool _aligningPlan = false;
   bool _preparingFirstX = false;
@@ -73,6 +75,17 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           _workspace = value;
           _firstX = firstX;
         });
+        if (!_initialReviewOpened && widget.initialReview != null) {
+          _initialReviewOpened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _reviewSavedPlans(
+                value,
+                strategyOnly: widget.initialReview == 'plan',
+              );
+            }
+          });
+        }
         _connectionRefresh?.cancel();
         if (value.connections.any(
           (c) =>
@@ -960,6 +973,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               ),
               const SizedBox(height: 16),
               SocialRuntimeStatusCard(
+                onReviewPosts: () => _reviewSavedPlans(workspace),
                 status: _approvalReadback.pending
                     ? {
                         'available': true,
@@ -975,6 +989,19 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               ),
               const SizedBox(height: 16),
               _section('30-Day Plan', _plans(workspace)),
+              _section(
+                'Content',
+                SocialPlanOverview(
+                  presentation: SocialPlanPresentation(
+                    workspace.plans,
+                    workspace.runtimeStatus,
+                  ),
+                  refreshingApproval: _approvalReadback.pending,
+                  onReview: workspace.plans.isEmpty
+                      ? _createPlan
+                      : () => _reviewSavedPlans(workspace),
+                ),
+              ),
               _notice(),
               const SizedBox(height: 16),
               _section('Connections', _connections(workspace, wide)),
@@ -1345,68 +1372,73 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     );
   }
 
-  Future<void> _reviewSavedPlans(SocialOperationsWorkspace workspace) =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (context) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .85,
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text(
-                    SocialPlanPresentation(
+  Future<void> _reviewSavedPlans(
+    SocialOperationsWorkspace workspace, {
+    bool strategyOnly = false,
+  }) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * .85,
+        child: Column(
+          children: [
+            ListTile(
+              title: Text(
+                strategyOnly &&
+                        SocialPlanPresentation(
                           workspace.plans,
                           workspace.runtimeStatus,
                         ).allApproved
-                        ? 'Review Draft Posts'
-                        : 'Review 30-Day Plan',
-                  ),
-                  trailing: IconButton(
-                    tooltip: 'Close review',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    'Reviewing does not approve or schedule any content.',
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      for (final plan in workspace.plans)
-                        CustomerSocialPlanCard(
-                          plan: plan,
-                          initiallyExpanded: true,
-                          onApprove: () {
-                            Navigator.pop(context);
-                            _approvePlan(plan);
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Back / Keep Editing'),
-                ),
-              ],
+                    ? 'View Approved Plan'
+                    : SocialPlanPresentation(
+                        workspace.plans,
+                        workspace.runtimeStatus,
+                      ).allApproved
+                    ? 'Review Draft Posts'
+                    : 'Review 30-Day Plan',
+              ),
+              trailing: IconButton(
+                tooltip: 'Close review',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
             ),
-          ),
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Reviewing does not approve or schedule any content.',
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  for (final plan in workspace.plans)
+                    CustomerSocialPlanCard(
+                      plan: plan,
+                      initiallyExpanded: true,
+                      strategyOnly: strategyOnly,
+                      onApprove: () {
+                        Navigator.pop(context);
+                        _approvePlan(plan);
+                      },
+                    ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Back'),
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   Widget _plans(SocialOperationsWorkspace workspace) {
-    final presentation = SocialPlanPresentation(
-      workspace.plans,
-      workspace.runtimeStatus,
-    );
     final alignment = workspace.internalPlanAlignment;
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
@@ -1439,7 +1471,21 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ),
         if (!_approvalReadback.pending)
           for (final plan in workspace.plans)
-            if (plan['strategy'] is Map)
+            if (socialPlanApproved(plan))
+              Card(
+                child: ListTile(
+                  title: const Text('30-Day Plan · Approved ✓'),
+                  subtitle: Text(
+                    plan['goal']?.toString() ?? 'Approved strategy',
+                  ),
+                  trailing: TextButton(
+                    onPressed: () =>
+                        _reviewSavedPlans(workspace, strategyOnly: true),
+                    child: const Text('View Approved Plan'),
+                  ),
+                ),
+              )
+            else if (plan['strategy'] is Map)
               CustomerSocialPlanCard(
                 plan: plan,
                 onApprove: () => _approvePlan(plan),
@@ -1463,13 +1509,6 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                       : const Chip(label: Text('APPROVED')),
                 ),
               ),
-        SocialPlanOverview(
-          presentation: presentation,
-          refreshingApproval: _approvalReadback.pending,
-          onReview: workspace.plans.isEmpty
-              ? _createPlan
-              : () => _reviewSavedPlans(workspace),
-        ),
         if (alignment != null)
           Card(
             child: ListTile(

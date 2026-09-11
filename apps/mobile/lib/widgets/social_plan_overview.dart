@@ -23,7 +23,7 @@ class SocialPlanOverview extends StatelessWidget {
             refreshingApproval
                 ? 'Plan approved — refreshing status…'
                 : presentation.allApproved
-                ? '30-Day Plan · Approved ✓'
+                ? 'Draft Posts'
                 : '${presentation.plans.length} saved plan${presentation.plans.length == 1 ? '' : 's'}',
           ),
           if (!refreshingApproval) ...[
@@ -35,9 +35,6 @@ class SocialPlanOverview extends StatelessWidget {
               'Published: ${presentation.count('published') ?? 'Not confirmed'}',
             ),
           ],
-          const Text(
-            'Plan approval does not approve posts, complete media or schedule publication.',
-          ),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: refreshingApproval ? null : onReview,
