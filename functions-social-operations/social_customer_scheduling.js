@@ -11,10 +11,11 @@ const messages = {
   content: 'Review the complete copy, call to action and destination.',
   quality: 'Resolve the content quality review before scheduling.',
   scheduler: 'Scheduling is not available for this workspace yet.',
+  existing: 'Review the existing scheduled version before scheduling a replacement.',
   paused: 'Publishing is paused. Review your publishing settings first.',
 };
 function readiness({uid, plan, item, version, provider, connection, revision, quality,
-  schedulerEnabled = false, health, config, environment, entitlement, now = Date.now()}) {
+  schedulerEnabled = false, health, config, environment, entitlement, conflictingSchedule = false, now = Date.now()}) {
   const reasons = [];
   const add = key => reasons.push({code:key, message:messages[key]});
   if (!plan || plan.businessUid !== uid || !item || item.businessUid !== uid ||
@@ -37,12 +38,14 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
   if (!connection || connection.businessUid!==uid || connection.status!=='connected_write' ||
       connection.environment!==environment || connection.tokenHealth!=='healthy' || connection.requiresReconnect===true || !connection.credentialId ||
       !/^\d+$/.test(connection.providerUserId||'') ||
+      !Number.isSafeInteger(connection.connectionRevision) || !Number.isSafeInteger(connection.credentialRotationGeneration) ||
       connection.capabilities?.[mediaRequired?'publishImage':'publishText']!==true) add('permission');
   try {require("./social_oauth").exactScopeSet(connection?.grantedScopes,require("./social_oauth").META_PUBLISH_SCOPES);} catch {if(!reasons.some(r=>r.code==='permission'))add('permission');}
   if (quality?.businessUid!==uid || quality.immutableSourceHash!==version.contentHash || quality.readyToPublish!==true) add('quality');
   if (!schedulerEnabled || config?.enabled!==true || config.writeScopesEnabled!==true || config.provider!=='meta' || config.environment!==environment ||
       !require("./subscription_entitlements").hasActiveScaleEntitlement(entitlement,{nowMillis:now})) add('scheduler');
   if (health?.killSwitchActive===true) add('paused');
+  if (conflictingSchedule) add('existing');
   if (!reasons.some(r=>['creative','permission','content'].includes(r.code))) {
     try { meta.describe({job:{id:'readiness',businessUid:uid,provider,binding:{variants:version.variants}},revision,
       account:{businessUid:uid,providerUserId:connection.providerUserId,linkedPageId:connection.linkedPageId}}); }
@@ -69,10 +72,14 @@ function createStore({db, now=Date.now, enabledUids=[], environment}) {
       read(db.doc(`socialConnections/${uid}/providers/${input.provider}`)),
       read(db.doc('socialContentQualityAssessments/'+versionId)),read(db.doc('agentHealth/'+uid)),
       read(db.doc('socialProviderConfigs/'+environment+'_meta')),read(db.doc('businessSubscriptions/'+uid))]);
+    const jobs=await read(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
+    if(jobs.size>100)throw Error('Publication history requires review.');
+    const conflictingSchedule=jobs.docs.some(doc=>{const job=doc.data();return job.provider===input.provider &&
+      job.versionId?.startsWith(input.itemId+'_v') && job.versionId!==versionId && !['published','canceled'].includes(job.status);});
     const version=v.data(),variant=version?.variants?.find(v=>v.provider===input.provider);
     const revision=variant?.mediaRevisionId?(await read(db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`))).data():null;
     return {uid,plan:p.data(),item,version,versionId,itemRef,provider:input.provider,connection:c.data(),quality:q.data(),
-      health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
+      conflictingSchedule,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
   }
   return {
     async preview(uid,input) {

@@ -35,6 +35,13 @@ test('real transaction: one exact approval/job on concurrent taps, no plan/versi
  assert.deepEqual((await db.doc('socialContentVersions/'+itemId+'_v1').get()).data(),beforeVersion);
  assert.equal((await jobs.docs[0].ref.collection('providerSteps').get()).size,0);
  assert.equal((await jobs.docs[0].ref.collection('receipts').get()).size,0);
+ await db.doc('socialContentVersions/'+itemId+'_v2').set({...version,version:2});
+ await db.doc('socialContentItems/'+itemId).update({currentVersion:2});
+ const newer=await store.preview(uid,input);
+ const held=await store.approve(uid,{...input,version:2,bindingHash:newer.bindingHash,reviewDigest:newer.reviewDigest});
+ assert.equal(held.status,'blocked');assert.ok(held.reasons.some(r=>r.code==='existing'));
+ assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',uid).get()).size,1);
+ await db.doc('socialContentItems/'+itemId).update({currentVersion:1});
  let clock=f.now,creates=0;
  const publisher=require('../functions-social-operations/social_meta_runtime').createPublisher({db,project:'scaled-circle',
    customerUids:[uid],providerCreatesEnabled:true,now:()=>clock,

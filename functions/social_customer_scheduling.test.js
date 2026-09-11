@@ -20,7 +20,8 @@ test('complete future post passes; each missing prerequisite blocks without auth
   ['permission',f=>f.connection.businessUid='other'],['permission',f=>f.connection.environment='staging'],
   ['permission',f=>f.connection.grantedScopes=[]],['time',f=>f.version.scheduledFor=new Date(f.now).toISOString()],
   ['quality',f=>f.quality.immutableSourceHash='old'],['scheduler',f=>f.schedulerEnabled=false],
-  ['scheduler',f=>f.entitlement.status='expired'],['paused',f=>f.health.killSwitchActive=true],
+  ['scheduler',f=>f.entitlement.status='expired'],['paused',f=>f.health.killSwitchActive=true],['existing',f=>f.conflictingSchedule=true],
+  ['permission',f=>delete f.connection.credentialRotationGeneration],
   ['content',f=>f.version.variants[0].destinationUrl='javascript:alert(1)']]) {
    const f=fixture();change(f);const result=readiness(f);assert.equal(result.ready,false,key);assert.ok(result.reasons.some(r=>r.code===key),key);
  }
