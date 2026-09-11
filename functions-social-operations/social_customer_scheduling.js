@@ -40,7 +40,7 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
       !/^\d+$/.test(connection.providerUserId||'') ||
       !Number.isSafeInteger(connection.connectionRevision) || !Number.isSafeInteger(connection.credentialRotationGeneration) ||
       connection.capabilities?.[mediaRequired?'publishImage':'publishText']!==true) add('permission');
-  try {require("./social_oauth").exactScopeSet(connection?.grantedScopes,require("./social_oauth").META_PUBLISH_SCOPES);} catch {if(!reasons.some(r=>r.code==='permission'))add('permission');}
+  if(!hasPublishingScopes(connection,provider) && !reasons.some(r=>r.code==='permission'))add('permission');
   if (quality?.businessUid!==uid || quality.immutableSourceHash!==version.contentHash || quality.readyToPublish!==true) add('quality');
   if (!schedulerEnabled || config?.enabled!==true || config.writeScopesEnabled!==true || config.provider!=='meta' || config.environment!==environment ||
       !require("./subscription_entitlements").hasActiveScaleEntitlement(entitlement,{nowMillis:now})) add('scheduler');
@@ -53,6 +53,13 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
   }
   return {ready:reasons.length===0,reasons,scheduledFor:Number.isFinite(time)?new Date(time).toISOString():null,
     contentHash:version.contentHash,version:version.version,provider};
+}
+// Customer capability grants may include normal optional permissions such as
+// public_profile. Only the scopes needed for this platform action are required.
+function hasPublishingScopes(connection,provider) {
+  const required=provider==='facebook'?['pages_read_engagement','pages_manage_posts']:
+    provider==='instagram'?['pages_read_engagement','instagram_basic','instagram_content_publish']:null;
+  return !!required && Array.isArray(connection?.grantedScopes) && required.every(scope=>connection.grantedScopes.includes(scope));
 }
 function reviewDigest(ctx,bindingHash) {
   const c=ctx.connection||{};
@@ -132,4 +139,4 @@ function authorizeRuntime({approval,connection,config,uid,provider,environment,e
     throw Error('meta_customer_authority_changed');
   }
 }
-module.exports={SCHEMA,readiness,createStore,authorizeRuntime,messages};
+module.exports={SCHEMA,readiness,createStore,authorizeRuntime,hasPublishingScopes,messages};

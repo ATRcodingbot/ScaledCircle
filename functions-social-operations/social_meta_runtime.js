@@ -42,7 +42,9 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    c.providerUserId!==identity?.providerUserId||(!customer&&(c.linkedPageId!==p.metaDogfood.pageId||
    c.providerUserId!==(job.provider==="facebook"?p.metaDogfood.pageId:p.metaDogfood.instagramId)))||
    (job.provider==="instagram"&&c.handle!==identity.handle))throw Error("meta_connection_mismatch");
-  oauth.exactScopeSet(c.grantedScopes,oauth.META_PUBLISH_SCOPES);
+  if(customer) {
+   if(!require("./social_customer_scheduling").hasPublishingScopes(c,job.provider))throw Error('meta_customer_permission_required');
+  } else oauth.exactScopeSet(c.grantedScopes,oauth.META_PUBLISH_SCOPES);
   if(action!=="reconcile") {
    if(a.revokedAt!=null||h?.killSwitchActive===true)throw Error("meta_supervisor_paused");
    if(action==="create") {

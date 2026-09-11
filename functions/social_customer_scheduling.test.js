@@ -15,6 +15,8 @@ function fixture(){return {uid:'owner',provider:'facebook',environment:'producti
  entitlement:{plan:'managed_growth',status:'active',expiresAt:new Date(2000000000000)}};}
 test('complete future post passes; each missing prerequisite blocks without authority',()=>{
  assert.equal(readiness(fixture()).ready,true);
+ const optional=fixture();optional.connection.grantedScopes=[...optional.connection.grantedScopes,'public_profile'];assert.equal(readiness(optional).ready,true);
+ optional.connection.grantedScopes=['pages_read_engagement','pages_manage_posts','public_profile'];assert.equal(readiness(optional).ready,true);
  for(const [key,change] of [
   ['plan',f=>f.plan.approvedVersion=0],['creative',f=>f.version.variants[0].mediaRequirement='Image required'],
   ['permission',f=>f.connection.businessUid='other'],['permission',f=>f.connection.environment='staging'],
