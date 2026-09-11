@@ -6,7 +6,9 @@ function project(plans = []) {
   const pending = plans.filter(p => !approved(p));
   const items = plans.flatMap(p => Array.isArray(p.items) ? p.items : []);
   const finalStates = ['approved', 'scheduled', 'published'];
-  const draftPosts = items.filter(i => Array.isArray(i.variants) && i.variants.length
+  const platformCounting=plans.some(p=>p.strategy?.version==='CustomerSocialDraftStrategyV1');
+  const countItems=platformCounting?items.flatMap(i=>i.variants?.length?i.variants:[i]):items;
+  const draftPosts = countItems.filter(i => Array.isArray(i.variants) && i.variants.length
     ? i.variants.some(v => !finalStates.includes(v.status)) : !finalStates.includes(i.status)).length;
   const allApproved = plans.length > 0 && !pending.length;
   const planApprovalState = !plans.length ? 'not_created' : allApproved ? 'approved' : 'needs_review';

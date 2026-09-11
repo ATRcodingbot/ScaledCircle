@@ -11,6 +11,19 @@ const indexSource = fs.readFileSync(path.join(packageRoot, "index.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 
+test('customer scheduling bundle has exactly two owner callables and one isolated scheduler',()=>{
+ const {execFileSync}=require('node:child_process');
+ execFileSync(process.execPath,[path.join(__dirname,'scripts/build_customer_social_scheduling_runtime.js')]);
+ const output=path.join(root,'.firebase/customer-social-scheduling-runtime');
+ const endpoints=JSON.parse(execFileSync(process.execPath,['-e',`const e=require(${JSON.stringify(output)});console.log(JSON.stringify(Object.fromEntries(Object.entries(e).map(([k,v])=>[k,v.__endpoint?.secretEnvironmentVariables||[]]))));`],{encoding:'utf8'}));
+ assert.deepEqual(Object.keys(endpoints).sort(),['approveAndScheduleCustomerSocialPostV1','previewCustomerSocialPostV1','runCustomerMetaPublisherV1']);
+ assert.deepEqual(endpoints.approveAndScheduleCustomerSocialPostV1,[]);
+ assert.deepEqual(endpoints.previewCustomerSocialPostV1,[]);
+ assert.deepEqual(endpoints.runCustomerMetaPublisherV1.map(s=>s.key),['SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY']);
+ assert.ok(fs.existsSync(path.join(output,'social_customer_scheduling.js')));
+ assert.ok(fs.existsSync(path.join(output,'subscription_entitlements.js')));
+});
+
 test("Meta bundle has no public activation surface and only the scheduled Meta feed path gains create capability",()=>{
  const {execFileSync}=require("node:child_process");
  execFileSync(process.execPath,[path.join(__dirname,"scripts/build_meta_growth_runtime.js")]);
@@ -80,6 +93,7 @@ test("X OAuth codebase binds only shared encryption and the X secret", () => {
 test("Social Operations exports provider-free surfaces plus one bounded X certification", () => {
   const names = [...indexSource.matchAll(/exports\.([A-Za-z0-9_]+)\s*=/g)].map((match) => match[1]);
   assert.deepEqual(names.sort(), [
+    "approveAndScheduleCustomerSocialPostV1",
     "approveFirstXProductionSuccessorV4",
     "approveMetaGrowthWeekV1",
     "approveSocialContentPlanV1",
@@ -108,6 +122,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "prepareCustomerSocialPlanV1",
     "prepareFirstXPublishFoundationV1",
     "prepareMetaGrowthWeekV1",
+    "previewCustomerSocialPostV1",
     "proposeScheduledSocialReplacementV1",
     "publishFirstXProductionSuccessorV4",
     "rateHistoricalSocialContentV1",
@@ -120,6 +135,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "recordFirstXFounderApprovalV1",
     "registerFirstXProductionResponseAssetV1",
     "reviewScheduledSocialContentV1",
+    "runCustomerMetaPublisherV1",
     "runMetaGrowthMeasurementsV1",
     "runMetaGrowthPublisherV1",
     "runSocialGrowthMeasurementsV1",

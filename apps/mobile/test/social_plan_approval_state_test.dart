@@ -43,7 +43,7 @@ void main() {
     );
     expect(
       SocialPlanPresentation([plan()], runtime(1)).contentAction,
-      'Review scheduled content',
+      'View Schedule',
     );
     expect(SocialPlanPresentation([plan()], {}).count('scheduled'), isNull);
   });
@@ -94,7 +94,7 @@ void main() {
       expect(find.text('Draft Posts: 8 ready for review'), findsOneWidget);
       expect(find.text('Scheduled: 0'), findsOneWidget);
       expect(find.text('Review 30-Day Plan'), findsNothing);
-      expect(find.text('Review scheduled content'), findsNothing);
+      expect(find.text('View Schedule'), findsNothing);
       await tester.ensureVisible(find.text('Review Draft Posts'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Review Draft Posts'));

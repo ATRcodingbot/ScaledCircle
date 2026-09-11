@@ -80,7 +80,7 @@ function approval({record, businessUid, expectedDigest, versionIds, windowStart,
 }
 
 function jobs(approved) {
-  return approved.items.flatMap((item) => item.variants.map((variant) => {
+  return approved.items.flatMap((item) => item.variants.filter(variant => !approved.providers || approved.providers.includes(variant.provider)).map((variant) => {
     // A second approval or a rescheduled cycle cannot create a second job for
     // the same immutable platform version. Changed schedule needs new content.
     const key = {businessUid: approved.businessUid, versionId: item.versionId, provider: variant.provider};

@@ -1372,77 +1372,287 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     );
   }
 
+  List<Map<String, dynamic>> _postReviewPlans(
+    SocialOperationsWorkspace workspace, {
+    required bool strategyOnly,
+    required bool scheduledOnly,
+  }) {
+    if (strategyOnly) return workspace.plans;
+    final drafts =
+        SocialPlanPresentation(
+          workspace.plans,
+          workspace.runtimeStatus,
+        ).draftPosts >
+        0;
+    return workspace.plans
+        .map(
+          (plan) => <String, dynamic>{
+            ...plan,
+            'items': (plan['items'] as List? ?? [])
+                .whereType<Map>()
+                .map(
+                  (item) => <String, dynamic>{
+                    ...item,
+                    'variants': (item['variants'] as List? ?? [])
+                        .whereType<Map>()
+                        .where(
+                          (v) => scheduledOnly
+                              ? v['status'] == 'scheduled'
+                              : !drafts ||
+                                    ![
+                                      'approved',
+                                      'scheduled',
+                                      'published',
+                                    ].contains(v['status']),
+                        )
+                        .toList(),
+                  },
+                )
+                .where((item) => (item['variants'] as List).isNotEmpty)
+                .toList(),
+          },
+        )
+        .toList();
+  }
+
   Future<void> _reviewSavedPlans(
     SocialOperationsWorkspace workspace, {
     bool strategyOnly = false,
-  }) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (context) => SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .85,
-        child: Column(
-          children: [
-            ListTile(
-              title: Text(
-                strategyOnly &&
-                        SocialPlanPresentation(
+    bool scheduledOnly = false,
+  }) {
+    final presentation = SocialPlanPresentation(
+      workspace.plans,
+      workspace.runtimeStatus,
+    );
+    final scheduleView =
+        scheduledOnly ||
+        (!strategyOnly &&
+            presentation.draftPosts == 0 &&
+            (presentation.count('scheduled') ?? 0) > 0);
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .85,
+          child: Column(
+            children: [
+              ListTile(
+                title: Text(
+                  scheduleView
+                      ? 'View Schedule'
+                      : strategyOnly &&
+                            SocialPlanPresentation(
+                              workspace.plans,
+                              workspace.runtimeStatus,
+                            ).allApproved
+                      ? 'View Approved Plan'
+                      : SocialPlanPresentation(
                           workspace.plans,
                           workspace.runtimeStatus,
                         ).allApproved
-                    ? 'View Approved Plan'
-                    : SocialPlanPresentation(
-                        workspace.plans,
-                        workspace.runtimeStatus,
-                      ).allApproved
-                    ? 'Review Draft Posts'
-                    : 'Review 30-Day Plan',
+                      ? (presentation.draftPosts > 0
+                            ? 'Review Draft Posts'
+                            : 'View Results')
+                      : 'Review 30-Day Plan',
+                ),
+                trailing: IconButton(
+                  tooltip: 'Close review',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
               ),
-              trailing: IconButton(
-                tooltip: 'Close review',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'Reviewing does not approve or schedule any content.',
+                ),
               ),
-            ),
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
-                'Reviewing does not approve or schedule any content.',
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  for (final plan in workspace.plans)
-                    CustomerSocialPlanCard(
-                      plan: plan,
-                      initiallyExpanded: true,
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    for (final plan in _postReviewPlans(
+                      workspace,
                       strategyOnly: strategyOnly,
-                      onApprove: () {
-                        Navigator.pop(context);
-                        _approvePlan(plan);
-                      },
-                    ),
-                ],
+                      scheduledOnly: scheduleView,
+                    ))
+                      CustomerSocialPlanCard(
+                        plan: plan,
+                        initiallyExpanded: true,
+                        strategyOnly: strategyOnly,
+                        onSchedulePost: (post) {
+                          Navigator.pop(context);
+                          _schedulePost(post);
+                        },
+                        onApprove: () {
+                          Navigator.pop(context);
+                          _approvePlan(plan);
+                        },
+                      ),
+                  ],
+                ),
               ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Back'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _schedulePost(Map<String, dynamic> post) async {
+    try {
+      final preview = await _service.previewPost({
+        'itemId': post['itemId'],
+        'provider': post['provider'],
+      });
+      if (!mounted) return;
+      if (preview['ready'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              (preview['reasons'] as List? ?? [])
+                  .whereType<Map>()
+                  .map((r) => r['message'])
+                  .join(' '),
             ),
+          ),
+        );
+        await _load(quiet: true);
+        return;
+      }
+      final reviewed = preview['reviewedPost'] as Map;
+      final variant = reviewed['variant'] as Map;
+      for (final image
+          in (reviewed['images'] as List? ?? []).whereType<Map>()) {
+        if (!mounted) return;
+        var failed = false;
+        await precacheImage(
+          NetworkImage(image['url'].toString()),
+          context,
+          onError: (_, stack) {
+            failed = true;
+          },
+        );
+        if (failed) throw StateError('Creative could not be displayed.');
+      }
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Approve & Schedule'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final image
+                    in (reviewed['images'] as List? ?? []).whereType<Map>())
+                  Image.network(
+                    image['url'].toString(),
+                    errorBuilder: (_, error, stack) => const Text(
+                      'Image unavailable. Go back before approving.',
+                    ),
+                  ),
+                Text(
+                  [
+                    socialProviderName(preview['provider']?.toString() ?? ''),
+                    reviewed['accountName'],
+                    variant['copy'],
+                    'Creative: ${variant['mediaRevisionId'] != null ? 'Prepared version shown in the post' : 'Text only'}',
+                    'Call to action: ${variant['callToAction'] ?? 'None'}',
+                    'Destination: ${variant['destinationUrl'] ?? 'None'}',
+                    'Publish: ${DateTime.tryParse(preview['scheduledFor']?.toString() ?? '')?.toLocal()}',
+                    'This approves only this exact post and future publish time.',
+                  ].join('\n\n'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Back'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Approve & Schedule'),
             ),
           ],
         ),
-      ),
-    ),
-  );
+      );
+      if (confirmed != true) return;
+      final result = await _service.approveAndSchedulePost({
+        'itemId': post['itemId'],
+        'provider': preview['provider'],
+        'version': preview['version'],
+        'contentHash': preview['contentHash'],
+        'bindingHash': preview['bindingHash'],
+        'reviewDigest': preview['reviewDigest'],
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['status'] == 'scheduled'
+                ? 'Post scheduled: ${DateTime.tryParse(result['scheduledFor']?.toString() ?? '')?.toLocal()}'
+                : 'Scheduling needs attention. Review the current post requirements.',
+          ),
+        ),
+      );
+      socialReviewRevision.value++;
+      await _load(quiet: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Scheduling could not be confirmed. Check the saved post status before trying again.',
+            ),
+          ),
+        );
+      }
+      await _load(quiet: true);
+    }
+  }
 
   Widget _plans(SocialOperationsWorkspace workspace) {
+    final cadence = workspace.data['cadence'] as Map?;
     final alignment = workspace.internalPlanAlignment;
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
       children: [
+        if (cadence != null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Social cadence',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(cadence['startingCopy']?.toString() ?? ''),
+                  const Text(
+                    'Adaptive recommendations. Cadence changes need your approval; no managed range has been granted.',
+                  ),
+                  for (final platform
+                      in (cadence['platforms'] as List? ?? []).whereType<Map>())
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '${socialProviderName(platform['provider']?.toString() ?? '')}: ${platform['decision']}\n${platform['reason']}',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         if (workspace.managedPublishingAvailable && workspace.plans.isEmpty)
           FilledButton.icon(
             onPressed: _loading
@@ -1617,7 +1827,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                         onPressed: _reviewingContent
                             ? null
                             : (presentation.count('scheduled') ?? 0) > 0
-                            ? _reviewScheduledContent
+                            ? () => _reviewSavedPlans(
+                                workspace,
+                                scheduledOnly: true,
+                              )
                             : () => _reviewSavedPlans(workspace),
                         icon: const Icon(Icons.fact_check_outlined),
                         label: Text(
@@ -1626,6 +1839,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                               : presentation.contentAction!,
                         ),
                       ),
+                    TextButton(
+                      onPressed: _reviewingContent
+                          ? null
+                          : _reviewScheduledContent,
+                      child: const Text('Check content quality'),
+                    ),
                     if (pastPosts.isNotEmpty ||
                         (presentation.count('published') ?? 0) > 0)
                       PopupMenuButton<int>(

@@ -138,6 +138,28 @@ async function requireManagedGrowthBusiness(request) {
   return {...context, entitlement: entitlement || {}};
 }
 
+// Customer approvals are separate from internal dogfood allowances. An empty
+// deployment allowlist fails closed; no plan approval enables this path.
+function customerSchedulingStore() {
+  return require('./social_customer_scheduling').createStore({db, environment:runtimeEnvironment(),
+    enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
+}
+function customerPostCallable(method) {
+  return onCall({enforceAppCheck:false,maxInstances:3},async request=>{
+    const business=await requireSocialOperationsBusiness(request);
+    if(business.role!=='business' || !metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
+      throw new HttpsError('permission-denied','Post scheduling is not available for this Business.');
+    try{return await customerSchedulingStore()[method](business.uid,request.data||{});}
+    catch(error){
+      require('firebase-functions/logger').warn('customer_social_schedule_rejected',{uid:business.uid,reason:error.message});
+      throw new HttpsError('failed-precondition','This post could not be scheduled. Review its current version and requirements before trying again.');
+    }
+  });
+}
+
+exports.previewCustomerSocialPostV1=customerPostCallable('preview');
+exports.approveAndScheduleCustomerSocialPostV1=customerPostCallable('approve');
+
 exports.getSocialOperationsWorkspace = onCall(
   {enforceAppCheck: false, maxInstances: 6},
   async (request) => {
@@ -161,6 +183,21 @@ exports.getSocialOperationsWorkspace = onCall(
     const safeConnections = require('./social_launch_availability').channels(business).map((provider) =>
       socialOperations.connectionProjection({provider, ...(connectionMap.get(provider) || {})}));
     const performance = snapshots.docs.map((doc) => ({id: doc.id, ...doc.data()}));
+    const customerPlans=await require('./social_customer_post_projection').load({db,uid:business.uid,
+      plans:plans.docs.map(doc=>({id:doc.id,...doc.data()})),store:customerSchedulingStore()});
+    const cadenceObservations=await db.collection('socialMetaMeasurementSnapshots').where('businessUid','==',business.uid).limit(100).get();
+    const cadenceJobs=await db.collection('socialMetaMeasurementJobs').where('businessUid','==',business.uid).limit(100).get();
+    const cadenceJobMap=new Map(cadenceJobs.docs.map(doc=>[doc.id,doc.data()]));
+    const cadence=require('./social_customer_cadence');
+    const qualityMap=new Map(qualityAssessments.docs.map(doc=>[doc.id,doc.data()]));
+    const cadenceLearning=['facebook','instagram'].map(provider=>cadence.recommend({uid:business.uid,provider,
+      observations:cadenceObservations.docs.map(doc=>{const row=doc.data(),q=qualityMap.get(row.contentVersionId);
+        const valid=q?.businessUid===business.uid&&q.immutableSourceHash===row.contentHash;
+        const variant=valid?q.variantAssessments?.find(v=>v.provider===row.provider):null;
+        return {...row,hoursAfterPublication:cadenceJobMap.get(doc.id)?.hoursAfterPublication,
+          qualityReady:valid&&q.readyToPublish===true,fatigueObserved:variant?.repetition?.repeated};})}));
+
+
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
       canonicalBusinessId: business.uid,
@@ -169,7 +206,8 @@ exports.getSocialOperationsWorkspace = onCall(
       managedGrowth: business.planId === "managed_growth",
       connections: safeConnections,
       managedPublishingAvailable: metaCustomer.available(business, process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS),
-      plans: plans.docs.map((doc) => ({id: doc.id, ...doc.data()})),
+      plans: customerPlans,
+      cadence: {startingCopy:cadence.startingCopy,platforms:cadenceLearning},
       emailPlans: emailPlans.docs.map((doc) => ({id: doc.id, ...doc.data()})),
       ads: [
         socialOperations.adAccountHealth({provider: "meta_ads", ...(metaAds.data() || {})}),
@@ -185,7 +223,7 @@ exports.getSocialOperationsWorkspace = onCall(
         ratings: pastPostRatings.docs.map((doc) => ({id: doc.id, ...doc.data()})),
       }),
       runtimeStatus: await require("./social_runtime_status").load(db, business.uid, {
-        plans: plans.docs.map(doc => doc.data()), connections: safeConnections,
+        plans: customerPlans, connections: safeConnections,
       }),
       contentQualityLearning: socialOperations.qualityLearningComparison({
         businessUid: business.uid,
@@ -3410,6 +3448,20 @@ exports.runMetaGrowthPublisherV1=onSchedule({schedule:"every 5 minutes",timeZone
   require("firebase-functions/logger").info("meta_scheduler_certification",{
     discoveredJobs:inspection.results.length,results:inspection.results,
     enabledProviders:["facebook","instagram"]});
+});
+
+// Only exact customer approvals are processed here. Existing internal/X jobs
+// and their allowances are never selected or changed by this scheduler.
+exports.runCustomerMetaPublisherV1=onSchedule({schedule:'every 5 minutes',timeZone:'UTC',
+  maxInstances:1,timeoutSeconds:120,retryCount:0,secrets:[socialOAuthEncryptionKey]},async()=>{
+  const customerUids=(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean);
+  if(customerUids.length>25)throw Error('customer_scheduler_inventory_review_required');
+  const publisher=require('./social_meta_runtime').createPublisher({db,project:process.env.GCLOUD_PROJECT,
+    providerCreatesEnabled:process.env.GCLOUD_PROJECT==='scaled-circle',customerUids,credentials:loadMetaPublisherCredential});
+  for(const businessUid of customerUids) {
+    const result=await require('./social_meta_scheduler').run({db,publisher,businessUid,customerOnly:true});
+    require('firebase-functions/logger').info('customer_social_scheduler',{businessUid,results:result.results});
+  }
 });
 
 exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",timeZone:"UTC",

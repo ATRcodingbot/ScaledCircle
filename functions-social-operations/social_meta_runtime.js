@@ -10,7 +10,7 @@ const {isDeepStrictEqual}=require("node:util");
 
 // Same immutable growth jobs/approvals, with a separate provider allowance so
 // preparing Meta cannot replace the active X week. No allowance is auto-enabled.
-function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false,enabledProviders=["facebook","instagram"]}) {
+function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false,enabledProviders=["facebook","instagram"],customerUids=[]}) {
  const canCreate=provider=>providerCreatesEnabled===true&&enabledProviders.includes(provider);
  const environment=project==="scaled-circle"?"production":project==="scaledcircle-staging"?"staging":null;
  if(!environment)throw Error("meta_runtime_unavailable");
@@ -28,23 +28,29 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    db.doc(`agentHealth/${job.businessUid}`),db.doc(`socialContentVersions/${job.versionId}`),
    db.doc(`socialContentQualityAssessments/${job.versionId}`)];
   const [a,c,p,s,h,v,q]=(await Promise.all(refs.map(read))).map(x=>x.data());
-  connectionPolicy.authorize(p,job.businessUid);
+  const customer=a?.schemaVersion==='CustomerPostApprovalV1';
+  if(customer) {
+   require("./social_customer_scheduling").authorizeRuntime({approval:a,connection:c,config:p,uid:job.businessUid,
+    provider:job.provider,environment,enabledUids:customerUids});
+   const subscription=(await read(db.doc('businessSubscriptions/'+job.businessUid))).data();
+   if(!require("./subscription_entitlements").hasActiveScaleEntitlement(subscription))throw Error('meta_customer_entitlement_required');
+  } else connectionPolicy.authorize(p,job.businessUid);
   if(!a || a.businessUid!==job.businessUid || a.approvedByUid!==job.businessUid ||
    !growth.jobs(a).some(x=>x.id===job.id&&x.bindingHash===job.bindingHash&&isDeepStrictEqual(x.binding,job.binding)))throw Error("meta_approval_mismatch");
   const identity=a.providerAccounts?.[job.provider];
   if(c?.environment!==environment||c.tokenHealth!=="healthy"||c.status!=="connected_write"||
-   c.providerUserId!==identity?.providerUserId||c.linkedPageId!==p.metaDogfood.pageId||
-   c.providerUserId!==(job.provider==="facebook"?p.metaDogfood.pageId:p.metaDogfood.instagramId)||
+   c.providerUserId!==identity?.providerUserId||(!customer&&(c.linkedPageId!==p.metaDogfood.pageId||
+   c.providerUserId!==(job.provider==="facebook"?p.metaDogfood.pageId:p.metaDogfood.instagramId)))||
    (job.provider==="instagram"&&c.handle!==identity.handle))throw Error("meta_connection_mismatch");
   oauth.exactScopeSet(c.grantedScopes,oauth.META_PUBLISH_SCOPES);
   if(action!=="reconcile") {
    if(a.revokedAt!=null||h?.killSwitchActive===true)throw Error("meta_supervisor_paused");
    if(action==="create") {
    if(!canCreate(job.provider))throw Error("meta_deployment_creates_disabled");
-   if(a.revokedAt!=null||s?.schemaVersion!=="MetaPublisherAllowanceV1"||s.businessUid!==job.businessUid||
+   if(!customer&&(a.revokedAt!=null||s?.schemaVersion!=="MetaPublisherAllowanceV1"||s.businessUid!==job.businessUid||
     s.environment!==environment||s.provider!==job.provider||s.approvalId!==job.approvalId||s.mode!=="approval_required"||
     s.externalPublishingEnabled!==true||s.killSwitchActive!==false||h?.killSwitchActive===true||
-    !Array.isArray(s.jobIds)||s.jobIds.length>3||!s.jobIds.includes(job.id))throw Error("meta_supervisor_paused");
+    !Array.isArray(s.jobIds)||s.jobIds.length>3||!s.jobIds.includes(job.id)))throw Error("meta_supervisor_paused");
    if(!Number.isFinite(Date.parse(job.scheduledFor))||now()<Date.parse(job.scheduledFor)||
     now()>Date.parse(job.scheduledFor)+15*60000)throw Error("meta_schedule_closed");
    }
@@ -70,7 +76,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    return {jobId,provider:job.provider,bindingHash:job.bindingHash,
     scheduledFor:job.scheduledFor,providerBoundary:"validated_request_not_sent",
     deploymentAllowsCreates:canCreate(job.provider),
-    allowanceEnabled:state?.externalPublishingEnabled===true&&state?.killSwitchActive===false,
+    allowanceEnabled:ctx.approval.schemaVersion==='CustomerPostApprovalV1' || state?.externalPublishingEnabled===true&&state?.killSwitchActive===false,
     maximumEffects:plan.maximumEffects,providerCreates:0};
   },
   async prepare(uid,provider) {

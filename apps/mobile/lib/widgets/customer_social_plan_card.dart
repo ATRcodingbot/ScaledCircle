@@ -9,12 +9,14 @@ class CustomerSocialPlanCard extends StatelessWidget {
     this.initiallyExpanded = false,
     this.onApprove,
     this.onReviewPosts,
+    this.onSchedulePost,
     this.strategyOnly = false,
   });
   final Map<String, dynamic> plan;
   final bool initiallyExpanded;
   final VoidCallback? onApprove;
   final VoidCallback? onReviewPosts;
+  final void Function(Map<String, dynamic>)? onSchedulePost;
   final bool strategyOnly;
   @override
   Widget build(BuildContext context) {
@@ -48,7 +50,12 @@ class CustomerSocialPlanCard extends StatelessWidget {
           ])
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Text(strategy[key]?.toString() ?? ''),
+              child: Text(
+                key == 'cadence' &&
+                        strategy['version'] == 'CustomerSocialDraftStrategyV1'
+                    ? 'Starting cadence: 2 posts per week per platform. Social Manager will measure performance and recommend adjustments as real results accumulate.'
+                    : strategy[key]?.toString() ?? '',
+              ),
             ),
           if (!strategyOnly)
             for (final item in (plan['items'] as List? ?? []).whereType<Map>())
@@ -85,13 +92,45 @@ class CustomerSocialPlanCard extends StatelessWidget {
                             'Post status: ${socialPostStateLabel(v['status'])}',
                           ),
                           Text(
-                            v['mediaRequirement'] == 'none'
+                            v['mediaRevisionId'] != null
+                                ? 'Creative version prepared for this post.'
+                                : v['mediaRequirement'] == 'none'
                                 ? 'Creative status: Text-only. No media required by this draft.'
                                 : 'Creative not prepared yet. Finished media preparation is not available in this workflow yet; scheduling remains unavailable.',
                           ),
                           Text(
                             'Measurement: ${v['responseAssetRequirement'] ?? 'No measurement recorded yet'}',
                           ),
+                          if (![
+                            'scheduled',
+                            'published',
+                          ].contains(v['status'])) ...[
+                            for (final reason
+                                in ((v['scheduling'] as Map?)?['reasons']
+                                            as List? ??
+                                        const [])
+                                    .whereType<Map>())
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  reason['message']?.toString() ??
+                                      'Review this post.',
+                                ),
+                              ),
+                            if ((v['scheduling'] as Map?)?['ready'] == true &&
+                                onSchedulePost != null)
+                              FilledButton(
+                                onPressed: () => onSchedulePost!(
+                                  Map<String, dynamic>.from(
+                                    v['scheduling'] as Map,
+                                  ),
+                                ),
+                                child: const Text('Approve & Schedule'),
+                              ),
+                          ] else
+                            Text(
+                              'Scheduled: ${DateTime.tryParse(v['scheduledFor']?.toString() ?? '')?.toLocal().toString() ?? 'View saved status'}',
+                            ),
                         ],
                       ),
                     ),

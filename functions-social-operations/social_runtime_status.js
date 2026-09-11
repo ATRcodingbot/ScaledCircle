@@ -33,8 +33,9 @@ function project({jobs, measurements, now = Date.now()}) {
 }
 
 function customerState({jobs = [], plans = [], connections = [], now = Date.now()}) {
-  const review = require('./social_plan_state').project(plans);
-  const draftPlans = plans.filter(p => !require('./social_plan_state').approved(p));
+  plans=require("./social_customer_post_projection").overlay(plans,jobs);
+  const review = require("./social_plan_state").project(plans);
+  const draftPlans = plans.filter(p => !require("./social_plan_state").approved(p));
   const published = jobs.filter(j => j.providerPostId || j.providerMediaId);
   const scheduled = jobs.filter(j => ['approved','scheduled','queued'].includes(j.status) && iso(j.scheduledFor));
   const failed = jobs.some(j => ['failed','unknown_outcome','hold','reconciliation_required','blocked'].includes(j.status));

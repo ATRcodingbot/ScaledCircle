@@ -51,6 +51,24 @@ class SocialOperationsService {
 
   final FirebaseFunctions _functions;
 
+  Future<Map<String, dynamic>> previewPost(Map<String, dynamic> post) async =>
+      Map<String, dynamic>.from(
+        (await _functions
+                    .httpsCallable('previewCustomerSocialPostV1')
+                    .call(post))
+                .data
+            as Map,
+      );
+  Future<Map<String, dynamic>> approveAndSchedulePost(
+    Map<String, dynamic> post,
+  ) async => Map<String, dynamic>.from(
+    (await _functions
+                .httpsCallable('approveAndScheduleCustomerSocialPostV1')
+                .call(post))
+            .data
+        as Map,
+  );
+
   Future<SocialOperationsWorkspace> load() async {
     final result = await _functions
         .httpsCallable('getSocialOperationsWorkspace')

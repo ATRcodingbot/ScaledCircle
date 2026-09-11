@@ -43,7 +43,7 @@ void main() {
     expect(screen, contains('Strong Posts'));
     expect(screen, contains('Scheduled'));
     expect(screen, contains('Past Posts'));
-    expect(File('lib/models/social_plan_presentation.dart').readAsStringSync(), contains('Review scheduled content'));
+    expect(File('lib/models/social_plan_presentation.dart').readAsStringSync(), contains('View Schedule'));
     expect(screen, contains('presentation.contentAction'));
     expect(screen, contains('Staging plan alignment verified'));
     expect(screen, contains('Align Plan'));

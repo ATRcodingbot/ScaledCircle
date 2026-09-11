@@ -2,13 +2,14 @@
 
 // Shares canonical growth jobs with X, but never reads or changes X allowances.
 // Certification discovers/evaluates real jobs without creating synthetic approvals.
-async function run({db, publisher, businessUid, now=Date.now(),inspectOnly=false}) {
+async function run({db, publisher, businessUid, now=Date.now(),inspectOnly=false,customerOnly=false}) {
   const results=[];
   for (const provider of ["facebook","instagram"]) {
-    const snapshots=await db.collection("socialGrowthJobs").where("provider","==",provider).limit(100).get();
+    const snapshots=await (customerOnly ? db.collection("socialGrowthJobs").where("businessUid","==",businessUid) : db.collection("socialGrowthJobs").where("provider","==",provider)).limit(101).get();
+    if(customerOnly && snapshots.size>100)throw Error("customer_history_requires_pagination");
     for (const snapshot of snapshots.docs) {
       const job=snapshot.data();
-      if(job.businessUid!==businessUid || job.id!==snapshot.id ||
+      if(job.businessUid!==businessUid || job.provider!==provider || (customerOnly && job.customerApproval!==true) || job.id!==snapshot.id ||
           ["published","canceled"].includes(job.status))continue;
       try {
         const inspection=await publisher.inspect(job.id);

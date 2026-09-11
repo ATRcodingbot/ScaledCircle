@@ -24,17 +24,19 @@ class SocialPlanPresentation {
   final Map<String, dynamic> runtime;
 
   bool get allApproved => plans.isNotEmpty && plans.every(socialPlanApproved);
-  int get draftPosts => plans
-      .expand((p) => (p['items'] as List? ?? const []).whereType<Map>())
-      .where((item) {
-        final variants = (item['variants'] as List? ?? const [])
-            .whereType<Map>();
-        const finalStates = ['approved', 'scheduled', 'published'];
-        return variants.isEmpty
-            ? !finalStates.contains(item['status'])
-            : variants.any((v) => !finalStates.contains(v['status']));
-      })
-      .length;
+  int get draftPosts =>
+      count('draftPosts') ??
+      plans
+          .expand((p) => (p['items'] as List? ?? const []).whereType<Map>())
+          .where((item) {
+            final variants = (item['variants'] as List? ?? const [])
+                .whereType<Map>();
+            const finalStates = ['approved', 'scheduled', 'published'];
+            return variants.isEmpty
+                ? !finalStates.contains(item['status'])
+                : variants.any((v) => !finalStates.contains(v['status']));
+          })
+          .length;
 
   int? count(String key) {
     if (runtime['available'] != true) return null;
@@ -49,10 +51,14 @@ class SocialPlanPresentation {
       ? 'Review 30-Day Plan'
       : draftPosts > 0
       ? 'Review Draft Posts'
+      : (count('scheduled') ?? 0) > 0
+      ? 'View Schedule'
+      : (count('published') ?? 0) > 0
+      ? 'View Results'
       : 'View Posts';
 
   String? get contentAction => (count('scheduled') ?? 0) > 0
-      ? 'Review scheduled content'
+      ? 'View Schedule'
       : draftPosts > 0
       ? 'Review Draft Posts'
       : null;
