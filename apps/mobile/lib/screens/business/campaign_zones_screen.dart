@@ -827,7 +827,7 @@ class CampaignZonesScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to rename zone: $e')));
+      ).showSnackBar(SnackBar(content: Text('The name could not be saved. Please try again.')));
     }
   }
 
@@ -896,7 +896,7 @@ class CampaignZonesScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to delete zone: $e')));
+      ).showSnackBar(SnackBar(content: Text('Removal could not be confirmed. Check the current zones before trying again.')));
     }
   }
 
@@ -1302,7 +1302,7 @@ class CampaignZonesScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to drop Scaler: $e')));
+      ).showSnackBar(SnackBar(content: Text('The assignment change could not be confirmed. Check the current assignment before trying again.')));
     }
   }
 

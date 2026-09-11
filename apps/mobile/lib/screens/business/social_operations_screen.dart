@@ -882,41 +882,50 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     );
   }
 
-  Widget _body(SocialOperationsWorkspace workspace) => LayoutBuilder(
-    builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 820;
-      return ListView(
-        padding: EdgeInsets.all(wide ? 24 : 16),
-        children: [
-          Text(
-            workspace.managedGrowth
-                ? 'Your managed marketing workspace'
-                : 'Plan, approve, and measure your marketing',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          const Text('Connect → Plan → Review → Schedule → Measure → Improve'),
-          const SizedBox(height: 16),
-          _notice(),
-          const SizedBox(height: 16),
-          _section('Connections', _connections(workspace, wide)),
-          if (workspace.firstXCertificationAvailable)
-            _section('First X publish candidate', _firstXPublishCard()),
-          _section('30-Day Plan', _plans(workspace)),
-          SocialRuntimeStatusCard(
-            status: workspace.runtimeStatus,
-            onRefresh: _load,
-          ),
-          _section('Content Health', _contentHealth(workspace)),
-          _section("What's Working", _learning(workspace)),
-          if (workspace.managedGrowth)
-            _section('30-Day Email Content', _email(workspace)),
-          _section('Ads — Read Only', _ads(workspace, wide)),
-        ],
-      );
-    },
+  Widget _body(SocialOperationsWorkspace workspace) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1080),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 820;
+          return ListView(
+            padding: EdgeInsets.all(wide ? 24 : 16),
+            children: [
+              Text(
+                workspace.managedGrowth
+                    ? 'Your managed marketing workspace'
+                    : 'Plan, approve, and measure your marketing',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Connect → Plan → Review → Schedule → Measure → Improve',
+              ),
+              const SizedBox(height: 16),
+              SocialRuntimeStatusCard(
+                status: workspace.runtimeStatus,
+                onRefresh: _load,
+                compact: true,
+              ),
+              const SizedBox(height: 16),
+              _section('30-Day Plan', _plans(workspace)),
+              _notice(),
+              const SizedBox(height: 16),
+              _section('Connections', _connections(workspace, wide)),
+              if (workspace.firstXCertificationAvailable)
+                _section('First X publish candidate', _firstXPublishCard()),
+              _section('Content Health', _contentHealth(workspace)),
+              _section("What's Working", _learning(workspace)),
+              if (workspace.managedGrowth)
+                _section('30-Day Email Content', _email(workspace)),
+              _section('Ads — Read Only', _ads(workspace, wide)),
+            ],
+          );
+        },
+      ),
+    ),
   );
 
   Widget _notice() => const Card(

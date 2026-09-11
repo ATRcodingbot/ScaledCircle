@@ -5,9 +5,11 @@ class SocialRuntimeStatusCard extends StatelessWidget {
     super.key,
     required this.status,
     required this.onRefresh,
+    this.compact = false,
   });
   final Map<String, dynamic> status;
   final VoidCallback onRefresh;
+  final bool compact;
 
   String _time(BuildContext context, dynamic raw) {
     final value = DateTime.tryParse(raw?.toString() ?? '');
@@ -21,6 +23,27 @@ class SocialRuntimeStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final channels = (status['channels'] as List? ?? const []).whereType<Map>();
     final summary = status['summary'] as Map?;
+    final details = <Widget>[
+      for (final channel in channels) ...[
+        const Divider(height: 24),
+        Text(switch (channel['provider']) {
+          'facebook' => 'Facebook',
+          'instagram' => 'Instagram',
+          'x' => 'X',
+          _ => 'Social channel',
+        }, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(
+          'Next ${channel['nextFormat'] ?? 'post'}: ${_time(context, channel['nextScheduledFor'])}',
+        ),
+        Text(
+          channel['result']?.toString() ?? 'No confirmed outcome is available.',
+        ),
+        Text(
+          'Next measurement: ${_time(context, channel['nextMeasurementAt'])}',
+        ),
+        Text(channel['actionNeeded']?.toString() ?? 'Review the saved plan.'),
+      ],
+    ];
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -46,30 +69,13 @@ class SocialRuntimeStatusCard extends StatelessWidget {
                   'We could not confirm the latest status. Refresh to check before taking action.',
                 ),
               )
+            else if (compact && channels.isNotEmpty)
+              ExpansionTile(
+                title: const Text('Schedule and measurement details'),
+                children: details,
+              )
             else
-              for (final channel in channels) ...[
-                const Divider(height: 24),
-                Text(switch (channel['provider']) {
-                  'facebook' => 'Facebook',
-                  'instagram' => 'Instagram',
-                  'x' => 'X',
-                  _ => 'Social channel',
-                }, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  'Next ${channel['nextFormat'] ?? 'post'}: ${_time(context, channel['nextScheduledFor'])}',
-                ),
-                Text(
-                  channel['result']?.toString() ??
-                      'No confirmed outcome is available.',
-                ),
-                Text(
-                  'Next measurement: ${_time(context, channel['nextMeasurementAt'])}',
-                ),
-                Text(
-                  channel['actionNeeded']?.toString() ??
-                      'Review the saved plan.',
-                ),
-              ],
+              ...details,
             const SizedBox(height: 12),
             const Text(
               'Account permissions do not approve posts. Your content approval and scheduling controls remain separate.',

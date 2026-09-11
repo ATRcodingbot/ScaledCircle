@@ -63,7 +63,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
       if (mounted) {
         setState(
           () => _error =
-              'No membership could be verified. Retry, or choose a plan if you have not subscribed.',
+              'Your membership details could not be loaded. Please retry. Do not choose another plan to resolve a loading problem.',
         );
       }
     }
@@ -134,7 +134,11 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                   Text('Current plan: ${data['planName']} — $_recurring/month'),
                   Text('Current status: $status'),
                   if (!scheduled && !ended)
-                    Text('Next renewal: $_recurring on $_end'),
+                    Text(
+                      data['complimentary'] == true
+                          ? 'Complimentary access through $_end. No recurring charge.'
+                          : 'Next renewal: $_recurring on $_end',
+                    ),
                   const SizedBox(height: 24),
                   if (scheduled) ...[
                     Text(
@@ -453,7 +457,11 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     data['planName']?.toString() ?? 'Membership',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  Text('\$${data['price']} per month'),
+                  Text(
+                    data['complimentary'] == true
+                        ? 'Complimentary access · No recurring charge'
+                        : '\$${data['price']} per month',
+                  ),
                   const SizedBox(height: 12),
                   if (data['seatStatus'] == 'verified' &&
                       data['seatsUsed'] is num &&
@@ -504,7 +512,9 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     ),
                   ],
                   Text(
-                    data['cancelAtPeriodEnd'] == true
+                    data['complimentary'] == true
+                        ? 'Complimentary access through $_end. No automatic renewal charge.'
+                        : data['cancelAtPeriodEnd'] == true
                         ? 'Paid access ends $_end. No further subscription renewal is scheduled.'
                         : 'Next renewal date: $_end',
                   ),
@@ -528,6 +538,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                       child: const Text('Reactivate Membership'),
                     ),
                   if (data['paidAccess'] == true &&
+                      data['complimentary'] != true &&
                       data['changePending'] != true &&
                       data['scheduledChange'] == null &&
                       data['bundle'] == null &&
@@ -565,6 +576,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                             },
                     ),
                   if (data['paidAccess'] == true &&
+                      data['complimentary'] != true &&
                       data['changePending'] != true &&
                       data['scheduledChange'] == null &&
                       data['cancelAtPeriodEnd'] != true) ...[
@@ -607,7 +619,11 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (data['billingHistoryStatus'] != 'verified')
+                  if (data['billingHistoryStatus'] == 'complimentary')
+                    const Text(
+                      'This complimentary membership has no recurring subscription charge. Existing financial history is preserved.',
+                    )
+                  else if (data['billingHistoryStatus'] != 'verified')
                     const Text(
                       'Billing history could not be verified. Refresh Membership to retry.',
                     )
@@ -676,31 +692,35 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     onPressed: _busy ? null : _load,
                     child: const Text('Refresh Membership'),
                   ),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            try {
-                              await PlatformBillingService()
-                                  .purchaseSubscription(
-                                    businessId: _businessId,
-                                    plan: data['plan']?.toString() ?? 'starter',
-                                    manageExisting: true,
+                  if (data['complimentary'] != true)
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              try {
+                                await PlatformBillingService()
+                                    .purchaseSubscription(
+                                      businessId: _businessId,
+                                      plan:
+                                          data['plan']?.toString() ?? 'starter',
+                                      manageExisting: true,
+                                    );
+                              } catch (_) {
+                                if (mounted) {
+                                  setState(
+                                    () => _error =
+                                        'Secure billing could not open. Please retry.',
                                   );
-                            } catch (_) {
-                              if (mounted) {
-                                setState(
-                                  () => _error =
-                                      'Secure billing could not open. Please retry.',
-                                );
+                                }
                               }
-                            }
-                          },
-                    child: const Text('Payment Methods & Billing Records'),
-                  ),
+                            },
+                      child: const Text('Payment Methods & Billing Records'),
+                    ),
                 ],
                 const SizedBox(height: 20),
-                if (data?['paidAccess'] != true)
+                if (data != null &&
+                    _error == null &&
+                    data['paidAccess'] != true)
                   OutlinedButton(
                     onPressed: _busy
                         ? null
@@ -711,7 +731,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                             ),
                           ),
                     child: Text(
-                      data?['paidAccess'] == true
+                      data['paidAccess'] == true
                           ? 'Compare Plans'
                           : 'Reactivate — Choose a Plan',
                     ),

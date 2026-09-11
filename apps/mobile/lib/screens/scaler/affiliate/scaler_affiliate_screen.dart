@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../navigation/context_back_button.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../config/app_environment.dart';
@@ -92,7 +93,10 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
   Widget build(BuildContext context) {
     if (!widget.enableAttribution) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Referral Program')),
+        appBar: AppBar(
+          leading: const ContextBackButton(),
+          title: const Text('Referral Program'),
+        ),
         body: const Padding(
           padding: EdgeInsets.all(24),
           child: Column(
@@ -113,7 +117,10 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
         ? null
         : AffiliateService.referralUrl(code, scaler: _scaler);
     return Scaffold(
-      appBar: AppBar(title: const Text('Referrals')),
+      appBar: AppBar(
+        leading: const ContextBackButton(),
+        title: const Text('Referrals'),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(

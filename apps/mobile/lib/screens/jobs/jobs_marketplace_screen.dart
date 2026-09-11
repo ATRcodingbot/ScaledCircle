@@ -328,8 +328,6 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
 
                     final description = data['description']?.toString() ?? '';
 
-                    final homes = data['homes']?.toString() ?? '0';
-
                     final basePay = data['basePay']?.toString() ?? '0';
 
                     final bonus = data['bonus']?.toString() ?? '0';
@@ -380,7 +378,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
                                 children: [
                                   Chip(
                                     avatar: const Icon(Icons.home, size: 18),
-                                    label: Text('Estimated homes: ~$homes'),
+                                    label: const Text('Mapped territory'),
                                   ),
                                   Chip(
                                     avatar: const Icon(

@@ -12,12 +12,12 @@ class CustomerCapabilityStatus extends StatelessWidget {
           'Plan content, review recommendations, and approve supported publishing. ScaledCircle is testing it on its own channels; results are still being measured.',
     ),
     (
-      title: 'Lead Generation Research — Beta',
+      title: 'Lead Generation Research — Private Beta',
       description:
           'Prospect research, evidence, qualification and drafts. Research does not authorize outreach; delivered leads and sales are not guaranteed.',
     ),
     (
-      title: 'Business Assistant — Beta',
+      title: 'Business Assistant — Beta / Coming Soon',
       description:
           'Review business information and suggested next steps. Recommendations need your judgment and approval.',
     ),
@@ -32,9 +32,9 @@ class CustomerCapabilityStatus extends StatelessWidget {
           'Planned: order flyers or door hangers after reviewing quantity, total cost, and delivery estimates. Printing orders are not available yet.',
     ),
     (
-      title: 'Postcard Campaigns — Beta',
+      title: 'Postcard Campaigns — Private Beta',
       description:
-          'Neighborhood mail fulfilled by ScaledCircle. The managed quote, print and mail workflow is being verified; customer payments are not enabled yet.',
+          'A managed area-to-mail workflow for invited Businesses. Review the quote, artwork and fulfillment status. General ordering is not open.',
     ),
   ];
 

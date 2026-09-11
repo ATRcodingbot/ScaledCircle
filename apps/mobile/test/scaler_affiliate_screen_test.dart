@@ -42,7 +42,7 @@ void main() {
         );
         expect(
           find.text("Your reward does not come out of the Scaler's pay."),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.text(ReferralProgramScreen.scalerProtection),

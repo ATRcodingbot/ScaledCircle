@@ -30,7 +30,7 @@ def content():
     plans = (ROOT / 'apps/mobile/lib/services/subscription_plan_service.dart').read_text(encoding='utf-8')
     prices = re.findall(r"'name': '([^']+)',\s*'price': ([0-9.]+)", plans)
     assert len(prices) == 4
-    pricing = [(name + (' - LIMITED BETA' if name == 'Managed Growth' else ''),
+    pricing = [(name + (' — Private Beta / Invite Only' if name == 'Managed Growth' else ''),
                 '$' + format(float(price), '.0f') + '/month') for name, price in prices]
     def heading(name):
         section = landing.split('class ' + name + ' ')[1].split('\nclass ')[0]
@@ -46,17 +46,19 @@ def content():
             '/scalers': funnel('scaler_funnel_screen.dart'),
             '/how-it-works': [('From a local campaign to work you can review.', 'One clear workflow for the Business and the Scaler.'), *steps],
             '/pricing': [('Choose your plan', 'One Business workspace. Total users including the owner: Starter 1, Growth 3, Scale 5, Managed Growth 10.'), *pricing,
-                         ('Add more intelligence', 'Optional recurring add-ons; these never add seats.'),
-                         ('Business Assistant - Beta', '+$399/month. Business state, recommendations and next actions; approval remains required.'),
-                         ('Lead Generation Research - Beta', '+$699/month. Prospect research, evidence and drafts. Research does not authorize contact or automatic cold outreach.'),
-                         ('Growth Department - $2,000/month', 'Managed Growth + Business Assistant Beta + Lead Generation Research Beta. 10 total users. Save $97/month ($1,164/year) versus $2,097 separately. One bundle replaces the three individual recurring charges. Included agent capabilities remain Beta.')]}
+                         ('Controlled premium access', 'These capabilities are not generally available for purchase. Access requires an invitation; add-ons never add seats.'),
+                         ('Business Assistant — Beta / Coming Soon', 'Planned recurring price: $399/month. Business information and recommended next steps.'),
+                         ('Lead Generation Research — Private Beta', '$699/month when authorized. Prospect research, evidence and drafts. Research does not authorize outreach.'),
+                         ('Growth Department — Private Beta', '$2,000/month when authorized. Managed Growth, Business Assistant and Lead Generation Research; 10 total users. No public purchase is enabled.')]}
 
 
 def documents(*, staging=False):
     template = (ROOT / 'apps/mobile/web/index.html').read_text(encoding='utf-8')
-    navigation = ''.join('<a href="' + route + '">' + label + '</a>' for route, label in
-                         [('/', 'ScaledCircle'), ('/businesses', 'Businesses'), ('/scalers', 'Scalers'),
-                          ('/how-it-works', 'How it works'), ('/pricing', 'Pricing')])
+    links = ''.join('<a href="' + route + '">' + label + '</a>' for route, label in
+                   [('/businesses', 'Businesses'), ('/scalers', 'Scalers'),
+                    ('/how-it-works', 'How it works'), ('/pricing', 'Pricing'), ('/#/referrals', 'Referrals')])
+    navigation = ('<a class="brand" href="/" aria-label="ScaledCircle home"><img src="/assets/assets/brand/scaledcircle-lockup-dark-surface.png" alt="ScaledCircle" width="192" height="64"></a>'
+                  '<div class="desktop-links">' + links + '</div><details class="mobile-menu"><summary>Menu</summary><div>' + links + '<a href="/#/login">Log in</a></div></details>')
     result = {}
     for route, sections in content().items():
         document = render(template, route).replace('$FLUTTER_BASE_HREF', '/')
@@ -64,15 +66,21 @@ def documents(*, staging=False):
         cta = lambda label: f'<p><a class="cta" href="{primary[1]}">{label}</a></p>'
         blocks = []
         for index, (title, body) in enumerate(sections):
+            if route == '/pricing' and 1 <= index <= 4:
+                if index == 1:
+                    blocks.append('<section class="plans" aria-label="Business plans">')
+                seats = [1, 3, 5, 10][index - 1]
+                blocks.append(f'<article><h2>{html.escape(title)}</h2><p class="price">{html.escape(body)}</p><p>{seats} total Business {"user" if seats == 1 else "users"}, including the owner.</p><p>{"Invite Only" if index == 4 else "Available"}</p></article>')
+                if index == 4:
+                    blocks.append('</section>')
+                continue
             tag = 'h1' if index == 0 else 'h2'
             blocks.append(f'<section><{tag}>{html.escape(title)}</{tag}><p>{html.escape(body)}</p></section>')
             if index == 0:
                 blocks.append(cta(primary[0]))
                 if route == '/':
                     blocks.append('<p><a href="/#/scalers">Become a Scaler</a> · <a href="/how-it-works">See How It Works</a></p>')
-                    blocks.append('<img width="1200" height="630" loading="lazy" src="https://scaledcircle.com/social/2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png" alt="ScaledCircle public Baltimore planning demo; estimated geography is not verified household coverage">')
-            if index == 2:
-                blocks.append(cta('Find Local Work' if route == '/scalers' else 'Build My First Campaign'))
+                    blocks.append('<section class="example"><p class="eyebrow">A workflow example</p><h2>A contractor has a neighborhood in mind.</h2><p>Choose the area, define the work and accepted pay, then review the Scaler’s tracked route. Residents can respond through configured QR codes and landing pages. Recorded responses stay connected to their campaign.</p><p>This explains the workflow; it does not promise leads, conversions or revenue.</p></section>')
         if route in ('/', '/businesses', '/pricing'):
             capability_source = (ROOT / 'apps/mobile/lib/widgets/customer_capability_status.dart').read_text(encoding='utf-8')
             capabilities = re.findall(r"title:\s*'([^']+)',\s*description:\s*'([^']+)'", capability_source)
@@ -84,9 +92,9 @@ def documents(*, staging=False):
         if route == '/':
             blocks.append('<section><h2>Pricing</h2><p>Subscription access and campaign costs are separate. Review compensation and platform fees before funding.</p><div class="capabilities">' + ''.join(
                 f'<article><h3>{html.escape(name)}</h3><p>{html.escape(price)}</p></article>'
-                for name, price in content()['/pricing'][1:5]) + '</div><p>Optional Business Assistant Beta +$399/month and Lead Generation Research Beta +$699/month. Growth Department bundles all three with Managed Growth for $2,000/month; save $97/month.</p><a href="/pricing">Compare plans and add-ons</a></section>')
+                for name, price in content()['/pricing'][1:5]) + '</div><p>Managed Growth and premium tools have controlled access. No add-on is included unless your plan or subscription explicitly includes it.</p><a href="/pricing">Compare plans and availability</a></section>')
         blocks.append(cta('Create Scaler Account' if route == '/scalers' else 'Create Business Account'))
-        picture = '' if route in ('/', '/pricing') else '<img width="1200" height="630" loading="lazy" src="https://scaledcircle.com/social/2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png" alt="ScaledCircle Smart Mapping: public Baltimore planning demo with estimated homes and an unverified route">'
+        picture = ''
         body = '<body><main id="marketing"><nav aria-label="Main">' + navigation + '<a class="cta" href="/#/businesses">Get Started</a></nav>' + ''.join(blocks) + picture + '''
 <p><a href="/#/login">Log in</a> · <a href="/#/businesses">Open Business experience</a> · <a href="/#/scalers">Open Scaler experience</a></p>
 <footer><a href="/#/privacy">Privacy</a> · <a href="/#/terms">Terms</a> · <a href="mailto:support@scaledcircle.com">Contact support</a></footer>
@@ -130,13 +138,15 @@ addEventListener('hashchange', startProduct); startProduct();
         document = document.replace('</head>', '''<script>if(location.pathname==='/'||location.pathname==='/login'||location.hash.startsWith('#/')){document.documentElement.classList.add('resolving-session');}</script><style>
 .resolving-session #marketing{display:none}
 body{margin:0;background:#071525;color:#fff;font:18px/1.6 system-ui,sans-serif}
-main{max-width:1040px;margin:auto;padding:28px}nav{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+*{box-sizing:border-box}main{max-width:1160px;margin:auto;padding:28px}nav{display:flex;gap:24px;align-items:center;justify-content:space-between;padding-bottom:28px;border-bottom:1px solid #29445b}.desktop-links{display:flex;gap:18px;align-items:center}.mobile-menu{display:none}.brand img{width:192px;height:64px;object-fit:contain;margin:0;border-radius:0}nav>.cta{display:none}
 a{color:#45dfbd}section{padding:24px 0;border-bottom:1px solid #29445b}
 a:focus-visible{outline:3px solid white;outline-offset:5px}nav a,footer a{display:inline-block;padding:10px 0}
 .cta{display:inline-block;background:#45dfbd;color:#071525;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700}
 .capabilities{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:20px}h3{font-size:20px}
 h1{font-size:clamp(32px,5vw,58px);line-height:1.1}h2{font-size:27px}p{max-width:760px;color:#c6d5e1}
 img{max-width:100%;height:auto;margin-top:30px;border-radius:18px}
+.plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.plans article,.capabilities article{padding:24px;border:1px solid #29445b;border-radius:18px;background:#0b1d30}.plans h2{font-size:24px}.price{font-size:32px;font-weight:700;color:#fff}.example{margin-top:36px;padding:28px;background:#102b42;border-radius:20px}.eyebrow{text-transform:uppercase;letter-spacing:1px;font-size:14px}.mobile-menu summary{cursor:pointer;min-height:48px;padding:12px;list-style:none}.mobile-menu div{position:absolute;right:0;top:48px;z-index:5;padding:16px;background:#102b42;border:1px solid #29445b;border-radius:12px;min-width:220px}.mobile-menu a{display:block;padding:12px}summary:focus-visible{outline:3px solid white;outline-offset:4px}a{overflow-wrap:anywhere}section{padding-block:36px}
+@media(max-width:900px){.desktop-links{display:none}.mobile-menu{display:block;position:relative}main{padding:20px}nav{gap:12px}.brand img{width:160px}.plans{grid-template-columns:1fr}h1{font-size:38px}.example{padding:22px}}
 </style></head>''')
         if route == '/how-it-works':
             styles = (ROOT / 'apps/mobile/web/marketing/how-it-works.css').read_text(encoding='utf-8')

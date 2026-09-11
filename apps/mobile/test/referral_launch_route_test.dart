@@ -1,7 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_app/screens/public/referral_program_screen.dart';
 import 'package:flutter_app/navigation/app_router.dart';
 
 void main() {
+  testWidgets(
+    'public preview has Back and does not offer enrollment or payment',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(const MaterialApp(home: ReferralProgramScreen()));
+      expect(find.byType(BackButton), findsOneWidget);
+      expect(
+        find.textContaining('not generally available yet'),
+        findsOneWidget,
+      );
+      expect(find.byType(Checkbox), findsNothing);
+      expect(find.text('Cash Out'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   test(
     'staging cold launch preserves referral policy, portal and coded signup destination',
     () {

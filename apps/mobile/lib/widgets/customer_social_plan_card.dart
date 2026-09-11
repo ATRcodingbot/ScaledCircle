@@ -24,6 +24,12 @@ class CustomerSocialPlanCard extends StatelessWidget {
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         childrenPadding: const EdgeInsets.all(16),
         children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 16),
+            child: Text(
+              'Review only. Creative briefs describe media to prepare; they are not finished images or videos. Each post still needs approved content and media before scheduling.',
+            ),
+          ),
           for (final key in [
             'cadence',
             'timingBasis',
@@ -62,7 +68,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
                           'Destination: ${v['destinationUrl'] ?? 'Needs review'}',
                         ),
                         Text(
-                          'Creative: ${v['mediaRequirement'] ?? 'Needs approved media'}',
+                          'Creative brief: ${v['mediaRequirement'] ?? 'Needs approved media'}',
                         ),
                         Text(
                           'Measurement: ${v['responseAssetRequirement'] ?? 'No measurement recorded yet'}',

@@ -45,12 +45,11 @@ exports.queueCustomerGrowthReportEmailV1 = onDocumentCreated({document:'agentRep
     if(!prefs[kind]||(kind==='important'&&!report.summary.newApprovalsToday))return;
     const ref=db.doc('outboundEmailJobs/customer_growth_'+event.params.reportId);
     if((await tx.get(ref)).exists)return;
-    const prospects=(await tx.get(db.collection('agentProspects').where('businessUid','==',uid).limit(20))).docs.map(d=>d.data());
-    const details=prospects.slice(0,12).map(p=>`${p.displayName}\n${p.geography}\n${p.reason}\nSource: ${p.sourceUrl}\nContact: ${p.email||p.phone||p.contactPath||'Unknown'}\nRecommended: ${p.recommendedCta||'Review source'}\nDraft — NOT SENT: ${p.draft||'Further source review required'}\nStatus: ${p.approvalState==='awaiting_approval'?'Needs your approval':'Source review required'}\n`).join('\n');
+    const prospects=(await tx.get(db.collection('agentProspects').where('businessUid','==',uid).limit(20))).docs.map(d=>({...d.data(),id:d.id}));
     const s=report.summary;
+    const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,prospects,customer:true});
     tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
-      subject:kind==='weekly'?'Your Growth Weekly Report':kind==='daily'?'Your Growth Daily Brief':'Your Growth Agents need your review',
-      text:`${report.businessName}\n\n${s.businessesFound} potential project/referral opportunities; ${s.partnersFound} workforce organization partners. ${s.individualScalersFound} individual candidates.\n${s.awaitingApproval} drafts await review.\n\n${details}\nSocial: Review the connected-account baseline and draft plan in Social Operations. No new publication is authorized by this report.\n\nContacted: 0. Appointments, estimates, won work, hires and attributed revenue: No Data.\n\nNext: review the evidence and drafts. No outreach or ad spend has occurred.\n\nReview your workspace: https://scaledcircle.com/#/business/growth-agents\n\nManage important alerts and daily/weekly emails in Growth Agents.`,
+      ...presentation,
       template:'growth_agent_report_v1',preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
   });
 });
@@ -128,11 +127,11 @@ exports.queueGrowthReportEmailV1=onDocumentCreated({document:'agentReports/{repo
     if(!prefs[kind])return;
     const ref=db.doc('outboundEmailJobs/growth_'+event.params.reportId);if((await tx.get(ref)).exists)return;
     const s=report.summary;
+    const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,customer:false});
     const byArea=(s.discoveryByServiceArea||[]).map(g=>`${g.serviceArea}: ${g.businesses} Business prospects, ${g.partners} organization partners, ${g.individualScalers} individual Scalers`).join('\n');
     if(kind==='important'&&!s.newApprovalsToday)return;
     tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
-      subject:kind==='weekly'?'ScaledCircle Weekly Performance Report':kind==='daily'?'ScaledCircle Daily Brief':'ScaledCircle agents need your review',
-      text:`Needs your attention\n${s.awaitingApproval} sourced drafts await review.\n\nLead Generator: ${s.businessesFound} Business prospects.\nWorkforce Recruiter: ${s.partnersFound} organization partners; ${s.individualScalersFound} individual Scalers.\n\nNo outreach was sent. Replies, meetings, signups and revenue: No Data.\n\nDiscovery by service area\n${byArea}\n${s.serviceAreaStatus==='AVAILABLE'?'Priority follows this Business’s saved areas.':'Service-area priority is not yet configured for this workspace; existing research is preserved.'}\n\n${s.learned}\n\n${s.next}\n\nReview actions: https://scaledcircle-staging.web.app/#/growth-agents\n\nEmail preferences are available in Growth Agents.`,
+      ...presentation,
       template:'growth_agent_report_v1',preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
   });
 });

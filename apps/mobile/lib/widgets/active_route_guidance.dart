@@ -95,7 +95,7 @@ class _ActiveRouteGuidanceState extends State<ActiveRouteGuidance> {
                   : 'Route Coverage Estimate: ${progress?['state'] == 'unavailable' ? 'UNKNOWN' : 'CALCULATING'}',
             ),
             const Text(
-              'Coverage uses uploaded GPS evidence. Final payment is determined after submission and review.',
+              'This route estimate uses uploaded GPS evidence. It does not verify service at individual homes.',
             ),
             if (hint == RoutePositionHint.accuracyAdjusting)
               const Text(

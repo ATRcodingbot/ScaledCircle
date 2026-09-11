@@ -68,14 +68,18 @@ class _WeatherCoverageSettingsScreenState
         emailAlertsEnabled: _emailAlertsEnabled,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Weather coverage saved.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Weather coverage saved.')));
       Navigator.pop(context, true);
-    } on FirebaseException catch (error) {
+    } on FirebaseException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save coverage: ${error.message}')),
+        SnackBar(
+          content: Text(
+            'Coverage settings could not be saved. Please try again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -84,7 +88,8 @@ class _WeatherCoverageSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final email = FirebaseAuth.instance.currentUser?.email ?? 'your account email';
+    final email =
+        FirebaseAuth.instance.currentUser?.email ?? 'your account email';
     return Scaffold(
       appBar: AppBar(title: const ScaledCircleBrand(compact: true)),
       body: _loading
@@ -127,9 +132,8 @@ class _WeatherCoverageSettingsScreenState
                           '${_selectedCountyIds.length} of '
                           '${MarylandWeatherService.counties.length} Maryland '
                           'areas selected',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 12),
                         Wrap(

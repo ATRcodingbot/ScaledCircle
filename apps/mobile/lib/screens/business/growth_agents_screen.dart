@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'growth_territories_dialog.dart';
 import '../../navigation/context_back_button.dart';
 import '../../navigation/app_router.dart';
+import '../../widgets/customer_page_body.dart';
 
 class GrowthAgentsScreen extends StatefulWidget {
   const GrowthAgentsScreen({
@@ -101,8 +102,9 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
         setState(
-          () =>
-              _error = e.message ?? 'Action held. Retry to check saved state.',
+          () => _error = widget.customer
+              ? 'The result could not be confirmed. Refresh saved activity before trying again. No outreach is authorized by this message.'
+              : e.message ?? 'Action held. Retry to check saved state.',
         );
       }
     } catch (_) {
@@ -134,8 +136,8 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
               fallback: '/business/growth',
               businessOnly: true,
             )
-          : null,
-      title: const Text('Growth Agents'),
+          : const ContextBackButton(fallback: '/admin'),
+      title: Text(widget.customer ? _specialistTitle : 'Growth Agents'),
       actions: [
         IconButton(
           onPressed: _busy ? null : _load,
@@ -147,7 +149,14 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     body: _data == null
         ? Center(
             child: _error == null
-                ? const CircularProgressIndicator()
+                ? const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text('Checking your Growth team…'),
+                    ],
+                  )
                 : Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -162,8 +171,35 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                     ],
                   ),
           )
-        : _content(context),
+        : CustomerPageBody(child: _content(context)),
   );
+  String get _specialistTitle =>
+      const {
+        'growth_strategist': 'Growth Manager',
+        'lead_generation': 'Lead Generator',
+        'workforce_recruiter': 'Workforce Recruiter',
+        'ad_manager': 'Ad Manager',
+        'business_assistant': 'Business Assistant',
+      }[widget.focusId] ??
+      'Growth Team';
+
+  String _group(Map<String, dynamic> p) => switch (p['opportunityType']) {
+    'public_bid' => 'Public procurement / bid opportunities',
+    'direct_project' || 'commercial' => 'Direct project opportunities',
+    'property_facility' ||
+    'property_management' => 'Property / facility / HOA prospects',
+    'residential_signal' => 'Residential opportunity signals',
+    'workforce_candidate' => 'Individual candidates',
+    'recruitment_channel' => 'Recruitment partners',
+    'partner_channel' => 'Partner / referral channels',
+    'paid_lead_source' => 'Paid lead sources',
+    _ =>
+      p['kind'] == 'scaler'
+          ? 'Individual candidates'
+          : p['kind'] == 'referral_partner'
+          ? 'Recruitment partners'
+          : 'High-fit accounts',
+  };
   Widget _content(BuildContext context) {
     final d = _data!, s = Map<String, dynamic>.from(d['summary'] as Map? ?? {});
     final prospects = _list(d['prospects']);
@@ -185,7 +221,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         ),
         const SizedBox(height: 12),
         const Text(
-          'Research and drafts only. External outreach, ad spend and financial actions remain off. Existing approved Social schedules retain their own authority.',
+          'Review what your team found and choose the next step. Research does not send messages, launch ads or approve Social posts.',
         ),
         if (_error != null)
           Padding(
@@ -285,7 +321,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        FilledButton.icon(
+        OutlinedButton.icon(
           onPressed: _busy || (widget.customer && d['initialized'] != true)
               ? null
               : () => _action('runGrowthDogfoodResearchV1'),
@@ -293,7 +329,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           label: Text(
             _busy
                 ? 'Checking official sources…'
-                : 'Run today’s bounded research',
+                : 'Check for new opportunities',
           ),
         ),
         if (!widget.customer)
@@ -309,121 +345,147 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         if (widget.customer) ..._customerOverview(d),
         const SizedBox(height: 24),
         Text(
-          'Prospects and approval queue',
+          'Review opportunities',
           style: Theme.of(context).textTheme.titleLarge,
         ),
-        if (prospects.isEmpty) const Text('No sourced prospects yet.'),
-        ...prospects.map(
-          (p) => Card(
-            child: ExpansionTile(
-              key: ValueKey(p['id']),
-              initiallyExpanded: p['id'] == widget.focusId,
-              title: Text(p['displayName'].toString()),
-              subtitle: Text(
-                '${p['opportunityLabel'] ?? (p['kind'] == 'business'
-                        ? 'Business prospect'
-                        : p['kind'] == 'scaler'
-                        ? 'Workforce candidate'
-                        : 'Organization referral partner')} · ${p['geography']}',
-              ),
-              childrenPadding: const EdgeInsets.all(16),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _line('Fit', p['reason']),
-                _line('Confidence', p['confidence']),
-                _line('Possible use', p['useCase']),
-                if (widget.customer) ...[
-                  _line(
-                    'Project / need',
-                    p['currentOpportunity'] == true
-                        ? 'Specific published requirement — eligibility needs review'
-                        : 'Buying intent / current availability unknown',
-                  ),
-                  if (p['sourceRecordId'] != p['sourceUrl'])
-                    _line('Public reference', p['sourceRecordId']),
-                  if (p['deadline'] != null)
-                    _line('Published deadline', p['deadline']),
-                  _line('What we do not know', p['unknowns']),
-                  if (p['ranking'] is Map)
-                    ExpansionTile(
-                      title: const Text('Why this ranks here'),
+        if (prospects.isEmpty)
+          const Text(
+            'No sourced opportunities yet. Check your saved services and service areas, then check for new opportunities.',
+          ),
+        if (!prospects.any((p) => _group(p) == 'Individual candidates'))
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'No verified individual candidates yet. Recruitment and referral partners are listed separately.',
+            ),
+          ),
+        for (final group in prospects.map(_group).toSet()) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 24, bottom: 12),
+            child: Text(group, style: Theme.of(context).textTheme.titleMedium),
+          ),
+          ...prospects
+              .where((p) => _group(p) == group)
+              .map(
+                (p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Card(
+                    child: ExpansionTile(
+                      key: ValueKey(p['id']),
+                      initiallyExpanded: p['id'] == widget.focusId,
+                      title: Text(p['displayName'].toString()),
+                      subtitle: Text(
+                        '${p['opportunityLabel'] ?? (p['kind'] == 'business'
+                                ? 'Business prospect'
+                                : p['kind'] == 'scaler'
+                                ? 'Workforce candidate'
+                                : 'Organization referral partner')} · ${p['geography']}',
+                      ),
+                      childrenPadding: const EdgeInsets.all(16),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final factor in _list(p['ranking']['factors']))
-                          ListTile(
-                            title: Text('${factor['label']}'),
-                            subtitle: Text('${factor['reason']}'),
+                        _line('Why it fits', p['reason']),
+                        _line('Confidence', p['confidence']),
+                        _line('Possible use', p['useCase']),
+                        if (widget.customer) ...[
+                          _line(
+                            'Project / need',
+                            p['currentOpportunity'] == true
+                                ? 'Specific published requirement — eligibility needs review'
+                                : 'Buying intent / current availability unknown',
+                          ),
+                          if (p['sourceRecordId'] != p['sourceUrl'])
+                            _line('Public reference', p['sourceRecordId']),
+                          if (p['deadline'] != null)
+                            _line('Published deadline', p['deadline']),
+                          _line('What we do not know', p['unknowns']),
+                          if (p['ranking'] is Map)
+                            ExpansionTile(
+                              title: const Text('Why this ranks here'),
+                              children: [
+                                for (final factor in _list(
+                                  p['ranking']['factors'],
+                                ))
+                                  ListTile(
+                                    title: Text('${factor['label']}'),
+                                    subtitle: Text('${factor['reason']}'),
+                                  ),
+                              ],
+                            ),
+                        ],
+                        _line('Email', p['email']),
+                        _line('Phone', p['phone']),
+                        if (_group(p) == 'Individual candidates') ...[
+                          _line('Individual skills', p['skills']),
+                          _line('Transportation', p['transportation']),
+                          _line('Availability', p['availability']),
+                        ],
+                        TextButton(
+                          onPressed: () => launchUrl(
+                            Uri.parse(p['sourceUrl'].toString()),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          child: const Text('Open public source'),
+                        ),
+                        _line('Source checked', _time(p['lastCheckedAt'])),
+                        _line('Recommended channel', p['recommendedChannel']),
+                        _line('Recommended CTA', p['recommendedCta']),
+                        _line('Last action', p['lastAction']),
+                        _line('Result', p['result']),
+                        _line('Next action', p['nextAction']),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Proposed outreach — not sent',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        SelectableText(
+                          p['draft']?.toString() ??
+                              'More source review required.',
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          p['approvalState'] == 'awaiting_approval'
+                              ? (widget.customer
+                                    ? 'Needs your approval'
+                                    : 'Needs Founder approval')
+                              : p['approvalState'] == 'do_not_contact'
+                              ? 'Do not contact'
+                              : p['approvalState'] == 'ready_for_founder_send'
+                              ? 'Reviewed · external contact still held'
+                              : 'Research required',
+                        ),
+                        if (p['approvalState'] == 'awaiting_approval')
+                          Wrap(
+                            spacing: 12,
+                            children: [
+                              OutlinedButton(
+                                onPressed: _busy
+                                    ? null
+                                    : () => _action('reviewGrowthProspectV1', {
+                                        'prospectId': p['id'],
+                                        'decision': 'ready_for_founder_send',
+                                      }),
+                                child: const Text(
+                                  'Mark reviewed — do not send',
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _busy
+                                    ? null
+                                    : () => _action('reviewGrowthProspectV1', {
+                                        'prospectId': p['id'],
+                                        'decision': 'do_not_contact',
+                                      }),
+                                child: const Text('Do not contact'),
+                              ),
+                            ],
                           ),
                       ],
                     ),
-                ],
-                _line('Email', p['email']),
-                _line('Phone', p['phone']),
-                if (p['kind'] != 'business') ...[
-                  _line('Individual skills', p['skills']),
-                  _line('Transportation', p['transportation']),
-                  _line('Availability', p['availability']),
-                ],
-                TextButton(
-                  onPressed: () => launchUrl(
-                    Uri.parse(p['sourceUrl'].toString()),
-                    mode: LaunchMode.externalApplication,
                   ),
-                  child: const Text('Open public source'),
                 ),
-                _line('Source checked', _time(p['lastCheckedAt'])),
-                _line('Recommended channel', p['recommendedChannel']),
-                _line('Recommended CTA', p['recommendedCta']),
-                _line('Last action', p['lastAction']),
-                _line('Result', p['result']),
-                _line('Next action', p['nextAction']),
-                const SizedBox(height: 8),
-                const Text(
-                  'Proposed outreach — not sent',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                SelectableText(
-                  p['draft']?.toString() ?? 'More source review required.',
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  p['approvalState'] == 'awaiting_approval'
-                      ? (widget.customer
-                            ? 'Needs your approval'
-                            : 'Needs Founder approval')
-                      : p['approvalState'] == 'do_not_contact'
-                      ? 'Do not contact'
-                      : p['approvalState'] == 'ready_for_founder_send'
-                      ? 'Reviewed · external contact still held'
-                      : 'Research required',
-                ),
-                if (p['approvalState'] == 'awaiting_approval')
-                  Wrap(
-                    spacing: 12,
-                    children: [
-                      OutlinedButton(
-                        onPressed: _busy
-                            ? null
-                            : () => _action('reviewGrowthProspectV1', {
-                                'prospectId': p['id'],
-                                'decision': 'ready_for_founder_send',
-                              }),
-                        child: const Text('Mark reviewed — do not send'),
-                      ),
-                      TextButton(
-                        onPressed: _busy
-                            ? null
-                            : () => _action('reviewGrowthProspectV1', {
-                                'prospectId': p['id'],
-                                'decision': 'do_not_contact',
-                              }),
-                        child: const Text('Do not contact'),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-        ),
+              ),
+        ],
         const SizedBox(height: 24),
         Text(
           'Completed activity',

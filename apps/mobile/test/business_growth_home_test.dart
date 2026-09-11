@@ -4,7 +4,7 @@ import 'package:flutter_app/screens/business/business_growth_home.dart';
 import 'package:flutter_app/widgets/social_runtime_status_card.dart';
 
 void main() {
-  for (final width in [360.0, 1280.0]) {
+  for (final width in [320.0, 390.0, 1440.0]) {
     testWidgets('Growth has six clear team destinations at $width', (
       tester,
     ) async {
@@ -49,6 +49,16 @@ void main() {
         'Ad Manager',
         'Business Assistant',
       ]) {
+        await tester.scrollUntilVisible(
+          find.text(name),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.scrollUntilVisible(
+          find.text(name),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
         expect(find.text(name), findsOneWidget);
       }
       expect(find.textContaining('AI Team'), findsNothing);

@@ -29,7 +29,73 @@ class ReviewService extends BusinessWorkspaceService {
   };
 }
 
+class ComplimentaryReviewService extends ReviewService {
+  @override
+  Future<Map<String, dynamic>> call(
+    String name, [
+    Map<String, dynamic> input = const {},
+  ]) async => {
+    ...await super.call(name, input),
+    'plan': 'managed_growth',
+    'planName': 'Managed Growth',
+    'complimentary': true,
+    'price': 0,
+    'monthlyCents': 0,
+    'canCancel': false,
+    'canWithdrawCancellation': false,
+    'seatLimit': 10,
+    'seatsUsed': 1,
+    'seatsReserved': 0,
+    'seatsAvailable': 9,
+    'billingHistoryStatus': 'complimentary',
+  };
+}
+
+class UnavailableReviewService extends ReviewService {
+  @override
+  Future<Map<String, dynamic>> call(
+    String name, [
+    Map<String, dynamic> input = const {},
+  ]) async => throw Exception('private provider diagnostic');
+}
+
 void main() {
+  testWidgets('complimentary access never looks like an expired paid plan', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BusinessMembershipScreen(
+          service: ComplimentaryReviewService(),
+          businessId: 'review-business',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No recurring charge'), findsOneWidget);
+    expect(find.text('1 of 10 seats used'), findsOneWidget);
+    expect(find.text('Reactivate Membership'), findsNothing);
+    expect(find.text('Cancel Membership'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('failed membership read does not invite a duplicate purchase', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BusinessMembershipScreen(
+          service: UnavailableReviewService(),
+          businessId: 'review-business',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('could not be loaded'), findsOneWidget);
+    expect(find.text('Reactivate Membership'), findsNothing);
+    expect(find.textContaining('private provider diagnostic'), findsNothing);
+  });
   for (final width in [390.0, 1280.0]) {
     testWidgets('verified seat counts render on Billing at $width', (
       tester,

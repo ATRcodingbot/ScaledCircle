@@ -1029,7 +1029,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
           content: Text(
             campaignReference == null
                 ? "We couldn't create the campaign draft. Try again."
-                : "We saved the draft, but couldn't open the area step. Try again. ($e)",
+                : "We saved the draft, but couldn't open the area step. Try again.",
           ),
         ),
       );

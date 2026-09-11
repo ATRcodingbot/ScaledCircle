@@ -87,7 +87,7 @@ void main() {
     }
     for (final destination in [
       'Home',
-      'Grow',
+      'Growth',
       'Campaigns',
       'Results',
       'Account',

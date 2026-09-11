@@ -403,9 +403,6 @@ class MyJobsScreen extends StatelessWidget {
             (zoneData['paymentStatus']?.toString() == 'paid' ||
                 zoneData['paidAt'] is Timestamp);
 
-        final estimatedHomes =
-            (zoneData['estimatedHomes'] as num?)?.toInt() ?? 0;
-
         final reviewFeedback = zoneData['reviewFeedback']?.toString();
 
         final hasChangesRequested =
@@ -504,11 +501,7 @@ class MyJobsScreen extends StatelessWidget {
                     children: [
                       Chip(
                         avatar: const Icon(Icons.home_outlined, size: 18),
-                        label: Text(
-                          estimatedHomes > 0
-                              ? 'Estimated homes: ~$estimatedHomes'
-                              : 'Assigned territory',
-                        ),
+                        label: const Text('Assigned territory'),
                       ),
 
                       Chip(

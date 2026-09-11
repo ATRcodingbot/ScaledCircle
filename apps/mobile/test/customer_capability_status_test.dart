@@ -15,11 +15,11 @@ void main() {
     );
     for (final title in [
       'Social Manager — Beta',
-      'Lead Generation Research — Beta',
-      'Business Assistant — Beta',
+      'Lead Generation Research — Private Beta',
+      'Business Assistant — Beta / Coming Soon',
       'Ad Manager — Beta',
       'Printing — Coming Soon',
-      'Postcard Campaigns — Beta',
+      'Postcard Campaigns — Private Beta',
     ]) {
       expect(find.text(title), findsOneWidget);
     }
@@ -28,7 +28,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('customer payments are not enabled yet.'),
+      find.textContaining('General ordering is not open.'),
       findsOneWidget,
     );
     expect(find.byType(FilledButton), findsNothing);
@@ -57,7 +57,7 @@ void main() {
       ),
     );
     await tester.ensureVisible(
-      find.text('Postcard Campaigns — Beta'),
+      find.text('Postcard Campaigns — Private Beta'),
     );
     expect(tester.takeException(), isNull);
   });

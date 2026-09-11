@@ -95,7 +95,7 @@ function paymentIssues(records, now) {
   return items;
 }
 
-function completionIssues(records, earningsByCompletion, now) {
+function completionIssues(records, earningsByCompletion, now, unavailable = new Set()) {
   const items = [];
   for (const record of records) {
     const data = record.data || {};
@@ -119,8 +119,10 @@ function completionIssues(records, earningsByCompletion, now) {
     }
     if (["approved", "verified"].includes(status) && !earningsByCompletion.has(record.id)) {
       items.push(issue({id: `earning_${record.id}`, category: "completion_earning",
-        severity: "action_required", summary: "Approved work has no matching worker earning record.",
-        status: "earning_missing", ...common,
+        severity: "action_required", summary: unavailable.has(record.id) ?
+          "The earning record for approved work could not be checked." :
+          "Approved work has no matching worker earning record.",
+        status: unavailable.has(record.id) ? "earning_check_unavailable" : "earning_missing", ...common,
         recommendedAction: "Investigate the completion-to-earning authority; do not edit Wallet data."}));
     }
   }
@@ -270,9 +272,39 @@ function createAdminOpsReadService({db, FieldValue, now = () => Date.now()}) {
     const data = Object.fromEntries(names.map((name, index) => [name, values[index]]));
     const earningsByCompletion = new Set(data.scalerEarnings
       .map((record) => text(record.data.completionId, 160)).filter(Boolean));
+    const unavailableEarnings = new Set();
+    // Modern settlement writes the immutable global and per-Scaler ledger,
+    // not the historical scalerEarnings collection. Read exact deterministic
+    // records; never create a replacement earning to satisfy an Admin alert.
+    for (const record of data.campaignCompletions) {
+      const c = record.data || {};
+      if (!["approved", "verified"].includes(c.status || c.reviewStatus) ||
+          earningsByCompletion.has(record.id)) continue;
+      const zone = text(c.zoneId, 160), scaler = text(c.scalerId, 160);
+      if (!zone || !scaler || zone.includes('/') || scaler.includes('/')) continue;
+      try {
+        const id = `earning_${zone}_v1`;
+        const snapshots = await Promise.all([
+          db.collection('walletTransactions').doc(id).get(),
+          db.collection('wallets').doc(scaler).collection('transactions').doc(id).get(),
+        ]);
+        const rows = snapshots.map(s => s.exists ? s.data() : null);
+        const matches = rows.every(e => e && e.type === 'scaler_earnings' &&
+          e.zoneId === zone && e.campaignId === c.campaignId && e.scalerId === scaler &&
+          e.status === 'available' && e.currency === 'usd' &&
+          Number.isSafeInteger(e.amountCents) && e.amountCents > 0);
+        if (matches && rows[0].amountCents === rows[1].amountCents &&
+            rows[0].transferOperationId === rows[1].transferOperationId && rows[0].transferOperationId) {
+          earningsByCompletion.add(record.id);
+        }
+      } catch (_) {
+        unavailableEarnings.add(record.id);
+        failures.push('earning_verification');
+      }
+    }
     const generated = [
       ...paymentIssues(data.campaignPayments, now()),
-      ...completionIssues(data.campaignCompletions, earningsByCompletion, now()),
+      ...completionIssues(data.campaignCompletions, earningsByCompletion, now(), unavailableEarnings),
       ...emailIssues(data.outboundEmailJobs, now()),
       ...supportIssues(data.supportCases),
     ];

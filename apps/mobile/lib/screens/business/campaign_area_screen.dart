@@ -165,7 +165,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to load the existing zone area: $e')),
+        SnackBar(content: Text('The saved area could not be loaded. Please retry before making changes.')),
       );
     }
   }
@@ -919,7 +919,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       debugPrint('Unable to save campaign zone: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save campaign zone: $e')),
+        SnackBar(content: Text('The area could not be confirmed. Check the saved zones before trying again.')),
       );
     } finally {
       if (mounted) {

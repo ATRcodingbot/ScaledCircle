@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../navigation/context_back_button.dart';
 
 /// The approved launch policy. Publishing this page does not enable payouts.
 class ReferralProgramScreen extends StatelessWidget {
@@ -11,13 +12,25 @@ class ReferralProgramScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Referrals')),
+    appBar: AppBar(
+      leading: const ContextBackButton(),
+      title: const Text('Referrals'),
+    ),
     body: Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: const [
+            Text(
+              'Referral Program — Preview',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Enrollment and referral payments are not generally available yet. The terms below explain the program; viewing this page does not enroll you or create a reward.',
+            ),
+            SizedBox(height: 24),
             Text(
               'Refer a Business',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -31,7 +44,6 @@ class ReferralProgramScreen extends StatelessWidget {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             Text('Earn 1% from qualifying completed work.'),
-            Text("Your reward does not come out of the Scaler's pay."),
             Text(scalerProtection),
             Text(platformFunding),
             SizedBox(height: 24),

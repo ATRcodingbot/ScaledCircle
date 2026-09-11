@@ -475,7 +475,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                 const SizedBox(height: 10),
 
-                Text('Estimated homes: ~${data['estimatedHomes'] ?? 0}'),
+                const Text('Assigned territory'),
 
                 const Text('Route: Not yet verified'),
 

@@ -47,7 +47,7 @@ class _ScCampaignApplicantsScreenState
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Unable to accept scaler: $e")));
+      ).showSnackBar(SnackBar(content: Text("The assignment could not be confirmed. Check the current applicant status before trying again.")));
     } finally {
       if (mounted) {
         setState(() {
@@ -79,7 +79,7 @@ class _ScCampaignApplicantsScreenState
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Unable to reject scaler: $e")));
+      ).showSnackBar(SnackBar(content: Text("The decision could not be confirmed. Check the current applicant status before trying again.")));
     } finally {
       if (mounted) {
         setState(() {

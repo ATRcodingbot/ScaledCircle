@@ -105,6 +105,28 @@ test("transactional email failures and long-pending jobs are visible", () => {
   assert.deepEqual(issues.map((item) => item.id).sort(), ["email_failed", "email_queued"]);
 });
 
+test('modern earning evidence suppresses only exact matching ledger alerts without writes', async () => {
+  const completion = {status:'approved', zoneId:'zone', campaignId:'campaign', scalerId:'scaler'};
+  const earning = {type:'scaler_earnings', zoneId:'zone', campaignId:'campaign', scalerId:'scaler',
+    status:'available', currency:'usd', amountCents:1800, transferOperationId:'transfer'};
+  for (const mode of ['valid','wrong_scaler','different_amount','missing','read_failure']) {
+    const reads=[];
+    const ref = path => ({collection:name=>ref(path+'/'+name),doc:id=>ref(path+'/'+id),
+      limit:()=>({get:async()=>({docs:path==='campaignCompletions'?[{id:'completion',data:()=>completion}]:[]})}),
+      get:async()=>{reads.push(path);if(mode==='read_failure')throw Error('unavailable');
+        const data={...earning};if(path.startsWith('wallets/')){
+          if(mode==='wrong_scaler')data.scalerId='unrelated';if(mode==='different_amount')data.amountCents=1500;
+        }return {exists:mode!=='missing',data:()=>data};}});
+    const db={collection:name=>ref(name)};
+    const result=await model.createAdminOpsReadService({db,now:()=>now}).getOverview();
+    const serialized=JSON.stringify(result);
+    assert.equal(serialized.includes('earning_completion'), mode!=='valid', mode);
+    if(mode==='read_failure') {assert.equal(result.partial,true); assert.match(serialized,/earning_check_unavailable/);}
+    assert.deepEqual(reads.sort(),['walletTransactions/earning_zone_v1','wallets/scaler/transactions/earning_zone_v1']);
+    assert.equal(earning.amountCents,1800);
+  }
+});
+
 test("open support is actionable and resolved support is absent", () => {
   const issues = model.supportIssues([
     record("open", {status: "open", priority: "high", summary: "Materials issue"}),

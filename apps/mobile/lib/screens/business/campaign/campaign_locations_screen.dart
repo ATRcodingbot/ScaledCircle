@@ -430,7 +430,7 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to add location: $e')));
+      ).showSnackBar(SnackBar(content: Text('The location could not be confirmed. Check the saved locations before trying again.')));
     } finally {
       if (mounted) {
         setState(() {
@@ -558,7 +558,7 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to remove location: $e')));
+      ).showSnackBar(SnackBar(content: Text('Removal could not be confirmed. Check the saved locations before trying again.')));
     }
   }
 
@@ -628,7 +628,7 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to finish location setup: $e')),
+        SnackBar(content: Text('Location setup could not be confirmed. Your saved locations are still available. Please try again.')),
       );
     } finally {
       if (mounted) {

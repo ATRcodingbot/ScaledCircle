@@ -56,18 +56,18 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertIn("location.pathname !== '/' && location.pathname !== '/login'", value)
         self.assertEqual([x[1] for x in content()['/pricing'][1:5]], ['$99/month', '$299/month', '$499/month', '$999/month'])
         pricing = docs['/pricing']
-        for text in ['Add more intelligence', 'Business Assistant - Beta', '+$399/month', 'Lead Generation Research - Beta', '+$699/month', 'Growth Department - $2,000/month', 'Save $97/month', '10 total users']:
+        for text in ['Controlled premium access', 'Business Assistant — Beta / Coming Soon', '$399/month', 'Lead Generation Research — Private Beta', '$699/month', 'Growth Department — Private Beta', '$2,000/month', '10 total users']:
             self.assertIn(text, pricing)
-        self.assertIn('Research does not authorize contact', pricing)
+        self.assertIn('Research does not authorize outreach', pricing)
 
     def test_staging_indexing_and_truthful_conversion_paths(self):
         home = documents(staging=True)['/']
         self.assertIn('noindex,nofollow', home)
-        self.assertIn('Build My First Campaign', home)
+        self.assertIn('A contractor has a neighborhood in mind.', home)
         self.assertIn('Create Business Account', home)
         self.assertIn('Social Manager — Beta', home)
         self.assertIn('Printing — Coming Soon', home)
-        self.assertIn('A flyer campaign for a local contractor.', home)
+        self.assertIn('This explains the workflow; it does not promise leads', home)
         self.assertIn('Know the work and pay before you apply.', home)
         self.assertIn('<h2>Pricing</h2>', home)
         self.assertNotIn('422 homes analyzed', home)
@@ -89,7 +89,8 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertIn('Grow My Business', body)
         self.assertIn('Find Work', body)
         self.assertIn('Start Growing', body)
-        self.assertNotIn('<img', body)
+        self.assertEqual(body.count('<img'), 1)
+        self.assertIn('scaledcircle-lockup-dark-surface.png', body)
         self.assertNotIn('Network Intelligence', body)
         self.assertNotIn('Master Agent', body)
         self.assertNotIn('checkout', body.lower())

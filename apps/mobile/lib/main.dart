@@ -209,13 +209,15 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => const StagingPrivacyScreen(),
       );
     }
+    if (route?.path == '/referrals') {
+      return MaterialPageRoute(settings: settings,
+          builder: (_) => const ReferralProgramScreen());
+    }
     if ((AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isLocal) &&
-        (route?.path == '/referrals' || route?.path == '/referral-portal')) {
+        route?.path == '/referral-portal') {
       return MaterialPageRoute(
         settings: settings,
-        builder: (_) => route?.path == '/referrals'
-            ? const ReferralProgramScreen()
-            : const StartupSessionGate(
+        builder: (_) => const StartupSessionGate(
                 signedOut: LoginScreen(returnRoute: '/referral-portal'),
                 authenticatedChild: ScalerAffiliateScreen(),
               ),

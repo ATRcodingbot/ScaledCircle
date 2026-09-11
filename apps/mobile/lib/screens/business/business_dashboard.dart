@@ -188,7 +188,7 @@ class _BusinessToday extends StatelessWidget {
                 color: AppColors.warning,
               ),
               title: Text(
-                '$needsReview submitted zone${needsReview == 1 ? '' : 's'} need your review',
+                '$needsReview submitted zone${needsReview == 1 ? ' needs' : 's need'} your review',
               ),
             ),
           if (activeCampaigns > 0)
@@ -398,7 +398,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to open campaign creator: $e')),
+        SnackBar(content: Text('The campaign editor could not open. Please try again.')),
       );
     }
   }

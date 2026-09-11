@@ -55,6 +55,23 @@ function createBillingService({db,FieldValue,workspace,stripe,planForPrice,price
  const selections=require('./workspace_billing_catalog').createSelectionService({db,FieldValue,workspace,stripe,read,planForPrice,priceForPlan,validatePrice,now});
  return {
   async get({uid,businessId}) {
+   await workspace.actor(uid);
+   const access=await workspace.authority({uid,businessId,permission:'billing',allowExpired:true});
+   if(access.entitlement?.comped===true) {
+    const e=access.entitlement,plan=e.planId||e.plan;
+    const active=require('./subscription_entitlements').hasActivePaidBusinessEntitlement(e,{nowMillis:now()});
+    if(!PLANS[plan]||!active)error('failed-precondition','Complimentary membership needs review.');
+    const w=(await db.doc('wallets/'+access.businessId).get()).data()||{};
+    if(e.stripeSubscriptionId||w.stripeSubscriptionId||w.pendingSubscriptionRequestId)error('failed-precondition','Membership billing needs reconciliation.');
+    const view={businessId:access.businessId,plan,planName:PLANS[plan].name,price:0,monthlyCents:0,
+      complimentary:true,periodEndMs:e.expiresAt.toMillis(),paidAccess:true,status:'active',
+      canCancel:false,canWithdrawCancellation:false,cancelAtPeriodEnd:false,addons:[],
+      billingHistory:[],billingHistoryStatus:'complimentary',seatLimit:PLANS[plan].seats};
+    try {const inv=await workspace.inventory(access.businessId),used=1+inv.members.filter(m=>m.status==='active').length,
+      reserved=inv.invitations.filter(i=>i.status==='pending'&&i.expiresAt?.toMillis()>now()).length;
+      return {...view,seatsUsed:used,seatsReserved:reserved,seatsAvailable:Math.max(0,view.seatLimit-used-reserved),seatStatus:'verified'};
+    } catch (_) {return {...view,seatStatus:'unavailable'};}
+   }
    const r=await read(uid,businessId),view=await selections.decorate({...r,view:await reconcile(r.a,r.provider,r.view)});
    try {view.billingHistory=await require('./billing_history').history({db,stripe:stripe(),businessId:r.a.businessId,customerId:r.a.customerId});view.billingHistoryStatus='verified';}
    catch (_) {view.billingHistoryStatus='unavailable';}
