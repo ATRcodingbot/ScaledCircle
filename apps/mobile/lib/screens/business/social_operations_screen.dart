@@ -1618,9 +1618,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           const Card(
             child: ListTile(
               leading: Icon(Icons.health_and_safety_outlined),
-              title: Text('No content needs attention yet'),
+              title: Text('Content assessment not available yet'),
               subtitle: Text(
-                'Review scheduled content or select a past-post lookback. Missing provider evidence stays unavailable—not zero.',
+                'Use the review action above for your current content. Performance assessments appear when supporting evidence is available.',
               ),
             ),
           ),
