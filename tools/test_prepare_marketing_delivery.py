@@ -128,6 +128,31 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
                 self.assertEqual((output / name).read_text(), 'preserved ' + name)
             self.assertIn('noindex,nofollow', (output / 'how-it-works/index.html').read_text(encoding='utf-8'))
 
+    def test_audience_pages_share_navigation_and_keep_unavailable_tools_inert(self):
+        docs = documents()
+        for route in ['/businesses', '/scalers']:
+            body = docs[route].split('<body', 1)[1].split('<script>', 1)[0]
+            self.assertIn('class="how-page"', body)
+            self.assertIn('id="workflow"', body)
+            self.assertEqual(body.count('class="button primary"'), 2)
+            self.assertIn('href="' + route + '" aria-current="page"', body)
+            self.assertIn('href="/#' + route + '"', body)
+            self.assertEqual(body.count('aria-label="ScaledCircle home"'), 1)
+        business = docs['/businesses']
+        for tool in ['Business Assistant', 'Email Marketing', 'YouTube']:
+            card = re.search(r'<article><h3>' + tool + r'</h3>(.*?)</article>', business, re.S).group(1)
+            self.assertIn('Coming Soon', card)
+            self.assertNotIn('<a ', card)
+            self.assertNotIn('<button', card)
+        self.assertIn('A workflow example, not a case study', business)
+        scaler = docs['/scalers']
+        for copy in ['Route Coverage Estimate', '80%+', '95%+', '100%',
+                     'does not verify delivery to individual households',
+                     "Your reward does not come out of the Scaler's pay.",
+                     'Signup alone creates no cash reward',
+                     'qualifying retained recurring', 'final approved compensation']:
+            self.assertIn(copy, scaler)
+
 
 if __name__ == '__main__':
     unittest.main()
