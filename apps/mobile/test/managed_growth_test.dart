@@ -115,7 +115,7 @@ void main() {
     final subscription = File(
       'lib/screens/business/subscription_screen.dart',
     ).readAsStringSync();
-    expect(public, contains("planId == 'managed_growth' ? 'PRIVATE BETA / INVITE ONLY'"));
+    expect(public, matches(RegExp("planId == 'managed_growth'\\s*\\? 'PRIVATE BETA / INVITE ONLY'")));
     expect(public, contains('SubscriptionPlanService.plans[planId]'));
     expect(public, contains('Campaign compensation and platform fees are shown before funding.'));
     expect(subscription, contains("plan: 'managed_growth'"));

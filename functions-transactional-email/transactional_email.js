@@ -412,6 +412,10 @@ async function processDeliveryJob({db, reference, jobId, FieldValue, createTrans
   if(job.template==='growth_agent_report_v1') {
     const p=(await db.doc('agentCommunicationPreferences/'+job.businessUid).get()).data();
     if(p?.[job.preferenceKind]!==true){await reference.set({status:'suppressed',reason:'communication_preference'},{merge:true});return {processed:false,reason:'communication_preference'};}
+    if(job.growthPreferenceRevision !== (p?.updatedAt?.toMillis?.() ?? 0)) {
+      await reference.set({status:'suppressed',reason:'growth_preferences_changed'},{merge:true});
+      return {processed:false,reason:'growth_preferences_changed'};
+    }
   }
   const claimed = await claimQueuedJob({db,reference,FieldValue,leaseId});
   if (!claimed) return {processed:false, reason:"not_claimed"};

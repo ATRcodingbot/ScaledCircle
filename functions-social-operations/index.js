@@ -11,6 +11,7 @@ const socialOAuth = require("./social_oauth");
 const metaConnection = require("./social_meta_connection");
 const oauthLifecycle = require("./social_oauth_lifecycle");
 const metaCustomer = require("./social_meta_customer");
+const launchAvailability = require('./social_launch_availability');
 const subscriptionEntitlements = require("./subscription_entitlements");
 const scaledCircleLaunchPlan = require("./scaledcircle_launch_plan");
 const xFirstPublish = require("./x_first_publish");
@@ -157,7 +158,7 @@ exports.getSocialOperationsWorkspace = onCall(
       db.collection("businessGrowthProfiles").doc(business.uid).get(),
     ]);
     const connectionMap = new Map(connections.docs.map((doc) => [doc.id, doc.data()]));
-    const safeConnections = socialOperations.PROVIDERS.map((provider) =>
+    const safeConnections = require('./social_launch_availability').channels(business).map((provider) =>
       socialOperations.connectionProjection({provider, ...(connectionMap.get(provider) || {})}));
     const performance = snapshots.docs.map((doc) => ({id: doc.id, ...doc.data()}));
     return {
@@ -195,6 +196,8 @@ exports.getSocialOperationsWorkspace = onCall(
       externalPublishingEnabled: false,
       adMutationsEnabled: false,
       emailDeliveryEnabled: false,
+      internalDevelopmentAvailable: business.isAdmin === true,
+      availableCustomerChannels: launchAvailability.channels(business),
       internalPlanAlignment: runtimeEnvironment() === "staging" && business.isAdmin ? {
         sourcePlanId: scaledCircleLaunchPlan.PLAN_ID,
         sourceArtifact: scaledCircleLaunchPlan.SOURCE_ARTIFACT,
@@ -1991,6 +1994,22 @@ exports.approveSocialContentPlanV1 = onCall(
     const business = await requireSocialOperationsBusiness(request);
     const planId = readText(request.data?.planId, 180);
     const planRef = db.collection("socialContentPlans").doc(planId);
+    // A customer strategy approval is not approval of unfinished post creative.
+    // Keep the legacy workflow separate and pin the decision to the reviewed version.
+    const strategyResult = await db.runTransaction(async tx => {
+      const snapshot = await tx.get(planRef);
+      const record = snapshot.data();
+      if (record?.strategy?.version !== 'CustomerSocialDraftStrategyV1') return null;
+      if (record.businessUid !== business.uid) throw new HttpsError('permission-denied', 'This plan is not in your Business.');
+      if (Number(request.data?.planVersion) !== Number(record.planVersion)) throw new HttpsError('failed-precondition', 'Review the latest plan before approving.');
+      if (record.status === 'approved' && record.approvedVersion === record.planVersion) return {planId,status:'approved',duplicate:true,approvedItemCount:0,externalPublishingEnabled:false};
+      let approved;
+      try { approved = socialOperations.approvePlan({businessUid:business.uid,record,planVersion:request.data?.planVersion}); }
+      catch (_) { throw new HttpsError('failed-precondition', 'Review the latest plan before approving.'); }
+      tx.update(planRef,{status:approved.status,approvedVersion:approved.approvedVersion,approvedByUid:business.uid,approvedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+      return {planId,status:'approved',approvedItemCount:0,externalPublishingEnabled:false};
+    });
+    if (strategyResult) return strategyResult;
     const [planSnapshot, itemSnapshots] = await Promise.all([
       planRef.get(),
       db.collection("socialContentItems").where("planId", "==", planId).limit(60).get(),
@@ -2046,6 +2065,7 @@ exports.createEmailContentPlanV1 = onCall(
   {enforceAppCheck: false, maxInstances: 4},
   async (request) => {
     const business = await requireManagedGrowthBusiness(request);
+    if (!launchAvailability.canUseMarketingEmail(business)) throw new HttpsError('failed-precondition', 'Email Marketing is Coming Soon.');
     const profile = (await db.collection("businessGrowthProfiles").doc(business.uid).get()).data();
     if (!profile?.businessName) {
       throw new HttpsError("failed-precondition", "Complete the Business Growth Profile first.");
@@ -2203,6 +2223,7 @@ exports.beginSocialOAuthConnectionV1 = onCall(
   async (request) => {
     const business = await requireSocialOperationsBusiness(request);
     const provider = socialOAuth.normalizeProvider(request.data?.provider);
+    if (!launchAvailability.canConnect(provider,business)) throw new HttpsError('failed-precondition', 'This channel is Coming Soon.');
     if (provider === "meta") await oauthLifecycle.recoverMetaPending(db, business.uid, FieldValue);
     const environment = runtimeEnvironment();
     const customerManaged = request.data?.capability === "managed_publishing";
@@ -2539,6 +2560,7 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
           .includes(attempt.purpose))) {
       throw new HttpsError("not-found", "The connection attempt is unavailable.");
     }
+    if (!require('./social_launch_availability').canConnect(attempt.provider,business)) throw new HttpsError('failed-precondition','This channel is Coming Soon.');
     try {
       if (attempt.provider === "meta" && !metaWrite) {
         if (socialOAuth.readOnlyMetaScopes(attempt.grantedScopes).missing.length) {

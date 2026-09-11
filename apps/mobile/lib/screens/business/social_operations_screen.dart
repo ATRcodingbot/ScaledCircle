@@ -183,8 +183,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Approve this exact plan?'),
-        content: const Text(
-          'Approval applies to the current calendar and platform-specific drafts. Nothing will publish until an account is connected and publishing is separately enabled.',
+        content: Text(
+          plan['strategy'] is Map
+              ? 'Approve this strategy and proposed calendar. Posts still need separate content review and approval. Nothing will be scheduled or published.'
+              : 'Approval applies to the current calendar and platform-specific drafts. Nothing will publish until an account is connected and publishing is separately enabled.',
         ),
         actions: [
           TextButton(
@@ -205,6 +207,22 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         planVersion: (plan['planVersion'] as num?)?.toInt() ?? 0,
       );
       await _load();
+      if (mounted && plan['strategy'] is Map) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              '30-Day Plan Approved. Review the draft posts next.',
+            ),
+            action: SnackBarAction(
+              label: 'Review Posts',
+              onPressed: () {
+                final workspace = _workspace;
+                if (workspace != null) _reviewSavedPlans(workspace);
+              },
+            ),
+          ),
+        );
+      }
     } on FirebaseFunctionsException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -918,7 +936,8 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 _section('First X publish candidate', _firstXPublishCard()),
               _section('Content Health', _contentHealth(workspace)),
               _section("What's Working", _learning(workspace)),
-              if (workspace.managedGrowth)
+              if (workspace.managedGrowth &&
+                  workspace.internalDevelopmentAvailable)
                 _section('30-Day Email Content', _email(workspace)),
               _section('Ads — Read Only', _ads(workspace, wide)),
             ],
@@ -1080,7 +1099,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (final connection in workspace.connections)
+          for (final connection in workspace.availableConnections)
             SizedBox(
               width: width,
               child: SocialConnectionCard(
@@ -1312,9 +1331,17 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                         CustomerSocialPlanCard(
                           plan: plan,
                           initiallyExpanded: true,
+                          onApprove: () {
+                            Navigator.pop(context);
+                            _approvePlan(plan);
+                          },
                         ),
                     ],
                   ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Back / Keep Editing'),
                 ),
               ],
             ),
@@ -1355,7 +1382,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ),
         for (final plan in workspace.plans)
           if (plan['strategy'] is Map)
-            CustomerSocialPlanCard(plan: plan)
+            CustomerSocialPlanCard(
+              plan: plan,
+              onApprove: () => _approvePlan(plan),
+              onReviewPosts: () => _reviewSavedPlans(workspace),
+            )
           else
             Card(
               child: ListTile(
@@ -1373,21 +1404,29 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               ),
             ),
         Card(
-          child: ListTile(
-            leading: const Icon(Icons.add_circle_outline),
-            title: Text(
-              '${workspace.plans.length} saved plan${workspace.plans.length == 1 ? '' : 's'}',
-            ),
-            subtitle: const Text(
-              'Platform-specific versions remain drafts until explicitly approved.',
-            ),
-            trailing: FilledButton(
-              onPressed: workspace.plans.isEmpty
-                  ? _createPlan
-                  : () => _reviewSavedPlans(workspace),
-              child: Text(
-                workspace.plans.isEmpty ? 'Start Plan' : 'Review 30-Day Plan',
-              ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '${workspace.plans.length} saved plan${workspace.plans.length == 1 ? '' : 's'}',
+                ),
+                const Text(
+                  'Platform-specific versions remain drafts until explicitly approved.',
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: workspace.plans.isEmpty
+                      ? _createPlan
+                      : () => _reviewSavedPlans(workspace),
+                  child: Text(
+                    workspace.plans.isEmpty
+                        ? 'Start Plan'
+                        : 'Review 30-Day Plan',
+                  ),
+                ),
+              ],
             ),
           ),
         ),

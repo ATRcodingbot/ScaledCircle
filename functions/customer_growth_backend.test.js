@@ -53,7 +53,7 @@ test('Supervisor pause and tenant geography limit source reads; no custom URL or
 
 test('expanded customer cycle preserves prior prospects and drafts while adding current bid evidence exactly once',async()=>{
  await db.doc('businessSubscriptions/owner').update({expiresAt:Timestamp.fromMillis(Date.now()+7*86400000)});
- await call('initialize');await call('research');
+ await call('initialize');await call('preferences','owner','owner',{opportunities:{government:true}});await call('research');
  const original=(await db.collection('agentProspects').get()).docs.map(d=>({id:d.id,data:d.data()}));
  const actions=(await db.collection('agentActions').get()).docs.map(d=>({id:d.id,data:d.data()}));
  // Existing day/version is reused. Simulate a new UTC research day for a legitimate next cycle.
@@ -79,7 +79,7 @@ test('customer report email is owner-bound, preference-controlled and deduplicat
  assert.ok(start>=0&&end>start);const handlers={};
  vm.runInNewContext(source.slice(start,end),{exports:handlers,onDocumentCreated:(_,fn)=>fn,
   getAuth:()=>auth,db:new Proxy(db,{get:(t,k)=>k==='runTransaction'?fn=>t.runTransaction(tx=>Promise.resolve(fn(tx))):typeof t[k]==='function'?t[k].bind(t):t[k]}),FieldValue,process:{env:{GROWTH_CUSTOMER_BETA_UIDS:'owner'}},
-  growth:require('../functions-agentic-growth/growth_operations')});
+  require:name=>require(require('node:path').join(__dirname,'../functions-agentic-growth',name)),growth:require('../functions-agentic-growth/growth_operations')});
  await call('initialize');await call('research');
  const report=(await db.collection('agentReports').where('kind','==','daily').get()).docs[0];
  const event={data:{data:()=>report.data()},params:{reportId:report.id}};
@@ -87,7 +87,7 @@ test('customer report email is owner-bound, preference-controlled and deduplicat
  await Promise.all([queue(event),queue(event)]);
  const jobs=await db.collection('outboundEmailJobs').get();assert.equal(jobs.size,1);
  const job=jobs.docs[0];assert.equal(job.data().to,'owner@example.test');
- assert.equal(job.data().preferenceKind,'important');assert.match(job.data().text,/Draft — NOT SENT/);
+ assert.equal(job.data().preferenceKind,'important');assert.match(job.data().text,/Nothing in this report approves outreach/);
  assert.match(job.data().text,/https:\/\/scaledcircle.com\/#\/business\/growth-agents/);
  let sends=0;const deliver=()=>require('./transactional_email').processDeliveryJob({db,reference:job.ref,
   jobId:job.id,FieldValue,createTransport:()=>({sendMail:async()=>{sends++;return {messageId:'test-only',accepted:['owner@example.test']};}})});

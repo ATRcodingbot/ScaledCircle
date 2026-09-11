@@ -31,7 +31,7 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
       fail('failed-precondition','Complete your Business Growth profile first.');
     const services=(profile.priorityServices?.length?profile.priorityServices:profile.servicesOffered).map(x=>clean(x,120)).filter(Boolean).slice(0,6);
     return {businessUid:a.businessId,authorized:true,name:clean(profile.businessName,160),profile,researchVersion:discovery.VERSION,
-      discover:(scope,reader)=>discovery.discover({profile,scope,readSource:reader,now:now()}),
+      discover:(scope,reader,opportunityPreferences)=>discovery.discover({profile,scope,readSource:reader,now:now(),opportunityPreferences}),
       draft:(source,partner)=>partner?
         `Hello ${source.name} team, ${clean(profile.businessName,160)} lists ${services.join(', ')} among its services. We are reviewing legitimate recruitment channels for construction and marketing work. Could you share your employer requirements and appropriate next steps? We have not assumed candidate availability or eligibility, and will follow your review process before sharing any opening.`:
         source.opportunityType==='public_bid'?`Hello procurement team, ${clean(profile.businessName,160)} provides ${services.join(', ')}. We are reviewing ${source.sourceRecordId}. Please confirm where to review the official scope, eligibility requirements and permitted question process. This is an inquiry draft, not a bid or commitment. We have not assumed qualification or an award.`:

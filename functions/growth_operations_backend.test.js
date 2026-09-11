@@ -14,6 +14,29 @@ beforeEach(async()=>{
   service=growth.createService({db,FieldValue,sourceCatalog:require('../functions-agentic-growth/growth_sources').slice(0,6),project:'demo-growth-agents',target:'owner',now:()=>clock,readSource:async s=>{checks++;return s.signals.join(' ')+' '+(s.email||'')+' '+(s.phone||'');}});
 });
 after(async()=>{await db.terminate();await app.delete();});
+test('preference changes preserve historical RFQs and block new drafts and review',async()=>{
+ const source={key:'public_bid_test',name:'RFQ-000859',kind:'business',opportunityType:'public_bid',region:'Anne Arundel County',serviceArea:{type:'county',locality:'Anne Arundel County',state:'Maryland'},industry:'procurement',url:'https://example.test/bid',signals:['qualified'],reason:'Public solicitation',useCase:'Read requirements'};
+ const research=growth.createService({db,FieldValue,project:'demo-growth-agents',target:'owner',now:()=>clock,sourceCatalog:[source],readSource:async()=>{checks++;return 'qualified';}});
+ await research.run();assert.equal(checks,0);assert.equal((await db.collection('agentProspects').get()).size,0);
+ await research.savePreferences({opportunities:{government:true}});clock+=86400000;await research.run();
+ const record=(await db.collection('agentProspects').get()).docs[0],before=record.data();
+ assert.equal(before.displayName,'RFQ-000859');
+ await research.savePreferences({opportunities:{government:false}});
+ await research.savePreferences({mode:'weekly'});
+ const view=await research.load();assert.equal(view.preferences.opportunities.government,false);
+ assert.equal(view.prospects.length,0);assert.equal(view.summary.awaitingApproval,0);assert.equal(view.excludedProspects.length,1);
+ assert.deepEqual((await record.ref.get()).data(),before);
+ await assert.rejects(research.review({prospectId:record.id,decision:'ready_for_founder_send'}),/excluded/);
+ clock+=86400000;await research.run();assert.equal(checks,1);assert.deepEqual((await record.ref.get()).data(),before);
+});
+test('queued report is suppressed if opportunity preferences changed before delivery',async()=>{
+ await service.savePreferences({mode:'daily',opportunities:{government:true}});
+ const old=(await db.doc('agentCommunicationPreferences/owner').get()).data();
+ const ref=db.doc('outboundEmailJobs/old_focus');await ref.set({status:'queued',template:'growth_agent_report_v1',businessUid:'owner',preferenceKind:'daily',growthPreferenceRevision:old.updatedAt.toMillis(),to:'support@scaledcircle.com',fromAddress:'support@scaledcircle.com',text:'Historical RFQ report'});
+ await service.savePreferences({opportunities:{government:false}});let sends=0;
+ const result=await require('./transactional_email').processDeliveryJob({db,reference:ref,jobId:'old_focus',FieldValue,createTransport:()=>({sendMail:async()=>{sends++;}})});
+ assert.equal(result.reason,'growth_preferences_changed');assert.equal(sends,0);
+});
 test('real persistence dedupes research/CRM/approvals/reports without financial writes',async()=>{
   await db.doc('wallets/protected').set({balance:123});
   await service.run();await service.run();

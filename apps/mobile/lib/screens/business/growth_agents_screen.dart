@@ -6,6 +6,7 @@ import 'growth_territories_dialog.dart';
 import '../../navigation/context_back_button.dart';
 import '../../navigation/app_router.dart';
 import '../../widgets/customer_page_body.dart';
+import '../../widgets/growth_opportunity_preferences_card.dart';
 
 class GrowthAgentsScreen extends StatefulWidget {
   const GrowthAgentsScreen({
@@ -344,6 +345,31 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         ),
         if (widget.customer) ..._customerOverview(d),
         const SizedBox(height: 24),
+        GrowthOpportunityPreferencesCard(
+          values: Map<String, dynamic>.from(
+            d['preferences']?['opportunities'] as Map? ?? {},
+          ),
+          onSave: (values) async {
+            await _call('updateGrowthCommunicationPreferencesV1', {
+              'opportunities': values,
+            });
+            await _load();
+          },
+        ),
+        if (_list(d['excludedProspects']).isNotEmpty)
+          ExpansionTile(
+            title: const Text('Excluded by Growth Preferences'),
+            subtitle: const Text(
+              'Historical evidence · Not active recommendations',
+            ),
+            children: [
+              for (final prospect in _list(d['excludedProspects']))
+                ListTile(
+                  title: Text('${prospect['displayName']}'),
+                  subtitle: Text('Source preserved: ${prospect['sourceUrl']}'),
+                ),
+            ],
+          ),
         Text(
           'Review opportunities',
           style: Theme.of(context).textTheme.titleLarge,

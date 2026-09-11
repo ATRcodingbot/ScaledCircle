@@ -45,12 +45,15 @@ exports.queueCustomerGrowthReportEmailV1 = onDocumentCreated({document:'agentRep
     if(!prefs[kind]||(kind==='important'&&!report.summary.newApprovalsToday))return;
     const ref=db.doc('outboundEmailJobs/customer_growth_'+event.params.reportId);
     if((await tx.get(ref)).exists)return;
-    const prospects=(await tx.get(db.collection('agentProspects').where('businessUid','==',uid).limit(20))).docs.map(d=>({...d.data(),id:d.id}));
+    const prospects=(await tx.get(db.collection('agentProspects').where('businessUid','==',uid).limit(250))).docs.map(d=>({...d.data(),id:d.id}));
+    const focus=require('./growth_opportunity_preferences').normalize(prefs.opportunities);
+    const active=require('./growth_opportunity_preferences').active(prospects,focus);
+    if(kind==='important'&&!active.some(p=>p.approvalState==='awaiting_approval'))return;
     const s=report.summary;
-    const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,prospects,customer:true});
+    const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,prospects,customer:true,opportunityPreferences:focus});
     tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
       ...presentation,
-      template:'growth_agent_report_v1',preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
+      template:'growth_agent_report_v1',growthPreferenceRevision:prefs.updatedAt?.toMillis?.()??0,preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
   });
 });
 
@@ -126,13 +129,17 @@ exports.queueGrowthReportEmailV1=onDocumentCreated({document:'agentReports/{repo
     const kind=report.kind==='daily'&&!prefs.daily&&prefs.important&&report.summary.newApprovalsToday>0?'important':report.kind;
     if(!prefs[kind])return;
     const ref=db.doc('outboundEmailJobs/growth_'+event.params.reportId);if((await tx.get(ref)).exists)return;
+    const prospects=(await tx.get(db.collection('agentProspects').where('businessUid','==',uid).limit(250))).docs.map(d=>({...d.data(),id:d.id}));
+    const focus=require('./growth_opportunity_preferences').normalize(prefs.opportunities);
+    const active=require('./growth_opportunity_preferences').active(prospects,focus);
+    if(kind==='important'&&!active.some(p=>p.approvalState==='awaiting_approval'))return;
     const s=report.summary;
-    const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,customer:false});
+    const presentation=require('./growth_report_presentation').renderGrowthReport({report,reportId:event.params.reportId,kind,prospects,customer:false,opportunityPreferences:focus});
     const byArea=(s.discoveryByServiceArea||[]).map(g=>`${g.serviceArea}: ${g.businesses} Business prospects, ${g.partners} organization partners, ${g.individualScalers} individual Scalers`).join('\n');
     if(kind==='important'&&!s.newApprovalsToday)return;
     tx.create(ref,{businessUid:uid,to:account.email,fromAddress:'support@scaledcircle.com',fromName:'ScaledCircle',replyTo:'support@scaledcircle.com',
       ...presentation,
-      template:'growth_agent_report_v1',preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
+      template:'growth_agent_report_v1',growthPreferenceRevision:prefs.updatedAt?.toMillis?.()??0,preferenceKind:kind,reportId:event.params.reportId,status:'queued',attempts:0,createdAt:FieldValue.serverTimestamp()});
   });
 });
 

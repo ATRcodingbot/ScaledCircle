@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../navigation/app_router.dart';
 import '../../navigation/context_back_button.dart';
 import '../../widgets/customer_page_body.dart';
+import '../../widgets/growth_opportunity_preferences_card.dart';
 
 class BusinessGrowthHome extends StatefulWidget {
   const BusinessGrowthHome({super.key, this.loadOverride});
@@ -76,6 +77,20 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
                 ],
               )
             else ...[
+              GrowthOpportunityPreferencesCard(
+                values: Map<String, dynamic>.from(
+                  _data?['preferences']?['opportunities'] as Map? ?? {},
+                ),
+                onSave: (values) async {
+                  await FirebaseFunctions.instanceFor(
+                    region: 'us-east1',
+                  ).httpsCallable('customerGrowthOperationsV1').call({
+                    'operation': 'preferences',
+                    'input': {'opportunities': values},
+                  });
+                  await _load();
+                },
+              ),
               Text(
                 'Needs your attention',
                 style: Theme.of(context).textTheme.titleLarge,

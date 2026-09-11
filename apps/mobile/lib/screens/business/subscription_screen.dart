@@ -506,7 +506,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             'For 3–5 initial Businesses building one coordinated digital + physical growth system.',
                         currentPlan: currentPlan,
                         subscriptionActive: subscriptionActive,
-                        availableForPurchase: true,
+                        availableForPurchase: false,
                         features: const [
                           'Everything in Scale',
                           'AI Business Growth Analysis',
@@ -514,7 +514,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           'Social Content Plan',
                           'Paid Advertising Creative & Strategy',
                           'SEO Action Plan',
-                          '30-Day Email Campaign',
                           'Postcards / Direct Mail — Coming Soon',
                           'Unified campaign measurement',
                           'Advertising needs separate approval. Printing and postcards are Coming Soon',
@@ -777,7 +776,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         isCurrentPlan
                             ? 'Current Plan'
                             : !availableForPurchase
-                            ? 'Limited Beta — Contact ScaledCircle'
+                            ? 'Private Beta / Invite Only'
                             : isDowngrade
                             ? 'Lower Plan'
                             : isUpgrade

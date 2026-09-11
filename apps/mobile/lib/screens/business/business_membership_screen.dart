@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/business_workspace_service.dart';
 import '../../services/platform_billing_service.dart';
 import 'subscription_screen.dart';
+import 'business_team_screen.dart';
 import '../../widgets/billing_selection_editor.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../navigation/app_router.dart';
@@ -523,7 +524,46 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     'Your funded campaigns and accepted Scaler contracts continue independently of subscription cancellation. You can still sign in to view your historical records after the paid term ends, subject to our retention policy.',
                   ),
                   const SizedBox(height: 16),
+                  if (data['complimentary'] == true) ...[
+                    FilledButton(
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          scrollable: true,
+                          title: const Text('Available Plans'),
+                          content: const Text(
+                            'Starter — \$99/month · 1 total seat\nGrowth — \$299/month · 3 total seats\nScale — \$499/month · 5 total seats\nManaged Growth — \$999/month · 10 total seats\n\nYour complimentary access stays unchanged. Moving this grant to a paid plan is not currently available through membership management.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Back to my plan'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      child: const Text('View Available Plans'),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const BusinessTeamScreen(),
+                        ),
+                      ),
+                      child: const Text('Team / Seats'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        final target = _sectionKeys['history']?.currentContext;
+                        if (target != null) Scrollable.ensureVisible(target);
+                      },
+                      child: const Text('Billing History'),
+                    ),
+                  ],
                   if (data['canCancel'] == true &&
+                      data['complimentary'] != true &&
+                      data['cancelAtPeriodEnd'] != true &&
                       data['changePending'] != true &&
                       data['scheduledChange'] == null)
                     OutlinedButton(
@@ -539,6 +579,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     ),
                   if (data['paidAccess'] == true &&
                       data['complimentary'] != true &&
+                      data['cancelAtPeriodEnd'] != true &&
                       data['changePending'] != true &&
                       data['scheduledChange'] == null &&
                       data['bundle'] == null &&
@@ -549,23 +590,24 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Change Plan',
                       ),
-                      items: const [
-                        DropdownMenuItem(
+                      items: [
+                        const DropdownMenuItem(
                           value: 'starter',
                           child: Text('Starter — \$99 / 1 seat'),
                         ),
-                        DropdownMenuItem(
+                        const DropdownMenuItem(
                           value: 'growth',
                           child: Text('Growth — \$299 / 3 seats'),
                         ),
-                        DropdownMenuItem(
+                        const DropdownMenuItem(
                           value: 'scale',
                           child: Text('Scale — \$499 / 5 seats'),
                         ),
-                        DropdownMenuItem(
-                          value: 'managed_growth',
-                          child: Text('Managed Growth — \$999 / 10 seats'),
-                        ),
+                        if (data['plan'] == 'managed_growth')
+                          const DropdownMenuItem(
+                            value: 'managed_growth',
+                            child: Text('Managed Growth — \$999 / 10 seats'),
+                          ),
                       ],
                       onChanged: _busy
                           ? null

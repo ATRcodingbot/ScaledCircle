@@ -6,9 +6,13 @@ class CustomerSocialPlanCard extends StatelessWidget {
     super.key,
     required this.plan,
     this.initiallyExpanded = false,
+    this.onApprove,
+    this.onReviewPosts,
   });
   final Map<String, dynamic> plan;
   final bool initiallyExpanded;
+  final VoidCallback? onApprove;
+  final VoidCallback? onReviewPosts;
   @override
   Widget build(BuildContext context) {
     final strategy = plan['strategy'] as Map? ?? {};
@@ -27,7 +31,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.only(bottom: 16),
             child: Text(
-              'Review only. Creative briefs describe media to prepare; they are not finished images or videos. Each post still needs approved content and media before scheduling.',
+              'Creative briefs are not finished images or videos. Review each post’s copy and any required media separately before scheduling. Text-only posts do not need an image where the platform supports them.',
             ),
           ),
           for (final key in [
@@ -71,6 +75,14 @@ class CustomerSocialPlanCard extends StatelessWidget {
                           'Creative brief: ${v['mediaRequirement'] ?? 'Needs approved media'}',
                         ),
                         Text(
+                          'Post approval: ${v['status'] == 'approved' ? 'Approved version' : 'Needs content review'}',
+                        ),
+                        Text(
+                          v['mediaRequirement'] == 'none'
+                              ? 'Creative status: Text-only. No media required by this draft.'
+                              : 'Creative status: Brief prepared. Finished media must be verified before scheduling.',
+                        ),
+                        Text(
                           'Measurement: ${v['responseAssetRequirement'] ?? 'No measurement recorded yet'}',
                         ),
                       ],
@@ -78,6 +90,23 @@ class CustomerSocialPlanCard extends StatelessWidget {
                   ),
               ],
             ),
+          if (plan['status'] == 'ready_for_review' && onApprove != null) ...[
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: onApprove,
+              child: const Text('Approve 30-Day Plan'),
+            ),
+          ],
+          if (plan['status'] == 'approved' && onReviewPosts != null) ...[
+            const SizedBox(height: 16),
+            const Text(
+              '30-Day Plan Approved. Each post still needs content review; approval has not scheduled anything.',
+            ),
+            FilledButton(
+              onPressed: onReviewPosts,
+              child: const Text('Review Posts'),
+            ),
+          ],
         ],
       ),
     );

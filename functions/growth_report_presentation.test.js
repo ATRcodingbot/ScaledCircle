@@ -3,6 +3,13 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {renderGrowthReport}=require('../functions-agentic-growth/growth_report_presentation');
 const report={businessName:'Example Business',summary:{awaitingApproval:4,businessesFound:3,partnersFound:2,individualScalersFound:0,learned:'Outcomes are not measured yet.',next:'Review the sourced opportunities.'}};
 const prospects=Array.from({length:12},(_,i)=>({id:'record '+i,displayName:'Prospect '+i,reason:'Potential fit; interest unknown.',email:'private@example.test',draft:'Do not include full outreach drafts.'}));
+test('current preferences override historical RFQ counts and recommendations in every email kind',()=>{
+ const rfq={id:'old',displayName:'RFQ-000859',opportunityType:'public_bid',kind:'business',approvalState:'awaiting_approval'};
+ for(const kind of ['daily','weekly','important']){
+  const result=renderGrowthReport({report:{summary:{businessesFound:3,awaitingApproval:3,next:'Review RFQ-000859 first.'}},reportId:'old',prospects:[rfq],kind,customer:true,opportunityPreferences:{government:false}});
+  assert.doesNotMatch(result.text,/RFQ-000859|3 research drafts/);assert.match(result.text,/0 research drafts/);
+ }
+});
 test('daily brief is bounded and links to exact report and opportunities',()=>{
  const result=renderGrowthReport({report,reportId:'report / one',prospects,kind:'daily',customer:true});
  assert.match(result.text,/\?report=report%20%2F%20one/);assert.match(result.text,/\?prospect=record%200/);

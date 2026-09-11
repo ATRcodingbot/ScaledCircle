@@ -5,6 +5,15 @@ class SocialOperationsWorkspace {
   final Map<String, dynamic> data;
 
   bool get managedGrowth => data['managedGrowth'] == true;
+  bool get internalDevelopmentAvailable =>
+      data['internalDevelopmentAvailable'] == true;
+  List<Map<String, dynamic>> get availableConnections => connections
+      .where(
+        (connection) =>
+            internalDevelopmentAvailable ||
+            ['facebook', 'instagram'].contains(connection['provider']),
+      )
+      .toList();
   bool get managedPublishingAvailable =>
       data['managedPublishingAvailable'] == true;
   bool get publishingEnabled => data['externalPublishingEnabled'] == true;

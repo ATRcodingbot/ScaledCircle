@@ -23,8 +23,9 @@ function parseBids(html,hub,profile,now){
  }
  return rows.slice(0,6);
 }
-async function discover({profile,scope,readSource,now}){
+async function discover({profile,scope,readSource,now,opportunityPreferences}){
  const sources=[],checks=[];
+ if(!require('./growth_opportunity_preferences').normalize(opportunityPreferences).government)return {sources,checks};
  for(const hub of hubs.filter(h=>geography.matchArea(h,scope))){
   try{const html=await readSource(hub),found=parseBids(html,hub,profile,now);sources.push(...found);checks.push({sourceUrl:hub.url,status:'checked',discovered:found.length,sourceHash:crypto.createHash('sha256').update(html).digest('hex')});}
   catch(_){checks.push({sourceUrl:hub.url,status:'unavailable',discovered:0});}

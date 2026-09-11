@@ -141,13 +141,21 @@ void main() {
     },
   );
 
-  test('authorized catalog exposes Managed Growth through verified Checkout', () {
-    final subscriptions = source(
-      'lib/screens/business/subscription_screen.dart',
-    );
-    expect(subscriptions, contains("plan: 'managed_growth'"));
-    expect(subscriptions, contains('availableForPurchase: true'));
-    expect(subscriptions, contains('previewBusinessMembershipChange'));
-    expect(subscriptions, contains('Beta'));
-  });
+  test(
+    'Managed Growth stays invite-only while billing retains verified preview',
+    () {
+      final subscriptions = source(
+        'lib/screens/business/subscription_screen.dart',
+      );
+      expect(subscriptions, contains("plan: 'managed_growth'"));
+      final managed = subscriptions.split("plan: 'managed_growth',").last;
+      expect(
+        managed.split('features: const').first,
+        contains('availableForPurchase: false'),
+      );
+      expect(subscriptions, contains('Private Beta / Invite Only'));
+      expect(subscriptions, contains('previewBusinessMembershipChange'));
+      expect(subscriptions, contains('Beta'));
+    },
+  );
 }

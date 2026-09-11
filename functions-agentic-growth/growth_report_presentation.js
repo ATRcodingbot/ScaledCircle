@@ -1,8 +1,10 @@
 'use strict';
 const clean=value=>String(value??'').replace(/[\r\n]+/g,' ').trim();
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:0;
-function renderGrowthReport({report,reportId,prospects=[],kind,customer=false}) {
- const s=report.summary||{},base=customer?'https://scaledcircle.com/#/business/growth-agents':'https://scaledcircle-staging.web.app/#/growth-agents';
+function renderGrowthReport({report,reportId,prospects=[],kind,customer=false,opportunityPreferences}) {
+ const active=require('./growth_opportunity_preferences').active(prospects,opportunityPreferences);
+ const s=opportunityPreferences===undefined?report.summary||{}:{...(report.summary||{}),awaitingApproval:active.filter(p=>p.approvalState==='awaiting_approval').length,businessesFound:active.filter(p=>p.kind==='business').length,partnersFound:active.filter(p=>p.kind==='referral_partner').length,individualScalersFound:active.filter(p=>p.kind==='scaler').length,discoveryByServiceArea:[],next:'Review enabled opportunities in Growth. Your current preferences control recommendations.'};
+ const base=customer?'https://scaledcircle.com/#/business/growth-agents':'https://scaledcircle-staging.web.app/#/growth-agents';
  const link=base+'?report='+encodeURIComponent(reportId);
  const subject=kind==='weekly'?'Your Growth Weekly Report':kind==='daily'?'Your Growth Daily Brief':'Your Growth team needs your review';
  const lines=[clean(report.businessName||'ScaledCircle'),'', 'Needs your attention',`${count(s.awaitingApproval)} research drafts await review.`,
@@ -12,7 +14,7 @@ function renderGrowthReport({report,reportId,prospects=[],kind,customer=false}) 
  if(kind!=='important'){
   const areas=Array.isArray(s.discoveryByServiceArea)?s.discoveryByServiceArea:[];
   if(areas.length)lines.push('','By service area',...areas.map(a=>`${clean(a.serviceArea)}: ${count(a.businesses)} Business prospects · ${count(a.partners)} organization partners · ${count(a.individualScalers)} individual candidates.`));
-  const selected=prospects.slice(0,kind==='weekly'?5:3);
+  const selected=active.slice(0,kind==='weekly'?5:3);
   if(selected.length)lines.push('','Selected findings',...selected.flatMap(p=>[clean(p.displayName),clean(p.reason),base+'?prospect='+encodeURIComponent(p.id),'']));
   if(kind==='weekly')lines.push('What we learned',clean(s.learned)||'Verified performance outcomes are not available yet.','');
  }

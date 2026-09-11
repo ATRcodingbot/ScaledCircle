@@ -3,6 +3,7 @@ import '../scaler/affiliate/scaler_affiliate_screen.dart';
 import 'package:flutter/material.dart';
 import '../../services/business_workspace_service.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
+import '../../widgets/membership_account_description.dart';
 import 'business_team_screen.dart';
 import 'business_membership_screen.dart';
 import 'profile/business_profile_screen.dart';
@@ -62,7 +63,7 @@ class BusinessAccountScreen extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.credit_card_outlined),
                 title: const Text('Billing / Plan'),
-                subtitle: const Text('Manage, cancel or reactivate membership'),
+                subtitle: const MembershipAccountDescription(),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(

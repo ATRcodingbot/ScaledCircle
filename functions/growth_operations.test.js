@@ -27,7 +27,7 @@ test('reports distinguish partner organizations, unknown conversion and zero out
   assert.equal(r.partnersFound,1);assert.equal(r.individualScalersFound,0);assert.equal(r.contacted,0);assert.equal(r.paid,null);
 });
 test('communication preferences validate exact input and daily/weekly independently',()=>{
-  assert.deepEqual(growth.preferences({mode:'off'}),{mode:'off',important:false,daily:false,weekly:false});
+  assert.deepEqual(growth.preferences({mode:'off'}),{mode:'off',important:false,daily:false,weekly:false,opportunities:require('../functions-agentic-growth/growth_opportunity_preferences').DEFAULTS});
   assert.equal(growth.preferences({mode:'daily_weekly'}).weekly,true);
   assert.throws(()=>growth.preferences({mode:'daily',to:'other@example.org'}));
 });
