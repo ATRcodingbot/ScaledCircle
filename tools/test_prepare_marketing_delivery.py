@@ -19,8 +19,8 @@ class DeliveryTest(unittest.TestCase):
             self.assertEqual(schema['url'], 'https://scaledcircle.com' + route)
             self.assertEqual(schema['@type'], 'WebPage')
             self.assertNotIn('AggregateRating', page)
-        self.assertEqual(len(titles), 5)
-        self.assertEqual(len(descriptions), 5)
+        self.assertEqual(len(titles), 6)
+        self.assertEqual(len(descriptions), 6)
 
     def test_referral_and_hash_product_navigation_without_network_or_attribution(self):
         script = next(value for value in re.findall(r'<script>(.*?)</script>', documents()['/'], re.S) if 'function startProduct()' in value)
@@ -45,8 +45,8 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
 
     def test_five_routes_have_visible_copy_and_distinct_canonicals(self):
         docs = documents()
-        self.assertEqual(len(docs), 5)
-        self.assertEqual(len(set(docs.values())), 5)
+        self.assertEqual(len(docs), 6)
+        self.assertEqual(len(set(docs.values())), 6)
         for route, value in docs.items():
             self.assertEqual(len(re.findall(r'<h1(?:\s[^>]*)?>', value)), 1)
             self.assertIn('href="https://scaledcircle.com' + route + '"', value)
@@ -56,9 +56,22 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertIn("location.pathname !== '/' && location.pathname !== '/login'", value)
         self.assertEqual([x[1] for x in content()['/pricing'][1:5]], ['$99/month', '$299/month', '$499/month', '$999/month'])
         pricing = docs['/pricing']
-        for text in ['Controlled premium access', 'Business Assistant — Beta / Coming Soon', '$399/month', 'Lead Generation Research — Private Beta', '$699/month', 'Growth Department — Private Beta', '$2,000/month', '10 total users']:
+        for text in ['Controlled premium access', 'Business Assistant — Beta / Coming Soon', '$399/month', 'Lead Generation Research — Private Beta / Coming Soon', '$699/month', 'Growth Department — Private Beta', '$2,000/month', '10 total users']:
             self.assertIn(text, pricing)
         self.assertIn('Research does not authorize outreach', pricing)
+
+    def test_public_navigation_has_independent_routes_and_truthful_availability(self):
+        for route, page in documents().items():
+            nav = page.split('<nav aria-label="Main">', 1)[1].split('</nav>', 1)[0]
+            for target in ['/businesses', '/scalers', '/how-it-works', '/pricing', '/referrals']:
+                self.assertIn('href="' + target + '"', nav)
+            self.assertIn('aria-label="ScaledCircle home"', nav)
+            self.assertIn('class="mobile-menu"', nav)
+            self.assertNotIn('href="/#pricing"', nav)
+            self.assertNotIn('href="/#how-it-works"', nav)
+        self.assertIn('Available Business plans', documents()['/pricing'])
+        self.assertIn('Private Beta plans', documents()['/pricing'])
+        self.assertIn('residential photos are not required', documents()['/scalers'])
 
     def test_staging_indexing_and_truthful_conversion_paths(self):
         home = documents(staging=True)['/']

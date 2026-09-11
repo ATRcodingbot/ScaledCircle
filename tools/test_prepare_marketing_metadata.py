@@ -7,7 +7,7 @@ class MetadataTest(unittest.TestCase):
     def test_distinct_metadata_preserves_existing_page_body(self):
         source = (Path(__file__).resolve().parent.parent / 'apps/mobile/web/index.html').read_text(encoding='utf-8')
         documents = [render(source, route) for route in ROUTES]
-        self.assertEqual(len(set(documents)), 5)
+        self.assertEqual(len(set(documents)), 6)
         for route, document in zip(ROUTES, documents):
             self.assertEqual(document.split('<body>')[1], source.split('<body>')[1])
             self.assertIn('href="https://scaledcircle.com' + route + '"', document)

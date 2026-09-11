@@ -43,12 +43,22 @@ def content():
     assert all(text in landing for text in scaler)
     return {'/': [(hero, intro), heading('_BusinessExperience'), *steps,
                   heading('_FieldCampaigns'), scaler, heading('_ManagedGrowth')], '/businesses': funnel('business_funnel_screen.dart'),
-            '/scalers': funnel('scaler_funnel_screen.dart'),
+            '/scalers': [*funnel('scaler_funnel_screen.dart'),
+                         ('Canvassing with clear accepted pay', 'Review the fixed base compensation and any accepted coverage bonus before accepting. Automatic route tracking supports review; residential photos are not required. This is not pure-commission work or an employment offer.'),
+                         ('Share work opportunities', 'Refer Businesses or Scalers under the referral program. Signup alone earns no cash reward, and a referral reward never reduces the referred Scaler’s earned pay.')],
+            '/referrals': [('Refer Businesses. Refer Scalers.', 'Share ScaledCircle with people who may find it useful. Rewards require qualifying authoritative economic events.'),
+                           ('Refer a Business', 'Earn 10% of qualifying retained recurring ScaledCircle subscription revenue. Single-level referrals only.'),
+                           ('Refer a Scaler', "Earn 1% of final approved compensation from qualifying completed work. This does not come out of the Scaler's pay. ScaledCircle funds the reward separately."),
+                           ('Honest reward states', 'Signing up alone does not create a cash reward. Earned, available and paid are different states. Payout availability remains subject to certification and eligibility; no immediate cash-out is promised.')],
             '/how-it-works': [('From a local campaign to work you can review.', 'One clear workflow for the Business and the Scaler.'), *steps],
             '/pricing': [('Choose your plan', 'One Business workspace. Total users including the owner: Starter 1, Growth 3, Scale 5, Managed Growth 10.'), *pricing,
                          ('Controlled premium access', 'These capabilities are not generally available for purchase. Access requires an invitation; add-ons never add seats.'),
                          ('Business Assistant — Beta / Coming Soon', 'Planned recurring price: $399/month. Business information and recommended next steps.'),
-                         ('Lead Generation Research — Private Beta', '$699/month when authorized. Prospect research, evidence and drafts. Research does not authorize outreach.'),
+                         ('Lead Generation Research — Private Beta / Coming Soon', '$699/month when authorized. Prospect research, evidence and drafts. Research does not authorize outreach.'),
+                         ('Email Marketing — Coming Soon', 'Business-owned marketing campaigns are not available at launch. Account messages, billing receipts and Growth reports remain active.'),
+                         ('YouTube — Coming Soon', 'Customer YouTube management is not available at launch.'),
+                         ('Supported Social channels', 'Facebook and Instagram support Business connection and permission review. Publishing requires separate approved content and execution authority. Customer X is Coming Soon.'),
+                         ('Postcards — Private Beta', 'Choose an area, create and approve a design, and arrange fulfillment with ScaledCircle. General ordering is held until physical fulfillment certification.'),
                          ('Growth Department — Private Beta', '$2,000/month when authorized. Managed Growth, Business Assistant and Lead Generation Research; 10 total users. No public purchase is enabled.')]}
 
 
@@ -56,9 +66,9 @@ def documents(*, staging=False):
     template = (ROOT / 'apps/mobile/web/index.html').read_text(encoding='utf-8')
     links = ''.join('<a href="' + route + '">' + label + '</a>' for route, label in
                    [('/businesses', 'Businesses'), ('/scalers', 'Scalers'),
-                    ('/how-it-works', 'How it works'), ('/pricing', 'Pricing'), ('/#/referrals', 'Referrals')])
+                    ('/how-it-works', 'How it works'), ('/pricing', 'Pricing'), ('/referrals', 'Referral Program'), ('/#/login', 'Log in')])
     navigation = ('<a class="brand" href="/" aria-label="ScaledCircle home"><img src="/assets/assets/brand/scaledcircle-lockup-dark-surface.png" alt="ScaledCircle" width="192" height="64"></a>'
-                  '<div class="desktop-links">' + links + '</div><details class="mobile-menu"><summary>Menu</summary><div>' + links + '<a href="/#/login">Log in</a></div></details>')
+                  '<div class="desktop-links">' + links + '</div><details class="mobile-menu"><summary>Menu</summary><div>' + links + '</div></details>')
     result = {}
     for route, sections in content().items():
         document = render(template, route).replace('$FLUTTER_BASE_HREF', '/')
@@ -68,7 +78,9 @@ def documents(*, staging=False):
         for index, (title, body) in enumerate(sections):
             if route == '/pricing' and 1 <= index <= 4:
                 if index == 1:
-                    blocks.append('<section class="plans" aria-label="Business plans">')
+                    blocks.append('<h2>Available now</h2><section class="plans" aria-label="Available Business plans">')
+                if index == 4:
+                    blocks.append('</section><h2>Private Beta / Invite Only</h2><section class="plans" aria-label="Private Beta plans">')
                 seats = [1, 3, 5, 10][index - 1]
                 blocks.append(f'<article><h2>{html.escape(title)}</h2><p class="price">{html.escape(body)}</p><p>{seats} total Business {"user" if seats == 1 else "users"}, including the owner.</p><p>{"Invite Only" if index == 4 else "Available"}</p></article>')
                 if index == 4:
@@ -146,7 +158,7 @@ a:focus-visible{outline:3px solid white;outline-offset:5px}nav a,footer a{displa
 h1{font-size:clamp(32px,5vw,58px);line-height:1.1}h2{font-size:27px}p{max-width:760px;color:#c6d5e1}
 img{max-width:100%;height:auto;margin-top:30px;border-radius:18px}
 .plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.plans article,.capabilities article{padding:24px;border:1px solid #29445b;border-radius:18px;background:#0b1d30}.plans h2{font-size:24px}.price{font-size:32px;font-weight:700;color:#fff}.example{margin-top:36px;padding:28px;background:#102b42;border-radius:20px}.eyebrow{text-transform:uppercase;letter-spacing:1px;font-size:14px}.mobile-menu summary{cursor:pointer;min-height:48px;padding:12px;list-style:none}.mobile-menu div{position:absolute;right:0;top:48px;z-index:5;padding:16px;background:#102b42;border:1px solid #29445b;border-radius:12px;min-width:220px}.mobile-menu a{display:block;padding:12px}summary:focus-visible{outline:3px solid white;outline-offset:4px}a{overflow-wrap:anywhere}section{padding-block:36px}
-@media(max-width:900px){.desktop-links{display:none}.mobile-menu{display:block;position:relative}main{padding:20px}nav{gap:12px}.brand img{width:160px}.plans{grid-template-columns:1fr}h1{font-size:38px}.example{padding:22px}}
+@media(max-width:1100px){.desktop-links{display:none}.mobile-menu{display:block;position:relative}main{padding:20px}nav{gap:12px}.brand img{width:160px}.plans{grid-template-columns:1fr}h1{font-size:38px}.example{padding:22px}}
 </style></head>''')
         if route == '/how-it-works':
             styles = (ROOT / 'apps/mobile/web/marketing/how-it-works.css').read_text(encoding='utf-8')
@@ -187,4 +199,4 @@ if __name__ == '__main__':
                 'copyScope': 'Existing hero and workflow copy; full visual/feature parity review remains',
                 'sourceHashes': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}}
     (args.output / 'candidate-manifest.json').write_text(json.dumps(manifest, indent=2))
-    print('Five visible HTML route candidates prepared; production promotion requires approval and full app-route regression.')
+    print('Six visible HTML route candidates prepared; production promotion requires approval and full app-route regression.')

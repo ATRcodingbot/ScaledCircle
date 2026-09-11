@@ -167,6 +167,12 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => const PublicLandingScreen(),
       );
     }
+    if (const {'/how-it-works', '/pricing'}.contains(route?.path)) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => PublicLandingScreen(page: route!.path),
+      );
+    }
     if (route?.path == AppRoutes.businesses) {
       return MaterialPageRoute(
         settings: settings,

@@ -16,6 +16,8 @@ ROUTES = {
                       'Choose a local market, build a campaign, coordinate Scalers and connect execution with mapping, response tracking and growth intelligence.'),
     '/pricing': ('ScaledCircle Pricing',
                  'Compare ScaledCircle Business tools and plans. Review subscription options separately from campaign fulfillment costs.'),
+    '/referrals': ('ScaledCircle Referral Program',
+                   'Refer Businesses and Scalers. Learn how qualifying economic events create rewards without reducing Scaler pay.'),
 }
 
 

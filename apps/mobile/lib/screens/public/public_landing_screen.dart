@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
+import '../../navigation/public_page_navigation.dart';
 import '../../navigation/app_router.dart';
 import '../../services/subscription_plan_service.dart';
 import 'authentic_product_map.dart';
@@ -17,7 +18,8 @@ const _blue = Color(0xFF287EFF);
 const _muted = Color(0xFFB8C9D8);
 
 class PublicLandingScreen extends StatelessWidget {
-  const PublicLandingScreen({super.key});
+  const PublicLandingScreen({super.key, this.page});
+  final String? page;
 
   void _start(BuildContext context, String role) => AppNavigation.push(
     context,
@@ -26,19 +28,9 @@ class PublicLandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 760;
+    final mobile = MediaQuery.sizeOf(context).width < 1100;
     final howItWorksKey = GlobalKey();
     final pricingKey = GlobalKey();
-    void reveal(GlobalKey key) {
-      final target = key.currentContext;
-      if (target != null) {
-        Scrollable.ensureVisible(
-          target,
-          duration: const Duration(milliseconds: 450),
-          curve: Curves.easeOut,
-        );
-      }
-    }
 
     return Scaffold(
       backgroundColor: _bg,
@@ -57,11 +49,10 @@ class PublicLandingScreen extends StatelessWidget {
               title: _Navigation(
                 onLogin: () => AppNavigation.push(context, AppRoutes.login),
                 onStart: () => openPublicRoleChooser(context),
-                onBusiness: () =>
-                    AppNavigation.push(context, AppRoutes.businesses),
-                onScaler: () => AppNavigation.push(context, AppRoutes.scalers),
-                onHowItWorks: () => reveal(howItWorksKey),
-                onPricing: () => reveal(pricingKey),
+                onBusiness: () => openPublicPage(context, AppRoutes.businesses),
+                onScaler: () => openPublicPage(context, AppRoutes.scalers),
+                onHowItWorks: () => openPublicPage(context, '/how-it-works'),
+                onPricing: () => openPublicPage(context, '/pricing'),
               ),
             ),
             SliverToBoxAdapter(
@@ -72,48 +63,61 @@ class PublicLandingScreen extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(22, 44, 22, 80),
                     child: Column(
                       children: [
-                        _Hero(
-                          onBusiness: () =>
-                              AppNavigation.push(context, AppRoutes.businesses),
-                          onScaler: () =>
-                              AppNavigation.push(context, AppRoutes.scalers),
-                        ),
-                        const _Gap(),
-                        _HowItWorks(key: howItWorksKey),
-                        const SizedBox(height: 24),
-                        FilledButton(
-                          key: const Key('business-after-proof-cta'),
-                          onPressed: () => _start(context, 'business'),
-                          child: const Text('Build My First Campaign'),
-                        ),
-                        const _Gap(),
-                        const _BusinessExperience(),
-                        const _Gap(),
-                        const _FieldCampaigns(),
-                        const _Gap(),
-                        _ScalerExperience(
-                          onStart: () => _start(context, 'scaler'),
-                        ),
-                        const _Gap(),
-                        const _ManagedGrowth(),
-                        const _Gap(),
-                        const CustomerCapabilityStatus(
-                          foregroundColor: Colors.white,
-                        ),
-                        const _Gap(),
-                        _Pricing(
-                          key: pricingKey,
-                          onGetStarted: () => _start(context, 'business'),
-                          onCompare: () =>
-                              AppNavigation.push(context, AppRoutes.login),
-                        ),
-                        const _Gap(),
-                        _FinalCta(
-                          onBusiness: () => _start(context, 'business'),
-                          onScaler: () => _start(context, 'scaler'),
-                          onLogin: () =>
-                              AppNavigation.push(context, AppRoutes.login),
-                        ),
+                        if (page == '/how-it-works')
+                          _HowItWorks(key: howItWorksKey),
+                        if (page == '/pricing')
+                          _Pricing(
+                            key: pricingKey,
+                            onGetStarted: () => _start(context, 'business'),
+                            onCompare: () =>
+                                AppNavigation.push(context, AppRoutes.login),
+                          ),
+                        if (page == null) ...[
+                          _Hero(
+                            onBusiness: () => AppNavigation.push(
+                              context,
+                              AppRoutes.businesses,
+                            ),
+                            onScaler: () =>
+                                AppNavigation.push(context, AppRoutes.scalers),
+                          ),
+                          const _Gap(),
+                          _HowItWorks(key: howItWorksKey),
+                          const SizedBox(height: 24),
+                          FilledButton(
+                            key: const Key('business-after-proof-cta'),
+                            onPressed: () => _start(context, 'business'),
+                            child: const Text('Build My First Campaign'),
+                          ),
+                          const _Gap(),
+                          const _BusinessExperience(),
+                          const _Gap(),
+                          const _FieldCampaigns(),
+                          const _Gap(),
+                          _ScalerExperience(
+                            onStart: () => _start(context, 'scaler'),
+                          ),
+                          const _Gap(),
+                          const _ManagedGrowth(),
+                          const _Gap(),
+                          const CustomerCapabilityStatus(
+                            foregroundColor: Colors.white,
+                          ),
+                          const _Gap(),
+                          _Pricing(
+                            key: pricingKey,
+                            onGetStarted: () => _start(context, 'business'),
+                            onCompare: () =>
+                                AppNavigation.push(context, AppRoutes.login),
+                          ),
+                          const _Gap(),
+                          _FinalCta(
+                            onBusiness: () => _start(context, 'business'),
+                            onScaler: () => _start(context, 'scaler'),
+                            onLogin: () =>
+                                AppNavigation.push(context, AppRoutes.login),
+                          ),
+                        ],
                         const SizedBox(height: 48),
                         const PublicLegalFooter(),
                       ],
@@ -147,7 +151,7 @@ class _Navigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final showLinks = constraints.maxWidth >= 760;
+      final showLinks = constraints.maxWidth >= 1100;
       return SizedBox(
         width: double.infinity,
         child: Wrap(
@@ -156,6 +160,28 @@ class _Navigation extends StatelessWidget {
           runSpacing: 8,
           children: [
             const SizedBox(width: 190, child: ScaledCircleBrand(compact: true)),
+            if (!showLinks)
+              PopupMenuButton<String>(
+                tooltip: 'Public navigation',
+                icon: const Icon(Icons.menu, semanticLabel: 'Menu'),
+                onSelected: (path) => openPublicPage(context, path),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: '/businesses',
+                    child: Text('For Businesses'),
+                  ),
+                  PopupMenuItem(value: '/scalers', child: Text('For Scalers')),
+                  PopupMenuItem(
+                    value: '/how-it-works',
+                    child: Text('How It Works'),
+                  ),
+                  PopupMenuItem(value: '/pricing', child: Text('Pricing')),
+                  PopupMenuItem(
+                    value: '/referrals',
+                    child: Text('Referral Program'),
+                  ),
+                ],
+              ),
             if (showLinks)
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -164,6 +190,10 @@ class _Navigation extends StatelessWidget {
                   _NavText('For Scalers', onPressed: onScaler),
                   _NavText('How It Works', onPressed: onHowItWorks),
                   _NavText('Pricing', onPressed: onPricing),
+                  _NavText(
+                    'Referrals',
+                    onPressed: () => openPublicPage(context, '/referrals'),
+                  ),
                 ],
               ),
             Wrap(
@@ -547,7 +577,9 @@ class _Pricing extends StatelessWidget {
             key: Key('public-plan-$planId'),
             name: name.toUpperCase(),
             price: '\$${price.toStringAsFixed(0)}/month',
-            badge: planId == 'managed_growth' ? 'PRIVATE BETA / INVITE ONLY' : null,
+            badge: planId == 'managed_growth'
+                ? 'PRIVATE BETA / INVITE ONLY'
+                : null,
             body: _descriptions[planId]!,
             features: _highlights(planId, plan),
             onGetStarted: planId == 'managed_growth' ? null : onGetStarted,
@@ -887,7 +919,11 @@ class _Price extends StatelessWidget {
                 backgroundColor: _green,
                 foregroundColor: _bg,
               ),
-              child: Text(onGetStarted == null ? 'Private Beta / Coming Soon' : 'Get Started'),
+              child: Text(
+                onGetStarted == null
+                    ? 'Private Beta / Coming Soon'
+                    : 'Get Started',
+              ),
             ),
           ),
         ],

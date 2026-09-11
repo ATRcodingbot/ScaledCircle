@@ -5,6 +5,7 @@ import 'public_legal_footer.dart';
 import '../../models/user/user_profile.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
+import '../../navigation/public_page_navigation.dart';
 import '../auth/register_screen.dart';
 import 'waitlist_screen.dart';
 
@@ -82,7 +83,7 @@ class ScaledCircleBrand extends StatelessWidget {
         button: true,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => AppNavigation.replace(context, '/'),
+          onTap: () => openPublicPage(context, '/'),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
             child: Image.asset(
@@ -108,7 +109,7 @@ class PublicTopNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, _) {
-      final wide = MediaQuery.sizeOf(context).width >= 820;
+      final wide = MediaQuery.sizeOf(context).width >= 1100;
       if (!wide) {
         return Container(
           color: const Color(0xF2020914),
@@ -116,10 +117,33 @@ class PublicTopNavigation extends StatelessWidget {
           child: Row(
             children: [
               const Expanded(child: ScaledCircleBrand(compact: true)),
-              IconButton(
-                tooltip: 'Log In',
-                onPressed: () => AppNavigation.push(context, AppRoutes.login),
-                icon: const Icon(Icons.login, color: publicMuted),
+              PopupMenuButton<String>(
+                tooltip: 'Public navigation',
+                icon: const Icon(Icons.menu, color: publicMuted),
+                onSelected: (route) {
+                  if (route == AppRoutes.login) {
+                    AppNavigation.push(context, route);
+                  } else {
+                    openPublicPage(context, route);
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: '/businesses',
+                    child: Text('For Businesses'),
+                  ),
+                  PopupMenuItem(value: '/scalers', child: Text('For Scalers')),
+                  PopupMenuItem(
+                    value: '/how-it-works',
+                    child: Text('How It Works'),
+                  ),
+                  PopupMenuItem(value: '/pricing', child: Text('Pricing')),
+                  PopupMenuItem(
+                    value: '/referrals',
+                    child: Text('Referral Program'),
+                  ),
+                  PopupMenuItem(value: '/login', child: Text('Log In')),
+                ],
               ),
               FilledButton(
                 onPressed: () => openPublicRoleChooser(context),
@@ -145,8 +169,9 @@ class PublicTopNavigation extends StatelessWidget {
             const Spacer(),
             PublicNavLink(label: 'For Businesses', route: AppRoutes.businesses),
             PublicNavLink(label: 'For Scalers', route: AppRoutes.scalers),
-            const PublicNavLink(label: 'How It Works', route: '/#how'),
-            const PublicNavLink(label: 'Pricing', route: '/#pricing'),
+            const PublicNavLink(label: 'How It Works', route: '/how-it-works'),
+            const PublicNavLink(label: 'Pricing', route: '/pricing'),
+            const PublicNavLink(label: 'Referrals', route: '/referrals'),
             TextButton(
               onPressed: () => AppNavigation.push(context, AppRoutes.login),
               child: const Text('Log In'),
@@ -177,13 +202,7 @@ class PublicNavLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TextButton(
-    onPressed: () {
-      if (route.startsWith('/#')) {
-        AppNavigation.replace(context, '/');
-      } else {
-        AppNavigation.push(context, route);
-      }
-    },
+    onPressed: () => openPublicPage(context, route),
     child: Text(label, style: const TextStyle(color: publicMuted)),
   );
 }
