@@ -2,6 +2,14 @@
 const test=require("node:test"),assert=require("node:assert/strict");
 const {project,load}=require("../functions-social-operations/social_runtime_status");
 const {customerState}=require('../functions-social-operations/social_runtime_status');
+test('approved strategy moves to draft-post review without approving or scheduling posts',()=>{
+ const plans=[{status:'approved',planVersion:1,approvedVersion:1,items:Array.from({length:8},()=>({variants:[{status:'ready_for_review'},{status:'ready_for_review'}]}))}];
+ const before=structuredClone(plans),s=customerState({plans});
+ assert.equal(s.state,'posts_need_review');assert.equal(s.title,'Plan approved — posts need review');
+ assert.deepEqual(s.counters,{draftPlans:0,approvedPlans:1,draftPosts:8,scheduled:0,published:0});
+ assert.equal(s.publicationAuthorizedByStatus,false);assert.deepEqual(plans,before);
+ assert.equal(customerState({plans:[{...plans[0],approvedVersion:0}]}).state,'needs_review');
+});
 test('saved draft plus write permission means review, never publication approval',()=>{
  const input={plans:[{planVersion:1,approvedVersion:null,status:'ready_for_review'}],connections:[{status:'connected_write'}]};
  const original=structuredClone(input),s=customerState(input);assert.equal(s.state,'needs_review');assert.equal(s.counters.scheduled,0);assert.equal(s.publicationAuthorizedByStatus,false);assert.deepEqual(input,original);

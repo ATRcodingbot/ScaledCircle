@@ -37,7 +37,11 @@ function customerState({jobs = [], plans = [], connections = [], now = Date.now(
   const published = jobs.filter(j => j.providerPostId || j.providerMediaId);
   const scheduled = jobs.filter(j => ['approved','scheduled','queued'].includes(j.status) && iso(j.scheduledFor));
   const failed = jobs.some(j => ['failed','unknown_outcome','hold','reconciliation_required','blocked'].includes(j.status));
-  const counters = {draftPlans: draftPlans.length, scheduled: scheduled.length, published: published.length};
+  const draftPosts = plans.flatMap(p => Array.isArray(p.items) ? p.items : []).filter(item => {
+    const variants = Array.isArray(item.variants) ? item.variants : [];
+    return variants.length ? variants.some(v => !['approved','scheduled','published'].includes(v.status)) : !['approved','scheduled','published'].includes(item.status);
+  }).length;
+  const counters = {draftPlans: draftPlans.length, approvedPlans: plans.length - draftPlans.length, draftPosts, scheduled: scheduled.length, published: published.length};
   const result = (state, title, description) => ({state,title,description,counters,publicationAuthorizedByStatus:false});
   if (failed) return result('blocked','Needs attention','A publication needs review. Check its saved outcome before trying again.');
   if (jobs.some(j => ['publishing','executing','running'].includes(j.status))) return result('publishing','Publishing','Approved content is being processed. Publication is not confirmed yet.');
@@ -47,7 +51,7 @@ function customerState({jobs = [], plans = [], connections = [], now = Date.now(
     : result('scheduled','Scheduled','Approved work has a saved publication time.');
   if (draftPlans.length) return result('needs_review','Needs your review','Your saved strategy and draft posts need your review. Nothing is scheduled.');
   if (published.length) return result('published_monitoring','Published / Monitoring','Publication evidence is recorded. Review available results without assuming leads or revenue.');
-  if (plans.length) return result('waiting_for_approval','Waiting for approval','Plan approval does not approve every post. Review exact content and creative before scheduling.');
+  if (plans.length) return result(draftPosts ? 'posts_need_review' : 'plan_approved', draftPosts ? 'Plan approved — posts need review' : 'Plan approved', draftPosts ? `${draftPosts} draft posts need content review. Nothing is scheduled. Plan approval does not approve individual posts.` : 'Strategy approval is recorded. Post approval, scheduling and publication remain separate.');
   if (!connections.some(c => ['connected_read_only','connected_write'].includes(c.status)))
     return result('needs_permission','Needs permission','Connect your Business accounts to prepare your Social plan.');
   return result('ready','Ready to plan','Your connected accounts are ready for a draft strategy. Nothing is scheduled.');

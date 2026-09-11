@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'social_connection_card.dart';
+import '../models/social_plan_presentation.dart';
 
 class CustomerSocialPlanCard extends StatelessWidget {
   const CustomerSocialPlanCard({
@@ -21,7 +22,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
         initiallyExpanded: initiallyExpanded,
         title: Text(plan['goal']?.toString() ?? '30-day Social strategy'),
         subtitle: Text(
-          plan['status'] == 'approved'
+          socialPlanApproved(plan)
               ? 'Plan approved · Post approval and scheduling are separate'
               : 'Draft · Needs your review',
         ),
@@ -54,7 +55,9 @@ class CustomerSocialPlanCard extends StatelessWidget {
               ),
               expandedCrossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Why: ${item['goal']}'),
+                Text(
+                  'Objective / why recommended: ${item['goal'] ?? 'Review the proposed purpose'}',
+                ),
                 for (final v
                     in (item['variants'] as List? ?? []).whereType<Map>())
                   Padding(
@@ -75,12 +78,12 @@ class CustomerSocialPlanCard extends StatelessWidget {
                           'Creative brief: ${v['mediaRequirement'] ?? 'Needs approved media'}',
                         ),
                         Text(
-                          'Post approval: ${v['status'] == 'approved' ? 'Approved version' : 'Needs content review'}',
+                          'Post status: ${socialPostStateLabel(v['status'])}',
                         ),
                         Text(
                           v['mediaRequirement'] == 'none'
                               ? 'Creative status: Text-only. No media required by this draft.'
-                              : 'Creative status: Brief prepared. Finished media must be verified before scheduling.',
+                              : 'Creative not prepared yet. Finished media preparation is not available in this workflow yet; scheduling remains unavailable.',
                         ),
                         Text(
                           'Measurement: ${v['responseAssetRequirement'] ?? 'No measurement recorded yet'}',
@@ -97,14 +100,14 @@ class CustomerSocialPlanCard extends StatelessWidget {
               child: const Text('Approve 30-Day Plan'),
             ),
           ],
-          if (plan['status'] == 'approved' && onReviewPosts != null) ...[
+          if (socialPlanApproved(plan) && onReviewPosts != null) ...[
             const SizedBox(height: 16),
             const Text(
               '30-Day Plan Approved. Each post still needs content review; approval has not scheduled anything.',
             ),
             FilledButton(
               onPressed: onReviewPosts,
-              child: const Text('Review Posts'),
+              child: const Text('Review Draft Posts'),
             ),
           ],
         ],

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/customer_social_plan_card.dart';
+import '../../widgets/social_plan_overview.dart';
+import '../../models/social_plan_presentation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/attribution_service.dart';
@@ -24,6 +26,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   SocialOperationsWorkspace? _workspace;
   Map<String, dynamic>? _firstX;
   bool _loading = true;
+  int _loadGeneration = 0;
+  int _approvalReadAttempts = 0;
+  Timer? _approvalRefresh;
+  final _approvalReadback = SocialPlanApprovalReadback();
   bool _reviewingContent = false;
   bool _ratingPosts = false;
   bool _aligningPlan = false;
@@ -45,10 +51,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   @override
   void dispose() {
     _connectionRefresh?.cancel();
+    _approvalRefresh?.cancel();
     super.dispose();
   }
 
   Future<void> _load({bool quiet = false}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       if (!quiet) _loading = true;
       _error = null;
@@ -59,8 +67,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       if (value.firstXCertificationAvailable) {
         firstX = await _service.firstXPublishCertification();
       }
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
+          _approvalReadback.reconcile(value.plans);
           _workspace = value;
           _firstX = firstX;
         });
@@ -71,18 +80,34 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               (c['pendingAttemptId']?.toString().isNotEmpty ?? false),
         )) {
           _connectionRefresh = Timer(const Duration(seconds: 30), () {
-            if (mounted) _load(quiet: true);
+            if (mounted && generation == _loadGeneration) _load(quiet: true);
           });
         }
       }
     } on FirebaseFunctionsException catch (error) {
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(
           () => _error = error.message ?? 'Unable to load Social Operations.',
         );
       }
+    } catch (_) {
+      if (mounted && generation == _loadGeneration) {
+        setState(
+          () => _error =
+              'Unable to confirm the latest Social status. Try refreshing.',
+        );
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _loading = false);
+        _approvalRefresh?.cancel();
+        if (_approvalReadback.pending && _approvalReadAttempts < 3) {
+          _approvalReadAttempts++;
+          _approvalRefresh = Timer(const Duration(seconds: 2), () {
+            if (mounted) _load(quiet: true);
+          });
+        }
+      }
     }
   }
 
@@ -206,7 +231,15 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         planId: plan['id']?.toString() ?? '',
         planVersion: (plan['planVersion'] as num?)?.toInt() ?? 0,
       );
-      await _load();
+      if (!mounted) return;
+      setState(() {
+        _approvalReadback.acknowledge(
+          plan['id'].toString(),
+          (plan['planVersion'] as num).toInt(),
+        );
+        _approvalReadAttempts = 0;
+      });
+      await _load(quiet: true);
       if (mounted && plan['strategy'] is Map) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -214,7 +247,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               '30-Day Plan Approved. Review the draft posts next.',
             ),
             action: SnackBarAction(
-              label: 'Review Posts',
+              label: 'Review Draft Posts',
               onPressed: () {
                 final workspace = _workspace;
                 if (workspace != null) _reviewSavedPlans(workspace);
@@ -886,6 +919,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (_approvalReadback.pending)
+                      const Text(
+                        'Plan approved — status refresh pending. Your approval was saved.',
+                      ),
                     Text(_error!, textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     FilledButton(
@@ -923,7 +960,16 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               ),
               const SizedBox(height: 16),
               SocialRuntimeStatusCard(
-                status: workspace.runtimeStatus,
+                status: _approvalReadback.pending
+                    ? {
+                        'available': true,
+                        'summary': {
+                          'title': 'Plan approved — refreshing status…',
+                          'description':
+                              'Your strategy approval succeeded. We are confirming the latest post-review state.',
+                        },
+                      }
+                    : workspace.runtimeStatus,
                 onRefresh: _load,
                 compact: true,
               ),
@@ -1310,7 +1356,14 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('Review 30-Day Plan'),
+                  title: Text(
+                    SocialPlanPresentation(
+                          workspace.plans,
+                          workspace.runtimeStatus,
+                        ).allApproved
+                        ? 'Review Draft Posts'
+                        : 'Review 30-Day Plan',
+                  ),
                   trailing: IconButton(
                     tooltip: 'Close review',
                     onPressed: () => Navigator.pop(context),
@@ -1350,6 +1403,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       );
 
   Widget _plans(SocialOperationsWorkspace workspace) {
+    final presentation = SocialPlanPresentation(
+      workspace.plans,
+      workspace.runtimeStatus,
+    );
     final alignment = workspace.internalPlanAlignment;
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
@@ -1380,55 +1437,38 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             icon: const Icon(Icons.auto_awesome_outlined),
             label: const Text('Prepare my 30-day draft strategy'),
           ),
-        for (final plan in workspace.plans)
-          if (plan['strategy'] is Map)
-            CustomerSocialPlanCard(
-              plan: plan,
-              onApprove: () => _approvePlan(plan),
-              onReviewPosts: () => _reviewSavedPlans(workspace),
-            )
-          else
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.calendar_month_outlined),
-                title: Text(plan['goal']?.toString() ?? '30-day content plan'),
-                subtitle: Text(
-                  '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',
-                ),
-                trailing: plan['status'] == 'ready_for_review'
-                    ? FilledButton.tonal(
-                        onPressed: () => _approvePlan(plan),
-                        child: const Text('Review & Approve'),
-                      )
-                    : const Chip(label: Text('APPROVED')),
-              ),
-            ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  '${workspace.plans.length} saved plan${workspace.plans.length == 1 ? '' : 's'}',
-                ),
-                const Text(
-                  'Platform-specific versions remain drafts until explicitly approved.',
-                ),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: workspace.plans.isEmpty
-                      ? _createPlan
-                      : () => _reviewSavedPlans(workspace),
-                  child: Text(
-                    workspace.plans.isEmpty
-                        ? 'Start Plan'
-                        : 'Review 30-Day Plan',
+        if (!_approvalReadback.pending)
+          for (final plan in workspace.plans)
+            if (plan['strategy'] is Map)
+              CustomerSocialPlanCard(
+                plan: plan,
+                onApprove: () => _approvePlan(plan),
+                onReviewPosts: () => _reviewSavedPlans(workspace),
+              )
+            else
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.calendar_month_outlined),
+                  title: Text(
+                    plan['goal']?.toString() ?? '30-day content plan',
                   ),
+                  subtitle: Text(
+                    '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',
+                  ),
+                  trailing: plan['status'] == 'ready_for_review'
+                      ? FilledButton.tonal(
+                          onPressed: () => _approvePlan(plan),
+                          child: const Text('Review & Approve'),
+                        )
+                      : const Chip(label: Text('APPROVED')),
                 ),
-              ],
-            ),
-          ),
+              ),
+        SocialPlanOverview(
+          presentation: presentation,
+          refreshingApproval: _approvalReadback.pending,
+          onReview: workspace.plans.isEmpty
+              ? _createPlan
+              : () => _reviewSavedPlans(workspace),
         ),
         if (alignment != null)
           Card(
@@ -1475,6 +1515,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   }
 
   Widget _contentHealth(SocialOperationsWorkspace workspace) {
+    final presentation = SocialPlanPresentation(
+      workspace.plans,
+      workspace.runtimeStatus,
+    );
     final health = workspace.contentHealth;
     final scheduled = (health['scheduled'] as List? ?? const [])
         .whereType<Map>()
@@ -1498,7 +1542,14 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               Icons.warning_amber,
             ),
             _healthMetric('Strong Posts', strong, Icons.star_outline),
-            _healthMetric('Scheduled', scheduled.length, Icons.schedule),
+            if (presentation.count('scheduled') != null)
+              _healthMetric(
+                'Scheduled',
+                presentation.count('scheduled')!,
+                Icons.schedule,
+              )
+            else
+              const Text('Scheduled: Not confirmed'),
             _healthMetric('Past Posts', pastPosts.length, Icons.history),
           ],
         ),
@@ -1522,32 +1573,37 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    FilledButton.tonalIcon(
-                      onPressed: _reviewingContent
-                          ? null
-                          : _reviewScheduledContent,
-                      icon: const Icon(Icons.fact_check_outlined),
-                      label: Text(
-                        _reviewingContent
-                            ? 'Reviewing…'
-                            : 'Review scheduled content',
-                      ),
-                    ),
-                    PopupMenuButton<int>(
-                      enabled: !_ratingPosts,
-                      onSelected: _ratePastPosts,
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 7, child: Text('Last 7 days')),
-                        PopupMenuItem(value: 30, child: Text('Last 30 days')),
-                        PopupMenuItem(value: 90, child: Text('Last 90 days')),
-                      ],
-                      child: Chip(
-                        avatar: const Icon(Icons.analytics_outlined),
+                    if (presentation.contentAction != null)
+                      FilledButton.tonalIcon(
+                        onPressed: _reviewingContent
+                            ? null
+                            : (presentation.count('scheduled') ?? 0) > 0
+                            ? _reviewScheduledContent
+                            : () => _reviewSavedPlans(workspace),
+                        icon: const Icon(Icons.fact_check_outlined),
                         label: Text(
-                          _ratingPosts ? 'Reviewing…' : 'Rate past posts',
+                          _reviewingContent
+                              ? 'Reviewing…'
+                              : presentation.contentAction!,
                         ),
                       ),
-                    ),
+                    if (pastPosts.isNotEmpty ||
+                        (presentation.count('published') ?? 0) > 0)
+                      PopupMenuButton<int>(
+                        enabled: !_ratingPosts,
+                        onSelected: _ratePastPosts,
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 7, child: Text('Last 7 days')),
+                          PopupMenuItem(value: 30, child: Text('Last 30 days')),
+                          PopupMenuItem(value: 90, child: Text('Last 90 days')),
+                        ],
+                        child: Chip(
+                          avatar: const Icon(Icons.analytics_outlined),
+                          label: Text(
+                            _ratingPosts ? 'Reviewing…' : 'Rate past posts',
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ],
