@@ -30,7 +30,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   const [a,c,p,s,h,v,q]=(await Promise.all(refs.map(read))).map(x=>x.data());
   const customer=a?.schemaVersion==='CustomerPostApprovalV1';
   if(customer) {
-   require("./social_customer_scheduling").authorizeRuntime({approval:a,connection:c,config:p,uid:job.businessUid,
+   require("./social_customer_scheduling").authorizeRuntime({approval:a,connection:require("./social_customer_scheduling").connectionFromOwnedPath(c,job.businessUid),config:p,uid:job.businessUid,
     provider:job.provider,environment,enabledUids:customerUids});
    const subscription=(await read(db.doc('businessSubscriptions/'+job.businessUid))).data();
    if(!require("./subscription_entitlements").hasActiveScaleEntitlement(subscription))throw Error('meta_customer_entitlement_required');

@@ -13,7 +13,7 @@ test('real transaction: one exact approval/job on concurrent taps, no plan/versi
  const plan={...f.plan,businessUid:uid},item={...f.item,businessUid:uid,planId:'customer_plan'};
  const write=(path,value)=>db.doc(path).set(value);
  await Promise.all([write('socialContentPlans/customer_plan',plan),write('socialContentItems/'+itemId,item),
-  write('socialContentVersions/'+itemId+'_v1',version),write(`socialConnections/${uid}/providers/facebook`,{...f.connection,businessUid:uid,grantedScopes:[...f.connection.grantedScopes,'public_profile']}),
+  write('socialContentVersions/'+itemId+'_v1',version),write(`socialConnections/${uid}/providers/facebook`,{...f.connection,businessUid:null,grantedScopes:[...f.connection.grantedScopes,'public_profile']}),
   write('socialContentQualityAssessments/'+itemId+'_v1',{...f.quality,businessUid:uid}),write('agentHealth/'+uid,f.health),
   write('socialProviderConfigs/production_meta',f.config),write('businessSubscriptions/'+uid,f.entitlement)]);
  const store=createStore({db,enabledUids:[uid],environment:'production',now:()=>f.now});

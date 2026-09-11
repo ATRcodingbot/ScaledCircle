@@ -3,6 +3,12 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {readiness,authorizeRuntime}=require('../functions-social-operations/social_customer_scheduling');
 const {recommend}=require('../functions-social-operations/social_customer_cadence');
 const scopes=require('../functions-social-operations/social_oauth').META_PUBLISH_SCOPES;
+test('owned connection path supplies legacy identity but never overrides a conflicting tenant',()=>{
+ const {connectionFromOwnedPath}=require('../functions-social-operations/social_customer_scheduling');
+ assert.deepEqual(connectionFromOwnedPath({providerUserId:'123'},'owner'),{providerUserId:'123',businessUid:'owner'});
+ assert.throws(()=>connectionFromOwnedPath({businessUid:'other'},'owner'),/tenant_mismatch/);
+ assert.equal(connectionFromOwnedPath(undefined,'owner'),undefined);
+});
 function fixture(){return {uid:'owner',provider:'facebook',environment:'production',now:1900000000000,
  plan:{businessUid:'owner',status:'approved',planVersion:1,approvedVersion:1},
  item:{businessUid:'owner',planId:'plan',currentVersion:1},

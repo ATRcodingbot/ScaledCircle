@@ -61,6 +61,12 @@ function hasPublishingScopes(connection,provider) {
     provider==='instagram'?['pages_read_engagement','instagram_basic','instagram_content_publish']:null;
   return !!required && Array.isArray(connection?.grantedScopes) && required.every(scope=>connection.grantedScopes.includes(scope));
 }
+// Call only after reading the exact server-selected tenant/provider document.
+function connectionFromOwnedPath(record, uid) {
+  if (!record) return record;
+  if (record.businessUid != null && record.businessUid !== uid) throw Error('meta_connection_tenant_mismatch');
+  return {...record,businessUid:uid};
+}
 function reviewDigest(ctx,bindingHash) {
   const c=ctx.connection||{};
   return growth.hash({uid:ctx.uid,provider:ctx.provider,bindingHash,planVersion:ctx.plan?.planVersion,
@@ -85,7 +91,7 @@ function createStore({db, now=Date.now, enabledUids=[], environment}) {
       job.versionId?.startsWith(input.itemId+'_v') && job.versionId!==versionId && !['published','canceled'].includes(job.status);});
     const version=v.data(),variant=version?.variants?.find(v=>v.provider===input.provider);
     const revision=variant?.mediaRevisionId?(await read(db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`))).data():null;
-    return {uid,plan:p.data(),item,version,versionId,itemRef,provider:input.provider,connection:c.data(),quality:q.data(),
+    return {uid,plan:p.data(),item,version,versionId,itemRef,provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality:q.data(),
       conflictingSchedule,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
   }
   return {
@@ -139,4 +145,4 @@ function authorizeRuntime({approval,connection,config,uid,provider,environment,e
     throw Error('meta_customer_authority_changed');
   }
 }
-module.exports={SCHEMA,readiness,createStore,authorizeRuntime,hasPublishingScopes,messages};
+module.exports={SCHEMA,readiness,createStore,authorizeRuntime,hasPublishingScopes,connectionFromOwnedPath,messages};
