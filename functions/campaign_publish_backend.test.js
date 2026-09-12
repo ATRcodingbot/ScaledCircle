@@ -9,6 +9,7 @@ process.env.APP_ENV = "staging";
 const fundingRequire = createRequire(require.resolve("../functions-campaign-funding/index.js"));
 const fn = fundingRequire("./index.js").publishFundedCampaign;
 const db = fundingRequire("firebase-admin/firestore").getFirestore();
+const originalFetch = global.fetch;
 before(async () => {
  if(!process.env.FIREBASE_AUTH_EMULATOR_HOST)throw Error('Auth emulator required');
  const auth=fundingRequire('firebase-admin/auth').getAuth();
@@ -16,13 +17,21 @@ before(async () => {
   try {await auth.createUser({uid,email:`${uid}@example.test`,emailVerified:true});}
   catch(e){if(e.code!=='auth/uid-already-exists')throw e;}
  }
+ global.fetch = async (url, options) => {
+  if (String(url).startsWith('https://tigerweb.geo.census.gov/'))
+   return {ok:true,json:async()=>({features:[{attributes:{STATE:'24'}}]})};
+  return originalFetch(url, options);
+ };
 });
-after(async () => Promise.all(fundingRequire("firebase-admin/app").getApps().map((app) => app.delete())));
+after(async () => {global.fetch=originalFetch;await Promise.all(fundingRequire("firebase-admin/app").getApps().map((app) => app.delete()));});
 const call = (id, uid = "publish_business") => fn.run({data: {campaignId: id},
   auth: {uid, token: {email_verified: true}}});
 async function seed(id, overrides = {}, zoneOverrides = {}) {
   await db.doc("users/publish_business").set({role: "business", active: true});
   await db.doc("users/publish_other").set({role: "business", active: true});
+  await db.doc('marketRollout/config').set(require('./market_rollout').initialConfig());
+  await db.doc('marketProfiles/publish_business').set({stateId:'us_census_tigerweb:state:24',
+    role:'business',selectionSource:'explicit_user_selection'});
   await db.doc(`campaigns/${id}`).set({businessId: "publish_business", status: "draft",
     fundingStatus: "funded", fundingPaymentId: id, basePay: 15, ...overrides});
   await db.doc(`campaignPayments/${id}`).set({campaignId: id, businessUid: "publish_business",

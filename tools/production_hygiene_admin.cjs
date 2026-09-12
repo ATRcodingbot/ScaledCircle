@@ -63,7 +63,8 @@ function planSnapshot(snapshot, review) {
       assert.ok(/test/i.test([user.email, user.displayName].join(' ')), 'No test identity match');
       assert.ok(!Object.keys(user.customClaims || {}).length, 'Claim-bearing account is held');
       assert.ok(!hasProviderReference(user.uid, user.email), 'LIVE provider history is held');
-      const refs = rows.filter(row => related(row, user.uid));
+      const refs = rows.filter(row => related(row, user.uid) ||
+        JSON.stringify(row.data).toLowerCase().includes(user.email.toLowerCase()));
       for (const row of refs) {
         if (row.path === 'users/' + user.uid) {
           assert.ok(['scaler', 'business'].includes(row.data.role), 'Unknown/admin profile is held');
@@ -72,6 +73,18 @@ function planSnapshot(snapshot, review) {
           for (const key of ['businessId', 'workspaceId', 'ownerUid', 'ownerId'])
             assert.ok(!row.data[key] || row.data[key] === user.uid, 'Cross-workspace profile is held');
           assert.ok(!financialValue(row.data), 'Profile economic binding is held');
+        } else if (row.path === 'wallets/' + user.uid &&
+            candidate.zeroWalletDisposition === 'delete_verified_empty') {
+          assert.equal(row.data.ownerId, user.uid, 'Wallet owner mismatch');
+          assert.equal(row.data.ownerType, 'business', 'Only the reviewed empty Business Wallet is eligible');
+          const zeroFields = ['availableBalance','availableCredits','balance','pendingBalance',
+            'promotionalCreditsGranted','reservedCredits'];
+          const allowed = new Set([...zeroFields,'ownerId','ownerType','createdAt','updatedAt']);
+          assert.ok(Object.keys(row.data).every(key => allowed.has(key)),
+            'Unknown Wallet metadata or economic history is held');
+          for (const key of zeroFields) assert.equal(row.data[key], 0, 'Wallet must be exactly empty: ' + key);
+          assert.ok(!rows.some(other => other.path.startsWith(row.path + '/')),
+            'Nested Wallet history must be retained');
         } else if (row.path.startsWith('applications/')) {
           assertPendingApplication(row, user.uid);
         } else {
@@ -80,7 +93,8 @@ function planSnapshot(snapshot, review) {
       }
       refs.forEach(row => deletes.set(row.path, row));
       acceptedAccounts.push({uid:user.uid, email:user.email, creationTime:user.creationTime,
-        lastSignInTime:user.lastSignInTime, customClaims:user.customClaims || {}});
+        lastSignInTime:user.lastSignInTime, customClaims:user.customClaims || {},
+        ...(candidate.zeroWalletDisposition ? {zeroWalletDisposition:candidate.zeroWalletDisposition} : {})});
     } catch (error) { holds.push({kind:'account', id:candidate.uid, reason:error.message}); }
   }
   for (const candidate of review.campaigns) {
@@ -172,6 +186,17 @@ async function inventory(db, auth) {
   return {rows, users, collections};
 }
 
+// Reuse the existing Auth quiescence mechanism when economic history must stay.
+// This is not account deletion or a profile/Wallet/contract rewrite.
+async function quiesceReviewedAccountAuth(auth, user) {
+  const current=await auth.getUser(user.uid);
+  assert.equal(current.email,user.email,'Reviewed Auth identity changed');
+  assert.equal(current.metadata.creationTime,user.creationTime,'Reviewed account was replaced');
+  await auth.updateUser(user.uid,{disabled:true});
+  await auth.revokeRefreshTokens(user.uid);
+  assert.equal((await auth.getUser(user.uid)).disabled,true,'Auth quiescence did not persist');
+}
+
 function createService({db, auth, FieldValue, projectId, readProvider, review, actor}) {
   assert.equal(projectId, 'scaled-circle');
   assert.equal(actor.kind, 'google_iam_admin');
@@ -210,8 +235,7 @@ function createService({db, auth, FieldValue, projectId, readProvider, review, a
         reviewDigest:digest(review), plan, occurredAt:timestamp()});
       // Quiesce only the reviewed synthetic identities. A failure leaves a recoverable hold.
       for (const user of plan.accounts) {
-        await auth.updateUser(user.uid, {disabled:true});
-        await auth.revokeRefreshTokens(user.uid);
+        await quiesceReviewedAccountAuth(auth,user);
       }
       const fresh = await preview();
       assert.equal(fresh.plan.seal, expectedSeal, 'State changed while disabling synthetic accounts');
@@ -320,10 +344,32 @@ function draftArchivePlan(snapshot, review) {
   return {...plan,seal:digest(plan)};
 }
 
-function createDraftArchiveService({db,auth,FieldValue,projectId,readProvider,review,actor}) {
+function legacyVisibilityArchivePlan(snapshot, review) {
+  assert.equal(snapshot.projectId,'scaled-circle');assert.equal(review.projectId,snapshot.projectId);
+  assert.equal(snapshot.provider.mode,'live');assert.equal(snapshot.provider.complete,true);
+  assert.equal(snapshot.provider.accountId,review.stripeAccountId);
+  assert.ok(review.reason && review.archives.length===1,'One exact reviewed legacy opportunity only');
+  const target=review.archives[0];assert.equal(target.reviewedSynthetic,true);assert.ok(target.evidence);
+  assert.equal(target.preserveOutstandingObligations,true,'Outstanding work must remain explicitly held');
+  const source=snapshot.rows.find(x=>x.path==='campaigns/'+target.id);assert.ok(source);
+  assert.equal(source.data.businessId,target.businessId);assert.equal(source.data.status,'open');
+  const refs=snapshot.rows.filter(x=>!retainedAudit(x)&&related(x,target.id));
+  for(const row of refs) {
+    for(const [key,value] of Object.entries(row.data))
+      if(/activeTrackingSession(Id|Pointer)?$/i.test(key))assert.ok(!value,'Active tracking is held');
+    if(row.path.startsWith('trackingSessions/'))assert.ok(['completed','cancelled','canceled','closed','finalized'].includes(row.data.status),'Unclosed tracking is held');
+  }
+  const record={id:target.id,businessId:target.businessId,previousStatus:source.data.status,
+    obligations:'unresolved_preserved',refs:refs.map(x=>({path:x.path,hash:digest(x.data),version:x.version})).sort((a,b)=>a.path.localeCompare(b.path))};
+  const plan={version:VERSION,operation:'archive_legacy_launch_visibility_only',projectId:snapshot.projectId,
+    operatorEmail:review.operatorEmail,reason:review.reason,records:[record]};
+  return {...plan,seal:digest(plan)};
+}
+
+function createArchiveService({db,auth,FieldValue,projectId,readProvider,review,actor},planBuilder) {
   assert.equal(projectId,'scaled-circle');assert.equal(actor.kind,'google_iam_admin');
   assert.equal(actor.email,review.operatorEmail);
-  async function preview(){const state=await inventory(db,auth);return draftArchivePlan({
+  async function preview(){const state=await inventory(db,auth);return planBuilder({
     ...state,projectId,provider:await readProvider()},review);}
   async function execute(seal) {
     assert.match(seal,/^[a-f0-9]{64}$/);
@@ -340,7 +386,8 @@ function createDraftArchiveService({db,auth,FieldValue,projectId,readProvider,re
       for(const record of plan.records)tx.update(db.doc('campaigns/'+record.id),{
         status:'archived',archived:true,archivedBy:actor.email,archivedAt:FieldValue.serverTimestamp(),
         updatedAt:FieldValue.serverTimestamp(),marketplaceVisible:false,acceptingApplications:false});
-      tx.create(audit,{schemaVersion:VERSION,eventType:'production_hygiene_drafts_archived',
+      tx.create(audit,{schemaVersion:VERSION,eventType:plan.operation==='archive_legacy_launch_visibility_only'
+        ?'production_hygiene_legacy_discovery_archived':'production_hygiene_drafts_archived',
         operatorEmail:actor.email,plan,occurredAt:FieldValue.serverTimestamp()});
     });
     return {seal,campaignsArchived:plan.records.length,financialRecordsChanged:0};
@@ -348,4 +395,7 @@ function createDraftArchiveService({db,auth,FieldValue,projectId,readProvider,re
   return {preview,execute};
 }
 
-module.exports = {VERSION, digest, planSnapshot, inventory, createService,draftArchivePlan,createDraftArchiveService};
+const createDraftArchiveService=args=>createArchiveService(args,draftArchivePlan);
+const createLegacyVisibilityArchiveService=args=>createArchiveService(args,legacyVisibilityArchivePlan);
+module.exports = {VERSION, digest, planSnapshot, inventory, createService,draftArchivePlan,quiesceReviewedAccountAuth,
+  createDraftArchiveService,legacyVisibilityArchivePlan,createLegacyVisibilityArchiveService};

@@ -1,7 +1,7 @@
 'use strict';
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {VERSION, planSnapshot, createService,draftArchivePlan} = require('./production_hygiene_admin.cjs');
+const {VERSION, planSnapshot, createService,draftArchivePlan,legacyVisibilityArchivePlan} = require('./production_hygiene_admin.cjs');
 const review = () => ({version:VERSION, projectId:'scaled-circle', operatorEmail:'admin@example.invalid',
   stripeAccountId:'acct_fixture', reason:'Reviewed synthetic cleanup',
   protectedEmails:['owner@example.invalid','admin@example.invalid','worker@example.invalid','billing@example.invalid'],
@@ -44,6 +44,24 @@ test('Only owned ordinary profiles and unaccepted applications are removable', (
   assert.equal(planSnapshot(s,review()).deletes.length,2);
   s.rows[1].data.status='accepted';assert.equal(planSnapshot(s,review()).holds.length,1);
   s.rows[1].data.status='rejected';s.rows[1].data.acceptedAt='historical';
+  assert.equal(planSnapshot(s,review()).holds.length,1);
+});
+test('Explicitly reviewed empty Business Wallet can be removed with its synthetic identity only', () => {
+  const r=review(),s=snapshot();r.accounts[0].zeroWalletDisposition='delete_verified_empty';
+  const wallet={ownerId:'test-user',ownerType:'business',availableBalance:0,availableCredits:0,
+    balance:0,pendingBalance:0,promotionalCreditsGranted:0,reservedCredits:0};
+  s.rows=[row('users/test-user',{email:'test@example.invalid',role:'business'}),row('wallets/test-user',wallet)];
+  const p=planSnapshot(s,r);assert.equal(p.holds.length,0);assert.equal(p.accounts.length,1);
+  assert.deepEqual(p.deletes.map(x=>x.path),['users/test-user','wallets/test-user']);
+  for(const key of ['availableBalance','availableCredits','balance','pendingBalance','promotionalCreditsGranted','reservedCredits']) {
+    wallet[key]=1;assert.equal(planSnapshot(s,r).holds.length,1,key);wallet[key]=0;
+  }
+  wallet.stripeCustomerId='cus_history';assert.equal(planSnapshot(s,r).holds.length,1);delete wallet.stripeCustomerId;
+  s.rows.push(row('wallets/test-user/transactions/zero-history',{amount:0}));
+  assert.equal(planSnapshot(s,r).holds.length,1);
+});
+test('Email-only economic references also prevent synthetic identity deletion',()=>{
+  const s=snapshot();s.rows=[row('payouts/history',{recipientEmail:'test@example.invalid',amount:100})];
   assert.equal(planSnapshot(s,review()).holds.length,1);
 });
 test('Reviewed unfunded campaign is removable; historical funding, accepted zones and shared assets are held', () => {
@@ -92,4 +110,16 @@ test('Unclassified, assigned and completed work cannot be archived by the draft 
     const s=snapshot();s.rows=[row('campaigns/c',{businessId:'owner',status:'draft'}),extra];
     assert.throws(()=>draftArchivePlan(s,r));
   }
+});
+test('Legacy launch archive preserves outstanding economics and requires explicit single-record review',()=>{
+  const s=snapshot(),r={...review(),archives:[{id:'c',businessId:'owner',reviewedSynthetic:true,
+    evidence:'Reviewed legacy synthetic opportunity',preserveOutstandingObligations:true}]};
+  s.rows=[row('campaigns/c',{businessId:'owner',status:'open',reservedAmount:50}),
+    row('campaignZones/z',{campaignId:'c',assignedScalerId:'test-user',status:'in_progress'}),
+    row('payouts/p',{campaignId:'c',amount:15,status:'paid'})];
+  const p=legacyVisibilityArchivePlan(s,r);assert.equal(p.records[0].refs.length,3);
+  assert.equal(p.records[0].obligations,'unresolved_preserved');assert.equal(p.deletes,undefined);
+  s.rows[1].data.activeTrackingSessionId='session';assert.throws(()=>legacyVisibilityArchivePlan(s,r));
+  delete s.rows[1].data.activeTrackingSessionId;r.archives[0].preserveOutstandingObligations=false;
+  assert.throws(()=>legacyVisibilityArchivePlan(s,r));
 });

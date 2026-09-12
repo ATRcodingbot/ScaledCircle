@@ -5,7 +5,7 @@ const requireFunctions=require('node:module').createRequire(require('node:path')
 const {initializeApp,deleteApp}=requireFunctions('firebase-admin/app');
 const {getFirestore,FieldValue}=requireFunctions('firebase-admin/firestore');
 const {getAuth}=requireFunctions('firebase-admin/auth');
-const {VERSION,createService,createDraftArchiveService}=require('./production_hygiene_admin.cjs');
+const {VERSION,createService,createDraftArchiveService,createLegacyVisibilityArchiveService,quiesceReviewedAccountAuth}=require('./production_hygiene_admin.cjs');
 let app,db,auth;
 before(()=>{assert.ok(process.env.FIRESTORE_EMULATOR_HOST&&process.env.FIREBASE_AUTH_EMULATOR_HOST);
   app=initializeApp({projectId:'demo-production-hygiene'});db=getFirestore(app);auth=getAuth(app);});
@@ -17,12 +17,39 @@ beforeEach(async()=>{for(const c of await db.listCollections())await db.recursiv
   await db.doc('wallets/protected').set({balance:123,uid:'protected'});
 });
 after(()=>deleteApp(app));
-function service(customAuth=auth){return createService({db,auth:customAuth,FieldValue,projectId:'scaled-circle',
+function service(customAuth=auth,zeroWallet=false){return createService({db,auth:customAuth,FieldValue,projectId:'scaled-circle',
   actor:{kind:'google_iam_admin',email:'admin@example.invalid'},
   readProvider:async()=>({mode:'live',accountId:'acct_fixture',complete:true,records:[]}),
   review:{version:VERSION,projectId:'scaled-circle',stripeAccountId:'acct_fixture',operatorEmail:'admin@example.invalid',
     reason:'Emulator-only safety proof',protectedEmails:['owner@example.invalid','admin@example.invalid','worker@example.invalid','billing@example.invalid'],
-    protectedUids:['owner','admin','worker','billing'],accounts:[{uid:'synthetic',email:'test@example.invalid',reviewedSynthetic:true,evidence:'Emulator fixture'}],campaigns:[]}});}
+    protectedUids:['owner','admin','worker','billing'],accounts:[{uid:'synthetic',email:'test@example.invalid',reviewedSynthetic:true,evidence:'Emulator fixture',...(zeroWallet?{zeroWalletDisposition:'delete_verified_empty'}:{})}],campaigns:[]}});}
+
+test('Reviewed empty Wallet is deleted atomically with profile; no protected Wallet or history changes',async()=>{
+  await db.doc('users/synthetic').update({role:'business'});
+  await db.doc('wallets/synthetic').set({ownerId:'synthetic',ownerType:'business',availableBalance:0,
+    availableCredits:0,balance:0,pendingBalance:0,promotionalCreditsGranted:0,reservedCredits:0});
+  const protectedWallet=await db.doc('wallets/protected').get(),svc=service(auth,true),p=await svc.preview();
+  assert.equal(p.plan.holds.length,0);await svc.execute(p.plan.seal);
+  assert.equal((await db.doc('wallets/synthetic').get()).exists,false);
+  assert.ok((await db.doc('wallets/protected').get()).updateTime.isEqual(protectedWallet.updateTime));
+});
+
+test('Legacy visibility archive leaves every worker, reserve, payment and earning record untouched',async()=>{
+  await db.doc('campaigns/legacy').set({businessId:'owner',status:'open',reservedAmount:50,basePay:15});
+  await db.doc('campaignZones/z').set({campaignId:'legacy',assignedScalerId:'synthetic',status:'in_progress'});
+  await db.doc('payouts/p').set({campaignId:'legacy',amount:15,status:'paid'});
+  const zone=await db.doc('campaignZones/z').get(),payout=await db.doc('payouts/p').get();
+  const svc=createLegacyVisibilityArchiveService({db,auth,FieldValue,projectId:'scaled-circle',
+    actor:{kind:'google_iam_admin',email:'admin@example.invalid'},
+    readProvider:async()=>({mode:'live',accountId:'acct_fixture',complete:true,records:[]}),
+    review:{projectId:'scaled-circle',operatorEmail:'admin@example.invalid',stripeAccountId:'acct_fixture',reason:'Visibility only, obligations held',
+      archives:[{id:'legacy',businessId:'owner',reviewedSynthetic:true,evidence:'Legacy synthetic',preserveOutstandingObligations:true}]}});
+  const p=await svc.preview();await svc.execute(p.seal);
+  const campaign=(await db.doc('campaigns/legacy').get()).data();
+  assert.equal(campaign.status,'archived');assert.equal(campaign.reservedAmount,50);assert.equal(campaign.basePay,15);
+  assert.ok((await zone.ref.get()).updateTime.isEqual(zone.updateTime));assert.ok((await payout.ref.get()).updateTime.isEqual(payout.updateTime));
+  assert.equal((await svc.execute(p.seal)).alreadyComplete,true);
+});
 
 test('Consistent Admin Auth/profile/application deletion; audit retained; Wallet unchanged; exactly once',async()=>{
   const svc=service(),beforeWallet=await db.doc('wallets/protected').get();
@@ -36,6 +63,17 @@ test('Consistent Admin Auth/profile/application deletion; audit retained; Wallet
   assert.ok(wallet.updateTime.isEqual(beforeWallet.updateTime));
   const again=await svc.execute(p.plan.seal);assert.equal(again.alreadyComplete,true);
   assert.equal((await db.collection('adminAuditEvents').get()).size,3);
+});
+test('Existing Auth quiescence disables login and preserves every economic and accepted-work document',async()=>{
+  await db.doc('applications/accepted').set({scalerId:'synthetic',status:'accepted'});
+  await db.doc('payouts/history').set({scalerId:'synthetic',amount:15,status:'paid'});
+  const preserved=await Promise.all(['users/synthetic','applications/accepted','payouts/history','wallets/protected'].map(p=>db.doc(p).get()));
+  const account=await auth.getUser('synthetic');
+  const review={uid:account.uid,email:account.email,creationTime:account.metadata.creationTime};
+  await quiesceReviewedAccountAuth(auth,review);
+  assert.equal((await auth.getUser('synthetic')).disabled,true);
+  for(const before of preserved)assert.ok((await before.ref.get()).updateTime.isEqual(before.updateTime));
+  await assert.rejects(quiesceReviewedAccountAuth(auth,{...review,email:'wrong@example.invalid'}));
 });
 test('Economic relationship added after preview prevents all deletion',async()=>{
   const svc=service(),p=await svc.preview();await db.doc('wallets/synthetic').set({balance:0});
