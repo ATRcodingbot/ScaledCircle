@@ -6,6 +6,7 @@ import '../../services/business_email_service.dart';
 import '../../navigation/context_back_button.dart';
 import '../../widgets/customer_page_body.dart';
 import '../../widgets/business_email_providers.dart';
+import 'business_email_campaign_screen.dart';
 
 class BusinessEmailScreen extends StatefulWidget {
   const BusinessEmailScreen({super.key, this.loadOverride, this.service});
@@ -300,6 +301,20 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text('Invited mailbox: ${_data!['expectedMailbox']}'),
+                    if (_data!['campaignPrivateBeta'] == true)
+                      ListTile(
+                        title: const Text('Email Campaigns · Private Beta'),
+                        subtitle: const Text(
+                          'Review contacts, history and a campaign draft',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                BusinessEmailCampaignScreen(service: _service),
+                          ),
+                        ),
+                      ),
                     if (c['status'] == 'connected') ...[
                       Text(
                         'Provider: ${c['providerLabel'] ?? 'Google / Gmail / Workspace'}',

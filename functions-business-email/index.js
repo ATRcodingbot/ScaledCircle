@@ -18,7 +18,7 @@ function service() {
   const clientSecret=CLIENT_SECRET.value(),key=ENCRYPTION_KEY.value();
   const configured=!!clientId&&!!clientSecret&&!!redirectUri&&Buffer.from(key||'','base64').length===32;
   const beta=JSON.parse(process.env.BUSINESS_EMAIL_PRIVATE_BETA||'{}');
-  return createService({db,key,authority:createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,beta,configured,
+  return createService({db,key,project,authority:createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,beta,configured,
     internalAdminUid:process.env.GROWTH_PRODUCTION_ADMIN_UID||''}),
     providers:createRegistry({google:{...gmail.createProvider({clientId,clientSecret,redirectUri}),configured},
       microsoft:require('./microsoft').createProvider({clientId:process.env.BUSINESS_EMAIL_MICROSOFT_CLIENT_ID,
@@ -45,4 +45,14 @@ exports.syncBusinessEmailRepliesV1=onSchedule({...options,schedule:'every 5 minu
     try{await service().syncReplies({auth:{uid:record.ownerUid},data:{businessId}});}
     catch(error){console.warn('Business reply check held',{code:error.code||'unavailable'});}
   }
+});
+exports.businessEmailUnsubscribeV1=onRequest({region:'us-east1',maxInstances:2,timeoutSeconds:30},async(req,res)=>{
+  res.set('Cache-Control','no-store');res.set('Referrer-Policy','no-referrer');res.set('X-Content-Type-Options','nosniff');
+  res.set('Content-Security-Policy',"default-src 'none'; form-action 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+  if(!['GET','POST'].includes(req.method))return res.status(405).send('Method not allowed');
+  try{
+   const token=req.query.token,result=await require('./unsubscribe').createUnsubscribe({db})(token,{confirm:req.method==='POST'});
+   if(result.unsubscribed)return res.status(200).send('<!doctype html><title>Unsubscribed</title><h1>You are unsubscribed</h1><p>This Business will no longer send you marketing emails. Account and requested service messages are separate.</p>');
+   return res.status(200).send('<!doctype html><title>Stop marketing email</title><h1>Stop marketing emails from this Business</h1><p>No login is required.</p><form method="post"><button type="submit">Unsubscribe</button></form>');
+  }catch(_){return res.status(400).send('<!doctype html><title>Check unsubscribe link</title><h1>This link could not be verified</h1><p>Reply to the Business and ask to stop receiving marketing emails.</p>');}
 });

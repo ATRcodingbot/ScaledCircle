@@ -7,7 +7,7 @@ const fail=(code,message)=>{const e=Error(message);e.code=code;throw e;};
 const id=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(value))fail('invalid-argument','Choose a saved record.');return value;};
 const strict=(input,keys)=>{if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!keys.includes(k)))fail('invalid-argument','Unsupported action.');};
 const text=(v,max)=>{if(typeof v!=='string'||!v.trim()||v.length>max||v.includes('\0'))fail('invalid-argument','Enter a complete message within the displayed limits.');return v.trim();};
-function createService({db,authority,provider,providers,key,now=Date.now}) {
+function createService({db,authority,provider,providers,key,project,now=Date.now}) {
   const registry=providers||createRegistry({google:provider});
   const adapter=(a,name='google')=>registry.get(name,a.beta);
   const root=b=>db.doc('businessMailboxes/'+id(b));
@@ -30,6 +30,7 @@ function createService({db,authority,provider,providers,key,now=Date.now}) {
         tx.update(sub(a.businessId,'private','credential'),{sealed:gmail.seal(value,key,binding(a))});});
     }};
   }
+  const campaigns=require('./campaigns').createCampaigns({db,now,current,adapter,credentialAccess,root,sub,project});
   async function load(a) {
     const [connection,operations,drafts,events,prospects]=await Promise.all([root(a.businessId).get(),root(a.businessId).collection('operations').orderBy('requestedAt','desc').limit(100).get(),
       root(a.businessId).collection('drafts').limit(100).get(),root(a.businessId).collection('outcomes').orderBy('recordedAt','desc').limit(250).get(),
@@ -44,7 +45,7 @@ function createService({db,authority,provider,providers,key,now=Date.now}) {
     const rows=prospects.docs.map(d=>({id:d.id,...d.data()})).map(p=>({...p,doNotContact:p.doNotContact===true||suppressedRecipients.has(p.email?.toLowerCase()),excludedByGrowthPreferences:!a.preferenceEnabled(p,focus)}));
     const leadDocs=await db.collection('salesLeads').where('ownerUid','==',a.businessId).limit(25).get();
     const replies=c.status==='connected'&&c.permissions?.read===true?(await root(a.businessId).collection('replies').limit(50).get()).docs.map(d=>d.data()):[];
-    return {available:true,privateBeta:true,configured:!!a.beta.configured,providers:registry.list(a.beta),sendEnabled:a.beta.sendEnabled!==false,
+    return {available:true,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta),sendEnabled:a.beta.sendEnabled!==false,
       deliveryLimits:{individualPerHour:5,individualPerDay:20,campaignAudience:25,campaignSending:false},
       certificationSendEnabled:a.beta.certificationSendEnabled===true,expectedMailbox:a.beta.mailbox,
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
@@ -291,6 +292,12 @@ function createService({db,authority,provider,providers,key,now=Date.now}) {
   async function execute(request) {
     const data=request.data||{};strict(data,['businessId','operation','input']);const op=data.operation||'load',input=data.input||{};
     const a=await authority(request,op);
+    if(op==='loadCampaigns')return campaigns.load(a);
+    if(op==='importCampaignWorkbook')return campaigns.importWorkbook(a,input);
+    if(op==='discoverCampaignHistory')return campaigns.discover(a,input);
+    if(op==='restrictCampaignContact')return campaigns.restrict(a,input);
+    if(op==='saveCampaignDraft')return campaigns.saveDraft(a,input);
+    if(op==='sendCampaign'||op==='scheduleCampaign')fail('failed-precondition','Campaign sending is held for the exact Founder audience and message review.');
     if(op==='load')return load(a);
     if(op==='connect')return connect(a,input);
     if(op==='connectOther')return connectOther(a,input);
@@ -319,7 +326,7 @@ function createService({db,authority,provider,providers,key,now=Date.now}) {
       return db.runTransaction(async tx=>{
         const p=(await tx.get(pRef)).data();if(p?.businessUid!==a.businessId)fail('permission-denied','This prospect is not in your workspace.');
         const recipient=gmail.email(p.email),ref=sub(a.businessId,'suppression',hash(recipient)),restriction=(await tx.get(ref)).data();
-        if(restriction?.reason==='unsubscribed'||restriction?.reason==='bounced')fail('failed-precondition','A new verified opt-in or corrected contact record is required.');
+        if(['unsubscribed','bounced','invalid'].includes(restriction?.reason))fail('failed-precondition','A new verified opt-in or corrected contact record is required.');
         const audit=sub(a.businessId,'contactHistory',hash([recipient,restriction?.updatedAt||0,now(),'restore']));
         tx.create(audit,{businessId:a.businessId,recipient,priorRestriction:restriction||null,reason,actorUid:a.actorUid,recordedAt:stamp(),action:'contact_restored'});
         tx.set(ref,{businessId:a.businessId,recipient,active:false,restoredBy:a.actorUid,restoredAt:stamp()},{merge:true});
