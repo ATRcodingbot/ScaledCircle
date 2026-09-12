@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_app/screens/business/business_email_screen.dart';
 import 'package:flutter_app/services/business_email_service.dart';
+import 'package:flutter_app/widgets/business_email_providers.dart';
 
 class ControlledEmailService extends BusinessEmailService {
   final calls = <String>[];
@@ -85,6 +86,131 @@ class ConversationEmailService extends BusinessEmailService {
 }
 
 void main() {
+  for (final width in [320.0, 1280.0]) {
+    testWidgets(
+      'three provider choices remain honest and accessible at $width',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final calls = <String>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MediaQuery(
+                data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+                child: SingleChildScrollView(
+                  child: BusinessEmailProviders(
+                    providers: const [
+                      {
+                        'id': 'google',
+                        'label': 'Google / Gmail / Workspace',
+                        'configured': true,
+                        'status': 'private_beta',
+                      },
+                      {
+                        'id': 'microsoft',
+                        'label': 'Microsoft 365 / Outlook',
+                        'configured': false,
+                        'status': 'setup_testing',
+                      },
+                      {
+                        'id': 'other',
+                        'label': 'Other Business Email',
+                        'configured': false,
+                        'status': 'setup_testing',
+                      },
+                    ],
+                    connection: const {},
+                    busy: false,
+                    read: true,
+                    send: false,
+                    onConnect: (op, input) async {
+                      calls.add(op);
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        for (final label in [
+          'Google / Gmail / Workspace',
+          'Microsoft 365 / Outlook',
+          'Other Business Email',
+        ]) {
+          await tester.ensureVisible(find.text(label));
+          await tester.pumpAndSettle();
+          expect(find.text(label), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        }
+        expect(find.text('Private Beta — Setup Testing'), findsNWidgets(2));
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Continue with Microsoft'),
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(
+          tester
+              .widget<FilledButton>(find.widgetWithText(FilledButton, 'Set Up'))
+              .onPressed,
+          isNull,
+        );
+        expect(calls, isEmpty);
+      },
+    );
+  }
+  testWidgets(
+    'Other setup cancels without saving or sending and hides the app password',
+    (tester) async {
+      final calls = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: BusinessEmailProviders(
+                providers: const [
+                  {
+                    'id': 'other',
+                    'label': 'Other Business Email',
+                    'configured': true,
+                    'status': 'setup_testing',
+                    'settings': {
+                      'email': 'owner@example.test',
+                      'username': 'owner@example.test',
+                      'imapHost': 'imap.example.test',
+                      'imapPort': 993,
+                    },
+                  },
+                ],
+                connection: const {},
+                busy: false,
+                read: true,
+                send: false,
+                onConnect: (op, input) async {
+                  calls.add(op);
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Set Up'));
+      await tester.pumpAndSettle();
+      final input = find.widgetWithText(TextField, 'Secure / app password');
+      expect(tester.widget<TextField>(input).obscureText, true);
+      await tester.enterText(input, 'test-only-secret');
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(calls, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final count in [0, 1, -1]) {
     testWidgets('conversation check has visible result $count and never sends', (
       tester,
@@ -247,16 +373,21 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Read leads'), findsOneWidget);
         await tester.scrollUntilVisible(
-          find.text('Send approved outreach'),
+          find.text('Read leads'),
           200,
           scrollable: find.byType(Scrollable).first,
         );
-        expect(find.text('Send approved outreach'), findsOneWidget);
+        expect(find.text('Read leads'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Send approved email'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('Send approved email'), findsOneWidget);
         final sendSwitch = tester.widget<SwitchListTile>(
           find.ancestor(
-            of: find.text('Send approved outreach'),
+            of: find.text('Send approved email'),
             matching: find.byType(SwitchListTile),
           ),
         );

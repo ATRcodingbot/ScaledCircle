@@ -44,6 +44,16 @@ String businessEmailState(dynamic state) => switch (state) {
   _ => 'Awaiting review',
 };
 
+String businessEmailHealth(dynamic health) => switch (health) {
+  'read_only' => 'Read Only · Send permission needed',
+  'read_permission_needed' =>
+    'Connected · Read permission needed to check replies',
+  'needs_attention' => 'Needs Attention',
+  'reconnect_required' => 'Reconnect Required',
+  'not_connected' => 'Not connected',
+  _ => 'Connected',
+};
+
 String businessEmailOutcome(dynamic state) => switch (state) {
   'interested' => 'Interested',
   'not_interested' => 'Not interested',

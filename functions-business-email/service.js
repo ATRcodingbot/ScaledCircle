@@ -1,12 +1,15 @@
 'use strict';
 const crypto=require('node:crypto');
 const gmail=require('./gmail'),learning=require('./growth_learning');
+const contract=require('./mailbox_contract'),{createRegistry}=require('./providers');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const fail=(code,message)=>{const e=Error(message);e.code=code;throw e;};
 const id=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(value))fail('invalid-argument','Choose a saved record.');return value;};
 const strict=(input,keys)=>{if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!keys.includes(k)))fail('invalid-argument','Unsupported action.');};
 const text=(v,max)=>{if(typeof v!=='string'||!v.trim()||v.length>max||v.includes('\0'))fail('invalid-argument','Enter a complete message within the displayed limits.');return v.trim();};
-function createService({db,authority,provider,key,now=Date.now}) {
+function createService({db,authority,provider,providers,key,now=Date.now}) {
+  const registry=providers||createRegistry({google:provider});
+  const adapter=(a,name='google')=>registry.get(name,a.beta);
   const root=b=>db.doc('businessMailboxes/'+id(b));
   const sub=(b,c,i)=>root(b).collection(c).doc(id(i));
   const stamp=()=>now();
@@ -17,7 +20,15 @@ function createService({db,authority,provider,key,now=Date.now}) {
     const [connection,credential]=await Promise.all([read(root(a.businessId)),read(sub(a.businessId,'private','credential'))]);
     const c=connection.data();checkConnection(c);
     if(!credential.exists||gmail.email(c.email)!==gmail.email(a.beta.mailbox))fail('failed-precondition','Reconnect the authorized Business mailbox.');
+    if(credential.data().generation!==c.generation)fail('failed-precondition','The mailbox or draft changed. Review the latest message.');
     return {c,secret:credential.data()};
+  }
+  function credentialAccess(a,c,secret) {
+    return {credentials:gmail.unseal(secret.sealed,key,binding(a)),onRefresh:async value=>{
+      await db.runTransaction(async tx=>{const fresh=await current(a,tx);
+        if(fresh.c.generation!==c.generation||fresh.secret.sealed.body!==secret.sealed.body)fail('aborted','The mailbox changed. Check the connection again.');
+        tx.update(sub(a.businessId,'private','credential'),{sealed:gmail.seal(value,key,binding(a))});});
+    }};
   }
   async function load(a) {
     const [connection,operations,drafts,events,prospects]=await Promise.all([root(a.businessId).get(),root(a.businessId).collection('operations').orderBy('requestedAt','desc').limit(100).get(),
@@ -33,12 +44,14 @@ function createService({db,authority,provider,key,now=Date.now}) {
     const rows=prospects.docs.map(d=>({id:d.id,...d.data()})).map(p=>({...p,doNotContact:p.doNotContact===true||suppressedRecipients.has(p.email?.toLowerCase()),excludedByGrowthPreferences:!a.preferenceEnabled(p,focus)}));
     const leadDocs=await db.collection('salesLeads').where('ownerUid','==',a.businessId).limit(25).get();
     const replies=c.status==='connected'&&c.permissions?.read===true?(await root(a.businessId).collection('replies').limit(50).get()).docs.map(d=>d.data()):[];
-    return {available:true,privateBeta:true,configured:!!a.beta.configured,sendEnabled:a.beta.sendEnabled!==false,
+    return {available:true,privateBeta:true,configured:!!a.beta.configured,providers:registry.list(a.beta),sendEnabled:a.beta.sendEnabled!==false,
+      deliveryLimits:{individualPerHour:5,individualPerDay:20,campaignAudience:25,campaignSending:false},
       certificationSendEnabled:a.beta.certificationSendEnabled===true,expectedMailbox:a.beta.mailbox,
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
+        provider:c.provider||'google',providerLabel:contract.LABELS[c.provider||'google'],...contract.capabilities(c),
         read:c.status==='connected'&&c.permissions?.read===true,send:c.status==='connected'&&c.permissions?.send===true,
         automaticSending:false,landingSender:c.landingSender||'account_notifications',pending:active,
-        error:!active&&c.pendingAttempt?'Email was not connected. Try again.':c.lastConnectionError||null},
+        error:!active&&c.pendingAttempt?'The latest connection attempt ended. Your existing connection is unchanged.':c.lastConnectionError||null},
       evidenceWindow:'Up to 100 recent outreach operations and their recorded outcomes.',operations:ops.sort((a,b)=>b.requestedAt-a.requestedAt),drafts:drafts.docs.map(d=>({id:d.id,...d.data()})),replies,outcomes:events.docs.map(d=>d.data()),restrictions:restrictions.docs.map(d=>({recipient:d.data().recipient,reason:d.data().reason})),
       landingLeads:leadDocs.docs.filter(d=>d.data().leadType==='landing_page_inquiry'&&!d.data().suppressionStatus).map(d=>({id:d.id,email:d.data().contactEmail,displayName:d.data().contactName,
         reason:'An inbound request from your landing page.',draft:'Thank you for your inquiry. We received your request and will review how we can help.',sourceUrl:null})),
@@ -46,17 +59,19 @@ function createService({db,authority,provider,key,now=Date.now}) {
       certificationRecipient:a.beta.certificationRecipient||null,certificationOnly:a.beta.certificationOnly!==false};
   }
   async function connect(a,input) {
-    strict(input,['read','send']);if(typeof input.read!=='boolean'||typeof input.send!=='boolean'||!input.read&&!input.send)fail('invalid-argument','Choose Read leads, Send approved outreach, or both.');
+    strict(input,['provider','read','send']);if(typeof input.read!=='boolean'||typeof input.send!=='boolean'||!input.read&&!input.send)fail('invalid-argument','Choose Read leads, Send approved outreach, or both.');
+    const name=contract.providerId(input.provider),p=adapter(a,name),permissions={read:input.read,send:input.send};
+    if(name==='other')fail('invalid-argument','Use the secure mailbox setup form.');
     const nonce=crypto.randomBytes(32).toString('base64url'),verifier=crypto.randomBytes(32).toString('base64url'),attemptId=hash(nonce);
-    const attempt={id:attemptId,businessId:a.businessId,actorUid:a.actorUid,permissions:input,status:'pending',createdAt:stamp(),expiresAt:now()+600000,
+    const attempt={id:attemptId,businessId:a.businessId,actorUid:a.actorUid,provider:name,permissions,status:'pending',createdAt:stamp(),expiresAt:now()+600000,
       challenge:gmail.seal({nonce,verifier},key,binding(a)),expectedMailbox:gmail.email(a.beta.mailbox)};
-    const url=provider.authorize({state:nonce,verifier,...input,expectedMailbox:attempt.expectedMailbox});
+    const url=p.authorize({state:nonce,verifier,...permissions,expectedMailbox:attempt.expectedMailbox});
     return db.runTransaction(async tx=>{
       const c=(await tx.get(root(a.businessId))).data()||{};
       const old=c.pendingAttempt?(await tx.get(sub(a.businessId,'attempts',c.pendingAttempt))).data():null;
-      if(old?.status==='pending'&&old.expiresAt>now()&&hash(old.permissions)===hash(input)) {
+      if(old?.status==='pending'&&old.expiresAt>now()&&contract.providerId(old.provider)===name&&hash(old.permissions)===hash(permissions)) {
         const v=gmail.unseal(old.challenge,key,binding(a));
-        return {url:provider.authorize({state:v.nonce,verifier:v.verifier,...input,expectedMailbox:old.expectedMailbox}),reused:true};
+        return {url:p.authorize({state:v.nonce,verifier:v.verifier,...permissions,expectedMailbox:old.expectedMailbox}),reused:true};
       }
       if(old?.status==='pending')tx.update(sub(a.businessId,'attempts',old.id),{status:'canceled',closedAt:stamp()});
       tx.create(sub(a.businessId,'attempts',attemptId),attempt);
@@ -78,8 +93,8 @@ function createService({db,authority,provider,key,now=Date.now}) {
       tx.update(ref,{status:'verifying'});return p;
     });
     try {
-      if(query.error||typeof query.code!=='string'||query.code.length>4096)fail('permission-denied','Google did not complete the connection.');
-      const {verifier}=gmail.unseal(attempt.challenge,key,binding(a)),result=await provider.exchange(query.code,verifier);
+      if(query.error||typeof query.code!=='string'||query.code.length>4096)fail('permission-denied','The email provider did not complete the connection.');
+      const name=contract.providerId(attempt.provider),{verifier}=gmail.unseal(attempt.challenge,key,binding(a)),result=await adapter(a,name).exchange(query.code,verifier);
       if(gmail.email(result.email)!==attempt.expectedMailbox)fail('permission-denied','Choose the approved Business mailbox.');
       const permissions={read:attempt.permissions.read&&result.permissions.read===true,send:attempt.permissions.send&&result.permissions.send===true};
       if(!permissions.read&&!permissions.send)fail('permission-denied','No requested permission was granted.');
@@ -87,8 +102,8 @@ function createService({db,authority,provider,key,now=Date.now}) {
       await db.runTransaction(async tx=>{
         const c=(await tx.get(root(a.businessId))).data(),p=(await tx.get(ref)).data();
         if(c?.pendingAttempt!==attemptId||p?.status!=='verifying'||p.expiresAt<=now())fail('failed-precondition','This connection attempt has ended.');
-        tx.set(sub(a.businessId,'private','credential'),{businessId:a.businessId,sealed:gmail.seal({refreshToken:result.refreshToken},key,binding(a)),generation:attemptId});
-        tx.set(root(a.businessId),{businessId:a.businessId,status:'connected',email:result.email,provider:'google',subject:result.subject,
+        tx.set(sub(a.businessId,'private','credential'),{businessId:a.businessId,sealed:gmail.seal(result.credentials||{refreshToken:result.refreshToken},key,binding(a)),generation:attemptId});
+        tx.set(root(a.businessId),{businessId:a.businessId,status:'connected',email:result.email,provider:name,subject:result.subject,senderVerified:result.senderVerified!==false,
           permissions,generation:attemptId,automaticSending:false,pendingAttempt:null,landingSender:c.landingSender||'account_notifications',updatedAt:stamp()});
         tx.update(ref,{status:'connected',challenge:null,closedAt:stamp()});
       });return {connected:true};
@@ -97,6 +112,34 @@ function createService({db,authority,provider,key,now=Date.now}) {
         if(c?.pendingAttempt===attemptId)tx.update(root(a.businessId),{pendingAttempt:null,lastConnectionError:'Email was not connected. Try again.'});});
       throw error;
     }
+  }
+  async function connectOther(a,input) {
+    strict(input,['requestId','email','username','password','imapHost','imapPort','smtpHost','smtpPort','read','send']);
+    if(typeof input.read!=='boolean'||typeof input.send!=='boolean')fail('invalid-argument','Choose your Read and Send permissions.');
+    const p=adapter(a,'other'),attemptId=id(input.requestId),setupRef=sub(a.businessId,'setupAttempts',attemptId);
+    const claimed=await db.runTransaction(async tx=>{const previous=(await tx.get(setupRef)).data(),c=(await tx.get(root(a.businessId))).data();
+      if(previous)return {reused:true,state:previous.state};
+      if(c?.setupLeaseUntil>now())fail('failed-precondition','A mailbox check is already in progress. Try again shortly.');
+      tx.create(setupRef,{businessId:a.businessId,actorUid:a.actorUid,provider:'other',state:'checking',createdAt:stamp()});
+      tx.set(root(a.businessId),{setupLeaseUntil:now()+90000,setupLease:attemptId},{merge:true});return {reused:false};});
+    if(claimed.reused)return claimed;
+    try {
+      const result=await p.verify(input,a.beta.otherMailbox);
+      if(result.email!==gmail.email(a.beta.mailbox))fail('permission-denied','Use the invited Business mailbox.');
+      const fresh=await authority({auth:{uid:a.actorUid},data:{businessId:a.businessId}},'connectOther');
+      if(hash(fresh.beta.otherMailbox)!==hash(a.beta.otherMailbox))fail('aborted','The approved mailbox settings changed.');
+      await db.runTransaction(async tx=>{const c=(await tx.get(root(a.businessId))).data();
+        if(c?.setupLease!==attemptId||c.setupLeaseUntil<=now())fail('aborted','This mailbox check has ended. Try again.');
+        if(c.pendingAttempt)tx.update(sub(a.businessId,'attempts',c.pendingAttempt),{status:'canceled',closedAt:stamp()});
+        tx.set(sub(a.businessId,'private','credential'),{businessId:a.businessId,generation:attemptId,sealed:gmail.seal(result.credentials,key,binding(a))});
+        tx.set(root(a.businessId),{businessId:a.businessId,status:'connected',provider:'other',email:result.email,subject:result.subject,
+          senderVerified:result.senderVerified,permissions:result.permissions,generation:attemptId,automaticSending:false,pendingAttempt:null,
+          landingSender:'account_notifications',updatedAt:stamp(),setupLease:null,setupLeaseUntil:0});
+        tx.update(setupRef,{state:'connected',closedAt:stamp()});});
+      return {connected:true,...contract.capabilities({status:'connected',permissions:result.permissions,senderVerified:result.senderVerified})};
+    } catch(error){await setupRef.update({state:'needs_attention',closedAt:stamp()});throw error;}
+    finally {await db.runTransaction(async tx=>{const c=(await tx.get(root(a.businessId))).data();if(c?.setupLease===attemptId)
+      tx.update(root(a.businessId),{setupLease:null,setupLeaseUntil:0});});}
   }
   async function prospect(a,prospectId,tx) {
     const read=r=>tx?tx.get(r):r.get();
@@ -139,7 +182,7 @@ function createService({db,authority,provider,key,now=Date.now}) {
         fail('failed-precondition','This message already has a send record. Review its outcome before preparing a separate follow-up.');
       if(input.followupTo&&!previous&&old?.followupTo!==input.followupTo)fail('failed-precondition','Choose the current confirmed conversation.');
       const version=input.expectedVersion+1,operationId=hash([a.businessId,prospectId,version,c.generation,subject,body,p.recipient]);
-      const draft={businessId:a.businessId,prospectId,version,operationId,from:c.email,recipient:p.recipient,subject,body,connectionGeneration:c.generation,
+      const draft={businessId:a.businessId,prospectId,version,operationId,provider:c.provider||'google',providerSubject:c.subject||null,from:c.email,recipient:p.recipient,subject,body,connectionGeneration:c.generation,
         source:p.sourceUrl||null,reason:p.reason||p.qualificationReason||'Review the source and Business fit.',certification,
         features:{...learning.featuresFor(p),channel:'email',messageAngle:input.messageAngle||'unspecified',cta:input.cta||'unspecified'},
         followupTo:input.followupTo||old?.followupTo||null,parentMessageId:previous?.messageId||old?.parentMessageId||null,
@@ -158,7 +201,7 @@ function createService({db,authority,provider,key,now=Date.now}) {
       const existing=(await tx.get(ref)).data();if(existing)return {existing};
       const {c,secret}=await current(a,tx),draft=(await tx.get(draftRef)).data();
       requireSend(a,draft);
-      if(!c.permissions?.send||!draft||draft.operationId!==input.operationId||draft.version!==input.version||draft.connectionGeneration!==c.generation||draft.from!==c.email)
+      if(!contract.capabilities(c).canSend||!draft||draft.operationId!==input.operationId||draft.version!==input.version||draft.connectionGeneration!==c.generation||draft.from!==c.email)
         fail('failed-precondition','The mailbox or draft changed. Review the latest message.');
       const suppressed=(await tx.get(sub(a.businessId,'suppression',hash(draft.recipient)))).data();
       if(suppressed?.active)fail('failed-precondition','Do not contact this recipient.');
@@ -167,9 +210,13 @@ function createService({db,authority,provider,key,now=Date.now}) {
         if(latest.recipient!==draft.recipient)fail('failed-precondition','The contact source changed. Review a new draft.');
       }
       else if(draft.recipient!==gmail.email(a.beta.certificationRecipient))fail('permission-denied','The controlled recipient changed.');
+      const hourRef=sub(a.businessId,'deliveryWindows','hour_'+Math.floor(now()/3600000)),dayRef=sub(a.businessId,'deliveryWindows','day_'+Math.floor(now()/86400000));
+      const hourly=(await tx.get(hourRef)).data()?.attempts||0,daily=(await tx.get(dayRef)).data()?.attempts||0;
+      if(hourly>=5||daily>=20)fail('resource-exhausted','The private beta sending limit has been reached. Wait before sending more; provider limits may be lower.');
       const op={...draft,state:'sending',messageId:input.operationId+'@mail.scaledcircle.com',requestedAt:stamp(),approvedBy:a.actorUid,
         attempts:1,replyCount:0,delivered:false,providerMessageId:null,providerThreadId:null};
-      tx.create(ref,op);tx.update(draftRef,{state:'sending'});return {op,secret};
+      tx.set(hourRef,{attempts:hourly+1});tx.set(dayRef,{attempts:daily+1});
+      tx.create(ref,op);tx.update(draftRef,{state:'sending'});return {op,secret,c};
     });
     if(claim.existing)return {operationId:ref.id,state:claim.existing.state==='sending'?'needs_reconciliation':claim.existing.state,reused:true};
     let result;
@@ -177,8 +224,9 @@ function createService({db,authority,provider,key,now=Date.now}) {
       // Recheck owner/eligibility immediately before the single provider attempt.
       const fresh=await authority({auth:{uid:a.actorUid},data:{businessId:a.businessId}},'send');
       requireSend(fresh,claim.op);
-      const creds=gmail.unseal(claim.secret.sealed,key,binding(a));
-      result=await provider.send({...claim.op,to:claim.op.recipient,refreshToken:creds.refreshToken});
+      const {c}=await current(fresh);contract.requireOperationProvider(c,claim.op);
+      if(c.generation!==claim.c.generation||!contract.capabilities(c).canSend)fail('failed-precondition','The mailbox changed.');
+      result=await adapter(fresh,claim.op.provider).send({...claim.op,to:claim.op.recipient,...credentialAccess(fresh,c,claim.secret),policy:fresh.beta.otherMailbox});
       if(!result?.id||!result?.threadId)throw Error('provider_receipt_missing');
     } catch(_) {
       await ref.update({state:'needs_reconciliation',lastCheckedAt:stamp()});
@@ -189,7 +237,7 @@ function createService({db,authority,provider,key,now=Date.now}) {
   async function recordSent(a,ref,result) {
     await db.runTransaction(async tx=>{
       const op=(await tx.get(ref)).data();if(op.state==='sent')return;
-      tx.update(ref,{state:'sent',providerMessageId:result.id,providerThreadId:result.threadId,providerAcceptedAt:stamp(),delivered:false});
+      tx.update(ref,{state:'sent',providerMessageId:result.id,providerThreadId:result.threadId,conversationId:hash([a.businessId,ref.id]),providerAcceptedAt:stamp(),delivered:false});
       tx.update(sub(a.businessId,'drafts',op.prospectId),{state:'sent'});
       tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,state:'contacted',operationId:ref.id,updatedAt:stamp()},{merge:true});
     });
@@ -198,16 +246,17 @@ function createService({db,authority,provider,key,now=Date.now}) {
     strict(input,['operationId']);const ref=sub(a.businessId,'operations',input.operationId),op=(await ref.get()).data();
     if(!op||op.businessId!==a.businessId)fail('not-found','No send record exists.');
     const {c,secret}=await current(a);if(!c.permissions?.read)fail('permission-denied','Enable Read leads to check this conversation. No message was resent.');
-    if(c.email!==op.from)fail('permission-denied','Reconnect the original sending mailbox.');
-    const {refreshToken}=gmail.unseal(secret.sealed,key,binding(a));
+    contract.requireOperationProvider(c,op);
+    const {credentials,onRefresh}=credentialAccess(a,c,secret),p=adapter(a,c.provider);
     if(op.state!=='sent') {
-      const receipt=await provider.reconcileSent(refreshToken,op);
+      const receipt=await p.reconcileSent(credentials,op,onRefresh,a.beta.otherMailbox);
       if(!receipt)return {state:'needs_reconciliation',retryAllowed:false};
       await recordSent(a,ref,receipt);return {state:'sent',delivered:false};
     }
-    const replies=gmail.replyMessages(await provider.thread(refreshToken,op.providerThreadId),op);
+    const replies=await p.replies(credentials,op,onRefresh,a.beta.otherMailbox);
+    const replyKey=r=>c.provider&&c.provider!=='google'?hash([c.provider,c.subject,r.providerMessageId]):id(r.providerMessageId);
     const replyCount=await db.runTransaction(async tx=>{
-      const saved=await Promise.all(replies.map(r=>tx.get(sub(a.businessId,'replies',r.providerMessageId))));
+      const saved=await Promise.all(replies.map(r=>tx.get(sub(a.businessId,'replies',replyKey(r)))));
       const latest=(await tx.get(ref)).data();
       const currentConnection=(await current(a,tx)).c;
       if(currentConnection.generation!==c.generation||!currentConnection.permissions?.read||currentConnection.email!==op.from)
@@ -215,8 +264,8 @@ function createService({db,authority,provider,key,now=Date.now}) {
       if(latest?.state!=='sent'||latest.providerMessageId!==op.providerMessageId||latest.providerThreadId!==op.providerThreadId||
         saved.some(s=>s.exists&&(s.data().operationId!==ref.id||s.data().businessId!==a.businessId)))
         fail('failed-precondition','This conversation needs review before its reply can be recorded.');
-      for(let i=0;i<replies.length;i++)if(!saved[i].exists)tx.create(sub(a.businessId,'replies',replies[i].providerMessageId),{
-        ...replies[i],businessId:a.businessId,operationId:ref.id,prospectId:op.prospectId,certification:op.certification===true});
+      for(let i=0;i<replies.length;i++)if(!saved[i].exists)tx.create(sub(a.businessId,'replies',replyKey(replies[i])),{
+        ...replies[i],provider:c.provider||'google',conversationId:hash([a.businessId,ref.id]),businessId:a.businessId,operationId:ref.id,prospectId:op.prospectId,certification:op.certification===true});
       const count=(latest.replyCount||0)+saved.filter(s=>!s.exists).length;
       tx.update(ref,{replyCount:count,lastCheckedAt:stamp(),replyCheckStatus:count?'reply_received':'no_reply_yet'});
       if(count)tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,
@@ -244,6 +293,22 @@ function createService({db,authority,provider,key,now=Date.now}) {
     const a=await authority(request,op);
     if(op==='load')return load(a);
     if(op==='connect')return connect(a,input);
+    if(op==='connectOther')return connectOther(a,input);
+    if(op==='checkConnection') {
+      strict(input,[]);const {c,secret}=await current(a),p=adapter(a,c.provider);
+      try {
+        const access=credentialAccess(a,c,secret),verified=await p.checkConnection(access.credentials,access.onRefresh,a.beta.otherMailbox);
+        if(verified.email!==c.email||verified.subject!==c.subject)fail('permission-denied','Reconnect the original Business mailbox.');
+        await db.runTransaction(async tx=>{const latest=(await current(a,tx)).c;if(latest.generation!==c.generation)fail('aborted','The connection changed. Check again.');
+          const permissions={read:c.permissions.read===true&&(verified.permissions?.read??true),send:c.permissions.send===true&&(verified.permissions?.send??true)};
+          tx.update(root(a.businessId),{permissions,health:!permissions.send?'read_only':!permissions.read?'read_permission_needed':'connected',lastHealthCheckedAt:stamp()});});
+        return {checked:true,message:'Connection checked.'};
+      }catch(error){
+        await db.runTransaction(async tx=>{const latest=(await tx.get(root(a.businessId))).data();if(latest?.generation===c.generation)
+          tx.update(root(a.businessId),{health:error.code==='permission-denied'?'reconnect_required':'needs_attention',lastHealthCheckedAt:stamp()});});
+        fail(error.code==='permission-denied'?'permission-denied':'unavailable',error.code==='permission-denied'?'Reconnect Business Email to continue.':'Connection could not be checked. Try again later.');
+      }
+    }
     if(op==='saveDraft')return saveDraft(a,input);
     if(op==='send')return send(a,input);
     if(op==='reconcile')return reconcile(a,input);
@@ -269,7 +334,7 @@ function createService({db,authority,provider,key,now=Date.now}) {
     }
     if(op==='disconnect') {
       await db.runTransaction(async tx=>{const c=(await tx.get(root(a.businessId))).data();if(c?.pendingAttempt)tx.update(sub(a.businessId,'attempts',c.pendingAttempt),{status:'canceled',closedAt:stamp()});
-        tx.delete(sub(a.businessId,'private','credential'));tx.set(root(a.businessId),{status:'not_connected',permissions:{read:false,send:false},pendingAttempt:null,automaticSending:false,landingSender:'account_notifications',updatedAt:stamp()},{merge:true});});
+        tx.delete(sub(a.businessId,'private','credential'));tx.set(root(a.businessId),{status:'not_connected',permissions:{read:false,send:false},pendingAttempt:null,setupLease:null,setupLeaseUntil:0,automaticSending:false,landingSender:'account_notifications',updatedAt:stamp()},{merge:true});});
       return {disconnected:true};
     }
     if(op==='outcome') {

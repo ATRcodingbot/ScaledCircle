@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/business_email_service.dart';
 import '../../navigation/context_back_button.dart';
 import '../../widgets/customer_page_body.dart';
+import '../../widgets/business_email_providers.dart';
 
 class BusinessEmailScreen extends StatefulWidget {
   const BusinessEmailScreen({super.key, this.loadOverride, this.service});
@@ -76,12 +77,21 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
       final response = await _service.call(op, input);
       if (response['url'] is String) {
         final url = Uri.parse(response['url']);
-        if (url.scheme != 'https' || url.host != 'accounts.google.com') {
+        if (url.scheme != 'https' ||
+            ![
+              'accounts.google.com',
+              'login.microsoftonline.com',
+            ].contains(url.host)) {
           throw StateError('Invalid connection destination');
         }
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }
       await _load();
+      if (mounted && op == 'checkConnection') {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Connection checked.')));
+      }
       if (mounted && op == 'reconcile') {
         final message = _error != null
             ? 'Conversation checked, but the page could not refresh. Try again.'
@@ -290,6 +300,12 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text('Invited mailbox: ${_data!['expectedMailbox']}'),
+                    if (c['status'] == 'connected') ...[
+                      Text(
+                        'Provider: ${c['providerLabel'] ?? 'Google / Gmail / Workspace'}',
+                      ),
+                      Text(businessEmailHealth(c['connectionHealth'])),
+                    ],
                     if (_data!['sendEnabled'] == false)
                       Text(
                         _data!['certificationSendEnabled'] == true
@@ -305,13 +321,13 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       ),
                     if (c['pending'] == true)
                       const Text(
-                        'Finish connecting with Google. This attempt expires after 10 minutes.',
+                        'Finish connecting with your email provider. This attempt expires after 10 minutes.',
                       ),
                     if (c['error'] != null) Text(c['error'].toString()),
                     SwitchListTile(
                       title: const Text('Read leads'),
                       subtitle: const Text(
-                        'Review replies to your approved outreach.',
+                        'Review lead conversations and replies in your Business mailbox.',
                       ),
                       value: _read,
                       onChanged: _busy
@@ -319,7 +335,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                           : (v) => setState(() => _read = v),
                     ),
                     SwitchListTile(
-                      title: const Text('Send approved outreach'),
+                      title: const Text('Send approved email'),
                       subtitle: const Text(
                         'Send only after you review and confirm the exact message.',
                       ),
@@ -332,28 +348,35 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       title: Text('Automatic sending'),
                       trailing: Text('Off'),
                     ),
+                    BusinessEmailProviders(
+                      providers:
+                          (_data!['providers'] as List? ??
+                                  [
+                                    {
+                                      'id': 'google',
+                                      'label': 'Google / Gmail / Workspace',
+                                      'configured': _data!['configured'],
+                                      'status': 'private_beta',
+                                    },
+                                  ])
+                              .whereType<Map>()
+                              .toList(),
+                      connection: c,
+                      busy: _busy,
+                      read: _read,
+                      send: _send,
+                      onConnect: _action,
+                    ),
                     Wrap(
                       spacing: 12,
                       runSpacing: 8,
                       children: [
-                        FilledButton(
-                          onPressed:
-                              _busy ||
-                                  _data!['configured'] != true ||
-                                  !_read && !_send
-                              ? null
-                              : () => _action('connect', {
-                                  'read': _read,
-                                  'send': _send,
-                                }),
-                          child: Text(
-                            c['status'] == 'connected'
-                                ? 'Update permissions'
-                                : 'Continue with Google',
-                          ),
-                        ),
                         OutlinedButton(
-                          onPressed: _busy ? null : _load,
+                          onPressed: _busy
+                              ? null
+                              : c['status'] == 'connected'
+                              ? () => _action('checkConnection')
+                              : _load,
                           child: const Text('Check connection'),
                         ),
                         if (c['status'] == 'connected')

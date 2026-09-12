@@ -54,6 +54,12 @@ function createProvider({clientId,clientSecret,redirectUri,fetchImpl=fetch}) {
       return {subject:identity.sub,email:email(identity.email),refreshToken:result.refresh_token,
         permissions:{read:(result.scope||'').split(' ').includes(SCOPES.read),send:(result.scope||'').split(' ').includes(SCOPES.send)}};
     },
+    async checkConnection(credentials) {
+      const result=await token({grant_type:'refresh_token',refresh_token:credentials.refreshToken});
+      const identity=await request('https://openidconnect.googleapis.com/v1/userinfo',{headers:headers(result.access_token)});
+      if(identity.email_verified!==true||!identity.sub)fail('permission-denied','Reconnect Business Email to continue.');
+      return {email:email(identity.email),subject:identity.sub,permissions:{read:(result.scope||'').split(' ').includes(SCOPES.read),send:(result.scope||'').split(' ').includes(SCOPES.send)}};
+    },
     async send({refreshToken,from,to,subject,body,messageId,parentMessageId,parentThreadId}) {
       const access=(await token({grant_type:'refresh_token',refresh_token:refreshToken})).access_token;
       const raw=[`From: ${email(from)}`,`To: ${email(to)}`,`Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,

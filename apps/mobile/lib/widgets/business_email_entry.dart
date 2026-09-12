@@ -31,7 +31,7 @@ class _BusinessEmailEntryState extends State<BusinessEmailEntry> {
       if (snapshot.data?['available'] != true) return const SizedBox.shrink();
       return ListTile(
         leading: const Icon(Icons.email_outlined),
-        title: const Text('Email Connection · Private Beta'),
+        title: const Text('Business Email · Private Beta'),
         subtitle: const Text('Business replies and owner-approved outreach'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => AppNavigation.push(context, '/business/email-connection'),

@@ -41,6 +41,54 @@ test('owner isolation and read-only mailbox cannot send',async()=>{
   await assert.rejects(call('load',{},'other','owner'));await assert.rejects(call('load',{},'owner','other'));
   await credential({read:true,send:false});await assert.rejects(draft(),/Enable Send/);assert.equal(sends,0);
 });
+test('provider portals are invited, honest about testing, and cannot return encrypted credentials',async()=>{
+ const d=await call('load');assert.deepEqual(d.providers.map(p=>p.id),['google','microsoft','other']);
+ assert.equal(d.providers.find(p=>p.id==='microsoft').configured,false);assert.equal(d.providers.find(p=>p.id==='other').configured,false);
+ await assert.rejects(call('connect',{provider:'microsoft',read:true,send:false}),/setup testing/);
+ await assert.rejects(call('connectOther',{email:'owner@example.test',username:'owner@example.test',password:'unused',read:true,send:false}),/setup testing/);
+ assert(!JSON.stringify(d).includes('private-test-token'));assert.equal(sends,0);
+});
+test('provider is bound to OAuth attempt and callback cannot switch accounts or tenant',async()=>{
+ const microsoft={configured:true,authorize:({state})=>'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state='+state,
+   exchange:async()=>({email:'owner@example.test',subject:'microsoft-owner',credentials:{refreshToken:'ms-private'},permissions:{read:true,send:false}})};
+ beta.providers={microsoft:true};
+ const registry=require('../functions-business-email/providers').createRegistry({google:provider,microsoft});
+ const multi=createService({db,key,now:()=>clock,providers:registry,authority:async r=>{
+  if(r.auth?.uid!=='owner'||r.data.businessId!=='owner')throw Error('denied');
+  return {actorUid:'owner',businessId:'owner',beta,preferenceEnabled:()=>true};}});
+ const request=input=>multi.execute({auth:{uid:'owner'},data:{businessId:'owner',operation:'connect',input}});
+ const first=await request({provider:'microsoft',read:true,send:false});assert.equal((await request({provider:'microsoft',read:true,send:false})).reused,true);
+ assert.equal((await request({provider:'google',read:true,send:false})).reused,false);
+ await assert.rejects(multi.callback({state:new URL(first.url).searchParams.get('state'),code:'ended'}));
+ const fresh=await request({provider:'microsoft',read:true,send:false});await multi.callback({state:new URL(fresh.url).searchParams.get('state'),code:'authorized'});
+ const c=(await db.doc('businessMailboxes/owner').get()).data();assert.equal(c.provider,'microsoft');assert.equal(c.permissions.send,false);
+ const stored=(await db.doc('businessMailboxes/owner/private/credential').get()).data();assert(!JSON.stringify(stored).includes('ms-private'));
+ assert.equal(gmail.unseal(stored.sealed,key,'BusinessMailboxV1/owner').refreshToken,'ms-private');
+ await assert.rejects(multi.callback({state:new URL(fresh.url).searchParams.get('state'),code:'replayed'}));assert.equal(sends,0);
+});
+test('Other setup encrypts password, preserves one connection, and returns only verified partial capability',async()=>{
+ beta.providers={other:true};beta.otherMailbox={email:'owner@example.test'};
+ const input={requestId:'setup-once',email:'owner@example.test',username:'owner@example.test',password:'test-secret',read:true,send:true};
+ let verifyCount=0;
+ const other={configured:true,verify:async()=>{verifyCount++;return {email:'owner@example.test',subject:'other-owner',credentials:{password:'test-secret'},permissions:{read:true,send:false},senderVerified:false};}};
+ const registry=require('../functions-business-email/providers').createRegistry({google:provider,other});
+ const multi=createService({db,key,now:()=>clock,providers:registry,authority:async r=>{
+  if(r.auth?.uid!=='owner'||r.data.businessId!=='owner')throw Error('denied');return {actorUid:'owner',businessId:'owner',beta,preferenceEnabled:()=>true};}});
+ const doConnect=()=>multi.execute({auth:{uid:'owner'},data:{businessId:'owner',operation:'connectOther',input}});
+ const results=await Promise.all([doConnect(),doConnect()]);assert.equal(results.filter(r=>r.reused===true).length,1);assert.equal(verifyCount,1);
+ const result=results.find(r=>r.connected===true);assert.equal(result.canSend,false);assert.equal(result.canRead,true);
+ const publicRecord=(await db.doc('businessMailboxes/owner').get()).data();assert(!JSON.stringify(publicRecord).includes('test-secret'));assert.equal(publicRecord.automaticSending,false);
+ const privateRecord=(await db.doc('businessMailboxes/owner/private/credential').get()).data();assert(!JSON.stringify(privateRecord).includes('test-secret'));
+ assert.equal(gmail.unseal(privateRecord.sealed,key,'BusinessMailboxV1/owner').password,'test-secret');assert.equal(sends,0);
+});
+test('connection health failures are recoverable and stop send capability without fabricating a new connection',async()=>{
+ provider.checkConnection=async()=>{const error=Error('raw provider credential detail');error.code='permission-denied';throw error;};
+ // Registry holds the provider implementation; construct after installing this test adapter.
+ service=createService({db,key,now:()=>clock,provider,authority:async()=>({actorUid:'owner',businessId:'owner',beta,preferenceEnabled:()=>true})});
+ await assert.rejects(call('checkConnection'),e=>e.message==='Reconnect Business Email to continue.');
+ const d=await call('load');assert.equal(d.connection.connectionHealth,'reconnect_required');assert.equal(d.connection.canSend,false);
+ assert.equal((await db.doc('businessMailboxes/owner').get()).data().generation,'gen');assert.equal(sends,0);
+});
 test('production internal mailbox requires exact invited and pinned verified Admin; no customer profile or entitlement is fabricated',async()=>{
  await db.doc('users/internal').set({role:'admin',active:false});
  await db.doc('users/otheradmin').set({role:'admin',active:true});
@@ -108,6 +156,32 @@ test('ambiguous provider outcome is held; retry cannot send again or create a ne
   await send(d);assert.equal(sends,1);assert.equal((await call('reconcile',{operationId:d.operationId})).retryAllowed,false);
   provider.reconcileSent=async()=>({id:'accepted-message',threadId:'accepted-thread'});
   assert.equal((await call('reconcile',{operationId:d.operationId})).state,'sent');assert.equal(sends,1);
+});
+
+test('concurrent distinct sends enforce workspace hourly and daily limits; retries consume no extra slot',async()=>{
+  const source=(await db.doc('agentProspects/prospect').get()).data();
+  const drafts=[];
+  for(let i=0;i<21;i++){
+    const prospectId='limit_'+i;
+    await db.doc('agentProspects/'+prospectId).set(source);
+    drafts.push(await draft({prospectId}));
+  }
+  const outcomes=await Promise.allSettled(drafts.slice(0,6).map(send));
+  assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,5);
+  const rejected=outcomes.filter(r=>r.status==='rejected');
+  assert.equal(rejected.length,1);assert.equal(rejected[0].reason.code,'resource-exhausted');
+  assert.equal(sends,5);
+  const hourRef=db.doc('businessMailboxes/owner/deliveryWindows/hour_'+Math.floor(clock/3600000));
+  const dayRef=db.doc('businessMailboxes/owner/deliveryWindows/day_'+Math.floor(clock/86400000));
+  assert.equal((await hourRef.get()).data().attempts,5);
+  const firstSent=drafts[outcomes.findIndex(r=>r.status==='fulfilled')];
+  await send(firstSent);assert.equal(sends,5);assert.equal((await dayRef.get()).data().attempts,5);
+  for(let offset=6;offset<21;offset+=5){clock+=3600000;await Promise.all(drafts.slice(offset,offset+5).map(send));}
+  assert.equal(sends,20);assert.equal((await dayRef.get()).data().attempts,20);
+  clock+=3600000;
+  const neverSent=drafts[outcomes.findIndex(r=>r.status==='rejected')];
+  await assert.rejects(send(neverSent),{code:'resource-exhausted'});assert.equal(sends,20);
+  assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,20);
 });
 test('exact recipient, version, sender generation, source freshness and preferences are rechecked',async()=>{
   const d=await draft();await assert.rejects(send({...d,version:7}));

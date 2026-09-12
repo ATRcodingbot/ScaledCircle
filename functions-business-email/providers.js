@@ -1,0 +1,24 @@
+'use strict';
+const gmail=require('./gmail'),contract=require('./mailbox_contract');
+function createRegistry({google,microsoft,other}) {
+ const adapters={google:{...google,id:'google',configured:google.configured!==false,
+   authorize:input=>google.authorize(input),exchange:(...args)=>google.exchange(...args),
+   send:op=>google.send({...op,refreshToken:op.credentials.refreshToken}),
+   reconcileSent:(credentials,op)=>google.reconcileSent(credentials.refreshToken,op),
+   replies:async(credentials,op)=>gmail.replyMessages(await google.thread(credentials.refreshToken,op.providerThreadId),op)},microsoft,other};
+ return {
+  get(name='google',beta={}) {
+   name=contract.providerId(name);const p=adapters[name];
+   if(!p||p.configured===false||name!=='google'&&beta.providers?.[name]!==true||name==='other'&&!beta.otherMailbox)
+     contract.fail('failed-precondition','This provider is in setup testing. A reviewed private test connection is required.');
+   return p;
+  },
+  list(beta={}) {return Object.entries(contract.LABELS).map(([id,label])=>({id,label,
+   status:id==='google'?'private_beta':'setup_testing',
+   configured:!!adapters[id]&&adapters[id].configured!==false&&(id==='google'||beta.providers?.[id]===true)&&(id!=='other'||!!beta.otherMailbox),
+   // Never return credentials or caller-controlled server destinations.
+   ...(id==='other'&&beta.otherMailbox?{settings:{email:beta.mailbox,username:beta.otherMailbox.username,imapHost:beta.otherMailbox.imapHost||'',imapPort:993,
+     smtpHost:beta.otherMailbox.smtpHost||'',smtpPort:beta.otherMailbox.smtpPort||465}}:{})}));}
+ };
+}
+module.exports={createRegistry};

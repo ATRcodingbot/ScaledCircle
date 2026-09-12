@@ -6,9 +6,12 @@ const {onCall,onRequest,HttpsError}=require('firebase-functions/v2/https');
 const {defineSecret}=require('firebase-functions/params');
 const {onSchedule}=require('firebase-functions/v2/scheduler');
 const {createService}=require('./service'),{createAuthority}=require('./authority'),gmail=require('./gmail');
+const {createRegistry}=require('./providers');
 const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(),db=getFirestore(app);
 const CLIENT_SECRET=defineSecret('BUSINESS_EMAIL_GOOGLE_CLIENT_SECRET');
 const ENCRYPTION_KEY=defineSecret('BUSINESS_EMAIL_ENCRYPTION_KEY');
+const MICROSOFT_SECRET=defineSecret('BUSINESS_EMAIL_MICROSOFT_CLIENT_SECRET');
+const microsoftEnabled=process.env.BUSINESS_EMAIL_MICROSOFT_ENABLED==='true';
 function service() {
   const project=process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT;
   const clientId=process.env.BUSINESS_EMAIL_GOOGLE_CLIENT_ID,redirectUri=process.env.BUSINESS_EMAIL_REDIRECT_URI;
@@ -17,9 +20,12 @@ function service() {
   const beta=JSON.parse(process.env.BUSINESS_EMAIL_PRIVATE_BETA||'{}');
   return createService({db,key,authority:createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,beta,configured,
     internalAdminUid:process.env.GROWTH_PRODUCTION_ADMIN_UID||''}),
-    provider:gmail.createProvider({clientId,clientSecret,redirectUri})});
+    providers:createRegistry({google:{...gmail.createProvider({clientId,clientSecret,redirectUri}),configured},
+      microsoft:require('./microsoft').createProvider({clientId:process.env.BUSINESS_EMAIL_MICROSOFT_CLIENT_ID,
+        clientSecret:microsoftEnabled?MICROSOFT_SECRET.value():null,redirectUri:process.env.BUSINESS_EMAIL_MICROSOFT_REDIRECT_URI}),
+      other:require('./other_mail').createProvider()})});
 }
-const options={region:'us-east1',maxInstances:2,timeoutSeconds:120,secrets:[CLIENT_SECRET,ENCRYPTION_KEY]};
+const options={region:'us-east1',maxInstances:2,timeoutSeconds:120,secrets:[CLIENT_SECRET,ENCRYPTION_KEY,...(microsoftEnabled?[MICROSOFT_SECRET]:[])]};
 exports.businessEmailOperationsV1=onCall({...options,enforceAppCheck:false},async request=>{
   try{return await service().execute(request);}catch(error){
     console.warn('Business Email action held',{code:error.code||'unavailable'});
