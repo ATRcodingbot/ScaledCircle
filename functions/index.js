@@ -824,6 +824,9 @@ exports.provisionCampaignTracking = onCall(
         .map((value) => readText(value, 24))
         .filter((value) => TRACKING_CHANNELS.has(value))
       : ["web", "qr", "print"];
+    if (requestedChannels.some(channel => ['phone', 'email'].includes(channel))) {
+      throw new HttpsError('failed-precondition', 'Phone and email tracking are not available yet. Choose website or QR tracking.');
+    }
 
     if (!campaignId) {
       throw new HttpsError(
@@ -7568,6 +7571,11 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOper
     if (zone.assignedScalerId) {
       throw new HttpsError("failed-precondition", "This zone has already been assigned.");
     }
+    try {
+      require('./paid_work_launch_gate').assertNewPaidWork({project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
+    } catch (error) {
+      throw new HttpsError("failed-precondition", error.message, {reason: error.reason});
+    }
     if (zone.analysisStatus !== "complete" ||
         zone.serverZoneMetricsVersion !== "geometry_v1_server") {
       throw new HttpsError(
@@ -7852,6 +7860,11 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
       throw new HttpsError("permission-denied", "This group slot is not available to you.");
     }
     if (existingParticipant.exists) { result = existingParticipant.data(); return; }
+    try {
+      require('./paid_work_launch_gate').assertNewPaidWork({project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
+    } catch (error) {
+      throw new HttpsError("failed-precondition", error.message, {reason: error.reason});
+    }
     await requireCurrentLegalConsents(
       scalerUid,
       legalConsent.ROLE_REQUIREMENTS.scaler_work,
@@ -10856,6 +10869,7 @@ exports.publishFundedCampaign = safeStripeCallable(
         multiScalerRollout.campaignScalerCount(campaign),
       );
       if (campaign.status === "open") return;
+      require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
       if (campaign.status !== "draft" || campaign.fundingStatus !== "funded" ||
           !cleanId(campaign.fundingPaymentId)) {
         throw new HttpsError(
@@ -11015,6 +11029,7 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
     if (campaign.businessId !== context.uid) {
       throw new HttpsError("permission-denied", "You do not own this campaign.");
     }
+    require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
     const zoneSnapshots = await db.collection("campaignZones")
       .where("campaignId", "==", campaignId).get();
     const zoneReadiness = zoneSnapshots.docs.map((doc) =>

@@ -52,9 +52,9 @@ const copy = (name) => {
   const bytes = fs.readFileSync(path.join(source, name));
   hashes[name] = crypto.createHash("sha256").update(bytes).digest("hex");
   fs.writeFileSync(path.join(output, name), bytes);
-  for (const match of bytes.toString().matchAll(/require\("\.\/([a-z0-9_]+)"\)/g)) copy(`${match[1]}.js`);
+  for (const match of bytes.toString().matchAll(/require\(['"]\.\/([a-z0-9_]+)['"]\)/g)) copy(`${match[1]}.js`);
 };
-for (const match of built.matchAll(/require\("\.\/([a-z0-9_]+)"\)/g)) copy(`${match[1]}.js`);
+for (const match of built.matchAll(/require\(['"]\.\/([a-z0-9_]+)['"]\)/g)) copy(`${match[1]}.js`);
 for (const name of ["package.json", "package-lock.json"]) fs.copyFileSync(path.join(source, name), path.join(output, name));
 if (!fs.existsSync(path.join(output, "node_modules"))) {
   fs.symlinkSync(path.join(source, "node_modules"), path.join(output, "node_modules"), "junction");

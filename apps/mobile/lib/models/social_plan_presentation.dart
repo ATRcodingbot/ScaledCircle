@@ -1,4 +1,59 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+String socialEvidenceText(dynamic raw, String fallback) {
+  final value = raw?.toString().trim() ?? '';
+  if (value.isEmpty ||
+      RegExp(
+        r'\b(not[ _-]?found|undefined|null|nan)\b',
+        caseSensitive: false,
+      ).hasMatch(value) ||
+      RegExp(
+        r'\[[a-z_-]+/[a-z_-]+\]|\bHTTP\s*\d{3}\b|^[A-Z][A-Z_]+$',
+      ).hasMatch(value)) {
+    return fallback;
+  }
+  return value;
+}
+
+String socialQualityLabel(dynamic value) => switch (value) {
+  'keep' => 'Ready for your review',
+  'improve' => 'Improve this post',
+  'replace' => 'Prepare a better version',
+  'reschedule' => 'Choose a future time',
+  'strong' => 'Strong',
+  'needs_attention' => 'Needs attention',
+  _ => 'Not assessed yet',
+};
+String socialCustomerTime(BuildContext context, dynamic raw) {
+  final date = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  if (date == null) return 'Choose a time';
+  final labels = MaterialLocalizations.of(context);
+  return '${labels.formatMediumDate(date)} · ${labels.formatTimeOfDay(TimeOfDay.fromDateTime(date))} (device time)';
+}
+
+List<String> socialQualityAdvice(Map assessment) {
+  final scores = assessment['scores'] as Map? ?? const {};
+  const advice = {
+    'businessRelevance': 'Make the connection to your Business clear.',
+    'serviceRelevance':
+        'Describe the specific service this post helps explain.',
+    'localRelevance':
+        'Mention the relevant service area when it fits the post.',
+    'hookStrength': 'Open with a clear, useful reason to keep reading.',
+    'copyQuality': 'Use concise, complete copy that explains the value.',
+    'ctaQuality': 'Add a clear next step and its correct destination.',
+    'repetition': 'Use a distinct angle instead of repeating another draft.',
+    'keywordQuality': 'Use natural words customers use for this service.',
+    'hashtagQuality': 'Keep hashtags relevant and avoid repetition.',
+  };
+  return [
+    for (final entry in advice.entries)
+      if (scores[entry.key] is num && (scores[entry.key] as num) < 75)
+        entry.value,
+    if (assessment['recommendation'] == 'reschedule')
+      'Choose a future publish time, then check quality again.',
+  ];
+}
 
 // Invalidates customer read models after an authoritative approval receipt.
 final socialReviewRevision = ValueNotifier<int>(0);
@@ -28,15 +83,17 @@ class SocialPlanPresentation {
       count('draftPosts') ??
       plans
           .expand((p) => (p['items'] as List? ?? const []).whereType<Map>())
-          .where((item) {
+          .fold<int>(0, (total, item) {
             final variants = (item['variants'] as List? ?? const [])
                 .whereType<Map>();
             const finalStates = ['approved', 'scheduled', 'published'];
-            return variants.isEmpty
-                ? !finalStates.contains(item['status'])
-                : variants.any((v) => !finalStates.contains(v['status']));
-          })
-          .length;
+            return total +
+                (variants.isEmpty
+                    ? (!finalStates.contains(item['status']) ? 1 : 0)
+                    : variants
+                          .where((v) => !finalStates.contains(v['status']))
+                          .length);
+          });
 
   int? count(String key) {
     if (runtime['available'] != true) return null;

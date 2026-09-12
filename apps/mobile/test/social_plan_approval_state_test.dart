@@ -31,8 +31,8 @@ void main() {
     expect(view.allApproved, true);
     expect(
       view.draftPosts,
-      8,
-    ); // Calendar proposals, not twice-counted variants.
+      16,
+    ); // Eight ideas contain sixteen independent platform drafts.
     expect(view.primaryAction, 'Review Draft Posts');
     expect(view.contentAction, 'Review Draft Posts');
     expect(view.count('scheduled'), 0);
@@ -64,7 +64,7 @@ void main() {
     },
   );
   testWidgets(
-    'narrow large text shows approved plan, 8 drafts, zero scheduled',
+    'narrow large text shows approved plan, 16 drafts, zero scheduled',
     (tester) async {
       tester.view.physicalSize = const Size(320, 900);
       tester.view.devicePixelRatio = 1;
@@ -91,7 +91,7 @@ void main() {
       );
       await show(false);
       expect(find.text('Draft Posts'), findsOneWidget);
-      expect(find.text('Draft Posts: 8 ready for review'), findsOneWidget);
+      expect(find.text('Draft Posts: 16 ready for review'), findsOneWidget);
       expect(find.text('Scheduled: 0'), findsOneWidget);
       expect(find.text('Review 30-Day Plan'), findsNothing);
       expect(find.text('View Schedule'), findsNothing);

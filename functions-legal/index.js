@@ -1251,6 +1251,9 @@ async function authenticatedUserContext(request, message) {
 
 
 
+
+
+
 /** Record immutable, versioned acceptance for the authenticated profile owner. */
 exports.recordLegalConsent = onCall(
   { enforceAppCheck: false, maxInstances: 10 },

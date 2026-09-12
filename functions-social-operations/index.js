@@ -114,6 +114,9 @@ async function requireSocialOperationsBusiness(request) {
   if (!context.isAdmin && context.role !== "business") {
     throw new HttpsError("permission-denied", "Social Operations is available to Business accounts.");
   }
+  if (!launchAvailability.invited(context, process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS)) {
+    throw new HttpsError('permission-denied', 'Social Manager is Private Beta. An invitation is required.', {reason:'SOCIAL_INVITATION_REQUIRED'});
+  }
   const entitlement = (await db.collection("businessSubscriptions").doc(context.uid).get()).data();
   if (!context.isAdmin && !subscriptionEntitlements.hasActiveScaleEntitlement(entitlement)) {
     throw new HttpsError("permission-denied", "An active Scale or Managed Growth entitlement is required.");
@@ -160,6 +163,36 @@ function customerPostCallable(method) {
 exports.previewCustomerSocialPostV1=customerPostCallable('preview');
 exports.approveAndScheduleCustomerSocialPostV1=customerPostCallable('approve');
 
+exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3},async request=>{
+  const business=await requireSocialOperationsBusiness(request);
+  if(business.role!=='business'||!metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
+    throw new HttpsError('permission-denied','Social Manager is Private Beta. An invitation is required.');
+  const method=request.data?.action;
+  if(!['save','assess','attach'].includes(method))throw new HttpsError('invalid-argument','Choose a supported preparation action.');
+  const editor=require('./social_customer_editor').createEditor({db,
+    enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
+  try{return await (method==='attach'?customerMediaStore():editor)[method](business.uid,request.data||{});}
+  catch(error){require('firebase-functions/logger').warn('customer_social_prepare_rejected',{uid:business.uid,reason:error.message});
+    throw new HttpsError('failed-precondition','The post could not be prepared. Reload its current version and review your changes.');}
+});
+
+function customerMediaStore(){return require('./social_customer_media').createMedia({db,
+  bucket:()=>require('firebase-admin/storage').getStorage().bucket(),
+  project:process.env.GCLOUD_PROJECT||process.env.GCP_PROJECT,
+  enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});}
+
+// Public delivery contains only the derivative explicitly released by its owner.
+// Neither private originals nor arbitrary Storage paths are addressable here.
+exports.serveCustomerSocialMediaV1=onRequest({maxInstances:4,timeoutSeconds:30},async(req,res)=>{
+  if(!['GET','HEAD'].includes(req.method))return res.status(405).end();
+  const match=/^\/([a-f0-9]{64})\.jpg$/.exec(req.path);
+  if(!match)return res.status(404).end();
+  try{const bytes=await customerMediaStore().delivery(match[1]);if(!bytes)return res.status(404).end();
+    res.set('Content-Type','image/jpeg').set('X-Content-Type-Options','nosniff').set('Cache-Control','public,max-age=300');
+    return req.method==='HEAD'?res.status(200).end():res.status(200).send(bytes);}
+  catch{return res.status(503).end();}
+});
+
 exports.getSocialOperationsWorkspace = onCall(
   {enforceAppCheck: false, maxInstances: 6},
   async (request) => {
@@ -191,7 +224,7 @@ exports.getSocialOperationsWorkspace = onCall(
     const cadence=require('./social_customer_cadence');
     const qualityMap=new Map(qualityAssessments.docs.map(doc=>[doc.id,doc.data()]));
     const cadenceLearning=['facebook','instagram'].map(provider=>cadence.recommend({uid:business.uid,provider,
-      observations:cadenceObservations.docs.map(doc=>{const row=doc.data(),q=qualityMap.get(row.contentVersionId);
+      observations:cadenceObservations.docs.map(doc=>{const row=doc.data(),q=qualityMap.get(row.contentVersionId+'_'+row.provider)||qualityMap.get(row.contentVersionId);
         const valid=q?.businessUid===business.uid&&q.immutableSourceHash===row.contentHash;
         const variant=valid?q.variantAssessments?.find(v=>v.provider===row.provider):null;
         return {...row,hoursAfterPublication:cadenceJobMap.get(doc.id)?.hoursAfterPublication,

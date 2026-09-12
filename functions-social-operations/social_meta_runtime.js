@@ -27,8 +27,9 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    db.doc(`socialProviderConfigs/${environment}_meta`),stateRef(job.businessUid,job.provider),
    db.doc(`agentHealth/${job.businessUid}`),db.doc(`socialContentVersions/${job.versionId}`),
    db.doc(`socialContentQualityAssessments/${job.versionId}`)];
-  const [a,c,p,s,h,v,q]=(await Promise.all(refs.map(read))).map(x=>x.data());
+  const [a,c,p,s,h,v,legacyQuality]=(await Promise.all(refs.map(read))).map(x=>x.data());
   const customer=a?.schemaVersion==='CustomerPostApprovalV1';
+  const q=customer?(await read(db.doc(`socialContentQualityAssessments/${job.versionId}_${job.provider}`))).data()||legacyQuality:legacyQuality;
   if(customer) {
    require("./social_customer_scheduling").authorizeRuntime({approval:a,connection:require("./social_customer_scheduling").connectionFromOwnedPath(c,job.businessUid),config:p,uid:job.businessUid,
     provider:job.provider,environment,enabledUids:customerUids});
@@ -61,6 +62,8 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   }
   let revision=null;
   if(variant?.mediaRevisionId) revision=(await read(db.doc(`socialMediaLibraries/${job.businessUid}/items/${variant.mediaRevisionId}`))).data();
+  meta.assertMediaEnvironment(revision,environment);
+  if(action!=='reconcile')await require('./social_customer_media').assertDeliveryAuthority({db,read,uid:job.businessUid,revision});
   const account={businessUid:job.businessUid,providerUserId:c.providerUserId,linkedPageId:c.linkedPageId,handle:c.handle};
   meta.prepare({job,revision,account,approval:{...a,revokedAt:action==="create"?a.revokedAt:null}});
   return {account,approval:a,revision,connection:c};

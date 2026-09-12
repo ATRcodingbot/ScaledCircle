@@ -7,11 +7,14 @@ const {isDeepStrictEqual} = require("node:util");
 const fail = (code) => { throw new Error(code); };
 const numericId = (value) => typeof value === "string" && /^\d+$/.test(value);
 
-function mediaRevision({businessUid, assetId, provider, images, productionOrigin}) {
+function mediaRevision({businessUid, assetId, provider, images, productionOrigin, customerDeliveryId}) {
   if (!businessUid || !assetId || !["facebook", "instagram"].includes(provider)) fail("meta_media_context");
   const origin = new URL(productionOrigin);
+  const customerDelivery=customerDeliveryId!=null;
+  if(customerDelivery && (!/^[a-f0-9]{64}$/.test(customerDeliveryId)||
+      !['https://us-east1-scaled-circle.cloudfunctions.net','https://us-east1-scaledcircle-staging.cloudfunctions.net'].includes(productionOrigin)))fail('meta_media_origin');
   if (origin.protocol !== "https:" || origin.origin !== productionOrigin ||
-      /staging|web\.app|firebaseapp\.com|localhost|127\.0\.0\.1/i.test(origin.hostname)) fail("meta_media_origin");
+      (!customerDelivery && /staging|web\.app|firebaseapp\.com|localhost|127\.0\.0\.1/i.test(origin.hostname))) fail("meta_media_origin");
   if (!Array.isArray(images) || images.length < 1 || images.length > (provider === "facebook" ? 1 : 10)) fail("meta_media_count");
   const files = images.map((image) => {
     if (!/^[a-f0-9]{64}$/.test(image.sha256) || !Number.isSafeInteger(image.bytes) || image.bytes <= 0 ||
@@ -21,12 +24,14 @@ function mediaRevision({businessUid, assetId, provider, images, productionOrigin
     if (!extension || (provider === "instagram" && extension !== "jpg")) fail("meta_media_format");
     if (provider === "instagram" && (image.width < 320 || image.width > 1440 ||
         image.width / image.height < 0.8 || image.width / image.height > 1.91)) fail("meta_media_dimensions");
-    if (image.url !== `${productionOrigin}/social/${image.sha256}.${extension}`) fail("meta_media_url");
+    const expected=customerDelivery?`${productionOrigin}/serveCustomerSocialMediaV1/${customerDeliveryId}.jpg`:
+      `${productionOrigin}/social/${image.sha256}.${extension}`;
+    if (image.url !== expected || (customerDelivery && (extension!=='jpg'||images.length!==1))) fail("meta_media_url");
     return {sha256: image.sha256, bytes: image.bytes, width: image.width, height: image.height,
       mime: image.mime, url: image.url};
   });
   if (new Set(files.map((file) => file.sha256)).size !== files.length) fail("meta_media_duplicate");
-  const binding = {businessUid, assetId, provider, images: files};
+  const binding = {businessUid, assetId, provider, images: files,...(customerDelivery?{customerDeliveryId}:{})};
   return {...binding, id: `media_sha256_${hash(binding)}`};
 }
 
@@ -95,4 +100,10 @@ function nextStep(record) {
   return "not_started";
 }
 
-module.exports = {mediaRevision, prepare, describe, nextStep};
+function assertMediaEnvironment(revision, environment) {
+  if(!revision?.customerDeliveryId)return;
+  const project=environment==='production'?'scaled-circle':environment==='staging'?'scaledcircle-staging':null;
+  if(!project || !revision.images?.length || revision.images.some(image=>
+    image.url!==`https://us-east1-${project}.cloudfunctions.net/serveCustomerSocialMediaV1/${revision.customerDeliveryId}.jpg`))fail('meta_media_environment_mismatch');
+}
+module.exports = {mediaRevision, prepare, describe, nextStep,assertMediaEnvironment};

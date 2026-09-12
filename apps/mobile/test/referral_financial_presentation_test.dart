@@ -37,6 +37,36 @@ class FakeReferralFinance implements ReferralFinancialGateway {
 
 void main() {
   testWidgets(
+    'uncertified referral rail shows Held, never Available or Cash Out',
+    (tester) async {
+      final service = FakeReferralFinance()..data['executionEnabled'] = false;
+      service.data['history'] = [
+        {
+          'status': 'AVAILABLE',
+          'currentCents': 999,
+          'originalCents': 999,
+          'type': 'SCALER_JOB_REFERRAL',
+        },
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ReferralEarningsPanel(service: service),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Held'), findsWidgets);
+      expect(find.textContaining(r'$9.99'), findsWidgets);
+      expect(find.text('Available'), findsNothing);
+      expect(find.text('Cash Out Referral Earnings'), findsNothing);
+      expect(find.textContaining('once your available'), findsNothing);
+      expect(service.requests, 0);
+    },
+  );
+  testWidgets(
     'held and below-minimum available stay distinct; no automatic payout',
     (tester) async {
       final service = FakeReferralFinance();

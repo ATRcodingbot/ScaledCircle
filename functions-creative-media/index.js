@@ -12182,6 +12182,21 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function requireCreativeMediaBusiness(request) {
   const context = await requireVerifiedUser(request, "Log in to manage Brand Assets.");
   if (context.role !== "business" || context.user.active !== true) {

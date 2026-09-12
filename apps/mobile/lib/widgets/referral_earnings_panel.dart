@@ -104,6 +104,7 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
   Widget build(BuildContext context) {
     final data = _data;
     final available = (data?['availableCents'] as num?)?.toInt() ?? 0;
+    final payoutReady = data?['executionEnabled'] == true;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -126,7 +127,10 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                 children: [
                   for (final pair in [
                     ('Pending', 'pendingCents'),
-                    ('Available', 'availableCents'),
+                    (
+                      payoutReady ? 'Available' : 'Held',
+                      payoutReady ? 'availableCents' : 'heldCents',
+                    ),
                     ('Paid', 'paidCents'),
                   ])
                     Column(
@@ -134,7 +138,11 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                       children: [
                         Text(pair.$1),
                         Text(
-                          _money(data[pair.$2]),
+                          _money(
+                            pair.$2 == 'heldCents'
+                                ? data['heldCents'] ?? data['availableCents']
+                                : data[pair.$2],
+                          ),
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                       ],
@@ -147,11 +155,12 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                 const Text(
                   'A referral adjustment will be offset by future referral earnings before another cash-out.',
                 ),
-              if (available >= 0 && available < 1000)
+              if (payoutReady && available >= 0 && available < 1000)
                 const Text(
                   'Cash out once your available referral balance reaches \$10.',
                 ),
-              if (data['recipientReady'] != true &&
+              if (payoutReady &&
+                  data['recipientReady'] != true &&
                   (data['history'] as List? ?? []).isNotEmpty)
                 OutlinedButton(
                   onPressed: _busy
@@ -171,19 +180,22 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                         }),
                   child: const Text('Set Up Referral Payouts'),
                 ),
-              FilledButton(
-                onPressed:
-                    !_busy &&
-                        available >= 1000 &&
-                        data['recipientReady'] == true &&
-                        data['executionEnabled'] == true &&
-                        (data['reservedCents'] as num? ?? 0) == 0
-                    ? () => _cashOut(available)
-                    : null,
-                child: const Text('Cash Out Referral Earnings'),
-              ),
+              if (payoutReady)
+                FilledButton(
+                  onPressed:
+                      !_busy &&
+                          available >= 1000 &&
+                          data['recipientReady'] == true &&
+                          data['executionEnabled'] == true &&
+                          (data['reservedCents'] as num? ?? 0) == 0
+                      ? () => _cashOut(available)
+                      : null,
+                  child: const Text('Cash Out Referral Earnings'),
+                ),
               if (data['executionEnabled'] != true)
-                const Text('TEST payout execution is not enabled.'),
+                const Text(
+                  'Referral Program — Private Beta. Rewards remain pending or held while payout certification is completed. A completed hold does not mean money has been paid.',
+                ),
               for (final op in (data['operations'] as List? ?? []).where(
                 (o) => o['status'] != 'completed',
               ))
@@ -203,11 +215,11 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                         : () => _action(
                             () => _service.reconcile(
                               op['operationId'] as String,
-                              retry: op['payoutFailed'] == true,
+                              retry: payoutReady && op['payoutFailed'] == true,
                             ),
                           ),
                     child: Text(
-                      op['payoutFailed'] == true
+                      payoutReady && op['payoutFailed'] == true
                           ? 'Retry payout'
                           : 'Check status',
                     ),
@@ -232,24 +244,28 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
     final label = e['type'] == 'BUSINESS_SUBSCRIPTION_REFERRAL'
         ? 'Business subscription referral'
         : 'Scaler work referral';
-    final date = DateTime.fromMillisecondsSinceEpoch(
-      (e['expectedAvailabilityMillis'] as num).toInt(),
-    );
-    final status =
-        const {
-          'PENDING': 'Pending',
-          'AVAILABLE': 'Available',
-          'PAID': 'Paid',
-          'ADJUSTED': 'Adjusted',
-          'REVERSED': 'Reversed',
-          'PAYOUT_PENDING': 'Payout processing',
-        }[e['status']] ??
-        'Needs review';
+    final millis = e['expectedAvailabilityMillis'];
+    final date = millis is num
+        ? DateTime.fromMillisecondsSinceEpoch(millis.toInt())
+        : null;
+    final payoutReady = _data?['executionEnabled'] == true;
+    final status = e['status'] == 'AVAILABLE' && !payoutReady
+        ? 'Held'
+        : const {
+                'PENDING': 'Pending',
+                'HELD': 'Held',
+                'AVAILABLE': 'Available',
+                'PAID': 'Paid',
+                'ADJUSTED': 'Adjusted',
+                'REVERSED': 'Reversed',
+                'PAYOUT_PENDING': 'Payout processing',
+              }[e['status']] ??
+              'Needs review';
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text('$label · ${_money(e['currentCents'])}'),
       subtitle: Text(
-        '$status${e['status'] == 'PENDING' ? '\nExpected availability: ${date.month}/${date.day}/${date.year}, subject to eligibility checks' : ''}'
+        '$status${e['status'] == 'PENDING' && date != null ? '\nEarliest hold review: ${date.month}/${date.day}/${date.year}, subject to eligibility and payout readiness' : ''}'
         '${(e['adjustmentCents'] as num? ?? 0) != 0 ? '\nAdjustment: ${_money(e['adjustmentCents'])}' : ''}',
       ),
     );

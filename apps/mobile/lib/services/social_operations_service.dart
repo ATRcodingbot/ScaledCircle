@@ -46,10 +46,20 @@ class SocialOperationsWorkspace {
 
 class SocialOperationsService {
   SocialOperationsService({FirebaseFunctions? functions})
-    : _functions =
-          functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
+    : _providedFunctions = functions;
 
-  final FirebaseFunctions _functions;
+  final FirebaseFunctions? _providedFunctions;
+  FirebaseFunctions get _functions =>
+      _providedFunctions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
+
+  Future<Map<String, dynamic>> preparePost(Map<String, dynamic> input) async =>
+      Map<String, dynamic>.from(
+        (await _functions
+                    .httpsCallable('prepareCustomerSocialPostV1')
+                    .call(input))
+                .data
+            as Map,
+      );
 
   Future<Map<String, dynamic>> previewPost(Map<String, dynamic> post) async =>
       Map<String, dynamic>.from(

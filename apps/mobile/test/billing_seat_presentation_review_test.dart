@@ -60,6 +60,28 @@ class UnavailableReviewService extends ReviewService {
 }
 
 void main() {
+  testWidgets(
+    'complimentary cancellation deep link returns plan management without a fake cancel',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessMembershipScreen(
+            service: ComplimentaryReviewService(),
+            businessId: 'review-business',
+            section: 'cancel',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No recurring charge'), findsOneWidget);
+      expect(find.text('Cancel at End of Billing Period'), findsNothing);
+      expect(find.text('Cancel Membership'), findsNothing);
+      expect(find.text('View Available Plans'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('complimentary access never looks like an expired paid plan', (
     tester,
   ) async {

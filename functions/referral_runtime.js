@@ -8,6 +8,11 @@ function signedPaidProof(event){
   return event.type==='payout.paid' && event.data?.object?.status==='paid'
     ?{payoutId:event.data.object.id,accountId:event.account,eventId:event.id}:null;
 }
+function payoutPresentation(dashboard,executionEnabled) {
+  if(executionEnabled===true)return {...dashboard,heldCents:0};
+  return {...dashboard,heldCents:dashboard.availableCents,availableCents:0,
+    history:(dashboard.history||[]).map(row=>({...row,status:row.status==='AVAILABLE'?'HELD':row.status}))};
+}
 function createRuntime({db,FieldValue,auth,project,environment,key,invoiceKey,planForPrice,executionEnabled=false,now=Date.now}){
   liability.assertRuntime(project);if(environment!=='staging'&&project!=='demo-referral-authority')throw Error('referral_staging_only');
   if(!/^sk_test_/.test(key)||!/^sk_test_/.test(invoiceKey))throw Error('referral_test_credentials_required');
@@ -27,7 +32,7 @@ function createRuntime({db,FieldValue,auth,project,environment,key,invoiceKey,pl
       if(e.type==='BUSINESS_SUBSCRIPTION_REFERRAL')await business.reconcile(e.sourceId);else await scaler.reconcile(e.sourceId);
     }
     const account=await recipient.current(uid);
-    if(account.ready)for(const doc of rows.docs){const fresh=(await doc.ref.get()).data();
+    if(executionEnabled && account.ready)for(const doc of rows.docs){const fresh=(await doc.ref.get()).data();
       await ledger.release(doc.id,{providerHealthy:true,authorityDigest:fresh.authorityDigest});}
     return {account,dashboard:await ledger.dashboard(uid)};
   }
@@ -36,7 +41,7 @@ function createRuntime({db,FieldValue,auth,project,environment,key,invoiceKey,pl
     async dashboard(uid){const result=await refresh(uid);
       const ops=await db.collection('financialOperations').where('ownerId','==',uid).limit(401).get();
       if(ops.size>400)throw Error('referral_operation_inventory_requires_review');
-      return {...result.dashboard,recipientStatus:result.account.status,recipientReady:result.account.ready===true,
+      return {...payoutPresentation(result.dashboard,executionEnabled),recipientStatus:result.account.status,recipientReady:result.account.ready===true,
         executionEnabled,operations:ops.docs.filter(d=>d.data().kind===payouts.KIND).map(d=>({
           operationId:d.id,status:require('./scaler_cashout').projection(d.data()).status,
           amountCents:d.data().amountCents,payoutFailed:d.data().state==='payout_failed'}))};
@@ -75,4 +80,4 @@ function createRuntime({db,FieldValue,auth,project,environment,key,invoiceKey,pl
       const results=[];for(const d of users.docs){try{await refresh(d.id);results.push({ok:true});}catch(_){results.push({ok:false});}}return results;},
   };
 }
-module.exports={createRuntime,signedPaidProof};
+module.exports={createRuntime,signedPaidProof,payoutPresentation};

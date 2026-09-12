@@ -1848,6 +1848,9 @@ async function authenticatedUserContext(request, message) {
 
 
 
+
+
+
 /**
  * Creates the legacy wallet projection used by existing read-only screens.
  * It is not a cash ledger and cannot fund a Stripe marketplace campaign.

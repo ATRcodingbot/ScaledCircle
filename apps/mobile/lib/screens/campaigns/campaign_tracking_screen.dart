@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../services/campaign_tracking_service.dart';
+import '../../config/app_environment.dart';
 
 class CampaignTrackingScreen extends StatefulWidget {
   const CampaignTrackingScreen({super.key, required this.campaign});
@@ -126,8 +127,7 @@ class _CampaignTrackingScreenState extends State<CampaignTrackingScreen> {
       if (_trackWeb) 'web',
       if (_trackQr) 'qr',
       if (_createPrintable) 'print',
-      if (_trackPhone) 'phone',
-      if (_trackEmail) 'email',
+      // Provider channels are unavailable to customers until separately certified.
     ];
   }
 
@@ -169,7 +169,11 @@ class _CampaignTrackingScreenState extends State<CampaignTrackingScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save tracking: $error')),
+        const SnackBar(
+          content: Text(
+            'Tracking could not be saved. Check the destination and try again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -374,29 +378,37 @@ class _CampaignTrackingScreenState extends State<CampaignTrackingScreen> {
               value: _createPrintable,
               onChanged: (value) => setState(() => _createPrintable = value),
             ),
-            _providerChannel(
-              title: 'Tracking phone number',
-              subtitle:
-                  'Forwards calls to the business and records campaign call '
-                  'events after Twilio is connected.',
-              value: _trackPhone,
-              status: _phoneTrackingStatus,
-              controller: _phoneController,
-              fieldLabel: 'Business phone receiving forwarded calls',
-              onChanged: (value) => setState(() => _trackPhone = value),
+            const ListTile(
+              title: Text('Phone and email tracking — Coming Soon'),
+              subtitle: Text(
+                'Website links and campaign QR codes remain available.',
+              ),
             ),
-            _providerChannel(
-              title: 'Tracking email address',
-              subtitle:
-                  'Forwards campaign email to the business after the inbound '
-                  'email provider and DNS subdomain are connected.',
-              value: _trackEmail,
-              status: _emailTrackingStatus,
-              controller: _emailController,
-              fieldLabel: 'Business email receiving forwarded messages',
-              keyboardType: TextInputType.emailAddress,
-              onChanged: (value) => setState(() => _trackEmail = value),
-            ),
+            if (AppEnvironmentConfig.isLocal) ...[
+              _providerChannel(
+                title: 'Tracking phone number',
+                subtitle:
+                    'Forwards calls to the business and records campaign call '
+                    'events after Twilio is connected.',
+                value: _trackPhone,
+                status: _phoneTrackingStatus,
+                controller: _phoneController,
+                fieldLabel: 'Business phone receiving forwarded calls',
+                onChanged: (value) => setState(() => _trackPhone = value),
+              ),
+              _providerChannel(
+                title: 'Tracking email address',
+                subtitle:
+                    'Forwards campaign email to the business after the inbound '
+                    'email provider and DNS subdomain are connected.',
+                value: _trackEmail,
+                status: _emailTrackingStatus,
+                controller: _emailController,
+                fieldLabel: 'Business email receiving forwarded messages',
+                keyboardType: TextInputType.emailAddress,
+                onChanged: (value) => setState(() => _trackEmail = value),
+              ),
+            ],
             const SizedBox(height: 22),
             ElevatedButton.icon(
               onPressed: _saving ? null : _save,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/customer_social_plan_card.dart';
+import '../../widgets/customer_social_post_editor.dart';
 import '../../widgets/social_plan_overview.dart';
 import '../../models/social_plan_presentation.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -40,6 +41,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   bool _approvingFirstX = false;
   bool _publishingFirstX = false;
   String? _error;
+  bool _invitationRequired = false;
   Timer? _connectionRefresh;
   bool _connecting = false;
   bool _reviewingConnection = false;
@@ -62,6 +64,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     setState(() {
       if (!quiet) _loading = true;
       _error = null;
+      _invitationRequired = false;
     });
     try {
       final value = await _service.load();
@@ -99,9 +102,20 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       }
     } on FirebaseFunctionsException catch (error) {
       if (mounted && generation == _loadGeneration) {
-        setState(
-          () => _error = error.message ?? 'Unable to load Social Operations.',
-        );
+        setState(() {
+          _invitationRequired =
+              error.details is Map &&
+              (error.details as Map)['reason'] == 'SOCIAL_INVITATION_REQUIRED';
+          _error = socialEvidenceText(
+            error.message,
+            'Unable to confirm Social Operations. Try again.',
+          );
+          if (_invitationRequired) {
+            _workspace = null;
+            _error =
+                'Social Manager is Private Beta / Invite Only. Your other Business tools remain available in Growth.';
+          }
+        });
       }
     } catch (_) {
       if (mounted && generation == _loadGeneration) {
@@ -207,7 +221,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(error.message ?? 'Unable to create the plan.'),
+              content: Text(
+                socialEvidenceText(error.message, 'Unable to create the plan.'),
+              ),
             ),
           );
         }
@@ -273,7 +289,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'Unable to approve the plan.'),
+            content: Text(
+              socialEvidenceText(error.message, 'Unable to approve the plan.'),
+            ),
           ),
         );
       }
@@ -300,7 +318,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              error.message ?? 'Unable to align the existing plan.',
+              socialEvidenceText(
+                error.message,
+                'Unable to align the existing plan.',
+              ),
             ),
           ),
         );
@@ -358,7 +379,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(error.message ?? 'Unable to create email content.'),
+              content: Text(
+                socialEvidenceText(
+                  error.message,
+                  'Unable to create email content.',
+                ),
+              ),
             ),
           );
         }
@@ -850,7 +876,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'Performance sync is unavailable.'),
+            content: Text(
+              socialEvidenceText(
+                error.message,
+                'Performance sync is unavailable.',
+              ),
+            ),
           ),
         );
       }
@@ -876,7 +907,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'Content review is unavailable.'),
+            content: Text(
+              socialEvidenceText(
+                error.message,
+                'Content review is unavailable.',
+              ),
+            ),
           ),
         );
       }
@@ -904,7 +940,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.message ?? 'Past-post review is unavailable.'),
+            content: Text(
+              socialEvidenceText(
+                error.message,
+                'Past-post review is unavailable.',
+              ),
+            ),
           ),
         );
       }
@@ -939,8 +980,15 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     Text(_error!, textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     FilledButton(
-                      onPressed: _load,
-                      child: const Text('Try Again'),
+                      onPressed: _invitationRequired
+                          ? () => Navigator.pushReplacementNamed(
+                              context,
+                              '/business/growth',
+                            )
+                          : _load,
+                      child: Text(
+                        _invitationRequired ? 'Back to Growth' : 'Try Again',
+                      ),
                     ),
                   ],
                 ),
@@ -1482,6 +1530,14 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                         plan: plan,
                         initiallyExpanded: true,
                         strategyOnly: strategyOnly,
+                        onPreparePost: (post) {
+                          Navigator.pop(context);
+                          _preparePost(post);
+                        },
+                        onResolveBlocker: (code, post) {
+                          Navigator.pop(context);
+                          _resolvePostBlocker(code, post);
+                        },
                         onSchedulePost: (post) {
                           Navigator.pop(context);
                           _schedulePost(post);
@@ -1503,6 +1559,81 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _preparePost(Map<String, dynamic> post) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CustomerSocialPostEditor(post: post, service: _service),
+      ),
+    );
+    if (mounted) await _load(quiet: true);
+  }
+
+  Future<void> _resolvePostBlocker(
+    String code,
+    Map<String, dynamic> post,
+  ) async {
+    if (['creative', 'quality', 'time', 'content'].contains(code)) {
+      await _preparePost(post);
+      return;
+    }
+    if (code == 'permission') {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Manage Connection',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                if (_workspace != null) _connections(_workspace!, false),
+              ],
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    if (code == 'paused' || code == 'scheduler') {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            code == 'paused'
+                ? 'Publishing settings'
+                : 'Social Manager availability',
+          ),
+          content: Text(
+            code == 'paused'
+                ? 'Publishing is paused by the workspace safety controls. Drafts are preserved. An Admin must review this safety hold before approved posts can run. Opening these settings does not resume publishing.'
+                : 'Social Manager is Private Beta / Invite Only. Your workspace needs current scheduling access before posts can run.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Back'),
+            ),
+            TextButton(
+              onPressed: () => launchUrl(
+                Uri.parse(
+                  'mailto:support@scaledcircle.com?subject=Social%20publishing%20access%20review',
+                ),
+              ),
+              child: const Text('Request access review'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    await _load(quiet: true);
   }
 
   Future<void> _schedulePost(Map<String, dynamic> post) async {
@@ -1775,9 +1906,14 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     final pastPosts = (health['pastPosts'] as List? ?? const [])
         .whereType<Map>()
         .toList(growable: false);
-    final needsAttention =
-        (health['needsAttentionCount'] as num?)?.toInt() ?? 0;
-    final strong = (health['strongCount'] as num?)?.toInt() ?? 0;
+    final assessed =
+        health['assessmentStatus'] == 'assessed' ||
+        (health['assessedCount'] is num &&
+            (health['assessedCount'] as num) > 0);
+    final needsAttention = assessed
+        ? (health['needsAttentionCount'] as num?)?.toInt()
+        : null;
+    final strong = assessed ? (health['strongCount'] as num?)?.toInt() : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1799,7 +1935,12 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               )
             else
               const Text('Scheduled: Not confirmed'),
-            _healthMetric('Past Posts', pastPosts.length, Icons.history),
+            _healthMetric(
+              'Reviewed Past Posts',
+              pastPosts.isNotEmpty ? pastPosts.length : null,
+              Icons.history,
+              unknown: 'History unavailable',
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -1815,7 +1956,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'ScaledCircle checks relevance, hook, copy, CTA, visual quality, repetition, platform fit, discovery language, and timing. Recommendations never change or remove provider content automatically.',
+                  'Open a draft, prepare its creative and review content quality. Automated checks cover wording, relevance, repetition and timing. You review the actual image and claims before approval. Nothing changes on your connected accounts during review.',
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -1839,14 +1980,19 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                               : presentation.contentAction!,
                         ),
                       ),
-                    TextButton(
-                      onPressed: _reviewingContent
-                          ? null
-                          : _reviewScheduledContent,
-                      child: const Text('Check content quality'),
-                    ),
-                    if (pastPosts.isNotEmpty ||
-                        (presentation.count('published') ?? 0) > 0)
+                    if (workspace.internalDevelopmentAvailable &&
+                        workspace.data['legacyContentReviewAvailable'] == true)
+                      TextButton(
+                        onPressed: _reviewingContent
+                            ? null
+                            : _reviewScheduledContent,
+                        child: const Text('Check content quality'),
+                      ),
+                    if (workspace.internalDevelopmentAvailable &&
+                        workspace.data['legacyContentReviewAvailable'] ==
+                            true &&
+                        (pastPosts.isNotEmpty ||
+                            (presentation.count('published') ?? 0) > 0))
                       PopupMenuButton<int>(
                         enabled: !_ratingPosts,
                         onSelected: _ratePastPosts,
@@ -1886,13 +2032,18 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     );
   }
 
-  Widget _healthMetric(String label, int value, IconData icon) => SizedBox(
+  Widget _healthMetric(
+    String label,
+    int? value,
+    IconData icon, {
+    String unknown = 'Not assessed yet',
+  }) => SizedBox(
     width: 170,
     child: Card(
       child: ListTile(
         leading: Icon(icon),
         title: Text(
-          '$value',
+          value == null ? unknown : '$value',
           style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         subtitle: Text(label),
@@ -1903,9 +2054,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   Widget _qualityCard(Map<String, dynamic> assessment) => Card(
     child: ListTile(
       leading: CircleAvatar(child: Text('${assessment['score'] ?? '—'}')),
-      title: Text('${assessment['recommendation'] ?? 'keep'}'.toUpperCase()),
+      title: Text(socialQualityLabel(assessment['recommendation'])),
       subtitle: Text(
-        '${assessment['qualityBand'] ?? 'unrated'} · Business approval is required before any replacement, reschedule, or removal.',
+        '${socialQualityLabel(assessment['qualityBand'])} · Business approval is required before any replacement, reschedule, or removal.',
       ),
       trailing: const Chip(label: Text('REVIEW ONLY')),
     ),

@@ -4,10 +4,11 @@ function overlay(plans,jobs) {
   return plans.map(plan=>({...plan,items:(plan.items||[]).map(item=>({...item,
     variants:(item.variants||[]).map(variant=>{
       const candidates=jobs.filter(job=>job.businessUid===plan.businessUid && job.provider===variant.provider &&
-        job.versionId===`${plan.id}_${item.itemKey}_v${item.currentVersion||1}` && job.customerApproval===true);
+        job.versionId?.startsWith(`${plan.id}_${item.itemKey}_v`) && job.customerApproval===true && job.status!=='canceled');
       if(candidates.length!==1)return {...variant};
       const job=candidates[0];
-      return {...variant,status:job.status,scheduledFor:job.scheduledFor};
+      const bound=job.binding?.variants?.find(v=>v.provider===variant.provider);
+      return {...variant,...bound,status:job.status,scheduledFor:job.scheduledFor};
     })}))}));
 }
 async function load({db,uid,plans,store}) {

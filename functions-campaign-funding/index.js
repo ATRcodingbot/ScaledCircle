@@ -118,6 +118,8 @@ exports.quoteCampaignFunding = onCall({...OPTIONS, timeoutSeconds: 30}, async (r
 
 exports.createCampaignFundingCheckoutSession = onCall({...OPTIONS, secrets: [STRIPE_SECRET_KEY]}, async (request) => {
   const input = await ownedCampaign(request);
+  try { require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT}); }
+  catch(error) { throw new HttpsError(error.code,error.message,{reason:error.reason}); }
   // Fail before payment records, Stripe customers, or Checkout Sessions exist.
   await requireBusinessFundingConsent(input.actorUid);
   if(input.actorUid!==input.uid)await requireBusinessFundingConsent(input.uid);
@@ -457,6 +459,8 @@ exports.reconcileUnusedWorkReservesV1 = onSchedule({schedule:'every 5 minutes',r
 exports.publishFundedCampaign = onCall(OPTIONS, async (request) => {
   const input = await ownedCampaign(request, 'authorizeCampaigns');
   if (input.campaign.status === "open") return {campaignId: input.campaignId, status: "open"};
+  try { require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT}); }
+  catch(error) { throw new HttpsError(error.code,error.message,{reason:error.reason}); }
   const zones = await validatedCampaignZones(input, {forPublication: true});
   const paymentId = cleanId(input.campaign.fundingPaymentId);
   const payment = paymentId ? (await db.collection("campaignPayments").doc(paymentId).get()).data() : null;

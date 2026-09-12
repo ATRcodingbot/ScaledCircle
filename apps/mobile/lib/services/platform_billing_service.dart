@@ -1,4 +1,5 @@
 import 'business_workspace_service.dart';
+import '../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -73,7 +74,14 @@ class PlatformBillingService {
   /// Temporary production capability gate. The reviewed funding callables are
   /// not live yet, so drafts must remain safely saved without presenting a
   /// launch action that cannot succeed.
-  static const bool authoritativeCampaignFundingAvailable = true;
+  static const bool authoritativeCampaignFundingAvailable =
+      !AppEnvironmentConfig.isProduction ||
+      bool.fromEnvironment(
+        'LIVE_PAID_WORK_ACTIVATION_ENABLED',
+        defaultValue: false,
+      );
+  static const paidWorkHoldMessage =
+      'Paid work is not open yet. Your campaign draft is saved while ScaledCircle completes payout readiness.';
 
   static const Map<String, double> subscriptionPrices = {
     'starter': 99.0,
@@ -180,6 +188,9 @@ class PlatformBillingService {
     required String campaignId,
     String? approvedQuoteDigest,
   }) async {
+    if (!authoritativeCampaignFundingAvailable) {
+      throw StateError(paidWorkHoldMessage);
+    }
     if (approvedQuoteDigest == null || approvedQuoteDigest.isEmpty) {
       throw Exception('Review and approve the latest campaign funding quote.');
     }

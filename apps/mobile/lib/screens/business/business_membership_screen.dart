@@ -423,7 +423,9 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.section == 'cancel') return _cancellationView(context);
+    if (widget.section == 'cancel' && _data?['complimentary'] != true) {
+      return _cancellationView(context);
+    }
     final data = _data;
     return Scaffold(
       appBar: AppBar(title: const Text('Billing / Plan')),
@@ -445,7 +447,8 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                 if (data == null && _error == null)
                   const Center(child: CircularProgressIndicator()),
                 if (data != null) ...[
-                  if (widget.section == 'cancel')
+                  if (widget.section == 'cancel' &&
+                      data['complimentary'] != true)
                     const Text(
                       'Review your membership below, then choose Cancel Membership to confirm. Opening this page does not cancel anything.',
                     ),
@@ -516,8 +519,8 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     data['complimentary'] == true
                         ? 'Complimentary access through $_end. No automatic renewal charge.'
                         : data['cancelAtPeriodEnd'] == true
-                        ? 'Paid access ends $_end. No further subscription renewal is scheduled.'
-                        : 'Next renewal date: $_end',
+                        ? 'Cancellation Scheduled · Access through $_end. No further subscription renewal is scheduled.'
+                        : 'Next renewal: $_recurring on $_end',
                   ),
                   const SizedBox(height: 20),
                   const Text(
@@ -532,7 +535,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                           scrollable: true,
                           title: const Text('Available Plans'),
                           content: const Text(
-                            'Starter — \$99/month · 1 total seat\nGrowth — \$299/month · 3 total seats\nScale — \$499/month · 5 total seats\nManaged Growth — \$999/month · 10 total seats\n\nYour complimentary access stays unchanged. Moving this grant to a paid plan is not currently available through membership management.',
+                            'Starter — \$99/month · 1 total seat\nGrowth — \$299/month · 3 total seats\nScale — \$499/month · 5 total seats\nManaged Growth — Private Beta / Invite Only · \$999/month · 10 total seats\n\nYour complimentary access stays unchanged. Moving this grant to a paid plan is not currently available through membership management.',
                           ),
                           actions: [
                             TextButton(

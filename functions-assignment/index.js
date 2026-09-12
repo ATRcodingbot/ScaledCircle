@@ -2910,6 +2910,9 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
 async function assertPhysicalQaRequest(request) {
   if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
   const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
@@ -7568,6 +7571,11 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOper
     if (zone.assignedScalerId) {
       throw new HttpsError("failed-precondition", "This zone has already been assigned.");
     }
+    try {
+      require('./paid_work_launch_gate').assertNewPaidWork({ project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT });
+    } catch (error) {
+      throw new HttpsError("failed-precondition", error.message, { reason: error.reason });
+    }
     if (zone.analysisStatus !== "complete" ||
     zone.serverZoneMetricsVersion !== "geometry_v1_server") {
       throw new HttpsError(
@@ -7852,6 +7860,11 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
       throw new HttpsError("permission-denied", "This group slot is not available to you.");
     }
     if (existingParticipant.exists) {result = existingParticipant.data();return;}
+    try {
+      require('./paid_work_launch_gate').assertNewPaidWork({ project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT });
+    } catch (error) {
+      throw new HttpsError("failed-precondition", error.message, { reason: error.reason });
+    }
     await requireCurrentLegalConsents(
       scalerUid,
       legalConsent.ROLE_REQUIREMENTS.scaler_work,

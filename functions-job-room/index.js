@@ -2910,6 +2910,9 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
 async function assertPhysicalQaRequest(request) {
   if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
   const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
@@ -8433,6 +8436,16 @@ function assertOperationalPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
+
+
+
+
+
 exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoom", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
   const context = await requireVerifiedUser(request, "Verify your email to open this Job Room.");
@@ -8658,6 +8671,8 @@ exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoo
     ...((ownSubmittedEvidence || ownPausedEvidence) && response.completionEvidence ? { completionEvidence: response.completionEvidence } : {}),
     ...(ownPausedEvidence ? { pausedWork: response.pausedWork, messages: response.messages, canMessage: true } : {}) };
 }));
+
+
 
 
 

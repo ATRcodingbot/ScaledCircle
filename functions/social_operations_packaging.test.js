@@ -11,14 +11,16 @@ const indexSource = fs.readFileSync(path.join(packageRoot, "index.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const firebase = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
 
-test('customer scheduling bundle has exactly two owner callables and one isolated scheduler',()=>{
+test('customer scheduling bundle has bounded owner preparation, immutable public image delivery and one scheduler',()=>{
  const {execFileSync}=require('node:child_process');
  execFileSync(process.execPath,[path.join(__dirname,'scripts/build_customer_social_scheduling_runtime.js')]);
  const output=path.join(root,'.firebase/customer-social-scheduling-runtime');
  const endpoints=JSON.parse(execFileSync(process.execPath,['-e',`const e=require(${JSON.stringify(output)});console.log(JSON.stringify(Object.fromEntries(Object.entries(e).map(([k,v])=>[k,v.__endpoint?.secretEnvironmentVariables||[]]))));`],{encoding:'utf8'}));
- assert.deepEqual(Object.keys(endpoints).sort(),['approveAndScheduleCustomerSocialPostV1','previewCustomerSocialPostV1','runCustomerMetaPublisherV1']);
+ assert.deepEqual(Object.keys(endpoints).sort(),['approveAndScheduleCustomerSocialPostV1','prepareCustomerSocialPostV1','previewCustomerSocialPostV1','runCustomerMetaPublisherV1','serveCustomerSocialMediaV1']);
  assert.deepEqual(endpoints.approveAndScheduleCustomerSocialPostV1,[]);
  assert.deepEqual(endpoints.previewCustomerSocialPostV1,[]);
+ assert.deepEqual(endpoints.prepareCustomerSocialPostV1,[]);
+ assert.deepEqual(endpoints.serveCustomerSocialMediaV1,[]);
  assert.deepEqual(endpoints.runCustomerMetaPublisherV1.map(s=>s.key),['SOCIAL_OAUTH_TOKEN_ENCRYPTION_KEY']);
  assert.ok(fs.existsSync(path.join(output,'social_customer_scheduling.js')));
  assert.ok(fs.existsSync(path.join(output,'subscription_entitlements.js')));
@@ -60,7 +62,7 @@ test("normal growth deployment is reproducible and contains only its seven expor
 test("Social Operations has one dedicated narrowly-secret-bound codebase", () => {
   const config = firebase.functions.find((entry) => entry.codebase === "social-operations");
   assert.equal(config.source, "functions-social-operations");
-  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ["firebase-admin", "firebase-functions"]);
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ["firebase-admin", "firebase-functions", "sharp"]);
   for (const forbidden of [
     "CENSUS_API_KEY", "TWILIO_", "OPENAI_", "STRIPE_", "SMTP_", "GOOGLE_ADS_",
   ]) assert.doesNotMatch(indexSource, new RegExp(forbidden));
@@ -120,6 +122,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "ingestScaledCircleLaunchPlanV1",
     "inspectMetaGrowthRuntimeV1","inspectMetaPageExecutionCredentialV1",
     "prepareCustomerSocialPlanV1",
+    "prepareCustomerSocialPostV1",
     "prepareFirstXPublishFoundationV1",
     "prepareMetaGrowthWeekV1",
     "previewCustomerSocialPostV1",
@@ -140,6 +143,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "runMetaGrowthPublisherV1",
     "runSocialGrowthMeasurementsV1",
     "runSocialGrowthPublisherV1",
+    "serveCustomerSocialMediaV1",
     "setMetaGrowthPublishingStateV1",
     "setSocialGrowthPublishingStateV1",
     "socialOAuthCallbackV1",

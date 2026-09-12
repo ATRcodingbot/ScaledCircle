@@ -2905,6 +2905,9 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
 const EXACT_LOCATION_TYPES = new Set([
 "service_point", "yard_sign_installation", "material_pickup",
 "material_dropoff", "dump_pickup", "dump_dropoff", "event_location"]
@@ -10571,6 +10574,16 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
+
+
+
+
+
 const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   enforceAppCheck: false,
   maxInstances: 10,
@@ -10622,6 +10635,8 @@ function safeMarketplaceAuthorityCallable(name, handler) {
     }
   });
 }
+
+
 
 
 

@@ -10,6 +10,8 @@ class CustomerSocialPlanCard extends StatelessWidget {
     this.onApprove,
     this.onReviewPosts,
     this.onSchedulePost,
+    this.onPreparePost,
+    this.onResolveBlocker,
     this.strategyOnly = false,
   });
   final Map<String, dynamic> plan;
@@ -17,6 +19,8 @@ class CustomerSocialPlanCard extends StatelessWidget {
   final VoidCallback? onApprove;
   final VoidCallback? onReviewPosts;
   final void Function(Map<String, dynamic>)? onSchedulePost;
+  final void Function(Map<String, dynamic>)? onPreparePost;
+  final void Function(String, Map<String, dynamic>)? onResolveBlocker;
   final bool strategyOnly;
   @override
   Widget build(BuildContext context) {
@@ -40,30 +44,39 @@ class CustomerSocialPlanCard extends StatelessWidget {
                 'Creative briefs are not finished images or videos. Review each post’s copy and any required media separately before scheduling. Text-only posts do not need an image where the platform supports them.',
               ),
             ),
-          for (final key in [
-            'cadence',
-            'timingBasis',
-            'objective',
-            'measurement',
-            if (!strategyOnly) 'creativeState',
-            if (!socialPlanApproved(plan)) 'nextAction',
-          ])
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(
-                key == 'cadence' &&
-                        strategy['version'] == 'CustomerSocialDraftStrategyV1'
-                    ? 'Starting cadence: 2 posts per week per platform. Social Manager will measure performance and recommend adjustments as real results accumulate.'
-                    : strategy[key]?.toString() ?? '',
-              ),
+          ExpansionTile(
+            title: Text(
+              socialPlanApproved(plan)
+                  ? 'View Approved Strategy'
+                  : 'View Strategy',
             ),
+            initiallyExpanded: strategyOnly,
+            children: [
+              for (final key in [
+                'cadence',
+                'timingBasis',
+                'objective',
+                'measurement',
+                if (!strategyOnly) 'creativeState',
+                if (!socialPlanApproved(plan)) 'nextAction',
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    key == 'cadence' &&
+                            strategy['version'] ==
+                                'CustomerSocialDraftStrategyV1'
+                        ? 'Starting cadence: 2 posts per week per platform. Social Manager will measure performance and recommend adjustments as real results accumulate.'
+                        : socialEvidenceText(strategy[key], ''),
+                  ),
+                ),
+            ],
+          ),
           if (!strategyOnly)
             for (final item in (plan['items'] as List? ?? []).whereType<Map>())
               ExpansionTile(
                 title: Text(item['pillar']?.toString() ?? 'Proposed post'),
-                subtitle: Text(
-                  'Proposed: ${DateTime.tryParse(item['scheduledFor']?.toString() ?? '')?.toLocal().toString().substring(0, 16) ?? 'Review timing'}',
-                ),
+                subtitle: const Text('Review each platform’s post and time'),
                 expandedCrossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -81,13 +94,20 @@ class CustomerSocialPlanCard extends StatelessWidget {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           SelectableText(v['copy']?.toString() ?? ''),
+                          Text(
+                            'Proposed: ${socialCustomerTime(context, (v['scheduling'] as Map?)?['scheduledFor'] ?? v['scheduledFor'] ?? item['scheduledFor'])}',
+                          ),
                           Text('Next step: ${v['callToAction'] ?? 'Review'}'),
                           Text(
                             'Destination: ${v['destinationUrl'] ?? 'Needs review'}',
                           ),
-                          Text(
-                            'Creative brief: ${v['mediaRequirement'] ?? 'Needs approved media'}',
-                          ),
+                          if (![
+                            'none',
+                            'approved_image',
+                          ].contains(v['mediaRequirement']))
+                            Text(
+                              'Creative brief: ${socialEvidenceText(v['mediaRequirement'], 'Choose approved media')}',
+                            ),
                           Text(
                             'Post status: ${socialPostStateLabel(v['status'])}',
                           ),
@@ -96,15 +116,27 @@ class CustomerSocialPlanCard extends StatelessWidget {
                                 ? 'Creative version prepared for this post.'
                                 : v['mediaRequirement'] == 'none'
                                 ? 'Creative status: Text-only. No media required by this draft.'
-                                : 'Creative not prepared yet. Finished media preparation is not available in this workflow yet; scheduling remains unavailable.',
+                                : 'Creative not prepared yet. Choose an approved Business image.',
                           ),
                           Text(
-                            'Measurement: ${v['responseAssetRequirement'] ?? 'No measurement recorded yet'}',
+                            'Measurement: ${socialEvidenceText(v['responseAssetRequirement'], 'No measurement recorded yet')}',
                           ),
                           if (![
                             'scheduled',
                             'published',
                           ].contains(v['status'])) ...[
+                            if (onPreparePost != null &&
+                                (v['scheduling'] as Map?)?['version'] != null)
+                              OutlinedButton(
+                                onPressed: () => onPreparePost!(
+                                  Map<String, dynamic>.from(
+                                    v['scheduling'] as Map,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Prepare post / Choose creative',
+                                ),
+                              ),
                             for (final reason
                                 in ((v['scheduling'] as Map?)?['reasons']
                                             as List? ??
@@ -112,9 +144,36 @@ class CustomerSocialPlanCard extends StatelessWidget {
                                     .whereType<Map>())
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  reason['message']?.toString() ??
-                                      'Review this post.',
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      socialEvidenceText(
+                                        reason['message'],
+                                        'Review this post.',
+                                      ),
+                                    ),
+                                    if (onResolveBlocker != null)
+                                      TextButton(
+                                        onPressed: () => onResolveBlocker!(
+                                          reason['code']?.toString() ??
+                                              'readback',
+                                          Map<String, dynamic>.from(
+                                            v['scheduling'] as Map,
+                                          ),
+                                        ),
+                                        child: Text(switch (reason['code']) {
+                                          'creative' => 'Choose Creative',
+                                          'quality' => 'Review Content Quality',
+                                          'paused' =>
+                                            'Review Publishing Settings',
+                                          'permission' => 'Manage Connection',
+                                          'time' => 'Choose Time',
+                                          'scheduler' => 'Review availability',
+                                          _ => 'Review post',
+                                        }),
+                                      ),
+                                  ],
                                 ),
                               ),
                             if ((v['scheduling'] as Map?)?['ready'] == true &&
@@ -129,7 +188,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
                               ),
                           ] else
                             Text(
-                              'Scheduled: ${DateTime.tryParse(v['scheduledFor']?.toString() ?? '')?.toLocal().toString() ?? 'View saved status'}',
+                              'Scheduled: ${socialCustomerTime(context, v['scheduledFor'])}',
                             ),
                         ],
                       ),

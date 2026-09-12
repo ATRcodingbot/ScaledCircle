@@ -247,7 +247,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
             ],
             const SizedBox(height: 20),
             const Text(
-              'Signed up: attribution recorded, no cash reward.\nPending: earned reward in its settlement hold.\nAvailable: eligible referral funds.\nPaid: payout confirmed. Earned does not mean paid.',
+              'Signed up: attribution recorded, no cash reward.\nPending: earned reward in its settlement hold.\nHeld: awaiting payout eligibility and certification.\nPaid: payout confirmed. Earned does not mean paid.',
             ),
           ],
         ),
@@ -265,7 +265,9 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
     final status =
         const {
           'EARNING': 'Earning',
-          'AVAILABLE': 'Available',
+          'AVAILABLE': 'Held',
+          'HELD': 'Held',
+          'PENDING': 'Pending',
           'PAID': 'Paid',
         }[r['status']] ??
         'Signed up';
@@ -274,6 +276,6 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
     final paid = ((r['paidCents'] as num?) ?? 0) / 100;
     return '${r['referredRole'] == 'scaler' ? 'Scaler' : 'Business'} · $status'
         '${date.isEmpty ? '' : '\nJoined $date'}\nQualifying jobs: ${r['qualifyingJobCount'] ?? 0}'
-        '\nEarned: \$${amount.toStringAsFixed(2)} · Available: \$${available.toStringAsFixed(2)} · Paid: \$${paid.toStringAsFixed(2)}';
+        '\nEarned: \$${amount.toStringAsFixed(2)} · Held: \$${available.toStringAsFixed(2)} · Paid: \$${paid.toStringAsFixed(2)}';
   }
 }

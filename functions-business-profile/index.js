@@ -5448,6 +5448,9 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
 async function requireManagedGrowthBusiness(request) {
   const context = await requireVerifiedUser(
     request,
@@ -5491,6 +5494,18 @@ exports.saveBusinessGrowthProfile = onCall(
 );
 
 /** Reads a public website and returns suggestions that the Business must confirm. */
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

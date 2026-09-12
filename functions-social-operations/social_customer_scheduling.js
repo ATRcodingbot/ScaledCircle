@@ -6,7 +6,7 @@ const SCHEMA = 'CustomerPostApprovalV1';
 const messages = {
   plan: 'Approve the current 30-Day Plan first.',
   creative: 'Finish or approve the image before scheduling.',
-  permission: 'Reconnect this account to enable publishing.',
+  permission: 'Review this account’s publishing permissions.',
   time: 'Choose a future publish time and review the updated post.',
   content: 'Review the complete copy, call to action and destination.',
   quality: 'Resolve the content quality review before scheduling.',
@@ -15,12 +15,12 @@ const messages = {
   paused: 'Publishing is paused. Review your publishing settings first.',
 };
 function readiness({uid, plan, item, version, provider, connection, revision, quality,
-  schedulerEnabled = false, health, config, environment, entitlement, conflictingSchedule = false, now = Date.now()}) {
+  schedulerEnabled = false, health, config, environment, entitlement, conflictingSchedule = false, mediaAuthorityValid=true, now = Date.now()}) {
   const reasons = [];
   const add = key => reasons.push({code:key, message:messages[key]});
   if (!plan || plan.businessUid !== uid || !item || item.businessUid !== uid ||
       !version || version.businessUid !== uid || item.planId !== version.planId ||
-      item.currentVersion !== version.version || !['facebook','instagram'].includes(provider)) {
+      (item.platformVersions?.[provider]??item.currentVersion) !== version.version || !['facebook','instagram'].includes(provider)) {
     return {ready:false, reasons:[{code:'content',message:messages.content}]};
   }
   if (!approved(plan)) add('plan');
@@ -35,6 +35,7 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
   if (!Number.isFinite(time) || time < now + 5*60000) add('time');
   const mediaRequired = provider==='instagram' || variant?.mediaRequirement !== 'none';
   if (mediaRequired && (!variant?.mediaAssetId || !variant?.mediaRevisionId || !revision)) add('creative');
+  if(!mediaAuthorityValid&&!reasons.some(r=>r.code==='creative'))add('creative');
   if (!connection || connection.businessUid!==uid || connection.status!=='connected_write' ||
       connection.environment!==environment || connection.tokenHealth!=='healthy' || connection.requiresReconnect===true || !connection.credentialId ||
       !/^\d+$/.test(connection.providerUserId||'') ||
@@ -51,6 +52,7 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
       account:{businessUid:uid,providerUserId:connection.providerUserId,linkedPageId:connection.linkedPageId}}); }
     catch { add(mediaRequired?'creative':'content'); }
   }
+  try {meta.assertMediaEnvironment(revision,environment);} catch {if(!reasons.some(r=>r.code==='creative'))add('creative');}
   return {ready:reasons.length===0,reasons,scheduledFor:Number.isFinite(time)?new Date(time).toISOString():null,
     contentHash:version.contentHash,version:version.version,provider};
 }
@@ -79,20 +81,24 @@ function createStore({db, now=Date.now, enabledUids=[], environment}) {
     const read = ref => tx ? tx.get(ref) : ref.get();
     const itemRef=db.doc('socialContentItems/'+input.itemId),item=(await read(itemRef)).data();
     if(!item || item.businessUid!==uid) throw Error('This post is not available in your Business.');
-    const versionId=input.itemId+'_v'+item.currentVersion;
-    const [p,v,c,q,h,config,entitlement] = await Promise.all([
+    const versionId=input.itemId+'_v'+(item.platformVersions?.[input.provider]??item.currentVersion);
+    const [p,v,c,q,h,config,entitlement,platformQuality] = await Promise.all([
       read(db.doc('socialContentPlans/'+item.planId)),read(db.doc('socialContentVersions/'+versionId)),
       read(db.doc(`socialConnections/${uid}/providers/${input.provider}`)),
       read(db.doc('socialContentQualityAssessments/'+versionId)),read(db.doc('agentHealth/'+uid)),
-      read(db.doc('socialProviderConfigs/'+environment+'_meta')),read(db.doc('businessSubscriptions/'+uid))]);
+      read(db.doc('socialProviderConfigs/'+environment+'_meta')),read(db.doc('businessSubscriptions/'+uid)),
+      read(db.doc('socialContentQualityAssessments/'+versionId+'_'+input.provider))]);
     const jobs=await read(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
     if(jobs.size>100)throw Error('Publication history requires review.');
     const conflictingSchedule=jobs.docs.some(doc=>{const job=doc.data();return job.provider===input.provider &&
       job.versionId?.startsWith(input.itemId+'_v') && job.versionId!==versionId && !['published','canceled'].includes(job.status);});
     const version=v.data(),variant=version?.variants?.find(v=>v.provider===input.provider);
     const revision=variant?.mediaRevisionId?(await read(db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`))).data():null;
-    return {uid,plan:p.data(),item,version,versionId,itemRef,provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality:q.data(),
-      conflictingSchedule,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
+    let mediaAuthorityValid=true;
+    try{await require('./social_customer_media').assertDeliveryAuthority({db,read,uid,revision});}
+    catch{mediaAuthorityValid=false;}
+    return {uid,plan:p.data(),item,version,versionId,itemRef,provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality:platformQuality.data()||q.data(),
+      conflictingSchedule,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
   }
   return {
     async preview(uid,input) {

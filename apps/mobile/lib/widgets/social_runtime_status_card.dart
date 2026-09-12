@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/social_plan_presentation.dart';
 
 class SocialRuntimeStatusCard extends StatelessWidget {
   const SocialRuntimeStatusCard({
@@ -38,12 +39,17 @@ class SocialRuntimeStatusCard extends StatelessWidget {
           'Next ${channel['nextFormat'] ?? 'post'}: ${_time(context, channel['nextScheduledFor'])}',
         ),
         Text(
-          channel['result']?.toString() ?? 'No confirmed outcome is available.',
+          socialEvidenceText(
+            channel['result'],
+            'No confirmed outcome is available.',
+          ),
         ),
         Text(
           'Next measurement: ${_time(context, channel['nextMeasurementAt'])}',
         ),
-        Text(channel['actionNeeded']?.toString() ?? 'Review the saved plan.'),
+        Text(
+          socialEvidenceText(channel['actionNeeded'], 'Review the saved plan.'),
+        ),
       ],
     ];
     return Card(

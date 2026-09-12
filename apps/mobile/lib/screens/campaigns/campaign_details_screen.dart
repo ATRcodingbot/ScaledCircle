@@ -553,11 +553,11 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Campaign funding is temporarily unavailable.',
+                'Paid work is not open yet',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
               ),
               const SizedBox(height: 8),
-              const Text('Your campaign draft and target are saved.'),
+              const Text(PlatformBillingService.paidWorkHoldMessage),
               const SizedBox(height: 12),
               OutlinedButton(
                 onPressed: () => Navigator.maybePop(context),

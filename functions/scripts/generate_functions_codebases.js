@@ -598,3 +598,4 @@ fs.copyFileSync(path.join(sourceRoot, "staging_physical_qa.js"), path.join(campa
 
 copyRequiredLocalModules(campaignFundingRoot, `require("./business_workspace");require("./workspace_subscription_sync");require("./workspace_subscription_events")`);
 copyRequiredLocalModules(campaignFundingRoot, `require("./campaign_reserve_settlement")`);
+copyRequiredLocalModules(campaignFundingRoot, `require("./paid_work_launch_gate")`);

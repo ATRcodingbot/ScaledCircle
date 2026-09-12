@@ -266,10 +266,12 @@ function replacementProposal({businessUid, contentItemId, sourceVersion, replace
 function contentHealthProjection({assessments = [], ratings = []}) {
   const all = [...assessments, ...ratings];
   return {schemaVersion: CONTENT_QUALITY_VERSION,
+    assessmentStatus:all.length?'assessed':'not_assessed',
+    historyStatus:ratings.length?'partial':'unavailable',
     assessedCount: all.length,
-    needsAttentionCount: all.filter((item) => ["weak", "needs_attention"]
-      .includes(item.qualityBand || item.creativeQualityBand)).length,
-    strongCount: all.filter((item) => (item.qualityBand || item.creativeQualityBand) === "strong").length,
+    needsAttentionCount: all.length?all.filter((item) => ["weak", "needs_attention"]
+      .includes(item.qualityBand || item.creativeQualityBand)).length:null,
+    strongCount: all.length?all.filter((item) => (item.qualityBand || item.creativeQualityBand) === "strong").length:null,
     scheduled: assessments,
     pastPosts: ratings,
     providerMutationsEnabled: false,

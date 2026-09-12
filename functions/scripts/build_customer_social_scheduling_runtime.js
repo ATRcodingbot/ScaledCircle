@@ -12,7 +12,7 @@ const generate = require("@babel/generator").default;
 const root = path.resolve(__dirname, "../..");
 const source = path.join(root, "functions-social-operations");
 const output = path.join(root, ".firebase/customer-social-scheduling-runtime");
-const names = ['previewCustomerSocialPostV1','approveAndScheduleCustomerSocialPostV1','runCustomerMetaPublisherV1'];
+const names = ['previewCustomerSocialPostV1','prepareCustomerSocialPostV1','serveCustomerSocialMediaV1','approveAndScheduleCustomerSocialPostV1','runCustomerMetaPublisherV1'];
 const original = fs.readFileSync(path.join(source, "index.js"), "utf8");
 const ast = parser.parse(original, {sourceType: "script"});
 let program;

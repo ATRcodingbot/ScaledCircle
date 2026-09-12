@@ -7,9 +7,9 @@ class CustomerCapabilityStatus extends StatelessWidget {
 
   static const capabilities = <({String title, String description})>[
     (
-      title: 'Social Manager — Beta',
+      title: 'Social Manager — Private Beta / Invite Only',
       description:
-          'Plan content, review recommendations, and approve supported publishing. ScaledCircle is testing it on its own channels; results are still being measured.',
+          'Invited Businesses can plan content, review recommendations, and approve supported publishing. Results are still being measured.',
     ),
     (
       title: 'Lead Generation Research — Private Beta',
