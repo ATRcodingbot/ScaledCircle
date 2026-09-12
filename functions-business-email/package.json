@@ -9,6 +9,7 @@
   "dependencies": {
     "firebase-admin": "^13.6.0",
     "firebase-functions": "^7.0.0",
+    "html-to-text": "10.0.1",
     "imapflow": "2.0.2",
     "mailparser": "3.9.26",
     "nodemailer": "10.0.9"

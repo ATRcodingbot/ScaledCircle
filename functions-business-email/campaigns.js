@@ -2,6 +2,7 @@
 // Private campaign preparation only. No provider send, approval or scheduling
 // executor is reachable from this service.
 const crypto=require('node:crypto'),gmail=require('./gmail');
+const {convert}=require('html-to-text');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
 const strict=(v,keys)=>{if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!keys.includes(k)))fail('invalid-argument','Unsupported campaign input.');};
@@ -11,15 +12,17 @@ function mailbox(value){const match=String(value||'').trim().match(/^(?:[^<>@\r\
 function messages(thread,owner){
  if(!Array.isArray(thread?.messages)||thread.messages.length>50)fail('resource-exhausted','This long conversation needs a separate review.');
  const header=(m,name)=>{const rows=(m.payload?.headers||[]).filter(h=>h.name.toLowerCase()===name);return rows.length===1?String(rows[0].value):'';};
- const body=p=>p?.mimeType==='text/plain'&&p.body?.data?Buffer.from(p.body.data,'base64url').toString('utf8'):(p?.parts||[]).filter(x=>!x.filename).map(body).join('\n');
+ const body=(p,mime)=>p?.mimeType===mime&&p.body?.data?Buffer.from(p.body.data,'base64url').toString('utf8'):(p?.parts||[]).filter(x=>!x.filename).map(x=>body(x,mime)).join('\n').trim();
  return thread.messages.map(m=>{
-  const from=mailbox(header(m,'from')),to=header(m,'to'),allText=body(m.payload),plain=allText.split(/\n(?:On .+wrote:|>|[- ]*Original Message[- ]*)/i)[0].trim().slice(0,5000);
+  const from=mailbox(header(m,'from')),to=header(m,'to'),originalText=body(m.payload,'text/plain'),html=originalText?'':body(m.payload,'text/html');
+  const allText=originalText||(html?convert(html.slice(0,50000),{wordwrap:false,limits:{maxInputLength:50000,maxDepth:20},selectors:[{selector:'a',options:{ignoreHref:true}},{selector:'img',format:'skip'},{selector:'script',format:'skip'},{selector:'style',format:'skip'}]}):'');
+  const plain=allText.split(/\n(?:On .+wrote:|>|[- ]*Original Message[- ]*)/i)[0].trim().slice(0,5000);
   const related=from===owner||mailbox(to)===owner;
   const recipient=from===owner?mailbox(to):from;
   const auto=!!header(m,'list-unsubscribe')||!!header(m,'list-id')||/auto-generated|auto-replied/i.test(header(m,'auto-submitted'))||/no.?reply|mailer-daemon|postmaster/i.test(from);
   const optout=related&&from!==owner&&!auto&&/^\s*(?:hi[^\n]*\n|hello[^\n]*\n|thanks[^\n]*\n|dear[^\n]*\n)*\s*(?:please\s+)?(?:unsubscribe me|remove me from (?:your|the) (?:list|mailing)|do not (?:email|contact|send)|don.t (?:email|contact)|stop (?:emailing|contacting|sending))/i.test(plain);
   return {providerMessageId:m.id,providerThreadId:thread.id,from,recipient,subject:header(m,'subject').slice(0,250),excerpt:plain,receivedAt:Number(m.internalDate)||0,related,automated:auto,optout,
-   spam:(m.labelIds||[]).some(l=>l==='SPAM'||l==='TRASH'),htmlOnly:!allText&&m.payload?.mimeType==='text/html'};
+   spam:(m.labelIds||[]).some(l=>l==='SPAM'||l==='TRASH'),htmlConverted:!originalText&&!!html,htmlOnly:!allText&&!!html};
  }).filter(m=>m.related&&m.recipient&&m.recipient!==owner);
 }
 function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,sub,project}){
