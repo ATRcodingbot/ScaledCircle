@@ -122,19 +122,24 @@ class _BusinessTeamScreenState extends State<BusinessTeamScreen> {
                       labelText: 'Responsibilities',
                     ),
                   ),
-                  for (final permission in businessPermissionLabels.entries)
-                    CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: grants.contains(permission.key),
-                      title: Text(permission.value),
-                      onChanged: (v) => update(() {
-                        preset = 'Custom';
-                        v == true
-                            ? grants.add(permission.key)
-                            : grants.remove(permission.key);
-                      }),
-                    ),
+                  ExpansionTile(
+                    title: const Text('Adjust responsibilities'),
+                    children: [
+                      for (final permission in businessPermissionLabels.entries)
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          value: grants.contains(permission.key),
+                          title: Text(permission.value),
+                          onChanged: (v) => update(() {
+                            preset = 'Custom';
+                            v == true
+                                ? grants.add(permission.key)
+                                : grants.remove(permission.key);
+                          }),
+                        ),
+                    ],
+                  ),
                   const Text(
                     'Campaign access does not grant permission to spend money. The owner always keeps full access.',
                   ),

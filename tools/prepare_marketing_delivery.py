@@ -82,7 +82,7 @@ def documents(*, staging=False):
                 if index == 4:
                     blocks.append('</section><h2>Private Beta / Invite Only</h2><section class="plans" aria-label="Private Beta plans">')
                 seats = [1, 3, 5, 10][index - 1]
-                blocks.append(f'<article><h2>{html.escape(title)}</h2><p class="price">{html.escape(body)}</p><p>{seats} total Business {"user" if seats == 1 else "users"}, including the owner.</p><p>{"Invite Only" if index == 4 else "Available"}</p></article>')
+                blocks.append(f'<article><h2>{html.escape(title)}</h2><p class="price">{html.escape(body)}</p><p>{seats} total Business {"user" if seats == 1 else "users"}, including the owner.</p><p>Customers &amp; leads, schedule, jobs and tasks included.</p><p>{"Invite Only" if index == 4 else "Available"}</p></article>')
                 if index == 4:
                     blocks.append('</section>')
                 continue

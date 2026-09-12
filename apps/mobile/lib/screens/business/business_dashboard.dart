@@ -607,13 +607,16 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'home', child: Text('Home')),
               const PopupMenuItem(value: 'grow', child: Text('Growth')),
+              const PopupMenuItem(value: 'schedule', child: Text('Schedule')),
               const PopupMenuItem(value: 'campaigns', child: Text('Campaigns')),
               const PopupMenuItem(value: 'results', child: Text('Results')),
               const PopupMenuItem(value: 'account', child: Text('Account')),
               const PopupMenuItem(value: 'support', child: Text('Support')),
             ],
             onSelected: (value) {
-              if (value == 'grow') {
+              if (value == 'schedule') {
+                AppNavigation.push(context, '/business/schedule');
+              } else if (value == 'grow') {
                 AppNavigation.push(context, '/business/growth');
               } else if (value == 'campaigns') {
                 _openCampaigns(
@@ -806,6 +809,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ),
                   children: [
                     const MarketStatusCard(business: true),
+                    Card(child: ListTile(leading: const Icon(Icons.calendar_month_outlined), title: const Text('Customers & Schedule'), subtitle: const Text('Leads, estimates, jobs and follow-ups'), trailing: const Icon(Icons.chevron_right), onTap: () => AppNavigation.push(context, '/business/schedule'))),
                     DashboardHero(
                       eyebrow: 'BUSINESS HOME',
                       title: awaitingReviewCount > 0

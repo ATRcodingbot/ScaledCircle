@@ -1,5 +1,6 @@
 'use strict';
 const workspace=require('./shared/business_workspace'),legal=require('./shared/legal_consent');
+const entitlements=require('./shared/subscription_entitlements');
 const preferences=require('./growth_opportunity_preferences');
 function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configured=false}) {
   const ws=workspace.createWorkspaceService({db,auth,FieldValue,Timestamp}),consent=legal.createLegalConsentService({db,FieldValue});
@@ -16,8 +17,9 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
         registry.data()?.kind!=='internal_admin_dogfood'||registry.data()?.namespace!==businessId||registry.data()?.ownerUid!==uid)
         deny('Use the maintained internal ScaledCircle workspace.');
     } else {
-      const a=await ws.authority({uid,businessId,permission:'intelligence'});
+      const a=await ws.authority({uid,businessId,permission:operation==='load'||operation==='reconcile'?'communicationsRead':'communicationsSend'});
       if(!a.isOwner)deny('The invited Business owner must approve mailbox actions.');
+      if(!entitlements.hasActivePaidBusinessEntitlement(a.entitlement))deny('An active paid Business plan is required for Business Email.');
     }
     // The existing internal Admin namespace has no customer Business identity.
     // Normal customer workspaces retain their maintained legal-consent gate.
@@ -25,7 +27,7 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
     if(operation!=='load'&&operation!=='disconnect'&&!configured) {
       const e=Error('Business Email setup is pending. Existing account emails continue normally.');e.code='failed-precondition';throw e;
     }
-    return {businessId,actorUid:uid,actorEmail:who.email,beta:{...config,configured},preferenceEnabled:preferences.enabled};
+    return {businessId,actorUid:uid,actorEmail:who.email,beta:{...config,configured,sendEnabled:config.sendEnabled===true},preferenceEnabled:preferences.enabled};
   };
 }
 module.exports={createAuthority};

@@ -522,6 +522,8 @@ class _Pricing extends StatelessWidget {
   };
 
   static const _featureLabels = <String, String>{
+    'customers_leads': 'Customers & leads',
+    'business_schedule': 'Schedule, jobs & tasks',
     'campaign_mapping': 'Campaign mapping',
     'gps_verification': 'Tracked route evidence',
     'basic_ai_planning': 'Simple AI campaign planning',
@@ -539,21 +541,29 @@ class _Pricing extends StatelessWidget {
   List<String> _highlights(String planId, Map<String, dynamic> plan) {
     final preferred = switch (planId) {
       'starter' => const [
+        'customers_leads',
+        'business_schedule',
         'campaign_mapping',
         'gps_verification',
         'basic_ai_planning',
       ],
       'growth' => const [
+        'customers_leads',
+        'business_schedule',
         'advanced_analytics',
         'ai_content_creation',
         'lead_tracking',
       ],
       'scale' => const [
+        'customers_leads',
+        'business_schedule',
         'property_intelligence',
         'weather_intelligence',
         'priority_scaler_matching',
       ],
       _ => const [
+        'customers_leads',
+        'business_schedule',
         'managed_growth_planning',
         'social_content_package',
         'seo_action_plan',

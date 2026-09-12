@@ -1,0 +1,9 @@
+{
+  "functions": [{
+    "source": "functions-business-operations",
+    "codebase": "business-operations-core",
+    "predeploy": ["node tools/prepare_business_operations.cjs"],
+    "disallowLegacyRuntimeConfig": true,
+    "ignore": ["node_modules", ".git", "*.log", "*.local", "*.test.js"]
+  }]
+}

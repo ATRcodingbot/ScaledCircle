@@ -5,15 +5,16 @@ const {hasActivePaidBusinessEntitlement} = require('./subscription_entitlements'
 const {createLegalConsentService} = require('./legal_consent');
 const VERSION = 'BusinessWorkspaceV1';
 const PLANS = Object.freeze({starter:{name:'Starter',price:99,seats:1},growth:{name:'Growth',price:299,seats:3},scale:{name:'Scale',price:499,seats:5},managed_growth:{name:'Managed Growth',price:999,seats:10}});
-const PERMISSIONS = Object.freeze(['campaigns','authorizeCampaigns','payments','intelligence','analytics','teamManagement','billing']);
-const PRESETS = Object.freeze({admin:PERMISSIONS,campaignManager:['campaigns','authorizeCampaigns','analytics'],analyst:['intelligence','analytics'],finance:['payments','billing']});
+const operationsPermissions = require('./business_operation_permissions');
+const PERMISSIONS = Object.freeze(['campaigns','authorizeCampaigns','payments','intelligence','analytics','teamManagement','billing',...operationsPermissions.PERMISSIONS]);
+const PRESETS = Object.freeze({admin:PERMISSIONS,campaignManager:['campaigns','authorizeCampaigns','analytics'],analyst:['intelligence','analytics'],finance:['payments','billing'],...operationsPermissions.PRESETS});
 const INVITE_TTL_MS = 7 * 24 * 3600 * 1000;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const text = (v,max=160) => typeof v === 'string' ? v.trim().slice(0,max) : '';
 function fail(code,message) { const e=new Error(message || code);e.code=code;throw e; }
 function id(v) { const s=text(v,128);if(!/^[A-Za-z0-9_-]{1,128}$/.test(s))fail('invalid-argument','Choose a valid workspace.');return s; }
 function email(v) { const s=text(v,254).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))fail('invalid-argument','Enter a valid email.');return s; }
-function permissions(v) {if(!Array.isArray(v)||v.length>7||v.some(p=>!PERMISSIONS.includes(p)))fail('invalid-argument','Choose supported responsibilities.');return [...new Set(v)].sort();}
+function permissions(v) {if(!Array.isArray(v)||v.length>PERMISSIONS.length||v.some(p=>!PERMISSIONS.includes(p)))fail('invalid-argument','Choose supported responsibilities.');return [...new Set(v)].sort();}
 function seats(entitlement,now=Date.now()) {return hasActivePaidBusinessEntitlement(entitlement,{nowMillis:now}) ? PLANS[entitlement.planId||entitlement.plan]?.seats||1 : 1;}
 function createWorkspaceService({db,auth,FieldValue,Timestamp,now=Date.now,origin='https://scaledcircle.com'}) {
   const legal=createLegalConsentService({db,FieldValue});

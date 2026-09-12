@@ -2,7 +2,7 @@
 // Only events already attributed to this workspace may enter this projection.
 // No mailbox text, contact information or network data is used as training input.
 const FEATURES=['industry','companyType','geography','serviceFit','prospectType','channel','messageAngle','cta','sourceClass'];
-const OUTCOMES=['interested','not_interested','follow_up_required','meeting','appointment','estimate','won','signup','paid','activated','approved','first_job','completed','do_not_contact','bounced'];
+const OUTCOMES=['interested','not_interested','follow_up_required','meeting','appointment','estimate','won','lost','signup','paid','activated','approved','first_job','completed','do_not_contact','bounced'];
 function featuresFor(p) {return {
   industry:typeof p.category==='string'?p.category.slice(0,120):p.industry||'unspecified',companyType:p.opportunityType||'unspecified',
   geography:p.serviceArea?.locality||p.serviceArea?.label||'unspecified',serviceFit:p.fit||'unspecified',prospectType:p.kind||'unspecified',
@@ -18,7 +18,7 @@ function project({businessId,operations=[],outcomes=[],prospects=[],now=Date.now
     g.sent++;if(o.replyCount>0)g.replied++;
     const outcome=latest.get(o.id)?.outcome;
     if(['interested','meeting','appointment','won','paid','activated','completed'].includes(outcome))g.positive++;
-    if(['not_interested','do_not_contact','bounced'].includes(outcome))g.negative++;
+    if(['not_interested','lost','do_not_contact','bounced'].includes(outcome))g.negative++;
     if(!o.replyCount&&now-o.requestedAt>=5*86400000)g.noReplyAfterFiveDays++;
     byFeature.set(key,g);
   }

@@ -1,6 +1,6 @@
 {
   "functions":[{
-    "source":"functions-business-email","codebase":"business-email",
+    "source":"functions-business-email","codebase":"business-email-core",
     "predeploy":["node functions/scripts/prepare_business_email.js"],
     "disallowLegacyRuntimeConfig":true,
     "ignore":["node_modules",".git","*.local","*.test.js"]

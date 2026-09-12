@@ -52,6 +52,7 @@ String businessEmailOutcome(dynamic state) => switch (state) {
   'appointment' => 'Appointment booked',
   'estimate' => 'Estimate provided',
   'won' => 'Work won',
+  'lost' => 'Work lost',
   'do_not_contact' => 'Do not contact',
   'unsubscribed' => 'Unsubscribed',
   'bounced' => 'Bounced / invalid address',

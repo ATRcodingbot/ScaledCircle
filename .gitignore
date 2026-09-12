@@ -9,6 +9,9 @@
 
 .vscode/
 .firebase/
+/firebase.*.private.json
+functions-business-email/.env.*
+functions-business-operations/.env.*
 **/.secret.local
 **/.staging-*.local
 

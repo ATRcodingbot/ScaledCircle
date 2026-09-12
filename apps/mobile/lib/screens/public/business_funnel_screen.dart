@@ -93,6 +93,7 @@ class BusinessFunnelScreen extends StatelessWidget {
         reverse: true,
         visual: _ResultsVisual(),
       ),
+      const Padding(padding: EdgeInsets.all(24), child: Column(children: [Text('CUSTOMERS & SCHEDULE', style: TextStyle(fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Keep leads, estimates, jobs, follow-ups and your team schedule together. Included with every paid Business plan.'), SizedBox(height: 8), Text('Lead → Estimate → Job → Follow-up') ])),
       const _ManagedGrowthBand(),
       _BusinessPricing(
         onStart: () => openPublicAccountRegistration(context, 'business'),

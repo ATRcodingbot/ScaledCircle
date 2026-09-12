@@ -33,7 +33,7 @@ function createService({db,authority,provider,key,now=Date.now}) {
     const rows=prospects.docs.map(d=>({id:d.id,...d.data()})).map(p=>({...p,doNotContact:p.doNotContact===true||suppressedRecipients.has(p.email?.toLowerCase()),excludedByGrowthPreferences:!a.preferenceEnabled(p,focus)}));
     const leadDocs=await db.collection('salesLeads').where('ownerUid','==',a.businessId).limit(25).get();
     const replies=c.status==='connected'&&c.permissions?.read===true?(await root(a.businessId).collection('replies').limit(50).get()).docs.map(d=>d.data()):[];
-    return {available:true,privateBeta:true,configured:!!a.beta.configured,expectedMailbox:a.beta.mailbox,
+    return {available:true,privateBeta:true,configured:!!a.beta.configured,sendEnabled:a.beta.sendEnabled!==false,expectedMailbox:a.beta.mailbox,
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
         read:c.status==='connected'&&c.permissions?.read===true,send:c.status==='connected'&&c.permissions?.send===true,
         automaticSending:false,landingSender:c.landingSender||'account_notifications',pending:active,
@@ -147,6 +147,7 @@ function createService({db,authority,provider,key,now=Date.now}) {
     });
   }
   async function send(a,input) {
+    if(a.beta.sendEnabled===false)fail('failed-precondition','Sending is held while the private connection is being certified. No email was sent.');
     strict(input,['prospectId','version','operationId','confirm']);if(input.confirm!==true)fail('failed-precondition','Review the exact message and choose Send Email.');
     const ref=sub(a.businessId,'operations',input.operationId),draftRef=sub(a.businessId,'drafts',input.prospectId);
     const claim=await db.runTransaction(async tx=>{

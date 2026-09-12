@@ -78,7 +78,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertIn('noindex,nofollow', home)
         self.assertIn('A contractor has a neighborhood in mind.', home)
         self.assertIn('Create Business Account', home)
-        self.assertIn('Social Manager — Beta', home)
+        self.assertIn('Social Manager — Private Beta / Invite Only', home)
         self.assertIn('Printing — Coming Soon', home)
         self.assertIn('This explains the workflow; it does not promise leads', home)
         self.assertIn('Know the work and pay before you apply.', home)
@@ -86,6 +86,14 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
         self.assertNotIn('422 homes analyzed', home)
         self.assertNotIn('checkout', home.split('<script>')[1])
         self.assertNotIn('noindex,nofollow', documents()['/'])
+
+    def test_core_operations_are_included_in_each_paid_plan_without_sync_claims(self):
+        pricing = documents(staging=True)['/pricing']
+        self.assertEqual(pricing.count('Customers &amp; leads, schedule, jobs and tasks included.'), 4)
+        how = documents(staging=True)['/how-it-works']
+        self.assertIn('Lead → Estimate → Job → Follow-up', how)
+        self.assertIn('Included with every paid Business plan', how)
+        self.assertNotIn('Google Calendar sync included', how)
 
     def test_how_it_works_has_complete_truthful_story_without_image_dependency(self):
         page = documents(staging=True)['/how-it-works']

@@ -167,6 +167,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text('Invited mailbox: ${_data!['expectedMailbox']}'),
+                    if (_data!['sendEnabled'] == false) const Text('Sending is held for private connection certification. No customer or prospect email can be sent.'),
                     const Text(
                       'Receive lead replies and send messages you explicitly approve. Automatic sending is off.',
                     ),
@@ -497,7 +498,7 @@ class BusinessEmailDraftButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
     icon: const Icon(Icons.edit_outlined),
-    onPressed: mailbox['connection']?['send'] != true
+    onPressed: mailbox['connection']?['send'] != true || mailbox['sendEnabled'] == false
         ? null
         : () => showDialog(
             context: context,

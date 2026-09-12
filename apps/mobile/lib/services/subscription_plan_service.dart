@@ -10,6 +10,7 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': false,
       'unlimitedScalers': false,
       'features': [
+        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',
@@ -27,6 +28,7 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': false,
       'unlimitedScalers': false,
       'features': [
+        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',
@@ -51,6 +53,7 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': true,
       'unlimitedScalers': true,
       'features': [
+        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',
@@ -83,6 +86,7 @@ class SubscriptionPlanService {
       'unlimitedCampaigns': true,
       'unlimitedScalers': true,
       'features': [
+        'customers_leads', 'business_schedule', 'internal_jobs', 'business_tasks',
         'campaign_mapping',
         'gps_verification',
         'completion_verification',

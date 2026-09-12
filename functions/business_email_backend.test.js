@@ -34,6 +34,9 @@ test('owner isolation and read-only mailbox cannot send',async()=>{
   await assert.rejects(call('load',{},'other','owner'));await assert.rejects(call('load',{},'owner','other'));
   await credential({read:true,send:false});await assert.rejects(draft(),/Enable Send/);assert.equal(sends,0);
 });
+test('deployment sending hold prevents provider calls despite a granted Send scope',async()=>{
+ beta.sendEnabled=false;const d=await draft();await assert.rejects(send(d),/Sending is held/);assert.equal(sends,0);assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,0);
+});
 test('same draft concurrent approval has exactly one provider attempt; never claims delivered',async()=>{
   const d=await draft(),outcomes=await Promise.all([send(d),send(d),send(d)]);
   assert.equal(sends,1);assert.ok(outcomes.some(r=>r.state==='sent'));
