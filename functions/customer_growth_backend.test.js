@@ -24,10 +24,10 @@ test('Growth uses exact Social plan approval version and preserves all source re
  await ref.set(plan);
  const result=await call();
  const social=result.agents.find(a=>a.type==='marketing_manager');
- assert.equal(social.status,'Plan approved · 8 posts need review');
+ assert.equal(social.status,'Plan approved · 8 ideas / 16 draft platform versions');
  assert.equal(social.lastAction,'30-Day strategy approved');
  assert.equal(social.destination,'/business/social-operations?review=posts');
- assert.equal(result.social.review.draftPosts,8);
+ assert.equal(result.social.review.draftPosts,16);
  assert.deepEqual((await ref.get()).data(),plan);
  await ref.update({planVersion:2,status:'ready_for_review'});
  assert.equal((await call()).social.review.title,'New Plan Version Needs Review');

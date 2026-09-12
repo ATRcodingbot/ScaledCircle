@@ -50,7 +50,7 @@ function customerState({jobs = [], plans = [], connections = [], now = Date.now(
     : result('scheduled','Scheduled','Approved work has a saved publication time.');
   if (draftPlans.length) return result('needs_review',review.title,'Review the proposed plan version. Content approval is separate.');
   if (published.length) return result('published_monitoring','Published / Monitoring','Publication evidence is recorded. Review available results without assuming leads or revenue.');
-  if (plans.length) return result(draftPosts ? 'posts_need_review' : 'plan_approved', draftPosts ? 'Plan approved — posts need review' : 'Plan approved', draftPosts ? `${draftPosts} draft posts need review. Nothing is scheduled yet.` : 'Strategy approval is recorded. Post approval, scheduling and publication remain separate.');
+  if (plans.length) return result(draftPosts ? 'posts_need_review' : 'plan_approved', draftPosts ? 'Plan approved — posts need review' : 'Plan approved', draftPosts ? `${review.contentCounts.contentIdeas} content ideas have ${review.contentCounts.platformVersions} platform versions. ${draftPosts} versions need review. Nothing is scheduled yet.` : 'Strategy approval is recorded. Post approval, scheduling and publication remain separate.');
   if (!connections.some(c => ['connected_read_only','connected_write'].includes(c.status)))
     return result('needs_permission','Needs permission','Connect your Business accounts to prepare your Social plan.');
   return result('ready','Ready to plan','Your connected accounts are ready for a draft strategy. Nothing is scheduled.');

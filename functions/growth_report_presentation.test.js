@@ -3,6 +3,12 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {renderGrowthReport}=require('../functions-agentic-growth/growth_report_presentation');
 const report={businessName:'Example Business',summary:{awaitingApproval:4,businessesFound:3,partnersFound:2,individualScalersFound:0,learned:'Outcomes are not measured yet.',next:'Review the sourced opportunities.'}};
 const prospects=Array.from({length:12},(_,i)=>({id:'record '+i,displayName:'Prospect '+i,reason:'Potential fit; interest unknown.',email:'private@example.test',draft:'Do not include full outreach drafts.'}));
+
+test('mailbox evidence in future reports distinguishes acceptance, reply and owner-reported outcomes',()=>{
+ const result=renderGrowthReport({report:{summary:{outreach:{sent:5,replied:2,evidenceWindow:'Recent confirmed operations',patterns:[{value:'property management',sent:5,replied:2,recommendation:'Review similar opportunities'}]}}},reportId:'one',kind:'weekly'});
+ assert.match(result.text,/5 sends accepted by the provider/);assert.match(result.text,/2 conversations with matched replies/);
+ assert.match(result.text,/does not prove delivery/);assert.match(result.text,/owner-recorded/);assert.doesNotMatch(result.text,/private@example/);
+});
 test('current preferences override historical RFQ counts and recommendations in every email kind',()=>{
  const rfq={id:'old',displayName:'RFQ-000859',opportunityType:'public_bid',kind:'business',approvalState:'awaiting_approval'};
  for(const kind of ['daily','weekly','important']){

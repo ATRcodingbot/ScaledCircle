@@ -66,7 +66,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
                     key == 'cadence' &&
                             strategy['version'] ==
                                 'CustomerSocialDraftStrategyV1'
-                        ? 'Starting cadence: 2 posts per week per platform. Social Manager will measure performance and recommend adjustments as real results accumulate.'
+                        ? 'Starting cadence: 2 shared content ideas per week, each adapted for the connected platforms. That is 2 posts per week per platform. Recommendations will change only as real performance evidence accumulates.'
                         : socialEvidenceText(strategy[key], ''),
                   ),
                 ),
@@ -75,8 +75,12 @@ class CustomerSocialPlanCard extends StatelessWidget {
           if (!strategyOnly)
             for (final item in (plan['items'] as List? ?? []).whereType<Map>())
               ExpansionTile(
-                title: Text(item['pillar']?.toString() ?? 'Proposed post'),
-                subtitle: const Text('Review each platform’s post and time'),
+                title: Text(item['pillar']?.toString() ?? 'Content idea'),
+                subtitle: Text(
+                  item['platformExclusive'] == true
+                      ? 'Platform-exclusive idea · review its version and time'
+                      : 'One idea · review each platform version and time',
+                ),
                 expandedCrossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(

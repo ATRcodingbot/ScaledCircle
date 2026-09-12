@@ -33,8 +33,8 @@ void main() {
       view.draftPosts,
       16,
     ); // Eight ideas contain sixteen independent platform drafts.
-    expect(view.primaryAction, 'Review Draft Posts');
-    expect(view.contentAction, 'Review Draft Posts');
+    expect(view.primaryAction, 'Review Content');
+    expect(view.contentAction, 'Review Content');
     expect(view.count('scheduled'), 0);
     expect(p['items'], plan()['items']);
     expect(
@@ -90,14 +90,14 @@ void main() {
         ),
       );
       await show(false);
-      expect(find.text('Draft Posts'), findsOneWidget);
-      expect(find.text('Draft Posts: 16 ready for review'), findsOneWidget);
-      expect(find.text('Scheduled: 0'), findsOneWidget);
+      expect(find.text('30-Day Strategy · Approved'), findsOneWidget);
+      expect(find.text('Platform Versions: 16'), findsOneWidget);
+      expect(find.text('Scheduled versions: 0'), findsOneWidget);
       expect(find.text('Review 30-Day Plan'), findsNothing);
       expect(find.text('View Schedule'), findsNothing);
-      await tester.ensureVisible(find.text('Review Draft Posts'));
+      await tester.ensureVisible(find.text('Review Content'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Review Draft Posts'));
+      await tester.tap(find.text('Review Content'));
       expect(reviews, 1);
       expect(tester.takeException(), isNull);
       await show(true);

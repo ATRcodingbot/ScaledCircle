@@ -90,7 +90,7 @@ class SocialRuntimeStatusCard extends StatelessWidget {
                 (summary?['counters']?['draftPosts'] ?? 0) > 0)
               FilledButton(
                 onPressed: onReviewPosts,
-                child: const Text('Review Draft Posts'),
+                child: const Text('Review Content'),
               ),
             const Text(
               'Account permissions do not approve posts. Your content approval and scheduling controls remain separate.',

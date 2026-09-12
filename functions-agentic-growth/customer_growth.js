@@ -86,14 +86,15 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
       if(a.type==='lead_generation')a.result=result.summary.opportunityGroups.filter(g=>!['Workforce candidates','Excluded paid sources'].includes(g.label)).map(g=>`${g.count} ${g.label.toLowerCase()}`).join('; ');
       if(a.type==='workforce_recruiter')a.result=`${result.prospects.filter(p=>p.opportunityType==='workforce_candidate').length} individual candidates; ${result.prospects.filter(p=>p.opportunityType==='recruitment_channel').length} recruitment channels. Organizations are not counted as candidates.`;
       if(a.type==='marketing_manager'){const review=result.social.review;a.status=review.title;a.lastAction=review.lastAction;a.result=review.result;a.nextAction=review.nextAction;a.destination=review.destination;}
-      if(a.type==='business_assistant'){a.status='Private Beta · Recommendations only';a.result='No customer messages sent. Confirm current offer, project examples and brand assets before drafting replies.';a.nextAction='Review the saved profile and any outdated free-text service areas.';}
+      if(a.type==='business_assistant'){a.status='Private Beta · Recommendations only';a.result='Confirm your current offer, project examples and brand assets before reviewing replies. Business Email shows confirmed correspondence separately.';a.nextAction='Review the saved profile and any outdated free-text service areas.';}
       if(a.type==='ad_manager'){a.status='Approval required · No spend';a.result=`Saved budget preference: ${c.profile.plannedAdBudget||'Not provided'}. No advertising changes made.`;a.nextAction='Review organic results first; approve a separate budget before advertising.';}
     }
     result.measurement={prospects:['Found','Qualified','Contacted','Appointment','Estimate','Won','Attributed Revenue'],
       workforce:['Found','Qualified','Contacted','Available','Used / Hired'],
       social:['Baseline','Published','Reach / engagement','Attributed traffic / leads'],
-      contacted:0,appointments:null,estimates:null,won:null,attributedRevenue:null,individualHires:null,
-      note:'No contact or conversion event has been recorded by this workspace cycle. A lead is not revenue.'};
+      contacted:result.outreach.sent,replies:result.outreach.replied,appointments:result.outreach.outcomeCounts.appointment,
+      estimates:result.outreach.outcomeCounts.estimate,won:result.outreach.outcomeCounts.won,attributedRevenue:null,individualHires:null,
+      note:'Contacts and replies use recorded mailbox evidence. Appointment, estimate and won outcomes are owner-reported. A lead is not revenue.'};
     return result;
   }
   async function execute(request) {

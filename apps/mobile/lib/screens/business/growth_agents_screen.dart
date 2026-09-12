@@ -1,4 +1,7 @@
 import '../../models/social_plan_presentation.dart';
+import '../../services/business_email_service.dart';
+import '../../widgets/business_email_entry.dart';
+import 'business_email_screen.dart';
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +28,7 @@ class GrowthAgentsScreen extends StatefulWidget {
 
 class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
   Map<String, dynamic>? _data;
+  Map<String, dynamic>? _mailbox;
   int _loadGeneration = 0;
   String? _error;
   bool _busy = false;
@@ -86,9 +90,18 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
       final data =
           await (widget.loadOverride?.call() ??
               _call('getGrowthDogfoodWorkspaceV1'));
+      Map<String, dynamic>? mailbox;
+      if (widget.loadOverride == null) {
+        try {
+          mailbox = await BusinessEmailService().availability();
+        } catch (_) {
+          /* Private beta may be unavailable. */
+        }
+      }
       if (mounted && generation == _loadGeneration) {
         setState(() {
           _data = data;
+          _mailbox = mailbox;
           _error = null;
         });
       }
@@ -480,8 +493,20 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                               'More source review required.',
                         ),
                         const SizedBox(height: 12),
+                        if (_mailbox != null &&
+                            p['doNotContact'] != true &&
+                            p['qualified'] == true &&
+                            p['email'] is String &&
+                            p['sourceAvailable'] == true &&
+                            p['excludedByGrowthPreferences'] != true)
+                          BusinessEmailDraftButton(
+                            mailbox: _mailbox!,
+                            prospect: p,
+                          ),
                         Text(
-                          p['approvalState'] == 'awaiting_approval'
+                          p['doNotContact'] == true
+                              ? 'Do not contact'
+                              : p['approvalState'] == 'awaiting_approval'
                               ? (widget.customer
                                     ? 'Needs your approval'
                                     : 'Needs Founder approval')
@@ -523,6 +548,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                 ),
               ),
         ],
+        const BusinessEmailEntry(),
         const SizedBox(height: 24),
         Text(
           'Completed activity',
@@ -611,8 +637,25 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                 },
         ),
         const SizedBox(height: 14),
+        Text(
+          d['outreach']?['learningBasis']?.toString() ??
+              'No verified conversion evidence yet.',
+        ),
+        if (d['outreach'] != null) ...[
+          Text(
+            'Confirmed outreach: ${d['outreach']['sent']} sent · ${d['outreach']['replied']} replied',
+          ),
+          for (final pattern in _list(d['outreach']['patterns']))
+            Text(
+              '${pattern['value']}: ${pattern['sent']} sent · ${pattern['replied']} replies · ${pattern['positive']} positive outcomes. ${pattern['recommendation']}',
+            ),
+          if (_list(d['outreach']['followups']).isNotEmpty)
+            Text(
+              '${_list(d['outreach']['followups']).length} follow-ups worth reviewing after five days without a recorded reply. Automatic sending remains off.',
+            ),
+        ],
         const Text(
-          'Learning: No verified conversion evidence yet. Recommendations use sourced local facts with limited confidence. Private tenant records are never shared between Businesses.',
+          'Private conversations and contacts remain within this Business.',
         ),
       ],
     );
@@ -668,7 +711,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         ),
         child: Text(
           social['review']?['planApprovalState'] == 'approved'
-              ? 'Review Draft Posts'
+              ? 'Review Content'
               : 'Review 30-Day Plan',
         ),
       ),

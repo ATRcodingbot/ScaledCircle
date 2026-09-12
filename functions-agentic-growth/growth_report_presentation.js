@@ -17,6 +17,12 @@ function renderGrowthReport({report,reportId,prospects=[],kind,customer=false,op
   const selected=active.slice(0,kind==='weekly'?5:3);
   if(selected.length)lines.push('','Selected findings',...selected.flatMap(p=>[clean(p.displayName),clean(p.reason),base+'?prospect='+encodeURIComponent(p.id),'']));
   if(kind==='weekly')lines.push('What we learned',clean(s.learned)||'Verified performance outcomes are not available yet.','');
+  if(s.outreach){const o=s.outreach;
+   lines.push('Confirmed correspondence',`${count(o.sent)} sends accepted by the provider · ${count(o.replied)} conversations with matched replies.`,
+    'Provider acceptance does not prove delivery. Meetings, estimates and won work are owner-recorded; revenue requires linked evidence.',
+    clean(o.evidenceWindow));
+   for(const pattern of (o.patterns||[]).slice(0,5))lines.push(`${clean(pattern.value)}: ${count(pattern.sent)} sent, ${count(pattern.replied)} replies. ${clean(pattern.recommendation)}`);
+  }
  }
  lines.push('Next step',clean(s.next)||'Review the evidence and decide what needs approval.','', 'Review this report',link,'',
   'Research is not proof of customer interest, a hire or a won job. Review evidence and drafts in the workspace.',

@@ -1,4 +1,5 @@
 import '../../models/social_plan_presentation.dart';
+import '../../widgets/business_email_entry.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../../navigation/app_router.dart';
@@ -82,6 +83,7 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
             const Text(
               'Private Beta · Research, recommendations and drafts. You decide what happens next.',
             ),
+            const BusinessEmailEntry(),
             const SizedBox(height: 16),
             if (_failed) ...[
               const Text(

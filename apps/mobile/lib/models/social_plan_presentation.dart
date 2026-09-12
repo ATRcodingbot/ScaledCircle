@@ -79,21 +79,40 @@ class SocialPlanPresentation {
   final Map<String, dynamic> runtime;
 
   bool get allApproved => plans.isNotEmpty && plans.every(socialPlanApproved);
-  int get draftPosts =>
-      count('draftPosts') ??
-      plans
-          .expand((p) => (p['items'] as List? ?? const []).whereType<Map>())
-          .fold<int>(0, (total, item) {
-            final variants = (item['variants'] as List? ?? const [])
-                .whereType<Map>();
-            const finalStates = ['approved', 'scheduled', 'published'];
-            return total +
-                (variants.isEmpty
-                    ? (!finalStates.contains(item['status']) ? 1 : 0)
-                    : variants
-                          .where((v) => !finalStates.contains(v['status']))
-                          .length);
-          });
+  List<Map> get ideas => plans
+      .expand((p) => (p['items'] as List? ?? const []).whereType<Map>())
+      .toList();
+  List<Map> get versions => ideas.expand((i) {
+    final variants = (i['variants'] as List? ?? const [])
+        .whereType<Map>()
+        .toList();
+    return variants.isEmpty ? [i] : variants;
+  }).toList();
+  int versionsInState(String state) =>
+      versions.where((v) => v['status'] == state).length;
+  Map<String, List<Map>> get byPlatform {
+    final result = <String, List<Map>>{};
+    for (final version in versions) {
+      (result[version['provider']?.toString() ?? 'unknown'] ??= []).add(
+        version,
+      );
+    }
+    return result;
+  }
+
+  int get draftPosts => plans
+      .expand((p) => (p['items'] as List? ?? const []).whereType<Map>())
+      .fold<int>(0, (total, item) {
+        final variants = (item['variants'] as List? ?? const [])
+            .whereType<Map>();
+        const finalStates = ['approved', 'scheduled', 'published'];
+        return total +
+            (variants.isEmpty
+                ? (!finalStates.contains(item['status']) ? 1 : 0)
+                : variants
+                      .where((v) => !finalStates.contains(v['status']))
+                      .length);
+      });
 
   int? count(String key) {
     if (runtime['available'] != true) return null;
@@ -107,17 +126,17 @@ class SocialPlanPresentation {
       : !allApproved
       ? 'Review 30-Day Plan'
       : draftPosts > 0
-      ? 'Review Draft Posts'
+      ? 'Review Content'
       : (count('scheduled') ?? 0) > 0
       ? 'View Schedule'
       : (count('published') ?? 0) > 0
       ? 'View Results'
-      : 'View Posts';
+      : 'Review Content';
 
   String? get contentAction => (count('scheduled') ?? 0) > 0
       ? 'View Schedule'
       : draftPosts > 0
-      ? 'Review Draft Posts'
+      ? 'Review Content'
       : null;
 }
 

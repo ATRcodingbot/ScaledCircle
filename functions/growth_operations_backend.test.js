@@ -7,13 +7,25 @@ const growth=require('../functions-agentic-growth/growth_operations');
 const rules=require('@firebase/rules-unit-testing');
 let service,clock,checks;
 beforeEach(async()=>{
-  for(const c of ['internalGrowthWorkspaces','internalGrowthWorkspaceAudits','discoveryPreferences','agentProspects','agentCrmProspects','agentActions','agentApprovals','agentRuns','agentReports','agentObservations','agentHealth','agentCommunicationPreferences','notifications'])for(const d of await db.collection(c).listDocuments())await db.recursiveDelete(d);
+  for(const c of ['businessMailboxes','internalGrowthWorkspaces','internalGrowthWorkspaceAudits','discoveryPreferences','agentProspects','agentCrmProspects','agentActions','agentApprovals','agentRuns','agentReports','agentObservations','agentHealth','agentCommunicationPreferences','notifications'])for(const d of await db.collection(c).listDocuments())await db.recursiveDelete(d);
   clock=Date.parse('2026-09-10T14:00:00Z');checks=0;
   await db.doc('agentHealth/owner').set({businessUid:'owner',killSwitchActive:true,externalActionsEnabled:false});
   await db.doc('discoveryPreferences/owner').set({schemaVersion:'ServiceAreaPreferencesV1',userUid:'owner',role:'business',preferenceVersion:1,areas:['Anne Arundel County','Baltimore County'].map((county,i)=>({id:'area'+i,type:'place',geographyType:'county',county,state:'Maryland',displayName:county+', Maryland',enabled:true}))});
   service=growth.createService({db,FieldValue,sourceCatalog:require('../functions-agentic-growth/growth_sources').slice(0,6),project:'demo-growth-agents',target:'owner',now:()=>clock,readSource:async s=>{checks++;return s.signals.join(' ')+' '+(s.email||'')+' '+(s.phone||'');}});
 });
 after(async()=>{await db.terminate();await app.delete();});
+
+test('future briefs use confirmed local correspondence while prior reports stay immutable',async()=>{
+ const priorId=await service.makeReport('daily'),prior=(await db.doc('agentReports/'+priorId).get()).data();
+ await db.doc('businessMailboxes/owner/operations/real_send').set({businessId:'owner',state:'sent',requestedAt:clock,replyCount:1});
+ await db.doc('businessMailboxes/owner/operations/certification').set({businessId:'owner',state:'sent',requestedAt:clock,replyCount:1,certification:true});
+ await db.doc('businessMailboxes/owner/outcomes/appointment').set({businessId:'owner',operationId:'real_send',outcome:'appointment',recordedAt:clock,evidenceType:'owner_reported'});
+ const view=await service.load();assert.equal(view.summary.contacted,1);assert.equal(view.summary.replied,1);assert.equal(view.outreach.outcomeCounts.appointment,1);
+ await service.makeReport('daily');assert.deepEqual((await db.doc('agentReports/'+priorId).get()).data(),prior);
+ clock+=86400000;const nextId=await service.makeReport('daily'),next=(await db.doc('agentReports/'+nextId).get()).data();
+ assert.equal(next.summary.contacted,1);assert.equal(next.summary.outreach.outcomeCounts.appointment,1);assert.equal(next.summary.outreach.attributedRevenue,null);
+ assert.equal(next.summary.paid,null);assert.match(next.scope,/owner-recorded/);
+});
 test('preference changes preserve historical RFQs and block new drafts and review',async()=>{
  const source={key:'public_bid_test',name:'RFQ-000859',kind:'business',opportunityType:'public_bid',region:'Anne Arundel County',serviceArea:{type:'county',locality:'Anne Arundel County',state:'Maryland'},industry:'procurement',url:'https://example.test/bid',signals:['qualified'],reason:'Public solicitation',useCase:'Read requirements'};
  const research=growth.createService({db,FieldValue,project:'demo-growth-agents',target:'owner',now:()=>clock,sourceCatalog:[source],readSource:async()=>{checks++;return 'qualified';}});
@@ -52,7 +64,7 @@ test('concurrent run does not duplicate source research or effects; next day pre
   const result=await Promise.allSettled([service.run(),service.run()]);assert.ok(result.some(x=>x.status==='fulfilled'));assert.equal(checks,6);
   const p=(await db.collection('agentProspects').get()).docs[0];
   await service.review({prospectId:p.id,decision:'do_not_contact'});
-  clock+=86400000;await service.run();assert.equal(checks,12);assert.equal((await db.collection('agentProspects').get()).size,6);
+  clock+=86400000;await service.run();assert.equal(checks,11,'recipient-wide Do Not Contact skips that source on the next cycle');assert.equal((await db.collection('agentProspects').get()).size,6);
   assert.equal((await p.ref.get()).data().doNotContact,true);assert.equal((await db.collection('agentActions').get()).size,6);
 });
 test('Supervisor pause blocks run; cross-tenant review and external-send decisions are denied',async()=>{

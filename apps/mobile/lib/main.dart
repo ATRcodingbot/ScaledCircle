@@ -1,4 +1,5 @@
 import 'screens/business/growth_agents_screen.dart';
+import 'screens/business/business_email_screen.dart';
 import 'screens/business/business_growth_home.dart';
 import 'screens/public/referral_program_screen.dart';
 import 'screens/scaler/affiliate/scaler_affiliate_screen.dart';
@@ -184,6 +185,11 @@ class ScaledCircleApp extends StatelessWidget {
         settings: settings,
         builder: (_) => const ScalerFunnelScreen(),
       );
+    }
+    if (route?.path == '/business/email-connection') {
+      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
+        routeName: settings.name!, audience: ProtectedRouteAudience.business,
+        builder: (_, _) => const BusinessEmailScreen()));
     }
     if (route?.path == '/business/growth') {
       return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(

@@ -5,8 +5,8 @@ const plan={id:'plan',status:'approved',planVersion:1,approvedVersion:1,items:Ar
 test('same immutable plan authority feeds Social and Growth projections',()=>{
  for(const dir of ['functions-agentic-growth','functions-social-operations'])assert.equal(fs.readFileSync(path.join(__dirname,'../',dir,'social_plan_state.js'),'utf8'),fs.readFileSync(path.join(__dirname,'social_plan_state.js'),'utf8'));
  const before=structuredClone(plan),state=project([plan]);
- assert.equal(state.planApprovalState,'approved');assert.equal(state.postReviewState,'drafts_need_review');assert.equal(state.draftPosts,8);
- assert.equal(state.title,'Plan approved · 8 posts need review');assert.equal(state.destination,'/business/social-operations?review=posts');assert.equal(state.publicationAuthorizedByStatus,false);assert.deepEqual(plan,before);
+ assert.equal(state.planApprovalState,'approved');assert.equal(state.postReviewState,'drafts_need_review');assert.equal(state.draftPosts,16);
+ assert.equal(state.title,'Plan approved · 8 ideas / 16 draft platform versions');assert.equal(state.destination,'/business/social-operations?review=posts');assert.equal(state.publicationAuthorizedByStatus,false);assert.deepEqual(plan,before);
 });
 test('only exact approved current version is approved; previous approval stays historical',()=>{
  const newer={...plan,planVersion:2,status:'ready_for_review'};

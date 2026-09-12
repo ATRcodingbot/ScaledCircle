@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/social_plan_presentation.dart';
+import 'social_connection_card.dart';
 
 class SocialPlanOverview extends StatelessWidget {
   const SocialPlanOverview({
@@ -23,16 +24,24 @@ class SocialPlanOverview extends StatelessWidget {
             refreshingApproval
                 ? 'Plan approved — refreshing status…'
                 : presentation.allApproved
-                ? 'Draft Posts'
+                ? '30-Day Strategy · Approved'
                 : '${presentation.plans.length} saved plan${presentation.plans.length == 1 ? '' : 's'}',
           ),
           if (!refreshingApproval) ...[
-            Text('Draft Posts: ${presentation.draftPosts} ready for review'),
+            Text('Content Ideas: ${presentation.ideas.length}'),
+            Text('Platform Versions: ${presentation.versions.length}'),
+            for (final platform in presentation.byPlatform.entries)
+              Text(
+                '${socialProviderName(platform.key)}: ${platform.value.length} versions · ${platform.value.where((v) => !['approved', 'scheduled', 'published'].contains(v['status'])).length} drafts',
+              ),
             Text(
-              'Scheduled: ${presentation.count('scheduled') ?? 'Not confirmed'}',
+              'Approved versions: ${presentation.versionsInState('approved')}',
             ),
             Text(
-              'Published: ${presentation.count('published') ?? 'Not confirmed'}',
+              'Scheduled versions: ${presentation.count('scheduled') == null ? 'Not confirmed' : presentation.versionsInState('scheduled')}',
+            ),
+            Text(
+              'Published versions: ${presentation.count('published') == null ? 'Not confirmed' : presentation.versionsInState('published')}',
             ),
           ],
           const SizedBox(height: 12),

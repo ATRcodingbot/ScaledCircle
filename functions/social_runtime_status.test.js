@@ -6,7 +6,8 @@ test('approved strategy moves to draft-post review without approving or scheduli
  const plans=[{status:'approved',planVersion:1,approvedVersion:1,items:Array.from({length:8},()=>({variants:[{status:'ready_for_review'},{status:'ready_for_review'}]}))}];
  const before=structuredClone(plans),s=customerState({plans});
  assert.equal(s.state,'posts_need_review');assert.equal(s.title,'Plan approved — posts need review');
- assert.deepEqual(s.counters,{draftPlans:0,approvedPlans:1,draftPosts:8,scheduled:0,published:0});
+ assert.deepEqual(s.counters,{draftPlans:0,approvedPlans:1,draftPosts:16,scheduled:0,published:0});
+ assert.equal(s.review.contentCounts.contentIdeas,8);assert.equal(s.review.contentCounts.platformVersions,16);
  assert.equal(s.publicationAuthorizedByStatus,false);assert.deepEqual(plans,before);
  assert.equal(customerState({plans:[{...plans[0],approvedVersion:0}]}).state,'needs_review');
 });

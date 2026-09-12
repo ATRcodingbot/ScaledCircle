@@ -276,7 +276,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               '30-Day Plan Approved. Review the draft posts next.',
             ),
             action: SnackBarAction(
-              label: 'Review Draft Posts',
+              label: 'Review Content',
               onPressed: () {
                 final workspace = _workspace;
                 if (workspace != null) _reviewSavedPlans(workspace);
@@ -1501,7 +1501,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                           workspace.runtimeStatus,
                         ).allApproved
                       ? (presentation.draftPosts > 0
-                            ? 'Review Draft Posts'
+                            ? 'Review Content'
                             : 'View Results')
                       : 'Review 30-Day Plan',
                 ),
