@@ -15,6 +15,24 @@ const call=(b,operation,input={},uid=b,requestId=crypto.randomUUID())=>service.e
 const load=(b,uid=b)=>call(b,'load',{fromMs:start-86400000,toMs:start+7*86400000},uid);
 const customer=(b,extra={},uid=b)=>call(b,'saveCustomer',{customer:{name:'Controlled customer',email:'client'+b+'@example.test',...extra},expectedVersion:0},uid);
 const item=(b,extra={},uid=b,id)=>call(b,'saveItem',{item:{title:'Controlled estimate',type:'estimate',startMs:start,durationMinutes:60,timeZone:'America/New_York',assignedPeople:['user:'+b],...extra},expectedVersion:0},uid,id);
+test('production internal access reuses only the pinned verified Admin without a customer entitlement or staging registry',async()=>{
+ const uid=await user(),other=await user();
+ await db.doc('users/'+uid).update({role:'admin',active:false});
+ await db.doc('users/'+other).update({role:'admin',active:true});
+ const make=pin=>createAuthority({db,auth,FieldValue,Timestamp,project:'scaled-circle',internalAdminUid:pin});
+ const request={auth:{uid},data:{businessId:uid}};
+ const result=await make(uid)(request,{write:true});
+ assert.equal(result.internal,true);assert.equal(result.businessId,uid);assert.equal(result.capacity,1);
+ for(const c of ['businessSubscriptions','internalGrowthWorkspaces','businessWorkspaces'])assert.equal((await db.doc(c+'/'+uid).get()).exists,false);
+ await assert.rejects(make('')(request),{code:'permission-denied'});
+ await assert.rejects(make(other)(request),{code:'permission-denied'});
+ await assert.rejects(make(uid)({auth:{uid:other},data:{businessId:other}}),{code:'permission-denied'});
+ await assert.rejects(make(uid)({auth:{uid},data:{businessId:other}}),{code:'permission-denied'});
+ await auth.updateUser(uid,{emailVerified:false});await assert.rejects(make(uid)(request),{code:'permission-denied'});
+ await auth.updateUser(uid,{emailVerified:true,disabled:true});await assert.rejects(make(uid)(request),{code:'permission-denied'});
+ await auth.updateUser(uid,{disabled:false});await db.doc('users/'+uid).update({role:'business'});
+ await assert.rejects(make(uid)(request,{write:true}),{code:'permission-denied'});
+});
 test('all four paid plans have core access and unchanged total seats',async()=>{for(const [p,cap]of [['starter',1],['growth',3],['scale',5],['managed_growth',10]]){const b=await owner(p);await customer(b);const v=await load(b);assert.equal(v.activePaid,true);assert.equal(v.seatLimit,cap);assert.equal(v.customers.length,1);assert.equal(v.people.length,1);}});
 
 test('new work defaults to its authenticated creator for every type, not the workspace owner',async()=>{

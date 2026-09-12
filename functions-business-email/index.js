@@ -15,7 +15,8 @@ function service() {
   const clientSecret=CLIENT_SECRET.value(),key=ENCRYPTION_KEY.value();
   const configured=!!clientId&&!!clientSecret&&!!redirectUri&&Buffer.from(key||'','base64').length===32;
   const beta=JSON.parse(process.env.BUSINESS_EMAIL_PRIVATE_BETA||'{}');
-  return createService({db,key,authority:createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,beta,configured}),
+  return createService({db,key,authority:createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,beta,configured,
+    internalAdminUid:process.env.GROWTH_PRODUCTION_ADMIN_UID||''}),
     provider:gmail.createProvider({clientId,clientSecret,redirectUri})});
 }
 const options={region:'us-east1',maxInstances:2,timeoutSeconds:120,secrets:[CLIENT_SECRET,ENCRYPTION_KEY]};

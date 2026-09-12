@@ -4,7 +4,7 @@ This isolated Functions codebase supports individual owner-reviewed Gmail/Google
 
 ## Authority and state
 
-- Invitation binds an existing workspace, its real authenticated owner, and an exact provider-verified mailbox. Normal Business membership, intelligence permission, paid entitlement and current legal consent remain enforced. The maintained staging internal Admin namespace stays separate from customer Businesses.
+- Invitation binds an existing workspace, its real authenticated owner, and an exact provider-verified mailbox. Normal Business membership, Communications permission, paid entitlement and current legal consent remain enforced. Internal Admin workspaces stay separate from customer Businesses. Production reuses the existing pinned, verified Admin authority; it never copies the staging workspace or mailbox, creates a customer identity, or changes an entitlement.
 - Read and Send grants are requested independently. Provider scope, requested permission and stored authority must agree. Every send rechecks the owner, mailbox generation, immutable message version, current source contact, source freshness, preferences and recipient-wide restrictions.
 - Tokens are encrypted with AES-256-GCM and workspace-bound additional authenticated data. Secrets remain in Secret Manager. Browser Rules deny mailbox data, credentials, OAuth attempts, replies and operations; owner views use authenticated callables.
 - One server transaction claims an operation before one Gmail send attempt. A timeout or uncertain response is held for reconciliation and never retried as a new send. Gmail does not provide a send idempotency key. An RFC Message-ID is correlation evidence, not a provider deduplication guarantee.
@@ -14,13 +14,14 @@ This isolated Functions codebase supports individual owner-reviewed Gmail/Google
 
 ## Deployment configuration
 
-Use only the dedicated `firebase.business-email.json` selectors after configuring a dedicated Google Web application in Testing mode with the exact callback URI.
+Use only the dedicated `firebase.business-email.json` selectors after configuring an environment-specific Google Web application with the exact callback URI. Keep staging and production clients and secrets separate. Review the project's existing Google audience without changing unrelated login or provider integrations; Google's Testing and verification restrictions still apply independently of ScaledCircle's private invitation gate.
 
 Required environment configuration:
 
 - `BUSINESS_EMAIL_GOOGLE_CLIENT_ID`
 - `BUSINESS_EMAIL_REDIRECT_URI`
 - `BUSINESS_EMAIL_PRIVATE_BETA`: private JSON mapping workspace IDs to `ownerUid`, `mailbox`, `kind`, `funnel`, `certificationRecipient`, and `certificationOnly`.
+- `GROWTH_PRODUCTION_ADMIN_UID`: existing production internal Admin binding, required only for the explicitly invited internal workspace. Missing or mismatched bindings fail closed. Disabled or unverified identities and other Admins are denied.
 
 Required Secret Manager entries:
 

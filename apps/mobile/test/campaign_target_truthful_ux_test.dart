@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_app/config/app_environment.dart';
 import 'package:flutter_app/services/platform_billing_service.dart';
 import 'package:flutter_app/services/secure_function_service.dart';
 import 'package:flutter_app/widgets/zone_intelligence_card.dart';
@@ -71,12 +72,26 @@ void main() {
     expect(error.toString(), 'Campaign funding is unavailable.');
   });
 
-  test('funding action is enabled only for the reviewed isolated boundary', () {
-    expect(
-      PlatformBillingService.authoritativeCampaignFundingAvailable,
-      isTrue,
-    );
-  });
+  test(
+    'unrestricted production funding stays held before payout readiness',
+    () {
+      if (AppEnvironmentConfig.isProduction) {
+        expect(
+          PlatformBillingService.authoritativeCampaignFundingAvailable,
+          isFalse,
+        );
+        expect(
+          PlatformBillingService.paidWorkHoldMessage,
+          contains('payout readiness'),
+        );
+      } else {
+        expect(
+          PlatformBillingService.authoritativeCampaignFundingAvailable,
+          isTrue,
+        );
+      }
+    },
+  );
 
   test(
     'persistence returns before optional analysis and fake formulas are gone',
@@ -110,10 +125,7 @@ void main() {
         source,
         isNot(contains("'zoneAreaSquareMeters': metrics.areaSquareMeters")),
       );
-      expect(
-        source,
-        isNot(contains("'zoneAreaAcres': metrics.areaAcres")),
-      );
+      expect(source, isNot(contains("'zoneAreaAcres': metrics.areaAcres")));
       expect(source, contains('unawaited(_analyzeSavedZone())'));
     },
   );

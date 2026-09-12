@@ -41,6 +41,24 @@ test('owner isolation and read-only mailbox cannot send',async()=>{
   await assert.rejects(call('load',{},'other','owner'));await assert.rejects(call('load',{},'owner','other'));
   await credential({read:true,send:false});await assert.rejects(draft(),/Enable Send/);assert.equal(sends,0);
 });
+test('production internal mailbox requires exact invited and pinned verified Admin; no customer profile or entitlement is fabricated',async()=>{
+ await db.doc('users/internal').set({role:'admin',active:false});
+ await db.doc('users/otheradmin').set({role:'admin',active:true});
+ const identities={internal:{uid:'internal',email:'internal@example.test',emailVerified:true,disabled:false},otheradmin:{uid:'otheradmin',email:'otheradmin@example.test',emailVerified:true,disabled:false}};
+ const invitation=uid=>({ownerUid:uid,kind:'internal',mailbox:uid+'@example.test',certificationOnly:true,certificationSendEnabled:true});
+ const make=pin=>createAuthority({db,auth:{getUser:async uid=>identities[uid]},FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,project:'scaled-circle',internalAdminUid:pin,beta:{internal:invitation('internal'),otheradmin:invitation('otheradmin')},configured:true});
+ const request={auth:{uid:'internal'},data:{businessId:'internal'}};
+ const result=await make('internal')(request,'connect');assert.equal(result.businessId,'internal');assert.equal(result.beta.sendEnabled,false);assert.equal(result.beta.certificationSendEnabled,false);
+ for(const c of ['businessSubscriptions','internalGrowthWorkspaces','businessWorkspaces'])assert.equal((await db.doc(c+'/internal').get()).exists,false);
+ for(const pin of ['','otheradmin'])await assert.rejects(make(pin)(request,'connect'),{code:'permission-denied'});
+ await assert.rejects(make('internal')({auth:{uid:'otheradmin'},data:{businessId:'otheradmin'}},'connect'),{code:'permission-denied'});
+ await assert.rejects(make('internal')({auth:{uid:'internal'},data:{businessId:'otheradmin'}},'connect'),{code:'permission-denied'});
+ await assert.rejects(make('internal')({auth:{uid:'internal'},data:{businessId:'uninvited'}},'connect'),{code:'permission-denied'});
+ identities.internal.emailVerified=false;await assert.rejects(make('internal')(request,'connect'),{code:'permission-denied'});
+ identities.internal.emailVerified=true;identities.internal.disabled=true;await assert.rejects(make('internal')(request,'connect'),{code:'permission-denied'});
+ identities.internal.disabled=false;await db.doc('users/internal').update({role:'business'});await assert.rejects(make('internal')(request,'connect'),{code:'permission-denied'});
+ assert.equal(sends,0);
+});
 test('deployment sending hold prevents provider calls despite a granted Send scope',async()=>{
  beta.sendEnabled=false;const d=await draft();await assert.rejects(send(d),/Sending is held/);assert.equal(sends,0);assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,0);
 });

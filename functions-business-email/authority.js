@@ -2,7 +2,8 @@
 const workspace=require('./shared/business_workspace'),legal=require('./shared/legal_consent');
 const entitlements=require('./shared/subscription_entitlements');
 const preferences=require('./growth_opportunity_preferences');
-function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configured=false}) {
+const internalBridge=require('./shared/internal_growth_bridge');
+function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configured=false,internalAdminUid=''}) {
   const ws=workspace.createWorkspaceService({db,auth,FieldValue,Timestamp}),consent=legal.createLegalConsentService({db,FieldValue});
   const deny=message=>{const e=Error(message);e.code='permission-denied';throw e;};
   return async (request,operation)=>{
@@ -12,10 +13,21 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
     const config=beta[businessId];
     if(config.ownerUid!==uid)deny('Only the invited workspace owner can manage this private beta.');
     if(config.kind==='internal') {
-      const [user,registry]=await Promise.all([db.doc('users/'+uid).get(),db.doc('internalGrowthWorkspaces/'+businessId).get()]);
-      if((project!=='scaledcircle-staging'&&!project?.startsWith('demo-'))||user.data()?.role!=='admin'||user.data()?.active!==true||
-        registry.data()?.kind!=='internal_admin_dogfood'||registry.data()?.namespace!==businessId||registry.data()?.ownerUid!==uid)
-        deny('Use the maintained internal ScaledCircle workspace.');
+      const user=await db.doc('users/'+uid).get();
+      if(project==='scaled-circle') {
+        // Production's existing Admin is the authenticated controller of the
+        // internal Growth bridge. Do not copy its staging registry or mailbox.
+        if(businessId!==uid)deny('Use the maintained internal ScaledCircle workspace.');
+        const identity=await auth.getUser(uid);
+        try{internalBridge.authorizeProductionActor({expectedUid:internalAdminUid,uid,
+          tokenVerified:identity.emailVerified,user:user.data(),identity});}
+        catch(_){deny('Use the maintained internal ScaledCircle workspace.');}
+      }else {
+        const registry=await db.doc('internalGrowthWorkspaces/'+businessId).get();
+        if((project!=='scaledcircle-staging'&&!project?.startsWith('demo-'))||user.data()?.role!=='admin'||user.data()?.active!==true||
+          registry.data()?.kind!=='internal_admin_dogfood'||registry.data()?.namespace!==businessId||registry.data()?.ownerUid!==uid)
+          deny('Use the maintained internal ScaledCircle workspace.');
+      }
     } else {
       const a=await ws.authority({uid,businessId,permission:operation==='load'||operation==='reconcile'?'communicationsRead':'communicationsSend'});
       if(!a.isOwner)deny('The invited Business owner must approve mailbox actions.');

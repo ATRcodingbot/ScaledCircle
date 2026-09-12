@@ -2,7 +2,8 @@
 const ws=require('./shared/business_workspace'),legal=require('./shared/legal_consent');
 const {hasActivePaidBusinessEntitlement,hasActiveManagedGrowthEntitlement,hasActiveProductEntitlement}=require('./shared/subscription_entitlements');
 const {id,fail}=require('./model');
-function createAuthority({db,auth,FieldValue,Timestamp,project,agentBusinesses='',now=Date.now}){
+const internalBridge=require('./shared/internal_growth_bridge');
+function createAuthority({db,auth,FieldValue,Timestamp,project,agentBusinesses='',internalAdminUid='',now=Date.now}){
  const workspace=ws.createWorkspaceService({db,auth,FieldValue,Timestamp,now});
  const consent=legal.createLegalConsentService({db,FieldValue});
  return async(request,{transaction=null,write=false}={})=>{
@@ -14,9 +15,17 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,agentBusinesses='
   // subscription or customer Business is fabricated for Admin dogfood.
   const user=(await get(db.doc('users/'+uid))).data();
   if(user?.role==='admin'){
-   const registry=(await get(db.doc('internalGrowthWorkspaces/'+businessId))).data();
-   if(user.active!==true||registry?.kind!=='internal_admin_dogfood'||registry.namespace!==businessId||registry.ownerUid!==uid)
-    fail('permission-denied','Choose your maintained internal workspace.');
+   if(project==='scaled-circle'){
+    if(businessId!==uid)fail('permission-denied','Choose your maintained internal workspace.');
+    const identity=await auth.getUser(uid);
+    try{internalBridge.authorizeProductionActor({expectedUid:internalAdminUid,uid,
+      tokenVerified:identity.emailVerified,user,identity});}
+    catch(_){fail('permission-denied','Choose your maintained internal workspace.');}
+   }else{
+    const registry=(await get(db.doc('internalGrowthWorkspaces/'+businessId))).data();
+    if(user.active!==true||registry?.kind!=='internal_admin_dogfood'||registry.namespace!==businessId||registry.ownerUid!==uid)
+     fail('permission-denied','Choose your maintained internal workspace.');
+   }
    return {businessId,actorUid:uid,isOwner:true,permissions:[...ws.PERMISSIONS],activePaid:true,internal:true,agentAvailable:true,capacity:1,ownerUid:uid,actorName:actor.name};
   }
   const a=await workspace.authority({uid,businessId,transaction,allowExpired:true});
