@@ -4,9 +4,10 @@ const contract=require('./subscription_contract');
 const id=v=>typeof v==='string'?v:v?.id;
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const ratio=(amount,numerator,denominator)=>denominator?Number((BigInt(cents(amount))*BigInt(cents(numerator))+BigInt(denominator)/2n)/BigInt(denominator)):0;
-function retainedBasis({invoice,subscription,payments,refunds,creditNotes,disputes,certifiedPriceIds}) {
+function retainedBasis({invoice,subscription,payments,refunds,creditNotes,disputes,certifiedPriceIds,environment='staging'}) {
+  if(!['staging','production'].includes(environment))fail('referral_provider_mode_mismatch');
   for(const o of [invoice,subscription,...payments,...refunds,...creditNotes,...disputes])
-    if(o.livemode!==false)fail('referral_provider_mode_mismatch');
+    if(o.livemode!==(environment==='production'))fail('referral_provider_mode_mismatch');
   const subId=id(invoice.parent?.subscription_details?.subscription||invoice.subscription);
   if(!subId||subId!==subscription.id||id(invoice.customer)!==id(subscription.customer)||invoice.currency!=='usd' ||
     invoice.status!=='paid'||invoice.amount_remaining!==0||!invoice.status_transitions?.paid_at ||
@@ -60,15 +61,16 @@ async function all(list,params){
     if(!page.has_more)return rows;if(!page.data.length)fail('referral_provider_pagination_invalid');after=page.data.at(-1).id;
   }while(true);
 }
-function createReconciler({db,FieldValue,project,stripe,planForPrice,now=Date.now}){
-  assertRuntime(project);const ledger=createLedger({db,FieldValue,project,now});
+function createReconciler({db,FieldValue,project,stripe,planForPrice,launchPolicy,now=Date.now}){
+  assertRuntime(project,launchPolicy);const environment=project==='scaled-circle'?'production':'staging',mode=environment==='production'?'live':'test';
+  const ledger=createLedger({db,FieldValue,project,launchPolicy,now});
   async function reconcile(invoiceId){
     if(!/^in_[A-Za-z0-9]+$/.test(invoiceId||''))fail('referral_invoice_id_invalid');
     const claimRef=db.doc('referralEconomicClaims/'+hash('invoice',invoiceId)),token=hash(invoiceId,now(),Math.random());
     await db.runTransaction(async tx=>{const c=await tx.get(claimRef);if(c.data()?.until>now())fail('referral_reconciliation_busy');tx.set(claimRef,{token,until:now()+120000});});
     try{
-      const receipt=(await db.doc('referralInvoiceSignatures/'+invoiceId).get()).data();
-      if(!receipt?.eventId||receipt.mode!=='test')fail('referral_signed_invoice_required');
+      const receiptDoc=await db.doc('referralInvoiceSignatures/'+invoiceId).get(),receipt=receiptDoc.data();
+      if(!receipt?.eventId||receipt.mode!==mode)fail('referral_signed_invoice_required');
       const invoice=await stripe.invoices.retrieve(invoiceId);
       const subscription=await stripe.subscriptions.retrieve(id(invoice.parent?.subscription_details?.subscription||invoice.subscription));
       const businessId=subscription.metadata?.firebaseUid;
@@ -81,37 +83,37 @@ function createReconciler({db,FieldValue,project,stripe,planForPrice,now=Date.no
         (f.exists&&f.data().ownerId!==businessId)||w.data()?.stripeCustomerId!==id(subscription.customer)||
         !attribution.attributedAt?.toMillis || attribution.attributedAt.toMillis()>invoice.created*1000)
         fail('referral_workspace_binding_invalid');
-      const affiliate=(await db.doc('scalerAffiliateProfiles/'+attribution.affiliateUid).get()).data();
+      const affiliateDoc=await db.doc('scalerAffiliateProfiles/'+attribution.affiliateUid).get(),affiliate=affiliateDoc.data();
       const certifiedPriceIds=[];
       for(const line of invoice.lines?.data||[]){const priceId=id(line.pricing?.price_details?.price||line.price);
-        await contract.certifyPrice(stripe,priceId,{environment:'staging',planForPrice});certifiedPriceIds.push(priceId);}
+        await contract.certifyPrice(stripe,priceId,{environment,planForPrice});certifiedPriceIds.push(priceId);}
       const invoicePayments=await all(p=>stripe.invoicePayments.list(p),{invoice:invoiceId});
       const payments=[],refunds=[],disputes=[];
       for(const payment of invoicePayments.filter(p=>p.status==='paid')){
-        contract.assertMode(payment,'staging');
+        contract.assertMode(payment,environment);
         const piId=id(payment.payment?.payment_intent);if(!piId)fail('referral_payment_type_requires_review');
-        const pi=await stripe.paymentIntents.retrieve(piId);contract.assertMode(pi,'staging');
+        const pi=await stripe.paymentIntents.retrieve(piId);contract.assertMode(pi,environment);
         if(pi.status!=='succeeded'||id(pi.customer)!==id(invoice.customer)||pi.amount_received!==payment.amount_paid||pi.currency!=='usd')fail('referral_collection_unverified');
-        const charge=await stripe.charges.retrieve(id(pi.latest_charge));contract.assertMode(charge,'staging');
+        const charge=await stripe.charges.retrieve(id(pi.latest_charge));contract.assertMode(charge,environment);
         if(!charge.paid||!charge.captured||id(charge.payment_intent)!==piId||id(charge.customer)!==id(invoice.customer))fail('referral_charge_unverified');
         payments.push({...payment,chargeVerified:true});
         refunds.push(...await all(p=>stripe.refunds.list(p),{payment_intent:piId}));
         disputes.push(...await all(p=>stripe.disputes.list(p),{payment_intent:piId}));
       }
       const creditNotes=await all(p=>stripe.creditNotes.list(p),{invoice:invoiceId});
-      const economics=retainedBasis({invoice,subscription,payments,refunds,creditNotes,disputes,certifiedPriceIds});
+      const economics=retainedBasis({invoice,subscription,payments,refunds,creditNotes,disputes,certifiedPriceIds,environment});
       if(affiliate?.status!=='active')economics.currentBasisCents=0;
       const e={...economics,type:'BUSINESS_SUBSCRIPTION_REFERRAL',beneficiaryUid:attribution.affiliateUid,
         referredId:businessId,relationshipId:a.id,sourceId:invoiceId,providerSubscriptionId:subscription.id,
         authorityDigest:hash(invoiceId,economics,refunds.map(r=>[r.id,r.status,r.amount]),creditNotes.map(c=>[c.id,c.status,c.amount]),disputes.map(d=>[d.id,d.status]),affiliate?.status)};
-      return await ledger.reconcile(e,{claimRef,claimToken:token});
+      return await ledger.reconcile(e,{claimRef,claimToken:token,expectedDocuments:[receiptDoc,a,u,w,f,affiliateDoc]});
     }finally{await db.runTransaction(async tx=>{if((await tx.get(claimRef)).data()?.token===token)tx.update(claimRef,{until:0});});}
   }
   async function handleSignedEvent(event){
-    contract.assertMode(event,'staging');if(!/^evt_/.test(event.id||''))fail('referral_signed_event_required');
+    contract.assertMode(event,environment);if(!/^evt_/.test(event.id||''))fail('referral_signed_event_required');
     const object=event.data?.object;if(event.type==='invoice.paid'){
       const ref=db.doc('referralInvoiceSignatures/'+object.id);
-      await db.runTransaction(async tx=>{if(!(await tx.get(ref)).exists)tx.create(ref,{eventId:event.id,mode:'test',createdAt:FieldValue.serverTimestamp()});});
+      await db.runTransaction(async tx=>{if(!(await tx.get(ref)).exists)tx.create(ref,{eventId:event.id,mode,createdAt:FieldValue.serverTimestamp()});});
       return reconcile(object.id);
     }
     if(event.type.startsWith('invoice.')||event.type.startsWith('credit_note.')){

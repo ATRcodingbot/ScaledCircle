@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../navigation/context_back_button.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../../../config/app_environment.dart';
 import '../../../services/affiliate_service.dart';
 import '../../public/referral_program_screen.dart';
 import '../../../services/referral_financial_service.dart';
@@ -14,8 +13,7 @@ class ScalerAffiliateScreen extends StatefulWidget {
     super.key,
     this.service,
     this.financialService,
-    this.enableAttribution =
-        AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isLocal,
+    this.enableAttribution = true,
   });
   final AffiliateGateway? service;
   final ReferralFinancialGateway? financialService;
@@ -95,7 +93,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
       return Scaffold(
         appBar: AppBar(
           leading: const ContextBackButton(),
-          title: const Text('Referral Program'),
+          title: const Text('Referrals'),
         ),
         body: const Padding(
           padding: EdgeInsets.all(24),
@@ -247,7 +245,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
             ],
             const SizedBox(height: 20),
             const Text(
-              'Signed up: attribution recorded, no cash reward.\nPending: earned reward in its settlement hold.\nHeld: awaiting payout eligibility and certification.\nPaid: payout confirmed. Earned does not mean paid.',
+              'Signed up: attribution recorded, no cash reward.\nPending: qualifying reward in its review window.\nUnder Review: ScaledCircle is checking the source economics before a manual payment.\nPaid: payout confirmed. Earned does not mean paid.',
             ),
           ],
         ),
@@ -265,17 +263,18 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
     final status =
         const {
           'EARNING': 'Earning',
-          'AVAILABLE': 'Held',
-          'HELD': 'Held',
+          'AVAILABLE': 'Under Review',
+          'HELD': 'Under Review',
+          'UNDER_REVIEW': 'Under Review',
           'PENDING': 'Pending',
           'PAID': 'Paid',
         }[r['status']] ??
         'Signed up';
     final amount = ((r['earnedCents'] as num?) ?? 0) / 100;
-    final available = ((r['availableCents'] as num?) ?? 0) / 100;
     final paid = ((r['paidCents'] as num?) ?? 0) / 100;
     return '${r['referredRole'] == 'scaler' ? 'Scaler' : 'Business'} · $status'
-        '${date.isEmpty ? '' : '\nJoined $date'}\nQualifying jobs: ${r['qualifyingJobCount'] ?? 0}'
-        '\nEarned: \$${amount.toStringAsFixed(2)} · Held: \$${available.toStringAsFixed(2)} · Paid: \$${paid.toStringAsFixed(2)}';
+        '${date.isEmpty ? '' : '\nJoined $date'}'
+        '${r['referredRole'] == 'scaler' ? '\nQualifying jobs: ${r['qualifyingJobCount'] ?? 0}' : '\nSubscription reward history'}'
+        '\nEarned: \$${amount.toStringAsFixed(2)} · Paid: \$${paid.toStringAsFixed(2)}';
   }
 }

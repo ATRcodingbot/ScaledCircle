@@ -128,7 +128,7 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                   for (final pair in [
                     ('Pending', 'pendingCents'),
                     (
-                      payoutReady ? 'Available' : 'Held',
+                      payoutReady ? 'Available' : 'Under Review',
                       payoutReady ? 'availableCents' : 'heldCents',
                     ),
                     ('Paid', 'paidCents'),
@@ -194,7 +194,7 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                 ),
               if (data['executionEnabled'] != true)
                 const Text(
-                  'Referral Program — Private Beta. Rewards remain pending or held while payout certification is completed. A completed hold does not mean money has been paid.',
+                  'Referral Program — Private Beta. Rewards are tracked now. ScaledCircle verifies qualifying activity and manually reviews initial payments. Automatic payouts are off; a review window ending does not mean money was sent.',
                 ),
               for (final op in (data['operations'] as List? ?? []).where(
                 (o) => o['status'] != 'completed',
@@ -244,15 +244,16 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
     final label = e['type'] == 'BUSINESS_SUBSCRIPTION_REFERRAL'
         ? 'Business subscription referral'
         : 'Scaler work referral';
-    final millis = e['expectedAvailabilityMillis'];
+    final millis = e['reviewAfterMillis'] ?? e['expectedAvailabilityMillis'];
     final date = millis is num
         ? DateTime.fromMillisecondsSinceEpoch(millis.toInt())
         : null;
     final payoutReady = _data?['executionEnabled'] == true;
     final status = e['status'] == 'AVAILABLE' && !payoutReady
-        ? 'Held'
+        ? 'Under Review'
         : const {
                 'PENDING': 'Pending',
+                'UNDER_REVIEW': 'Under Review',
                 'HELD': 'Held',
                 'AVAILABLE': 'Available',
                 'PAID': 'Paid',

@@ -18,6 +18,7 @@ import 'admin_role_management_screen.dart';
 import 'admin_social_operations_screen.dart';
 import 'admin_subscription_overview_screen.dart';
 import 'business_access_approval_screen.dart';
+import 'admin_referrals_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key, this.service});
@@ -74,6 +75,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
         actions: [
+          IconButton(
+            tooltip: 'Referral review',
+            icon: const Icon(Icons.group_add_outlined),
+            onPressed: () => _push(const AdminReferralsScreen()),
+          ),
           IconButton(
             tooltip: 'Business access',
             icon: const Icon(Icons.business_outlined),

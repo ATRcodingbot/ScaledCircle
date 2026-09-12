@@ -23,12 +23,12 @@ class ReferralProgramScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           children: const [
             Text(
-              'Referral Program — Preview',
+              'Referral Program — Private Beta',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 8),
             Text(
-              'Enrollment and referral payments are not generally available yet. The terms below explain the program; viewing this page does not enroll you or create a reward.',
+              'Approved Scalers and Business owners can join and share a referral link. Rewards require qualifying activity. Viewing this page does not enroll you or create a reward.',
             ),
             SizedBox(height: 24),
             Text(
@@ -69,7 +69,7 @@ class ReferralProgramScreen extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(
-              r'Business rewards have a 30-calendar-day hold after a qualifying paid invoice. Scaler rewards have a 7-calendar-day hold after qualifying approved compensation is settled. Rewards become available only after eligibility and payment checks pass. Cash out manually when your available referral balance reaches $10. No income or payment date is guaranteed.',
+              'Business rewards have a 30-calendar-day review window after a qualifying paid invoice. Scaler rewards have a 7-calendar-day review window after qualifying approved compensation is settled. During Private Beta, rewards remain Pending or Under Review while ScaledCircle verifies the economics and manually reviews payment. An elapsed window does not schedule a payment. Automatic payouts are off. No income or payment date is guaranteed.',
             ),
             Text(
               'Rewards remain subject to eligibility, valid attribution and authoritative economic reconciliation. Refunds, reversals and disputes may prevent or reverse a reward. Worker pay is never reduced to fund it.',

@@ -118,6 +118,7 @@ unlinked_spec.ds
 
 # Coverage
 coverage/
+/functions-referral-launch/
 /tmp/
 /output/
 

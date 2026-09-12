@@ -4,6 +4,7 @@
 // reserve or subscription balance is written by this adapter.
 const crypto = require('node:crypto');
 const VERSION = 'ReferralLiabilityV1';
+const MANUAL_LAUNCH_POLICY = 'ReferralPrivateBetaManualV1';
 const TERMS = 'referral-launch-v2-2026-09-10';
 const DAY = 86400000;
 const TYPES = Object.freeze({BUSINESS_SUBSCRIPTION_REFERRAL:{bps:1000,days:30},
@@ -13,7 +14,8 @@ const fail = code => { throw Object.assign(new Error(code),{code}); };
 const cents = n => { if(!Number.isSafeInteger(n)||n<0) fail('referral_amount_invalid'); return n; };
 const reward = (basis,bps) => Number((BigInt(cents(basis))*BigInt(bps)+5000n)/10000n);
 const money = n => `$${(n/100).toFixed(2)}`;
-function assertRuntime(project) {
+function assertRuntime(project,launchPolicy) {
+  if(project==='scaled-circle' && launchPolicy===MANUAL_LAUNCH_POLICY)return;
   if(project!=='scaledcircle-staging' && !(project==='demo-referral-authority' &&
     /^(localhost|127\.0\.0\.1):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||''))) fail('referral_staging_only');
 }
@@ -33,8 +35,9 @@ function state(e) {
   if(e.paidCents===e.currentCents && e.paidCents>0) return 'PAID';
   return e.released?'AVAILABLE':'PENDING';
 }
-function createLedger({db,FieldValue,project,now=Date.now}) {
-  assertRuntime(project);
+function createLedger({db,FieldValue,project,launchPolicy,now=Date.now}) {
+  assertRuntime(project,launchPolicy);
+  const manual=launchPolicy===MANUAL_LAUNCH_POLICY,mode=project==='scaled-circle'?'live':'test';
   const ref=id=>db.doc('referralLiabilities/'+id), balance=uid=>db.doc('referralBalances/'+uid);
   const stamp=()=>FieldValue.serverTimestamp();
   async function beneficiary(tx,uid) {
@@ -58,7 +61,7 @@ function createLedger({db,FieldValue,project,now=Date.now}) {
   function milestone(tx,key,uid,type,amountCents,extra={}) {
     const id=hash(VERSION,key,type), titles={earned:'Referral reward earned',available:'Referral reward available',
       paid:'Referral payment sent',adjusted:'Referral adjustment'};
-    const messages={earned:`You earned ${money(amountCents)} from qualifying referral activity. It is pending its settlement hold.`,
+    const messages={earned:manual?`You earned ${money(amountCents)} from qualifying referral activity. It is pending verification and manual payout review.`:`You earned ${money(amountCents)} from qualifying referral activity. It is pending its settlement hold.`,
       available:`${money(amountCents)} is now available in your referral balance. Cash out once your available balance reaches $10.`,
       paid:`Your referral payment of ${money(amountCents)} was sent.`,
       adjusted:`A previously qualifying economic event changed. Your referral balance was ${amountCents<0?'reduced':'increased'} by ${money(Math.abs(amountCents))}.`};
@@ -80,6 +83,7 @@ function createLedger({db,FieldValue,project,now=Date.now}) {
         if(current.exists!==expected.exists || (current.exists && !current.updateTime.isEqual(expected.updateTime)))fail('referral_stale_economic_read');}
       if(claimRef && (claim?.data()?.token!==claimToken || claim.data().until<now())) fail('referral_stale_economic_read');
       const prior=doc.data();
+      if(prior && prior.mode!==mode)fail('referral_ledger_mode_mismatch');
       if(!prior && grossCents===0) return {status:'no_reward'};
       if(prior && ['beneficiaryUid','referredId','relationshipId','sourceId','type','grossBasisCents','paidAtMillis']
         .some(k=>prior[k]!==e[k])) fail('referral_immutable_binding_changed');
@@ -93,7 +97,7 @@ function createLedger({db,FieldValue,project,now=Date.now}) {
       }
       const revision=(prior?.revision||0)+1;
       const next=prior?{...prior,currentCents,authorityDigest:e.authorityDigest,revision,reason:e.reason||null,
-        lastVerifiedAtMillis:now()}:{...e,id,version:VERSION,mode:'test',currency:'usd',rateBps:spec.bps,grossCents,currentCents,
+        lastVerifiedAtMillis:now()}:{...e,id,version:VERSION,mode,currency:'usd',rateBps:spec.bps,grossCents,currentCents,
         paidCents:0,reservedCents:0,released:false,holdUntilMillis:e.paidAtMillis+spec.days*DAY,
         fundingSource:'scaledcircle_platform_economics',revision,lastVerifiedAtMillis:now(),createdAt:stamp()};
       tx.set(ref(id),next);tx.set(balance(e.beneficiaryUid),{revision:(b.data()?.revision||0)+1,updatedAt:stamp()},{merge:true});
@@ -114,6 +118,7 @@ function createLedger({db,FieldValue,project,now=Date.now}) {
     });
   }
   async function release(id,{providerHealthy,authorityDigest}) {
+    if(manual)fail('referral_manual_payment_authority_required');
     if(providerHealthy!==true) fail('referral_recipient_not_ready');
     return db.runTransaction(async tx=>{
       const doc=await tx.get(ref(id)),e=doc.data();if(!e)fail('referral_reward_missing');
@@ -132,9 +137,9 @@ function createLedger({db,FieldValue,project,now=Date.now}) {
     await beneficiary(tx,uid);const list=await entries(tx,uid);
     return {...summary(list),history:list.map((e,i)=>({displayId:'Referral reward '+(i+1),type:e.type,
       status:state(e),grossCents:e.grossCents,currentCents:e.currentCents,paidCents:e.paidCents,
-      adjustmentCents:e.currentCents-e.grossCents,expectedAvailabilityMillis:e.holdUntilMillis})),
-      payoutAvailable:true};
+      adjustmentCents:e.currentCents-e.grossCents,...(manual?{reviewAfterMillis:e.holdUntilMillis}:{expectedAvailabilityMillis:e.holdUntilMillis})})),
+      payoutAvailable:!manual,payoutMode:manual?'manual_review':'test_execution'};
   });}
   return {reconcile,release,dashboard,beneficiary,entries,balance,ref,milestone};
 }
-module.exports={VERSION,TERMS,TYPES,DAY,hash,cents,reward,summary,state,assertRuntime,createLedger};
+module.exports={VERSION,MANUAL_LAUNCH_POLICY,TERMS,TYPES,DAY,hash,cents,reward,summary,state,assertRuntime,createLedger};

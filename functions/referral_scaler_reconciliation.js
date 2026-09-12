@@ -2,7 +2,7 @@
 const {createLedger,hash,assertRuntime}=require('./referral_liability');
 const {qualify}=require('./scaler_referral_rewards');
 function createReconciler(options){
-  const {db,project}=options;assertRuntime(project);const ledger=createLedger(options);
+  const {db,project,launchPolicy}=options;assertRuntime(project,launchPolicy);const ledger=createLedger(options);
   return {async reconcile(zoneId){
     if(!/^[A-Za-z0-9_-]{1,160}$/.test(zoneId||''))throw Error('referral_zone_invalid');
     const docs=[];const read=async path=>{const d=await db.doc(path).get();docs.push(d);return d.data();};
@@ -15,7 +15,7 @@ function createReconciler(options){
       read('walletTransactions/earning_'+zoneId+'_v1'),
       settlement.refundOperationId?read('financialOperations/'+settlement.refundOperationId):null,
     ]);
-    const result=qualify({zoneId,settlement,zone,payment,contract,affiliate,transfer,attribution,refund,mode:'test'});
+    const result=qualify({zoneId,settlement,zone,payment,contract,affiliate,transfer,attribution,refund,mode:project==='scaled-circle'?'live':'test'});
     const sourceId=zoneId,type='SCALER_COMPLETED_WORK_REFERRAL';
     const prior=(await db.doc('referralLiabilities/'+hash('ReferralLiabilityV1',type,sourceId)).get()).data();
     const posted=earning?.status==='available' && earning.scalerId===settlement.scalerId &&

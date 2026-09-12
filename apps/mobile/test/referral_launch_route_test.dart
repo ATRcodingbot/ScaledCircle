@@ -5,14 +5,14 @@ import 'package:flutter_app/navigation/app_router.dart';
 
 void main() {
   testWidgets(
-    'public preview has Back and does not offer enrollment or payment',
+    'public Private Beta policy has Back and never enrolls or pays by viewing',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(320, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(const MaterialApp(home: ReferralProgramScreen()));
       expect(find.byType(BackButton), findsOneWidget);
       expect(
-        find.textContaining('not generally available yet'),
+        find.textContaining('Viewing this page does not enroll you'),
         findsOneWidget,
       );
       expect(find.byType(Checkbox), findsNothing);

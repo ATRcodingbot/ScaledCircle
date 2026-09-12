@@ -1,5 +1,4 @@
 import '../preferences/market_state_screen.dart';
-import '../../config/app_environment.dart';
 import '../scaler/affiliate/scaler_affiliate_screen.dart';
 import 'package:flutter/material.dart';
 import '../../services/business_workspace_service.dart';
@@ -72,9 +71,7 @@ class BusinessAccountScreen extends StatelessWidget {
                   ),
                 ),
               ),
-            if ((AppEnvironmentConfig.isStaging ||
-                    AppEnvironmentConfig.isLocal) &&
-                BusinessWorkspaceSession.value?['isOwner'] == true)
+            if (BusinessWorkspaceSession.value?['isOwner'] == true)
               ListTile(
                 leading: const Icon(Icons.share_outlined),
                 title: const Text('Referrals'),

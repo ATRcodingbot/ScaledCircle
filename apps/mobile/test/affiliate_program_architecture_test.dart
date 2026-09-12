@@ -37,25 +37,26 @@ void main() {
     },
   );
 
-  test('Scaler dashboard alone links the referral experience', () {
-    final scaler = File(
-      'lib/screens/scaler/dashboard/scaler_dashboard_screen.dart',
-    ).readAsStringSync();
-    final business = File(
-      'lib/screens/business/business_dashboard.dart',
-    ).readAsStringSync();
-    expect(scaler, contains('Referral Program — Coming Soon'));
-    expect(business, isNot(contains('Referral Program — Coming Soon')));
-  });
+  test(
+    'Scaler and Business owner account surfaces link the referral experience',
+    () {
+      final scaler = File(
+        'lib/screens/scaler/dashboard/scaler_dashboard_screen.dart',
+      ).readAsStringSync();
+      final business = File(
+        'lib/screens/business/business_account_screen.dart',
+      ).readAsStringSync();
+      expect(scaler, contains('Referrals · Private Beta'));
+      expect(business, contains("['isOwner'] == true"));
+      expect(business, contains('ScalerAffiliateScreen'));
+    },
+  );
 
-  test('affiliate screen is truthful about Phase 1 accounting', () {
+  test('affiliate screen enables attribution without promising income', () {
     final source = File(
       'lib/screens/scaler/affiliate/scaler_affiliate_screen.dart',
     ).readAsStringSync();
-    expect(
-      source,
-      contains('Enrollment and referral rewards are not available yet.'),
-    );
+    expect(source, contains('this.enableAttribution = true'));
     expect(source, contains('Existing referral records are preserved.'));
     expect(source, isNot(contains('guaranteed income')));
     expect(source, isNot(contains('discount')));
