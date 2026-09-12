@@ -10,8 +10,8 @@ const {createRegistry}=require('./providers');
 const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(),db=getFirestore(app);
 const CLIENT_SECRET=defineSecret('BUSINESS_EMAIL_GOOGLE_CLIENT_SECRET');
 const ENCRYPTION_KEY=defineSecret('BUSINESS_EMAIL_ENCRYPTION_KEY');
-const MICROSOFT_SECRET=defineSecret('BUSINESS_EMAIL_MICROSOFT_CLIENT_SECRET');
 const microsoftEnabled=process.env.BUSINESS_EMAIL_MICROSOFT_ENABLED==='true';
+const MICROSOFT_SECRET=microsoftEnabled?defineSecret('BUSINESS_EMAIL_MICROSOFT_CLIENT_SECRET'):null;
 function service() {
   const project=process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT;
   const clientId=process.env.BUSINESS_EMAIL_GOOGLE_CLIENT_ID,redirectUri=process.env.BUSINESS_EMAIL_REDIRECT_URI;

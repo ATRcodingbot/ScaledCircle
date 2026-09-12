@@ -5,6 +5,18 @@ const other=require('../functions-business-email/other_mail'),contract=require('
 const {createRegistry}=require('../functions-business-email/providers');
 const operation={provider:'microsoft',providerSubject:'subject',from:'office@example.test',to:'client@example.test',recipient:'client@example.test',
  messageId:'a'.repeat(64)+'@mail.scaledcircle.com',subject:'A reviewed question',body:'Hello from your Business.',requestedAt:1000};
+
+test('disabled Microsoft provider does not require an unprovisioned deploy-time secret',()=>{
+ const {execFileSync}=require('node:child_process');
+ const cwd=require('node:path').resolve(__dirname,'../functions-business-email');
+ for(const enabled of [false,true]){
+  const raw=execFileSync(process.execPath,['-e',"require('./index');process.stdout.write(JSON.stringify(require('firebase-functions/params').declaredParams.map(p=>p.name)));"],
+   {cwd,env:{...process.env,GCLOUD_PROJECT:'demo-business-email',BUSINESS_EMAIL_MICROSOFT_ENABLED:String(enabled)},encoding:'utf8'});
+  const names=JSON.parse(raw);
+  assert(names.includes('BUSINESS_EMAIL_GOOGLE_CLIENT_SECRET'));assert(names.includes('BUSINESS_EMAIL_ENCRYPTION_KEY'));
+  assert.equal(names.includes('BUSINESS_EMAIL_MICROSOFT_CLIENT_SECRET'),enabled);
+ }
+});
 test('provider selection is explicit; a custom domain never selects Google or Microsoft by inference',()=>{
  const registry=createRegistry({google:{},microsoft:{configured:true},other:{configured:true}});
  assert.equal(registry.list({})[0].label,'Google / Gmail / Workspace');
