@@ -364,6 +364,7 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
       'excluded_automated',
     ].contains(c['status']);
     return ExpansionTile(
+      key: PageStorageKey(c['id']),
       title: Text('${c['name'] == '' ? 'Contact' : c['name']} · ${c['email']}'),
       subtitle: Text(campaignContactStatus(c['status'])),
       children: [
@@ -390,14 +391,6 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
             subtitle: Text(
               s['context'] ??
                   'Historical correspondence · relationship still needs review',
-            ),
-          ),
-        for (final e in (c['evidence'] as List? ?? []))
-          ListTile(
-            title: Text(e['subject'] ?? 'Conversation'),
-            subtitle: SelectableText(
-              e['excerpt'] ??
-                  'Readable text not available; review original conversation.',
             ),
           ),
         OutlinedButton(
@@ -432,6 +425,38 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
               ),
           ],
         ),
+        for (final e in (c['evidence'] as List? ?? []))
+          ListTile(
+            title: Text(e['subject'] ?? 'Conversation'),
+            subtitle: Text(
+              (e['excerpt'] as String?)?.isNotEmpty == true
+                  ? e['excerpt']
+                  : 'Readable text not available; review original conversation.',
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: Text(e['subject'] ?? 'Conversation'),
+                content: SizedBox(
+                  width: 620,
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      e['excerpt'] ?? 'Readable text not available.',
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
