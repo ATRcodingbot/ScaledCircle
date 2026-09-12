@@ -2,6 +2,17 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'business_workspace_service.dart';
 
+Map<String, dynamic> businessEmailConnectionInput(
+  Map<String, dynamic> input, {
+  required bool providerSelectionSupported,
+}) {
+  if (providerSelectionSupported) return Map.of(input);
+  if (input['provider'] != 'google') {
+    throw StateError('This mailbox provider is not available yet.');
+  }
+  return {'read': input['read'], 'send': input['send']};
+}
+
 class BusinessEmailService {
   Future<Map<String, dynamic>> call(
     String operation, [

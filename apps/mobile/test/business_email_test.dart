@@ -86,6 +86,31 @@ class ConversationEmailService extends BusinessEmailService {
 }
 
 void main() {
+  test(
+    'legacy production Google connection keeps its exact request contract',
+    () {
+      const request = {'provider': 'google', 'read': true, 'send': false};
+      expect(
+        businessEmailConnectionInput(
+          request,
+          providerSelectionSupported: false,
+        ),
+        {'read': true, 'send': false},
+      );
+      expect(
+        businessEmailConnectionInput(request, providerSelectionSupported: true),
+        request,
+      );
+      expect(
+        () => businessEmailConnectionInput({
+          'provider': 'microsoft',
+          'read': true,
+          'send': true,
+        }, providerSelectionSupported: false),
+        throwsStateError,
+      );
+    },
+  );
   for (final width in [320.0, 1280.0]) {
     testWidgets(
       'three provider choices remain honest and accessible at $width',

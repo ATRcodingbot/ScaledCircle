@@ -365,7 +365,16 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       busy: _busy,
                       read: _read,
                       send: _send,
-                      onConnect: _action,
+                      onConnect: (operation, input) => _action(
+                        operation,
+                        operation == 'connect'
+                            ? businessEmailConnectionInput(
+                                input,
+                                providerSelectionSupported:
+                                    _data!['providers'] is List,
+                              )
+                            : input,
+                      ),
                     ),
                     Wrap(
                       spacing: 12,
