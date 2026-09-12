@@ -21,21 +21,24 @@ void main() {
     },
   );
   test(
-    'staging cold launch preserves referral policy, portal and coded signup destination',
+    'production and staging cold launch preserve referral policy, portal and coded signup destination',
     () {
       for (final path in [
         '/referrals',
         '/referral-portal',
         '/create-account?role=scaler',
       ]) {
-        final uri = Uri.parse(
-          'https://scaledcircle-staging.web.app/?ref=ABCD2345#$path',
-        );
-        expect(
-          initialReferralRoute(uri, enabled: true)?.path,
-          path.split('?').first,
-        );
-        expect(initialReferralRoute(uri, enabled: false), isNull);
+        for (final host in [
+          'scaledcircle-staging.web.app',
+          'scaledcircle.com',
+        ]) {
+          final uri = Uri.parse('https://$host/?ref=ABCD2345#$path');
+          expect(
+            initialReferralRoute(uri, enabled: true)?.path,
+            path.split('?').first,
+          );
+          expect(initialReferralRoute(uri, enabled: false), isNull);
+        }
       }
     },
   );

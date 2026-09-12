@@ -233,8 +233,7 @@ class ScaledCircleApp extends StatelessWidget {
       return MaterialPageRoute(settings: settings,
           builder: (_) => const ReferralProgramScreen());
     }
-    if ((AppEnvironmentConfig.isStaging || AppEnvironmentConfig.isLocal) &&
-        route?.path == '/referral-portal') {
+    if (route?.path == '/referral-portal') {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => const StartupSessionGate(
@@ -494,9 +493,7 @@ class ScaledCircleApp extends StatelessWidget {
       ? initialBillingRoute(Uri.base) ??
             initialReferralRoute(
               Uri.base,
-              enabled:
-                  AppEnvironmentConfig.isStaging ||
-                  AppEnvironmentConfig.isLocal,
+              enabled: true,
             )
       : null;
   static final _billingRouteInformation = _billingLaunchRoute == null
