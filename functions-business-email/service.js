@@ -33,7 +33,8 @@ function createService({db,authority,provider,key,now=Date.now}) {
     const rows=prospects.docs.map(d=>({id:d.id,...d.data()})).map(p=>({...p,doNotContact:p.doNotContact===true||suppressedRecipients.has(p.email?.toLowerCase()),excludedByGrowthPreferences:!a.preferenceEnabled(p,focus)}));
     const leadDocs=await db.collection('salesLeads').where('ownerUid','==',a.businessId).limit(25).get();
     const replies=c.status==='connected'&&c.permissions?.read===true?(await root(a.businessId).collection('replies').limit(50).get()).docs.map(d=>d.data()):[];
-    return {available:true,privateBeta:true,configured:!!a.beta.configured,sendEnabled:a.beta.sendEnabled!==false,expectedMailbox:a.beta.mailbox,
+    return {available:true,privateBeta:true,configured:!!a.beta.configured,sendEnabled:a.beta.sendEnabled!==false,
+      certificationSendEnabled:a.beta.certificationSendEnabled===true,expectedMailbox:a.beta.mailbox,
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
         read:c.status==='connected'&&c.permissions?.read===true,send:c.status==='connected'&&c.permissions?.send===true,
         automaticSending:false,landingSender:c.landingSender||'account_notifications',pending:active,
@@ -147,12 +148,16 @@ function createService({db,authority,provider,key,now=Date.now}) {
     });
   }
   async function send(a,input) {
-    if(a.beta.sendEnabled===false)fail('failed-precondition','Sending is held while the private connection is being certified. No email was sent.');
+    const requireSend=(actor,draft)=>{
+      if(actor.beta.sendEnabled===false&&!(actor.beta.certificationSendEnabled===true&&draft?.certification===true&&draft.prospectId==='founder_certification'&&draft.recipient===gmail.email(actor.beta.certificationRecipient)))
+        fail('failed-precondition','Sending is held. Only the enabled, reviewed controlled test can be sent. No email was sent.');
+    };
     strict(input,['prospectId','version','operationId','confirm']);if(input.confirm!==true)fail('failed-precondition','Review the exact message and choose Send Email.');
     const ref=sub(a.businessId,'operations',input.operationId),draftRef=sub(a.businessId,'drafts',input.prospectId);
     const claim=await db.runTransaction(async tx=>{
       const existing=(await tx.get(ref)).data();if(existing)return {existing};
       const {c,secret}=await current(a,tx),draft=(await tx.get(draftRef)).data();
+      requireSend(a,draft);
       if(!c.permissions?.send||!draft||draft.operationId!==input.operationId||draft.version!==input.version||draft.connectionGeneration!==c.generation||draft.from!==c.email)
         fail('failed-precondition','The mailbox or draft changed. Review the latest message.');
       const suppressed=(await tx.get(sub(a.businessId,'suppression',hash(draft.recipient)))).data();
@@ -170,7 +175,8 @@ function createService({db,authority,provider,key,now=Date.now}) {
     let result;
     try {
       // Recheck owner/eligibility immediately before the single provider attempt.
-      await authority({auth:{uid:a.actorUid},data:{businessId:a.businessId}},'send');
+      const fresh=await authority({auth:{uid:a.actorUid},data:{businessId:a.businessId}},'send');
+      requireSend(fresh,claim.op);
       const creds=gmail.unseal(claim.secret.sealed,key,binding(a));
       result=await provider.send({...claim.op,to:claim.op.recipient,refreshToken:creds.refreshToken});
       if(!result?.id||!result?.threadId)throw Error('provider_receipt_missing');

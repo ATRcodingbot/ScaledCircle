@@ -39,6 +39,10 @@ does not touch Scaler tracking, contracts, earnings, Wallets or payments.
 - Today, Week and Month show a dated agenda with local device times.
 - Estimates, jobs, follow-ups, meetings and tasks support customer, duration,
   location, assigned people, notes and linked work.
+- New work defaults to the authenticated creator. An explicit Unassigned choice
+  and existing assignments survive edits; assigning someone else still requires
+  the maintained responsibility. Cards show names and unassigned estimates/jobs
+  contribute to the visible attention count.
 - Customers support contact search, optional pipeline stages and a chronological
   history. Existing landing-page inquiries can be linked once without duplicating
   their source or customer identity.
@@ -58,6 +62,11 @@ does not touch Scaler tracking, contracts, earnings, Wallets or payments.
 Google/Gmail remains an invited private beta, independent of transactional
 account email. Read and Send are separate provider grants. A server deployment
 hold can disable all sending even after Send permission is granted.
+An explicitly configured staging certification exception can permit one reviewed
+test message to the configured controlled recipient while ordinary sending stays
+held. Opening or reviewing the draft never sends; the owner must press Send Test
+Email. The exception cannot be activated in production, and the same provider
+operation/reconciliation protections prevent repeat sends.
 
 Only exact workspace/customer matches can link confirmed sent threads. Recorded
 appointments, estimates and win/loss outcomes feed that workspace's local

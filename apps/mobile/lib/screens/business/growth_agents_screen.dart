@@ -1,5 +1,7 @@
 import '../../models/social_plan_presentation.dart';
 import '../../services/business_email_service.dart';
+import '../../services/business_workspace_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../widgets/business_email_entry.dart';
 import 'business_email_screen.dart';
 import 'dart:async';
@@ -51,7 +53,13 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
       };
       final operation = operations[name];
       if (operation == null) throw StateError('Unsupported customer action');
-      input = {'operation': operation, 'input': ?input};
+      input = {
+        'operation': operation,
+        'input': ?input,
+        'businessId': BusinessWorkspaceSession.businessIdFor(
+          FirebaseAuth.instance.currentUser!.uid,
+        ),
+      };
       name = 'customerGrowthOperationsV1';
     }
     final response = await FirebaseFunctions.instanceFor(region: 'us-east1')

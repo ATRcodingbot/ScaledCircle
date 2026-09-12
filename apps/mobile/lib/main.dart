@@ -200,7 +200,9 @@ class ScaledCircleApp extends StatelessWidget {
     if (route?.path == '/business/growth') {
       return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
         routeName: settings.name!, audience: ProtectedRouteAudience.business,
-        builder: (_, _) => const BusinessGrowthHome()));
+        builder: (_, profile) => profile['role'] == 'admin'
+            ? const GrowthAgentsScreen()
+            : const BusinessGrowthHome()));
     }
     if (route?.path == '/growth-agents' ||
         route?.path == '/business/ai-team' ||

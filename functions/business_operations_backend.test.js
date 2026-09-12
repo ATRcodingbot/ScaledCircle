@@ -16,6 +16,35 @@ const load=(b,uid=b)=>call(b,'load',{fromMs:start-86400000,toMs:start+7*86400000
 const customer=(b,extra={},uid=b)=>call(b,'saveCustomer',{customer:{name:'Controlled customer',email:'client'+b+'@example.test',...extra},expectedVersion:0},uid);
 const item=(b,extra={},uid=b,id)=>call(b,'saveItem',{item:{title:'Controlled estimate',type:'estimate',startMs:start,durationMinutes:60,timeZone:'America/New_York',assignedPeople:['user:'+b],...extra},expectedVersion:0},uid,id);
 test('all four paid plans have core access and unchanged total seats',async()=>{for(const [p,cap]of [['starter',1],['growth',3],['scale',5],['managed_growth',10]]){const b=await owner(p);await customer(b);const v=await load(b);assert.equal(v.activePaid,true);assert.equal(v.seatLimit,cap);assert.equal(v.customers.length,1);assert.equal(v.people.length,1);}});
+
+test('new work defaults to its authenticated creator for every type, not the workspace owner',async()=>{
+ const b=await owner(),u=await member(b,[...PRESETS.sales,'jobsEdit','jobsView']);
+ for(const [i,type] of model.TYPES.entries()){
+  const saved=await call(b,'saveItem',{expectedVersion:0,item:{title:'Creator default',type,startMs:start+i*7200000,durationMinutes:60,timeZone:'America/New_York'}},u);
+  const stored=(await db.doc(`businessOperations/${b}/items/${saved.itemId}`).get()).data();
+  assert.deepEqual(stored.assignedPeople,['user:'+u]);assert.equal(stored.updatedBy,u);
+ }
+ await assert.rejects(item(b,{assignedPeople:['user:'+b]},u),{code:'permission-denied'});
+});
+
+test('explicit Unassigned remains conflict-free and existing Unassigned edits are preserved',async()=>{
+ const b=await owner();const first=await item(b,{assignedPeople:[]});await item(b,{assignedPeople:[],startMs:start+5*60000});
+ assert.equal((await load(b)).counts.unassignedWork,2);
+ const before=(await db.doc(`businessOperations/${b}/items/${first.itemId}`).get()).data();
+ const {assignedPeople,...edit}=Object.fromEntries(Object.entries(before).filter(([k])=>['title','type','customerId','startMs','durationMinutes','timeZone','assignedPeople','notes','status','linkedItemId','location'].includes(k)));
+ await call(b,'saveItem',{itemId:first.itemId,expectedVersion:1,item:{...edit,title:'Still intentionally unassigned'}});
+ assert.deepEqual((await db.doc(`businessOperations/${b}/items/${first.itemId}`).get()).data().assignedPeople,[]);
+});
+
+test('4:15 and 4:20 assignments conflict for the same user or crew; override remains owner-only',async()=>{
+ const b=await owner(),u=await member(b,PRESETS.officeManager),at=Date.UTC(2026,8,12,20,15);
+ await item(b,{startMs:at,assignedPeople:['user:'+u]});
+ await assert.rejects(item(b,{startMs:at+5*60000,assignedPeople:['user:'+u]}),e=>e.code==='failed-precondition'&&e.details.conflicts[0].startMs===at&&e.details.conflicts[0].endMs===at+3600000);
+ const crew=await call(b,'saveResource',{name:'Controlled crew',expectedVersion:0});await item(b,{startMs:at,assignedPeople:['crew:'+crew.resourceId]});
+ await assert.rejects(item(b,{startMs:at+5*60000,assignedPeople:['crew:'+crew.resourceId]}),{code:'failed-precondition'});
+ const input={expectedVersion:0,item:{title:'Reviewed overlap',type:'estimate',startMs:at+5*60000,durationMinutes:60,timeZone:'America/New_York',assignedPeople:['user:'+u]},overrideConflict:true,overrideReason:'Controlled overlapping review'};
+ await assert.rejects(call(b,'saveItem',input,u),{code:'permission-denied'});assert.equal((await call(b,'saveItem',input)).conflictOverride,true);
+});
 test('no auth, unrelated member, disabled actor, missing consent and unpaid edits fail closed',async()=>{const b=await owner(),other=await owner();await assert.rejects(load(b,null),{code:'unauthenticated'});await assert.rejects(load(b,other),{code:'permission-denied'});await auth.updateUser(b,{disabled:true});await assert.rejects(load(b),{code:'permission-denied'});await auth.updateUser(b,{disabled:false});await db.doc(`legalConsents/${b}_privacy_privacy-2026-08-v1`).delete();await assert.rejects(customer(b),/legal_consent_required/);const expired=await owner();await customer(expired);await db.doc('businessSubscriptions/'+expired).update({status:'canceled'});assert.equal((await load(expired)).customers.length,1);await assert.rejects(customer(expired,{name:'New'}),{code:'failed-precondition'});});
 test('concurrent duplicate contacts cannot create two CRM identities',async()=>{const b=await owner();const results=await Promise.allSettled([customer(b),customer(b)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal((await load(b)).customers.length,1);});
 test('scheduling creates/reuses customer, updates stage and preserves a real timeline',async()=>{const b=await owner();const a=await call(b,'saveItem',{item:{title:'Estimate',type:'estimate',startMs:start,durationMinutes:60,timeZone:'UTC-04:00',assignedPeople:[]},newCustomer:{name:'John controlled',email:'one@example.test'},expectedVersion:0});const c=(await load(b)).customers[0];assert.equal(c.stage,'estimate_scheduled');const second=await call(b,'saveItem',{item:{title:'Meeting',type:'meeting',startMs:start+86400000,durationMinutes:60,timeZone:'America/New_York',assignedPeople:[]},newCustomer:{name:'John controlled',email:'ONE@example.test'},expectedVersion:0});assert.equal(a.customerId,second.customerId);assert.equal((await load(b)).customers.length,1);assert.ok((await call(b,'timeline',{customerId:a.customerId})).events.some(e=>e.kind==='schedule_created'));});

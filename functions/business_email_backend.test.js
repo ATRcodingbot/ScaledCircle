@@ -37,6 +37,38 @@ test('owner isolation and read-only mailbox cannot send',async()=>{
 test('deployment sending hold prevents provider calls despite a granted Send scope',async()=>{
  beta.sendEnabled=false;const d=await draft();await assert.rejects(send(d),/Sending is held/);assert.equal(sends,0);assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,0);
 });
+
+test('certification exception permits one explicit test only and cannot release ordinary sending',async()=>{
+ beta.sendEnabled=false;beta.certificationSendEnabled=true;
+ const ordinary=await draft();await assert.rejects(send(ordinary),/Sending is held/);
+ const d=await draft({certification:true});assert.equal(sends,0);
+ await assert.rejects(call('send',{prospectId:d.prospectId,version:d.version,operationId:d.operationId,confirm:false}),/Review the exact/);
+ await Promise.all([send(d),send(d)]);assert.equal(sends,1);
+ assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,1);
+ await assert.rejects(draft({certification:true,expectedVersion:d.version}),/already has a send record/);
+ await assert.rejects(send(ordinary),/Sending is held/);assert.equal(sends,1);
+});
+
+test('controlled review binds exact mailbox, recipient, generation and actor without sending',async()=>{
+ beta.sendEnabled=false;beta.certificationSendEnabled=true;const d=await draft({certification:true});
+ beta.certificationRecipient='changed@example.test';await assert.rejects(send(d),/Sending is held|recipient changed/);
+ beta.certificationRecipient='recipient@example.test';await db.doc('businessMailboxes/owner').update({generation:'changed'});await assert.rejects(send(d),/mailbox or draft changed/);
+ await assert.rejects(call('send',{prospectId:d.prospectId,version:d.version,operationId:d.operationId,confirm:true},'other','owner'));
+ assert.equal(sends,0);assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,0);
+});
+
+test('certification send exception is staging-only and never activates ordinary sending',async()=>{
+ const legal=require('./legal_consent');
+ await db.doc('users/owner').set({role:'business',active:true});
+ await db.doc('businessSubscriptions/owner').set({plan:'starter',status:'active',expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});
+ for(const type of ['terms','privacy'])await db.doc(`legalConsents/owner_${type}_${legal.AGREEMENTS[type]}`).set({uid:'owner',agreementType:type,agreementVersion:legal.AGREEMENTS[type]});
+ for(const project of ['scaledcircle-staging','scaled-circle']){
+  const a=createAuthority({db,auth:{getUser:async uid=>({uid,email:'owner@example.test',emailVerified:true,disabled:false})},FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,project,beta:{owner:{ownerUid:'owner',mailbox:'owner@example.test',certificationSendEnabled:true,certificationOnly:true,certificationRecipient:'recipient@example.test'}},configured:true});
+  const actual=await a({auth:{uid:'owner'},data:{businessId:'owner'}},'send');
+  assert.equal(actual.beta.certificationSendEnabled,project==='scaledcircle-staging');assert.equal(actual.beta.sendEnabled,false);
+ }
+ assert.equal(sends,0);
+});
 test('same draft concurrent approval has exactly one provider attempt; never claims delivered',async()=>{
   const d=await draft(),outcomes=await Promise.all([send(d),send(d),send(d)]);
   assert.equal(sends,1);assert.ok(outcomes.some(r=>r.state==='sent'));

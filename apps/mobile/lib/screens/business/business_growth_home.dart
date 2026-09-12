@@ -6,6 +6,8 @@ import '../../navigation/app_router.dart';
 import '../../navigation/context_back_button.dart';
 import '../../widgets/customer_page_body.dart';
 import '../../widgets/growth_opportunity_preferences_card.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/business_workspace_service.dart';
 
 class BusinessGrowthHome extends StatefulWidget {
   const BusinessGrowthHome({super.key, this.loadOverride});
@@ -55,7 +57,12 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
   Future<Map<String, dynamic>> _loadCustomer() async {
     final result = await FirebaseFunctions.instanceFor(region: 'us-east1')
         .httpsCallable('customerGrowthOperationsV1')
-        .call({'operation': 'load'})
+        .call({
+          'operation': 'load',
+          'businessId': BusinessWorkspaceSession.businessIdFor(
+            FirebaseAuth.instance.currentUser!.uid,
+          ),
+        })
         .timeout(const Duration(seconds: 25));
     return Map<String, dynamic>.from(result.data as Map);
   }
@@ -87,7 +94,7 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
             const SizedBox(height: 16),
             if (_failed) ...[
               const Text(
-                'Your Growth workspace could not be opened. Use your invited Business account with an active Managed Growth membership, then retry.',
+                'Growth could not be loaded. Check your workspace access and retry. Email Connection above remains available separately.',
               ),
               TextButton(onPressed: _load, child: const Text('Retry')),
             ] else if (_data == null)
@@ -108,6 +115,9 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
                     region: 'us-east1',
                   ).httpsCallable('customerGrowthOperationsV1').call({
                     'operation': 'preferences',
+                    'businessId': BusinessWorkspaceSession.businessIdFor(
+                      FirebaseAuth.instance.currentUser!.uid,
+                    ),
                     'input': {'opportunities': values},
                   });
                   await _load();

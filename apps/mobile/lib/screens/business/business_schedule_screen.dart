@@ -159,7 +159,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
         final text = conflicts
             .map(
               (c) =>
-                  '${c['personName']} is already scheduled ${date(c['startMs'])}–${date(c['endMs'])}.',
+                  '${c['personName']} is already scheduled from ${date(c['startMs'])} to ${date(c['endMs'])}.',
             )
             .join('\n');
         message(text);
@@ -249,27 +249,49 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
       },
     ),
   );
-  Widget peoplePicker(Set<String> selected, StateSetter update) =>
-      ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: Text('Assigned people (${selected.length})'),
-        children: people
-            .map(
-              (p) => CheckboxListTile(
-                value: selected.contains(p['id']),
-                title: Text(p['name'].toString()),
-                subtitle: Text(
-                  p['kind'] == 'crew'
-                      ? 'Crew resource · no login seat'
-                      : 'Workspace user',
-                ),
-                onChanged: (v) => update(() {
-                  v == true ? selected.add(p['id']) : selected.remove(p['id']);
-                }),
+  Widget peoplePicker(
+    Set<String> selected,
+    StateSetter update, {
+    bool selfOnly = false,
+  }) => ExpansionTile(
+    tilePadding: EdgeInsets.zero,
+    title: const Text('Assigned to'),
+    subtitle: Text(
+      selected.isEmpty
+          ? 'Unassigned'
+          : selected
+                .map(
+                  (id) =>
+                      people.where((p) => p['id'] == id).firstOrNull?['name'] ??
+                      'Former team member',
+                )
+                .join(' · '),
+    ),
+    trailing: const Text('Change'),
+    children: [
+      CheckboxListTile(
+        title: const Text('Unassigned'),
+        value: selected.isEmpty,
+        onChanged: (_) => update(selected.clear),
+      ),
+      ...people
+          .where((p) => !selfOnly || p['id'] == 'user:${data?['actorUid']}')
+          .map(
+            (p) => CheckboxListTile(
+              value: selected.contains(p['id']),
+              title: Text(p['name'].toString()),
+              subtitle: Text(
+                p['kind'] == 'crew'
+                    ? 'Crew resource · no login seat'
+                    : 'Workspace user',
               ),
-            )
-            .toList(),
-      );
+              onChanged: (v) => update(() {
+                v == true ? selected.add(p['id']) : selected.remove(p['id']);
+              }),
+            ),
+          ),
+    ],
+  );
 
   Future<void> editCustomer([Map<String, dynamic>? before]) async {
     final controllers = {
@@ -369,7 +391,15 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
         : DateTime.fromMillisecondsSinceEpoch(
             (before['startMs'] as num).toInt(),
           );
-    final assigned = Set<String>.from(before?['assignedPeople'] as List? ?? []);
+    final isNew = before?['id'] == null;
+    final assigned = Set<String>.from(
+      isNew
+          ? ['user:${data!['actorUid']}']
+          : before?['assignedPeople'] as List? ?? [],
+    );
+    final selfEditable = assigned.every(
+      (id) => id == 'user:${data?['actorUid']}',
+    );
     var override = false;
     final value = await form<Map<String, dynamic>>(
       before == null ? 'Add to schedule' : 'Edit scheduled work',
@@ -469,7 +499,23 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
             maxLength: 4,
           ),
           field(location, 'Service address or location'),
-          if (can('assignPeople')) peoplePicker(assigned, update),
+          if (can('assignPeople') || selfEditable)
+            peoplePicker(assigned, update, selfOnly: !can('assignPeople'))
+          else
+            ListTile(
+              title: const Text('Assigned to'),
+              subtitle: Text(
+                assigned
+                    .map(
+                      (id) =>
+                          people
+                              .where((p) => p['id'] == id)
+                              .firstOrNull?['name'] ??
+                          'Former team member',
+                    )
+                    .join(' · '),
+              ),
+            ),
           selector('Related estimate or job', linked, {
             '': 'None',
             for (final i in items)
@@ -893,7 +939,13 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
             Text(
               (i['assignedLabels'] as List? ?? []).isEmpty
                   ? 'Unassigned'
-                  : (i['assignedLabels'] as List).join(' · '),
+                  : 'Assigned to ${(i['assignedLabels'] as List).join(' · ')}',
+              style: (i['assignedLabels'] as List? ?? []).isEmpty
+                  ? TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.error,
+                    )
+                  : null,
             ),
             if (i['estimate'] is Map)
               Text(
@@ -1111,7 +1163,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                       ),
                       if (data!['counts']['needsResponse'] != null)
                         Text(
-                          'Needs attention: ${data!['counts']['needsResponse']} new leads · ${data!['counts']['needsFollowUp']} need follow-up · ${data!['counts']['openTasks']} open tasks',
+                          'Needs attention: ${data!['counts']['needsResponse']} new leads · ${data!['counts']['needsFollowUp']} need follow-up · ${data!['counts']['openTasks']} open tasks · ${data!['counts']['unassignedWork'] ?? 0} unassigned estimates/jobs',
                         ),
                       Wrap(
                         spacing: 8,

@@ -12,7 +12,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
  async function people(a,tx){
   const [members,crew]=await Promise.all([bounded(db.collection(`businessWorkspaces/${a.businessId}/members`).where('status','==','active'),tx),bounded(root(a.businessId).collection('resources'),tx)]);
   const owner=(await(tx?tx.get(db.doc('users/'+a.ownerUid)):db.doc('users/'+a.ownerUid).get())).data()||{};
-  const users=[{id:'user:'+a.ownerUid,name:owner.displayName||owner.name||owner.companyName||'Business owner',kind:'user',uid:a.ownerUid},...members.filter(x=>x.businessId===a.businessId&&Number.isInteger(x.seatIndex)&&x.seatIndex>0&&x.seatIndex<a.capacity).map(x=>({id:'user:'+x.uid,name:x.name||'Team member',kind:'user',uid:x.uid}))];
+  const users=[{id:'user:'+a.ownerUid,name:owner.displayName||owner.name||(a.actorUid===a.ownerUid?a.actorName:null)||owner.companyName||'Business owner',kind:'user',uid:a.ownerUid},...members.filter(x=>x.businessId===a.businessId&&Number.isInteger(x.seatIndex)&&x.seatIndex>0&&x.seatIndex<a.capacity).map(x=>({id:'user:'+x.uid,name:x.name||'Team member',kind:'user',uid:x.uid}))];
   return [...users,...crew.map(x=>({id:'crew:'+x.id,name:x.name,kind:'crew',status:x.status,linkedUid:x.linkedUid||null,version:x.version}))];
  }
  function resolver(roster){return p=>roster.find(x=>x.id===p)?.linkedUid?'user:'+roster.find(x=>x.id===p).linkedUid:p;}
@@ -36,7 +36,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
   let emailThreads=[];
   if(can(a,'communicationsRead')){const mailbox=(await db.doc('businessMailboxes/'+a.businessId).get()).data();if(mailbox?.status==='connected'&&mailbox.permissions?.read===true)emailThreads=(await bounded(db.collection(`businessMailboxes/${a.businessId}/operations`).where('state','==','sent'))).filter(o=>o.businessId===a.businessId).map(o=>({id:o.id,recipient:o.recipient,subject:o.subject,prospectId:o.prospectId}));}
   return {...publicContext(a),customers:allCustomers,items,people:full||can(a,'assignPeople')||can(a,'scheduleView')?roster:roster.filter(x=>x.uid===a.actorUid||items.some(i=>i.assignedPeople.includes(x.id))),inbound,
-   notifications:prefs.data()?.choices||{},counts:{needsResponse:full?allCustomers.filter(c=>c.stage==='new_lead').length+inbound.length:null,needsFollowUp:full?allCustomers.filter(c=>c.stage==='follow_up'||c.stage==='estimate_given').length:null,openTasks:items.filter(i=>i.type==='task'&&i.status==='open').length},
+   notifications:prefs.data()?.choices||{},counts:{needsResponse:full?allCustomers.filter(c=>c.stage==='new_lead').length+inbound.length:null,needsFollowUp:full?allCustomers.filter(c=>c.stage==='follow_up'||c.stage==='estimate_given').length:null,openTasks:items.filter(i=>i.type==='task'&&i.status==='open').length,unassignedWork:items.filter(i=>['estimate','job'].includes(i.type)&&!['completed','canceled'].includes(i.status)&&!i.assignedPeople.length).length},
    emailThreads,filesSupported:false,externalCalendarSync:false,automaticEmail:false,financialRevenue:null};
  }
  async function timeline(request){
@@ -102,7 +102,15 @@ function createService({db,FieldValue,authority,now=Date.now}){
     if(current&&current.type!==data.type)requirePermission(a,current.type==='job'?'jobsEdit':'scheduleEdit');
     const ver=version(current,input.expectedVersion);if(input.itemId&&!current)m.fail('not-found','Scheduled item not found.');
     if(current?.estimate&&(current.type!==data.type||current.customerId!==data.customerId))m.fail('failed-precondition','This estimate has a recorded outcome. Keep its customer and type; create a separate item for different work.');
-    if(data.assignedPeople.length||current?.assignedPeople?.length)requirePermission(a,'assignPeople');checkPeople(data.assignedPeople,roster);
+    // Omission means the creator for new work, and preservation for edits.
+    // An explicit empty list is an intentional Unassigned choice.
+    if(!Object.hasOwn(input.item,'assignedPeople'))data.assignedPeople=current?.assignedPeople||['user:'+a.actorUid];
+    if(!can(a,'assignPeople')){
+     const selfOnly=values=>values.every(p=>p==='user:'+a.actorUid);
+     const unchanged=current&&m.hash([...current.assignedPeople].sort())===m.hash([...data.assignedPeople].sort());
+     if(!unchanged&&(!selfOnly(data.assignedPeople)||current&&!selfOnly(current.assignedPeople)))requirePermission(a,'assignPeople');
+    }
+    checkPeople(data.assignedPeople,roster);
     let customerBefore=data.customerId?await readCustomer(data.customerId):null;
     if(data.customerId&&!can(a,'customersView'))requirePermission(a,'customersView');
     if(data.linkedItemId){const link=(await tx.get(ref(a.businessId,'items',data.linkedItemId))).data();if(!link||link.customerId!==data.customerId||!['estimate','job'].includes(link.type))m.fail('invalid-argument','Choose a related estimate or job for this customer.');}

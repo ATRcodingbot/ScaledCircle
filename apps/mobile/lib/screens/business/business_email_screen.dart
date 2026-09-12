@@ -167,7 +167,12 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text('Invited mailbox: ${_data!['expectedMailbox']}'),
-                    if (_data!['sendEnabled'] == false) const Text('Sending is held for private connection certification. No customer or prospect email can be sent.'),
+                    if (_data!['sendEnabled'] == false)
+                      Text(
+                        _data!['certificationSendEnabled'] == true
+                            ? 'Server send hold: On · Certification only. Only one reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
+                            : 'Server send hold: On. No customer or prospect email can be sent. Controlled messages can be reviewed without sending.',
+                      ),
                     const Text(
                       'Receive lead replies and send messages you explicitly approve. Automatic sending is off.',
                     ),
@@ -469,7 +474,10 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                         '${(learning['followups'] as List).length} conversations have no recorded reply after five days. Review a follow-up; nothing is sent automatically.',
                       ),
                     if (_data!['certificationRecipient'] != null &&
-                        c['send'] == true)
+                        c['send'] == true &&
+                        !(_data!['operations'] as List? ?? [])
+                            .whereType<Map>()
+                            .any((op) => op['certification'] == true))
                       BusinessEmailDraftButton(
                         certification: true,
                         recipient: _data!['certificationRecipient'].toString(),
@@ -490,15 +498,19 @@ class BusinessEmailDraftButton extends StatelessWidget {
     this.prospect,
     this.certification = false,
     this.recipient,
+    this.service,
   });
   final Map<String, dynamic> mailbox;
   final Map? prospect;
   final bool certification;
   final String? recipient;
+  final BusinessEmailService? service;
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
     icon: const Icon(Icons.edit_outlined),
-    onPressed: mailbox['connection']?['send'] != true || mailbox['sendEnabled'] == false
+    onPressed:
+        mailbox['connection']?['send'] != true ||
+            !certification && mailbox['sendEnabled'] == false
         ? null
         : () => showDialog(
             context: context,
@@ -507,12 +519,13 @@ class BusinessEmailDraftButton extends StatelessWidget {
               prospect: prospect,
               certification: certification,
               recipient: recipient,
+              service: service,
               followupTo: prospect?['followupTo']?.toString(),
             ),
           ),
     label: Text(
       certification
-          ? 'Prepare controlled test message'
+          ? 'Review Controlled Test Message'
           : 'Edit Draft / Approve & Send Email',
     ),
   );
@@ -525,19 +538,21 @@ class _DraftDialog extends StatefulWidget {
     required this.certification,
     this.recipient,
     this.followupTo,
+    this.service,
   });
   final Map<String, dynamic> mailbox;
   final Map? prospect;
   final bool certification;
   final String? recipient;
   final String? followupTo;
+  final BusinessEmailService? service;
   @override
   State<_DraftDialog> createState() => _DraftDialogState();
 }
 
 class _DraftDialogState extends State<_DraftDialog> {
   late final TextEditingController _subject, _body;
-  final _service = BusinessEmailService();
+  late final _service = widget.service ?? BusinessEmailService();
   Map<String, dynamic>? _saved;
   int _version = 0;
   String? _messageAngle, _cta;
@@ -625,7 +640,13 @@ class _DraftDialogState extends State<_DraftDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(_saved == null ? 'Edit outreach draft' : 'Review exact email'),
+    title: Text(
+      widget.certification
+          ? 'Review Controlled Test Message'
+          : _saved == null
+          ? 'Edit outreach draft'
+          : 'Review exact email',
+    ),
     content: SizedBox(
       width: 520,
       child: SingleChildScrollView(
@@ -661,6 +682,12 @@ class _DraftDialogState extends State<_DraftDialog> {
             if (_saved != null)
               const Text(
                 'This sends one email from your connected Business mailbox. It does not authorize later outreach.',
+              ),
+            if (widget.mailbox['sendEnabled'] == false &&
+                !(widget.certification &&
+                    widget.mailbox['certificationSendEnabled'] == true))
+              const Text(
+                'Sending is held. Reviewing this message does not send it.',
               ),
             if (_saved == null) ...[
               DropdownButtonFormField<String>(
@@ -720,12 +747,21 @@ class _DraftDialogState extends State<_DraftDialog> {
         ),
       if (_result == null)
         FilledButton(
-          onPressed: _busy ? null : _saveOrSend,
+          onPressed:
+              _busy ||
+                  _saved != null &&
+                      widget.mailbox['sendEnabled'] == false &&
+                      !(widget.certification &&
+                          widget.mailbox['certificationSendEnabled'] == true)
+              ? null
+              : _saveOrSend,
           child: Text(
             _busy
                 ? 'Checking…'
                 : _saved == null
                 ? 'Review exact email'
+                : widget.certification
+                ? 'Send Test Email'
                 : 'Send Email',
           ),
         ),
