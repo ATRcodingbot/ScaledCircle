@@ -181,7 +181,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Choose how you will use ScaledCircle. New Maryland accounts are placed in early-access review until launch access is approved.',
+                    'Choose how you will use ScaledCircle. You can sign up in any state. Marketplace access depends on state availability and account approval.',
                   ),
                   const SizedBox(height: 24),
                   SegmentedButton<UserRole>(
@@ -280,7 +280,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     autofillHints: const [AutofillHints.postalCode],
                     validator: (value) => _required(value, 'ZIP code'),
                     decoration: const InputDecoration(
-                      labelText: 'Maryland ZIP code',
+                      labelText: 'ZIP code',
                       border: OutlineInputBorder(),
                     ),
                   ),

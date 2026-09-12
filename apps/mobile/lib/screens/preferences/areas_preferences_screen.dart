@@ -940,16 +940,16 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                _business
-                    ? 'Where do you work?'
-                    : 'Where do you usually want to work?',
+                _business ? 'Where do you work?' : 'Where do you want to work?',
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const Text(
-                'These choices personalize what ScaledCircle shows and sends. You can still search anywhere.',
+              Text(
+                _business
+                    ? 'These areas personalize relevant Business opportunities.'
+                    : 'Add the areas where you want ScaledCircle to notify you about nearby jobs. Your service areas control job alerts. You can still browse other available work manually. Choosing your state does not subscribe you to every job in that state.',
               ),
               const SizedBox(height: 12),
               ..._areas.asMap().entries.map(
@@ -1024,7 +1024,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
                     ),
                     DropdownMenuItem(
                       value: 'maryland',
-                      child: Text('Anywhere in Maryland'),
+                      child: Text('Outside my saved areas'),
                     ),
                     DropdownMenuItem(
                       value: 'followed',

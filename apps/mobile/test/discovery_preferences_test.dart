@@ -15,7 +15,8 @@ void main() {
 
   test('Business and Scaler setup use plain language', () {
     expect(screen, contains('Where do you work?'));
-    expect(screen, contains('Where do you usually want to work?'));
+    expect(screen, contains('Where do you want to work?'));
+    expect(screen, contains('Your service areas control job alerts.'));
     expect(screen, contains('What kind of work do you want more of?'));
     expect(screen, contains('What kind of jobs are you interested in?'));
     for (final jargon in [

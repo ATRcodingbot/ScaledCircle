@@ -2913,6 +2913,13 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
 async function assertPhysicalQaRequest(request) {
   if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
   const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
@@ -5118,6 +5125,35 @@ async function assertPhysicalQaRequest(request) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function marketRolloutError(error) {
+  if (error instanceof HttpsError) return error;
+  return new HttpsError(["unauthenticated", "permission-denied", "invalid-argument", "failed-precondition", "resource-exhausted"].includes(error.code) ?
+  error.code : "unavailable", error.code ? error.message : "State status could not be loaded. Please retry.");
+}
 
 
 
@@ -8397,6 +8433,21 @@ function setInAppNotification(transaction, notification) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) => {
   assertTrackingPayload(request.data, new Set(["campaignId"]), 2048);
   const context = await requireVerifiedUser(request, "Verify your email before applying.");
@@ -8426,6 +8477,10 @@ exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) =>
       if (["pending", "accepted"].includes(status)) return;
       throw new HttpsError("already-exists", "An application already exists for this campaign.");
     }
+    try {
+      await require("./market_rollout").requireActiveScaler(db, context.uid, transaction);
+      await require("./market_work_geography").requireCampaign(db, { ...campaign, id: campaignId }, transaction);
+    } catch (error) {throw marketRolloutError(error);}
     transaction.create(applicationRef, {
       scalerId: context.uid,
       campaignId,

@@ -1,3 +1,4 @@
+import '../../preferences/market_state_screen.dart';
 import '../../../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -254,6 +255,7 @@ class ScalerDashboardScreen extends StatelessWidget {
               50,
             ),
             children: [
+              const MarketStatusCard(),
               DashboardHero(
                 eyebrow: 'Scaler workspace',
                 title: 'Local work. Verified progress. Clear earnings.',

@@ -1,3 +1,4 @@
+import '../preferences/market_state_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -103,6 +104,8 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
+                    if (widget.role == 'business' || widget.role == 'scaler')
+                      MarketStatusCard(business: widget.role == 'business'),
                     const Icon(
                       Icons.schedule_send,
                       color: Color(0xFF14E39A),

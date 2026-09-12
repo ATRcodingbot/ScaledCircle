@@ -2913,6 +2913,13 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
 async function assertPhysicalQaRequest(request) {
   if (!stagingPhysicalQa.reserved(request.data?.campaignId, request.data?.zoneId)) return;
   const authority = await db.doc(stagingPhysicalQa.authorityPath(request.data?.campaignId, request.data?.zoneId)).get();
@@ -5142,6 +5149,35 @@ async function assertPhysicalQaRequest(request) {
 
 
 
+function marketRolloutError(error) {
+  if (error instanceof HttpsError) return error;
+  return new HttpsError(["unauthenticated", "permission-denied", "invalid-argument", "failed-precondition", "resource-exhausted"].includes(error.code) ?
+  error.code : "unavailable", error.code ? error.message : "State status could not be loaded. Please retry.");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -7275,6 +7311,13 @@ function setInAppNotification(transaction, notification) {
 
 
 
+
+
+
+
+
+
+
 function appendJobEvent(transaction, { campaignId, zoneId, businessId, scalerId, type, actorId, metadata = {} }) {
   const ref = db.collection("jobEvents").doc();
   transaction.create(ref, {
@@ -7572,6 +7615,10 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOper
       throw new HttpsError("failed-precondition", "This zone has already been assigned.");
     }
     try {
+      await require('./market_rollout').requireActiveScaler(db, application.scalerId, transaction);
+      await require('./market_work_geography').requireCampaign(db, { ...campaign, serviceArea: zone.serviceArea }, transaction);
+    } catch (error) {throw marketRolloutError(error);}
+    try {
       require('./paid_work_launch_gate').assertNewPaidWork({ project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT });
     } catch (error) {
       throw new HttpsError("failed-precondition", error.message, { reason: error.reason });
@@ -7860,6 +7907,10 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
       throw new HttpsError("permission-denied", "This group slot is not available to you.");
     }
     if (existingParticipant.exists) {result = existingParticipant.data();return;}
+    try {
+      await require('./market_rollout').requireActiveScaler(db, scalerUid, transaction);
+      await require('./market_work_geography').requireCampaign(db, { ...campaignSnapshot.data(), serviceArea: zone.serviceArea }, transaction);
+    } catch (error) {throw marketRolloutError(error);}
     try {
       require('./paid_work_launch_gate').assertNewPaidWork({ project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT });
     } catch (error) {

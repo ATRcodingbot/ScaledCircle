@@ -14,6 +14,7 @@ const jobAlertEmail = fs.readFileSync(path.join(root, "functions-job-alert-email
 const artifactEmailDelivery = fs.readFileSync(
   path.join(root, "functions-artifact-email", "managed_growth_delivery.js"), "utf8");
 const expected = [
+  "getMarketStatesV1", "getMarketProfileV1", "saveMarketProfileV1", "adminMarketRolloutV1",
   "analyzePropertyIntelligence", "analyzeScaleIntelligence",
   "notifyOnCampaignApplicationCreated", "notifyOnCampaignApplicationUpdated",
   "notifyOnCampaignZoneUpdated", "sendJobMessage", "updateCampaignMaterialLogistics",

@@ -1,3 +1,4 @@
+import 'admin_market_rollout_screen.dart';
 import 'package:flutter/material.dart';
 import '../../config/app_environment.dart';
 import '../../services/admin_operations_service.dart';
@@ -959,6 +960,17 @@ class AdminOperationsContent extends StatelessWidget {
             spacing: 12,
             runSpacing: 12,
             children: [
+              AdminDashboardCard(
+                title: 'Markets & signup demand',
+                subtitle: 'States, availability and confirmed signup counts.',
+                width: width,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AdminMarketRolloutScreen(),
+                  ),
+                ),
+              ),
               AdminDashboardCard(
                 title: 'Sales',
                 subtitle: 'Prospects, follow-ups, and conversion status.',

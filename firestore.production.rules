@@ -4,6 +4,19 @@ service cloud.firestore {
 
   match /databases/{database}/documents {
 
+    function activeBusinessMarket(businessId) {
+      let profile = get(/databases/$(database)/documents/marketProfiles/$(businessId)).data;
+      let config = get(/databases/$(database)/documents/marketRollout/config).data;
+      return profile.get('selectionSource','') == 'explicit_user_selection'
+        && profile.get('role','') == 'business'
+        && config.get('schemaVersion','') == 'StateMarketRolloutV1'
+        && config.get('states',{}).get(profile.get('stateId',''), 'PRELAUNCH') == 'ACTIVE';
+    }
+    match /marketProfiles/{id} { allow read, write: if false; }
+    match /marketRollout/{id} { allow read, write: if false; }
+    match /marketRolloutAudit/{id} { allow read, write: if false; }
+
+
     // Workspace membership is server-managed. Every private read rechecks the
     // member document and authoritative subscription capacity, not client claims.
     function workspaceSeatLimit(businessId) {
@@ -53,7 +66,8 @@ service cloud.firestore {
     match /businessWorkProgress/{zoneId} { allow read, write: if false; }
     match /campaigns/{campaignId} {
       allow read: if workspaceCampaignRead(resource.data);
-      allow create: if workspaceMember(request.resource.data.businessId, ['campaigns'])
+      allow create: if activeBusinessMarket(request.resource.data.businessId)
+        && workspaceMember(request.resource.data.businessId, ['campaigns'])
         && request.resource.data.status == 'draft'
         && request.resource.data.get('isTestCampaign', false) == false
         && request.resource.data.get('applications', 0) == 0
@@ -76,7 +90,8 @@ service cloud.firestore {
         'targetQuantity','assignedZoneCount','completedZoneCount','archived','isTestCampaign']);
       // Campaigns may be edited only while draft. Publishing, money, contracts,
       // ownership, assignments and audit attribution remain server-authoritative.
-      allow update: if workspaceMember(resource.data.businessId, ['campaigns'])
+      allow update: if request.resource.data.get("status", "") == resource.data.get("status", "")
+        && workspaceMember(resource.data.businessId, ['campaigns'])
         && !resource.data.get('certificationFixture', false) && resource.data.status == 'draft'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'campaignName','description','instructions','startDate','endDate','updatedAt',
@@ -293,7 +308,8 @@ service cloud.firestore {
 
 
       allow create:
-        if isApprovedAccount()
+        if activeBusinessMarket(request.resource.data.businessId)
+        && isApprovedAccount()
         && request.resource.data.businessId == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.status == 'draft'
@@ -301,7 +317,8 @@ service cloud.firestore {
 
 
       allow update:
-        if isApprovedAccount()
+        if request.resource.data.get("status", "") == resource.data.get("status", "")
+        && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt'])
         && (!('completionPolicyVersion' in resource.data)

@@ -111,12 +111,13 @@ void main() {
         400,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(
-        find.widgetWithText(
-          SwitchListTile,
-          'I am willing to do door-to-door outreach',
-        ),
+      final outreachSwitch = find.descendant(
+        of: find.widgetWithText(SwitchListTile, 'I am willing to do door-to-door outreach'),
+        matching: find.byType(Switch),
       );
+      await Scrollable.ensureVisible(tester.element(outreachSwitch), alignment: 0.5);
+      await tester.pumpAndSettle();
+      await tester.tap(outreachSwitch);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('Save & Continue'),

@@ -1,3 +1,5 @@
+import '../screens/preferences/market_state_screen.dart';
+import '../services/market_rollout_service.dart';
 import '../services/discovery_preferences_service.dart';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,6 +23,7 @@ enum StartupDestination {
   signedOut,
   verifyEmail,
   consent,
+  marketState,
   scalerProfile,
   businessProfile,
   pending,
@@ -47,6 +50,9 @@ StartupDestination resolveStartupDestination(Map<String, dynamic> state) {
   }
   if ((state['missingAgreements'] as List? ?? []).isNotEmpty) {
     return StartupDestination.consent;
+  }
+  if (state['marketStateConfirmed'] == false) {
+    return StartupDestination.marketState;
   }
   if (state['workspaceReady'] == true) return StartupDestination.business;
   if (role == 'scaler' && state['workProfileComplete'] != true) {
@@ -166,6 +172,9 @@ class _StartupSessionGateState extends State<StartupSessionGate>
       missing.addAll(required.map((agreement) => agreement['type']!).toList());
     }
 
+    final market = ['business', 'scaler'].contains(profile?['role'])
+        ? await MarketRolloutService.load()
+        : null;
     bool workspaceReady = false;
     if (profile?['activeBusinessId'] != null && missing.isEmpty) {
       try {
@@ -204,6 +213,7 @@ class _StartupSessionGateState extends State<StartupSessionGate>
       'email': user.email,
       'profile': profile,
       'workspaceReady': workspaceReady,
+      'marketStateConfirmed': market?['stateConfirmed'],
       'businessProfileComplete': businessProfileComplete,
       'missingAgreements': missing,
       'workProfileComplete':
@@ -268,6 +278,8 @@ class _StartupSessionGateState extends State<StartupSessionGate>
     switch (resolveStartupDestination(state)) {
       case StartupDestination.signedOut:
         return widget.signedOut;
+      case StartupDestination.marketState:
+        return MarketStateScreen(onCompleted: _refresh);
       case StartupDestination.scalerProfile:
         return const CompleteScalerProfileScreen();
       case StartupDestination.businessProfile:

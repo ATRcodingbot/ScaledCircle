@@ -1,3 +1,4 @@
+import '../preferences/market_state_screen.dart';
 import '../../services/business_workspace_records.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -804,6 +805,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     50,
                   ),
                   children: [
+                    const MarketStatusCard(business: true),
                     DashboardHero(
                       eyebrow: 'BUSINESS HOME',
                       title: awaitingReviewCount > 0

@@ -6,6 +6,8 @@ let env;const projectId='demo-business-workspace';
 before(async()=>{assert.ok(process.env.FIRESTORE_EMULATOR_HOST);env=await initializeTestEnvironment({projectId,firestore:{rules:fs.readFileSync('../firestore.staging.rules','utf8')}});
  await env.withSecurityRulesDisabled(async ctx=>{const db=ctx.firestore();for(const [uid,role] of [['team_owner','business'],['team_member','business'],['team_other','business']])await setDoc(doc(db,`users/${uid}`),{role,active:true,betaAccess:'approved'});
  await setDoc(doc(db,'businessSubscriptions/team_owner'),{status:'active',plan:'growth',expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
+ await setDoc(doc(db,'marketRollout/config'),require('./market_rollout').initialConfig());
+ await setDoc(doc(db,'marketProfiles/team_owner'),{stateId:'us_census_tigerweb:state:24',role:'business',selectionSource:'explicit_user_selection'});
  await setDoc(doc(db,'businessWorkspaces/team_owner/members/team_member'),{uid:'team_member',businessId:'team_owner',status:'active',seatIndex:1,permissions:['analytics']});
  await setDoc(doc(db,'campaigns/team_campaign'),{businessId:'team_owner',status:'draft',campaignName:'Controlled campaign',privatePickup:'private',certificationFixture:false});
  await setDoc(doc(db,'campaigns/team_qa'),{businessId:'team_owner',status:'open',certificationFixture:true});

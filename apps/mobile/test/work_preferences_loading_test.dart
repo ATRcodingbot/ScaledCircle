@@ -26,7 +26,7 @@ void main() {
   ) async {
     await open(tester, () async => null);
     await tester.pumpAndSettle();
-    expect(find.text('Where do you usually want to work?'), findsOneWidget);
+    expect(find.text('Where do you want to work?'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
   testWidgets('existing work interests are preserved', (tester) async {
@@ -61,7 +61,7 @@ void main() {
     expect(find.textContaining('provider diagnostic'), findsNothing);
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
-    expect(find.text('Where do you usually want to work?'), findsOneWidget);
+    expect(find.text('Where do you want to work?'), findsOneWidget);
   });
   testWidgets('unresolved request times out to recoverable error', (
     tester,

@@ -26,6 +26,7 @@ const creativeMediaRoot = path.join(root, "functions-creative-media");
 const physicalMarketingRoot = path.join(root, "functions-physical-marketing");
 const businessProfileRoot = path.join(root, "functions-business-profile");
 const expectedExports = [
+  "getMarketStatesV1", "getMarketProfileV1", "saveMarketProfileV1", "adminMarketRolloutV1",
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
   "notifyOnCampaignApplicationCreated",

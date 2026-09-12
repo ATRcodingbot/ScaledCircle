@@ -1426,6 +1426,13 @@ exports.sendScalerJobAlertEmailJob = onDocumentCreated(
         updatedAt: FieldValue.serverTimestamp()}, {merge: true});
       return;
     }
+    try {
+      const recipient=await getAuth().getUser(queued.scalerUid);
+      if(recipient.disabled || !recipient.emailVerified) return;
+      const campaign=(await db.doc('campaigns/'+queued.campaignId).get()).data();
+      await require('./market_rollout').requireActiveScaler(db,queued.scalerUid);
+      await require('./market_work_geography').requireCampaign(db,{...(campaign || {}),id:queued.campaignId});
+    } catch (_) { return; } // Paused/unverified markets never send queued opportunity emails.
     const claimed = await db.runTransaction(async (transaction) => {
       const current = await transaction.get(snapshot.ref);
       if (current.data()?.status !== "queued") return false;
@@ -2975,6 +2982,8 @@ exports.createCampaignLocation = completionAuthorityCallable(businessOperation("
     if (!["draft", "open"].includes(String(campaign.status || ""))) {
       throw new HttpsError("failed-precondition", "Locations are locked after work begins.");
     }
+    try { await require('./market_rollout').requireActiveBusiness(db,campaign.businessId,transaction); }
+    catch(error) { throw marketRolloutError(error); }
     transaction.create(locationRef, {
       campaignId, businessId: campaign.businessId, locationType: type,
       status: "pending", address: String(request.data?.address || "").trim().slice(0, 500) || null,
@@ -3046,6 +3055,11 @@ exports.assignScalerToCampaignLocations = completionAuthorityCallable(
       }
       const scalerId = cleanId(application.scalerId) || applicationId;
       if (!scalerId) throw new HttpsError("failed-precondition", "The application has no Scaler identity.");
+      try {
+        await require('./market_rollout').requireActiveBusiness(db,campaign.businessId,transaction);
+        await require('./market_rollout').requireActiveScaler(db,scalerId,transaction);
+        require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
+      } catch(error) { throw marketRolloutError(error); }
       const locationRefs = locationIds.map((id) => db.collection("campaignLocations").doc(id));
       const locationSnapshots = await Promise.all(locationRefs.map((ref) => transaction.get(ref)));
       let quantity = 0;
@@ -5131,6 +5145,28 @@ exports.getAdminOperationsOverview = onCall(
   },
 );
 
+function marketRolloutService() {
+  return require("./market_rollout").createService({db,FieldValue,
+    getUser:uid=>getAuth().getUser(uid),requireAdmin:requireTrustedAdmin});
+}
+function marketRolloutError(error) {
+  if(error instanceof HttpsError) return error;
+  return new HttpsError(["unauthenticated","permission-denied","invalid-argument","failed-precondition","resource-exhausted"].includes(error.code)
+    ? error.code : "unavailable", error.code ? error.message : "State status could not be loaded. Please retry.");
+}
+exports.getMarketStatesV1 = onCall({enforceAppCheck:false,maxInstances:4,invoker:'public'},async()=>{
+  try { return await marketRolloutService().catalog(); } catch(error) { throw marketRolloutError(error); }
+});
+exports.getMarketProfileV1 = onCall({enforceAppCheck:false,maxInstances:4,invoker:'public'},async request=>{
+  try { return await marketRolloutService().load(request.auth?.uid); } catch(error) { throw marketRolloutError(error); }
+});
+exports.saveMarketProfileV1 = onCall({enforceAppCheck:false,maxInstances:4,invoker:'public'},async request=>{
+  try { return await marketRolloutService().save(request.auth?.uid,request.data); } catch(error) { throw marketRolloutError(error); }
+});
+exports.adminMarketRolloutV1 = onCall({enforceAppCheck:false,maxInstances:2,invoker:'public'},async request=>{
+  try { return await marketRolloutService().administer(request); } catch(error) { throw marketRolloutError(error); }
+});
+
 exports.getAdminCampaignTimeline = onCall(
   {enforceAppCheck: false, maxInstances: 4},
   async (request) => {
@@ -7189,6 +7225,8 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
   const campaign = event.data?.after.data() || {};
   if (before.status === "open" || campaign.status !== "open") return;
   if (stagingPhysicalQa.suppressOpportunity(event.params.campaignId, campaign)) return;
+  try { await require("./market_work_geography").requireCampaign(db,{...campaign,id:event.params.campaignId}); }
+  catch (_) { logger.info("Job alerts held by market rollout", {campaignId:event.params.campaignId}); return; }
   // A bounded candidate query prevents one Firestore query per Scaler. Detailed
   // geometry and travel policy are evaluated deterministically in memory.
   const candidateQuery = db.collection("discoveryPreferences").where("role", "==", "scaler");
@@ -7224,6 +7262,11 @@ exports.notifyScalersOnCampaignOpened = onDocumentUpdated({
   let writes = 0;
   for (const candidate of candidates.docs) {
     let decision;
+    try {
+      await require("./market_rollout").requireActiveScaler(db,candidate.id);
+      const recipient=await getAuth().getUser(candidate.id);
+      if(recipient.disabled || !recipient.emailVerified)continue;
+    } catch (_) { continue; }
     try { decision = scalerOpportunityDecision(candidate.data(), campaign); } catch (_) { continue; }
     if (!decision.matched) continue;
     const travel = decision.travelMatch && !decision.serviceAreaMatch;
@@ -7572,6 +7615,10 @@ exports.assignScalerToZone = trackingCallable("assignScalerToZone", businessOper
       throw new HttpsError("failed-precondition", "This zone has already been assigned.");
     }
     try {
+      await require('./market_rollout').requireActiveScaler(db,application.scalerId,transaction);
+      await require('./market_work_geography').requireCampaign(db,{...campaign,serviceArea:zone.serviceArea},transaction);
+    } catch(error) { throw marketRolloutError(error); }
+    try {
       require('./paid_work_launch_gate').assertNewPaidWork({project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
     } catch (error) {
       throw new HttpsError("failed-precondition", error.message, {reason: error.reason});
@@ -7860,6 +7907,10 @@ exports.acceptZoneGroupSlot = trackingCallable("acceptZoneGroupSlot", async (req
       throw new HttpsError("permission-denied", "This group slot is not available to you.");
     }
     if (existingParticipant.exists) { result = existingParticipant.data(); return; }
+    try {
+      await require('./market_rollout').requireActiveScaler(db,scalerUid,transaction);
+      await require('./market_work_geography').requireCampaign(db,{...campaignSnapshot.data(),serviceArea:zone.serviceArea},transaction);
+    } catch(error) { throw marketRolloutError(error); }
     try {
       require('./paid_work_launch_gate').assertNewPaidWork({project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
     } catch (error) {
@@ -8426,6 +8477,10 @@ exports.applyToCampaign = trackingCallable("applyToCampaign", async (request) =>
       if (["pending", "accepted"].includes(status)) return;
       throw new HttpsError("already-exists", "An application already exists for this campaign.");
     }
+    try {
+      await require("./market_rollout").requireActiveScaler(db,context.uid,transaction);
+      await require("./market_work_geography").requireCampaign(db,{...campaign,id:campaignId},transaction);
+    } catch(error) { throw marketRolloutError(error); }
     transaction.create(applicationRef, {
       scalerId: context.uid,
       campaignId,
@@ -10869,6 +10924,8 @@ exports.publishFundedCampaign = safeStripeCallable(
         multiScalerRollout.campaignScalerCount(campaign),
       );
       if (campaign.status === "open") return;
+      try { await require("./market_work_geography").requireCampaign(db,{...campaign,id:campaignId},transaction); }
+      catch(error) { throw marketRolloutError(error); }
       require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
       if (campaign.status !== "draft" || campaign.fundingStatus !== "funded" ||
           !cleanId(campaign.fundingPaymentId)) {
@@ -11029,6 +11086,8 @@ exports.createCampaignFundingCheckoutSession = safeStripeCallable(
     if (campaign.businessId !== context.uid) {
       throw new HttpsError("permission-denied", "You do not own this campaign.");
     }
+    try { await require('./market_work_geography').requireCampaign(db,{...campaign,id:campaignId}); }
+    catch(error) { throw marketRolloutError(error); }
     require('./paid_work_launch_gate').assertNewPaidWork({project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
     const zoneSnapshots = await db.collection("campaignZones")
       .where("campaignId", "==", campaignId).get();

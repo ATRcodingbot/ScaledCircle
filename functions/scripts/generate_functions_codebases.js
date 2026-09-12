@@ -30,6 +30,7 @@ const physicalMarketingRoot = path.join(root, "functions-physical-marketing");
 const businessProfileRoot = path.join(root, "functions-business-profile");
 
 const platformExports = new Set([
+  "getMarketStatesV1", "getMarketProfileV1", "saveMarketProfileV1", "adminMarketRolloutV1",
   "analyzePropertyIntelligence",
   "analyzeScaleIntelligence",
   "notifyOnCampaignApplicationCreated",
@@ -599,3 +600,4 @@ fs.copyFileSync(path.join(sourceRoot, "staging_physical_qa.js"), path.join(campa
 copyRequiredLocalModules(campaignFundingRoot, `require("./business_workspace");require("./workspace_subscription_sync");require("./workspace_subscription_events")`);
 copyRequiredLocalModules(campaignFundingRoot, `require("./campaign_reserve_settlement")`);
 copyRequiredLocalModules(campaignFundingRoot, `require("./paid_work_launch_gate")`);
+copyRequiredLocalModules(campaignFundingRoot, `require("./market_work_geography")`);

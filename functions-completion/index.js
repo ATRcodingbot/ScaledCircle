@@ -2908,6 +2908,13 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
 const EXACT_LOCATION_TYPES = new Set([
 "service_point", "yard_sign_installation", "material_pickup",
 "material_dropoff", "dump_pickup", "dump_dropoff", "event_location"]
@@ -2975,6 +2982,8 @@ exports.createCampaignLocation = completionAuthorityCallable(businessOperation("
     if (!["draft", "open"].includes(String(campaign.status || ""))) {
       throw new HttpsError("failed-precondition", "Locations are locked after work begins.");
     }
+    try {await require('./market_rollout').requireActiveBusiness(db, campaign.businessId, transaction);}
+    catch (error) {throw marketRolloutError(error);}
     transaction.create(locationRef, {
       campaignId, businessId: campaign.businessId, locationType: type,
       status: "pending", address: String(request.data?.address || "").trim().slice(0, 500) || null,
@@ -3046,6 +3055,11 @@ exports.assignScalerToCampaignLocations = completionAuthorityCallable(
       }
       const scalerId = cleanId(application.scalerId) || applicationId;
       if (!scalerId) throw new HttpsError("failed-precondition", "The application has no Scaler identity.");
+      try {
+        await require('./market_rollout').requireActiveBusiness(db, campaign.businessId, transaction);
+        await require('./market_rollout').requireActiveScaler(db, scalerId, transaction);
+        require('./paid_work_launch_gate').assertNewPaidWork({ project: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT });
+      } catch (error) {throw marketRolloutError(error);}
       const locationRefs = locationIds.map((id) => db.collection("campaignLocations").doc(id));
       const locationSnapshots = await Promise.all(locationRefs.map((ref) => transaction.get(ref)));
       let quantity = 0;
@@ -5118,6 +5132,28 @@ exports.submitZoneCompletion = onCall(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function marketRolloutError(error) {
+  if (error instanceof HttpsError) return error;
+  return new HttpsError(["unauthenticated", "permission-denied", "invalid-argument", "failed-precondition", "resource-exhausted"].includes(error.code) ?
+  error.code : "unavailable", error.code ? error.message : "State status could not be loaded. Please retry.");
+}
 
 
 
@@ -10584,6 +10620,25 @@ function assertTrackingPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 const MARKETPLACE_AUTHORITY_FUNCTION_OPTIONS = {
   enforceAppCheck: false,
   maxInstances: 10,
@@ -10635,6 +10690,10 @@ function safeMarketplaceAuthorityCallable(name, handler) {
     }
   });
 }
+
+
+
+
 
 
 

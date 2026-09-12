@@ -7,7 +7,7 @@ const { onDocumentCreated, onDocumentUpdated, onDocumentWritten, onDocumentWritt
 
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp, getApp } = require("firebase-admin/app");
-
+const { getAuth } = require("firebase-admin/auth");
 
 const {
   getFirestore,
@@ -1426,6 +1426,13 @@ exports.sendScalerJobAlertEmailJob = onDocumentCreated(
         updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return;
     }
+    try {
+      const recipient = await getAuth().getUser(queued.scalerUid);
+      if (recipient.disabled || !recipient.emailVerified) return;
+      const campaign = (await db.doc('campaigns/' + queued.campaignId).get()).data();
+      await require('./market_rollout').requireActiveScaler(db, queued.scalerUid);
+      await require('./market_work_geography').requireCampaign(db, { ...(campaign || {}), id: queued.campaignId });
+    } catch (_) {return;} // Paused/unverified markets never send queued opportunity emails.
     const claimed = await db.runTransaction(async (transaction) => {
       const current = await transaction.get(snapshot.ref);
       if (current.data()?.status !== "queued") return false;
@@ -1457,6 +1464,35 @@ exports.sendScalerJobAlertEmailJob = onDocumentCreated(
  * module. Weather facts remain separate from Scaled Circle's experimental
  * lead-lift estimate.
  */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
