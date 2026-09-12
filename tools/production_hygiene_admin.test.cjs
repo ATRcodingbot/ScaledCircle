@@ -1,7 +1,7 @@
 'use strict';
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {VERSION, planSnapshot, createService} = require('./production_hygiene_admin.cjs');
+const {VERSION, planSnapshot, createService,draftArchivePlan} = require('./production_hygiene_admin.cjs');
 const review = () => ({version:VERSION, projectId:'scaled-circle', operatorEmail:'admin@example.invalid',
   stripeAccountId:'acct_fixture', reason:'Reviewed synthetic cleanup',
   protectedEmails:['owner@example.invalid','admin@example.invalid','worker@example.invalid','billing@example.invalid'],
@@ -73,4 +73,23 @@ test('No unauthenticated or different operator and no other Firebase project', (
   assert.throws(()=>createService({projectId:'scaled-circle',review:review(),actor:{kind:'user',email:'admin@example.invalid'}}));
   assert.throws(()=>createService({projectId:'scaled-circle',review:review(),actor:{kind:'google_iam_admin',email:'other@example.invalid'}}));
   assert.throws(()=>createService({projectId:'scaledcircle-staging',review:review(),actor:{}}));
+});
+test('Draft archival preserves records and requires exact expired/unpaid provider proof',()=>{
+  const r={...review(),archives:[{id:'c',businessId:'owner',reviewedSynthetic:true,evidence:'QA draft'}]};
+  const s=snapshot();s.rows=[row('campaigns/c',{businessId:'owner',status:'draft',fundingStatus:'unfunded',fundingPaymentId:'p'}),
+    row('campaignPayments/p',{campaignId:'c',status:'checkout_created'})];
+  assert.throws(()=>draftArchivePlan(s,r));
+  s.provider.records=[{type:'checkout/sessions',id:'cs',metadata:{campaignId:'c',paymentId:'p'},status:'expired',payment_status:'unpaid'}];
+  const p=draftArchivePlan(s,r);assert.equal(p.records.length,1);assert.equal(p.records[0].refs.length,2);
+  s.provider.records[0].payment_status='paid';assert.throws(()=>draftArchivePlan(s,r));
+  s.provider.records[0].payment_status='unpaid';s.rows[0].data.fundingStatus='reserved';
+  assert.throws(()=>draftArchivePlan(s,r));
+});
+test('Unclassified, assigned and completed work cannot be archived by the draft path',()=>{
+  const r={...review(),archives:[{id:'c',businessId:'owner',reviewedSynthetic:true,evidence:'QA draft'}]};
+  for(const extra of [row('unknownObligations/u',{campaignId:'c'}),
+    row('campaignZones/z',{campaignId:'c',status:'assigned'}),row('campaignCompletions/job',{campaignId:'c',status:'approved'})]){
+    const s=snapshot();s.rows=[row('campaigns/c',{businessId:'owner',status:'draft'}),extra];
+    assert.throws(()=>draftArchivePlan(s,r));
+  }
 });

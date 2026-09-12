@@ -5,7 +5,7 @@ const requireFunctions=require('node:module').createRequire(require('node:path')
 const {initializeApp,deleteApp}=requireFunctions('firebase-admin/app');
 const {getFirestore,FieldValue}=requireFunctions('firebase-admin/firestore');
 const {getAuth}=requireFunctions('firebase-admin/auth');
-const {VERSION,createService}=require('./production_hygiene_admin.cjs');
+const {VERSION,createService,createDraftArchiveService}=require('./production_hygiene_admin.cjs');
 let app,db,auth;
 before(()=>{assert.ok(process.env.FIRESTORE_EMULATOR_HOST&&process.env.FIREBASE_AUTH_EMULATOR_HOST);
   app=initializeApp({projectId:'demo-production-hygiene'});db=getFirestore(app);auth=getAuth(app);});
@@ -62,5 +62,26 @@ test('Late relationship during identity quiescence fails closed and remains a ho
   const svc=service(wrapped),p=await svc.preview();await assert.rejects(svc.execute(p.plan.seal));
   assert.ok((await db.doc('users/synthetic').get()).exists);
   assert.equal((await auth.getUser('synthetic')).disabled,true);
+  assert.equal((await db.collection('adminAuditEvents').get()).size,1);
+});
+test('Unstarted draft archives exactly once while payment, assets, compensation and Wallet remain intact',async()=>{
+  await db.doc('campaigns/draft').set({businessId:'owner',status:'draft',fundingStatus:'unfunded',basePay:15,bonus:3});
+  await db.doc('marketingMaterials/m').set({campaignId:'draft',approved:true});
+  await db.doc('responseAssets/qr').set({campaignId:'draft',destination:'https://example.invalid/history'});
+  const asset=await db.doc('marketingMaterials/m').get(),wallet=await db.doc('wallets/protected').get();
+  const qr=await db.doc('responseAssets/qr').get();
+  const svc=createDraftArchiveService({db,auth,FieldValue,projectId:'scaled-circle',
+    actor:{kind:'google_iam_admin',email:'admin@example.invalid'},
+    readProvider:async()=>({mode:'live',accountId:'acct_fixture',complete:true,records:[]}),
+    review:{projectId:'scaled-circle',operatorEmail:'admin@example.invalid',stripeAccountId:'acct_fixture',reason:'QA archive',
+      archives:[{id:'draft',businessId:'owner',reviewedSynthetic:true,evidence:'Unfunded QA draft'}]}});
+  const plan=await svc.preview();assert.equal((await db.doc('campaigns/draft').get()).data().status,'draft');
+  const result=await svc.execute(plan.seal);assert.equal(result.campaignsArchived,1);
+  const d=(await db.doc('campaigns/draft').get()).data();assert.equal(d.status,'archived');assert.equal(d.basePay,15);assert.equal(d.bonus,3);
+  assert.ok((await db.doc('marketingMaterials/m').get()).updateTime.isEqual(asset.updateTime));
+  assert.ok((await db.doc('responseAssets/qr').get()).updateTime.isEqual(qr.updateTime));
+  assert.ok((await db.doc('wallets/protected').get()).updateTime.isEqual(wallet.updateTime));
+  assert.equal((await auth.getUser('synthetic')).disabled,false);
+  assert.equal((await svc.execute(plan.seal)).alreadyComplete,true);
   assert.equal((await db.collection('adminAuditEvents').get()).size,1);
 });

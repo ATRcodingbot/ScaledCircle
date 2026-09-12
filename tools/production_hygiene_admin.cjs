@@ -263,4 +263,89 @@ function createService({db, auth, FieldValue, projectId, readProvider, review, a
   return {preview, execute};
 }
 
-module.exports = {VERSION, digest, planSnapshot, inventory, createService};
+function draftArchivePlan(snapshot, review) {
+  assert.equal(snapshot.projectId, 'scaled-circle');
+  assert.equal(review.projectId, snapshot.projectId);
+  assert.equal(snapshot.provider.mode, 'live');
+  assert.equal(snapshot.provider.complete, true);
+  assert.equal(snapshot.provider.accountId, review.stripeAccountId);
+  assert.ok(review.reason && review.archives.length > 0 && review.archives.length <= 10);
+  assert.equal(new Set(review.archives.map(x=>x.id)).size,review.archives.length);
+  const records=[];
+  for(const target of review.archives) {
+    assert.equal(target.reviewedSynthetic,true);assert.ok(target.evidence);
+    const source=snapshot.rows.find(x=>x.path==='campaigns/'+target.id);assert.ok(source);
+    assert.equal(source.data.businessId,target.businessId);
+    assert.equal(source.data.status,'draft','Only unstarted synthetic drafts can be archived here');
+    assert.ok([undefined,null,'unfunded'].includes(source.data.fundingStatus));
+    for(const k of ['fundedAt','reservedWorkerBudget','totalPaidOut','assignedScalerCount'])
+      assert.ok(!meaningful(source.data[k]),'Draft has funded/accepted history: '+k);
+    const refs=snapshot.rows.filter(x=>!retainedAudit(x)&&related(x,target.id));
+    for(const r of refs) {
+      const collection=r.path.split('/')[0];
+      assert.ok(['campaigns','campaignDiscovery','campaignZones','applications','privacyMigrationAudit',
+        'marketingMaterials','marketingMaterialVersions','marketingMaterialApprovals','printReadyArtifacts',
+        'responseAssets','campaignPayments'].includes(collection),'Unclassified relationship is held: '+r.path);
+      if(collection==='campaigns')assert.equal(r.path,'campaigns/'+target.id,'Shared campaign is held');
+      assert.ok(!/^(campaignCompletions|trackingSessions|campaignRoutes|wallets|walletTransactions|payouts)\//.test(r.path),
+        'Work or financial ledger reference is held');
+      if(r.path.startsWith('campaignZones/')) {
+        assert.equal(r.data.status,'unassigned');
+        for(const k of ['assignedScalerId','assignedAt','acceptedAt','activeTrackingSessionId',
+          'lastTrackingSessionId','startedAt','submittedAt','completedAt'])assert.ok(!meaningful(r.data[k]));
+      }
+      if(r.path.startsWith('applications/')||r.path.includes('/applications/'))assertPendingApplication(r);
+    }
+    const provider=snapshot.provider.records.filter(x=>JSON.stringify(x).includes(target.id));
+    for(const record of provider) {
+      assert.equal(record.type,'checkout/sessions','Provider economic history is held');
+      assert.equal(record.status,'expired');assert.equal(record.payment_status,'unpaid');
+    }
+    const payments=refs.filter(x=>x.path.startsWith('campaignPayments/'));
+    for(const payment of payments) {
+      assert.ok(!payment.data.paidAt&&!payment.data.refundedAt&&
+        !['paid','succeeded','confirmed','refunded','settled'].includes(payment.data.status),
+      'Recorded payment economics are held');
+      assert.ok(provider.some(x=>x.metadata?.paymentId===payment.path.split('/')[1]),
+        'Payment requires exact expired provider proof');
+    }
+    if(source.data.fundingPaymentId)assert.ok(payments.some(x=>x.path===
+      'campaignPayments/'+source.data.fundingPaymentId),'Missing payment binding is held');
+    records.push({id:target.id,businessId:target.businessId,
+      refs:refs.map(x=>({path:x.path,hash:digest(x.data),version:x.version})).sort((a,b)=>a.path.localeCompare(b.path)),
+      provider});
+  }
+  const plan={version:VERSION,operation:'archive_unstarted_synthetic_drafts',projectId:snapshot.projectId,
+    operatorEmail:review.operatorEmail,reason:review.reason,records};
+  return {...plan,seal:digest(plan)};
+}
+
+function createDraftArchiveService({db,auth,FieldValue,projectId,readProvider,review,actor}) {
+  assert.equal(projectId,'scaled-circle');assert.equal(actor.kind,'google_iam_admin');
+  assert.equal(actor.email,review.operatorEmail);
+  async function preview(){const state=await inventory(db,auth);return draftArchivePlan({
+    ...state,projectId,provider:await readProvider()},review);}
+  async function execute(seal) {
+    assert.match(seal,/^[a-f0-9]{64}$/);
+    const audit=db.doc('adminAuditEvents/hygiene_archive_'+seal);
+    if((await audit.get()).exists)return {alreadyComplete:true,seal};
+    const plan=await preview();assert.equal(plan.seal,seal,'Archive inventory changed');
+    await db.runTransaction(async tx=>{
+      for(const record of plan.records)for(const before of record.refs) {
+        const current=await tx.get(db.doc(before.path));
+        assert.ok(current.exists&&digest(current.data())===before.hash&&
+          `${current.updateTime.seconds}:${current.updateTime.nanoseconds}`===before.version,
+        'Archive source or history changed');
+      }
+      for(const record of plan.records)tx.update(db.doc('campaigns/'+record.id),{
+        status:'archived',archived:true,archivedBy:actor.email,archivedAt:FieldValue.serverTimestamp(),
+        updatedAt:FieldValue.serverTimestamp(),marketplaceVisible:false,acceptingApplications:false});
+      tx.create(audit,{schemaVersion:VERSION,eventType:'production_hygiene_drafts_archived',
+        operatorEmail:actor.email,plan,occurredAt:FieldValue.serverTimestamp()});
+    });
+    return {seal,campaignsArchived:plan.records.length,financialRecordsChanged:0};
+  }
+  return {preview,execute};
+}
+
+module.exports = {VERSION, digest, planSnapshot, inventory, createService,draftArchivePlan,createDraftArchiveService};

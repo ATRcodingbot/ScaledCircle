@@ -24,6 +24,12 @@ financial records, subscriptions, provider connections, accepted work and shared
 records are never cleanup write targets. Terminal financial history needs a
 separately reviewed archive action; this utility does not reinterpret it.
 
+The separate draft-archive path can retain an unstarted synthetic draft and its
+assets/payment history while removing it from active presentation. It rejects
+funded, assigned or completed work and unknown relationships. Any provider-bound
+draft requires an exact expired, unpaid Checkout match. It cannot refund money,
+alter a payment record, or archive an unresolved worker obligation.
+
 Execution disables the selected synthetic Auth identities, revokes their refresh
 tokens, repeats the inventory and provider checks, and transactionally deletes
 only the reviewed Firestore records with an authoritative audit event. It then
