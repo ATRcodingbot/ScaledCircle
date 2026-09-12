@@ -8,7 +8,10 @@ const {onSchedule}=require('firebase-functions/v2/scheduler');
 const {defineSecret}=require('firebase-functions/params');
 const {createService,launchEnvironment}=require('./referral_launch');
 const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(),db=getFirestore(app),auth=getAuth(app);
-const production=process.env.APP_ENV==='production';
+// Firebase discovery supplies project identity before loading user APP_ENV.
+// Credential declarations follow that identity; every invocation still requires
+// the exact project/APP_ENV pair through launchEnvironment.
+const production=app.options.projectId==='scaled-circle'||process.env.GCLOUD_PROJECT==='scaled-circle';
 const stripeKey=defineSecret(production?'STRIPE_LIVE_SECRET_KEY':'STRIPE_TEST_SECRET_KEY');
 const planIds=production?Object.keys(require('./subscription_contract').ITEMS):['starter','growth','scale','managed_growth'];
 const prices=Object.fromEntries(planIds.map(id=>[id,defineSecret('STRIPE_'+id.toUpperCase()+'_PRICE_ID')]));
