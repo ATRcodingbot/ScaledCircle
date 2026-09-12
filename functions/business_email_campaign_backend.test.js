@@ -37,9 +37,14 @@ test('exact recipient parsing ignores a substring identity and quoted/automated 
  const quoted=messages({id:'t1',messages:[msg('one@example.test','owner@example.test','Thanks!\nOn Monday wrote:\nPlease unsubscribe me')]},'owner@example.test');assert.equal(quoted[0].optout,false);
  const auto=messages({id:'t1',messages:[msg('news@example.test','owner@example.test','Please unsubscribe me',{'List-Unsubscribe':'<https://example.test>'})]},'owner@example.test');assert.equal(auto[0].optout,false);assert.equal(auto[0].automated,true);
 });
+test('known workbook email in a form is indirect provenance, not the form sender as a customer or inferred consent',async()=>{
+ await importRows();threads.t1.messages=[msg('forms@example.test','owner@example.test','Customer email: one@example.test\nDeck estimate requested. Please unsubscribe me',{'Auto-Submitted':'auto-generated'})];
+ await call('discoverCampaignHistory',{kind:'contact',candidateId:hash('one@example.test')});const d=(await call('loadCampaigns')).candidates;
+ assert.equal(d.length,1);assert.equal(d[0].email,'one@example.test');assert.equal(d[0].status,'needs_review');assert.equal(d[0].evidence[0].indirectEvidence,true);assert.equal(d[0].evidence[0].optout,false);assert.equal(d[0].reviewedForSend,false);
+});
 test('reliable inbound opt-out suppresses once and blocks proposed audience',async()=>{
  await importRows();threads.t1.messages=[msg('one@example.test','owner@example.test','Please unsubscribe me from these messages.')];
- await call('discoverCampaignHistory',{kind:'optouts'});await call('discoverCampaignHistory',{kind:'optouts'});const result=await call('loadCampaigns');assert.equal(result.suppression.length,1);assert.equal(result.suppression[0].reason,'unsubscribed');await assert.rejects(draft(),/excluded|restricted/);assert.equal(sends,0);
+ await call('discoverCampaignHistory',{kind:'optouts'});await call('discoverCampaignHistory',{kind:'optouts'});const result=await call('loadCampaigns');assert.equal(result.suppression.length,1);assert.equal(result.suppression[0].reason,'unsubscribed');assert.equal((await db.collection('businessMailboxes/owner/contactHistory').get()).size,1);await assert.rejects(draft(),/excluded|restricted/);assert.equal(sends,0);
 });
 test('pagination and read errors remain incomplete rather than claiming no prior opt-outs',async()=>{
  provider.history=async()=>({threads:[{id:'missing'}],nextPageToken:'next'});service=createService({db,key,project:'demo-business-email',provider,authority:async()=>({businessId:'owner',actorUid:'owner',beta,preferenceEnabled:()=>true})});

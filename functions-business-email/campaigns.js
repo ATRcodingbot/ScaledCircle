@@ -55,14 +55,21 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
   if(input.kind==='contact'){
    if(!/^[a-f0-9]{64}$/.test(input.candidateId||''))fail('invalid-argument','Choose a saved candidate.');
    const candidate=(await sourceRef(a.businessId,'campaignCandidates',input.candidateId).get()).data();if(candidate?.businessId!==a.businessId)fail('permission-denied','Choose a candidate in this Business.');
-   recipient=gmail.email(candidate.email);q='{from:'+recipient+' to:'+recipient+'}';
+   recipient=gmail.email(candidate.email);q='{from:'+recipient+' to:'+recipient+' "'+recipient+'"}';
   }else if(input.kind==='optouts')q='{ "unsubscribe me" "remove me from your list" "do not contact" "do not email" "stop emailing" "stop contacting" } -in:spam -in:trash';
   else if(input.kind==='inquiries')q='{ estimate quotation "home project" "deck repair" "kitchen remodel" "bathroom remodel" "carpet replacement" } -category:promotions -in:spam -in:trash';
   else fail('invalid-argument','Choose contacts, inquiries or opt-out history.');
   const access=credentialAccess(a,c,secret),page=await p.history(access.credentials.refreshToken,{q,pageToken:input.pageToken,maxResults:20});
   if(!Array.isArray(page.threads||[])||(page.threads||[]).length>20)fail('failed-precondition','Google history needs checking.');
   const found=[],errors=[];for(const t of page.threads||[]){
-   try{found.push(...messages(await p.thread(access.credentials.refreshToken,t.id),c.email).filter(m=>!recipient||m.recipient===recipient));}
+   try{const evidence=messages(await p.thread(access.credentials.refreshToken,t.id),c.email);found.push(...evidence.flatMap(m=>{
+    if(!recipient||m.recipient===recipient)return [m];
+    // A known workbook contact may appear inside a form notification rather
+    // than its From header. Preserve it as indirect evidence, never consent,
+    // an inferred customer outcome or that contact's own opt-out request.
+    const addresses=(m.excerpt.match(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)||[]).map(v=>v.toLowerCase());
+    return m.from!==c.email&&addresses.includes(recipient)?[{...m,recipient,indirectEvidence:true,optout:false}]:[];
+   }));}
    catch(_){errors.push(t.id);}
   }
   // Recheck the original connection and credential generation before persisting
@@ -72,16 +79,18 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
   if(grouped.size>25)fail('resource-exhausted','This search has too many correspondents. Review saved contacts individually.');
   const results=[];
   for(const [email,evidence] of grouped){
-   const ref=sourceRef(a.businessId,'campaignCandidates',hash(email)),hasOptout=evidence.some(m=>m.optout),auto=evidence.every(m=>m.automated||m.spam);
+   const ref=sourceRef(a.businessId,'campaignCandidates',hash(email)),hasOptout=evidence.some(m=>m.optout),auto=evidence.every(m=>(m.automated&&!m.indirectEvidence)||m.spam);
    await db.runTransaction(async tx=>{
     const old=(await tx.get(ref)).data(),restrictionRef=sub(a.businessId,'suppression',hash(email)),restriction=(await tx.get(restrictionRef)).data();
     await capacity(tx,a.businessId,old);const sources=[...(old?.sources||[])],source={kind:'gmail_conversation',threadIds:[...new Set(evidence.map(m=>m.providerThreadId))],messageIds:[...new Set(evidence.map(m=>m.providerMessageId))],readAt:now(),mailbox:c.email};
+    const signal=evidence.find(m=>m.optout),audit=signal?sourceRef(a.businessId,'contactHistory',hash([email,'historical_optout',signal.providerMessageId])):null,priorAudit=audit?await tx.get(audit):null;
     if(!sources.some(s=>s.kind==='gmail_conversation'&&hash(s.messageIds)===hash(source.messageIds)))sources.push(source);
     if(sources.length>20)fail('resource-exhausted','This contact history needs a separate review.');
     const status=hasOptout||restriction?.active?'suppressed':auto?'excluded_automated':old?.status||'needs_review';
     tx.set(ref,{businessId:a.businessId,email,name:old?.name||'',sources,status,audienceCategory:old?.audienceCategory||'unclassified',roleReviewRequired:true,reviewedForSend:false,
      evidence:[...new Map([...(old?.evidence||[]),...evidence].map(m=>[m.providerMessageId,m])).values()].slice(-20),historyCheckedAt:now(),historyComplete:!page.nextPageToken&&!errors.length,updatedAt:now(),...(old?{}:{createdAt:now()})},{merge:true});
-    if(hasOptout){const signal=evidence.find(m=>m.optout);
+    if(hasOptout){
+     if(!priorAudit.exists)tx.create(audit,{businessId:a.businessId,recipient:email,action:'historical_optout_recorded',providerMessageId:signal.providerMessageId,providerThreadId:signal.providerThreadId,priorRestriction:restriction||null,actorUid:a.actorUid,recordedAt:now()});
      tx.set(restrictionRef,{businessId:a.businessId,recipient:email,active:true,reason:'unsubscribed',source:'gmail_explicit_request',providerMessageId:signal.providerMessageId,providerThreadId:signal.providerThreadId,updatedAt:now()},{merge:true});
     }
    });results.push({email,status:hasOptout?'suppressed':auto?'excluded_automated':'needs_review',threads:[...new Set(evidence.map(m=>m.providerThreadId))].length});
