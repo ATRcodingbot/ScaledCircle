@@ -89,20 +89,40 @@ function createProvider({clientId,clientSecret,redirectUri,fetchImpl=fetch}) {
 function replyMessages(thread,operation) {
   const messages=thread.messages||[];
   if(messages.length>50)fail('resource-exhausted','This conversation needs a smaller review window.');
-  const header=(m,name)=>(m.payload?.headers||[]).find(h=>h.name.toLowerCase()===name)?.value||'';
-  if(!messages.some(m=>m.id===operation.providerMessageId&&header(m,'message-id').includes(operation.messageId)))
-    fail('failed-precondition','The provider conversation does not match the sent message.');
+  const header=(m,name)=>{
+    const found=(m.payload?.headers||[]).filter(h=>h.name.toLowerCase()===name);
+    return found.length===1?found[0].value:'';
+  };
+  const mailbox=value=>{
+    const match=value.trim().match(/^(?:[^<>@\r\n]*<([^<>\s,]+@[^<>\s,]+)>|([^<>\s,]+@[^<>\s,]+))$/);
+    return (match?.[1]||match?.[2]||'').toLowerCase();
+  };
   const textBody=p=>p?.mimeType==='text/plain'&&p.body?.data?Buffer.from(p.body.data,'base64url').toString('utf8'):
     (p?.parts||[]).filter(x=>!x.filename).map(textBody).join('\n');
+  const sent=messages.filter(m=>m.id===operation.providerMessageId);
+  const original=sent[0],reference=original&&header(original,'message-id').trim();
+  const normalized=value=>value.replace(/\r\n/g,'\n').trim();
+  const encodedSubject='=?UTF-8?B?'+Buffer.from(operation.subject).toString('base64')+'?=';
+  // Gmail may replace the requested RFC Message-ID. Trust its replacement only
+  // after matching the immutable send receipt AND the exact approved message.
+  if(thread.id!==operation.providerThreadId||sent.length!==1||original.threadId!==operation.providerThreadId||
+    !original.labelIds?.includes('SENT')||!/^<[^<>\s]+@[^<>\s]+>$/.test(reference)||
+    mailbox(header(original,'from'))!==operation.from||mailbox(header(original,'to'))!==operation.recipient||
+    ![operation.subject,encodedSubject].includes(header(original,'subject'))||original.payload?.mimeType!=='text/plain'||
+    normalized(textBody(original.payload))!==normalized(operation.body))
+    fail('failed-precondition','The provider conversation does not match the sent message.');
   const repliesTo=m=>{
     const immediate=header(m,'in-reply-to').match(/<([^<>]+)>/g)||[];
     const references=header(m,'references').match(/<([^<>]+)>/g)||[];
-    return (immediate.length?immediate.at(-1):references.at(-1))==='<'+operation.messageId+'>';
+    return (immediate.length?immediate.at(-1):references.at(-1))===reference;
   };
-  return messages.filter(m=>m.id!==operation.providerMessageId&&Number(m.internalDate)>=operation.requestedAt&&
-    header(m,'from').toLowerCase().match(/(?:<|^)([^<>\s]+@[^<>\s]+)(?:>|$)/)?.[1]===operation.recipient&&
+  const matches=messages.filter(m=>m.id!==operation.providerMessageId&&m.threadId===operation.providerThreadId&&
+    Number(m.internalDate)>=operation.requestedAt&&mailbox(header(m,'from'))===operation.recipient&&
+    mailbox(header(m,'to'))===operation.from&&
     repliesTo(m))
     .map(m=>({providerMessageId:m.id,receivedAt:Number(m.internalDate),body:textBody(m.payload).slice(0,8000),
-      subject:header(m,'subject').slice(0,250),state:'replied'}));
+      subject:header(m,'subject').slice(0,250),from:operation.recipient,to:operation.from,
+      providerThreadId:operation.providerThreadId,inReplyTo:reference,state:'replied'}));
+  return [...new Map(matches.map(m=>[m.providerMessageId,m])).values()];
 }
 module.exports={SCOPES,email,seal,unseal,createProvider,replyMessages};

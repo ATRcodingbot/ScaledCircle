@@ -14,6 +14,13 @@ async function credential(permissions={read:true,send:true}) {
 }
 async function draft(extra={}) {return call('saveDraft',{prospectId:'prospect',subject:'An exact question',body:'A complete, owner-reviewed message.',expectedVersion:0,...extra});}
 async function send(d) {return call('send',{prospectId:d.prospectId,version:d.version,operationId:d.operationId,confirm:true});}
+function exactThread(op,withReply=true) {
+  const reference='<gmail-replacement@mail.gmail.com>';
+  const message=(id,from,to,body,headers={})=>({id,threadId:op.providerThreadId,internalDate:String(clock+1000),payload:{mimeType:'text/plain',
+    body:{data:Buffer.from(body).toString('base64url')},headers:Object.entries({From:from,To:to,Subject:op.subject,...headers}).map(([name,value])=>({name,value}))}});
+  const original={...message(op.providerMessageId,op.from,op.recipient,op.body,{'Message-ID':reference}),labelIds:['SENT']};
+  return {id:op.providerThreadId,messages:[original,...(withReply?[message('reply-one',op.recipient,op.from,'Controlled reply',{'In-Reply-To':reference})]:[])]};
+}
 beforeEach(async()=>{
   for(const c of ['businessMailboxes','businessEmailCallbackStates','agentProspects','agentCommunicationPreferences','salesLeads','users','businessWorkspaces','businessSubscriptions','legalConsents'])
     for(const ref of await db.collection(c).listDocuments())await db.recursiveDelete(ref);
@@ -124,13 +131,33 @@ test('send-only grant cannot read replies and plaintext credentials are never re
 });
 test('replies need exact provider conversation, recipient and reference; duplicate reconciliation is harmless',async()=>{
   const d=await draft();await send(d);const op=(await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data();
-  provider.thread=async()=>({messages:[{id:'google-message',payload:{headers:[{name:'Message-ID',value:'<'+op.messageId+'>'}]}},
-    {id:'reply-one',internalDate:String(clock+1000),payload:{mimeType:'text/plain',body:{data:Buffer.from('Controlled reply').toString('base64url')},headers:[{name:'From',value:'Recipient <recipient@example.test>'},{name:'In-Reply-To',value:'<'+op.messageId+'>'}]}},
-    {id:'unrelated',internalDate:String(clock+1000),payload:{headers:[{name:'From',value:'another@example.test'}]}}]});
-  await call('reconcile',{operationId:d.operationId});await call('reconcile',{operationId:d.operationId});
+  provider.thread=async()=>exactThread(op);
+  const results=await Promise.all([call('reconcile',{operationId:d.operationId}),call('reconcile',{operationId:d.operationId})]);
+  assert.ok(results.every(r=>r.replies===1));assert.equal(sends,1);
   assert.equal((await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data().replyCount,1);
   assert.equal((await call('load')).replies.length,1);assert.equal((await call('load')).learning.replied,1);
   assert.equal((await call('load')).learning.patterns.length,0);
+});
+
+test('certification reply binds one conversation and CRM record, never becomes a Growth outcome',async()=>{
+ const d=await draft({certification:true,prospectId:null});await send(d);const ref=db.doc('businessMailboxes/owner/operations/'+d.operationId),op=(await ref.get()).data();
+ provider.thread=async()=>exactThread(op,false);assert.equal((await call('reconcile',{operationId:d.operationId})).replies,0);
+ provider.thread=async()=>exactThread(op);await call('reconcile',{operationId:d.operationId});await call('reconcile',{operationId:d.operationId});
+ const data=await call('load');assert.equal(data.operations[0].replyCount,1);assert.equal(data.operations[0].replyCheckStatus,'reply_received');
+ assert.equal(data.replies.length,1);assert.equal(data.replies[0].operationId,d.operationId);assert.equal(data.replies[0].providerThreadId,op.providerThreadId);
+ assert.equal(data.replies[0].businessId,'owner');assert.equal(data.replies[0].certification,true);
+ const crm=(await db.doc('businessMailboxes/owner/crm/founder_certification').get()).data();
+ assert.equal(crm.operationId,d.operationId);assert.equal(crm.state,'replied');assert.equal(crm.certification,true);
+ assert.equal(data.learning.sent,0);assert.equal(data.learning.replied,0);assert.equal(data.outcomes.length,0);assert.equal(sends,1);
+ assert.equal((await ref.get()).data().messageId,op.messageId);
+});
+
+test('reconciliation rechecks the read grant after provider read; wrong workspace cannot read it',async()=>{
+ const d=await draft();await send(d);const op=(await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data();
+ provider.thread=async()=>{await db.doc('businessMailboxes/owner').update({'permissions.read':false});return exactThread(op);};
+ await assert.rejects(call('reconcile',{operationId:d.operationId}),/Reconnect/);
+ await assert.rejects(call('reconcile',{operationId:d.operationId},'stranger','owner'),/denied/);
+ assert.equal((await db.collection('businessMailboxes/owner/replies').get()).size,0);assert.equal(sends,1);
 });
 test('landing responses require an owned inbound lead, explicit sender preference and exact test recipient',async()=>{
   const leadId='landing_'+'a'.repeat(40);await db.doc('salesLeads/'+leadId).set({ownerUid:'owner',leadType:'landing_page_inquiry',createdBy:'public_landing_page',contactEmail:'recipient@example.test'});

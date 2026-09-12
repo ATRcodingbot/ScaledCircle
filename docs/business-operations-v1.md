@@ -109,3 +109,13 @@ cover narrow layout, large text, customer creation and field-user visibility.
 Staging deployment is not production promotion. New mobile presentation needs
 a subsequent artifact build; no native GPS bridge or physical-walk authority
 was changed by this feature.
+
+Business Email reply checks use the exact provider send receipt, authorized
+mailbox, recipient, subject and original body to verify the conversation.
+Gmail may replace the requested RFC Message-ID; only the verified original's
+provider reference can then anchor a reply. Reconciliation deduplicates by
+provider message within the workspace and preserves the original send record.
+The conversation view shows the sent text and recorded replies. A check gives
+visible received, not-yet-received or recoverable-error feedback, without a send
+retry. Certification conversations stay out of Growth learning and never imply
+interest, qualification, an appointment or a conversion.

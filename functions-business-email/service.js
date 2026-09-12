@@ -206,14 +206,23 @@ function createService({db,authority,provider,key,now=Date.now}) {
       await recordSent(a,ref,receipt);return {state:'sent',delivered:false};
     }
     const replies=gmail.replyMessages(await provider.thread(refreshToken,op.providerThreadId),op);
-    await db.runTransaction(async tx=>{
+    const replyCount=await db.runTransaction(async tx=>{
       const saved=await Promise.all(replies.map(r=>tx.get(sub(a.businessId,'replies',r.providerMessageId))));
       const latest=(await tx.get(ref)).data();
-      for(let i=0;i<replies.length;i++)if(!saved[i].exists)tx.create(sub(a.businessId,'replies',replies[i].providerMessageId),{...replies[i],businessId:a.businessId,operationId:ref.id,prospectId:op.prospectId});
-      const replyCount=latest.replyCount+saved.filter(s=>!s.exists).length;
-      tx.update(ref,{replyCount,lastCheckedAt:stamp()});
-      if(replyCount)tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,state:'replied',updatedAt:stamp()},{merge:true});
-    });return {state:'sent',replies:replies.length,delivered:false};
+      const currentConnection=(await current(a,tx)).c;
+      if(currentConnection.generation!==c.generation||!currentConnection.permissions?.read||currentConnection.email!==op.from)
+        fail('permission-denied','Reconnect the original sending mailbox to check this conversation.');
+      if(latest?.state!=='sent'||latest.providerMessageId!==op.providerMessageId||latest.providerThreadId!==op.providerThreadId||
+        saved.some(s=>s.exists&&(s.data().operationId!==ref.id||s.data().businessId!==a.businessId)))
+        fail('failed-precondition','This conversation needs review before its reply can be recorded.');
+      for(let i=0;i<replies.length;i++)if(!saved[i].exists)tx.create(sub(a.businessId,'replies',replies[i].providerMessageId),{
+        ...replies[i],businessId:a.businessId,operationId:ref.id,prospectId:op.prospectId,certification:op.certification===true});
+      const count=(latest.replyCount||0)+saved.filter(s=>!s.exists).length;
+      tx.update(ref,{replyCount:count,lastCheckedAt:stamp(),replyCheckStatus:count?'reply_received':'no_reply_yet'});
+      if(count)tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,
+        operationId:ref.id,providerThreadId:op.providerThreadId,certification:op.certification===true,state:'replied',updatedAt:stamp()},{merge:true});
+      return count;
+    });return {state:'sent',replies:replyCount,delivered:false};
   }
   async function suppress(a,input) {
     strict(input,['prospectId','reason']);if(!['do_not_contact','unsubscribed','bounced'].includes(input.reason))fail('invalid-argument','Choose a contact restriction.');

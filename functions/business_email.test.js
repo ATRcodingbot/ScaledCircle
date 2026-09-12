@@ -43,13 +43,47 @@ test('reconciliation verifies the exact provider message, not only a searchable 
   await assert.rejects(p.reconcileSent('secret',op),/needs review/);
 });
 
-test('reply attribution selects the immediate message, not an earlier ancestor in the same thread',()=>{
- const op={messageId:'original@mail.scaledcircle.com',providerMessageId:'sent1',recipient:'recipient@example.test',requestedAt:1};
- const sent={id:'sent1',payload:{headers:[{name:'Message-ID',value:'<'+op.messageId+'>'}]}};
- const reply={id:'reply1',internalDate:'10',payload:{headers:[{name:'From',value:op.recipient},{name:'In-Reply-To',value:'<followup@mail.scaledcircle.com>'},{name:'References',value:'<'+op.messageId+'> <followup@mail.scaledcircle.com>'}]}};
- assert.equal(gmail.replyMessages({messages:[sent,reply]},op).length,0);
- reply.payload.headers.find(h=>h.name==='In-Reply-To').value='<'+op.messageId+'>';
- assert.equal(gmail.replyMessages({messages:[sent,reply]},op).length,1);
+function conversation(rewritten=true) {
+ const op={messageId:'original@mail.scaledcircle.com',providerMessageId:'sent1',providerThreadId:'thread1',
+  from:'owner@example.test',recipient:'recipient@example.test',subject:'Subject',body:'Original message',requestedAt:1};
+ const reference='<'+(rewritten?'provider-replacement@mail.gmail.com':op.messageId)+'>';
+ const sent={id:op.providerMessageId,threadId:op.providerThreadId,labelIds:['SENT'],payload:{mimeType:'text/plain',
+  body:{data:Buffer.from(op.body).toString('base64url')},headers:Object.entries({From:op.from,To:op.recipient,Subject:op.subject,'Message-ID':reference}).map(([name,value])=>({name,value}))}};
+ const reply={id:'reply1',threadId:op.providerThreadId,internalDate:'10',payload:{mimeType:'text/plain',body:{data:Buffer.from('Actual reply').toString('base64url')},
+  headers:Object.entries({From:'Recipient <'+op.recipient+'>',To:op.from,'In-Reply-To':reference,Subject:'Re: Subject'}).map(([name,value])=>({name,value}))}};
+ return {op,reference,sent,reply,thread:{id:op.providerThreadId,messages:[sent,reply]}};
+}
+const setHeader=(m,name,value)=>m.payload.headers.find(h=>h.name===name).value=value;
+test('reply attribution accepts verified Gmail replacement or preserved RFC ID without resending',()=>{
+ for(const rewritten of [false,true]){
+  const {op,reference,reply,thread}=conversation(rewritten);thread.messages.push(reply);
+  const replies=gmail.replyMessages(thread,op);assert.equal(replies.length,1);assert.equal(replies[0].body,'Actual reply');
+  assert.equal(replies[0].inReplyTo,reference);assert.equal(replies[0].providerThreadId,op.providerThreadId);
+  assert.equal(op.messageId,'original@mail.scaledcircle.com');
+ }
+});
+test('reply attribution selects the immediate provider message, not an earlier ancestor in the thread',()=>{
+ const {op,reference,reply,thread}=conversation();
+ setHeader(reply,'In-Reply-To','<followup@mail.scaledcircle.com>');reply.payload.headers.push({name:'References',value:reference+' <followup@mail.scaledcircle.com>'});
+ assert.equal(gmail.replyMessages(thread,op).length,0);
+ setHeader(reply,'In-Reply-To',reference);assert.equal(gmail.replyMessages(thread,op).length,1);
+});
+test('provider receipt alone cannot authorize a mismatched original message',()=>{
+ for(const corrupt of [
+  c=>c.thread.id='other',c=>c.sent.id='other',c=>c.sent.threadId='other',c=>c.sent.labelIds=[],
+  c=>setHeader(c.sent,'From','other@example.test'),c=>setHeader(c.sent,'To','other@example.test'),
+  c=>setHeader(c.sent,'Subject','Changed'),c=>setHeader(c.sent,'Message-ID','invalid'),
+  c=>c.sent.payload.body.data=Buffer.from('Changed body').toString('base64url'),
+  c=>c.sent.payload.headers.push({name:'To',value:c.op.recipient}),
+ ]){const c=conversation();corrupt(c);assert.throws(()=>gmail.replyMessages(c.thread,c.op),/does not match/);}
+});
+test('wrong sender, recipient, thread, earlier date and reference never count as replies',()=>{
+ for(const corrupt of [
+  c=>setHeader(c.reply,'From','wrong@example.test'),c=>setHeader(c.reply,'To','wrong@example.test'),
+  c=>c.reply.threadId='other',c=>c.reply.internalDate='0',
+  c=>setHeader(c.reply,'In-Reply-To','<unrelated@example.test>'),
+  c=>setHeader(c.reply,'From',c.op.recipient+', other@example.test'),
+ ]){const c=conversation();corrupt(c);assert.equal(gmail.replyMessages(c.thread,c.op).length,0);}
 });
 
 test('provider response size is bounded while streaming',async()=>{

@@ -7,16 +7,19 @@ import '../../navigation/context_back_button.dart';
 import '../../widgets/customer_page_body.dart';
 
 class BusinessEmailScreen extends StatefulWidget {
-  const BusinessEmailScreen({super.key, this.loadOverride});
+  const BusinessEmailScreen({super.key, this.loadOverride, this.service});
   final Future<Map<String, dynamic>?> Function()? loadOverride;
+  final BusinessEmailService? service;
   @override
   State<BusinessEmailScreen> createState() => _BusinessEmailScreenState();
 }
 
 class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
-  final _service = BusinessEmailService();
+  late final _service = widget.service ?? BusinessEmailService();
   Map<String, dynamic>? _data;
   String? _error;
+  final _conversationFeedback = <String, String>{};
+  String? _checkingConversation;
   bool _loading = true, _busy = false, _read = false, _send = false;
   Timer? _timer;
   @override
@@ -65,6 +68,9 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      if (op == 'reconcile') {
+        _checkingConversation = input['operationId'] as String;
+      }
     });
     try {
       final response = await _service.call(op, input);
@@ -76,20 +82,137 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }
       await _load();
+      if (mounted && op == 'reconcile') {
+        final message = _error != null
+            ? 'Conversation checked, but the page could not refresh. Try again.'
+            : response['state'] != 'sent'
+            ? 'The send is still being verified. No message was resent.'
+            : response['replies'] == null
+            ? 'Sent message found. Check conversation again for replies.'
+            : (response['replies'] as num) > 0
+            ? 'Reply received'
+            : 'No reply found yet';
+        _showConversationFeedback(input['operationId'] as String, message);
+      }
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
-        setState(() => _error = e.message ?? 'This action needs checking.');
+        if (op == 'reconcile') {
+          _showConversationFeedback(
+            input['operationId'] as String,
+            e.code == 'permission-denied'
+                ? 'Check your Read leads permission and reconnect Business Email, then try again. No message was resent.'
+                : 'Conversation could not be checked. Try again. No message was resent.',
+          );
+        } else {
+          setState(() => _error = e.message ?? 'This action needs checking.');
+        }
       }
     } catch (_) {
       if (mounted) {
-        setState(
-          () => _error =
-              'The result needs checking. No message was automatically retried.',
-        );
+        if (op == 'reconcile') {
+          _showConversationFeedback(
+            input['operationId'] as String,
+            'Conversation could not be checked. Try again. No message was resent.',
+          );
+        } else {
+          setState(
+            () => _error =
+                'The result needs checking. No message was automatically retried.',
+          );
+        }
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _checkingConversation = null;
+        });
+      }
     }
+  }
+
+  void _showConversationFeedback(String operationId, String message) {
+    setState(() => _conversationFeedback[operationId] = message);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _viewConversation(Map op) async {
+    final replies =
+        (_data!['replies'] as List? ?? [])
+            .whereType<Map>()
+            .where((r) => r['operationId'] == op['id'])
+            .toList()
+          ..sort(
+            (a, b) => ((a['receivedAt'] as num?) ?? 0).compareTo(
+              (b['receivedAt'] as num?) ?? 0,
+            ),
+          );
+    String time(dynamic value) {
+      if (value is! num) return 'Time unavailable';
+      final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
+      final labels = MaterialLocalizations.of(context);
+      return '${labels.formatMediumDate(date)} · ${labels.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Conversation'),
+        content: SizedBox(
+          width: 600,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  op['subject']?.toString() ?? 'Email conversation',
+                  style: Theme.of(dialog).textTheme.titleMedium,
+                ),
+                if (op['certification'] == true)
+                  const Text(
+                    'Software certification — excluded from Growth results.',
+                  ),
+                const SizedBox(height: 16),
+                Text('From: ${op['from']}'),
+                Text('To: ${op['recipient']}'),
+                Text('Sent ${time(op['providerAcceptedAt'])}'),
+                const SizedBox(height: 8),
+                SelectableText(
+                  op['body']?.toString() ?? 'Message text unavailable.',
+                ),
+                for (final reply in replies) ...[
+                  const Divider(height: 32),
+                  const Text('Reply received'),
+                  Text('From: ${reply['from'] ?? op['recipient']}'),
+                  Text(time(reply['receivedAt'])),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    reply['body']?.toString().trim().isNotEmpty == true
+                        ? reply['body'].toString()
+                        : 'No plain-text body available.',
+                  ),
+                ],
+                if (replies.isEmpty) ...[
+                  const Divider(height: 32),
+                  const Text(
+                    'No reply recorded yet. Use Check conversation to look for a reply.',
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _contactAction(Map op, String action) async {
@@ -345,24 +468,14 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                                         'Review the recorded conversation before following up.',
                                   },
                                 ),
-                              for (final reply
-                                  in (_data!['replies'] as List? ?? [])
-                                      .whereType<Map>()
-                                      .where(
-                                        (r) => r['operationId'] == op['id'],
-                                      ))
-                                ExpansionTile(
-                                  title: Text(
-                                    reply['subject']?.toString() ?? 'Reply',
-                                  ),
-                                  children: [
-                                    SelectableText(
-                                      reply['body']?.toString() ??
-                                          'No plain-text body available.',
-                                    ),
-                                  ],
+                              if (c['read'] == true)
+                                OutlinedButton.icon(
+                                  onPressed: () => _viewConversation(op),
+                                  icon: const Icon(Icons.forum_outlined),
+                                  label: const Text('View Conversation'),
                                 ),
-                              if (op['state'] == 'sent') ...[
+                              if (op['state'] == 'sent' &&
+                                  op['certification'] != true) ...[
                                 const Text(
                                   'Record the actual outcome. These are owner-reported results, not inferred from a reply.',
                                 ),
@@ -415,8 +528,17 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                                     : () => _action('reconcile', {
                                         'operationId': op['id'],
                                       }),
-                                child: const Text('Check conversation'),
+                                child: Text(
+                                  _checkingConversation == op['id']
+                                      ? 'Checking conversation…'
+                                      : 'Check conversation',
+                                ),
                               ),
+                              if (_conversationFeedback[op['id']] != null)
+                                Semantics(
+                                  liveRegion: true,
+                                  child: Text(_conversationFeedback[op['id']]!),
+                                ),
                               if (op['certification'] != true &&
                                   op['prospectId'] is String)
                                 PopupMenuButton<String>(
