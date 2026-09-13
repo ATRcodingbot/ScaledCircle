@@ -7,7 +7,7 @@ const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 function sourceRights(revision,uid){return revision?.rightsAttestation===true||
   revision?.origin==='generated_service_concept'&&revision.createdBy==='creative-media-core'&&
   revision.generatedContentAcknowledged===true&&revision.approvedBy===uid&&revision.moderationStatus==='passed'&&
-  Array.isArray(revision.moderationFlags)&&revision.moderationFlags.length===0&&
+  revision.moderation?.status==='passed'&&Array.isArray(revision.moderation.flags)&&revision.moderation.flags.length===0&&
   /^visual_job_[a-f0-9]+$/.test(revision.generationJobId||'')&&typeof revision.truthfulnessDisclosure==='string'&&revision.truthfulnessDisclosure.length>20;}
 function assertSource({uid,asset,revision,assetId,revisionId}) {
   if(!/^[A-Za-z0-9_-]{1,160}$/.test(assetId||'')||!/^[A-Za-z0-9_-]{1,160}$/.test(revisionId||'')||

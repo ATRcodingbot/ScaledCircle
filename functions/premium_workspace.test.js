@@ -38,9 +38,9 @@ test('only the exact owner-created legacy setup state qualifies; explicit restri
  a.equal(legacySetupHold(h,'other'),false);
 });
 test('approved concepts need maintained generation, moderation and owner acknowledgement; logo/test assets never auto-selected',()=>{
- const r={origin:'generated_service_concept',createdBy:'creative-media-core',generatedContentAcknowledged:true,approvedBy:'b',moderationStatus:'passed',moderationFlags:[],generationJobId:'visual_job_abc123',truthfulnessDisclosure:'Service concept image — not completed work.'};
+ const r={origin:'generated_service_concept',createdBy:'creative-media-core',generatedContentAcknowledged:true,approvedBy:'b',moderationStatus:'passed',moderation:{status:'passed',flags:[]},generationJobId:'visual_job_abc123',truthfulnessDisclosure:'Service concept image — not completed work.'};
  a.equal(sourceRights(r,'b'),true);
- for(const p of [{approvedBy:'other'},{moderationFlags:['unsafe']},{generatedContentAcknowledged:false},{createdBy:'client'}])a.equal(sourceRights({...r,...p},'b'),false);
+ for(const p of [{approvedBy:'other'},{moderation:{status:'passed',flags:['unsafe']}},{moderation:{status:'pending',flags:[]}},{moderation:undefined},{generatedContentAcknowledged:false},{createdBy:'client'}])a.equal(sourceRights({...r,...p},'b'),false);
  const revision={...r,id:'r',businessUid:'b',status:'ready',approvalStatus:'approved',privateOriginalPath:'business_media_private/b/deck/r/original.jpg',contentHash:'a'.repeat(64),storageGeneration:'1',altText:'A deck concept'};
  const asset={id:'deck',businessUid:'b',approvedRevisionId:'r',title:'Deck concept',revisions:[revision]};
  a.equal(selectAsset({uid:'b',assets:[asset],variant:{copy:'Plan a deck project'},goal:'deck'}).asset.id,'deck');
