@@ -72,9 +72,22 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
               error is FirebaseFunctionsException &&
               error.details is Map &&
               error.details['reason'] == 'test_window_closed';
+          final reason =
+              error is FirebaseFunctionsException && error.details is Map
+              ? error.details['reason']
+              : null;
+          const setupMessages = {
+            'cashout_setup_confirming':
+                "We're confirming your payout setup. Check its status before continuing.",
+            'cashout_setup_platform_blocked':
+                'Payout setup is currently unavailable. ScaledCircle is resolving an issue with its payout provider. Your earnings are unchanged.',
+            'cashout_setup_provider_rejected':
+                "We couldn't start payout setup. Please try again later or contact support.",
+          };
           _error = closed
               ? 'TEST certification window is closed. Cash-out execution is paused.'
-              : 'Could not complete this request. Refresh to check its status.';
+              : setupMessages[reason] ??
+                    'Could not complete this request. Refresh to check its status.';
         });
       }
     } finally {
@@ -105,7 +118,20 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
   });
 
   Future<void> _setup() => _work(() async {
-    final data = await _service.setup();
+    late final Map<String, dynamic> data;
+    try {
+      data = await _service.setup();
+    } catch (_) {
+      // Read the authoritative setup state even when creation/linking failed.
+      // This never retries account creation or performs a payout.
+      try {
+        final refreshed = await _service.status();
+        if (mounted) setState(() => _data = refreshed);
+      } catch (_) {
+        // Keep the original failure visible when readback is unavailable.
+      }
+      rethrow;
+    }
     final url = Uri.parse(data['url'] as String);
     if (url.scheme != 'https' || url.host != 'connect.stripe.com') {
       throw StateError('Invalid onboarding URL');
@@ -205,6 +231,8 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
               Text(
                 ready
                     ? 'Payouts ready'
+                    : _data?['setupMessage'] is String
+                    ? _data!['setupMessage'] as String
                     : _data?['status'] == 'not_setup'
                     ? 'Set up payouts to get started.'
                     : ScalerCashoutService.attentionMessage(
@@ -226,8 +254,22 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
             if (_error != null) Text(_error!),
             if (_busy) const LinearProgressIndicator(),
             TextButton(
-              onPressed: _busy ? null : _setup,
-              child: Text(ready ? 'Manage payouts' : 'Set up payouts'),
+              onPressed: _busy || _data?['setupRetryAllowed'] == false
+                  ? null
+                  : _setup,
+              child: Text(
+                ready
+                    ? 'Manage payouts'
+                    : _data?['status'] == 'setup_unavailable'
+                    ? 'Payout setup unavailable'
+                    : _data?['status'] == 'onboarding_incomplete'
+                    ? 'Finish payout setup'
+                    : _data?['status'] == 'setup_confirming'
+                    ? 'Continue payout setup'
+                    : _data?['status'] == 'setup_failed'
+                    ? 'Try payout setup again'
+                    : 'Set up payouts',
+              ),
             ),
             if (ready &&
                 executionEnabled &&

@@ -85,16 +85,44 @@ function createRuntime({
     assertRecipient: assertAccount
   });
   const accountRef = uid => db.doc('stripeConnectedAccounts/' + uid);
+  // Stripe v2 has a 30-day replay window. Leave a one-day safety margin.
+  const setupReplayWindow = 29 * 86400000;
+  const setupBlocked = () => config.setupBlockedReason === 'platform_activation_required';
   async function health(uid) {
     const r = (await accountRef(uid).get()).data();
-    if (!r?.stripeAccountId) return {
-      status: r?.setupStartedAt ? 'needs_attention' : 'not_setup',
-      ready: false
-    };
+    if (!r?.stripeAccountId) {
+      if (setupBlocked()) return {
+        status: 'setup_unavailable',
+        ready: false,
+        setupRetryAllowed: false,
+        setupMessage: "We couldn't start payout setup. ScaledCircle needs to resolve an activation issue with its payout provider. Your earnings are unchanged."
+      };
+      if (!r?.setupStartedAt) return {
+        status: 'not_setup',
+        ready: false,
+        setupRetryAllowed: true
+      };
+      return {
+        status: r.setupState === 'rejected' ? 'setup_failed' : 'setup_confirming',
+        ready: false,
+        setupRetryAllowed: now() >= r.setupStartedAt && now() - r.setupStartedAt < setupReplayWindow && !(r.setupLeaseUntil > now()),
+        setupMessage: r.setupState === 'rejected' ? "We couldn't start payout setup. Please try again later or contact support." : "We're confirming your payout setup. Check its status before continuing."
+      };
+    }
     assertAccount(r, uid);
     const a = await provider.getAccount(r.stripeAccountId);
     if (a.scalerId !== uid) fail('cashout_account_mismatch');
-    return liveEligibility(a, r.stripeAccountId);
+    const result = liveEligibility(a, r.stripeAccountId);
+    if (!result.ready && r.setupState === 'onboarding_incomplete') return {
+      ...result,
+      status: 'onboarding_incomplete',
+      setupRetryAllowed: true,
+      setupMessage: 'Finish setting up payouts to receive your earnings.'
+    };
+    return {
+      ...result,
+      setupRetryAllowed: true
+    };
   }
   async function status(uid) {
     await actor(uid);
@@ -140,6 +168,8 @@ function createRuntime({
     const a = await actor(uid);
     await platform();
     if (config.enabled !== true) fail('cashout_execution_paused');
+    const prior = (await accountRef(uid).get()).data();
+    if (!prior?.stripeAccountId && setupBlocked()) fail('cashout_setup_platform_blocked');
     const first = await db.runTransaction(async tx => {
       const r = await tx.get(accountRef(uid));
       if (r.exists) {
@@ -155,7 +185,9 @@ function createRuntime({
         mode: 'live',
         authorityVersion: VERSION,
         accountApi: 'accounts_v2',
-        setupStartedAt: now()
+        setupStartedAt: now(),
+        setupState: 'creating',
+        setupLeaseUntil: now() + 60000
       };
       tx.create(accountRef(uid), v);
       return {
@@ -166,45 +198,38 @@ function createRuntime({
     let accountId = first.record.stripeAccountId;
     if (!accountId) {
       let account;
-      if (first.create) {
-        try {
-          account = await stripe.v2.core.accounts.create({
-            contact_email: a.email,
-            dashboard: 'express',
-            identity: {
-              country: 'us'
-            },
-            defaults: {
-              currency: 'usd',
-              responsibilities: {
-                fees_collector: 'application',
-                losses_collector: 'application'
-              }
-            },
-            configuration: {
-              recipient: {
-                capabilities: {
-                  stripe_balance: {
-                    stripe_transfers: {
-                      requested: true
-                    }
-                  }
+      const requested = {
+        contact_email: a.email,
+        dashboard: 'express',
+        identity: {
+          country: 'us'
+        },
+        defaults: {
+          currency: 'usd',
+          responsibilities: {
+            fees_collector: 'application',
+            losses_collector: 'application'
+          }
+        },
+        configuration: {
+          recipient: {
+            capabilities: {
+              stripe_balance: {
+                stripe_transfers: {
+                  requested: true
                 }
               }
-            },
-            metadata: {
-              scalerId: uid,
-              mode: 'live',
-              authorityVersion: VERSION
-            },
-            include: ['configuration.recipient']
-          }, {
-            idempotencyKey: 'scaledcircle:live:cashout-account:' + id(uid)
-          });
-        } catch {
-          fail('cashout_setup_confirming');
-        }
-      } else {
+            }
+          }
+        },
+        metadata: {
+          scalerId: uid,
+          mode: 'live',
+          authorityVersion: VERSION
+        },
+        include: ['configuration.recipient']
+      };
+      if (!first.create) {
         const matches = [];
         let cursor;
         for (let page = 0; page < 50; page++) {
@@ -219,17 +244,68 @@ function createRuntime({
           cursor = new URL(list.next_page_url, 'https://api.stripe.com').searchParams.get('page');
           if (!cursor || page === 49) fail('cashout_setup_confirming');
         }
-        if (matches.length !== 1) fail('cashout_setup_confirming');
+        if (matches.length > 1) fail('cashout_account_mismatch');
         account = matches[0];
       }
-      if (account?.livemode !== true || account.metadata?.scalerId !== uid || account.metadata?.mode !== 'live' || !/^acct_[A-Za-z0-9]+$/.test(account.id || '')) fail('cashout_account_mismatch');
+      if (!account) {
+        const parameters = await db.runTransaction(async tx => {
+          const v = (await tx.get(accountRef(uid))).data();
+          if (v.stripeAccountId || !Number.isSafeInteger(v.setupStartedAt) || now() < v.setupStartedAt || now() - v.setupStartedAt >= setupReplayWindow || !first.create && v.setupLeaseUntil > now()) fail('cashout_setup_confirming');
+          // Legacy calls used this same payload and deterministic key. Freeze
+          // parameters before replay; never rotate the key or rely on an empty,
+          // eventually-consistent provider list as proof of a failed creation.
+          const parameters = v.setupRequest || requested;
+          tx.update(accountRef(uid), {
+            setupRequest: parameters,
+            setupState: 'creating',
+            setupLeaseUntil: now() + 60000,
+            setupLastAttemptAt: now()
+          });
+          return parameters;
+        });
+        try {
+          account = await stripe.v2.core.accounts.create(parameters, {
+            idempotencyKey: 'scaledcircle:live:cashout-account:' + id(uid)
+          });
+        } catch (error) {
+          const code = error.code || error.raw?.code;
+          const rejected = error.statusCode === 400 && /^req_[A-Za-z0-9]+$/.test(error.requestId || '') && ['account_create_activation_required', 'connect_profile_not_submitted', 'connect_identity_not_verified', 'accounts_v2_access_blocked'].includes(code);
+          const evidence = {
+            phase: 'account_creation',
+            state: rejected ? 'rejected' : 'confirming',
+            at: now(),
+            ...(Number.isInteger(error.statusCode) ? {
+              httpStatus: error.statusCode
+            } : {}),
+            ...(/^[a-z][a-z0-9_]{0,100}$/.test(code || '') ? {
+              providerCode: code
+            } : {}),
+            ...(/^req_[A-Za-z0-9]+$/.test(error.requestId || '') ? {
+              providerRequestId: error.requestId
+            } : {})
+          };
+          await db.runTransaction(async tx => {
+            const v = (await tx.get(accountRef(uid))).data();
+            if (!v.stripeAccountId) tx.update(accountRef(uid), {
+              setupState: evidence.state,
+              setupLeaseUntil: 0,
+              setupFailure: evidence
+            });
+            tx.set(accountRef(uid).collection('setupEvents').doc(id(evidence)), evidence);
+          });
+          fail(rejected ? 'cashout_setup_provider_rejected' : 'cashout_setup_confirming');
+        }
+      }
+      if (account?.livemode !== true || account.metadata?.scalerId !== uid || account.metadata?.mode !== 'live' || account.metadata?.authorityVersion !== VERSION || !/^acct_[A-Za-z0-9]+$/.test(account.id || '')) fail('cashout_account_mismatch');
       accountId = account.id;
       await db.runTransaction(async tx => {
         const [r, b] = (await Promise.all([tx.get(accountRef(uid)), tx.get(db.doc('stripeConnectedRecipients/' + accountId))])).map(x => x.data());
         if (r?.scalerId !== uid || r.mode !== 'live' || r.stripeAccountId && r.stripeAccountId !== accountId || b && b.scalerId !== uid) fail('cashout_account_mismatch');
         tx.update(accountRef(uid), {
           stripeAccountId: accountId,
-          createdAtMillis: now()
+          createdAtMillis: now(),
+          setupState: 'onboarding_incomplete',
+          setupLeaseUntil: 0
         });
         tx.set(db.doc('stripeConnectedRecipients/' + accountId), {
           scalerId: uid,
@@ -266,6 +342,10 @@ function createRuntime({
     });
     const url = new URL(link.url);
     if (url.protocol !== 'https:' || url.hostname !== 'connect.stripe.com') fail('cashout_onboarding_url_invalid');
+    await accountRef(uid).update({
+      setupState: 'onboarding_incomplete',
+      setupLinkIssuedAt: now()
+    });
     return {
       url: link.url,
       mode: 'live'
@@ -340,7 +420,7 @@ function createRuntime({
     const event = stripe.webhooks.constructEvent(rawBody, signature, secret);
     // Stripe reports this legacy name alongside transfer.reversed. Both only
     // trigger a fresh authoritative receipt read; event payloads never pay.
-    if(event.type==='transfer.canceled')event.type='transfer.reversed';
+    if (event.type === 'transfer.canceled') event.type = 'transfer.reversed';
     if (event.livemode !== true || (scope === 'connected' ? !event.account : Boolean(event.account))) fail('cashout_webhook_scope_mismatch');
     if (!(scope === 'connected' ? CONNECT_EVENTS : PLATFORM_EVENTS).includes(event.type)) return {
       ignored: true

@@ -12,13 +12,20 @@ class FakeCashout implements ScalerCashoutService {
   };
   final List<String> ids = [];
   int requests = 0;
+  int setups = 0;
+  Object? setupError;
   bool loseResponse = false;
   final List<bool> reconciliationRetries = [];
   String url = 'https://connect.stripe.com/setup/fixture';
   @override
   Future<Map<String, dynamic>> status() async => data;
   @override
-  Future<Map<String, dynamic>> setup() async => {'url': url, 'mode': 'test'};
+  Future<Map<String, dynamic>> setup() async {
+    setups++;
+    if (setupError != null) throw setupError!;
+    return {'url': url, 'mode': 'test'};
+  }
+
   @override
   Future<Map<String, dynamic>> request(
     String requestId,
@@ -45,6 +52,74 @@ class FakeCashout implements ScalerCashoutService {
 }
 
 void main() {
+  testWidgets(
+    'production activation failure remains visible and disables another setup attempt',
+    (tester) async {
+      final service = FakeCashout()
+        ..data = {
+          'mode': 'live',
+          'status': 'setup_unavailable',
+          'setupRetryAllowed': false,
+          'executionEnabled': true,
+          'availableCents': 0,
+          'setupMessage':
+              "We couldn't start payout setup. ScaledCircle needs to resolve an activation issue with its payout provider. Your earnings are unchanged.",
+        };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ScalerCashoutCard(service: service),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining("We couldn't start payout setup."),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Payout setup unavailable'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('Set up payouts to get started.'), findsNothing);
+      await tester.tap(find.text('Refresh'));
+      await tester.pumpAndSettle();
+      expect(service.setups, 0);
+    },
+  );
+  testWidgets(
+    'bound incomplete onboarding has a distinct continuation action',
+    (tester) async {
+      final service = FakeCashout()
+        ..data = {
+          'mode': 'live',
+          'status': 'onboarding_incomplete',
+          'setupRetryAllowed': true,
+          'executionEnabled': true,
+          'availableCents': 0,
+          'setupMessage': 'Finish setting up payouts to receive your earnings.',
+        };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ScalerCashoutCard(service: service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Finish payout setup'), findsOneWidget);
+      expect(
+        find.text('Finish setting up payouts to receive your earnings.'),
+        findsOneWidget,
+      );
+      expect(service.setups, 0);
+    },
+  );
+
   testWidgets(
     'failed payout stays reserved and checking status never retries provider creation',
     (tester) async {

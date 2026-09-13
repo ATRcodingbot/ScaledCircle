@@ -51,7 +51,8 @@ function runtime() {
       mode: 'live',
       secretKey,
       platformId: process.env.SCALEDCIRCLE_STRIPE_PLATFORM_ID,
-      enabled: process.env.SCALEDCIRCLE_CASHOUT_LIVE_ENABLED === 'true'
+      enabled: process.env.SCALEDCIRCLE_CASHOUT_LIVE_ENABLED === 'true',
+      setupBlockedReason: process.env.SCALEDCIRCLE_CONNECT_SETUP_BLOCKED_REASON
     }
   });
 }
@@ -69,7 +70,12 @@ function callable(fn) {
         reason,
         actorUid: request.auth.uid
       });
-      throw new HttpsError('failed-precondition', reason === 'cashout_setup_confirming' ? 'We are confirming your payout setup. Please check its status before trying again.' : 'This payout needs attention. Refresh its status; your earnings are preserved.', {
+      const setupMessages = {
+        cashout_setup_confirming: 'We are confirming your payout setup. Please check its status before trying again.',
+        cashout_setup_platform_blocked: 'Payout setup is currently unavailable. ScaledCircle is resolving an issue with its payout provider. Your earnings are unchanged.',
+        cashout_setup_provider_rejected: "We couldn't start payout setup. Please try again later or contact support."
+      };
+      throw new HttpsError('failed-precondition', setupMessages[reason] || 'This payout needs attention. Refresh its status; your earnings are preserved.', {
         reason
       });
     }

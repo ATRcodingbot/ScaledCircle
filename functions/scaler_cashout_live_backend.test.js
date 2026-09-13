@@ -35,8 +35,8 @@ test('late bank failure reopens one obligation; repayment cannot debit funding t
 });
 test('missing actual completion blocks reservation',async()=>{await db.doc('campaignCompletions/real-completion').delete();await assert.rejects(runtime.request(uid,req));assert.equal(calls.length,0);});
 test('provider authenticated explicit rejection releases before money movement',async()=>{stripe.transfers.create=async()=>{throw {type:'StripeInvalidRequestError',statusCode:400,requestId:'req_provider',code:'transfers_not_allowed'};};const r=await runtime.request(uid,req);assert.equal(r.status,'failed');assert.equal((await get('wallets/'+uid)).availableBalance,3);});
-test('Connect unknown create never blindly creates another recipient',async()=>{
- await db.doc('stripeConnectedAccounts/'+uid).delete();let creates=0;stripe.v2.core.accounts.create=async()=>{creates++;throw Error('lost response');};stripe.v2.core.accounts.list=async()=>({data:[],next_page_url:null});await assert.rejects(runtime.setup(uid));clock+=86400000;await assert.rejects(runtime.setup(uid));assert.equal(creates,1);
+test('Connect unknown create stops beyond the v2 idempotency replay window',async()=>{
+ await db.doc('stripeConnectedAccounts/'+uid).delete();let creates=0;stripe.v2.core.accounts.create=async()=>{creates++;throw Error('lost response');};stripe.v2.core.accounts.list=async()=>({data:[],next_page_url:null});await assert.rejects(runtime.setup(uid));clock+=30*86400000;await assert.rejects(runtime.setup(uid));assert.equal(creates,1);
 });
 test('Connect recovers relative provider pagination and exact LIVE UID binding',async()=>{
  await db.doc('stripeConnectedAccounts/'+uid).set({scalerId:uid,mode:'live',authorityVersion:VERSION,accountApi:'accounts_v2',setupStartedAt:1});let pages=0;stripe.v2.core.accounts.list=async opts=>{pages++;return opts.page?{data:[{id:accountId,livemode:true,metadata:{scalerId:uid,mode:'live',authorityVersion:VERSION}}],next_page_url:null}:{data:[],next_page_url:'/v2/core/accounts?page=next_page'};};stripe.balanceSettings.update=async()=>{};stripe.v2.core.accountLinks={create:async()=>({url:'https://connect.stripe.com/setup/test'})};const r=await runtime.setup(uid);assert.equal(r.mode,'live');assert.equal(pages,2);assert.equal((await get('stripeConnectedAccounts/'+uid)).stripeAccountId,accountId);
@@ -79,3 +79,34 @@ test('signed payout webhook verifies account and LIVE mode; replay cannot double
  const send=async(e,sig)=>{const rawBody=Buffer.from(JSON.stringify(e)),signature=sig||stripe.webhooks.generateTestHeaderString({payload:rawBody.toString(),secret});return runtime.webhook({rawBody,signature,secret,scope:'connected'});};await assert.rejects(send(event,'bad'));await assert.rejects(send({...event,livemode:false}));await assert.rejects(send({...event,account:'acct_other'}));await send(event);assert.deepEqual(await send(event),{duplicate:true});assert.equal((await get('wallets/'+uid)).cashoutPaidCents,300);assert.equal(calls.length,2);assert.equal((await runtime.store.get(r.operationId,uid)).state,'completed');
 });
 test('normal Scaler cannot inspect or reconcile another Scaler; Admin read shows safe operation identity',async()=>{const r=await runtime.request(uid,req);await assert.rejects(runtime.adminList(uid));await assert.rejects(runtime.reconcile('other',{operationId:r.operationId}));const list=await runtime.adminList('admin');assert.equal(list.operations[0].scalerId,uid);assert.equal(JSON.stringify(list).includes('sk_live'),false);});
+
+test('zero Wallet setup persists provider activation rejection without claiming an account',async()=>{
+ await db.doc('stripeConnectedAccounts/'+uid).delete();await db.doc('wallets/'+uid).set({ownerId:uid,ownerType:'scaler',availableBalance:0});
+ stripe.v2.core.accounts.create=async()=>{throw {statusCode:400,requestId:'req_activation',code:'account_create_activation_required'};};
+ await assert.rejects(runtime.setup(uid),{code:'cashout_setup_provider_rejected'});
+ const record=await get('stripeConnectedAccounts/'+uid);assert.equal(record.setupState,'rejected');assert.equal(record.setupFailure.providerRequestId,'req_activation');assert.equal(record.setupFailure.phase,'account_creation');assert.equal(record.stripeAccountId,undefined);
+ assert.equal((await runtime.status(uid)).status,'setup_failed');assert.equal((await db.collection('financialOperations').get()).size,0);assert.equal((await get('wallets/'+uid)).availableBalance,0);
+});
+test('platform setup hold preserves the original failed attempt and blocks creation at zero balance',async()=>{
+ await db.doc('stripeConnectedAccounts/'+uid).set({scalerId:uid,mode:'live',authorityVersion:VERSION,accountApi:'accounts_v2',setupStartedAt:clock-1000});
+ const original=await get('stripeConnectedAccounts/'+uid);let creates=0;stripe.v2.core.accounts.create=async()=>{creates++;};
+ const blocked=createRuntime({db,auth:{getUser:async()=>({emailVerified:true,disabled:false})},stripe,config:{...config,setupBlockedReason:'platform_activation_required'},now:()=>clock});
+ const status=await blocked.status(uid);assert.equal(status.status,'setup_unavailable');assert.equal(status.setupRetryAllowed,false);await assert.rejects(blocked.setup(uid),{code:'cashout_setup_platform_blocked'});assert.equal(creates,0);assert.deepEqual(await get('stripeConnectedAccounts/'+uid),original);
+});
+test('unbound v2 replay uses the exact original key and parameters, never a second account',async()=>{
+ await db.doc('stripeConnectedAccounts/'+uid).delete();await db.doc('wallets/'+uid).set({ownerId:uid,ownerType:'scaler',availableBalance:0});
+ let attempts=0,unique=0,remembered;stripe.v2.core.accounts.list=async()=>({data:[],next_page_url:null});
+ stripe.v2.core.accounts.create=async(parameters,options)=>{attempts++;if(!remembered){remembered={parameters,options};unique++;throw Error('response lost after creation');}assert.deepEqual(parameters,remembered.parameters);assert.deepEqual(options,remembered.options);return {id:accountId,livemode:true,metadata:{scalerId:uid,mode:'live',authorityVersion:VERSION}};};
+ stripe.balanceSettings.update=async()=>{};stripe.v2.core.accountLinks={create:async()=>({url:'https://connect.stripe.com/setup/existing'})};
+ await assert.rejects(runtime.setup(uid));clock+=60001;await runtime.setup(uid);await runtime.setup(uid);
+ assert.equal(attempts,2);assert.equal(unique,1);assert.equal((await get('stripeConnectedAccounts/'+uid)).stripeAccountId,accountId);assert.equal((await get('wallets/'+uid)).availableBalance,0);assert.equal(calls.length,0);
+});
+test('concurrent setup requests cannot launch a second account creation',async()=>{
+ await db.doc('stripeConnectedAccounts/'+uid).delete();let release,started;const began=new Promise(r=>started=r);const wait=new Promise(r=>release=r);let creates=0;
+ stripe.v2.core.accounts.list=async()=>({data:[],next_page_url:null});stripe.v2.core.accounts.create=async()=>{creates++;started();await wait;return {id:accountId,livemode:true,metadata:{scalerId:uid,mode:'live',authorityVersion:VERSION}};};stripe.balanceSettings.update=async()=>{};stripe.v2.core.accountLinks={create:async()=>({url:'https://connect.stripe.com/setup/existing'})};
+ const first=runtime.setup(uid);await began;await assert.rejects(runtime.setup(uid),{code:'cashout_setup_confirming'});release();await first;assert.equal(creates,1);
+});
+test('onboarding-link failure retains the bound account and retry resumes that account',async()=>{
+ const original=await get('stripeConnectedAccounts/'+uid);await db.doc('stripeConnectedAccounts/'+uid).update({setupState:'onboarding_incomplete'});let creates=0,links=0;stripe.v2.core.accounts.create=async()=>{creates++;throw Error('unexpected');};stripe.balanceSettings.update=async()=>{};stripe.v2.core.accountLinks={create:async()=>{links++;if(links===1)throw Error('link unavailable');return {url:'https://connect.stripe.com/setup/existing'};}};
+ await assert.rejects(runtime.setup(uid));assert.equal((await get('stripeConnectedAccounts/'+uid)).stripeAccountId,original.stripeAccountId);await runtime.setup(uid);assert.equal(creates,0);assert.equal(links,2);
+});
