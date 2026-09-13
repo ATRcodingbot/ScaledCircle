@@ -16,6 +16,7 @@ class BusinessGeographyEditor extends StatelessWidget {
     required this.search,
     this.legacyAreas = const [],
     this.enabled = true,
+    this.requireSelection = true,
   });
   final TextEditingController baseController, areaController;
   final AddressSuggestion? base;
@@ -25,6 +26,7 @@ class BusinessGeographyEditor extends StatelessWidget {
   final Future<List<AddressSuggestion>> Function(String, bool) search;
   final List<String> legacyAreas;
   final bool enabled;
+  final bool requireSelection;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -48,8 +50,9 @@ class BusinessGeographyEditor extends StatelessWidget {
         searchAddresses: (q) => search(q, false),
         onChanged: (_) => onBaseChanged(null),
         onSelected: onBaseChanged,
-        validator: (_) =>
-            base == null ? 'Search and select your Business base.' : null,
+        validator: (_) => requireSelection && base == null
+            ? 'Search and select your Business base.'
+            : null,
       ),
       if (base != null)
         Padding(
@@ -110,8 +113,9 @@ class BusinessGeographyEditor extends StatelessWidget {
           }
           areaController.clear();
         },
-        validator: (_) =>
-            areas.isEmpty ? 'Select at least one service area.' : null,
+        validator: (_) => requireSelection && areas.isEmpty
+            ? 'Select at least one service area.'
+            : null,
       ),
       const SizedBox(height: 24),
     ],

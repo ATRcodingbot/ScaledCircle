@@ -7,7 +7,7 @@ import '../../widgets/authenticated_sign_out_button.dart';
 import '../../widgets/membership_account_description.dart';
 import 'business_team_screen.dart';
 import 'business_membership_screen.dart';
-import 'profile/business_profile_screen.dart';
+
 import '../auth/complete_business_profile_screen.dart';
 
 class BusinessAccountScreen extends StatelessWidget {
@@ -31,23 +31,20 @@ class BusinessAccountScreen extends StatelessWidget {
             ),
             if (BusinessWorkspaceSession.value?['isOwner'] == true)
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit Business profile'),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const CompleteBusinessProfileScreen(),
-                  ),
-                ),
-              ),
-            if (BusinessWorkspaceSession.value?['isOwner'] == true)
-              ListTile(
                 leading: const Icon(Icons.business_outlined),
                 title: const Text('Business Profile'),
+                subtitle: const Text(
+                  'View and edit Business details and service areas',
+                ),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const BusinessProfileScreen(),
+                    builder: (_) => CompleteBusinessProfileScreen(
+                      editing: true,
+                      expectedBusinessId: BusinessWorkspaceSession
+                          .value?['businessId']
+                          ?.toString(),
+                    ),
                   ),
                 ),
               ),

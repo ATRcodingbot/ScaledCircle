@@ -1,4 +1,6 @@
 import '../../models/social_plan_presentation.dart';
+import 'property_intelligence_center_screen.dart';
+import 'weather_alerts_screen.dart';
 import '../../widgets/business_email_entry.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -90,6 +92,41 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
             const Text(
               'Private Beta · Research, recommendations and drafts. You decide what happens next.',
             ),
+            if (BusinessWorkspaceSession.can('intelligence')) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Local Intelligence',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              ListTile(
+                leading: const Icon(Icons.map_outlined),
+                title: const Text('Property & Territory Intelligence'),
+                subtitle: const Text(
+                  'Use property and local geography signals to help build practical marketing territories.',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PropertyIntelligenceCenterScreen(),
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cloud_outlined),
+                title: const Text('Weather Intelligence'),
+                subtitle: const Text(
+                  'Plan field work around local weather. Availability depends on your plan and saved coverage.',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const WeatherAlertsScreen(),
+                  ),
+                ),
+              ),
+            ],
             const BusinessEmailEntry(),
             const SizedBox(height: 16),
             if (_failed) ...[

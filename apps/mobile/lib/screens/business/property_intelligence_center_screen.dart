@@ -1,3 +1,4 @@
+import '../../navigation/context_back_button.dart';
 import '../../services/business_workspace_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -764,7 +765,13 @@ class _PropertyIntelligenceCenterScreenState
 
   Widget _buildPremiumGate() {
     return Scaffold(
-      appBar: AppBar(title: const Text('Property Intelligence')),
+      appBar: AppBar(
+        leading: const ContextBackButton(
+          fallback: '/business/growth',
+          businessOnly: true,
+        ),
+        title: const Text('Property Intelligence'),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 620),
@@ -821,7 +828,13 @@ class _PropertyIntelligenceCenterScreenState
             ),
           ];
     return Scaffold(
-      appBar: AppBar(title: const Text('Property Intelligence')),
+      appBar: AppBar(
+        leading: const ContextBackButton(
+          fallback: '/business/growth',
+          businessOnly: true,
+        ),
+        title: const Text('Property Intelligence'),
+      ),
       body: LayoutBuilder(
         builder: (context, viewport) {
           final desktop = viewport.maxWidth >= 760;

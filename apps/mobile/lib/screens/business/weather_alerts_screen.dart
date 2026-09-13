@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../services/maryland_weather_service.dart';
+import '../../services/business_workspace_service.dart';
+import '../../navigation/context_back_button.dart';
 import '../../services/scaled_circle_intelligence_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/scaled_circle_brand.dart';
@@ -24,6 +26,7 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
   final Set<String> _aiLoading = {};
   late Future<List<MarylandCountyWeather>> _weather;
   WeatherEntitlement? _entitlement;
+  bool _loadFailed = false;
   WeatherCoveragePreferences? _preferences;
 
   @override
@@ -37,21 +40,27 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final entitlement = await _service.loadEntitlement(user.uid);
-    if (!mounted) return;
-    setState(() => _entitlement = entitlement);
-    if (!entitlement.entitled) return;
+    try {
+      if (mounted) setState(() => _loadFailed = false);
+      final workspaceId = BusinessWorkspaceSession.businessIdFor(user.uid);
+      final entitlement = await _service.loadEntitlement(workspaceId);
+      if (!mounted) return;
+      setState(() => _entitlement = entitlement);
+      if (!entitlement.entitled) return;
 
-    final preferences = await _service.loadCoveragePreferences(user.uid);
-    final selectedCountyIds = preferences.configured
-        ? preferences.countyIds
-        : MarylandWeatherService.allCountyIds;
-    final future = _service.load(countyIds: selectedCountyIds);
-    setState(() {
-      _preferences = preferences;
-      _weather = future;
-    });
-    await future;
+      final preferences = await _service.loadCoveragePreferences(workspaceId);
+      final selectedCountyIds = preferences.configured
+          ? preferences.countyIds
+          : MarylandWeatherService.allCountyIds;
+      final future = _service.load(countyIds: selectedCountyIds);
+      setState(() {
+        _preferences = preferences;
+        _weather = future;
+      });
+      await future;
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    }
   }
 
   Future<void> _openCoverageSettings() async {
@@ -139,7 +148,11 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const ScaledCircleBrand(compact: true),
+        leading: const ContextBackButton(
+          fallback: '/business/growth',
+          businessOnly: true,
+        ),
+        title: const Text('Weather Intelligence'),
         actions: [
           if (_entitlement?.entitled == true)
             IconButton(
@@ -157,7 +170,17 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: _entitlement == null
+        child: _loadFailed
+            ? ListView(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Weather insight unavailable right now.'),
+                  ),
+                  TextButton(onPressed: _refresh, child: const Text('Retry')),
+                ],
+              )
+            : _entitlement == null
             ? const Center(child: CircularProgressIndicator())
             : !_entitlement!.entitled
             ? _lockedView()
@@ -168,6 +191,24 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
 
+                  if (snapshot.hasError ||
+                      snapshot.data?.isNotEmpty != true ||
+                      snapshot.data!.every(
+                        (c) => c.error != null || c.feed == null,
+                      )) {
+                    return ListView(
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('Weather insight unavailable right now.'),
+                        ),
+                        TextButton(
+                          onPressed: _refresh,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    );
+                  }
                   final counties =
                       snapshot.data ?? const <MarylandCountyWeather>[];
                   final activeCount = counties.fold<int>(
@@ -191,7 +232,7 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
                       DashboardHero(
                         eyebrow: 'Maryland local intelligence',
                         title: activeCount == 0
-                            ? 'Weather monitored. No active signals.'
+                            ? 'No active signals in available weather data.'
                             : '$activeCount active weather signal${activeCount == 1 ? '' : 's'}.',
                         description:
                             'Official alerts are monitored for your saved Maryland '
@@ -309,7 +350,7 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
 
   Widget _countyCard(MarylandCountyWeather county) {
     final alert = county.alerts.firstOrNull;
-    if (county.error != null) {
+    if (county.error != null || county.feed == null) {
       return Card(
         margin: const EdgeInsets.only(bottom: 14),
         child: ListTile(

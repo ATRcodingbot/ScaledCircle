@@ -445,13 +445,17 @@ void main() {
     expect(source, isNot(contains('selectedTerritory')));
   });
 
-  test('campaign publishing removes raw Exception prefixes', () {
+  test('campaign publishing keeps provider errors out of customer messages', () {
     for (final path in [
       'lib/screens/business/create_campaign_screen.dart',
       'lib/screens/campaigns/campaign_details_screen.dart',
     ]) {
       final source = File(path).readAsStringSync();
-      expect(source, contains("replaceFirst('Exception: ', '')"));
+      if (path.contains('campaign_details_screen')) {
+        expect(source, contains('Your campaign could not be published. Check funding, work-area setup and account eligibility before trying again.'));
+      } else {
+        expect(source, contains("replaceFirst('Exception: ', '')"));
+      }
       expect(
         source,
         isNot(contains("Text('Unable to publish campaign: \$e')")),

@@ -1,3 +1,6 @@
+import 'business_results_overview.dart';
+import '../../navigation/context_back_button.dart';
+import '../../widgets/campaign_card_header.dart';
 import '../../services/business_workspace_service.dart';
 import '../../services/business_workspace_records.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -38,18 +41,13 @@ class BusinessCampaignsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
+      leading: const ContextBackButton(
+        fallback: '/business',
+        businessOnly: true,
+      ),
       title: Text(
         view == BusinessCampaignView.results ? 'Results' : 'Campaigns',
       ),
-      actions: [
-        if (view == BusinessCampaignView.campaigns && BusinessWorkspaceSession.can('campaigns'))
-          TextButton.icon(
-            key: const Key('campaign-list-create'),
-            onPressed: onCreateCampaign,
-            icon: const Icon(Icons.add),
-            label: const Text('Create Campaign'),
-          ),
-      ],
     ),
     body: StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
       stream: businessWorkspaceRecords(
@@ -105,6 +103,21 @@ class BusinessCampaignsScreen extends StatelessWidget {
                       ),
                 );
 
+            if (view == BusinessCampaignView.results) {
+              return BusinessResultsOverview(
+                campaigns: snapshot.data!
+                    .where(
+                      (d) =>
+                          d.data()?['archived'] != true &&
+                          d.data()?['hiddenFromBusinessHistory'] != true,
+                    )
+                    .map((d) => {...d.data()!, 'id': d.id})
+                    .toList(),
+                zones: zoneSnapshot.data!
+                    .map((d) => {...d.data()!, 'id': d.id})
+                    .toList(),
+              );
+            }
             if (docs.isEmpty) {
               return Center(
                 child: Padding(
@@ -133,7 +146,8 @@ class BusinessCampaignsScreen extends StatelessWidget {
                             : 'Create a campaign when you are ready to reach your next area.',
                         textAlign: TextAlign.center,
                       ),
-                      if (view == BusinessCampaignView.campaigns && BusinessWorkspaceSession.can('campaigns')) ...[
+                      if (view == BusinessCampaignView.campaigns &&
+                          BusinessWorkspaceSession.can('campaigns')) ...[
                         const SizedBox(height: 18),
                         FilledButton.icon(
                           onPressed: onCreateCampaign,
@@ -149,10 +163,32 @@ class BusinessCampaignsScreen extends StatelessWidget {
 
             return ListView.separated(
               padding: const EdgeInsets.all(20),
-              itemCount: docs.length,
+              itemCount: docs.length + 1,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                final doc = docs[index];
+                if (index == 0) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Manage your campaigns',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const Text(
+                        'Create work, manage assignments and review submissions.',
+                      ),
+                      const SizedBox(height: 12),
+                      if (BusinessWorkspaceSession.can('campaigns'))
+                        FilledButton.icon(
+                          key: const Key('campaign-list-create'),
+                          onPressed: onCreateCampaign,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create Campaign'),
+                        ),
+                    ],
+                  );
+                }
+                final doc = docs[index - 1];
                 final data = doc.data()!;
                 final result = resultSummary.forCampaign(doc.id);
                 final status =
@@ -174,7 +210,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
                     ),
                     title: Text(
                       data['campaignName']?.toString().trim().isNotEmpty == true
-                          ? data['campaignName'].toString()
+                          ? campaignDisplayName(data['campaignName'].toString())
                           : 'Untitled Campaign',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),

@@ -46,7 +46,7 @@ void main() {
     test('existing dashboard campaign status still renders', () {
       expect(dashboardSource, contains("'Active Campaigns'"));
       expect(dashboardSource, contains("'Needs Review'"));
-      expect(dashboardSource, contains("'Create Another Campaign'"));
+      expect(dashboardSource, contains("'Create Campaign'"));
     });
 
     test('Property Intelligence navigation remains available', () {

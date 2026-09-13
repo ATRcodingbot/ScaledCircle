@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../navigation/context_back_button.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../navigation/app_router.dart';
 import '../../services/business_onboarding_service.dart';
@@ -13,7 +15,11 @@ class CompleteBusinessProfileScreen extends StatefulWidget {
     this.save,
     this.onCompleted,
     this.searchPlaces,
+    this.editing = false,
+    this.expectedBusinessId,
   });
+  final bool editing;
+  final String? expectedBusinessId;
   final Future<Map<String, dynamic>> Function()? load;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic>)? save;
   final VoidCallback? onCompleted;
@@ -72,6 +78,10 @@ class _CompleteBusinessProfileScreenState
       final value = await (widget.load ?? BusinessOnboardingService().load)()
           .timeout(const Duration(seconds: 20));
       if (!mounted) return;
+      if (widget.expectedBusinessId != null &&
+          value['businessId'] != widget.expectedBusinessId) {
+        throw StateError('Business workspace changed');
+      }
       final p = Map<String, dynamic>.from(value['profile'] as Map? ?? {});
       for (final k in labels.keys) {
         final v = p[k];
@@ -108,9 +118,15 @@ class _CompleteBusinessProfileScreenState
   Future<void> _save() async {
     if (_busy || !(_form.currentState?.validate() ?? false)) return;
     // Also validate outside the lazy form viewport before calling the server.
-    if (_base?.selectionId.isNotEmpty != true ||
-        _areas.isEmpty ||
-        _areas.any((a) => a.selectionId.isEmpty)) {
+    final preserveLegacyGeography =
+        widget.editing &&
+        _state?['geography'] == null &&
+        _base == null &&
+        _areas.isEmpty;
+    if (!preserveLegacyGeography &&
+        (_base?.selectionId.isNotEmpty != true ||
+            _areas.isEmpty ||
+            _areas.any((a) => a.selectionId.isEmpty))) {
       setState(
         () => _error =
             'Search and select your Business base and service areas before saving.',
@@ -132,12 +148,23 @@ class _CompleteBusinessProfileScreenState
           .where((v) => v.isNotEmpty)
           .toList();
     }
-    p['serviceAreas'] = _areas.map((a) => a.fullAddress).toList();
-    p['geography'] = {
-      'baseSelectionId': _base!.selectionId,
-      'serviceAreaSelectionIds': _areas.map((a) => a.selectionId).toList(),
-    };
+    if (preserveLegacyGeography) {
+      p['serviceAreas'] = List<String>.from(
+        (_state?['profile'] as Map?)?['serviceAreas'] as List? ?? const [],
+      );
+    }
+    if (!preserveLegacyGeography) {
+      p['serviceAreas'] = _areas.map((a) => a.fullAddress).toList();
+      p['geography'] = {
+        'baseSelectionId': _base!.selectionId,
+        'serviceAreaSelectionIds': _areas.map((a) => a.selectionId).toList(),
+      };
+    }
     try {
+      if (widget.expectedBusinessId != null &&
+          FirebaseAuth.instance.currentUser?.uid != widget.expectedBusinessId) {
+        throw StateError('Business owner changed');
+      }
       final result = await (widget.save ?? BusinessOnboardingService().save)(
         p,
       ).timeout(const Duration(seconds: 20));
@@ -150,6 +177,8 @@ class _CompleteBusinessProfileScreenState
       ).showSnackBar(const SnackBar(content: Text('Business profile saved.')));
       if (widget.onCompleted != null) {
         widget.onCompleted!();
+      } else if (widget.editing && Navigator.canPop(context)) {
+        Navigator.pop(context);
       } else {
         AppNavigation.replace(context, '/');
       }
@@ -168,6 +197,9 @@ class _CompleteBusinessProfileScreenState
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
+      leading: widget.editing
+          ? const ContextBackButton(fallback: '/business', businessOnly: true)
+          : null,
       title: const Text('Business profile'),
       actions: [if (widget.load == null) const AuthenticatedSignOutButton()],
     ),
@@ -199,15 +231,19 @@ class _CompleteBusinessProfileScreenState
                   padding: const EdgeInsets.all(24),
                   children: [
                     Text(
-                      'Complete your Business profile',
+                      widget.editing
+                          ? 'Edit Business profile'
+                          : 'Complete your Business profile',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 12),
                     const Text('✓ Email verified'),
                     Text(_state!['email']?.toString() ?? ''),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Prepare your profile now. Funding, subscriptions and marketplace access remain subject to approval.',
+                    Text(
+                      widget.editing
+                          ? 'Keep your Business information current. Your saved service areas stay unchanged unless you select replacements.'
+                          : 'Prepare your profile now. Funding, subscriptions and marketplace access remain subject to approval.',
                     ),
                     const SizedBox(height: 20),
                     for (final e in labels.entries.where(
@@ -273,6 +309,11 @@ class _CompleteBusinessProfileScreenState
                         ),
                       ),
                     BusinessGeographyEditor(
+                      requireSelection:
+                          !(widget.editing &&
+                              _state?['geography'] == null &&
+                              _base == null &&
+                              _areas.isEmpty),
                       baseController: _baseSearch,
                       areaController: _areaSearch,
                       base: _base,
@@ -295,12 +336,19 @@ class _CompleteBusinessProfileScreenState
                       ),
                     FilledButton(
                       onPressed: _busy ? null : _save,
-                      child: Text(_busy ? 'Saving…' : 'Save and continue'),
+                      child: Text(
+                        _busy
+                            ? 'Saving…'
+                            : widget.editing
+                            ? 'Save profile'
+                            : 'Save and continue',
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Next: review any missing agreements, then see your account access status.',
-                    ),
+                    if (!widget.editing)
+                      const Text(
+                        'Next: review any missing agreements, then see your account access status.',
+                      ),
                   ],
                 ),
               ),

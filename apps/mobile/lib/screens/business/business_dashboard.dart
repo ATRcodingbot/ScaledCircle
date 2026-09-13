@@ -174,7 +174,7 @@ class _BusinessToday extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Business Assistant — Beta',
+            'Business activity summary',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
@@ -399,7 +399,11 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('The campaign editor could not open. Please try again.')),
+        SnackBar(
+          content: Text(
+            'The campaign editor could not open. Please try again.',
+          ),
+        ),
       );
     }
   }
@@ -595,11 +599,6 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                 ),
               );
             },
-          ),
-          TextButton.icon(
-            onPressed: () => AppNavigation.push(context, '/business/growth'),
-            icon: const Icon(Icons.apps_outlined),
-            label: const Text('Growth'),
           ),
           PopupMenuButton<String>(
             tooltip: 'Business navigation',
@@ -809,16 +808,27 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ),
                   children: [
                     const MarketStatusCard(business: true),
-                    Card(child: ListTile(leading: const Icon(Icons.calendar_month_outlined), title: const Text('Customers & Schedule'), subtitle: const Text('Leads, estimates, jobs and follow-ups'), trailing: const Icon(Icons.chevron_right), onTap: () => AppNavigation.push(context, '/business/schedule'))),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.calendar_month_outlined),
+                        title: const Text('Customers & Schedule'),
+                        subtitle: const Text(
+                          'Leads, estimates, jobs and follow-ups',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () =>
+                            AppNavigation.push(context, '/business/schedule'),
+                      ),
+                    ),
                     DashboardHero(
                       eyebrow: 'BUSINESS HOME',
                       title: awaitingReviewCount > 0
                           ? 'Your work is ready for review.'
                           : campaigns.isEmpty
-                          ? 'Create your first local campaign.'
-                          : 'Keep your campaigns moving.',
+                          ? 'Organize today. Plan your next move.'
+                          : 'Your Business, in one place.',
                       description:
-                          'Choose the area, define the work and pay, then review the tracked evidence when work is submitted.',
+                          'Keep customers, schedule and your team organized. Review work that needs attention, then choose your next growth move.',
                       primaryActionLabel: awaitingReviewCount > 0
                           ? 'Review Submitted Work'
                           : campaigns.isEmpty
@@ -869,6 +879,17 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    if (BusinessWorkspaceSession.can('campaigns') &&
+                        campaigns.isNotEmpty)
+                      OutlinedButton.icon(
+                        onPressed: () => _openCreateCampaign(
+                          context,
+                          BusinessWorkspaceSession.businessIdFor(user.uid),
+                        ),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Create Campaign'),
+                      ),
                     const SizedBox(height: 22),
 
                     ExpansionTile(
@@ -1003,7 +1024,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       height: 55,
                       child: ElevatedButton.icon(
                         icon: const Icon(Icons.add_location_alt_outlined),
-                        label: const Text('Create Another Campaign'),
+                        label: const Text('Create Campaign'),
                         onPressed: () async {
                           await _openCreateCampaign(
                             context,
@@ -1357,7 +1378,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             leading: Icon(entitled ? Icons.auto_awesome : Icons.lock_outline),
             title: const Text('Managed Growth — Beta'),
             subtitle: const Text(
-              'AI growth plans, social, advertising strategy, SEO, email, postcards, and coordinated field campaigns.',
+              'Coordinated growth planning and Social support. Business Assistant and Lead Generation are separate add-ons. Postcards and Business Email remain Private Beta.',
             ),
             trailing: Text(entitled ? 'Open' : 'Upgrade • \$999/mo'),
             onTap: () => Navigator.push(
@@ -1553,7 +1574,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             'Intelligence Beta.';
 
       case 'managed_growth':
-        return 'Everything in Scale plus coordinated AI marketing planning, content packages, and direct-mail management.';
+        return 'Everything in Scale, 10 total seats and coordinated growth planning and Social support. Private Beta / Invite Only. Business Assistant and Lead Generation are separate add-ons; Postcards remain Private Beta.';
 
       default:
         return 'Choose a Scaled Circle subscription plan.';

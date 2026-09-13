@@ -230,6 +230,12 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('owner Schedule root retains visible Back even with workspaceHome', (tester) async {
+    await tester.pumpWidget(MaterialApp(home:BusinessScheduleScreen(businessId:'owner',service:FakeOperations(),workspaceHome:true)));
+    await tester.pumpAndSettle();
+    expect(find.text('Back'),findsOneWidget);
+    expect(find.text('Workspace'),findsNothing);
+  });
   testWidgets('owner Back returns to the workspace that opened Schedule', (
     tester,
   ) async {

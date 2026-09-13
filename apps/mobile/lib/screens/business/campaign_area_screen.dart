@@ -1,3 +1,5 @@
+import '../../services/business_workspace_service.dart';
+import 'weather_alerts_screen.dart';
 import 'dart:math' as math;
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -165,7 +167,11 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('The saved area could not be loaded. Please retry before making changes.')),
+        SnackBar(
+          content: Text(
+            'The saved area could not be loaded. Please retry before making changes.',
+          ),
+        ),
       );
     }
   }
@@ -524,7 +530,9 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         region: 'us-east1',
       ).httpsCallable('analyzeCampaignZone');
 
-      final result = await callable.call({'zoneId': widget.campaignReference.id});
+      final result = await callable.call({
+        'zoneId': widget.campaignReference.id,
+      });
       if (!mounted) return false;
       await reviewProductionRouteAnalysis(context, result.data);
 
@@ -919,7 +927,11 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
 
       debugPrint('Unable to save campaign zone: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('The area could not be confirmed. Check the saved zones before trying again.')),
+        SnackBar(
+          content: Text(
+            'The area could not be confirmed. Check the saved zones before trying again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -1131,12 +1143,27 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
                     ),
                   ),
 
+                if (BusinessWorkspaceSession.can('intelligence'))
+                  ListTile(
+                    leading: const Icon(Icons.cloud_outlined),
+                    title: const Text('Weather Intelligence'),
+                    subtitle: const Text(
+                      'Plan field work around local weather. Review your saved weather coverage before choosing dates.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const WeatherAlertsScreen(),
+                      ),
+                    ),
+                  ),
                 SwitchListTile(
                   value: _propertyLayerEnabled,
                   secondary: const Icon(Icons.home_work_outlined),
                   title: const Text('Property Intelligence'),
                   subtitle: const Text(
-                    'Optional property-age and housing-stock information',
+                    'Use available property and local geography signals to help shape practical Scaler Zones. Select an area to review available information.',
                   ),
                   onChanged: _generatedArea.length < 3
                       ? null

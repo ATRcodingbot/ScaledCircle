@@ -1079,7 +1079,9 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
       automaticallyImplyLeading: false,
       leadingWidth: 92,
       leading:
-          widget.workspaceHome && !(ModalRoute.of(context)?.canPop ?? false)
+          widget.workspaceHome &&
+              data?['isOwner'] != true &&
+              !(ModalRoute.of(context)?.canPop ?? false)
           ? null
           : TextButton.icon(
               icon: const Icon(Icons.arrow_back),
@@ -1094,7 +1096,8 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
             ),
       title: Text(can('customersView') ? 'Customers & Schedule' : 'Schedule'),
       actions: [
-        if (widget.workspaceHome || data?['isOwner'] == false)
+        if (data?['isOwner'] != true &&
+            (widget.workspaceHome || data?['isOwner'] == false))
           const MemberWorkspaceMenu(),
         IconButton(
           tooltip: 'Notification choices',

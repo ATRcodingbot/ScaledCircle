@@ -72,6 +72,41 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setupFirebaseCoreMocks();
   setUpAll(() async => Firebase.initializeApp());
+  testWidgets(
+    'owner edit preserves exact legacy areas without reconfirming geography',
+    (t) async {
+      Map<String, dynamic>? saved;
+      final record = profile();
+      (record['profile'] as Map)['serviceAreas'] = [
+        'Baltimore County, Maryland',
+        'Anne Arundel County, Maryland',
+      ];
+      await t.pumpWidget(
+        MaterialApp(
+          home: CompleteBusinessProfileScreen(
+            editing: true,
+            load: () async => record,
+            save: (p) async {
+              saved = p;
+              return {'profileComplete': true};
+            },
+            onCompleted: () {},
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Edit Business profile'), findsOneWidget);
+      await show(t, find.text('Save profile'));
+      await t.tap(find.text('Save profile'));
+      await t.pumpAndSettle();
+      expect(saved?['serviceAreas'], [
+        'Baltimore County, Maryland',
+        'Anne Arundel County, Maryland',
+      ]);
+      expect(saved?.containsKey('geography'), false);
+      expect(t.takeException(), isNull);
+    },
+  );
   for (final width in [390.0, 1100.0]) {
     testWidgets(
       'canonical base/multiple areas, duplicate/removal and parent save at $width',

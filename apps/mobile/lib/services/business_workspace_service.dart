@@ -102,6 +102,7 @@ abstract final class BusinessWorkspaceSession {
   static String businessIdFor(String uid) =>
       value?['actorUid'] == uid ? value!['businessId'].toString() : uid;
   static bool can(String permission) =>
+      value != null &&
       value?['actorUid'] == FirebaseAuth.instance.currentUser?.uid &&
       (value?['permissions'] as List? ?? []).contains(permission);
   static void clear() => value = null;
