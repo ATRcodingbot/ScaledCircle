@@ -20,14 +20,15 @@ function createReconciler(options){
     const prior=(await db.doc('referralLiabilities/'+hash('ReferralLiabilityV1',type,sourceId)).get()).data();
     const posted=earning?.status==='available' && earning.scalerId===settlement.scalerId &&
       earning.zoneId===zoneId && earning.amountCents===settlement.earnedWorkerCents;
-    if(!prior && (!result.qualifies||!posted))return {status:'not_qualified',reason:result.reason||'worker_earning_not_settled'};
+    const reason=result.qualifies&&!posted?'worker_earning_not_settled':result.reason;
+    if(!prior && (!result.qualifies||!posted))return {status:'not_qualified',reason};
     const basis=result.qualifies&&posted?settlement.earnedWorkerCents:0;
     const sourceNotificationId='referral_earned_'+require('node:crypto').createHash('sha256').update('ScalerReferralOnePercentV1:'+zoneId).digest('hex');
     const notice=await read('notifications/'+sourceNotificationId);
     const e={type,sourceId,...(notice?{sourceNotificationId}:{}),beneficiaryUid:attribution.affiliateUid,referredId:settlement.scalerId,
       relationshipId:settlement.scalerId,grossBasisCents:prior?.grossBasisCents??settlement.earnedWorkerCents,
       currentBasisCents:basis,paidAtMillis:prior?.paidAtMillis??settlement.createdAt.toMillis(),
-      reason:result.reason,authorityDigest:hash(zoneId,basis,docs.map(d=>[d.ref.path,d.updateTime?.toMillis()||null]))};
+      reason,authorityDigest:hash(zoneId,basis,docs.map(d=>[d.ref.path,d.updateTime?.toMillis()||null]))};
     return ledger.reconcile(e,{expectedDocuments:docs});
   }};
 }

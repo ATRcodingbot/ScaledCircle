@@ -1,4 +1,5 @@
 import 'screens/business/growth_agents_screen.dart';
+import 'screens/admin/staging_payment_certification_screen.dart';
 import 'screens/business/business_email_screen.dart';
 import 'screens/business/business_schedule_screen.dart';
 import 'screens/business/business_growth_home.dart';
@@ -186,6 +187,11 @@ class ScaledCircleApp extends StatelessWidget {
         settings: settings,
         builder: (_) => const ScalerFunnelScreen(),
       );
+    }
+    if (route?.path == '/staging/payment-certification' && AppEnvironmentConfig.isStaging) {
+      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
+        routeName: settings.name!, audience: ProtectedRouteAudience.jobRoomParticipant,
+        builder: (_, _) => const StagingPaymentCertificationScreen()));
     }
     if (route?.path == '/business/schedule') {
       return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(

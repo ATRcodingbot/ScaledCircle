@@ -31,6 +31,30 @@ before(async () => {
 after(async () => environment?.cleanup());
 const db = (uid) => environment.authenticatedContext(uid, {email_verified: true}).firestore();
 
+test('non-GPS certification is private and its task, contract, submission and money stay server-only',async()=>{
+ const id='staging_payment_certification_v1',zone='staging_payment_certification_job_v1';
+ await environment.withSecurityRulesDisabled(async ctx=>{
+  const d=ctx.firestore();
+  await d.doc('internalCertificationAuthorities/'+id).set({projectId:'scaledcircle-staging',immutable:true,
+   certificationFixture:true,campaignId:id,zoneId:zone,businessUid:'business',scalerUid:'scaler'});
+  await d.doc('campaigns/'+id).set({businessId:'business',certificationFixture:true,status:'certification_draft'});
+  await d.doc('campaignDiscovery/'+id).set({businessId:'business',status:'certification_draft'});
+  await d.doc('campaignZones/'+zone).set({businessId:'business',campaignId:id,assignedScalerId:'scaler',status:'submitted'});
+  await d.doc('assignmentCompensations/'+zone).set({businessId:'business',campaignId:id,scalerId:'scaler',immutable:true,baseAmountCents:500});
+ });
+ await assertSucceeds(db('scaler').doc('campaignDiscovery/'+id).get());
+ await assertSucceeds(db('scaler').doc('campaignZones/'+zone).get());
+ for(const path of ['campaigns/'+id,'campaignDiscovery/'+id,'campaignZones/'+zone,'assignmentCompensations/'+zone,
+  'internalCertificationAuthorities/'+id,'stagingPaymentCertifications/payment_flow_v1']) {
+  await assertFails(db('other').doc(path).get());
+  await assertFails(environment.unauthenticatedContext().firestore().doc(path).get());
+  await assertFails(db('business').doc(path).set({businessId:'business',status:'draft',basePay:1}));
+ }
+ await assertFails(db('business').doc('campaigns/'+id).update({description:'rewrite task'}));
+ await assertFails(db('scaler').doc('stagingPaymentCertifications/payment_flow_v1').set({status:'approved'}));
+ await assertFails(db('business').doc('campaignZones/'+zone).update({status:'assigned'}));
+});
+
 test('Scaler Privacy inspection is owner-only, exact-version and read-only',async()=>{
  const path='legalConsents/scaler_privacy_privacy-2026-08-v1';
  await assertSucceeds(db('scaler').doc(path).get());

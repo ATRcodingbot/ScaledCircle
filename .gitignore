@@ -119,6 +119,7 @@ unlinked_spec.ds
 # Coverage
 coverage/
 /functions-referral-launch/
+/functions-staging-payment-certification/
 /tmp/
 /output/
 
