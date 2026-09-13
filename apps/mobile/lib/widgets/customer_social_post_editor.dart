@@ -10,9 +10,11 @@ class CustomerSocialPostEditor extends StatefulWidget {
     super.key,
     required this.post,
     required this.service,
+    this.onSchedule,
   });
   final Map<String, dynamic> post;
   final SocialOperationsService service;
+  final Future<void> Function(Map<String, dynamic>)? onSchedule;
   @override
   State<CustomerSocialPostEditor> createState() =>
       _CustomerSocialPostEditorState();
@@ -33,7 +35,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   late DateTime? _time = DateTime.tryParse(
     _post['scheduledFor']?.toString() ?? '',
   )?.toLocal();
-  bool _busy = false, _changed = false;
+  bool _busy = false, _changed = false, _editing = false;
   late bool _textOnly =
       _post['reviewedPost']?['variant']?['mediaRequirement'] == 'none';
   String? _error;
@@ -43,6 +45,32 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     'provider': _post['provider'],
     'version': _post['version'],
   };
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _run(_prepare);
+    });
+  }
+
+  Future<void> _prepare() async {
+    final result = await widget.service
+        .preparePost({
+          ..._identity,
+          'action': 'auto',
+          'confirmOwnerExecution': true,
+        })
+        .timeout(const Duration(seconds: 90));
+    await _refresh();
+    if (mounted) {
+      setState(
+        () => _quality = Map<String, dynamic>.from(
+          result['quality'] as Map? ?? {},
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _copy.dispose();
@@ -60,6 +88,11 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     try {
       await action();
     } catch (_) {
+      try {
+        await _refresh().timeout(const Duration(seconds: 10));
+      } catch (_) {
+        // Keep the current text when the authoritative readback is unavailable.
+      }
       if (mounted) {
         setState(
           () => _error =
@@ -73,7 +106,19 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
 
   Future<void> _refresh() async {
     final fresh = await widget.service.previewPost(_identity);
-    if (mounted) setState(() => _post = {...fresh, 'itemId': _post['itemId']});
+    if (mounted) {
+      setState(() {
+        _post = {...fresh, 'itemId': _post['itemId']};
+        if (!_changed) {
+          _copy.text =
+              fresh['reviewedPost']?['variant']?['copy']?.toString() ??
+              _copy.text;
+          _time = DateTime.tryParse(
+            fresh['scheduledFor']?.toString() ?? '',
+          )?.toLocal();
+        }
+      });
+    }
     socialReviewRevision.value++;
   }
 
@@ -82,7 +127,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
       setState(() => _error = 'Choose a future time.');
       return;
     }
-    await widget.service.preparePost({
+    final result = await widget.service.preparePost({
       ..._identity,
       'action': 'save',
       'copy': _copy.text,
@@ -95,7 +140,8 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     if (mounted) {
       setState(() {
         _changed = false;
-        _quality = null;
+        _quality = Map<String, dynamic>.from(result['quality'] as Map? ?? {});
+        _editing = false;
       });
     }
   }
@@ -215,7 +261,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
         ),
       );
       if (accepted != true) return;
-      await widget.service.preparePost({
+      final result = await widget.service.preparePost({
         ..._identity,
         'action': 'attach',
         'assetId': selected['assetId'],
@@ -225,7 +271,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
       await _refresh();
       if (mounted) {
         setState(() {
-          _quality = null;
+          _quality = Map<String, dynamic>.from(result['quality'] as Map? ?? {});
           _textOnly = false;
         });
       }
@@ -237,24 +283,32 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   Widget build(BuildContext context) {
     final variant = _post['reviewedPost']?['variant'] as Map? ?? {};
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _post['provider'] == 'instagram'
-              ? 'Prepare Instagram post'
-              : 'Prepare Facebook post',
-        ),
-      ),
+      appBar: AppBar(title: const Text('Post Preview')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
             const Text(
-              'Prepare your post',
+              'Post Preview',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const Text(
-              'Saving changes or checking quality does not approve, schedule or publish anything.',
+              'Your exact approval controls publication. Creative preparation and quality checks run automatically.',
             ),
+            if (_busy) const LinearProgressIndicator(),
+            Text(_post['provider'] == 'instagram' ? 'Instagram' : 'Facebook'),
+            if (!_editing) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(_copy.text),
+              ),
+              Text('Call to action: ${_cta.text}'),
+              Text('Destination: ${_destination.text}'),
+              TextButton(
+                onPressed: _busy ? null : () => setState(() => _editing = true),
+                child: const Text('Edit Post'),
+              ),
+            ],
             if (_error != null) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -265,29 +319,47 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 child: const Text('Reload saved status (keep my text)'),
               ),
             ],
-            TextField(
-              controller: _copy,
-              minLines: 4,
-              maxLines: 10,
-              onChanged: (_) => setState(() => _changed = true),
-              decoration: const InputDecoration(labelText: 'Post text'),
-            ),
-            TextField(
-              controller: _cta,
-              onChanged: (_) => setState(() => _changed = true),
-              decoration: const InputDecoration(labelText: 'Call to action'),
-            ),
-            TextField(
-              controller: _destination,
-              keyboardType: TextInputType.url,
-              onChanged: (_) => setState(() => _changed = true),
-              decoration: const InputDecoration(
-                labelText: 'Destination (https://)',
+            for (final image
+                in (_post['reviewedPost']?['images'] as List? ?? [])
+                    .whereType<Map>())
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Image.network(
+                  image['url'].toString(),
+                  height: 220,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, error, stack) => const Text(
+                    'Image preview unavailable. Reload before approval.',
+                  ),
+                ),
               ),
-            ),
+            if (_editing)
+              TextField(
+                key: const ValueKey('social-post-copy'),
+                controller: _copy,
+                minLines: 4,
+                maxLines: 10,
+                onChanged: (_) => setState(() => _changed = true),
+                decoration: const InputDecoration(labelText: 'Post text'),
+              ),
+            if (_editing)
+              TextField(
+                controller: _cta,
+                onChanged: (_) => setState(() => _changed = true),
+                decoration: const InputDecoration(labelText: 'Call to action'),
+              ),
+            if (_editing)
+              TextField(
+                controller: _destination,
+                keyboardType: TextInputType.url,
+                onChanged: (_) => setState(() => _changed = true),
+                decoration: const InputDecoration(
+                  labelText: 'Destination (https://)',
+                ),
+              ),
             const SizedBox(height: 12),
             Text(
-              'Proposed time: ${socialCustomerTime(context, _time?.toIso8601String())}',
+              'Proposed time: ${socialCustomerTime(context, _time?.isAfter(DateTime.now()) == true ? _time?.toIso8601String() : _post['proposedFutureTime'])}',
             ),
             TextButton.icon(
               onPressed: _busy ? null : _chooseTime,
@@ -307,56 +379,45 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                         _changed = true;
                       }),
               ),
-            FilledButton(
-              onPressed: _busy ? null : () => _run(_save),
-              child: Text(_busy ? 'Working…' : 'Save draft changes'),
-            ),
+            if (_changed)
+              FilledButton(
+                onPressed: _busy ? null : () => _run(_save),
+                child: Text(_busy ? 'Working…' : 'Save draft changes'),
+              ),
             const SizedBox(height: 20),
             Text(
               variant['mediaRevisionId'] != null
                   ? 'Creative prepared'
-                  : 'Creative not prepared',
+                  : _textOnly
+                  ? 'Text-only post'
+                  : 'No suitable approved image was found. Generate or upload a creative, or use text only where supported.',
             ),
-            for (final image
-                in (_post['reviewedPost']?['images'] as List? ?? [])
-                    .whereType<Map>())
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Image.network(
-                  image['url'].toString(),
-                  height: 220,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, error, stack) => const Text(
-                    'Image preview unavailable. Reload before approval.',
-                  ),
-                ),
-              ),
             OutlinedButton(
               onPressed: _busy || _changed ? null : () => _run(_chooseImage),
-              child: const Text('Choose creative'),
+              child: const Text('Upload / Replace Image'),
             ),
-            if (_changed)
-              const Text(
-                'Save your draft changes before choosing an image or checking quality.',
-              ),
             OutlinedButton(
               onPressed: _busy || _changed
                   ? null
                   : () => _run(() async {
-                      final q = await widget.service.preparePost({
-                        ..._identity,
-                        'action': 'assess',
-                      });
-                      await _refresh();
-                      if (mounted) setState(() => _quality = q);
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BrandAssetsScreen(),
+                        ),
+                      );
+                      if (mounted) await _chooseImage();
                     }),
-              child: const Text('Review content quality'),
+              child: const Text('Generate / Regenerate Creative'),
             ),
+            if (_changed)
+              const Text(
+                'Save your changes to refresh the preview and automatic quality checks.',
+              ),
             if (_quality != null) ...[
               Text(
                 _quality!['readyToPublish'] == true
-                    ? 'Content quality review passed'
-                    : 'Content needs improvement',
+                    ? 'Content checks passed'
+                    : 'Post needs changes before approval',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               for (final v
@@ -380,13 +441,16 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 ),
               ),
             const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: _busy ? null : () => Navigator.pop(context),
-              child: Text(
-                _post['ready'] == true
-                    ? 'Continue to post review'
-                    : 'Back to draft review',
+            if (_post['ready'] == true &&
+                !_changed &&
+                widget.onSchedule != null)
+              FilledButton(
+                onPressed: _busy ? null : () => widget.onSchedule!(_post),
+                child: const Text('Approve & Schedule'),
               ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Back to Content'),
             ),
           ],
         ),

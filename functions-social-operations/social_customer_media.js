@@ -4,10 +4,15 @@ const {validate}=require('./social_customer_editor');
 const social=require('./social_operations');
 const meta=require('./social_meta_candidate');
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
+function sourceRights(revision,uid){return revision?.rightsAttestation===true||
+  revision?.origin==='generated_service_concept'&&revision.createdBy==='creative-media-core'&&
+  revision.generatedContentAcknowledged===true&&revision.approvedBy===uid&&revision.moderationStatus==='passed'&&
+  Array.isArray(revision.moderationFlags)&&revision.moderationFlags.length===0&&
+  /^visual_job_[a-f0-9]+$/.test(revision.generationJobId||'')&&typeof revision.truthfulnessDisclosure==='string'&&revision.truthfulnessDisclosure.length>20;}
 function assertSource({uid,asset,revision,assetId,revisionId}) {
   if(!/^[A-Za-z0-9_-]{1,160}$/.test(assetId||'')||!/^[A-Za-z0-9_-]{1,160}$/.test(revisionId||'')||
     asset?.businessUid!==uid||asset.removed===true||asset.approvedRevisionId!==revisionId||
-    revision?.businessUid!==uid||revision.status!=='ready'||revision.approvalStatus!=='approved'||revision.rightsAttestation!==true||
+    revision?.businessUid!==uid||revision.status!=='ready'||revision.approvalStatus!=='approved'||!sourceRights(revision,uid)||
     !revision.altText?.trim()||!revision.privateOriginalPath?.startsWith(`business_media_private/${uid}/${assetId}/${revisionId}/`)||
     !/^[a-f0-9]{64}$/.test(revision.contentHash||'')||!revision.storageGeneration)throw Error('Choose a current approved Business image.');
 }
@@ -33,7 +38,7 @@ async function assertDeliveryAuthority({db,read=ref=>ref.get(),uid,revision}) {
   const [asset,source]=await Promise.all([read(ar),read(ar.collection('revisions').doc(record.revisionId))]);
   if(asset.data()?.businessUid!==uid||asset.data()?.removed===true||asset.data()?.approvedRevisionId!==record.revisionId||
     source.data()?.businessUid!==uid||source.data()?.status!=='ready'||source.data()?.approvalStatus!=='approved'||
-    source.data()?.rightsAttestation!==true)throw Error('Image approval needs review.');
+    !sourceRights(source.data(),uid))throw Error('Image approval needs review.');
 }
 function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage=derivative}) {
   if(!['scaled-circle','scaledcircle-staging'].includes(project))throw Error('Media environment unavailable.');
@@ -74,9 +79,11 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
         const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
         if(jobs.size>100||jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))
           throw Error('Review the existing scheduled post before replacing its image.');
+        const disclosure=source.revision.origin==='generated_service_concept'?source.revision.truthfulnessDisclosure:null;
         const next=social.contentItemVersion({businessUid:uid,planId:current.planId,previousVersion:item.data().currentVersion,now:now(),item:{...current,
           variants:current.variants.map(v=>v.provider===input.provider?{...v,mediaAssetId:input.assetId,mediaRevisionId:prepared.id,
-            mediaRequirement:'approved_image',format:'feed',altText:source.revision.altText}:v)}});
+            mediaRequirement:'approved_image',format:'feed',altText:source.revision.altText,
+            copy:disclosure&&!v.copy.includes(disclosure)?v.copy+'\n\n'+disclosure:v.copy}:v)}});
         if(delivery.exists&&(delivery.data().businessUid!==uid||delivery.data().sha256!==image.sha256))throw Error('Image identity conflict.');
         if(!delivery.exists)tx.create(db.doc('customerSocialMedia/'+deliveryId),{businessUid:uid,status:'approved_for_social',
           path,generation:String(stored.generation),sha256:image.sha256,bytes:image.bytes.length,
@@ -94,11 +101,11 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
       if(!enabledUids.includes(record.businessUid))return null;
       const asset=(await db.doc(`businessMediaLibraries/${record.businessUid}/mediaAssets/${record.assetId}`).get()).data();
       const revision=(await db.doc(`businessMediaLibraries/${record.businessUid}/mediaAssets/${record.assetId}/revisions/${record.revisionId}`).get()).data();
-      if(asset?.removed===true||asset?.businessUid!==record.businessUid||asset?.approvedRevisionId!==record.revisionId||revision?.businessUid!==record.businessUid||revision?.status!=='ready'||revision?.approvalStatus!=='approved'||revision?.rightsAttestation!==true)return null;
+      if(asset?.removed===true||asset?.businessUid!==record.businessUid||asset?.approvedRevisionId!==record.revisionId||revision?.businessUid!==record.businessUid||revision?.status!=='ready'||revision?.approvalStatus!=='approved'||!sourceRights(revision,record.businessUid))return null;
       const [bytes]=await storage().file(record.path,{generation:record.generation}).download();
       if(bytes.length!==record.bytes||hash(bytes)!==record.sha256)throw Error('Image integrity failed.');
       return bytes;
     },
   };
 }
-module.exports={assertSource,derivative,createMedia,assertDeliveryAuthority};
+module.exports={assertSource,derivative,createMedia,assertDeliveryAuthority,sourceRights};

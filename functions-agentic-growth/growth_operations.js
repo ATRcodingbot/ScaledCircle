@@ -66,7 +66,8 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
   async function areaScope(){if(customer)return geography.serviceAreaScope((await db.doc('discoveryPreferences/'+target).get()).data(),target);const registry=await db.doc('internalGrowthWorkspaces/'+target).get();
     if(registry.exists)return internalWorkspace.scope(registry.data(),target);
     return geography.serviceAreaScope((await db.doc('discoveryPreferences/'+target).get()).data(),target,areaPriorityIds);}
-  async function check(){if(!customer&&project!=='scaledcircle-staging'&&!project?.startsWith('demo-'))fail('Staging dogfood only.');if(!target)fail('Dogfood binding required.');const h=(await db.doc('agentHealth/'+target).get()).data();if(!h||h.businessUid!==target||h.externalActionsEnabled!==false||h.killSwitchActive!==true)fail('Existing Supervisor safety state must be preserved.');if(h.researchPaused===true)fail('Research is paused by the Supervisor.');return h;}
+  const safeResearchState=h=>h?.externalActionsEnabled===false&&(h.killSwitchActive===true||customer&&h.workspaceKind==='customer'&&h.socialExecutionMode==='owner_approval_required'&&h.killSwitchActive===false);
+  async function check(){if(!customer&&project!=='scaledcircle-staging'&&!project?.startsWith('demo-'))fail('Staging dogfood only.');if(!target)fail('Dogfood binding required.');const h=(await db.doc('agentHealth/'+target).get()).data();if(!h||h.businessUid!==target||!safeResearchState(h))fail('Existing Supervisor safety state must be preserved.');if(h.researchPaused===true)fail('Research is paused by the Supervisor.');return h;}
   async function run() {
     await check();const initialScope=await areaScope();
     const initialPreferences=opportunityPreferences.normalize((await db.doc('agentCommunicationPreferences/'+target).get()).data()?.opportunities);
@@ -92,7 +93,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
     const results=[];
     for(const source of selected){try{results.push({source,observation:analyzeSource(source,source.evidenceHtml||await readSource(source),now())});}catch(_){results.push({source,error:'Public source could not be verified; retry on the next research cycle.'});}}
     await db.runTransaction(async tx=>{
-      const current=await tx.get(ref),health=await tx.get(db.doc('agentHealth/'+target));if(current.data()?.claim!==claim||health.data()?.researchPaused===true||health.data()?.externalActionsEnabled!==false||health.data()?.killSwitchActive!==true)fail('Research commit held by Supervisor.');
+      const current=await tx.get(ref),health=await tx.get(db.doc('agentHealth/'+target));if(current.data()?.claim!==claim||health.data()?.researchPaused===true||!safeResearchState(health.data()))fail('Research commit held by Supervisor.');
       const currentWorkspace=await tx.get(db.doc('internalGrowthWorkspaces/'+target));
       if(scopeVersion!==null&&currentWorkspace.data()?.revision!==scopeVersion)fail('Territories changed during research. Retry using the current priority.');
       const records=[];for(const result of results){const id='growth_prospect_'+hash([target,result.source.key]).slice(0,40),p=db.doc('agentProspects/'+id);records.push({...result,id,ref:p,old:await tx.get(p)});}

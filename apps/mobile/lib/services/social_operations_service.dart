@@ -1,4 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'business_workspace_service.dart';
 
 class SocialOperationsWorkspace {
   const SocialOperationsWorkspace(this.data);
@@ -49,6 +51,15 @@ class SocialOperationsService {
     : _providedFunctions = functions;
 
   final FirebaseFunctions? _providedFunctions;
+  Map<String, dynamic> _workspace(Map<String, dynamic> input) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return {
+      ...input,
+      if (uid != null)
+        'businessId': BusinessWorkspaceSession.businessIdFor(uid),
+    };
+  }
+
   FirebaseFunctions get _functions =>
       _providedFunctions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
 
@@ -56,7 +67,7 @@ class SocialOperationsService {
       Map<String, dynamic>.from(
         (await _functions
                     .httpsCallable('prepareCustomerSocialPostV1')
-                    .call(input))
+                    .call(_workspace(input)))
                 .data
             as Map,
       );
@@ -65,7 +76,7 @@ class SocialOperationsService {
       Map<String, dynamic>.from(
         (await _functions
                     .httpsCallable('previewCustomerSocialPostV1')
-                    .call(post))
+                    .call(_workspace(post)))
                 .data
             as Map,
       );
@@ -74,7 +85,7 @@ class SocialOperationsService {
   ) async => Map<String, dynamic>.from(
     (await _functions
                 .httpsCallable('approveAndScheduleCustomerSocialPostV1')
-                .call(post))
+                .call(_workspace(post)))
             .data
         as Map,
   );
@@ -82,7 +93,7 @@ class SocialOperationsService {
   Future<SocialOperationsWorkspace> load() async {
     final result = await _functions
         .httpsCallable('getSocialOperationsWorkspace')
-        .call();
+        .call(_workspace({}));
     return SocialOperationsWorkspace(
       Map<String, dynamic>.from(result.data as Map),
     );

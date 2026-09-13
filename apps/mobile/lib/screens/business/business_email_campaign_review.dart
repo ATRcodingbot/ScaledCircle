@@ -415,17 +415,29 @@ class _ReviewState extends State<BusinessEmailCampaignReview> {
     final results = campaign['results'] as Map? ?? {},
         approved = campaign['approved'] == true;
     return Scaffold(
-      appBar: AppBar(title: const Text('Review Campaign · Private Beta')),
+      appBar: AppBar(title: const Text('Review Campaign')),
       body: CustomerPageBody(
         child: ListView(
           controller: scroll,
           padding: const EdgeInsets.all(20),
           children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(label: Text('Private Beta')),
+            ),
             Text(
               emailCampaignStatus(campaign['status']),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             if (busy) const LinearProgressIndicator(),
+            if (approved)
+              Text(
+                '${results['sent'] ?? 0} of ${audience.length} sent · ${results['queued'] ?? 0} queued',
+              ),
+            if (campaign['nextSendingWindow'] != null)
+              Text(
+                'Next sending window: ${campaignLocalTime(context, campaign['nextSendingWindow'])}',
+              ),
             if (feedback != null)
               Semantics(liveRegion: true, child: Text(feedback!)),
             Text('From: ${campaign['sender']}'),
@@ -504,6 +516,8 @@ class _ReviewState extends State<BusinessEmailCampaignReview> {
                 for (final entry in {
                   'Audience': audience.length,
                   'Sent': results['sent'],
+                  'Queued': results['queued'],
+                  'Needs Attention': results['needsAttention'],
                   'Replies': results['replies'],
                   'Recorded bounces': results['bounced'],
                   'Unsubscribes': results['unsubscribed'],

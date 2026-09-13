@@ -1,3 +1,4 @@
+import '../../widgets/social_performance_panel.dart';
 import '../../models/social_plan_presentation.dart';
 import '../../services/business_email_service.dart';
 import '../../services/business_workspace_service.dart';
@@ -13,6 +14,8 @@ import '../../navigation/context_back_button.dart';
 import '../../navigation/app_router.dart';
 import '../../widgets/customer_page_body.dart';
 import '../../widgets/growth_opportunity_preferences_card.dart';
+import '../../widgets/premium_agent_workspace.dart';
+import 'business_growth_profile_wizard.dart';
 
 class GrowthAgentsScreen extends StatefulWidget {
   const GrowthAgentsScreen({
@@ -52,6 +55,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         'updateGrowthCommunicationPreferencesV1': 'preferences',
         'reviewGrowthProspectV1': 'review',
         'initializeCustomerGrowth': 'initialize',
+        'reviewRecommendation': 'reviewRecommendation',
       };
       final operation = operations[name];
       if (operation == null) throw StateError('Unsupported customer action');
@@ -244,7 +248,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     );
   }
 
-  void _reviewPeople(String type) {
+  void _reviewPeople(String type, [String? prospectId]) {
     final rows = _list(_data?['prospects'])
         .where(
           (p) => type == 'workforce_recruiter'
@@ -254,6 +258,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
               : p['kind'] != 'scaler' &&
                     p['opportunityType'] != 'recruitment_channel',
         )
+        .where((p) => prospectId == null || p['id'] == prospectId)
         .toList();
     showDialog<void>(
       context: context,
@@ -473,6 +478,54 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           : 'High-fit accounts',
   };
   Widget _content(BuildContext context) {
+    if (widget.customer && _data!['initialized'] == true) {
+      return PremiumAgentWorkspace(
+        data: _data!,
+        focus: widget.focusId,
+        busy: _busy,
+        error: _error,
+        onOpen: (route) async {
+          if (route == '/business/growth-profile') {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => BusinessGrowthProfileWizard(
+                  initialProfile: Map<String, dynamic>.from(
+                    _data?['businessContext']?['profile'] as Map? ?? {},
+                  ),
+                ),
+              ),
+            );
+            if (mounted) await _load();
+          } else {
+            AppNavigation.push(
+              context,
+              route == '/business/customers' ? '/business/schedule' : route,
+            );
+          }
+        },
+        onResearch: _research,
+        onReviewPeople: _reviewPeople,
+        onPerformance: _performance,
+        onRecommendation: (report, decision) =>
+            _action('reviewRecommendation', {
+              'reportIds': (report['history'] as List)
+                  .map((r) => r['id'])
+                  .toList(),
+              'decision': decision,
+            }),
+        preferences: GrowthOpportunityPreferencesCard(
+          values: Map<String, dynamic>.from(
+            _data?['preferences']?['opportunities'] as Map? ?? {},
+          ),
+          onSave: (values) async {
+            await _call('updateGrowthCommunicationPreferencesV1', {
+              'opportunities': values,
+            });
+            await _load();
+          },
+        ),
+      );
+    }
     final d = _data!, s = Map<String, dynamic>.from(d['summary'] as Map? ?? {});
     final prospects = _list(d['prospects']);
     if (widget.focusId == 'lead_generation') {
@@ -960,38 +1013,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         'Plan status',
         social['review']?['title'] ?? 'Checking saved status',
       ),
-      _line('Saved provider baselines', _list(social['baselines']).length),
-      for (final baseline in _list(social['baselines']))
-        ExpansionTile(
-          title: Text(
-            '${baseline['provider'] == 'facebook' ? 'Facebook' : 'Instagram'} baseline',
-          ),
-          subtitle: Text(
-            'Baseline captured · ${_time(baseline['observedAt'])}',
-          ),
-          expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final entry
-                in (baseline['metrics'] as Map? ?? {}).entries.where(
-                  (e) => _metricName(e.key.toString()) != null,
-                ))
-              _line(
-                _metricName(entry.key.toString())!,
-                entry.value is Map
-                    ? (entry.value['value'] ?? 'Unavailable')
-                    : 'Unavailable',
-              ),
-            _line(
-              'Recent content observed',
-              baseline['latest'] is List
-                  ? _list(baseline['latest']).length
-                  : 'Unavailable',
-            ),
-            const Text(
-              'Provider metrics keep their original period. Missing values remain unavailable; reach is not summed across days.',
-            ),
-          ],
-        ),
+      SocialPerformancePanel(data: social['performance'] as Map? ?? {}),
       const Text(
         'Existing account history belongs to your Business. It is not counted as ScaledCircle publication.',
       ),
@@ -1029,17 +1051,4 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
       ),
     ];
   }
-
-  String? _metricName(String key) => const {
-    'followers': 'Followers',
-    'impressions': 'Impressions',
-    'views': 'Views',
-    'reach': 'Reach',
-    'mediaCount': 'Account media count',
-    'page_media_view': 'Page media views',
-    'page_post_engagements': 'Page post engagements',
-    'page_views_total': 'Page views',
-    'total_interactions': 'Interactions',
-    'profile_links_taps': 'Profile link taps',
-  }[key];
 }

@@ -60,7 +60,7 @@ test('suppression after review reduces audience and suppression discovered just 
 test('hour and day limits are shared; scheduled approval cannot execute early or expand its saved audience',async()=>{
  const d=await prepare(7);await call('approveCampaign',approval(d,clock+60000));assert.equal(sends.length,0);
  clock+=60001;for(let i=0;i<4;i++)await service.syncCampaigns({auth:{uid:'owner'},data:{businessId:'owner'}});assert.equal(sends.length,5);
- let view=await call('reviewCampaign',{campaignId:'review'});assert.equal(view.status,'partially_sent');assert.equal(view.results.sent,5);
+ let view=await call('reviewCampaign',{campaignId:'review'});assert.equal(view.status,'sending');assert.equal(view.results.sent,5);assert.equal(view.results.queued,2);assert.equal(view.nextSendingWindow,Math.ceil(clock/3600000)*3600000);
  clock+=3600000;await service.syncCampaigns({auth:{uid:'owner'},data:{businessId:'owner'}});assert.equal(sends.length,7);
  view=await call('reviewCampaign',{campaignId:'review'});assert.equal(view.status,'sent');assert.equal(view.results.delivered,null);assert.equal(view.results.opens,null);
 });

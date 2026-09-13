@@ -4,7 +4,7 @@ import 'package:flutter_app/widgets/customer_social_plan_card.dart';
 
 void main() {
   for (final ready in [false, true]) {
-    testWidgets('post scheduling readiness $ready is explicit', (tester) async {
+    testWidgets('ready=$ready enters preview without approving from the list', (tester) async {
       tester.view.physicalSize = const Size(360, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -22,7 +22,8 @@ void main() {
             body: SingleChildScrollView(
               child: CustomerSocialPlanCard(
                 initiallyExpanded: true,
-                onSchedulePost: (_) => taps++,
+                onSchedulePost: (_) => fail('The list must not approve a post'),
+                onPreparePost: (_) => taps++,
                 plan: {
                   'status': 'approved',
                   'planVersion': 1,
@@ -37,6 +38,7 @@ void main() {
                           'copy': 'Exact post copy.',
                           'mediaRequirement': 'none',
                           'scheduling': {
+                            'version': 1,
                             'ready': ready,
                             'reasons': ready
                                 ? []
@@ -57,19 +59,11 @@ void main() {
           ),
         ),
       );
-      await tester.ensureVisible(find.text('Post to review'));
+      await tester.ensureVisible(find.text('Preview Post'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Post to review'));
-      await tester.pumpAndSettle();
-      if (ready) {
-        await tester.ensureVisible(find.text('Approve & Schedule'));
-        await tester.tap(find.text('Approve & Schedule'));
-        expect(taps, 1);
-      } else {
-        expect(find.text('Choose a future publish time.'), findsOneWidget);
-        expect(find.text('Approve & Schedule'), findsNothing);
-        expect(taps, 0);
-      }
+      await tester.tap(find.text('Preview Post'));
+      expect(taps, 1);
+      expect(find.text('Approve & Schedule'), findsNothing);
       expect(find.text('Approve 30-Day Plan'), findsNothing);
       expect(tester.takeException(), isNull);
     });

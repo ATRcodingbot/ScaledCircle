@@ -734,6 +734,7 @@ class _DraftDialogState extends State<_DraftDialog> {
   int _version = 0;
   String? _messageAngle, _cta;
   bool _busy = false;
+  bool _uncertain = false;
   String? _error, _result;
   @override
   void initState() {
@@ -770,20 +771,22 @@ class _DraftDialogState extends State<_DraftDialog> {
   }
 
   Future<void> _saveOrSend() async {
-    if (_busy) return;
+    if (_busy || _uncertain) return;
     setState(() => _busy = true);
     try {
       if (_saved == null) {
-        final draft = await _service.call('saveDraft', {
-          'prospectId': widget.prospect?['id'],
-          'certification': widget.certification,
-          'subject': _subject.text,
-          'body': _body.text,
-          'expectedVersion': _version,
-          if (widget.followupTo != null) 'followupTo': widget.followupTo,
-          if (_messageAngle != null) 'messageAngle': _messageAngle,
-          if (_cta != null) 'cta': _cta,
-        });
+        final draft = await _service
+            .call('saveDraft', {
+              'prospectId': widget.prospect?['id'],
+              'certification': widget.certification,
+              'subject': _subject.text,
+              'body': _body.text,
+              'expectedVersion': _version,
+              if (widget.followupTo != null) 'followupTo': widget.followupTo,
+              if (_messageAngle != null) 'messageAngle': _messageAngle,
+              if (_cta != null) 'cta': _cta,
+            })
+            .timeout(const Duration(seconds: 30));
         if (mounted) {
           setState(() {
             _saved = draft;
@@ -791,12 +794,14 @@ class _DraftDialogState extends State<_DraftDialog> {
           });
         }
       } else {
-        final result = await _service.call('send', {
-          'prospectId': _saved!['prospectId'],
-          'operationId': _saved!['operationId'],
-          'version': _saved!['version'],
-          'confirm': true,
-        });
+        final result = await _service
+            .call('send', {
+              'prospectId': _saved!['prospectId'],
+              'operationId': _saved!['operationId'],
+              'version': _saved!['version'],
+              'confirm': true,
+            })
+            .timeout(const Duration(seconds: 30));
         if (mounted) {
           setState(() => _result = businessEmailState(result['state']));
         }
@@ -805,10 +810,12 @@ class _DraftDialogState extends State<_DraftDialog> {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
       if (mounted) {
-        setState(
-          () => _error =
-              'The result needs checking. Do not resend; check Outreach history.',
-        );
+        setState(() {
+          _uncertain = true;
+          _error = _saved == null
+              ? 'Eligibility is still being confirmed. You can close this window. Reopen the saved draft before trying again; no send was requested.'
+              : 'The send result is being confirmed. Close this window and check Outreach history; do not resend.';
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -845,7 +852,7 @@ class _DraftDialogState extends State<_DraftDialog> {
             TextField(
               controller: _subject,
               maxLength: 200,
-              readOnly: _saved != null,
+              readOnly: _saved != null || _busy || _uncertain,
               decoration: const InputDecoration(labelText: 'Subject'),
             ),
             TextField(
@@ -853,7 +860,7 @@ class _DraftDialogState extends State<_DraftDialog> {
               maxLength: 8000,
               minLines: 5,
               maxLines: 12,
-              readOnly: _saved != null,
+              readOnly: _saved != null || _busy || _uncertain,
               decoration: const InputDecoration(labelText: 'Message'),
             ),
             if (_saved != null)
@@ -914,15 +921,15 @@ class _DraftDialogState extends State<_DraftDialog> {
     ),
     actions: [
       TextButton(
-        onPressed: _busy ? null : () => Navigator.pop(context),
+        onPressed: () => Navigator.pop(context),
         child: const Text('Close'),
       ),
-      if (_saved != null && _result == null)
+      if (_saved != null && _result == null && !_uncertain)
         TextButton(
           onPressed: _busy ? null : () => setState(() => _saved = null),
           child: const Text('Edit Draft'),
         ),
-      if (_result == null)
+      if (_result == null && !_uncertain)
         FilledButton(
           onPressed:
               _busy ||

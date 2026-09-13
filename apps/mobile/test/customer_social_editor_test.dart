@@ -35,7 +35,9 @@ class EditorService extends SocialOperationsService {
     calls.add(input);
     if (fail) throw Exception('private provider detail');
     if (input['action'] == 'save') version++;
-    return {'readyToPublish': true, 'variantAssessments': []};
+    return {
+      'quality': {'readyToPublish': true, 'variantAssessments': []},
+    };
   }
 
   @override
@@ -69,9 +71,23 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(service.calls, isEmpty);
+        expect(service.calls.single['action'], 'auto');
+        expect(service.calls.single['confirmOwnerExecution'], true);
+        service.calls.clear();
+        await tester.scrollUntilVisible(
+          find.text('Edit Post'),
+          150,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('Edit Post'));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('social-post-copy')),
+          -150,
+          scrollable: find.byType(Scrollable).first,
+        );
         await tester.enterText(
-          find.byType(TextField).first,
+          find.byKey(const ValueKey('social-post-copy')),
           'Edited by the Business owner.',
         );
         service.fail = true;
@@ -116,21 +132,8 @@ void main() {
         await tester.tap(find.text('Save draft changes'));
         await tester.pumpAndSettle();
         expect(service.version, 2);
-        await tester.scrollUntilVisible(
-          find.text('Review content quality'),
-          200,
-          scrollable: find.byType(Scrollable).first,
-        );
-        await Scrollable.ensureVisible(
-          tester.element(find.text('Review content quality')),
-          alignment: 0.5,
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Review content quality'));
-        await tester.pumpAndSettle();
-        expect(service.calls.last['action'], 'assess');
-        expect(service.calls.last['version'], 2);
-        expect(find.text('Content quality review passed'), findsOneWidget);
+        expect(find.text('Review content quality'), findsNothing);
+        expect(service.calls.last['action'], 'save');
         expect(
           service.calls.where(
             (c) => c['action'] == 'approve' || c['action'] == 'schedule',

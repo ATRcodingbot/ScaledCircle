@@ -39,7 +39,7 @@ function prepare({job, revision, account, approval}) {
   if (!job || !["facebook", "instagram"].includes(job.provider) || !numericId(account?.providerUserId) ||
       account.businessUid !== job.businessUid) fail("meta_account_mismatch");
   const approvedAccount = approval?.providerAccounts?.[job.provider];
-  if (approval?.businessUid !== job.businessUid || approval?.approvedByUid !== job.businessUid ||
+  if (approval?.businessUid !== job.businessUid || !require('./social_workspace_authority').validApprovalActor(approval,job.businessUid) ||
       approval.revokedAt != null || approvedAccount?.providerUserId !== account.providerUserId ||
       (job.provider === "instagram" && approvedAccount?.linkedPageId !== account.linkedPageId) ||
       !jobs(approval).some((expected) =>

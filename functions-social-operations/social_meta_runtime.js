@@ -10,7 +10,7 @@ const {isDeepStrictEqual}=require("node:util");
 
 // Same immutable growth jobs/approvals, with a separate provider allowance so
 // preparing Meta cannot replace the active X week. No allowance is auto-enabled.
-function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false,enabledProviders=["facebook","instagram"],customerUids=[]}) {
+function createPublisher({db,project,credentials,fetchImpl,now=Date.now,providerCreatesEnabled=false,enabledProviders=["facebook","instagram"],customerUids=[],actorAuth}) {
  const canCreate=provider=>providerCreatesEnabled===true&&enabledProviders.includes(provider);
  const environment=project==="scaled-circle"?"production":project==="scaledcircle-staging"?"staging":null;
  if(!environment)throw Error("meta_runtime_unavailable");
@@ -31,12 +31,14 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   const customer=a?.schemaVersion==='CustomerPostApprovalV1';
   const q=customer?(await read(db.doc(`socialContentQualityAssessments/${job.versionId}_${job.provider}`))).data()||legacyQuality:legacyQuality;
   if(customer) {
+   if(a.approvedByUid!==job.businessUid&&action!=='reconcile')await require('./social_workspace_authority').createAuthority({db,
+     auth:actorAuth||require('firebase-admin/auth').getAuth(),FieldValue:require('firebase-admin/firestore').FieldValue,Timestamp:require('firebase-admin/firestore').Timestamp})({businessUid:job.businessUid,actorUid:a.approvedByUid,approve:true,transaction:tx});
    require("./social_customer_scheduling").authorizeRuntime({approval:a,connection:require("./social_customer_scheduling").connectionFromOwnedPath(c,job.businessUid),config:p,uid:job.businessUid,
     provider:job.provider,environment,enabledUids:customerUids});
    const subscription=(await read(db.doc('businessSubscriptions/'+job.businessUid))).data();
    if(!require("./subscription_entitlements").hasActiveScaleEntitlement(subscription))throw Error('meta_customer_entitlement_required');
   } else connectionPolicy.authorize(p,job.businessUid);
-  if(!a || a.businessUid!==job.businessUid || a.approvedByUid!==job.businessUid ||
+  if(!a || a.businessUid!==job.businessUid || !(customer?require('./social_workspace_authority').validApprovalActor(a,job.businessUid):a.approvedByUid===job.businessUid) ||
    !growth.jobs(a).some(x=>x.id===job.id&&x.bindingHash===job.bindingHash&&isDeepStrictEqual(x.binding,job.binding)))throw Error("meta_approval_mismatch");
   const identity=a.providerAccounts?.[job.provider];
   if(c?.environment!==environment||c.tokenHealth!=="healthy"||c.status!=="connected_write"||

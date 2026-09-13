@@ -7,10 +7,10 @@ void main() {
     final screen = File(
       'lib/screens/business/social_operations_screen.dart',
     ).readAsStringSync();
-    expect(screen, contains('Social Operations — Beta'));
+    expect(screen, contains('Social Manager'));
     expect(
       screen,
-      contains('Connect → Plan → Review → Schedule → Measure → Improve'),
+      contains('Preview → Approve & Schedule → Published → Measure'),
     );
     expect(screen, contains('Your accounts. Your approval.'));
     expect(screen, contains('SocialConnectionCard'));

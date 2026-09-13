@@ -37,13 +37,6 @@ class CustomerSocialPlanCard extends StatelessWidget {
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         childrenPadding: const EdgeInsets.all(16),
         children: [
-          if (!strategyOnly)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 16),
-              child: Text(
-                'Creative briefs are not finished images or videos. Review each post’s copy and any required media separately before scheduling. Text-only posts do not need an image where the platform supports them.',
-              ),
-            ),
           ExpansionTile(
             title: Text(
               socialPlanApproved(plan)
@@ -74,131 +67,60 @@ class CustomerSocialPlanCard extends StatelessWidget {
           ),
           if (!strategyOnly)
             for (final item in (plan['items'] as List? ?? []).whereType<Map>())
-              ExpansionTile(
-                title: Text(item['pillar']?.toString() ?? 'Content idea'),
-                subtitle: Text(
-                  item['platformExclusive'] == true
-                      ? 'Platform-exclusive idea · review its version and time'
-                      : 'One idea · review each platform version and time',
-                ),
-                expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Objective / why recommended: ${item['goal'] ?? 'Review the proposed purpose'}',
-                  ),
-                  for (final v
-                      in (item['variants'] as List? ?? []).whereType<Map>())
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            socialProviderName(v['provider']?.toString() ?? ''),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          SelectableText(v['copy']?.toString() ?? ''),
-                          Text(
-                            'Proposed: ${socialCustomerTime(context, (v['scheduling'] as Map?)?['scheduledFor'] ?? v['scheduledFor'] ?? item['scheduledFor'])}',
-                          ),
-                          Text('Next step: ${v['callToAction'] ?? 'Review'}'),
-                          Text(
-                            'Destination: ${v['destinationUrl'] ?? 'Needs review'}',
-                          ),
-                          if (![
-                            'none',
-                            'approved_image',
-                          ].contains(v['mediaRequirement']))
-                            Text(
-                              'Creative brief: ${socialEvidenceText(v['mediaRequirement'], 'Choose approved media')}',
+              for (final v
+                  in (item['variants'] as List? ?? []).whereType<Map>())
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '${socialProviderName(v['provider']?.toString() ?? '')} · ${item['pillar'] ?? 'Post'}',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(socialPostStateLabel(v['status'])),
+                        const SizedBox(height: 8),
+                        Text(
+                          v['copy']?.toString() ?? '',
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Proposed: ${socialCustomerTime(context, (v['scheduling'] as Map?)?['proposedFutureTime'] ?? v['scheduledFor'] ?? item['scheduledFor'])}',
+                        ),
+                        Text(
+                          'Objective: ${item['goal'] ?? 'Review the proposed purpose'}',
+                        ),
+                        if (![
+                          'scheduled',
+                          'published',
+                        ].contains(v['status'])) ...[
+                          const SizedBox(height: 12),
+                          if (onPreparePost != null &&
+                              (v['scheduling'] as Map?)?['version'] != null)
+                            FilledButton(
+                              onPressed: () => onPreparePost!(
+                                Map<String, dynamic>.from(
+                                  v['scheduling'] as Map,
+                                ),
+                              ),
+                              child: const Text('Preview Post'),
+                            )
+                          else
+                            const Text(
+                              'Post preview is unavailable. Reload the current content before approval.',
                             ),
+                        ] else
                           Text(
-                            'Post status: ${socialPostStateLabel(v['status'])}',
+                            '${socialPostStateLabel(v['status'])}: ${socialCustomerTime(context, v['scheduledFor'])}',
                           ),
-                          Text(
-                            v['mediaRevisionId'] != null
-                                ? 'Creative version prepared for this post.'
-                                : v['mediaRequirement'] == 'none'
-                                ? 'Creative status: Text-only. No media required by this draft.'
-                                : 'Creative not prepared yet. Choose an approved Business image.',
-                          ),
-                          Text(
-                            'Measurement: ${socialEvidenceText(v['responseAssetRequirement'], 'No measurement recorded yet')}',
-                          ),
-                          if (![
-                            'scheduled',
-                            'published',
-                          ].contains(v['status'])) ...[
-                            if (onPreparePost != null &&
-                                (v['scheduling'] as Map?)?['version'] != null)
-                              OutlinedButton(
-                                onPressed: () => onPreparePost!(
-                                  Map<String, dynamic>.from(
-                                    v['scheduling'] as Map,
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Prepare post / Choose creative',
-                                ),
-                              ),
-                            for (final reason
-                                in ((v['scheduling'] as Map?)?['reasons']
-                                            as List? ??
-                                        const [])
-                                    .whereType<Map>())
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      socialEvidenceText(
-                                        reason['message'],
-                                        'Review this post.',
-                                      ),
-                                    ),
-                                    if (onResolveBlocker != null)
-                                      TextButton(
-                                        onPressed: () => onResolveBlocker!(
-                                          reason['code']?.toString() ??
-                                              'readback',
-                                          Map<String, dynamic>.from(
-                                            v['scheduling'] as Map,
-                                          ),
-                                        ),
-                                        child: Text(switch (reason['code']) {
-                                          'creative' => 'Choose Creative',
-                                          'quality' => 'Review Content Quality',
-                                          'paused' =>
-                                            'Review Publishing Settings',
-                                          'permission' => 'Manage Connection',
-                                          'time' => 'Choose Time',
-                                          'scheduler' => 'Review availability',
-                                          _ => 'Review post',
-                                        }),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            if ((v['scheduling'] as Map?)?['ready'] == true &&
-                                onSchedulePost != null)
-                              FilledButton(
-                                onPressed: () => onSchedulePost!(
-                                  Map<String, dynamic>.from(
-                                    v['scheduling'] as Map,
-                                  ),
-                                ),
-                                child: const Text('Approve & Schedule'),
-                              ),
-                          ] else
-                            Text(
-                              'Scheduled: ${socialCustomerTime(context, v['scheduledFor'])}',
-                            ),
-                        ],
-                      ),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+                ),
           if (plan['status'] == 'ready_for_review' && onApprove != null) ...[
             const SizedBox(height: 16),
             FilledButton(

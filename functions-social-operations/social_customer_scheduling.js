@@ -12,7 +12,7 @@ const messages = {
   quality: 'Resolve the content quality review before scheduling.',
   scheduler: 'Scheduling is not available for this workspace yet.',
   existing: 'Review the existing scheduled version before scheduling a replacement.',
-  paused: 'Publishing is paused. Review your publishing settings first.',
+  paused: 'Publishing is paused by a workspace safety restriction. Your post is preserved.',
 };
 function readiness({uid, plan, item, version, provider, connection, revision, quality,
   schedulerEnabled = false, health, config, environment, entitlement, conflictingSchedule = false, mediaAuthorityValid=true, now = Date.now()}) {
@@ -74,7 +74,7 @@ function reviewDigest(ctx,bindingHash) {
   return growth.hash({uid:ctx.uid,provider:ctx.provider,bindingHash,planVersion:ctx.plan?.planVersion,
     account:[c.providerUserId,c.linkedPageId,c.credentialId,c.connectionRevision,c.credentialRotationGeneration].map(v=>v??null)});
 }
-function createStore({db, now=Date.now, enabledUids=[], environment}) {
+function createStore({db, now=Date.now, enabledUids=[], environment,authorizeActor}) {
   const enabled = uid => enabledUids.includes(uid);
   async function context(tx, uid, input) {
     if(!/^[a-zA-Z0-9_-]{1,220}$/.test(input?.itemId||'') || !['facebook','instagram'].includes(input?.provider)) throw Error('Choose a current post.');
@@ -104,12 +104,16 @@ function createStore({db, now=Date.now, enabledUids=[], environment}) {
     async preview(uid,input) {
       const ctx=await context(null,uid,input), result=readiness(ctx);
       const bindingHash=ctx.version?growth.contentBinding({id:ctx.versionId,record:ctx.version},uid).bindingHash:null;
-      return {...result,bindingHash,reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256}))||[],scheduledFor:result.scheduledFor}:null};
+      return {...result,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256}))||[],scheduledFor:result.scheduledFor}:null};
     },
-    async approve(uid,input) {
+    async approve(uid,input,{actorUid=uid}={}) {
       if(!/^[a-zA-Z0-9_-]{1,220}$/.test(input?.itemId||'') || !['facebook','instagram'].includes(input.provider) ||
         !Number.isSafeInteger(input.version) || !/^[a-f0-9]{64}$/.test(input.contentHash||'') || !/^[a-f0-9]{64}$/.test(input.bindingHash||'') || !/^[a-f0-9]{64}$/.test(input.reviewDigest||'')) throw Error('Review the exact current post first.');
       return db.runTransaction(async tx=>{
+        if(actorUid!==uid){
+          if(!authorizeActor)throw Error('Your team access does not allow Social approval.');
+          await authorizeActor({businessUid:uid,actorUid,approve:true,transaction:tx});
+        }
         const ctx=await context(tx,uid,input);
         if(ctx.version?.version!==input.version || ctx.version.contentHash!==input.contentHash) throw Error('The post changed. Review the current version.');
         const binding=growth.contentBinding({id:ctx.versionId,record:ctx.version},uid);
@@ -126,7 +130,8 @@ function createStore({db, now=Date.now, enabledUids=[], environment}) {
           handle:ctx.connection.handle||null,credentialId:ctx.connection.credentialId,
           connectionRevision:ctx.connection.connectionRevision,credentialRotationGeneration:ctx.connection.credentialRotationGeneration};
         if(!Number.isSafeInteger(account.connectionRevision)||!Number.isSafeInteger(account.credentialRotationGeneration)) throw Error(messages.permission);
-        const canonical={schemaVersion:SCHEMA,businessUid:uid,approvedByUid:uid,providers:[input.provider],items:[binding],
+        const canonical={schemaVersion:SCHEMA,businessUid:uid,approvedByUid:actorUid,
+          ...(actorUid===uid?{}:{actorAuthority:{type:'workspace_member',businessUid:uid,actorUid}}),providers:[input.provider],items:[binding],
           providerAccounts:{[input.provider]:account},planVersion:ctx.plan.planVersion,planId:ctx.item.planId};
         const approval={...canonical,id:'growth_approval_'+growth.hash(canonical),approvedAt:now(),externalPublishingEnabled:true};
         const job={...growth.jobs(approval)[0],status:'scheduled',customerApproval:true,externalPublishingEnabled:true};
@@ -142,7 +147,7 @@ function createStore({db, now=Date.now, enabledUids=[], environment}) {
 }
 function authorizeRuntime({approval,connection,config,uid,provider,environment,enabledUids}) {
   const a=approval?.providerAccounts?.[provider];
-  if(approval?.schemaVersion!==SCHEMA || approval.businessUid!==uid || approval.approvedByUid!==uid ||
+  if(approval?.schemaVersion!==SCHEMA || approval.businessUid!==uid || !require('./social_workspace_authority').validApprovalActor(approval,uid) ||
     approval.externalPublishingEnabled!==true || approval.revokedAt!=null || !enabledUids.includes(uid) || approval.providers?.length!==1 || approval.providers[0]!==provider ||
     config?.enabled!==true || config.writeScopesEnabled!==true || config.environment!==environment || config.provider!=='meta' ||
     connection?.businessUid!==uid || connection.environment!==environment || connection.status!=='connected_write' ||

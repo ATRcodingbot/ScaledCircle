@@ -53,7 +53,7 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
         enabled:true,autonomyMode:'approval_required',workspaceKind:'customer',externalActionsEnabled:false,
         createdBy:a.actorUid,createdAt:FieldValue.serverTimestamp()});
       tx.create(healthRef,{schemaVersion:VERSION,workspaceKind:'customer',businessUid:a.businessId,
-        businessName:c.name,externalActionsEnabled:false,killSwitchActive:true,researchPaused:false,
+        businessName:c.name,externalActionsEnabled:false,killSwitchActive:false,researchPaused:false,socialExecutionMode:'owner_approval_required',
         createdBy:a.actorUid,createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
       if(!prefs.exists)tx.create(prefRef,{businessUid:a.businessId,...growth.preferences(),updatedAt:FieldValue.serverTimestamp()});
       tx.create(db.doc('agentApprovals/customer_setup_'+a.businessId),{businessUid:a.businessId,actorUid:a.actorUid,
@@ -73,7 +73,7 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
       db.collection('socialConnections').doc(a.businessId).collection('providers').get()]);
     result.initialized=health?.workspaceKind==='customer';
     result.businessContext={businessName:c.name,services:c.profile.priorityServices||c.profile.servicesOffered,
-      website:c.profile.website||null,adBudget:c.profile.plannedAdBudget||'Not provided',
+      website:c.profile.website||null,adBudget:c.profile.plannedAdBudget||'Not provided',profile:c.profile,objective:c.profile.growthGoal||c.profile.primaryGoal||null,
       profileAreas:c.profile.serviceAreas||[],maintainedAreas:result.workspace.scope.areas.map(x=>x.label)};
     result.social={planCount:plans.size,plans:plans.docs.map(d=>({id:d.id,...d.data()})),
       baselines:snapshots.docs.filter(d=>d.data().schemaVersion==='MetaBaselineV1').map(d=>({id:d.id,...d.data()})),
@@ -81,6 +81,7 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
       attribution:'Existing provider history is not evidence of ScaledCircle publication.',approvalMode:'approval_required'};
     const socialJobs=await db.collection('socialGrowthJobs').where('businessUid','==',a.businessId).limit(100).get();
     result.social.plans=require('./social_customer_post_projection').overlay(result.social.plans,socialJobs.docs.map(d=>d.data()));
+    result.social.performance=require('./social_performance_presentation').project(snapshots.docs.map(d=>d.data()),result.social.plans);
     result.social.review=require('./social_plan_state').project(result.social.plans);
     for(const a of result.agents){
       if(a.type==='lead_generation')a.result=result.summary.opportunityGroups.filter(g=>!['Workforce candidates','Excluded paid sources'].includes(g.label)).map(g=>`${g.count} ${g.label.toLowerCase()}`).join('; ');
@@ -95,6 +96,18 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
       contacted:result.outreach.sent,replies:result.outreach.replied,appointments:result.outreach.outcomeCounts.appointment,
       estimates:result.outreach.outcomeCounts.estimate,won:result.outreach.outcomeCounts.won,attributedRevenue:null,individualHires:null,
       note:'Contacts and replies use recorded mailbox evidence. Appointment, estimate and won outcomes are owner-reported. A lead is not revenue.'};
+    const emailRoot=db.doc('businessMailboxes/'+a.businessId),customerRoot=db.doc('businessOperations/'+a.businessId);
+    const [ops,outcomes,customers,reviews]=await Promise.all([
+      emailRoot.collection('operations').limit(251).get(),emailRoot.collection('outcomes').limit(501).get(),
+      customerRoot.collection('customers').limit(501).get(),db.collection('agentRecommendationReviews').where('businessUid','==',a.businessId).limit(251).get()]);
+    if(ops.size>250||outcomes.size>500||customers.size>500||reviews.size>250)fail('failed-precondition','The saved history needs a paginated review.');
+    const rows=s=>s.docs.map(d=>({id:d.id,...d.data()}));
+    const projected=require('./premium_workspace').project({businessId:a.businessId,prospects:result.prospects,
+      operations:rows(ops),outcomes:rows(outcomes),customers:rows(customers),entitlement:a.entitlement,now:now()});
+    const adAccounts=await Promise.all(['meta_ads','google_ads'].map(p=>db.doc('adAccountHealth/'+a.businessId+'_'+p).get()));
+    projected.premium.ads.accounts=adAccounts.map((s,i)=>({name:i?'Google Ads':'Meta Ads',status:s.exists?s.data().status:'not_connected'}));
+    projected.premium.ads.noConnectedAccount=adAccounts.every(s=>!s.exists||s.data().status==='not_connected');
+    result.prospects=projected.prospects;result.premium={...projected.premium,recommendationReviews:rows(reviews)};
     return result;
   }
   async function execute(request) {
@@ -103,6 +116,17 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
     const op=data.operation||'load';
     if(op==='load')return load(a,c);
     if(op==='initialize')return initialize(a,c);
+    if(op==='reviewRecommendation'){
+      const input=data.input||{},ids=input.reportIds;
+      if(!Array.isArray(ids)||ids.length<1||ids.length>30||new Set(ids).size!==ids.length||ids.some(id=>!/^[-A-Za-z0-9_]{1,220}$/.test(id))||!['reviewed','dismissed'].includes(input.decision))fail('invalid-argument','Choose a saved recommendation.');
+      await db.runTransaction(async tx=>{
+        const reports=await Promise.all(ids.map(id=>tx.get(db.doc('agentReports/'+id))));
+        if(reports.some(r=>r.data()?.businessUid!==a.businessId))fail('permission-denied','This recommendation is not in your workspace.');
+        const refs=ids.map(id=>db.doc('agentRecommendationReviews/'+a.businessId+'_'+id));
+        const old=await Promise.all(refs.map(r=>tx.get(r)));
+        for(let i=0;i<refs.length;i++)if(!old[i].exists)tx.create(refs[i],{businessUid:a.businessId,reportId:ids[i],decision:input.decision,actorUid:a.actorUid,at:now()});
+      });return {reviewed:true};
+    }
     const health=(await db.doc('agentHealth/'+a.businessId).get()).data();
     if(health?.workspaceKind!=='customer')fail('failed-precondition','Activate your Growth workspace first.');
     if(op==='research'){if(data.input&&Object.keys(data.input).length)fail('invalid-argument','Research uses your saved Business context.');return research(a,c).run();}

@@ -54,11 +54,13 @@ function createEditor({db,now=Date.now,enabledUids=[]}) {
       return db.runTransaction(async tx=>{
         const {current}=await read(tx,uid,input);
         const profile=(await tx.get(db.doc('businessGrowthProfiles/'+uid))).data()||{};
+        const discovery=(await tx.get(db.doc('discoveryPreferences/'+uid))).data();
+        const geography=discovery?.userUid===uid?(discovery.areas||[]).filter(a=>a.enabled!==false).map(a=>a.displayName).filter(x=>typeof x==='string'):[];
         const recent=await tx.get(db.collection('socialContentVersions').where('businessUid','==',uid).limit(100));
         const assessment=social.assessScheduledContent({businessUid:uid,contentItemId:input.itemId,
           versionRecord:{...current,variants:current.variants.filter(v=>v.provider===input.provider)},
           businessContext:{businessName:profile.businessName,services:profile.services||profile.servicesOffered||[],
-            geography:[profile.serviceArea,profile.city,profile.county].filter(v=>typeof v==='string')},
+            geography:geography.length?geography:[profile.serviceArea,profile.city,profile.county].filter(v=>typeof v==='string')},
           recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[]),now:now()});
         const result={...assessment,provider:input.provider,versionId:`${input.itemId}_v${current.version}`,providerMutationsEnabled:false};
         tx.set(db.doc(`socialContentQualityAssessments/${input.itemId}_v${current.version}_${input.provider}`),result);

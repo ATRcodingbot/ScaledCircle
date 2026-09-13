@@ -84,12 +84,11 @@ void main() {
       );
       await tester.tap(find.text('Local estimate inquiries'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Estimate checklist'));
-      await tester.pumpAndSettle();
+      expect(find.textContaining('Estimate checklist'), findsOneWidget);
       expect(find.text('Write down your project goals.'), findsOneWidget);
       expect(
-        find.text('Creative brief: Owner-approved checklist'),
-        findsOneWidget,
+        find.textContaining('Choose creative'),
+        findsNothing,
       );
       expect(find.text('Plan version needs review'), findsOneWidget);
       expect(find.text('Approve'), findsNothing);

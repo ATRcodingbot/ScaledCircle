@@ -110,7 +110,7 @@ class SocialConnectionCard extends StatelessWidget {
                 'Analytics: ${socialAnalyticsEnabled(connection) ? 'On' : 'Off'}',
               ),
               Text(
-                'Managed Publishing: ${socialPublishingEnabled(connection, publishingEnabled) ? 'Ready' : 'Off'}',
+                connection['publishingState']?.toString() ?? 'Managed Publishing: ${socialPublishingEnabled(connection, publishingEnabled) ? 'Ready' : 'Off'}',
               ),
               if (!socialAnalyticsEnabled(connection))
                 const Text('Additional permission needed for analytics.'),

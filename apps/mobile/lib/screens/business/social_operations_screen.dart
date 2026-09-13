@@ -1,3 +1,4 @@
+import '../../widgets/social_performance_panel.dart';
 import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
@@ -962,7 +963,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           fallback: '/business/growth',
           businessOnly: true,
         ),
-        title: const Text('Social Operations — Beta'),
+        title: const Text('Social Manager'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -998,6 +999,42 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     );
   }
 
+  String _socialSection = 'Content';
+  Widget _history(SocialOperationsWorkspace workspace, String state) {
+    final rows = <Widget>[];
+    for (final p in workspace.plans) {
+      for (final i in (p['items'] as List? ?? []).whereType<Map>()) {
+        for (final v in (i['variants'] as List? ?? []).whereType<Map>()) {
+          if (v['status'] != state) continue;
+          rows.add(
+            Card(
+              child: ListTile(
+                title: Text(
+                  '${socialProviderName(v['provider']?.toString() ?? '')} · ${i['pillar'] ?? 'Post'}',
+                ),
+                subtitle: Text(
+                  '${v['copy'] ?? ''}\n${socialCustomerTime(context, v['scheduledFor'])}',
+                ),
+              ),
+            ),
+          );
+        }
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows.isEmpty
+          ? [
+              Text(
+                state == 'scheduled'
+                    ? 'Nothing scheduled. Preview and approve a finished post to schedule it.'
+                    : 'No ScaledCircle-published posts recorded yet.',
+              ),
+            ]
+          : rows,
+    );
+  }
+
   Widget _body(SocialOperationsWorkspace workspace) => Center(
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 1080),
@@ -1008,59 +1045,92 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             padding: EdgeInsets.all(wide ? 24 : 16),
             children: [
               Text(
-                workspace.managedGrowth
-                    ? 'Your managed marketing workspace'
-                    : 'Plan, approve, and measure your marketing',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
+                'Plan, publish and improve your social presence.',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Chip(label: Text('Private Beta')),
+              ),
+              const Text('Preview → Approve & Schedule → Published → Measure'),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final label in [
+                    'Content',
+                    'Calendar',
+                    'Published',
+                    'Performance',
+                    'Settings',
+                  ])
+                    ChoiceChip(
+                      label: Text(label),
+                      selected: _socialSection == label,
+                      onSelected: (_) => setState(() => _socialSection = label),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (_socialSection == 'Content') ...[
+                SocialRuntimeStatusCard(
+                  onReviewPosts: () => _reviewSavedPlans(workspace),
+                  status: _approvalReadback.pending
+                      ? {
+                          'available': true,
+                          'summary': {
+                            'title': 'Plan approved — refreshing status…',
+                            'description': 'Your approval was saved.',
+                          },
+                        }
+                      : workspace.runtimeStatus,
+                  onRefresh: _load,
+                  compact: true,
                 ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Connect → Plan → Review → Schedule → Measure → Improve',
-              ),
-              const SizedBox(height: 16),
-              SocialRuntimeStatusCard(
-                onReviewPosts: () => _reviewSavedPlans(workspace),
-                status: _approvalReadback.pending
-                    ? {
-                        'available': true,
-                        'summary': {
-                          'title': 'Plan approved — refreshing status…',
-                          'description':
-                              'Your strategy approval succeeded. We are confirming the latest post-review state.',
-                        },
-                      }
-                    : workspace.runtimeStatus,
-                onRefresh: _load,
-                compact: true,
-              ),
-              const SizedBox(height: 16),
-              _section('30-Day Plan', _plans(workspace)),
-              _section(
-                'Content',
-                SocialPlanOverview(
-                  presentation: SocialPlanPresentation(
-                    workspace.plans,
-                    workspace.runtimeStatus,
+                _section('30-Day Plan', _plans(workspace)),
+                _section(
+                  'Content',
+                  SocialPlanOverview(
+                    presentation: SocialPlanPresentation(
+                      workspace.plans,
+                      workspace.runtimeStatus,
+                    ),
+                    refreshingApproval: _approvalReadback.pending,
+                    onReview: workspace.plans.isEmpty
+                        ? _createPlan
+                        : () => _reviewSavedPlans(workspace),
                   ),
-                  refreshingApproval: _approvalReadback.pending,
-                  onReview: workspace.plans.isEmpty
-                      ? _createPlan
-                      : () => _reviewSavedPlans(workspace),
                 ),
-              ),
-              _notice(),
-              const SizedBox(height: 16),
-              _section('Connections', _connections(workspace, wide)),
-              if (workspace.firstXCertificationAvailable)
-                _section('First X publish candidate', _firstXPublishCard()),
-              _section('Content Health', _contentHealth(workspace)),
-              _section("What's Working", _learning(workspace)),
-              if (workspace.managedGrowth &&
-                  workspace.internalDevelopmentAvailable)
-                _section('30-Day Email Content', _email(workspace)),
-              _section('Ads — Read Only', _ads(workspace, wide)),
+              ],
+              if (_socialSection == 'Calendar')
+                _section('Scheduled Posts', _history(workspace, 'scheduled')),
+              if (_socialSection == 'Published')
+                _section(
+                  'Publication History',
+                  _history(workspace, 'published'),
+                ),
+              if (_socialSection == 'Performance') ...[
+                _section(
+                  'Platform Performance',
+                  SocialPerformancePanel(
+                    data: workspace.data['performance'] as Map? ?? {},
+                  ),
+                ),
+                _section("What's Working", _learning(workspace)),
+                _section('Content Health', _contentHealth(workspace)),
+              ],
+              if (_socialSection == 'Settings') ...[
+                _notice(),
+                _section('Connections', _connections(workspace, wide)),
+                if (workspace.firstXCertificationAvailable)
+                  _section('First X publish candidate', _firstXPublishCard()),
+                if (workspace.managedGrowth &&
+                    workspace.internalDevelopmentAvailable)
+                  _section('30-Day Email Content', _email(workspace)),
+                if (workspace.internalDevelopmentAvailable)
+                  _section('Ads — Read Only', _ads(workspace, wide)),
+              ],
             ],
           );
         },
@@ -1564,7 +1634,14 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   Future<void> _preparePost(Map<String, dynamic> post) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => CustomerSocialPostEditor(post: post, service: _service),
+        builder: (_) => CustomerSocialPostEditor(
+          post: post,
+          service: _service,
+          onSchedule: (fresh) async {
+            Navigator.of(context).pop();
+            await _schedulePost(fresh);
+          },
+        ),
       ),
     );
     if (mounted) await _load(quiet: true);
@@ -1612,21 +1689,13 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ),
           content: Text(
             code == 'paused'
-                ? 'Publishing is paused by the workspace safety controls. Drafts are preserved. An Admin must review this safety hold before approved posts can run. Opening these settings does not resume publishing.'
+                ? 'Publishing is paused by an explicit workspace safety restriction. Your draft is preserved. Resolve the restriction before scheduling.'
                 : 'Social Manager is Private Beta / Invite Only. Your workspace needs current scheduling access before posts can run.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Back'),
-            ),
-            TextButton(
-              onPressed: () => launchUrl(
-                Uri.parse(
-                  'mailto:support@scaledcircle.com?subject=Social%20publishing%20access%20review',
-                ),
-              ),
-              child: const Text('Request access review'),
             ),
           ],
         ),
@@ -1697,7 +1766,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     'Creative: ${variant['mediaRevisionId'] != null ? 'Prepared version shown in the post' : 'Text only'}',
                     'Call to action: ${variant['callToAction'] ?? 'None'}',
                     'Destination: ${variant['destinationUrl'] ?? 'None'}',
-                    'Publish: ${DateTime.tryParse(preview['scheduledFor']?.toString() ?? '')?.toLocal()}',
+                    'Publish: ${socialCustomerTime(context, preview['scheduledFor'])}',
                     'This approves only this exact post and future publish time.',
                   ].join('\n\n'),
                 ),
@@ -1730,7 +1799,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         SnackBar(
           content: Text(
             result['status'] == 'scheduled'
-                ? 'Post scheduled: ${DateTime.tryParse(result['scheduledFor']?.toString() ?? '')?.toLocal()}'
+                ? 'Post scheduled: ${socialCustomerTime(context, result['scheduledFor'])}'
                 : 'Scheduling needs attention. Review the current post requirements.',
           ),
         ),

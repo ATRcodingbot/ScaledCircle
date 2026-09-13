@@ -109,8 +109,13 @@ async function requireVerifiedUser(request, message) {
   return context;
 }
 
-async function requireSocialOperationsBusiness(request) {
-  const context = await requireVerifiedUser(request, "You must be logged in to use Social Operations.");
+async function requireSocialOperationsBusiness(request,{allowMember=false}={}) {
+  let context = await requireVerifiedUser(request, "You must be logged in to use Social Operations.");
+  if(request.data?.businessId && request.data.businessId!==context.uid){
+    if(!allowMember)throw new HttpsError('permission-denied','The Business owner manages this connection or strategy action.');
+    const access=await customerWorkspaceAuthority()({businessUid:request.data.businessId,actorUid:context.uid});
+    context={...context,uid:access.businessId,actorUid:context.uid,user:access.owner,role:'business',isAdmin:false};
+  }
   if (!context.isAdmin && context.role !== "business") {
     throw new HttpsError("permission-denied", "Social Operations is available to Business accounts.");
   }
@@ -145,14 +150,33 @@ async function requireManagedGrowthBusiness(request) {
 // deployment allowlist fails closed; no plan approval enables this path.
 function customerSchedulingStore() {
   return require('./social_customer_scheduling').createStore({db, environment:runtimeEnvironment(),
+    authorizeActor:customerWorkspaceAuthority(),
     enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
+}
+function customerWorkspaceAuthority(){return require('./social_workspace_authority').createAuthority({db,
+  auth:require('firebase-admin/auth').getAuth(),FieldValue,Timestamp});}
+async function customerPublishingPresentation(business) {
+  const [health,config,connections]=await Promise.all([db.doc('agentHealth/'+business.uid).get(),
+    providerConfigRef('meta').get(),db.doc('socialConnections/'+business.uid).collection('providers').get()]);
+  const legacy=require('./social_owner_execution').legacySetupHold(health.data(),business.uid);
+  const enabled=(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').includes(business.uid);
+  return {legacySetupHold:legacy,providers:Object.fromEntries(connections.docs.map(d=>{
+    const c=d.data();let label='Connection needs attention';
+    if(c.status==='connected_write'&&c.tokenHealth==='healthy'&&c.requiresReconnect!==true){
+      label=!require('./social_customer_scheduling').hasPublishingScopes(c,d.id)?'Publishing permission missing':
+        config.data()?.enabled!==true||config.data()?.writeScopesEnabled!==true?'Provider publishing unavailable':
+        !enabled?'Private Beta invitation required':health.data()?.killSwitchActive===true&&!legacy?'Connected — publishing paused':
+        legacy?'Connected — prepare your post preview':'Connected — owner approval required';
+    }
+    return [d.id,label];
+  }))};
 }
 function customerPostCallable(method) {
   return onCall({enforceAppCheck:false,maxInstances:3},async request=>{
-    const business=await requireSocialOperationsBusiness(request);
+    const business=await requireSocialOperationsBusiness(request,{allowMember:true});
     if(business.role!=='business' || !metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
       throw new HttpsError('permission-denied','Post scheduling is not available for this Business.');
-    try{return await customerSchedulingStore()[method](business.uid,request.data||{});}
+    try{return await customerSchedulingStore()[method](business.uid,request.data||{},{actorUid:request.auth.uid});}
     catch(error){
       require('firebase-functions/logger').warn('customer_social_schedule_rejected',{uid:business.uid,reason:error.message});
       throw new HttpsError('failed-precondition','This post could not be scheduled. Review its current version and requirements before trying again.');
@@ -163,15 +187,26 @@ function customerPostCallable(method) {
 exports.previewCustomerSocialPostV1=customerPostCallable('preview');
 exports.approveAndScheduleCustomerSocialPostV1=customerPostCallable('approve');
 
-exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3},async request=>{
-  const business=await requireSocialOperationsBusiness(request);
+exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3,timeoutSeconds:120},async request=>{
+  const business=await requireSocialOperationsBusiness(request,{allowMember:true});
   if(business.role!=='business'||!metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
     throw new HttpsError('permission-denied','Social Manager is Private Beta. An invitation is required.');
   const method=request.data?.action;
-  if(!['save','assess','attach'].includes(method))throw new HttpsError('invalid-argument','Choose a supported preparation action.');
+  if(!['save','assess','attach','auto'].includes(method))throw new HttpsError('invalid-argument','Choose a supported preparation action.');
   const editor=require('./social_customer_editor').createEditor({db,
     enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
-  try{return await (method==='attach'?customerMediaStore():editor)[method](business.uid,request.data||{});}
+  try{
+    if(method==='auto'){
+      const preflight=await customerSchedulingStore().preview(business.uid,request.data);
+      if(preflight.reasons.some(r=>['permission','scheduler'].includes(r.code)))
+        throw Error(preflight.reasons.find(r=>['permission','scheduler'].includes(r.code)).message);
+      if(request.data.confirmOwnerExecution===true&&request.auth.uid===business.uid)await require('./social_owner_execution').enableOwnerExecution({db,uid:business.uid,actorUid:request.auth.uid});
+      return await require('./social_customer_preparation').createPreparation({db,editor,media:customerMediaStore()}).prepare(business.uid,request.data);
+    }
+    const result=await (method==='attach'?customerMediaStore():editor)[method](business.uid,request.data||{});
+    if(method!=='assess')result.quality=await editor.assess(business.uid,{...request.data,version:result.version});
+    return result;
+  }
   catch(error){require('firebase-functions/logger').warn('customer_social_prepare_rejected',{uid:business.uid,reason:error.message});
     throw new HttpsError('failed-precondition','The post could not be prepared. Reload its current version and review your changes.');}
 });
@@ -196,7 +231,7 @@ exports.serveCustomerSocialMediaV1=onRequest({maxInstances:4,timeoutSeconds:30},
 exports.getSocialOperationsWorkspace = onCall(
   {enforceAppCheck: false, maxInstances: 6},
   async (request) => {
-    const business = await requireSocialOperationsBusiness(request);
+    const business = await requireSocialOperationsBusiness(request,{allowMember:true});
     await oauthLifecycle.recoverMetaPending(db, business.uid, FieldValue);
     const [connections, plans, emailPlans, snapshots, metaAds, googleAds,
       qualityAssessments, pastPostRatings, profileSnapshot] = await Promise.all([
@@ -215,6 +250,7 @@ exports.getSocialOperationsWorkspace = onCall(
     const connectionMap = new Map(connections.docs.map((doc) => [doc.id, doc.data()]));
     const safeConnections = require('./social_launch_availability').channels(business).map((provider) =>
       socialOperations.connectionProjection({provider, ...(connectionMap.get(provider) || {})}));
+    const publishingPresentation=await customerPublishingPresentation(business);
     const performance = snapshots.docs.map((doc) => ({id: doc.id, ...doc.data()}));
     const customerPlans=await require('./social_customer_post_projection').load({db,uid:business.uid,
       plans:plans.docs.map(doc=>({id:doc.id,...doc.data()})),store:customerSchedulingStore()});
@@ -237,8 +273,10 @@ exports.getSocialOperationsWorkspace = onCall(
       canonicalBusinessName: readText(profileSnapshot.data()?.businessName, 240) || null,
       planId: business.planId,
       managedGrowth: business.planId === "managed_growth",
-      connections: safeConnections,
+      connections: safeConnections.map(c=>({...c,publishingState:publishingPresentation.providers[c.provider]})),
       managedPublishingAvailable: metaCustomer.available(business, process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS),
+      publishingState: publishingPresentation,
+      performance: require('./social_performance_presentation').project(performance,customerPlans),
       plans: customerPlans,
       cadence: {startingCopy:cadence.startingCopy,platforms:cadenceLearning},
       emailPlans: emailPlans.docs.map((doc) => ({id: doc.id, ...doc.data()})),

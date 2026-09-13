@@ -47,12 +47,19 @@ function createDelivery({db,root,sub,current,adapter,credentialAccess,authority,
         restriction:restriction?.active?restriction.reason:null,restrictionAt:restriction?.updatedAt||0,requestedAt:op?.requestedAt||0};
     });
     const sent=rows.filter(r=>r.state==='sent').length,suppressed=rows.filter(r=>r.state==='suppressed').length;
-    const attention=rows.some(r=>['needs_reconciliation','held'].includes(r.state)||r.state==='sending'&&now()-r.requestedAt>120000);
+    const needsAttention=rows.filter(r=>['needs_reconciliation','held'].includes(r.state)||r.state==='sending'&&now()-r.requestedAt>120000).length;
+    const attention=needsAttention>0,queued=rows.filter(r=>r.state==='queued').length;
+    let nextSendingWindow=null;
+    if(c.approved&&queued&&!attention){
+      const hour=Math.floor(now()/3600000),day=Math.floor(now()/86400000);
+      const [h,d]=await Promise.all([sub(a.businessId,'deliveryWindows','hour_'+hour).get(),sub(a.businessId,'deliveryWindows','day_'+day).get()]);
+      nextSendingWindow=d.data()?.attempts>=20?(day+1)*86400000:h.data()?.attempts>=5?(hour+1)*3600000:c.sendAt>now()?c.sendAt:null;
+    }
     let status=c.status;
     if(c.approved)status=attention?'needs_attention':sent+suppressed===rows.length?(sent===rows.length?'sent':sent?'partially_sent':'suppressed'):
-      c.sendAt>now()?'scheduled':sent?'partially_sent':'sending';
-    return {...c,status,reviewDigest:contentHash(c),audience:rows,eligibleCount:rows.filter(r=>r.eligible).length,
-      canApprove:a.beta.campaignSendEnabled===true&&!c.approved&&rows.every(r=>r.body!==null),results:{audience:rows.length,sent,replies:rows.reduce((n,r)=>n+r.replyCount,0),
+      c.sendAt>now()?'scheduled':'sending';
+    return {...c,status,nextSendingWindow,reviewDigest:contentHash(c),audience:rows,eligibleCount:rows.filter(r=>r.eligible).length,
+      canApprove:a.beta.campaignSendEnabled===true&&!c.approved&&rows.every(r=>r.body!==null),results:{audience:rows.length,sent,queued,needsAttention,replies:rows.reduce((n,r)=>n+r.replyCount,0),
         delivered:null,opens:null,bounced:rows.filter(r=>r.state==='sent'&&r.restriction==='bounced'&&r.restrictionAt>=r.requestedAt).length,
         unsubscribed:rows.filter(r=>r.state==='sent'&&r.restriction==='unsubscribed'&&r.restrictionAt>=r.requestedAt).length,suppressed,
         ...(await outcomes(a,ops.filter(d=>d.data()?.state==='sent').map(d=>d.id)))}};

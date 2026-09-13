@@ -354,7 +354,7 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Email Campaigns · Private Beta')),
+    appBar: AppBar(title: const Text('Email Campaigns')),
     body: CustomerPageBody(
       child: ListView(
         padding: const EdgeInsets.all(16),
