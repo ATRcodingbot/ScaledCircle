@@ -154,6 +154,41 @@ test('changed accepted contract fails closed with no proration or earning', asyn
   assert.equal((await db.collection('walletTransactions').get()).size,0);
 });
 
+test('TEST reversal appends negative earning and referral delta exactly once, preserving original economics', async () => {
+  await accepted(); await run('worker','submit',{attested:true,notes}); await run('business','approve',{attested:true});
+  const paths = ['assignmentCompensations/'+IDS.zone,'campaignSettlements/'+IDS.zone,'campaignCompletions/'+IDS.completion,
+    'campaignZones/'+IDS.zone,'campaignPayments/'+IDS.payment,'walletTransactions/earning_'+IDS.zone+'_v1'];
+  const before = await Promise.all(paths.map(async p => (await db.doc(p).get()).data()));
+  await assert.rejects(run('worker','reverse',{attested:true}),/action_not_authorized/);
+  await assert.rejects(run('business','reverse'),/explicit_confirmation_required/);
+  await Promise.all([run('business','reverse',{attested:true}),run('business','reverse',{attested:true})]);
+  await run('business','reverse',{attested:true});
+  assert.equal((await db.doc('wallets/worker').get()).data().availableBalance,0);
+  const entries = await db.collection('walletTransactions').get();
+  assert.equal(entries.size,2); assert.equal(entries.docs.reduce((s,d)=>s+d.data().amountCents,0),0);
+  assert.deepEqual(await Promise.all(paths.map(async p => (await db.doc(p).get()).data())),before);
+  const source = (await db.collection('referralRewards').get()).docs[0];
+  assert.equal(source.data().amountCents,5); assert.equal(source.data().status,'REVERSED');
+  const liability = (await db.collection('referralLiabilities').get()).docs[0];
+  assert.equal(liability.data().grossCents,5); assert.equal(liability.data().currentCents,0); assert.equal(liability.data().paidCents,0);
+  const journal = await liability.ref.collection('journal').get();
+  assert.equal(journal.docs.filter(d=>d.data().deltaCents===-5).length,1);
+  assert.equal((await db.collection('stagingPaymentCertifications/'+IDS.task+'/audit').where('action','==','reverse').get()).size,1);
+});
+
+test('TEST reversal holds spent, pending and externally authorized balances without partial writes', async () => {
+  await accepted(); await run('worker','submit',{attested:true,notes}); await run('business','approve',{attested:true});
+  for (const changes of [{availableBalance:4},{availableBalance:5,pendingBalance:1}]) {
+    await db.doc('wallets/worker').update(changes);
+    await assert.rejects(run('business','reverse',{attested:true}),/test_reversal_requires_review/);
+  }
+  await db.doc('wallets/worker').update({availableBalance:5,pendingBalance:0});
+  const transfer = (await db.collection('scalerTransfers').get()).docs[0];
+  await transfer.ref.update({externalExecutionAuthorized:true});
+  await assert.rejects(run('business','reverse',{attested:true}),/test_reversal_requires_review/);
+  assert.equal((await db.collection('walletTransactions').get()).size,1);
+});
+
 test('approval and delayed or replayed settlement triggers share one earned notification and one payable liability', async () => {
   await accepted();
   await run('worker','submit',{attested:true,notes});

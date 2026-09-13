@@ -86,6 +86,8 @@ class _CertificationState extends State<StagingPaymentCertificationScreen> {
         'Confirm that you performed the assigned checks and that your notes describe the actual result. Submission does not approve payment.',
       'approve' =>
         'Approve the submitted checks and record \$5.00 TEST compensation? The \$0.05 referral reward is separate, funded by ScaledCircle and held for review. This does not execute a cash-out.',
+      'reverse' =>
+        'Append a -\$5.00 TEST earning adjustment and reverse the associated \$0.05 referral liability? Original earning, referral and audit records are retained. This does not refund the Stripe payment or execute a payout.',
       _ => null,
     };
     if (copy != null) {
@@ -119,6 +121,7 @@ class _CertificationState extends State<StagingPaymentCertificationScreen> {
     'accept': 'Accept task',
     'submit': 'Submit checks for Business review',
     'approve': 'Approve \$5 TEST compensation',
+    'reverse': 'Resolve TEST balance with reversal',
   };
   static const _states = {
     'not_created': 'Ready to create',
@@ -128,6 +131,7 @@ class _CertificationState extends State<StagingPaymentCertificationScreen> {
     'accepted': 'Ready for your checks',
     'submitted': 'Awaiting Business review',
     'approved': 'Approved — TEST earning recorded',
+    'reversed': 'TEST earning reversed — original history preserved',
   };
 
   @override
@@ -170,6 +174,9 @@ class _CertificationState extends State<StagingPaymentCertificationScreen> {
                           'The \$0.05 referral reward does not come out of the Scaler’s pay. It stays pending review; signup alone earns nothing.',
                         ),
                         Text('Funding: ${s['fundingStatus']}'),
+                        Text(
+                          'Available TEST Wallet: \$${((s['testWalletBalanceCents'] as num? ?? 0) / 100).toStringAsFixed(2)}',
+                        ),
                         if ((s['notes'] as String? ?? '').isNotEmpty) ...[
                           const SizedBox(height: 12),
                           const Text(

@@ -14,6 +14,9 @@
   "firestore": {
     "rules": "firestore.staging.rules"
   },
+  "storage": {
+    "rules": "storage.staging.rules"
+  },
   "hosting": {
     "site": "scaledcircle-staging",
     "public": "apps/mobile/build/web",
@@ -76,6 +79,8 @@
     ]
   },
   "emulators": {
+    "auth": {"port": 9099},
+    "storage": {"port": 9199},
     "firestore": {
       "port": 8080
     },

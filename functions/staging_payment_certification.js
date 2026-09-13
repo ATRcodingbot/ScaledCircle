@@ -74,7 +74,8 @@ function createService({db, auth, FieldValue, Timestamp, config, stripe, now = D
       checkoutUrl: role === 'business' && p.data()?.status === 'payment_pending' ? p.data()?.stripeCheckoutUrl || null : null,
       actions: !t.exists ? (role === 'admin' ? ['create'] : []) :
         role === 'business' ? (data.status === 'created' && !['paid', 'funded'].includes(p.data()?.status) ? ['checkout'] :
-          data.status === 'applied' ? ['assign'] : data.status === 'submitted' ? ['approve'] : []) :
+          data.status === 'applied' ? ['assign'] : data.status === 'submitted' ? ['approve'] :
+            ['approved','reversed'].includes(data.status) ? ['reverse'] : []) :
           role === 'scaler' && ['paid','funded'].includes(p.data()?.status) ?
             data.status === 'created' ? ['apply'] : data.status === 'assigned' ? ['accept'] :
               data.status === 'accepted' ? ['submit'] : [] : []};
@@ -141,6 +142,19 @@ function createService({db, auth, FieldValue, Timestamp, config, stripe, now = D
     if (Object.keys(input).some(k => !['action','notes','attested'].includes(k))) fail('unexpected_input');
     if (action === 'get') return get(uid);
     if (action === 'checkout') return checkout(uid);
+    if (action === 'reverse') {
+      if (role !== 'business') fail('action_not_authorized');
+      if (input.attested !== true) fail('explicit_confirmation_required');
+      await verifiedFunding();
+      await db.runTransaction(async tx => {
+        const t = (await tx.get(taskRef)).data(); assertTask(t);
+        await require('./staging_certification_reversal').reverse({tx, db, FieldValue, config, ids: IDS, task: t, actorUid: uid});
+      });
+      // Canonical reconciliation appends the source reversal and liability delta.
+      // Retries repair an interrupted mirror without another Wallet adjustment.
+      await reconcileReferral();
+      return get(uid);
+    }
     const required = {create: 'admin', apply: 'scaler', assign: 'business', accept: 'scaler', submit: 'scaler', approve: 'business'}[action];
     if (!required || role !== required) fail('action_not_authorized');
     if (['accept','submit','approve'].includes(action) && input.attested !== true) fail('explicit_confirmation_required');
@@ -216,10 +230,13 @@ function createService({db, auth, FieldValue, Timestamp, config, stripe, now = D
       // The normal staging settlement triggers also create the source reward.
       // Reconcile it first so both paths share its earned notification before
       // the payable-liability mirror runs, including delayed trigger delivery.
-      await require('./scaler_referral_rewards').createService({db, FieldValue, project: config.project}).reconcile(IDS.zone);
-      await createReconciler({db, FieldValue, Timestamp, project: config.project, launchPolicy: MANUAL_LAUNCH_POLICY, now}).reconcile(IDS.zone);
+      await reconcileReferral();
     }
     return get(uid);
+  }
+  async function reconcileReferral() {
+    await require('./scaler_referral_rewards').createService({db, FieldValue, project: config.project}).reconcile(IDS.zone);
+    await createReconciler({db, FieldValue, Timestamp, project: config.project, launchPolicy: MANUAL_LAUNCH_POLICY, now}).reconcile(IDS.zone);
   }
   return {run, get};
 }

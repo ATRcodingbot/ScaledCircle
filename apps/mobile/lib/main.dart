@@ -1,5 +1,6 @@
 import 'screens/business/growth_agents_screen.dart';
 import 'screens/admin/staging_payment_certification_screen.dart';
+import 'screens/auth/delete_account_screen.dart';
 import 'screens/business/business_email_screen.dart';
 import 'screens/business/business_schedule_screen.dart';
 import 'screens/business/business_growth_home.dart';
@@ -187,6 +188,9 @@ class ScaledCircleApp extends StatelessWidget {
         settings: settings,
         builder: (_) => const ScalerFunnelScreen(),
       );
+    }
+    if (route?.path == '/account/delete' && AppEnvironmentConfig.isStaging) {
+      return MaterialPageRoute(settings: settings, builder: (_) => const DeleteAccountScreen());
     }
     if (route?.path == '/staging/payment-certification' && AppEnvironmentConfig.isStaging) {
       return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(

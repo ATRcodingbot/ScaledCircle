@@ -1,4 +1,5 @@
 import '../preferences/market_state_screen.dart';
+import '../auth/delete_account_screen.dart';
 import '../scaler/affiliate/scaler_affiliate_screen.dart';
 import 'package:flutter/material.dart';
 import '../../services/business_workspace_service.dart';
@@ -85,6 +86,7 @@ class BusinessAccountScreen extends StatelessWidget {
               ),
             const MarketStatusCard(business: true),
             const Divider(),
+            const DeleteAccountTile(),
             const ListTile(
               title: Text('Switch accounts'),
               subtitle: Text(

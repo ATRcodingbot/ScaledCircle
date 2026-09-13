@@ -191,17 +191,6 @@ class AuthService {
     await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
-  // ------------------------------------------------------------
-  // DELETE ACCOUNT
-  // ------------------------------------------------------------
-
-  Future<void> deleteAccount() async {
-    final user = _auth.currentUser;
-
-    if (user == null) {
-      throw Exception('No authenticated user.');
-    }
-
-    await user.delete();
-  }
+  // Account deletion uses the server-authoritative Account screen. Deleting
+  // Firebase Auth directly would bypass obligation and workspace-owner checks.
 }
