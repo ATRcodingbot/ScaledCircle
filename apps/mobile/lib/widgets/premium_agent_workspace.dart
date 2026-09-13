@@ -61,6 +61,9 @@ String recommendationDestination(Map recommendation) {
   if (RegExp(r'brand|image|photo|creative').hasMatch(text)) {
     return '/business/brand-assets';
   }
+  if (RegExp(r'outreach|prospect|decision packages').hasMatch(text)) {
+    return '/business/growth-agents?agent=lead_generation';
+  }
   if (RegExp(r'repl|email|conversation|follow.up').hasMatch(text)) {
     return '/business/email-connection';
   }
@@ -151,7 +154,7 @@ class PremiumAgentWorkspace extends StatelessWidget {
     final parsed = DateTime.tryParse('$date');
     return parsed == null
         ? 'Date unavailable'
-        : MaterialLocalizations.of(c).formatMediumDate(parsed);
+        : '${MaterialLocalizations.of(c).formatMediumDate(parsed)}, ${parsed.year}';
   }
 
   Widget _pipeline(BuildContext c, Map? pipeline) => Column(
@@ -228,7 +231,7 @@ class PremiumAgentWorkspace extends StatelessWidget {
         runSpacing: 8,
         children: [
           const Chip(label: Text('Private Beta')),
-          if (type == 'business_assistant')
+          if (type == 'business_assistant' && access[type] is! String)
             const Chip(label: Text('Recommendations only')),
           if (access[type] is String) Chip(label: Text(access[type])),
         ],

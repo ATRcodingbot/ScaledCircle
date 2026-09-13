@@ -3,6 +3,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/widgets/premium_agent_workspace.dart';
 
 void main() {
+  test('recommendation actions route to the matching maintained workspace', () {
+    expect(
+      recommendationDestination({
+        'summary': {
+          'next': 'Review sourced decision packages and outreach drafts.',
+        },
+      }),
+      '/business/growth-agents?agent=lead_generation',
+    );
+    expect(
+      recommendationDestination({
+        'summary': {'next': 'Review customer replies.'},
+      }),
+      '/business/email-connection',
+    );
+    expect(
+      recommendationDestination({
+        'summary': {'next': 'Update approved brand images.'},
+      }),
+      '/business/brand-assets',
+    );
+  });
   test(
     'recommendations newest first and normalized duplicates retain history',
     () {

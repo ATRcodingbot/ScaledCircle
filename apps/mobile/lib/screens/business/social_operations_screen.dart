@@ -1846,7 +1846,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        '${socialProviderName(platform['provider']?.toString() ?? '')}: ${platform['decision']}\n${platform['reason']}',
+                        '${socialProviderName(platform['provider']?.toString() ?? '')}: ${platform['decision'] == 'HOLD' ? 'Keep current cadence' : platform['decision']}\n${platform['reason']}',
                       ),
                     ),
                 ],

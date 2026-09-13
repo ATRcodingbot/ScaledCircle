@@ -295,8 +295,25 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             const Text(
               'Your exact approval controls publication. Creative preparation and quality checks run automatically.',
             ),
-            if (_busy) const LinearProgressIndicator(),
+            if (_busy) ...[
+              const LinearProgressIndicator(),
+              const Text('Preparing your preview…'),
+            ],
             Text(_post['provider'] == 'instagram' ? 'Instagram' : 'Facebook'),
+            for (final image
+                in (_post['reviewedPost']?['images'] as List? ?? [])
+                    .whereType<Map>())
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Image.network(
+                  image['url'].toString(),
+                  height: 220,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, error, stack) => const Text(
+                    'Image preview unavailable. Reload before approval.',
+                  ),
+                ),
+              ),
             if (!_editing) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -319,20 +336,6 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 child: const Text('Reload saved status (keep my text)'),
               ),
             ],
-            for (final image
-                in (_post['reviewedPost']?['images'] as List? ?? [])
-                    .whereType<Map>())
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Image.network(
-                  image['url'].toString(),
-                  height: 220,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, error, stack) => const Text(
-                    'Image preview unavailable. Reload before approval.',
-                  ),
-                ),
-              ),
             if (_editing)
               TextField(
                 key: const ValueKey('social-post-copy'),
@@ -385,13 +388,14 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 child: Text(_busy ? 'Working…' : 'Save draft changes'),
               ),
             const SizedBox(height: 20),
-            Text(
-              variant['mediaRevisionId'] != null
-                  ? 'Creative prepared'
-                  : _textOnly
-                  ? 'Text-only post'
-                  : 'No suitable approved image was found. Generate or upload a creative, or use text only where supported.',
-            ),
+            if (!_busy)
+              Text(
+                variant['mediaRevisionId'] != null
+                    ? 'Creative prepared'
+                    : _textOnly
+                    ? 'Text-only post'
+                    : 'No suitable approved image was found. Generate or upload a creative, or use text only where supported.',
+              ),
             OutlinedButton(
               onPressed: _busy || _changed ? null : () => _run(_chooseImage),
               child: const Text('Upload / Replace Image'),
@@ -413,7 +417,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               const Text(
                 'Save your changes to refresh the preview and automatic quality checks.',
               ),
-            if (_quality != null) ...[
+            if (!_busy && _quality != null) ...[
               Text(
                 _quality!['readyToPublish'] == true
                     ? 'Content checks passed'
@@ -432,14 +436,15 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 'This is an automated content check, not proof of performance. Review the actual image and claims before approval.',
               ),
             ],
-            for (final reason
-                in (_post['reasons'] as List? ?? []).whereType<Map>())
-              Text(
-                socialEvidenceText(
-                  reason['message'],
-                  'Review current requirements.',
+            if (!_busy)
+              for (final reason
+                  in (_post['reasons'] as List? ?? []).whereType<Map>())
+                Text(
+                  socialEvidenceText(
+                    reason['message'],
+                    'Review current requirements.',
+                  ),
                 ),
-              ),
             const SizedBox(height: 16),
             if (_post['ready'] == true &&
                 !_changed &&
