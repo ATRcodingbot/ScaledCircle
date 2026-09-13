@@ -81,9 +81,10 @@ function createService({db, FieldValue, project}) {
       const prior = priorDoc.data();
       if (!a?.affiliateUid) return {status: 'no_referral'};
       const transferId = require('./marketplace_finance').operationId('scaler-transfer', zoneId, 1);
-      const [f, t, refund] = await Promise.all([
+      const [f, t, refund, notice] = await Promise.all([
         read('scalerAffiliateProfiles/' + a.affiliateUid), read('scalerTransfers/' + transferId),
         s.refundOperationId ? read('financialOperations/' + s.refundOperationId) : null,
+        read('notifications/referral_earned_' + id),
       ]);
       const result = qualify({zoneId, settlement: s, zone: z, payment: p, contract: c,
         transfer: t, attribution: a, affiliate: f, refund, mode: 'test'});
@@ -102,6 +103,8 @@ function createService({db, FieldValue, project}) {
         return {status: !result.qualifies ? 'REVERSED' : prior.status, duplicate: true};
       }
       if (!result.qualifies || result.amountCents === 0) return {status: 'not_qualified', reason: result.reason};
+      if (notice && (notice.userId !== a.affiliateUid ||
+          (notice.amountCents != null && notice.amountCents !== result.amountCents))) throw Error('referral_notification_binding_invalid');
       tx.create(ref, {policyVersion: VERSION, kind: 'scaler_completed_work', mode: 'test', currency: 'usd',
         affiliateUid: a.affiliateUid, referredScalerUid: s.scalerId, zoneId, paymentId: s.paymentId,
         campaignId: s.campaignId, rateBps: RATE_BPS, basisCents: result.basisCents, amountCents: result.amountCents,
@@ -109,10 +112,10 @@ function createService({db, FieldValue, project}) {
         createdAt: now()});
       tx.create(ref.collection('journal').doc('earned'), {action: 'earned', amountCents: result.amountCents,
         debit: 'platformReferralExpense', credit: 'referralHeldLiability', at: now()});
-      tx.create(db.doc('notifications/referral_earned_' + id), {userId: a.affiliateUid,
+      if (!notice) tx.create(db.doc('notifications/referral_earned_' + id), {userId: a.affiliateUid,
         type: 'referral_reward_earned', title: 'Referral reward earned', referralState: 'EARNED',
         message: `You earned ${money(result.amountCents)} from qualifying completed work by a Scaler you referred. This does not come out of the Scaler's pay.`,
-        amountCents: result.amountCents, read: false, createdAt: now()});
+        amountCents: result.amountCents, deepLink: {destination:'referrals'}, read: false, createdAt: now()});
       return {status: 'EARNED', amountCents: result.amountCents};
     });
   }

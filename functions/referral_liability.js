@@ -67,8 +67,8 @@ function createLedger({db,FieldValue,project,launchPolicy,now=Date.now}) {
       adjusted:`A previously qualifying economic event changed. Your referral balance was ${amountCents<0?'reduced':'increased'} by ${money(Math.abs(amountCents))}.`};
     const body={beneficiaryUid:uid,type,amountCents,title:titles[type],message:messages[type],...extra,createdAt:stamp()};
     tx.create(db.doc('referralMilestones/'+id),body);
-    if(!extra.notificationAlreadyCreated)tx.create(db.doc('notifications/referral_'+id),{userId:uid,type:'referral_'+type,title:body.title,message:body.message,
-      deepLink:{destination:'referrals'},read:false,createdAt:stamp()});
+    if(!extra.notificationAlreadyCreated)tx.create(db.doc('notifications/'+(extra.notificationId||'referral_'+id)),{userId:uid,type:'referral_'+type,title:body.title,message:body.message,
+      amountCents,deepLink:{destination:'referrals'},read:false,createdAt:stamp()});
   }
   async function reconcile(e,{claimRef,claimToken,expectedDocuments=[]}={}) {
     const spec=TYPES[e.type];
@@ -79,6 +79,10 @@ function createLedger({db,FieldValue,project,launchPolicy,now=Date.now}) {
     const id=hash(VERSION,e.type,e.sourceId);
     return db.runTransaction(async tx=>{
       const [doc,b,claim]=await Promise.all([tx.get(ref(id)),tx.get(balance(e.beneficiaryUid)),claimRef?tx.get(claimRef):null]);
+      if(e.sourceNotificationId && !/^referral_earned_[a-f0-9]{64}$/.test(e.sourceNotificationId))fail('referral_notification_binding_invalid');
+      const sourceNotice=e.sourceNotificationId?await tx.get(db.doc('notifications/'+e.sourceNotificationId)):null;
+      if(sourceNotice?.exists && (sourceNotice.data().userId!==e.beneficiaryUid ||
+        (sourceNotice.data().amountCents!=null && sourceNotice.data().amountCents!==grossCents)))fail('referral_notification_binding_invalid');
       for(const expected of expectedDocuments){const current=await tx.get(expected.ref);
         if(current.exists!==expected.exists || (current.exists && !current.updateTime.isEqual(expected.updateTime)))fail('referral_stale_economic_read');}
       if(claimRef && (claim?.data()?.token!==claimToken || claim.data().until<now())) fail('referral_stale_economic_read');
@@ -105,7 +109,7 @@ function createLedger({db,FieldValue,project,launchPolicy,now=Date.now}) {
         tx.create(ref(id).collection('journal').doc('earned'),{action:'earned',amountCents:grossCents,
           debit:'platformReferralExpense',credit:'referralHeldLiability',at:stamp(),authorityDigest:e.authorityDigest});
         milestone(tx,id,e.beneficiaryUid,'earned',grossCents,{holdUntilMillis:next.holdUntilMillis,
-          notificationAlreadyCreated:!!e.sourceNotificationId});
+          notificationAlreadyCreated:sourceNotice?.exists===true,...(e.sourceNotificationId?{notificationId:e.sourceNotificationId}:{})});
       }
       const delta=currentCents-(prior?.currentCents??grossCents);
       if(delta){

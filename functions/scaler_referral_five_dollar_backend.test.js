@@ -30,7 +30,7 @@ let now, service, ledger;
 beforeEach(async () => {
   for (const collection of ['users', 'scalerAffiliateProfiles', 'scalerReferralAttributions',
     'campaignSettlements', 'campaignZones', 'assignmentCompensations', 'campaignPayments',
-    'scalerTransfers', 'walletTransactions', 'wallets', 'referralLiabilities', 'referralBalances',
+    'scalerTransfers', 'walletTransactions', 'wallets', 'referralRewards', 'referralLiabilities', 'referralBalances',
     'referralMilestones', 'notifications', 'financialOperations']) {
     for (const ref of await db.collection(collection).listDocuments()) await db.recursiveDelete(ref);
   }
@@ -144,3 +144,25 @@ test('a lost posted-earning proof leaves a truthful held-liability adjustment re
   assert.equal(adjusted.reason, 'worker_earning_not_settled');
   assert.deepEqual(await protectedSnapshot(), before);
 });
+
+for (const order of ['liability first','source first','concurrent']) {
+  test(`source reward and payable ledger announce one reward when ${order}`, async () => {
+    const source = require('./scaler_referral_rewards').createService({db,FieldValue,project:'demo-referral-authority'});
+    const before = await protectedSnapshot();
+    if (order === 'liability first') {await service.reconcile(zoneId); await source.reconcile(zoneId);}
+    if (order === 'source first') {await source.reconcile(zoneId); await service.reconcile(zoneId);}
+    if (order === 'concurrent') {
+      const attempts = await Promise.allSettled([service.reconcile(zoneId),source.reconcile(zoneId)]);
+      for (const result of attempts) if (result.status === 'rejected') assert.match(result.reason.message,/referral_stale_economic_read/);
+    }
+    await source.reconcile(zoneId); await service.reconcile(zoneId);
+    assert.equal((await db.collection('referralRewards').get()).size,1);
+    assert.equal((await db.collection('referralLiabilities').get()).size,1);
+    const notices=await db.collection('notifications').get();assert.equal(notices.size,1);
+    assert.equal(notices.docs[0].data().amountCents,5);
+    assert.equal(notices.docs[0].data().userId,referrer);
+    assert.deepEqual(notices.docs[0].data().deepLink,{destination:'referrals'});
+    assert.equal((await ledger.dashboard(referrer)).pendingCents,5);
+    assert.deepEqual(await protectedSnapshot(),before);
+  });
+}

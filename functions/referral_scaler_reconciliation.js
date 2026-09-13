@@ -24,8 +24,7 @@ function createReconciler(options){
     if(!prior && (!result.qualifies||!posted))return {status:'not_qualified',reason};
     const basis=result.qualifies&&posted?settlement.earnedWorkerCents:0;
     const sourceNotificationId='referral_earned_'+require('node:crypto').createHash('sha256').update('ScalerReferralOnePercentV1:'+zoneId).digest('hex');
-    const notice=await read('notifications/'+sourceNotificationId);
-    const e={type,sourceId,...(notice?{sourceNotificationId}:{}),beneficiaryUid:attribution.affiliateUid,referredId:settlement.scalerId,
+    const e={type,sourceId,sourceNotificationId,beneficiaryUid:attribution.affiliateUid,referredId:settlement.scalerId,
       relationshipId:settlement.scalerId,grossBasisCents:prior?.grossBasisCents??settlement.earnedWorkerCents,
       currentBasisCents:basis,paidAtMillis:prior?.paidAtMillis??settlement.createdAt.toMillis(),
       reason,authorityDigest:hash(zoneId,basis,docs.map(d=>[d.ref.path,d.updateTime?.toMillis()||null]))};

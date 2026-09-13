@@ -34,9 +34,9 @@ liability. It cannot deduct worker pay or create a Business surcharge. The rewar
 remains held under the manual launch policy; this path never releases or pays it.
 It never executes a Scaler cash-out or claims a bank payout was certified.
 
-The staging source-reward adapter runs before the payable-liability mirror. This
-shares the existing earned notification with asynchronous settlement triggers,
-so delayed delivery or approval retries do not announce the same reward twice.
+The staging source-reward adapter runs before the payable-liability mirror.
+Both adapters also transactionally share the same earned-notification identity,
+so either asynchronous trigger order or approval retries announce one reward.
 The source reward is provenance for the single liability; the referral portal
 uses the liability ledger without adding the source record to its balance.
 
