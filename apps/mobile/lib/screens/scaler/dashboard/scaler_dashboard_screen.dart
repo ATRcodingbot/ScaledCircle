@@ -344,7 +344,7 @@ class ScalerDashboardScreen extends StatelessWidget {
                       icon: Icons.account_balance_wallet_outlined,
                       title: 'Earnings',
                       subtitle:
-                          'View verified work earnings. Cash-out is not yet available.',
+                          'View your earnings and manage payouts.',
                       accent: AppColors.primary,
                       onTap: () {
                         Navigator.push(
