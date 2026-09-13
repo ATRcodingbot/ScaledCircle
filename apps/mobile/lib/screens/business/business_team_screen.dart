@@ -125,19 +125,49 @@ class _BusinessTeamScreenState extends State<BusinessTeamScreen> {
                   ExpansionTile(
                     title: const Text('Adjust responsibilities'),
                     children: [
+                      Wrap(
+                        spacing: 12,
+                        children: [
+                          TextButton(
+                            onPressed: () => update(() {
+                              preset = 'Custom';
+                              grants = businessPermissionLabels.keys
+                                  .where(
+                                    (p) =>
+                                        _data?['isOwner'] == true ||
+                                        (_data?['permissions'] as List? ?? [])
+                                            .contains(p),
+                                  )
+                                  .toSet();
+                            }),
+                            child: const Text('Select All'),
+                          ),
+                          TextButton(
+                            onPressed: () => update(() {
+                              preset = 'Custom';
+                              grants = <String>{};
+                            }),
+                            child: const Text('Clear All'),
+                          ),
+                        ],
+                      ),
                       for (final permission in businessPermissionLabels.entries)
-                        CheckboxListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          value: grants.contains(permission.key),
-                          title: Text(permission.value),
-                          onChanged: (v) => update(() {
-                            preset = 'Custom';
-                            v == true
-                                ? grants.add(permission.key)
-                                : grants.remove(permission.key);
-                          }),
-                        ),
+                        if (_data?['isOwner'] == true ||
+                            (_data?['permissions'] as List? ?? []).contains(
+                              permission.key,
+                            ))
+                          CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: grants.contains(permission.key),
+                            title: Text(permission.value),
+                            onChanged: (v) => update(() {
+                              preset = 'Custom';
+                              v == true
+                                  ? grants.add(permission.key)
+                                  : grants.remove(permission.key);
+                            }),
+                          ),
                     ],
                   ),
                   const Text(

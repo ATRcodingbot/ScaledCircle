@@ -51,15 +51,16 @@ class BusinessAccountScreen extends StatelessWidget {
                   ),
                 ),
               ),
-            ListTile(
-              leading: const Icon(Icons.people_outline),
-              title: const Text('Team'),
-              subtitle: const Text('Members, invitations and seats'),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const BusinessTeamScreen()),
+            if (BusinessWorkspaceSession.can('teamManagement'))
+              ListTile(
+                leading: const Icon(Icons.people_outline),
+                title: const Text('Team'),
+                subtitle: const Text('Members, invitations and seats'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BusinessTeamScreen()),
+                ),
               ),
-            ),
             if (BusinessWorkspaceSession.can('billing'))
               ListTile(
                 leading: const Icon(Icons.credit_card_outlined),
@@ -84,7 +85,8 @@ class BusinessAccountScreen extends StatelessWidget {
                   ),
                 ),
               ),
-            const MarketStatusCard(business: true),
+            if (BusinessWorkspaceSession.value?['isOwner'] == true)
+              const MarketStatusCard(business: true),
             const Divider(),
             const DeleteAccountTile(),
             const ListTile(

@@ -1,4 +1,26 @@
 import '../navigation/app_routes.dart';
+import '../navigation/workspace_presentation.dart';
+
+NotificationDestination? workspaceNotificationDestination(
+  Map<String, dynamic> data,
+  Map<String, dynamic>? workspace,
+) {
+  final target = notificationDestination(data);
+  if (target == null || workspace == null || workspace['isOwner'] == true) {
+    return target;
+  }
+  final access = WorkspacePresentation(workspace);
+  if (target.kind == 'route') {
+    return access.allowsRoute(target.route!) ? target : null;
+  }
+  if (target.kind == 'applicants') {
+    return access.can('campaigns') ? target : null;
+  }
+  if (target.kind == 'weather') {
+    return access.can('intelligence') ? target : null;
+  }
+  return null;
+}
 
 class NotificationDestination {
   const NotificationDestination(
@@ -22,6 +44,14 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
   final type = data['type'];
   final link = data['deepLink'] is Map ? data['deepLink'] as Map : const {};
   final destination = link['destination'];
+  if (destination == 'business_schedule' ||
+      type == 'business_schedule_update') {
+    return const NotificationDestination(
+      'route',
+      'View Schedule',
+      route: '/business/schedule',
+    );
+  }
   if (destination == 'growth_agents' ||
       destination == 'business_growth_agents') {
     final prospect = id(link['prospectId']);

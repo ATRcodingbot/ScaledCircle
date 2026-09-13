@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/notification_destination.dart';
 import '../../navigation/context_back_button.dart';
+import '../../services/business_workspace_service.dart';
 
 import '../campaigns/campaign_applicants_screen.dart';
 import '../jobs/scaler_wallet_screen.dart';
@@ -13,9 +14,19 @@ class NotificationsScreen extends StatelessWidget {
     super.key,
     this.currentUserId,
     this.notificationsStream,
+    this.workspace,
   });
   final String? currentUserId;
   final Stream<QuerySnapshot>? notificationsStream;
+  final Map<String, dynamic>? workspace;
+  NotificationDestination? _destination(Map<String, dynamic> data) {
+    final uid = currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
+    final current = workspace ?? BusinessWorkspaceSession.value;
+    return workspaceNotificationDestination(
+      data,
+      current?['actorUid'] == uid ? current : null,
+    );
+  }
 
   Future<void> _markAsRead(DocumentReference reference) async {
     await reference.update({
@@ -54,7 +65,7 @@ class NotificationsScreen extends StatelessWidget {
     QueryDocumentSnapshot notification,
   ) async {
     final data = notification.data() as Map<String, dynamic>;
-    final target = notificationDestination(data);
+    final target = _destination(data);
     if (target == null) return;
     try {
       if (data['read'] != true) await _markAsRead(notification.reference);
@@ -128,7 +139,17 @@ class NotificationsScreen extends StatelessWidget {
             icon: const Icon(Icons.done_all),
             tooltip: 'Mark all as read',
             onPressed: () async {
-              await _markAllAsRead(userId);
+              try {
+                await _markAllAsRead(userId);
+              } catch (_) {
+                if (context.mounted) {
+                  _showMessage(
+                    context,
+                    "We couldn't update your notifications. Please retry.",
+                  );
+                }
+                return;
+              }
 
               if (!context.mounted) {
                 return;
@@ -149,7 +170,14 @@ class NotificationsScreen extends StatelessWidget {
                 .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  "We couldn't load your notifications right now. Please reopen this page to retry.",
+                ),
+              ),
+            );
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -193,7 +221,7 @@ class NotificationsScreen extends StatelessWidget {
 
     final createdAt = data['createdAt'];
 
-    final target = notificationDestination(data);
+    final target = _destination(data);
     final action = target?.label;
 
     return Card(

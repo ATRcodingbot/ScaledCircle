@@ -86,6 +86,7 @@ class ProtectedRouteGate extends StatelessWidget {
                                 profile['activeView'] == 'business')))) &&
                 profile['role'] != 'admin') {
               return BusinessWorkspaceGate(
+                routeName: routeName,
                 user: user,
                 profile: profile,
                 builder: builder,

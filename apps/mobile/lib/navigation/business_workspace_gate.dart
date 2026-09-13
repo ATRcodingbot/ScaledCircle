@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../services/business_workspace_service.dart';
 import '../widgets/authenticated_sign_out_button.dart';
 import 'app_router.dart';
+import 'workspace_presentation.dart';
+import '../screens/business/business_member_home.dart';
+import '../screens/business/business_schedule_screen.dart';
 
 class BusinessWorkspaceGate extends StatefulWidget {
   const BusinessWorkspaceGate({
@@ -12,10 +15,12 @@ class BusinessWorkspaceGate extends StatefulWidget {
     required this.builder,
     required this.user,
     required this.profile,
+    required this.routeName,
   });
   final Widget Function(User, Map<String, dynamic>) builder;
   final User user;
   final Map<String, dynamic> profile;
+  final String routeName;
   @override
   State<BusinessWorkspaceGate> createState() => _BusinessWorkspaceGateState();
 }
@@ -132,16 +137,52 @@ class _BusinessWorkspaceGateState extends State<BusinessWorkspaceGate> {
   @override
   Widget build(BuildContext context) {
     if (_workspace != null) {
+      final access = WorkspacePresentation(_workspace!);
+      if (!access.allowsRoute(widget.routeName)) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Business workspace'),
+            actions: const [MemberAccountActions()],
+          ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Your workspace responsibilities do not include this page.',
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        AppNavigation.replace(context, '/business'),
+                    child: const Text('Open my workspace'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
       return KeyedSubtree(
         key: ValueKey(
           '${_workspace!['businessId']}:${_workspace!['permissions']}',
         ),
-        child: widget.builder(widget.user, {
-          ...widget.profile,
-          'role': 'business',
-          'activeView': 'business',
-          'businessId': _workspace!['businessId'],
-        }),
+        child: Uri.tryParse(widget.routeName)?.path == '/business' && !access.owner
+            ? BusinessWorkspaceHome(
+                workspace: _workspace!,
+                ownerBuilder: (_) => const SizedBox.shrink(),
+                scheduleBuilder: (_) => BusinessScheduleScreen(
+                  businessId: _workspace!['businessId'],
+                  workspaceHome: true,
+                ),
+              )
+            : widget.builder(widget.user, {
+                ...widget.profile,
+                'role': 'business',
+                'activeView': 'business',
+                'businessId': _workspace!['businessId'],
+              }),
       );
     }
     return Scaffold(

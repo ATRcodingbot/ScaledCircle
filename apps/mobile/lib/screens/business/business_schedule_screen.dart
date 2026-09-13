@@ -5,9 +5,16 @@ import 'package:flutter/material.dart';
 import '../../navigation/app_router.dart';
 import '../../services/business_operations_service.dart';
 import '../../services/business_workspace_service.dart';
+import 'business_member_home.dart';
 
 class BusinessScheduleScreen extends StatefulWidget {
-  const BusinessScheduleScreen({super.key, this.businessId, this.service});
+  const BusinessScheduleScreen({
+    super.key,
+    this.businessId,
+    this.service,
+    this.workspaceHome = false,
+  });
+  final bool workspaceHome;
   final String? businessId;
   final BusinessOperationsService? service;
   @override
@@ -110,9 +117,10 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
       if (mounted && !accountChanged && requested == range) {
         setState(() {
           data = null;
-          error = e is FirebaseFunctionsException
-              ? e.message
-              : 'Schedule could not be confirmed. Check your connection and retry.';
+          error =
+              e is FirebaseFunctionsException && e.code == 'permission-denied'
+              ? 'Your schedule access has changed. Return to your workspace.'
+              : "We couldn't load your schedule right now. Please retry.";
         });
       }
     } finally {
@@ -1023,21 +1031,26 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      leading: BackButton(
-        onPressed: () {
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context);
-          } else {
-            AppNavigation.replace(context, '/business');
-          }
-        },
-      ),
-      title: const Text('Customers & Schedule'),
+      automaticallyImplyLeading: !widget.workspaceHome,
+      leading: widget.workspaceHome
+          ? null
+          : BackButton(
+              onPressed: () {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  AppNavigation.replace(context, '/business');
+                }
+              },
+            ),
+      title: Text(can('customersView') ? 'Customers & Schedule' : 'Schedule'),
       actions: [
+        if (widget.service == null && data?['isOwner'] != true)
+          const MemberAccountActions(),
         IconButton(
           tooltip: 'Notification choices',
           onPressed: data == null ? null : preferences,
-          icon: const Icon(Icons.notifications_outlined),
+          icon: const Icon(Icons.tune),
         ),
       ],
     ),
@@ -1061,8 +1074,10 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    const Text(
-                      'Customers, estimates, jobs and follow-ups in one place.',
+                    Text(
+                      can('customersView')
+                          ? 'Customers, estimates, jobs and follow-ups in one place.'
+                          : 'Your schedule and assigned work.',
                     ),
                     if (!editable)
                       const Card(

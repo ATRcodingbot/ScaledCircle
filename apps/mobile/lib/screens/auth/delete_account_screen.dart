@@ -221,24 +221,38 @@ class _DeleteAccountState extends State<DeleteAccountScreen> {
                   const Text(
                     'No outstanding obligations were found. Confirm with a fresh sign-in.',
                   ),
+                  const SizedBox(height: 24),
+                  const Text('Current password'),
+                  const SizedBox(height: 8),
                   TextField(
+                    key: const Key('delete-current-password'),
                     controller: _password,
                     obscureText: true,
                     enableSuggestions: false,
                     autocorrect: false,
                     decoration: const InputDecoration(
-                      labelText: 'Current password',
-                      helperText:
-                          'For email/password accounts. Connected accounts will use their sign-in provider.',
+                      hintText: 'Enter your current password',
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 18,
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'For email/password accounts. Connected accounts will use their sign-in provider.',
+                    key: Key('delete-password-help'),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Type DELETE to confirm'),
+                  const SizedBox(height: 8),
                   TextField(
+                    key: const Key('delete-confirmation'),
                     controller: _confirmation,
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Type DELETE to confirm',
-                    ),
+                    decoration: const InputDecoration(hintText: 'DELETE'),
                   ),
+                  const SizedBox(height: 24),
                   FilledButton(
                     onPressed: _busy || _confirmation.text != 'DELETE'
                         ? null

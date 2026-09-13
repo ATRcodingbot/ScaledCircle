@@ -1193,10 +1193,19 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
 
+      // Account notices are independent of marketplace approval or team roles.
+      // Only the recipient may read; only acknowledgement fields may change.
+      function notificationAccount() {
+        return isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('disabled', false) != true
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') != 'deleted';
+      }
+
       // A missing deterministic id contains no private data; existing
       // notifications remain readable only by their recipient.
       allow get:
-        if isApprovedAccount()
+        if notificationAccount()
         && (
           resource == null
           || resource.data.userId == request.auth.uid
@@ -1204,7 +1213,7 @@ service cloud.firestore {
 
 
       allow list:
-        if isApprovedAccount()
+        if notificationAccount()
         && resource.data.userId == request.auth.uid;
 
 
@@ -1215,7 +1224,7 @@ service cloud.firestore {
 
 
       allow update:
-        if isApprovedAccount()
+        if notificationAccount()
         &&
         resource.data.userId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys()

@@ -3,6 +3,8 @@ import 'screens/admin/staging_payment_certification_screen.dart';
 import 'screens/auth/delete_account_screen.dart';
 import 'screens/business/business_email_screen.dart';
 import 'screens/business/business_schedule_screen.dart';
+import 'screens/business/business_campaigns_screen.dart';
+import 'screens/business/create/create_campaign_screen.dart';
 import 'screens/business/business_growth_home.dart';
 import 'screens/public/referral_program_screen.dart';
 import 'screens/scaler/affiliate/scaler_affiliate_screen.dart';
@@ -201,6 +203,15 @@ class ScaledCircleApp extends StatelessWidget {
       return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
         routeName: settings.name!, audience: ProtectedRouteAudience.business,
         builder: (_, _) => BusinessScheduleScreen(businessId: route?.queryParameters['workspace'])));
+    }
+    if (route?.path == '/business/campaigns' || route?.path == '/business/results') {
+      return MaterialPageRoute(settings: settings, builder: (context) => ProtectedRouteGate(
+        routeName: settings.name!, audience: ProtectedRouteAudience.business,
+        builder: (_, profile) => BusinessCampaignsScreen(
+          businessId: profile['businessId'],
+          view: route?.path == '/business/results' ? BusinessCampaignView.results : BusinessCampaignView.campaigns,
+          onCreateCampaign: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateCampaignScreen())),
+        )));
     }
     if (route?.path == '/business/email-connection') {
       return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
