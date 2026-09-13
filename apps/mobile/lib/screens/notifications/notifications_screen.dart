@@ -5,20 +5,36 @@ import '../../models/notification_destination.dart';
 import '../../navigation/context_back_button.dart';
 import '../../services/business_workspace_service.dart';
 
+import 'notification_preferences_screen.dart';
 import '../campaigns/campaign_applicants_screen.dart';
 import '../jobs/scaler_wallet_screen.dart';
 import '../business/weather_alerts_screen.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({
     super.key,
     this.currentUserId,
     this.notificationsStream,
     this.workspace,
+    this.initialNotificationId,
+    this.initialResolvedData,
+    this.unavailableDestination = false,
   });
   final String? currentUserId;
   final Stream<QuerySnapshot>? notificationsStream;
   final Map<String, dynamic>? workspace;
+  final String? initialNotificationId;
+  final Map<String, dynamic>? initialResolvedData;
+  final bool unavailableDestination;
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool initialOpened = false;
+  String? get currentUserId => widget.currentUserId;
+  Stream<QuerySnapshot>? get notificationsStream => widget.notificationsStream;
+  Map<String, dynamic>? get workspace => widget.workspace;
   NotificationDestination? _destination(Map<String, dynamic> data) {
     final uid = currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
     final current = workspace ?? BusinessWorkspaceSession.value;
@@ -62,10 +78,11 @@ class NotificationsScreen extends StatelessWidget {
 
   Future<void> _openNotification(
     BuildContext context,
-    QueryDocumentSnapshot notification,
-  ) async {
+    QueryDocumentSnapshot notification, {
+    Map<String, dynamic>? resolvedData,
+  }) async {
     final data = notification.data() as Map<String, dynamic>;
-    final target = _destination(data);
+    final target = _destination(resolvedData ?? data);
     if (target == null) return;
     try {
       if (data['read'] != true) await _markAsRead(notification.reference);
@@ -136,6 +153,16 @@ class NotificationsScreen extends StatelessWidget {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Notification preferences',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const NotificationPreferencesScreen(),
+              ),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.done_all),
             tooltip: 'Mark all as read',
             onPressed: () async {
@@ -185,6 +212,46 @@ class NotificationsScreen extends StatelessWidget {
           }
 
           final notifications = snapshot.data?.docs ?? [];
+          if (!initialOpened &&
+              snapshot.hasData &&
+              (widget.initialNotificationId != null ||
+                  widget.unavailableDestination)) {
+            initialOpened = true;
+            final matching = notifications
+                .where((n) => n.id == widget.initialNotificationId)
+                .toList();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              if (matching.isNotEmpty) {
+                final n = matching.first;
+                if (_destination(
+                      widget.initialResolvedData ??
+                          n.data() as Map<String, dynamic>,
+                    ) !=
+                    null) {
+                  _openNotification(
+                    context,
+                    n,
+                    resolvedData: widget.initialResolvedData,
+                  );
+                } else {
+                  _markAsRead(n.reference).catchError((_) {});
+                  _showMessage(
+                    context,
+                    (n.data() as Map)['type'] == 'mobile_push_check'
+                        ? 'Notification check received. It is now marked as read.'
+                        : 'Notification received. It is now marked as read.',
+                  );
+                }
+              } else if (widget.unavailableDestination ||
+                  widget.initialNotificationId != null) {
+                _showMessage(
+                  context,
+                  'This notification is no longer available. Your current notifications are shown here.',
+                );
+              }
+            });
+          }
 
           if (notifications.isEmpty) {
             return const Center(child: Text('No notifications yet.'));

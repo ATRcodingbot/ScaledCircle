@@ -32,8 +32,13 @@ List<Map<String, String>> campaignImportRows(String value) {
 }
 
 class BusinessEmailCampaignScreen extends StatefulWidget {
-  const BusinessEmailCampaignScreen({super.key, this.service});
+  const BusinessEmailCampaignScreen({
+    super.key,
+    this.service,
+    this.initialCampaignId,
+  });
   final BusinessEmailService? service;
+  final String? initialCampaignId;
   @override
   State<BusinessEmailCampaignScreen> createState() => _CampaignState();
 }
@@ -42,6 +47,7 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
   late final service = widget.service ?? BusinessEmailService();
   Map<String, dynamic>? data;
   bool busy = false;
+  bool notificationOpened = false;
   String? feedback;
   final selected = <String>{};
   final pages = <String, String>{};
@@ -150,6 +156,28 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
       if (!mounted) return;
       setState(() {
         data = fresh;
+        if (!notificationOpened && widget.initialCampaignId != null) {
+          notificationOpened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final campaign = (fresh['campaigns'] as List? ?? [])
+                .whereType<Map>()
+                .where(
+                  (c) =>
+                      c['campaignId'] == widget.initialCampaignId ||
+                      c['id'] == widget.initialCampaignId,
+                )
+                .firstOrNull;
+            if (campaign != null) {
+              openCampaign(Map<String, dynamic>.from(campaign));
+            } else {
+              setState(
+                () => feedback =
+                    'This campaign is no longer available in your workspace.',
+              );
+            }
+          });
+        }
         if (operation == 'discoverCampaignHistory') {
           final key = '${input['kind']}:${input['candidateId'] ?? ''}';
           if (result['nextPageToken'] is String) {

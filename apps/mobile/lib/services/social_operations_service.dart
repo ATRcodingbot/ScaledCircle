@@ -63,14 +63,58 @@ class SocialOperationsService {
   FirebaseFunctions get _functions =>
       _providedFunctions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
 
-  Future<Map<String, dynamic>> preparePost(Map<String, dynamic> input) async =>
-      Map<String, dynamic>.from(
-        (await _functions
-                    .httpsCallable('prepareCustomerSocialPostV1')
-                    .call(_workspace(input)))
-                .data
-            as Map,
-      );
+  Future<Map<String, dynamic>> preparePost(Map<String, dynamic> input) async {
+    final result = Map<String, dynamic>.from(
+      (await _functions
+                  .httpsCallable(
+                    'prepareCustomerSocialPostV1',
+                    options: HttpsCallableOptions(
+                      timeout: const Duration(seconds: 120),
+                    ),
+                  )
+                  .call(_workspace(input)))
+              .data
+          as Map,
+    );
+    // Reuse the budgeted, moderated generation authority. Stable request identity
+    // prevents another provider generation when this review is reopened.
+    if (input['action'] == 'auto' && result['generationRequest'] is Map) {
+      try {
+        final requested = Map<String, dynamic>.from(
+          (await _functions
+                      .httpsCallable('requestGeneratedServiceVisual')
+                      .call(
+                        _workspace(
+                          Map<String, dynamic>.from(
+                            result['generationRequest'] as Map,
+                          ),
+                        ),
+                      ))
+                  .data
+              as Map,
+        );
+        final generated = Map<String, dynamic>.from(
+          (await _functions
+                      .httpsCallable(
+                        'processGeneratedServiceVisual',
+                        options: HttpsCallableOptions(
+                          timeout: const Duration(seconds: 120),
+                        ),
+                      )
+                      .call(_workspace({'jobId': requested['jobId']})))
+                  .data
+              as Map,
+        );
+        result['generatedCreative'] = generated;
+        result['creativeStatus'] = generated['status'] == 'review_required'
+            ? 'concept_needs_review'
+            : 'preparing';
+      } catch (_) {
+        result['creativeStatus'] = 'needs_creative';
+      }
+    }
+    return result;
+  }
 
   Future<Map<String, dynamic>> previewPost(Map<String, dynamic> post) async =>
       Map<String, dynamic>.from(

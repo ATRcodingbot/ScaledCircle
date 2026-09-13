@@ -52,6 +52,8 @@ dependencies:
   printing: ^5.14.3
   url_launcher: ^6.3.2
   share_plus: ^13.3.0
+  firebase_messaging: ^16.6.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   # Official Firebase core initialization harness for onboarding widget tests.

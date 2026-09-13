@@ -1,1 +1,3 @@
 #include "Generated.xcconfig"
+CODE_SIGN_ENTITLEMENTS = Runner/PushNotifications.entitlements
+APS_ENVIRONMENT = production

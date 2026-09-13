@@ -332,9 +332,20 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     }
     let reservation = null;
     if (budgetAuthority) reservation = await budgetAuthority.reserve({actor, jobId: ref.id});
-    await ref.update({status: "processing", providerAttemptState: "attempting",
-      attemptCount: Number(job.attemptCount || 0) + 1,
-      processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+    const claimed = await db.runTransaction(async (tx) => {
+      const current = (await tx.get(ref)).data();
+      if (current?.candidateRevisionId || ["processing", "unknown_provider_outcome"].includes(current?.status)) return false;
+      if (!current || current.businessUid !== actor.uid) throw new Error("generation_access_denied");
+      tx.update(ref, {status: "processing", providerAttemptState: "attempting",
+        attemptCount: Number(current.attemptCount || 0) + 1,
+        processingStartedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
+      return true;
+    });
+    if (!claimed) {
+      const current = (await ref.get()).data();
+      return {jobId: ref.id, status: current.status, idempotentReplay: true,
+        ...(current.candidateAssetId ? {assetId: current.candidateAssetId, revisionId: current.candidateRevisionId} : {})};
+    }
     let providerResult = null; let usableCandidate = false;
     try {
       const result = await adapter.generateServiceConcept({jobId: ref.id, brief: job.safeBrief});

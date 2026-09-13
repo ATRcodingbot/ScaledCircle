@@ -17,16 +17,39 @@ function assertSource({uid,asset,revision,assetId,revisionId}) {
     !/^[a-f0-9]{64}$/.test(revision.contentHash||'')||!revision.storageGeneration)throw Error('Choose a current approved Business image.');
 }
 async function derivative(bytes,sharp=require('sharp'),provider='facebook') {
-  // Deterministic format preparation: no image generation or inferred artwork.
-  // Facebook accepts the original aspect ratio. Do not bake a square white
-  // canvas into its upload. Preserve Instagram's existing bounded preparation.
   if(!['facebook','instagram'].includes(provider))throw Error('Choose a supported Social channel.');
-  const resize=provider==='facebook'?{fit:'inside',withoutEnlargement:true}:{fit:'contain',background:'#ffffff'};
-  const result=await sharp(bytes,{failOn:'error',limitInputPixels:40000000}).rotate().resize(1080,1080,
-    resize).flatten({background:'#ffffff'}).toColourspace('srgb')
+  const source=await sharp(bytes,{failOn:'error',limitInputPixels:40000000}).rotate().toBuffer({resolveWithObject:true});
+  const {width:sw,height:sh}=source.info;
+  if(Math.min(sw,sh)<640)throw Error('Use a full-quality original at least 640 pixels on its shorter side.');
+  const ratio=sw/sh;
+  const target=provider==='instagram'?(ratio>=1?1:0.8):ratio;
+  const retained=Math.min(ratio/target,target/ratio);
+  if(retained<0.66)throw Error('This image needs a different composition to preserve its subject.');
+  const width=provider==='instagram'?Math.min(1080,sw,Math.floor(sh*target)):1080;
+  const height=provider==='instagram'?Math.round(width/target):1080;
+  const result=await sharp(source.data).resize(width,height,
+    {fit:provider==='instagram'?'cover':'inside',position:'centre',withoutEnlargement:true})
+    .flatten({background:'#ffffff'}).toColourspace('srgb')
     .jpeg({quality:92,chromaSubsampling:'4:4:4'}).toBuffer({resolveWithObject:true});
   if(result.data.length>8*1024*1024)throw Error('Choose a smaller image.');
-  return {bytes:result.data,width:result.info.width,height:result.info.height,sha256:hash(result.data),mime:'image/jpeg'};
+  const quality=await inspectOutput(result.data,sharp);
+  return {bytes:result.data,width:result.info.width,height:result.info.height,sha256:hash(result.data),mime:'image/jpeg',
+    preparation:{policy:MEDIA_POLICY,sourceWidth:sw,sourceHeight:sh,cropFraction:1-retained,jpegQuality:92,...quality}};
+}
+const MEDIA_POLICY='SocialFeedCreativeV2';
+async function inspectOutput(bytes,sharp=require('sharp')) {
+  const {data,info}=await sharp(bytes).resize(128,128,{fit:'inside'}).removeAlpha().raw().toBuffer({resolveWithObject:true});
+  const pixel=(x,y)=>{const n=(y*info.width+x)*info.channels;return [data[n],data[n+1],data[n+2]];};
+  const uniform=line=>line.every(p=>p.every(v=>v>=245))||line.every(p=>p.every(v=>v<=10));
+  const edges=[Array.from({length:info.height},(_,y)=>Array.from({length:info.width},(_,x)=>pixel(x,y))),
+    Array.from({length:info.width},(_,x)=>Array.from({length:info.height},(_,y)=>pixel(x,y)))];
+  for(const axis of edges)for(const rows of [axis,[...axis].reverse()]) {
+    let band=0;for(const row of rows){if(!uniform(row))break;band++;}
+    if(band>=Math.max(2,Math.ceil(rows.length*.02)))throw Error('Creative has blank borders. Prepare a clean image before review.');
+  }
+  const stats=await sharp(bytes).stats();
+  if(stats.channels.slice(0,3).every(c=>c.stdev<3))throw Error('Creative is blank or lacks a usable subject.');
+  return {pixelCheck:'passed',checkedSha256:hash(bytes),subjectReview:'owner_preview_required'};
 }
 async function assertDeliveryAuthority({db,read=ref=>ref.get(),uid,revision}) {
   if(!revision?.customerDeliveryId)return;
@@ -68,6 +91,11 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
       const prepared=meta.mediaRevision({businessUid:uid,assetId:input.assetId,provider:input.provider,
         productionOrigin:origin,customerDeliveryId:deliveryId,images:[{sha256:image.sha256,bytes:image.bytes.length,
           width:image.width,height:image.height,mime:image.mime,url:`${origin}/serveCustomerSocialMediaV1/${deliveryId}.jpg`}]});
+      prepared.preparation=image.preparation||null;
+      prepared.sourceOrigin=source.revision.origin||'business_owned';
+      prepared.truthfulnessDisclosure=source.revision.origin==='generated_service_concept'?source.revision.truthfulnessDisclosure:null;
+      prepared.sourceRevisionId=input.revisionId;
+      prepared.sourceSha256=source.revision.contentHash;
       return db.runTransaction(async tx=>{
         const itemRef=db.doc('socialContentItems/'+input.itemId);
         const [item,latestAsset,latestRevision,delivery,existingMedia]=await Promise.all([
@@ -111,4 +139,4 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
     },
   };
 }
-module.exports={assertSource,derivative,createMedia,assertDeliveryAuthority,sourceRights};
+module.exports={assertSource,derivative,createMedia,assertDeliveryAuthority,sourceRights,inspectOutput,MEDIA_POLICY};

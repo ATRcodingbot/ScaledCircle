@@ -57,12 +57,19 @@ function createEditor({db,now=Date.now,enabledUids=[]}) {
         const discovery=(await tx.get(db.doc('discoveryPreferences/'+uid))).data();
         const geography=discovery?.userUid===uid?(discovery.areas||[]).filter(a=>a.enabled!==false).map(a=>a.displayName).filter(x=>typeof x==='string'):[];
         const recent=await tx.get(db.collection('socialContentVersions').where('businessUid','==',uid).limit(100));
+        const variant=current.variants.find(v=>v.provider===input.provider);
+        const revision=variant?.mediaRevisionId?(await tx.get(db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`))).data():null;
+        let mediaAuthorityValid=true;
+        try{await require('./social_customer_media').assertDeliveryAuthority({db,read:ref=>tx.get(ref),uid,revision});}catch{mediaAuthorityValid=false;}
         const assessment=social.assessScheduledContent({businessUid:uid,contentItemId:input.itemId,
           versionRecord:{...current,variants:current.variants.filter(v=>v.provider===input.provider)},
           businessContext:{businessName:profile.businessName,services:profile.services||profile.servicesOffered||[],
             geography:geography.length?geography:[profile.serviceArea,profile.city,profile.county].filter(v=>typeof v==='string')},
           recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[]),now:now()});
-        const result={...assessment,provider:input.provider,versionId:`${input.itemId}_v${current.version}`,providerMutationsEnabled:false};
+        const reviewChecks=require('./social_customer_quality').reviewChecks({variant,revision,mediaAuthorityValid,
+          recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[])});
+        const result={...assessment,advisoryReady:assessment.readyToPublish,readyToPublish:reviewChecks.passed,reviewChecks,
+          provider:input.provider,versionId:`${input.itemId}_v${current.version}`,providerMutationsEnabled:false};
         tx.set(db.doc(`socialContentQualityAssessments/${input.itemId}_v${current.version}_${input.provider}`),result);
         return result;
       });

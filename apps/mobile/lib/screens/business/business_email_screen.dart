@@ -9,9 +9,16 @@ import '../../widgets/business_email_providers.dart';
 import 'business_email_campaign_screen.dart';
 
 class BusinessEmailScreen extends StatefulWidget {
-  const BusinessEmailScreen({super.key, this.loadOverride, this.service});
+  const BusinessEmailScreen({
+    super.key,
+    this.loadOverride,
+    this.service,
+    this.initialOperationId,
+    this.initialCampaignId,
+  });
   final Future<Map<String, dynamic>?> Function()? loadOverride;
   final BusinessEmailService? service;
+  final String? initialOperationId, initialCampaignId;
   @override
   State<BusinessEmailScreen> createState() => _BusinessEmailScreenState();
 }
@@ -24,6 +31,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
   String? _checkingConversation;
   bool _loading = true, _busy = false, _read = false, _send = false;
   Timer? _timer;
+  bool _notificationOpened = false;
   @override
   void initState() {
     super.initState();
@@ -48,6 +56,36 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
         _read = data?['connection']?['read'] == true;
         _send = data?['connection']?['send'] == true;
       });
+      if (!_notificationOpened &&
+          (widget.initialOperationId != null ||
+              widget.initialCampaignId != null)) {
+        _notificationOpened = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final op = (data?['operations'] as List? ?? [])
+              .whereType<Map>()
+              .where((o) => o['id'] == widget.initialOperationId)
+              .firstOrNull;
+          if (op != null) {
+            _viewConversation(op);
+          } else if (widget.initialCampaignId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BusinessEmailCampaignScreen(
+                  initialCampaignId: widget.initialCampaignId,
+                ),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This conversation is no longer available.'),
+              ),
+            );
+          }
+        });
+      }
       _timer?.cancel();
       if (data?['connection']?['pending'] == true) {
         _timer = Timer(const Duration(seconds: 5), _load);

@@ -35,6 +35,7 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
   if (!Number.isFinite(time) || time < now + 5*60000) add('time');
   const mediaRequired = provider==='instagram' || variant?.mediaRequirement !== 'none';
   if (mediaRequired && (!variant?.mediaAssetId || !variant?.mediaRevisionId || !revision)) add('creative');
+  if(revision?.customerDeliveryId&&revision.preparation?.policy!==require('./social_customer_media').MEDIA_POLICY&&!reasons.some(r=>r.code==='creative'))add('creative');
   if(!mediaAuthorityValid&&!reasons.some(r=>r.code==='creative'))add('creative');
   if (!connection || connection.businessUid!==uid || connection.status!=='connected_write' ||
       connection.environment!==environment || connection.tokenHealth!=='healthy' || connection.requiresReconnect===true || !connection.credentialId ||
@@ -90,6 +91,7 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
       read(db.doc('socialContentQualityAssessments/'+versionId+'_'+input.provider))]);
     const jobs=await read(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
     if(jobs.size>100)throw Error('Publication history requires review.');
+    const existingJob=jobs.docs.map(d=>d.data()).find(job=>job.provider===input.provider&&job.versionId?.startsWith(input.itemId+'_v')&&job.customerApproval===true&&job.status!=='canceled');
     const conflictingSchedule=jobs.docs.some(doc=>{const job=doc.data();return job.provider===input.provider &&
       job.versionId?.startsWith(input.itemId+'_v') && job.versionId!==versionId && !['published','canceled'].includes(job.status);});
     const version=v.data(),variant=version?.variants?.find(v=>v.provider===input.provider);
@@ -98,13 +100,13 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
     try{await require('./social_customer_media').assertDeliveryAuthority({db,read,uid,revision});}
     catch{mediaAuthorityValid=false;}
     return {uid,plan:p.data(),item,version,versionId,itemRef,provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality:platformQuality.data()||q.data(),
-      conflictingSchedule,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
+      conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
   }
   return {
     async preview(uid,input) {
       const ctx=await context(null,uid,input), result=readiness(ctx);
       const bindingHash=ctx.version?growth.contentBinding({id:ctx.versionId,record:ctx.version},uid).bindingHash:null;
-      return {...result,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256}))||[],scheduledFor:result.scheduledFor}:null};
+      return {...result,publicationStatus:ctx.existingJob?.status||null,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256,width:i.width,height:i.height}))||[],creativePrepared:ctx.revision?.preparation?.policy===require('./social_customer_media').MEDIA_POLICY,quality:ctx.quality||null,scheduledFor:result.scheduledFor}:null};
     },
     async approve(uid,input,{actorUid=uid}={}) {
       if(!/^[a-zA-Z0-9_-]{1,220}$/.test(input?.itemId||'') || !['facebook','instagram'].includes(input.provider) ||

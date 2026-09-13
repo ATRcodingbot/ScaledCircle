@@ -32,20 +32,32 @@ test('media requires exact approved owned revision and explicit rights',()=>{
    assert.throws(()=>assertSource({...good,revision:{...good.revision,...patch}}));
  assert.throws(()=>assertSource({...good,asset:{...good.asset,removed:true}}));
 });
-test('Instagram preparation retains its supported portrait bounds and strips metadata',async()=>{
- const sharp=require('sharp');const original=await sharp({create:{width:400,height:900,channels:3,background:'#123456'}}).png().toBuffer();
+test('Instagram uses a full-resolution square without letterboxing and strips metadata',async()=>{
+ const sharp=require('sharp');const original=await sharp({create:{width:1536,height:1024,channels:3,background:'#123456'}})
+ .composite([{input:{create:{width:300,height:300,channels:3,background:'#ef3525'}},left:600,top:100}]).withMetadata().png().toBuffer();
  const prepared=await derivative(original,sharp,'instagram'),metadata=await sharp(prepared.bytes).metadata();
- assert.equal(metadata.format,'jpeg');assert.equal(metadata.width,1080);assert.equal(metadata.height,1080);assert.equal(metadata.exif,undefined);
+ assert.equal(metadata.format,'jpeg');assert.equal(metadata.width,1024);assert.equal(metadata.height,1024);assert.equal(metadata.exif,undefined);
+ assert.equal(prepared.preparation.pixelCheck,'passed');assert.equal(prepared.preparation.checkedSha256,prepared.sha256);
+ const {data,info}=await sharp(prepared.bytes).removeAlpha().raw().toBuffer({resolveWithObject:true});
+ assert(!data.some((v,i)=>i%info.channels===0&&v>245&&data[i+1]>245&&data[i+2]>245));
  const deliveryId='b'.repeat(64),origin='https://us-east1-scaled-circle.cloudfunctions.net';
  const revision=mediaRevision({businessUid:'owner',assetId:'asset',provider:'instagram',productionOrigin:origin,customerDeliveryId:deliveryId,
-  images:[{...prepared,bytes:prepared.bytes.length,url:origin+'/serveCustomerSocialMediaV1/'+deliveryId+'.jpg'}]});
+ images:[{...prepared,bytes:prepared.bytes.length,url:origin+'/serveCustomerSocialMediaV1/'+deliveryId+'.jpg'}]});
  assert.equal(revision.customerDeliveryId,deliveryId);
  assert.throws(()=>mediaRevision({...revision,productionOrigin:'https://attacker.example'}));
 });
-
-test('Facebook upload preserves landscape, portrait and small originals without white bands or cropping',async()=>{
+test('low resolution, blank images, baked borders and excessive crop all fail before review',async()=>{
  const sharp=require('sharp');
- for(const [width,height,expectedWidth,expectedHeight] of [[1536,1024,1080,720],[400,900,400,900],[300,200,300,200]]){
+ for(const [width,height,color] of [[300,200,'#123456'],[1024,1024,'#ffffff'],[640,2000,'#234567']])
+   await assert.rejects(derivative(await sharp({create:{width,height,channels:3,background:color}}).png().toBuffer(),sharp,'instagram'));
+ const bordered=await sharp({create:{width:1080,height:1080,channels:3,background:'#ffffff'}})
+  .composite([{input:{create:{width:1080,height:720,channels:3,background:'#123456'}},left:0,top:180}]).png().toBuffer();
+ await assert.rejects(derivative(bordered,sharp,'instagram'),/blank borders/);
+});
+
+test('Facebook upload preserves high-resolution landscape and portrait originals without white bands or cropping',async()=>{
+ const sharp=require('sharp');
+ for(const [width,height,expectedWidth,expectedHeight] of [[1536,1024,1080,720],[800,1000,800,1000]]){
   const original=await sharp({create:{width,height,channels:3,background:'#123456'}})
     .composite([{input:{create:{width:40,height:40,channels:3,background:'#ef3525'}},left:0,top:0},
       {input:{create:{width:40,height:40,channels:3,background:'#25cf35'}},left:width-40,top:height-40}])

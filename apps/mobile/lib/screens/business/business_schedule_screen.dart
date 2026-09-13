@@ -13,8 +13,13 @@ class BusinessScheduleScreen extends StatefulWidget {
     this.businessId,
     this.service,
     this.workspaceHome = false,
+    this.initialItemId,
+    this.initialLeadId,
+    this.initialStartMs,
   });
   final bool workspaceHome;
+  final String? initialItemId, initialLeadId;
+  final int? initialStartMs;
   final String? businessId;
   final BusinessOperationsService? service;
   @override
@@ -32,7 +37,10 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
   Map<String, dynamic>? data;
   String? error;
   String section = 'Schedule', period = 'Today', query = '', filter = 'All';
-  DateTime anchor = DateTime.now();
+  late DateTime anchor = widget.initialStartMs == null
+      ? DateTime.now()
+      : DateTime.fromMillisecondsSinceEpoch(widget.initialStartMs!);
+  bool notificationOpened = false;
   bool loading = false,
       busy = false,
       reloadQueued = false,
@@ -112,6 +120,57 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
           data = value;
           error = null;
         });
+        if (!notificationOpened &&
+            (widget.initialItemId != null || widget.initialLeadId != null)) {
+          notificationOpened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final selected = items
+                .where((i) => i['id'] == widget.initialItemId)
+                .firstOrNull;
+            final lead = operationRows(
+              data?['inbound'],
+            ).where((i) => i['id'] == widget.initialLeadId).firstOrNull;
+            if (selected == null && lead == null) {
+              message(
+                'This item is no longer available in your current workspace.',
+              );
+              return;
+            }
+            showDialog<void>(
+              context: context,
+              builder: (dialog) => AlertDialog(
+                title: Text(
+                  selected != null ? 'Schedule item' : 'Customer inquiry',
+                ),
+                content: SizedBox(
+                  width: 520,
+                  child: SingleChildScrollView(
+                    child: selected != null
+                        ? itemCard(selected)
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(lead!['name'] ?? 'Customer inquiry'),
+                              Text(lead['email'] ?? ''),
+                              const Text(
+                                'Open Customers to review this inquiry and its next step.',
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialog),
+                    child: const Text('Back'),
+                  ),
+                ],
+              ),
+            );
+          });
+        }
       }
     } catch (e) {
       if (mounted && !accountChanged && requested == range) {

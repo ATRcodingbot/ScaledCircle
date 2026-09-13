@@ -2,4 +2,5 @@
 <full-backup-content>
     <exclude domain="file" path="scaled_circle_tracking_points.jsonl" />
     <exclude domain="sharedpref" path="active_job_tracking.xml" />
+        <exclude domain="sharedpref" path="FlutterSharedPreferences.xml" />
 </full-backup-content>

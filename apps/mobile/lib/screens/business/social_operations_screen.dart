@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/customer_social_plan_card.dart';
 import '../../widgets/customer_social_post_editor.dart';
+import '../../widgets/customer_social_review_queue.dart';
 import '../../widgets/social_plan_overview.dart';
 import '../../models/social_plan_presentation.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,8 +17,15 @@ import '../../widgets/social_connection_card.dart';
 import '../../navigation/context_back_button.dart';
 
 class SocialOperationsScreen extends StatefulWidget {
-  const SocialOperationsScreen({super.key, this.initialReview});
+  const SocialOperationsScreen({
+    super.key,
+    this.initialReview,
+    this.initialItemId,
+    this.initialProvider,
+    this.initialPublishedJobId,
+  });
   final String? initialReview;
+  final String? initialItemId, initialProvider, initialPublishedJobId;
 
   @override
   State<SocialOperationsScreen> createState() => _SocialOperationsScreenState();
@@ -50,6 +58,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialPublishedJobId != null) _socialSection = 'Published';
     _load();
   }
 
@@ -79,6 +88,55 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           _workspace = value;
           _firstX = firstX;
         });
+        if (!_initialReviewOpened && widget.initialItemId != null) {
+          _initialReviewOpened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!mounted) return;
+            final item = value.plans
+                .expand(
+                  (p) => (p['items'] as List? ?? []).whereType<Map>().map(
+                    (i) => {...i, 'itemId': '${p['id']}_${i['itemKey']}'},
+                  ),
+                )
+                .where(
+                  (i) =>
+                      i['id'] == widget.initialItemId ||
+                      i['itemId'] == widget.initialItemId,
+                )
+                .firstOrNull;
+            if (item == null ||
+                !{'facebook', 'instagram'}.contains(widget.initialProvider)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('This Social draft is no longer available.'),
+                ),
+              );
+              return;
+            }
+            try {
+              final preview = await _service.previewPost({
+                'itemId': widget.initialItemId,
+                'provider': widget.initialProvider!,
+              });
+              if (!mounted) return;
+              await _preparePost({
+                ...preview,
+                'itemId': widget.initialItemId,
+                'provider': widget.initialProvider!,
+              });
+            } catch (_) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'This Social draft could not be opened. Check your connection and try again.',
+                    ),
+                  ),
+                );
+              }
+            }
+          });
+        }
         if (!_initialReviewOpened && widget.initialReview != null) {
           _initialReviewOpened = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1002,24 +1060,39 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   String _socialSection = 'Content';
   Widget _history(SocialOperationsWorkspace workspace, String state) {
     final rows = <Widget>[];
+    Widget? requestedPost;
     for (final p in workspace.plans) {
       for (final i in (p['items'] as List? ?? []).whereType<Map>()) {
         for (final v in (i['variants'] as List? ?? []).whereType<Map>()) {
           if (v['status'] != state) continue;
-          rows.add(
-            Card(
-              child: ListTile(
-                title: Text(
-                  '${socialProviderName(v['provider']?.toString() ?? '')} · ${i['pillar'] ?? 'Post'}',
-                ),
-                subtitle: Text(
-                  '${v['copy'] ?? ''}\n${socialCustomerTime(context, v['scheduledFor'])}',
-                ),
+          final card = Card(
+            child: ListTile(
+              title: Text(
+                '${socialProviderName(v['provider']?.toString() ?? '')} · ${i['pillar'] ?? 'Post'}',
+              ),
+              subtitle: Text(
+                '${v['copy'] ?? ''}\n${socialCustomerTime(context, v['scheduledFor'])}',
               ),
             ),
           );
+          if (v['jobId'] == widget.initialPublishedJobId &&
+              state == 'published') {
+            requestedPost = card;
+          } else {
+            rows.add(card);
+          }
         }
       }
+    }
+    if (state == 'published' && widget.initialPublishedJobId != null) {
+      rows.insertAll(0, [
+        Text(
+          requestedPost == null
+              ? 'The post from this notification is no longer available here.'
+              : 'Post from your notification',
+        ),
+        ?requestedPost,
+      ]);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1538,6 +1611,17 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     bool strategyOnly = false,
     bool scheduledOnly = false,
   }) {
+    if (!strategyOnly && !scheduledOnly) {
+      return Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CustomerSocialReviewQueue(
+            workspace: workspace,
+            service: _service,
+            onSchedule: _schedulePost,
+          ),
+        ),
+      );
+    }
     final presentation = SocialPlanPresentation(
       workspace.plans,
       workspace.runtimeStatus,
@@ -1600,10 +1684,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                         plan: plan,
                         initiallyExpanded: true,
                         strategyOnly: strategyOnly,
-                        onPreparePost: (post) {
-                          Navigator.pop(context);
-                          _preparePost(post);
-                        },
+                        onPreparePost: _preparePost,
                         onResolveBlocker: (code, post) {
                           Navigator.pop(context);
                           _resolvePostBlocker(code, post);
@@ -1637,10 +1718,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         builder: (_) => CustomerSocialPostEditor(
           post: post,
           service: _service,
-          onSchedule: (fresh) async {
-            Navigator.of(context).pop();
-            await _schedulePost(fresh);
-          },
+          onSchedule: _schedulePost,
         ),
       ),
     );

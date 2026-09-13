@@ -55,3 +55,35 @@ test('opening a stale text-only post prepares a future version and automatic qua
  a((await db.doc('socialContentQualityAssessments/'+itemId+'_v2_facebook').get()).exists);
  a.equal((await db.collection('socialGrowthJobs').where('businessUid','==',uid).get()).size,0);
 });
+
+test('automatic preparation preserves an approved platform and does not approve another platform',async()=>{
+ const uid='frozen_social_qa',itemId='frozen_social_post',f=fixture();
+ const original={...f.version,businessUid:uid,planId:'frozen_plan',scheduledFor:'2026-01-01T12:00:00Z'};
+ const job={businessUid:uid,provider:'facebook',versionId:itemId+'_v1',status:'scheduled',scheduledFor:'2026-10-10T10:00:00Z',customerApproval:true};
+ await db.doc('socialContentItems/'+itemId).set({...f.item,businessUid:uid,planId:'frozen_plan'});
+ await db.doc('socialContentVersions/'+itemId+'_v1').set(original);
+ await db.doc('socialGrowthJobs/frozen_job').set(job);
+ const editor=require('../functions-social-operations/social_customer_editor').createEditor({db,now:()=>f.now,enabledUids:[uid]});
+ const prep=require('../functions-social-operations/social_customer_preparation').createPreparation({db,editor,media:{attach:()=>{throw Error('must not attach');}},now:()=>f.now});
+ const results=await Promise.all([prep.prepare(uid,{itemId,provider:'facebook',version:1}),prep.prepare(uid,{itemId,provider:'facebook',version:1})]);
+ a(results.every(r=>r.creativeStatus==='preserved'));
+ a.deepEqual((await db.doc('socialGrowthJobs/frozen_job').get()).data(),job);
+ a.deepEqual((await db.doc('socialContentVersions/'+itemId+'_v1').get()).data(),original);
+ a.equal((await db.doc('socialContentItems/'+itemId).get()).data().currentVersion,1);
+ a.equal((await db.collection('socialGrowthApprovals').where('businessUid','==',uid).get()).size,0);
+});
+
+test('automatic generation calls from two review windows share one provider attempt',async()=>{
+ const uid='creative_concurrent_qa';let attempts=0;let release;const wait=new Promise(resolve=>release=resolve);
+ const generation=require('./generation_foundation');
+ const service=generation.createGenerationService({db,FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,FieldPath:admin.firestore.FieldPath,
+   capability:async()=> 'test_only',authorization:async()=>({authorized:true}),budgetEnabled:async()=>true,approvedServices:async()=>['Decks'],
+   adapter:{id:'test',mode:'test',async generateServiceConcept(){attempts++;await wait;return {binary:Buffer.from('test only'),moderation:{status:'passed'}};}},
+   ingestCandidate:async()=>({assetId:'concurrent_asset',revisionId:'concurrent_revision'})});
+ const requested=await service.request({actor:{uid},input:{requestId:'concurrent_social_request',serviceCategory:'Decks',visualDirection:'clean'}});
+ const one=service.process({actor:{uid},jobId:requested.jobId});
+ for(let i=0;i<100&&attempts===0;i++)await new Promise(r=>setTimeout(r,10));
+ a.equal(attempts,1);
+ const other=await service.process({actor:{uid},jobId:requested.jobId});a.equal(other.idempotentReplay,true);a.equal(other.status,'processing');
+ release();await one;a.equal(attempts,1);
+});

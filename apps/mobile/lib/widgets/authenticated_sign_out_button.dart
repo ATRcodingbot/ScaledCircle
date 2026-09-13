@@ -1,3 +1,4 @@
+import '../services/mobile_notifications_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,9 @@ class AuthenticatedSignOutButton extends StatelessWidget {
     final router = AppRouterScope.maybeOf(context);
     final navigator = Navigator.of(context);
     BusinessWorkspaceSession.clear();
+    try { await MobileNotificationsService.instance.disableDevice(); } catch (_) {
+      // Auth-state reconciliation retries installation revocation after offline sign-out.
+    }
     await FirebaseAuth.instance.signOut();
     if (!navigator.mounted) return;
     navigator.popUntil((r) => r.isFirst);

@@ -45,11 +45,103 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
   final link = data['deepLink'] is Map ? data['deepLink'] as Map : const {};
   final destination = link['destination'];
   if (destination == 'business_schedule' ||
-      type == 'business_schedule_update') {
-    return const NotificationDestination(
+      type == 'business_schedule_update' ||
+      type == 'business_estimate_reminder') {
+    final metadata = data['metadata'] is Map
+        ? data['metadata'] as Map
+        : const {};
+    final query = <String, String>{
+      if (id(link['businessId'] ?? metadata['businessId'])
+          case final String value)
+        'workspace': value,
+      if (id(link['itemId'] ?? metadata['itemId']) case final String value)
+        'item': value,
+      if (link['startMs'] is num) 'at': link['startMs'].toString(),
+    };
+    return NotificationDestination(
       'route',
       'View Schedule',
-      route: '/business/schedule',
+      route: Uri(
+        path: '/business/schedule',
+        queryParameters: query.isEmpty ? null : query,
+      ).toString(),
+    );
+  }
+  if (destination == 'business_inquiry') {
+    return NotificationDestination(
+      'route',
+      'View Inquiry',
+      route: Uri(
+        path: '/business/schedule',
+        queryParameters: {
+          'lead': id(link['leadId']) ?? '',
+          'workspace': id(link['businessId']) ?? '',
+        },
+      ).toString(),
+    );
+  }
+  if (destination == 'business_email') {
+    return NotificationDestination(
+      'route',
+      'View Conversation',
+      route: Uri(
+        path: '/business/email-connection',
+        queryParameters: {'operation': id(link['operationId']) ?? ''},
+      ).toString(),
+    );
+  }
+  if (destination == 'business_email_campaign') {
+    return NotificationDestination(
+      'route',
+      'Review Campaign',
+      route: Uri(
+        path: '/business/email-connection',
+        queryParameters: {'campaign': id(link['campaignId']) ?? ''},
+      ).toString(),
+    );
+  }
+  if (destination == 'social_draft') {
+    if (!{'facebook', 'instagram'}.contains(link['provider']) ||
+        id(link['itemId']) == null) {
+      return null;
+    }
+    return NotificationDestination(
+      'route',
+      'Review Social Draft',
+      route: Uri(
+        path: AppRoutes.businessSocialOperations,
+        queryParameters: {
+          'item': id(link['itemId']) ?? '',
+          'provider': link['provider'],
+        },
+      ).toString(),
+    );
+  }
+  if (destination == 'social_published') {
+    return NotificationDestination(
+      'route',
+      'View Published Post',
+      route: Uri(
+        path: AppRoutes.businessSocialOperations,
+        queryParameters: {'published': id(link['jobId']) ?? ''},
+      ).toString(),
+    );
+  }
+  if (destination == 'billing') {
+    return const NotificationDestination(
+      'route',
+      'View Billing',
+      route: '/billing',
+    );
+  }
+  if ({'job_opportunity', 'travel_job_opportunity'}.contains(type)) {
+    final campaignId = id(data['campaignId'] ?? link['campaignId']);
+    return NotificationDestination(
+      'route',
+      'View Work',
+      route: campaignId == null
+          ? '/scaler/work'
+          : AppRoutes.campaignDetail(campaignId),
     );
   }
   if (destination == 'growth_agents' ||

@@ -11,7 +11,12 @@ class CustomerSocialPostEditor extends StatefulWidget {
     required this.post,
     required this.service,
     this.onSchedule,
+    this.onPrevious,
+    this.onNext,
+    this.positionLabel,
   });
+  final VoidCallback? onPrevious, onNext;
+  final String? positionLabel;
   final Map<String, dynamic> post;
   final SocialOperationsService service;
   final Future<void> Function(Map<String, dynamic>)? onSchedule;
@@ -42,7 +47,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
       .every((image) => _loadedPreviewImages.contains(image['url'].toString()));
   late bool _textOnly =
       _post['reviewedPost']?['variant']?['mediaRequirement'] == 'none';
-  String? _error;
+  String? _error, _creativeNotice;
   Map<String, dynamic>? _quality;
   Map<String, dynamic> get _identity => {
     'itemId': _post['itemId'],
@@ -53,7 +58,13 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _run(_prepare);
+      if (mounted) {
+        _run(
+          _post['ready'] == true || _post['publicationStatus'] != null
+              ? _refresh
+              : _prepare,
+        );
+      }
     });
   }
 
@@ -67,6 +78,9 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
         .timeout(const Duration(seconds: 90));
     await _refresh();
     if (mounted) {
+      _creativeNotice = result['creativeStatus'] == 'concept_needs_review'
+          ? 'A new service concept is prepared. Review it in Brand Assets before using it in this post.'
+          : null;
       setState(
         () => _quality = Map<String, dynamic>.from(
           result['quality'] as Map? ?? {},
@@ -112,7 +126,10 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     final fresh = await widget.service.previewPost(_identity);
     if (mounted) {
       setState(() {
-        _post = {...fresh, 'itemId': _post['itemId']};
+        _post = {..._post, ...fresh, 'itemId': _post['itemId']};
+        _quality = Map<String, dynamic>.from(
+          fresh['reviewedPost']?['quality'] as Map? ?? {},
+        );
         if (!_changed) {
           _copy.text =
               fresh['reviewedPost']?['variant']?['copy']?.toString() ??
@@ -198,7 +215,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'Use an image you own or have permission to publish. It will be fitted without cropping.',
+                'Use an image you own or have permission to publish. You will review the exact platform crop before approving the post.',
               ),
             ),
             for (final asset in assets)
@@ -287,11 +304,36 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   Widget build(BuildContext context) {
     final variant = _post['reviewedPost']?['variant'] as Map? ?? {};
     return Scaffold(
-      appBar: AppBar(title: const Text('Post Preview')),
+      appBar: AppBar(
+        title: Text(
+          widget.positionLabel == null
+              ? 'Post Preview'
+              : 'Post ${widget.positionLabel}',
+        ),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (widget.positionLabel != null)
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: _busy || _changed ? null : widget.onPrevious,
+                    child: const Text('Previous'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy || _changed ? null : widget.onNext,
+                    child: Text(
+                      _post['publicationStatus'] == 'scheduled'
+                          ? 'Review next post'
+                          : 'Next',
+                    ),
+                  ),
+                ],
+              ),
             const Text(
               'Post Preview',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -311,7 +353,9 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Image.network(
                   image['url'].toString(),
-                  height: 220,
+                  width: MediaQuery.sizeOf(
+                    context,
+                  ).width.clamp(0, 640).toDouble(),
                   fit: BoxFit.contain,
                   frameBuilder: (context, child, frame, synchronous) {
                     final url = image['url'].toString();
@@ -410,8 +454,9 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                     ? 'Creative prepared'
                     : _textOnly
                     ? 'Text-only post'
-                    : 'No suitable approved image was found. Generate or upload a creative, or use text only where supported.',
+                    : 'Creative needs attention. Automatic preparation has not produced an approved, usable image yet.',
               ),
+            if (_creativeNotice != null) Text(_creativeNotice!),
             OutlinedButton(
               onPressed: _busy || _changed ? null : () => _run(_chooseImage),
               child: const Text('Upload / Replace Image'),
@@ -427,7 +472,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                       );
                       if (mounted) await _chooseImage();
                     }),
-              child: const Text('Generate / Regenerate Creative'),
+              child: const Text('Review / Regenerate Creative'),
             ),
             if (_changed)
               const Text(
@@ -436,18 +481,26 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             if (!_busy && _quality != null) ...[
               Text(
                 _quality!['readyToPublish'] == true
-                    ? 'Content checks passed'
+                    ? 'Ready for your review'
                     : 'Post needs changes before approval',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              for (final v
-                  in (_quality!['variantAssessments'] as List? ?? [])
-                      .whereType<Map>()) ...[
-                Text(
-                  'Recommendation: ${socialQualityLabel(v['recommendation'])}',
-                ),
-                for (final advice in socialQualityAdvice(v)) Text(advice),
-              ],
+              for (final blocker
+                  in (_quality!['reviewChecks']?['blockers'] as List? ?? []))
+                Text(blocker.toString()),
+              ExpansionTile(
+                title: const Text('Content suggestions'),
+                children: [
+                  for (final v
+                      in (_quality!['variantAssessments'] as List? ?? [])
+                          .whereType<Map>()) ...[
+                    Text(
+                      'Recommendation: ${socialQualityLabel(v['recommendation'])}',
+                    ),
+                    for (final advice in socialQualityAdvice(v)) Text(advice),
+                  ],
+                ],
+              ),
               const Text(
                 'This is an automated content check, not proof of performance. Review the actual image and claims before approval.',
               ),
@@ -462,13 +515,21 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                   ),
                 ),
             const SizedBox(height: 16),
-            if (_post['ready'] == true &&
+            if (_post['publicationStatus'] != null)
+              Text(
+                'Post ${_post['publicationStatus']}. Your saved approval and schedule are preserved.',
+              ),
+            if (_post['publicationStatus'] == null &&
+                _post['ready'] == true &&
                 !_changed &&
                 widget.onSchedule != null)
               FilledButton(
                 onPressed: _busy || !_imagesVisible
                     ? null
-                    : () => widget.onSchedule!(_post),
+                    : () => _run(() async {
+                        await widget.onSchedule!(_post);
+                        await _refresh();
+                      }),
                 child: const Text('Approve & Schedule'),
               ),
             TextButton(

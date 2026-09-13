@@ -1,0 +1,8 @@
+{
+  "functions": [{
+    "source": "functions-mobile-notifications",
+    "codebase": "mobile-notifications",
+    "predeploy": ["node tools/prepare_mobile_notifications.cjs"],
+    "ignore": ["node_modules", ".git", "*.log"]
+  }]
+}

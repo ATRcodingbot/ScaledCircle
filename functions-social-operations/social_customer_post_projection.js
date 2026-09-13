@@ -8,7 +8,7 @@ function overlay(plans,jobs) {
       if(candidates.length!==1)return {...variant};
       const job=candidates[0];
       const bound=job.binding?.variants?.find(v=>v.provider===variant.provider);
-      return {...variant,...bound,status:job.status,scheduledFor:job.scheduledFor};
+      return {...variant,...bound,status:job.status,jobId:job.id,scheduledFor:job.scheduledFor};
     })}))}));
 }
 async function load({db,uid,plans,store}) {
@@ -30,6 +30,6 @@ async function load({db,uid,plans,store}) {
       catch {variant.scheduling={ready:false,reasons:[{code:'readback',message:'Current post requirements could not be loaded. Try again.'}]};}
     }
   }
-  return overlay(hydrated,snapshot.docs.map(d=>d.data()));
+  return overlay(hydrated,snapshot.docs.map(d=>({id:d.id,...d.data()})));
 }
 module.exports={overlay,load};

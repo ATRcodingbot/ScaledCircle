@@ -1,3 +1,4 @@
+import 'widgets/mobile_notification_coordinator.dart';
 import 'screens/jobs/live_work_certification_screen.dart';
 import 'screens/business/growth_agents_screen.dart';
 import 'screens/admin/staging_payment_certification_screen.dart';
@@ -193,43 +194,92 @@ class ScaledCircleApp extends StatelessWidget {
       );
     }
     if (route?.path == '/account/delete' && AppEnvironmentConfig.isStaging) {
-      return MaterialPageRoute(settings: settings, builder: (_) => const DeleteAccountScreen());
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const DeleteAccountScreen(),
+      );
     }
-    if (route?.path == '/work/certification' && AppEnvironmentConfig.isProduction) {
-      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
-        routeName: settings.name!, audience: ProtectedRouteAudience.jobRoomParticipant,
-        builder: (_, _) => const LiveWorkCertificationScreen()));
+    if (route?.path == '/work/certification' &&
+        AppEnvironmentConfig.isProduction) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.jobRoomParticipant,
+          builder: (_, _) => const LiveWorkCertificationScreen(),
+        ),
+      );
     }
-    if (route?.path == '/staging/payment-certification' && AppEnvironmentConfig.isStaging) {
-      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
-        routeName: settings.name!, audience: ProtectedRouteAudience.jobRoomParticipant,
-        builder: (_, _) => const StagingPaymentCertificationScreen()));
+    if (route?.path == '/staging/payment-certification' &&
+        AppEnvironmentConfig.isStaging) {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.jobRoomParticipant,
+          builder: (_, _) => const StagingPaymentCertificationScreen(),
+        ),
+      );
     }
     if (route?.path == '/business/schedule') {
-      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
-        routeName: settings.name!, audience: ProtectedRouteAudience.business,
-        builder: (_, _) => BusinessScheduleScreen(businessId: route?.queryParameters['workspace'])));
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => BusinessScheduleScreen(
+            businessId: route?.queryParameters['workspace'],
+            initialItemId: route?.queryParameters['item'],
+            initialLeadId: route?.queryParameters['lead'],
+            initialStartMs: int.tryParse(route?.queryParameters['at'] ?? ''),
+          ),
+        ),
+      );
     }
-    if (route?.path == '/business/campaigns' || route?.path == '/business/results') {
-      return MaterialPageRoute(settings: settings, builder: (context) => ProtectedRouteGate(
-        routeName: settings.name!, audience: ProtectedRouteAudience.business,
-        builder: (_, profile) => BusinessCampaignsScreen(
-          businessId: profile['businessId'],
-          view: route?.path == '/business/results' ? BusinessCampaignView.results : BusinessCampaignView.campaigns,
-          onCreateCampaign: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateCampaignScreen())),
-        )));
+    if (route?.path == '/business/campaigns' ||
+        route?.path == '/business/results') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (context) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, profile) => BusinessCampaignsScreen(
+            businessId: profile['businessId'],
+            view: route?.path == '/business/results'
+                ? BusinessCampaignView.results
+                : BusinessCampaignView.campaigns,
+            onCreateCampaign: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CreateCampaignScreen()),
+            ),
+          ),
+        ),
+      );
     }
     if (route?.path == '/business/email-connection') {
-      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
-        routeName: settings.name!, audience: ProtectedRouteAudience.business,
-        builder: (_, _) => const BusinessEmailScreen()));
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, _) => BusinessEmailScreen(
+            initialOperationId: route?.queryParameters['operation'],
+            initialCampaignId: route?.queryParameters['campaign'],
+          ),
+        ),
+      );
     }
     if (route?.path == '/business/growth') {
-      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
-        routeName: settings.name!, audience: ProtectedRouteAudience.business,
-        builder: (_, profile) => profile['role'] == 'admin'
-            ? const GrowthAgentsScreen()
-            : const BusinessGrowthHome()));
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ProtectedRouteGate(
+          routeName: settings.name!,
+          audience: ProtectedRouteAudience.business,
+          builder: (_, profile) => profile['role'] == 'admin'
+              ? const GrowthAgentsScreen()
+              : const BusinessGrowthHome(),
+        ),
+      );
     }
     if (route?.path == '/growth-agents' ||
         route?.path == '/business/ai-team' ||
@@ -245,7 +295,8 @@ class ScaledCircleApp extends StatelessWidget {
             customer: route?.path != '/growth-agents',
             focusId:
                 route?.queryParameters['prospect'] ??
-                route?.queryParameters['report'] ?? route?.queryParameters['agent'],
+                route?.queryParameters['report'] ??
+                route?.queryParameters['agent'],
           ),
         ),
       );
@@ -257,16 +308,18 @@ class ScaledCircleApp extends StatelessWidget {
       );
     }
     if (route?.path == '/referrals') {
-      return MaterialPageRoute(settings: settings,
-          builder: (_) => const ReferralProgramScreen());
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const ReferralProgramScreen(),
+      );
     }
     if (route?.path == '/referral-portal') {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => const StartupSessionGate(
-                signedOut: LoginScreen(returnRoute: '/referral-portal'),
-                authenticatedChild: ScalerAffiliateScreen(),
-              ),
+          signedOut: LoginScreen(returnRoute: '/referral-portal'),
+          authenticatedChild: ScalerAffiliateScreen(),
+        ),
       );
     }
     if (LegalDocumentKind.fromPath(route?.path) case final legalKind?) {
@@ -378,6 +431,9 @@ class ScaledCircleApp extends StatelessWidget {
           audience: ProtectedRouteAudience.business,
           builder: (_, _) => SocialOperationsScreen(
             initialReview: route?.queryParameters['review'],
+            initialItemId: route?.queryParameters['item'],
+            initialProvider: route?.queryParameters['provider'],
+            initialPublishedJobId: route?.queryParameters['published'],
           ),
         ),
       );
@@ -518,10 +574,7 @@ class ScaledCircleApp extends StatelessWidget {
   // Native routing and ordinary public/role-home startup remain unchanged.
   static final _billingLaunchRoute = kIsWeb
       ? initialBillingRoute(Uri.base) ??
-            initialReferralRoute(
-              Uri.base,
-              enabled: true,
-            )
+            initialReferralRoute(Uri.base, enabled: true)
       : null;
   static final _billingRouteInformation = _billingLaunchRoute == null
       ? null
@@ -542,8 +595,12 @@ class ScaledCircleApp extends StatelessWidget {
       routeInformationProvider: _billingRouteInformation,
       routeInformationParser: const AppRouteInformationParser(),
       builder: (context, child) {
+        final content = MobileNotificationCoordinator(
+          navigatorKey: _routerDelegate.navigatorKey,
+          child: child ?? const SizedBox(),
+        );
         if (AppEnvironmentConfig.isProduction) {
-          return child ?? const SizedBox();
+          return content;
         }
         return Banner(
           message: AppEnvironmentConfig.diagnosticsLabel,
@@ -551,7 +608,7 @@ class ScaledCircleApp extends StatelessWidget {
           color: AppEnvironmentConfig.isStaging
               ? const Color(0xFF7C3AED)
               : const Color(0xFFD97706),
-          child: child ?? const SizedBox(),
+          child: content,
         );
       },
     );

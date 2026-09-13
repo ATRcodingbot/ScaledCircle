@@ -44,8 +44,16 @@ def inspect(path, version, build, environment='production'):
                     'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription']:
             if not str(info.get(key, '')).strip():
                 raise ValueError('Missing permission description: ' + key)
-        if info.get('UIBackgroundModes') != ['location']:
+        modes = info.get('UIBackgroundModes')
+        if modes not in (['location'], ['location', 'fetch', 'remote-notification']):
             raise ValueError('Unreviewed background capabilities')
+        if 'remote-notification' in modes:
+            if info.get('FirebaseMessagingAutoInitEnabled') is not False:
+                raise ValueError('Push registration must require user opt-in')
+            if info.get('FirebaseAppDelegateProxyEnabled') is False:
+                raise ValueError('Firebase notification delegate disabled')
+        if any(n.lower().endswith('.p8') for n in names):
+            raise ValueError('Private Apple key must never be packaged')
         forbidden = ['scaledcircle-staging', 'demo-scaledcircle', '10.0.2.2',
                      'http://127.0.0.1:5000', 'http://127.0.0.1:5001']
         required = ['https://us-east1-scaled-circle.cloudfunctions.net/', 'socialOAuthXCallbackV1']

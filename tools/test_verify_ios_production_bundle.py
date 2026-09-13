@@ -15,6 +15,13 @@ class IpaGateTest(unittest.TestCase):
             info[key] = 'Fixture permission'
         if bad == 'permission':
             del info['NSCameraUsageDescription']
+        if bad in ['push', 'push_auto', 'push_proxy', 'push_extra']:
+            info['UIBackgroundModes'] = ['location', 'fetch', 'remote-notification']
+            info['FirebaseMessagingAutoInitEnabled'] = bad == 'push_auto'
+            if bad == 'push_proxy':
+                info['FirebaseAppDelegateProxyEnabled'] = False
+            if bad == 'push_extra':
+                info['UIBackgroundModes'].append('audio')
         config = dict(PROJECT_ID='scaled-circle', BUNDLE_ID='com.scaledcircle.app',
                       GOOGLE_APP_ID='1:1010956217112:ios:91c890b1ca2018a4e70c6d')
         host = 'https://us-east1-scaled-circle.cloudfunctions.net/'
@@ -39,6 +46,8 @@ class IpaGateTest(unittest.TestCase):
                                  b'https://us-east1-scaled-circle.cloudfunctions.net/')
             if bad == 'staging':
                 archive.writestr('Symbols/extra', 'scaledcircle-staging'.encode('utf-16le'))
+            if bad == 'private_key':
+                archive.writestr('Payload/Runner.app/fixture.p8', 'synthetic test content')
             if bad == 'path':
                 archive.writestr('../outside', 'invalid')
             if bad == 'duplicate':
@@ -55,6 +64,16 @@ class IpaGateTest(unittest.TestCase):
                 inspect(path, '1.0.0', '2')
             for bad in ['permission', 'firebase', 'staging', 'path', 'duplicate', 'nested_firebase']:
                 self.fixture(path, bad)
+                with self.assertRaises(ValueError):
+                    inspect(path, '1.0.0', '1')
+
+    def test_reviewed_push_modes_require_opt_in_and_reject_private_keys(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'fixture.ipa'
+            self.fixture(path, bad='push')
+            self.assertEqual(inspect(path, '1.0.0', '1')['content_gate'], 'PASS')
+            for bad in ['push_auto', 'push_proxy', 'push_extra', 'private_key']:
+                self.fixture(path, bad=bad)
                 with self.assertRaises(ValueError):
                     inspect(path, '1.0.0', '1')
 
