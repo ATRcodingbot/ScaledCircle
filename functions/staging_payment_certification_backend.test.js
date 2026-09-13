@@ -13,7 +13,7 @@ const config = {project: 'scaledcircle-staging', appEnv: 'staging', enabled: 'tr
 const collections = ['stagingPaymentCertifications','internalCertificationAuthorities','users','legalConsents',
   'scalerReferralAttributions','scalerAffiliateProfiles','campaigns','campaignPayments','assignmentCompensations',
   'campaignZones','campaignCompletions','campaignSettlements','scalerTransfers','wallets','walletTransactions',
-  'referralLiabilities','referralBalances','referralMilestones','notifications','financialOperations',
+  'referralRewards','referralLiabilities','referralBalances','referralMilestones','notifications','financialOperations',
   'trackingSessions','activeTrackingSessions','campaignRoutes','campaignCheckpoints'];
 let service, provider, authUsers, requests, sessions, time;
 function make(overrides = {}) {
@@ -152,4 +152,25 @@ test('changed accepted contract fails closed with no proration or earning', asyn
   await assert.rejects(run('worker','submit',{attested:true,notes}),/contract_changed/);
   assert.equal((await db.collection('campaignCompletions').get()).size,0);
   assert.equal((await db.collection('walletTransactions').get()).size,0);
+});
+
+test('approval and delayed or replayed settlement triggers share one earned notification and one payable liability', async () => {
+  await accepted();
+  await run('worker','submit',{attested:true,notes});
+  await run('business','approve',{attested:true});
+  const source = require('./scaler_referral_rewards').createService({db,FieldValue,project:config.project});
+  await Promise.all([source.reconcile(IDS.zone),source.reconcile(IDS.zone)]);
+  const mirror = require('./referral_scaler_reconciliation').createReconciler({db,FieldValue,
+    project:config.project,launchPolicy:MANUAL_LAUNCH_POLICY});
+  await mirror.reconcile(IDS.zone);
+  await run('business','approve',{attested:true});
+  assert.equal((await db.collection('referralRewards').get()).size,1);
+  assert.equal((await db.collection('referralLiabilities').get()).size,1);
+  assert.equal((await db.collection('referralMilestones').get()).size,1);
+  const notifications = await db.collection('notifications').get();
+  assert.equal(notifications.size,1);
+  assert.equal(notifications.docs[0].data().amountCents,5);
+  assert.equal(notifications.docs[0].data().userId,'referrer');
+  assert.equal((await db.doc('wallets/worker').get()).data().availableBalance,5);
+  assert.equal((await db.collection('walletTransactions').get()).size,1);
 });

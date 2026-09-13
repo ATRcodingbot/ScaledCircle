@@ -213,6 +213,10 @@ function createService({db, auth, FieldValue, Timestamp, config, stripe, now = D
       tx.create(taskRef.collection('audit').doc(action), {action, actorUid: uid, version: VERSION, timestamp: at(), environment: 'staging'});
     });
     if (action === 'approve') {
+      // The normal staging settlement triggers also create the source reward.
+      // Reconcile it first so both paths share its earned notification before
+      // the payable-liability mirror runs, including delayed trigger delivery.
+      await require('./scaler_referral_rewards').createService({db, FieldValue, project: config.project}).reconcile(IDS.zone);
       await createReconciler({db, FieldValue, Timestamp, project: config.project, launchPolicy: MANUAL_LAUNCH_POLICY, now}).reconcile(IDS.zone);
     }
     return get(uid);
