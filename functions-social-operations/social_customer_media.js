@@ -112,6 +112,7 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
           throw Error('Review the existing scheduled post before replacing its image.');
         const disclosure=source.revision.origin==='generated_service_concept'?source.revision.truthfulnessDisclosure:null;
         const next=social.contentItemVersion({businessUid:uid,planId:current.planId,previousVersion:item.data().currentVersion,now:now(),item:{...current,
+          scheduledFor:new Date(current.scheduledFor?.toMillis?current.scheduledFor.toMillis():current.scheduledFor).toISOString(),
           variants:current.variants.map(v=>v.provider===input.provider?{...v,mediaAssetId:input.assetId,mediaRevisionId:prepared.id,
             mediaRequirement:'approved_image',format:'feed',altText:source.revision.altText,
             copy:disclosure&&!v.copy.includes(disclosure)?v.copy+'\n\n'+disclosure:v.copy}:v)}});

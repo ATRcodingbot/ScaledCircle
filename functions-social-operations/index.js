@@ -187,7 +187,7 @@ function customerPostCallable(method) {
 exports.previewCustomerSocialPostV1=customerPostCallable('preview');
 exports.approveAndScheduleCustomerSocialPostV1=customerPostCallable('approve');
 
-exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3,timeoutSeconds:120},async request=>{
+exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3,concurrency:1,memory:'1GiB',timeoutSeconds:120},async request=>{
   const business=await requireSocialOperationsBusiness(request,{allowMember:true});
   if(business.role!=='business'||!metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
     throw new HttpsError('permission-denied','Social Manager is Private Beta. An invitation is required.');

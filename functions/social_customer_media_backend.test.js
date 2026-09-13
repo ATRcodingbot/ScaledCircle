@@ -1,13 +1,13 @@
 'use strict';
 if(!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||''))throw Error('local_emulator_required');
 const {test,after}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
-const {initializeApp,deleteApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore');
+const {initializeApp,deleteApp}=require('firebase-admin/app'),{getFirestore,Timestamp}=require('firebase-admin/firestore');
 const {createMedia,assertDeliveryAuthority}=require('../functions-social-operations/social_customer_media');
 const social=require('../functions-social-operations/social_operations'),meta=require('../functions-social-operations/social_meta_candidate');
 const app=initializeApp({projectId:'demo-scaledcircle'},'customer-media'),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app);});
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
-test('approved own media attachment is isolated, concurrent-safe, revocable and never publishes',async()=>{
+test('approved own media preserves a Firestore schedule, is isolated, concurrent-safe, revocable and never publishes',async()=>{
  const uid='media_owner',itemId='media_plan_post',assetId='photo',revisionId='r1',original=Buffer.from('private original');
  const path=`business_media_private/${uid}/${assetId}/${revisionId}/original.jpg`,storage=new Map([[path,original]]);
  const bucket={file:(p,options)=>({download:async()=>{assert.equal(String(options?.generation||''),'1');return [storage.get(p)];},save:async(bytes,options)=>{
@@ -18,6 +18,7 @@ test('approved own media attachment is isolated, concurrent-safe, revocable and 
   return {bytes:image,width:1080,height:720,sha256:hash(image),mime:'image/jpeg'};}});
  const ar=db.doc(`businessMediaLibraries/${uid}/mediaAssets/${assetId}`),rr=ar.collection('revisions').doc(revisionId),item=db.doc('socialContentItems/'+itemId);
  const version=social.contentItemVersion({businessUid:uid,planId:'media_plan',item:{itemKey:'post',scheduledFor:'2026-10-10T16:00:00Z',variants:[{provider:'facebook',copy:'Our approved work',mediaRequirement:'image'},{provider:'instagram',copy:'Separate Instagram post',mediaRequirement:'image'}]}});
+ version.scheduledFor=Timestamp.fromDate(new Date('2026-10-10T16:00:00Z'));
  await Promise.all([ar.set({businessUid:uid,approvedRevisionId:revisionId}),rr.set({businessUid:uid,status:'ready',approvalStatus:'approved',rightsAttestation:true,altText:'A neutral work sample',privateOriginalPath:path,storageGeneration:'1',contentHash:hash(original)}),item.set({businessUid:uid,planId:'media_plan',currentVersion:1}),db.doc('socialContentVersions/'+itemId+'_v1').set(version)]);
  const input={itemId,provider:'facebook',version:1,assetId,revisionId,confirmPublicUse:true};
  for(const altered of [{...input,confirmPublicUse:false},{...input,assetId:'../other'}])await assert.rejects(service.attach(uid,altered));
@@ -25,6 +26,7 @@ test('approved own media attachment is isolated, concurrent-safe, revocable and 
  const results=await Promise.allSettled([service.attach(uid,input),service.attach(uid,input)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
  assert.deepEqual((await db.doc('socialContentVersions/'+itemId+'_v1').get()).data(),version);
  const state=(await item.get()).data();assert.equal(state.platformVersions.instagram,1);assert.equal(state.platformVersions.facebook,2);
+ assert.equal((await db.doc('socialContentVersions/'+itemId+'_v2').get()).data().scheduledFor,'2026-10-10T16:00:00.000Z');
  const delivery=(await db.collection('customerSocialMedia').where('businessUid','==',uid).get()).docs;assert.equal(delivery.length,1);
  assert.deepEqual(await service.delivery(delivery[0].id),image);assert.equal(await service.delivery('../private'),null);
  const media=(await db.collection(`socialMediaLibraries/${uid}/items`).get()).docs[0].data();
