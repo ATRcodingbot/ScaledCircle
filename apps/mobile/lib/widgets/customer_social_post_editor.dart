@@ -36,6 +36,10 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     _post['scheduledFor']?.toString() ?? '',
   )?.toLocal();
   bool _busy = false, _changed = false, _editing = false;
+  final Set<String> _loadedPreviewImages = {};
+  bool get _imagesVisible => (_post['reviewedPost']?['images'] as List? ?? [])
+      .whereType<Map>()
+      .every((image) => _loadedPreviewImages.contains(image['url'].toString()));
   late bool _textOnly =
       _post['reviewedPost']?['variant']?['mediaRequirement'] == 'none';
   String? _error;
@@ -309,6 +313,18 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                   image['url'].toString(),
                   height: 220,
                   fit: BoxFit.contain,
+                  frameBuilder: (context, child, frame, synchronous) {
+                    final url = image['url'].toString();
+                    if ((frame != null || synchronous) &&
+                        !_loadedPreviewImages.contains(url)) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted && !_loadedPreviewImages.contains(url)) {
+                          setState(() => _loadedPreviewImages.add(url));
+                        }
+                      });
+                    }
+                    return child;
+                  },
                   errorBuilder: (_, error, stack) => const Text(
                     'Image preview unavailable. Reload before approval.',
                   ),
@@ -450,7 +466,9 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 !_changed &&
                 widget.onSchedule != null)
               FilledButton(
-                onPressed: _busy ? null : () => widget.onSchedule!(_post),
+                onPressed: _busy || !_imagesVisible
+                    ? null
+                    : () => widget.onSchedule!(_post),
                 child: const Text('Approve & Schedule'),
               ),
             TextButton(

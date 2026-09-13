@@ -6,6 +6,7 @@ import 'package:flutter_app/services/social_operations_service.dart';
 class EditorService extends SocialOperationsService {
   final calls = <Map<String, dynamic>>[];
   bool fail = false;
+  String? imageUrl;
   int version = 1;
   Map<String, dynamic> post() => {
     'itemId': 'post',
@@ -15,7 +16,7 @@ class EditorService extends SocialOperationsService {
         .add(const Duration(days: 2))
         .toUtc()
         .toIso8601String(),
-    'ready': false,
+    'ready': imageUrl != null,
     'reasons': [],
     'reviewedPost': {
       'variant': {
@@ -24,7 +25,9 @@ class EditorService extends SocialOperationsService {
         'destinationUrl': 'https://example.com/services',
         'mediaRequirement': 'none',
       },
-      'images': [],
+      'images': [
+        if (imageUrl != null) {'url': imageUrl},
+      ],
     },
   };
   @override
@@ -47,6 +50,40 @@ class EditorService extends SocialOperationsService {
 }
 
 void main() {
+  testWidgets('an unavailable preview image cannot be approved', (
+    tester,
+  ) async {
+    final service = EditorService()
+      ..imageUrl = 'https://example.test/unavailable.jpg';
+    var approvals = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CustomerSocialPostEditor(
+          post: service.post(),
+          service: service,
+          onSchedule: (_) async {
+            approvals++;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Image preview unavailable. Reload before approval.'),
+      findsOneWidget,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Approve & Schedule'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Approve & Schedule'),
+    );
+    expect(button.onPressed, isNull);
+    expect(approvals, 0);
+    expect(tester.takeException(), isNull);
+  });
   for (final scale in [1.0, 2.0]) {
     testWidgets(
       'narrow editor keeps owner text, exact version and no implicit approval at text scale $scale',

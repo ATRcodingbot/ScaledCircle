@@ -218,7 +218,9 @@ function customerMediaStore(){return require('./social_customer_media').createMe
 
 // Public delivery contains only the derivative explicitly released by its owner.
 // Neither private originals nor arbitrary Storage paths are addressable here.
-exports.serveCustomerSocialMediaV1=onRequest({maxInstances:4,timeoutSeconds:30},async(req,res)=>{
+exports.serveCustomerSocialMediaV1=onRequest({maxInstances:4,timeoutSeconds:30,
+  cors:['https://scaledcircle.com','https://www.scaledcircle.com','https://scaled-circle.web.app','https://scaled-circle.firebaseapp.com',
+    'https://scaledcircle-staging.web.app','https://scaledcircle-staging.firebaseapp.com']},async(req,res)=>{
   if(!['GET','HEAD'].includes(req.method))return res.status(405).end();
   const match=/^\/([a-f0-9]{64})\.jpg$/.exec(req.path);
   if(!match)return res.status(404).end();
