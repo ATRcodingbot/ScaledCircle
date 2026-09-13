@@ -210,6 +210,8 @@ class _DeleteAccountState extends State<DeleteAccountScreen> {
                 'Deletion removes your login, personal profile and Business team access. It does not delete a Business or erase required work, financial and referral history.',
               ),
               if (_status != null) ...[
+                if (_status!['email'] != null)
+                  Text('Account: ${_status!['email']}'),
                 for (final reason in (_status!['blockers'] as List? ?? []))
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),

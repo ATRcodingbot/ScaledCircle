@@ -37,7 +37,7 @@ void main() {
             call: (input) async {
               events.add(input['action']);
               return input['action'] == 'get'
-                  ? {'canDelete': true, 'blockers': []}
+                ? {'canDelete': true, 'blockers': [], 'email': 'invited@example.test'}
                   : {'deleted': true};
             },
             reauthenticate: (_) async {
@@ -50,6 +50,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.text('Account: invited@example.test'), findsOneWidget);
       await tester.enterText(
         find.widgetWithText(TextField, 'Type DELETE to confirm'),
         'DELETE',

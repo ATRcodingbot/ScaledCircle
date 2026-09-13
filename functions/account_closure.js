@@ -59,7 +59,7 @@ function createService({db,auth,FieldValue,project,appEnv,now=Date.now}) {
     if(who.disabled)fail('permission-denied','This account is disabled.');
     return db.runTransaction(async tx=>{
       const i=await inventory(uid,tx);
-      return {canDelete:i.blockers.length===0,blockers:i.blockers.map(k=>MESSAGES[k]),
+      return {uid,email:who.email||null,canDelete:i.blockers.length===0,blockers:i.blockers.map(k=>MESSAGES[k]),
         availableBalanceCents:Math.round(Number(i.data.wallets?.availableBalance||0)*100),
         memberships:i.members.filter(m=>m.doc.data()?.status==='active').length,
         retainsFinancialHistory:true,environment:'staging'};
