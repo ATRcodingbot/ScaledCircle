@@ -40,7 +40,8 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
       const e=Error('Business Email setup is pending. Existing account emails continue normally.');e.code='failed-precondition';throw e;
     }
     return {businessId,actorUid:uid,actorEmail:who.email,beta:{...config,configured,sendEnabled:config.sendEnabled===true,
-      certificationSendEnabled:(project==='scaledcircle-staging'||project?.startsWith('demo-'))&&config.certificationSendEnabled===true&&config.certificationOnly!==false},preferenceEnabled:preferences.enabled};
+      certificationSendEnabled:((project==='scaledcircle-staging'||project?.startsWith('demo-'))&&config.certificationSendEnabled===true&&config.certificationOnly!==false)||
+        (project==='scaled-circle'&&require('./certification').productionPermit(config))},preferenceEnabled:preferences.enabled};
   };
 }
 module.exports={createAuthority};

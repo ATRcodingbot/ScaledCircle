@@ -266,7 +266,7 @@ void main() {
     () {
       final s = File(
         'lib/screens/public/early_access_pending_screen.dart',
-      ).readAsStringSync();
+      ).readAsStringSync().replaceAll('\r\n', '\n');
       final action = s.substring(
         s.indexOf('Future<void> _returnToSite'),
         s.indexOf('@override\n  Widget build'),

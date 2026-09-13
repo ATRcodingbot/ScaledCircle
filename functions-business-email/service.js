@@ -37,6 +37,9 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       db.collection('agentProspects').where('businessUid','==',a.businessId).limit(250).get()]);
     const c=connection.data()||{},pending=c.pendingAttempt?await sub(a.businessId,'attempts',c.pendingAttempt).get():null;
     const active=['pending','verifying'].includes(pending?.data()?.status)&&pending.data().expiresAt>now();
+    const credential=(await sub(a.businessId,'private','credential').get()).data();
+    const healthy=c.status==='connected'&&c.health==='connected'&&credential?.generation===c.generation&&
+      (!credential.businessId||credential.businessId===a.businessId)&&c.email===a.beta.mailbox;
     const ops=operations.docs.map(d=>({id:d.id,...d.data()}));
     const focus=(await db.doc('agentCommunicationPreferences/'+a.businessId).get()).data()?.opportunities;
     const restrictions=await root(a.businessId).collection('suppression').where('active','==',true).limit(501).get();
@@ -45,14 +48,17 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     const rows=prospects.docs.map(d=>({id:d.id,...d.data()})).map(p=>({...p,doNotContact:p.doNotContact===true||suppressedRecipients.has(p.email?.toLowerCase()),excludedByGrowthPreferences:!a.preferenceEnabled(p,focus)}));
     const leadDocs=await db.collection('salesLeads').where('ownerUid','==',a.businessId).limit(25).get();
     const replies=c.status==='connected'&&c.permissions?.read===true?(await root(a.businessId).collection('replies').limit(50).get()).docs.map(d=>d.data()):[];
-    return {available:true,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta),sendEnabled:a.beta.sendEnabled!==false,
+    const googleRoundTripVerified=project==='scaled-circle'&&healthy&&ops.some(op=>op.certification===true&&op.state==='sent'&&
+      (op.provider||'google')==='google'&&op.from===c.email&&op.providerMessageId&&op.providerThreadId&&
+      replies.some(r=>r.certification===true&&r.businessId===a.businessId&&r.operationId===op.id&&r.from===op.recipient));
+    return {available:true,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta,{googleRoundTripVerified}),sendEnabled:a.beta.sendEnabled!==false,
       deliveryLimits:{individualPerHour:5,individualPerDay:20,campaignAudience:25,campaignSending:false},
-      certificationSendEnabled:a.beta.certificationSendEnabled===true,expectedMailbox:a.beta.mailbox,
+      certificationSendEnabled:a.beta.certificationSendEnabled===true&&!ops.some(op=>op.certification===true),expectedMailbox:a.beta.mailbox,
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
         provider:c.provider||'google',providerLabel:contract.LABELS[c.provider||'google'],...contract.capabilities(c),
         read:c.status==='connected'&&c.permissions?.read===true,send:c.status==='connected'&&c.permissions?.send===true,
         automaticSending:false,landingSender:c.landingSender||'account_notifications',pending:active,
-        error:!active&&c.pendingAttempt?'The latest connection attempt ended. Your existing connection is unchanged.':c.lastConnectionError||null},
+        error:healthy?null:!active&&c.pendingAttempt?'The latest connection attempt ended. Your existing connection is unchanged.':c.lastConnectionError||null},
       evidenceWindow:'Up to 100 recent outreach operations and their recorded outcomes.',operations:ops.sort((a,b)=>b.requestedAt-a.requestedAt),drafts:drafts.docs.map(d=>({id:d.id,...d.data()})),replies,outcomes:events.docs.map(d=>d.data()),restrictions:restrictions.docs.map(d=>({recipient:d.data().recipient,reason:d.data().reason})),
       landingLeads:leadDocs.docs.filter(d=>d.data().leadType==='landing_page_inquiry'&&!d.data().suppressionStatus).map(d=>({id:d.id,email:d.data().contactEmail,displayName:d.data().contactName,
         reason:'An inbound request from your landing page.',draft:'Thank you for your inquiry. We received your request and will review how we can help.',sourceUrl:null})),
@@ -193,6 +199,9 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   }
   async function send(a,input) {
     const requireSend=(actor,draft)=>{
+      if(project==='scaled-circle'&&draft?.certification===true&&
+        !require('./certification').exactProductionMessage(actor.beta,draft,now()))
+        fail('failed-precondition','The controlled production message is not authorized. No email was sent.');
       if(actor.beta.sendEnabled===false&&!(actor.beta.certificationSendEnabled===true&&draft?.certification===true&&draft.prospectId==='founder_certification'&&draft.recipient===gmail.email(actor.beta.certificationRecipient)))
         fail('failed-precondition','Sending is held. Only the enabled, reviewed controlled test can be sent. No email was sent.');
     };
@@ -211,11 +220,18 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
         if(latest.recipient!==draft.recipient)fail('failed-precondition','The contact source changed. Review a new draft.');
       }
       else if(draft.recipient!==gmail.email(a.beta.certificationRecipient))fail('permission-denied','The controlled recipient changed.');
+      const certificationRef=sub(a.businessId,'certificationControl','founder_certification');
+      if(draft.certification) {
+        const used=(await tx.get(certificationRef)).data();
+        const prior=await tx.get(root(a.businessId).collection('operations').where('certification','==',true).limit(1));
+        if(used||!prior.empty)fail('failed-precondition','The controlled test already has a send record. Check its conversation instead.');
+      }
       const hourRef=sub(a.businessId,'deliveryWindows','hour_'+Math.floor(now()/3600000)),dayRef=sub(a.businessId,'deliveryWindows','day_'+Math.floor(now()/86400000));
       const hourly=(await tx.get(hourRef)).data()?.attempts||0,daily=(await tx.get(dayRef)).data()?.attempts||0;
       if(hourly>=5||daily>=20)fail('resource-exhausted','The private beta sending limit has been reached. Wait before sending more; provider limits may be lower.');
       const op={...draft,state:'sending',messageId:input.operationId+'@mail.scaledcircle.com',requestedAt:stamp(),approvedBy:a.actorUid,
         attempts:1,replyCount:0,delivered:false,providerMessageId:null,providerThreadId:null};
+      if(draft.certification)tx.create(certificationRef,{businessId:a.businessId,operationId:input.operationId,claimedAt:stamp(),actorUid:a.actorUid,maxSends:1});
       tx.set(hourRef,{attempts:hourly+1});tx.set(dayRef,{attempts:daily+1});
       tx.create(ref,op);tx.update(draftRef,{state:'sending'});return {op,secret,c};
     });

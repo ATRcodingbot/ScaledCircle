@@ -13,8 +13,8 @@ function createRegistry({google,microsoft,other}) {
      contract.fail('failed-precondition','This provider is in setup testing. A reviewed private test connection is required.');
    return p;
   },
-  list(beta={}) {return Object.entries(contract.LABELS).map(([id,label])=>({id,label,
-   status:id==='google'?'private_beta':'setup_testing',
+  list(beta={},evidence={}) {return Object.entries(contract.LABELS).map(([id,label])=>({id,label,
+   status:id==='google'?(evidence.googleRoundTripVerified===true?'available':'private_beta'):'setup_testing',
    configured:!!adapters[id]&&adapters[id].configured!==false&&(id==='google'||beta.providers?.[id]===true)&&(id!=='other'||!!beta.otherMailbox),
    // Never return credentials or caller-controlled server destinations.
    ...(id==='other'&&beta.otherMailbox?{settings:{email:beta.mailbox,username:beta.otherMailbox.username,imapHost:beta.otherMailbox.imapHost||'',imapPort:993,

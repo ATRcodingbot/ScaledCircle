@@ -135,6 +135,8 @@ class BusinessEmailProviders extends StatelessWidget {
                 Text(
                   provider['status'] == 'setup_testing'
                       ? 'Private Beta — Setup Testing'
+                      : provider['status'] == 'available'
+                      ? 'Available · Production conversation verified'
                       : 'Private Beta · Google round trip verified in staging',
                 ),
                 if (provider['configured'] != true)

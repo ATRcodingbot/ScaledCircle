@@ -324,7 +324,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                     if (_data!['sendEnabled'] == false)
                       Text(
                         _data!['certificationSendEnabled'] == true
-                            ? 'Sending is limited to one reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
+                            ? 'One reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
                             : 'Sending is not available yet. You can review messages without sending them.',
                       ),
                     const Text(

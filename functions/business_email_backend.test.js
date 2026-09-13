@@ -302,3 +302,49 @@ test('existing Rules deny mailbox records, tokens, attempts, replies and operati
     }
   }finally{await env.cleanup();}
 });
+
+test('healthy current credentials outrank expired historical warnings without rewriting attempts',async()=>{
+ const root=db.doc('businessMailboxes/owner'),attempt=root.collection('attempts').doc('old');
+ const historical={status:'pending',expiresAt:clock-1,actorUid:'owner'};await attempt.set(historical);
+ await root.update({health:'connected',pendingAttempt:'old',lastConnectionError:'Old failure'});
+ assert.equal((await call('load')).connection.error,null);assert.deepEqual((await attempt.get()).data(),historical);
+ assert.equal((await root.get()).data().pendingAttempt,'old');
+ await root.update({health:'reconnect_required'});assert((await call('load')).connection.error);
+ await root.update({health:'connected'});await root.collection('private').doc('credential').update({generation:'wrong'});
+ assert((await call('load')).connection.error);assert.equal(sends,0);
+});
+
+test('production certification is exact, expiring and globally single-use across concurrent clicks and draft versions',async()=>{
+ const {digest}=require('../functions-business-email/certification');
+ beta={...beta,kind:'customer',sendEnabled:false,certificationSendEnabled:true,productionCertification:{enabled:true,maxSends:1,
+  from:'owner@example.test',to:'recipient@example.test',subjectSha256:digest('Production check'),bodySha256:digest('Exact controlled message.'),expiresAt:clock+60000}};
+ service=createService({db,key,project:'scaled-circle',now:()=>clock,provider,authority:async r=>{
+  if(r.auth?.uid!=='owner'||r.data?.businessId!=='owner')throw Error('denied');return {actorUid:'owner',businessId:'owner',beta,preferenceEnabled:()=>true};}});
+ let d=await draft({certification:true,subject:'Wrong content'});await assert.rejects(send(d),/not authorized/);assert.equal(sends,0);
+ d=await draft({certification:true,expectedVersion:1,subject:'Production check',body:'Exact controlled message.'});
+ const originalExpiry=beta.productionCertification.expiresAt;beta.productionCertification.expiresAt=clock;
+ await assert.rejects(send(d),/not authorized/);beta.productionCertification.expiresAt=originalExpiry;
+ const result=await Promise.all([send(d),send(d)]);assert.equal(sends,1);assert.equal(result.filter(r=>r.reused).length,1);
+ await db.doc('businessMailboxes/owner').update({health:'connected'});
+ assert.equal((await call('load')).providers.find(p=>p.id==='google').status,'private_beta');
+ provider.thread=async()=>exactThread((await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data());
+ await call('reconcile',{operationId:d.operationId});await call('reconcile',{operationId:d.operationId});
+ const loaded=await call('load');assert.equal(loaded.providers.find(p=>p.id==='google').status,'available');
+ assert.equal(loaded.providers.find(p=>p.id==='microsoft').status,'setup_testing');
+ assert.equal(loaded.sendEnabled,false);assert.equal(loaded.replies.length,1);assert.equal(loaded.learning.sent,0);
+ assert.equal((await db.collection('businessMailboxes/owner/certificationControl').get()).size,1);
+ await assert.rejects(draft({certification:true,expectedVersion:2}),/send record/);
+ // Even a later malformed/stale draft cannot bypass the independent use record.
+ const next={...d,operationId:'different',version:3};await db.doc('businessMailboxes/owner/drafts/founder_certification').set(next);
+ await assert.rejects(send(next),/already has a send record/);assert.equal(sends,1);
+});
+
+test('production certification permit cannot enable internal mailbox, arbitrary recipients, content or ordinary outreach',async()=>{
+ const {productionPermit,exactProductionMessage,digest}=require('../functions-business-email/certification');
+ const config={kind:'customer',mailbox:'owner@example.test',certificationRecipient:'recipient@example.test',certificationOnly:true,sendEnabled:false,certificationSendEnabled:true,
+  productionCertification:{enabled:true,maxSends:1,from:'owner@example.test',to:'recipient@example.test',subjectSha256:digest('Check'),bodySha256:digest('Exact body'),expiresAt:clock+60000}};
+ const d={provider:'google',certification:true,prospectId:'founder_certification',from:config.mailbox,recipient:config.certificationRecipient,subject:'Check',body:'Exact body'};
+ assert(productionPermit(config,clock));assert(exactProductionMessage(config,d,clock));
+ for(const extra of [{kind:'internal'},{certificationOnly:false},{sendEnabled:true},{certificationSendEnabled:false},{mailbox:'another@example.test'}])assert.equal(productionPermit({...config,...extra},clock),false);
+ for(const extra of [{recipient:'another@example.test'},{body:'Changed'},{subject:'Changed'},{provider:'microsoft'},{certification:false}])assert.equal(exactProductionMessage(config,{...d,...extra},clock),false);
+});

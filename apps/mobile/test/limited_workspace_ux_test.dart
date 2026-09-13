@@ -238,21 +238,27 @@ void main() {
           await tester.pumpAndSettle();
           final field = find.byKey(const Key('delete-current-password')),
               help = find.byKey(const Key('delete-password-help'));
+          // Measure the page's vertical scroll, not EditableText's horizontal
+          // scroll position inside the password input.
+          final pageScroll = find.descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          ).first;
           await tester.scrollUntilVisible(
             field,
             150,
-            scrollable: find.byType(Scrollable).last,
+            scrollable: pageScroll,
           );
           await tester.pumpAndSettle();
           double offset() => tester
-              .state<ScrollableState>(find.byType(Scrollable).last)
+              .state<ScrollableState>(pageScroll)
               .position
               .pixels;
           final fieldBottom = tester.getRect(field).bottom + offset();
           await tester.scrollUntilVisible(
             help,
             150,
-            scrollable: find.byType(Scrollable).last,
+            scrollable: pageScroll,
           );
           await tester.pumpAndSettle();
           expect(fieldBottom, lessThan(tester.getRect(help).top + offset()));
@@ -276,7 +282,7 @@ void main() {
           await tester.scrollUntilVisible(
             find.widgetWithText(FilledButton, 'Delete Account'),
             200,
-            scrollable: find.byType(Scrollable).last,
+            scrollable: pageScroll,
           );
           expect(tester.takeException(), isNull);
         },

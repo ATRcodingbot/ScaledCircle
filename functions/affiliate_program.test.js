@@ -74,10 +74,11 @@ test("Phase 1 never fabricates subscription commission or changes Business prici
   assert.doesNotMatch(businessFunnel, /affiliate|commission|referral discount/i);
 });
 
-test("referral Private Beta is discoverable and attribution stays server-mediated", () => {
+test("referral portal is discoverable and attribution stays server-mediated", () => {
   const dashboard = fs.readFileSync(path.join(__dirname, "../apps/mobile/lib/screens/scaler/dashboard/scaler_dashboard_screen.dart"), "utf8");
   const register = fs.readFileSync(path.join(__dirname, "../apps/mobile/lib/services/auth/auth_service.dart"), "utf8");
-  assert.match(dashboard, /Referrals · Private Beta/);
+  assert.match(dashboard, /Text\('Referrals'\)/);
+  assert.match(dashboard, /ScalerAffiliateScreen/);
   const businessAccount=fs.readFileSync(path.join(__dirname, '../apps/mobile/lib/screens/business/business_account_screen.dart'),'utf8');
   assert.match(businessAccount,/BusinessWorkspaceSession.value\?\['isOwner'\] == true/);
   assert.match(register, /recordBusinessAttribution/);

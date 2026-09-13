@@ -14,6 +14,8 @@ This isolated Functions codebase provides one workspace-owned Business Email aut
 
 ## Deployment configuration
 
+A production certification exception is disabled by default. A separately reviewed customer-only invitation may contain `productionCertification` with `enabled`, `maxSends: 1`, exact `from`/`to`, SHA-256 hashes of the reviewed subject/body, and `expiresAt`. It additionally requires certification-only mode, the certification-send switch, and ordinary sending disabled. The server checks this permit again before its single provider attempt. A workspace-wide certification claim and existing-operation scan prevent reuse across draft versions. Uncertain sends remain reconciliation-only. Neither this exception nor a completed round trip enables campaign or automatic sending. The Google provider label becomes Available only from a sent production certification operation and its matching stored provider reply; the invitation gate remains intact.
+
 Use only the dedicated `firebase.business-email.json` selectors after configuring an environment-specific Google Web application with the exact callback URI. Keep staging and production clients and secrets separate. Review the project's existing Google audience without changing unrelated login or provider integrations; Google's Testing and verification restrictions still apply independently of ScaledCircle's private invitation gate.
 
 Required environment configuration:
