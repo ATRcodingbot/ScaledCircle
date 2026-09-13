@@ -106,6 +106,69 @@ test('linking crew to an account cannot silently merge overlapping assignments',
 test('landing inquiry is tenant-bound and imported only once even when reusing a customer',async()=>{const b=await owner(),c=await customer(b);await db.doc('salesLeads/lead_'+b).set({ownerUid:b,leadType:'landing_page_inquiry',createdBy:'public_landing_page',contactName:'Controlled customer',contactEmail:'client'+b+'@example.test',message:'Exact inquiry'});assert.equal((await load(b)).inbound.length,1);for(let i=0;i<2;i++)assert.equal((await call(b,'importLead',{leadId:'lead_'+b})).customerId,c.customerId);assert.equal((await load(b)).inbound.length,0);assert.equal((await db.collection(`businessOperations/${b}/timeline`).where('kind','==','landing_lead_linked').get()).size,1);const other=await owner();await assert.rejects(call(other,'importLead',{leadId:'lead_'+b}),{code:'permission-denied'});});
 test('notifications remain preferences, never action permissions or customer email',async()=>{const b=await owner(),u=await member(b,PRESETS.fieldUser);await call(b,'savePreferences',{choices:{scheduleChanges:false}},u);await item(b,{type:'job',assignedPeople:['user:'+u]});assert.equal((await db.collection('notifications').where('userId','==',u).get()).size,0);await assert.rejects(item(b,{type:'job',assignedPeople:[]},u),{code:'permission-denied'});});
 test('basic parsing rejects unknown fields, invalid dates and fake resource identity',()=>{assert.throws(()=>model.customer({name:'x',balance:10}),{code:'invalid-argument'});assert.throws(()=>model.item({title:'x',type:'job',startMs:start,durationMinutes:0,timeZone:'Bad'}),{code:'invalid-argument'});assert.throws(()=>model.people(['user:../../other']),{code:'invalid-argument'});assert.deepEqual(model.conflicts({id:'a',status:'scheduled',assignedPeople:['user:a'],startMs:10,endMs:20},[{id:'b',status:'scheduled',assignedPeople:['user:a'],startMs:20,endMs:30}]),[]);});
+
+test('schedule editor removes own accidental task without Assign People; no authority or history erased',async()=>{
+ const b=await owner(),u=await member(b,['scheduleView','scheduleEdit']);
+ const saved=await item(b,{type:'task',assignedPeople:['user:'+u]},u),before=(await db.doc(`businessOperations/${b}/items/${saved.itemId}`).get()).data();
+ assert.equal((await load(b,u)).items[0].removalAction,'delete');
+ const input={itemId:saved.itemId,expectedVersion:1,removalAction:'delete'},key=crypto.randomUUID();
+ const first=await call(b,'removeItem',input,u,key),retry=await call(b,'removeItem',input,u,key);
+ assert.equal(first.financialEffect,false);assert.equal(retry.duplicate,true);assert.equal((await load(b,u)).items.length,0);assert.equal((await load(b)).counts.openTasks,0);
+ const after=(await db.doc(`businessOperations/${b}/items/${saved.itemId}`).get()).data();
+ assert.equal(after.status,'canceled');assert.equal(after.removedBy,u);assert.equal(after.version,2);assert.deepEqual(after.assignedPeople,before.assignedPeople);
+ assert.equal((await db.collection(`businessOperations/${b}/timeline`).where('kind','==','schedule_removed').get()).size,1);
+ await assert.rejects(call(b,'setItemStatus',{itemId:saved.itemId,expectedVersion:2,status:'open'},u),{code:'failed-precondition'});
+ await assert.rejects(call(b,'saveItem',{itemId:saved.itemId,expectedVersion:2,item:{title:'Reopen',type:'task',startMs:start,durationMinutes:60,timeZone:'UTC-04:00'}},u),{code:'failed-precondition'});
+});
+test('read-only, cross-workspace and job-status-only members cannot remove schedule work',async()=>{
+ const b=await owner('managed_growth'),view=await member(b,['scheduleView']),field=await member(b,['jobsAssigned','jobsStatus']),other=await owner();
+ const s=await item(b,{type:'task'}),j=await item(b,{type:'job',startMs:start+3600000,assignedPeople:['user:'+field]});
+ assert.equal((await load(b,view)).items[0].removalAction,null);
+ for(const uid of [view,other,null])await assert.rejects(call(b,'removeItem',{itemId:s.itemId,expectedVersion:1,removalAction:'delete'},uid));
+ await assert.rejects(call(b,'removeItem',{itemId:j.itemId,expectedVersion:1,removalAction:'cancel'},field),{code:'permission-denied'});
+ assert.equal((await load(b)).items.length,2);
+});
+test('customer-linked cancellation preserves timeline and reconciles only the last scheduled estimate',async()=>{
+ const b=await owner(),c=await customer(b),u=await member(b,['scheduleView','scheduleEdit']);
+ const a=await item(b,{customerId:c.customerId,assignedPeople:['user:'+u]}),second=await item(b,{customerId:c.customerId,startMs:start+3600000});
+ for(const [i,x]of [a,second].entries()){
+  await call(b,'removeItem',{itemId:x.itemId,expectedVersion:1,removalAction:'cancel'},u);
+  assert.equal((await db.doc(`businessOperations/${b}/customers/${c.customerId}`).get()).data().stage,i===0?'estimate_scheduled':'follow_up');
+ }
+ const history=await call(b,'timeline',{customerId:c.customerId});assert.equal(history.items.length,2);assert(history.items.every(i=>i.status==='canceled'&&i.removedAtMs));assert.equal(history.events.filter(e=>e.kind==='schedule_removed').length,2);
+ assert.equal((await load(b)).customers.length,1);assert.equal((await load(b)).items.length,0);
+});
+test('completed internal job archives without erasing outcome, quote, customer or marketplace economics',async()=>{
+ const b=await owner(),c=await customer(b),e=await item(b,{customerId:c.customerId});
+ await call(b,'recordEstimate',{itemId:e.itemId,expectedVersion:1,quotedAmountCents:15000,outcome:'won',note:'Preserve quote'});
+ const j=await item(b,{type:'job',customerId:c.customerId,linkedItemId:e.itemId,startMs:start+3600000});await call(b,'setItemStatus',{itemId:j.itemId,expectedVersion:1,status:'completed'});
+ const snapshot=await db.doc(`businessOperations/${b}/items/${j.itemId}`).get();assert.equal((await load(b)).items.find(i=>i.id===j.itemId).removalAction,'archive');
+ await call(b,'removeItem',{itemId:j.itemId,expectedVersion:2,removalAction:'archive'});
+ const row=(await snapshot.ref.get()).data();assert.equal(row.status,'completed');assert.equal(row.linkedItemId,e.itemId);assert.equal((await call(b,'timeline',{customerId:c.customerId})).customer.stage,'completed');
+ assert.deepEqual((await db.doc(`businessOperations/${b}/items/${e.itemId}`).get()).data().estimate,{quotedAmountCents:15000,outcome:'won',note:'Preserve quote',evidenceType:'owner_recorded',collectedRevenueCents:null});
+});
+test('marketplace-bound legacy item fails closed; calendar removal cannot touch financial collections',async()=>{
+ const b=await owner(),s=await item(b,{type:'task'}),doc=db.doc(`businessOperations/${b}/items/${s.itemId}`);
+ for(const collection of ['campaigns','campaignZones','earnings','walletTransactions','campaignPayments'])await db.doc(collection+'/protected_'+b).set({protected:true,amount:500});
+ await doc.update({compensationContract:{baseCents:500}});assert.equal((await load(b)).items[0].removalAction,null);
+ assert.equal(model.removalAction({type:'task',status:'open',futureFinancialBinding:{amount:500}}),null);
+ await assert.rejects(call(b,'removeItem',{itemId:s.itemId,expectedVersion:1,removalAction:'delete'}),{code:'failed-precondition'});
+ assert.equal((await doc.get()).data().removedAtMs,undefined);
+ for(const collection of ['campaigns','campaignZones','earnings','walletTransactions','campaignPayments'])assert.deepEqual((await db.doc(collection+'/protected_'+b).get()).data(),{protected:true,amount:500});
+});
+test('concurrent removal creates one audit event and stale action confirmation cannot archive changed work',async()=>{
+ const b=await owner(),s=await item(b,{type:'task'}),input={itemId:s.itemId,expectedVersion:1,removalAction:'delete'};
+ const results=await Promise.all([call(b,'removeItem',input),call(b,'removeItem',input)]);assert.equal(results.filter(r=>r.alreadyRemoved===true).length,1);assert.equal((await db.collection(`businessOperations/${b}/timeline`).where('kind','==','schedule_removed').get()).size,1);
+ const x=await item(b,{type:'task'});await call(b,'setItemStatus',{itemId:x.itemId,expectedVersion:1,status:'done'});
+ await assert.rejects(call(b,'removeItem',{itemId:x.itemId,expectedVersion:2,removalAction:'delete'}),{code:'aborted'});
+});
+test('removed estimate generates no reminder and preserves its customer for follow-up',async()=>{
+ const b=await owner(),c=await customer(b),s=await item(b,{customerId:c.customerId});
+ await call(b,'removeItem',{itemId:s.itemId,expectedVersion:1,removalAction:'cancel'});
+ const run=require('../functions-business-operations/reminders').createReminders({db,FieldValue,authority:createAuthority({db,auth,FieldValue,Timestamp,project}),now:()=>start-20*60000});
+ await run();assert.equal((await db.collection('notifications').where('userId','==',b).where('type','==','business_estimate_reminder').get()).size,0);
+ assert.equal((await load(b)).customers[0].stage,'follow_up');
+});
 test('estimate reminders are exactly once, in-app only and respect permission/revocation',async()=>{
  const b=await owner(),u=await member(b,PRESETS.officeManager);await item(b,{assignedPeople:['user:'+u]});
  const {createReminders}=require('../functions-business-operations/reminders');const run=createReminders({db,FieldValue,authority:createAuthority({db,auth,FieldValue,Timestamp,project}),now:()=>start-20*60000});

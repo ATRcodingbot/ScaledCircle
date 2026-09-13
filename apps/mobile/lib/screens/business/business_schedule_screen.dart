@@ -926,10 +926,49 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
     }
   }
 
+  Future<void> removeItem(Map<String, dynamic> item) async {
+    final action = item['removalAction'];
+    if (!['delete', 'cancel', 'archive'].contains(action) || busy) return;
+    final verb = action == 'delete'
+        ? 'Delete'
+        : action == 'archive'
+        ? 'Archive'
+        : 'Cancel';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('$verb this schedule item?'),
+        content: Text(
+          action == 'delete'
+              ? 'This will remove it from the active schedule.'
+              : 'This will remove it from the active schedule. Its history will remain available.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: Text(action == 'cancel' ? 'Keep item' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: Text(verb),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final result = await change('removeItem', {
+      'itemId': item['id'],
+      'expectedVersion': item['version'],
+      'removalAction': action,
+    });
+    if (result != null) message('Removed from schedule.');
+  }
+
   Widget itemCard(Map<String, dynamic> i) {
     final customer = customers
         .where((c) => c['id'] == i['customerId'])
         .firstOrNull;
+    final removed = i['removedAtMs'] != null;
     final editor = can(i['type'] == 'job' ? 'jobsEdit' : 'scheduleEdit');
     return Card(
       child: Padding(
@@ -939,6 +978,8 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
           children: [
             Text(i['title'], style: Theme.of(context).textTheme.titleMedium),
             Text('${workTypeLabels[i['type']]} · ${label(i['status'])}'),
+            if (removed)
+              const Text('Removed from schedule · History preserved'),
             Text('${date(i['startMs'])} · ${i['durationMinutes']} minutes'),
             if (customer != null || i['customer'] != null)
               Text('${customer?['name'] ?? i['customer']['name']}'),
@@ -959,7 +1000,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
               Text(
                 'Quote: ${i['estimate']['quotedAmountCents'] == null ? 'Not recorded' : '\$${((i['estimate']['quotedAmountCents'] as num) / 100).toStringAsFixed(2)}'} · ${i['estimate']['outcome']} · Not collected revenue',
               ),
-            if (editable)
+            if (editable && !removed)
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
@@ -968,6 +1009,17 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                     TextButton(
                       onPressed: busy ? null : () => editItem(i),
                       child: const Text('Edit'),
+                    ),
+                  if (editor &&
+                      [
+                        'delete',
+                        'cancel',
+                        'archive',
+                      ].contains(i['removalAction']))
+                    TextButton.icon(
+                      onPressed: busy ? null : () => removeItem(i),
+                      icon: const Icon(Icons.event_busy_outlined),
+                      label: const Text('Remove from schedule'),
                     ),
                   if (editor || i['type'] == 'job' && can('jobsStatus'))
                     PopupMenuButton<String>(
@@ -1031,10 +1083,13 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      automaticallyImplyLeading: !widget.workspaceHome,
-      leading: widget.workspaceHome
+      automaticallyImplyLeading: false,
+      leadingWidth: 92,
+      leading: widget.workspaceHome && !Navigator.canPop(context)
           ? null
-          : BackButton(
+          : TextButton.icon(
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back'),
               onPressed: () {
                 if (Navigator.canPop(context)) {
                   Navigator.pop(context);
@@ -1045,8 +1100,8 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
             ),
       title: Text(can('customersView') ? 'Customers & Schedule' : 'Schedule'),
       actions: [
-        if (widget.service == null && data?['isOwner'] != true)
-          const MemberAccountActions(),
+        if (widget.workspaceHome || data?['isOwner'] == false)
+          const MemberWorkspaceMenu(),
         IconButton(
           tooltip: 'Notification choices',
           onPressed: data == null ? null : preferences,

@@ -8,6 +8,8 @@ class FakeOperations extends BusinessOperationsService {
   final customers = <Map<String, dynamic>>[];
   bool fieldUser = false;
   bool teamEditor = false;
+  bool scheduleViewer = false;
+  Map<String, dynamic>? removedItem;
   Map<String, dynamic>? savedItem;
   final existingItems = <Map<String, dynamic>>[];
   @override
@@ -18,6 +20,10 @@ class FakeOperations extends BusinessOperationsService {
     String? requestId,
   }) async {
     calls.add(operation);
+    if (operation == 'removeItem') {
+      removedItem = Map<String, dynamic>.from(input);
+      existingItems.removeWhere((i) => i['id'] == input['itemId']);
+    }
     if (operation == 'saveItem') {
       savedItem = Map<String, dynamic>.from(input['item']);
     }
@@ -43,10 +49,12 @@ class FakeOperations extends BusinessOperationsService {
     if (operation != 'load') return {'saved': true};
     return {
       'activePaid': true,
-      'isOwner': !fieldUser && !teamEditor,
+      'isOwner': !fieldUser && !teamEditor && !scheduleViewer,
       'seatLimit': 3,
       'permissions': fieldUser
           ? ['jobsAssigned', 'jobsStatus']
+          : scheduleViewer
+          ? ['scheduleView']
           : teamEditor
           ? ['scheduleView', 'scheduleEdit']
           : [],
@@ -80,6 +88,182 @@ class FakeOperations extends BusinessOperationsService {
 }
 
 void main() {
+  for (final member in [false, true]) {
+    testWidgets(
+      'confirmed removal works for ${member ? 'member' : 'owner'} and Cancel does not mutate',
+      (tester) async {
+        final service = FakeOperations()..teamEditor = member;
+        service.existingItems.add({
+          'id': 'accidental',
+          'title': 'Accidental task',
+          'type': 'task',
+          'status': 'open',
+          'startMs': DateTime.now().millisecondsSinceEpoch,
+          'durationMinutes': 10,
+          'assignedPeople': ['user:member'],
+          'assignedLabels': ['Current Team Member'],
+          'version': 3,
+          'removalAction': 'delete',
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            home: BusinessScheduleScreen(
+              businessId: 'owner',
+              service: service,
+              workspaceHome: member,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Remove from schedule'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Remove from schedule'));
+        await tester.pumpAndSettle();
+        expect(find.text('Delete this schedule item?'), findsOneWidget);
+        await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+        await tester.pumpAndSettle();
+        expect(service.calls.where((x) => x == 'removeItem'), isEmpty);
+        await tester.tap(find.text('Remove from schedule'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.pumpAndSettle();
+        expect(service.removedItem, {
+          'itemId': 'accidental',
+          'expectedVersion': 3,
+          'removalAction': 'delete',
+        });
+        expect(find.text('Accidental task'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+  testWidgets(
+    'view-only member has no removal even if a stale action is present',
+    (tester) async {
+      final service = FakeOperations()..scheduleViewer = true;
+      service.existingItems.add({
+        'id': 'one',
+        'title': 'Read only',
+        'type': 'task',
+        'status': 'open',
+        'startMs': DateTime.now().millisecondsSinceEpoch,
+        'durationMinutes': 10,
+        'assignedPeople': [],
+        'version': 1,
+        'removalAction': 'delete',
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessScheduleScreen(businessId: 'owner', service: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Remove from schedule'), findsNothing);
+      expect(find.text('Edit'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  for (final action in ['cancel', 'archive']) {
+    testWidgets('$action confirmation preserves history copy', (tester) async {
+      final service = FakeOperations();
+      service.existingItems.add({
+        'id': 'one',
+        'title': 'Historical work',
+        'type': 'estimate',
+        'status': 'scheduled',
+        'startMs': DateTime.now().millisecondsSinceEpoch,
+        'durationMinutes': 10,
+        'assignedPeople': [],
+        'version': 1,
+        'removalAction': action,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessScheduleScreen(businessId: 'owner', service: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Remove from schedule'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove from schedule'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Its history will remain available.'),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.widgetWithText(
+          TextButton,
+          action == 'cancel' ? 'Keep item' : 'Cancel',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(service.removedItem, isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+  testWidgets(
+    'default member workspace has explicit navigation without a root Back loop',
+    (tester) async {
+      final service = FakeOperations()..teamEditor = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessScheduleScreen(
+            businessId: 'owner',
+            service: service,
+            workspaceHome: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Back'), findsNothing);
+      await tester.tap(find.text('Workspace'));
+      await tester.pumpAndSettle();
+      for (final label in ['Account', 'Notifications', 'Sign Out']) {
+        expect(find.text(label), findsOneWidget);
+      }
+      for (final label in [
+        'Growth',
+        'Campaigns',
+        'Billing',
+        'Team',
+        'Customers',
+      ]) {
+        expect(find.text(label), findsNothing);
+      }
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets('owner Back returns to the workspace that opened Schedule', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BusinessScheduleScreen(
+                    businessId: 'owner',
+                    service: FakeOperations(),
+                  ),
+                ),
+              ),
+              child: const Text('Open Schedule'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open Schedule'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open Schedule'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets(
     'new member-created work visibly defaults to that member and permits intentional Unassigned',
     (tester) async {

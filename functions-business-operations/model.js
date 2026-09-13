@@ -31,9 +31,18 @@ function item(input){
 function conflicts(candidate,items,resolve=x=>x){
  const assigned=new Set(candidate.assignedPeople.map(resolve));
  if(['canceled','completed','done'].includes(candidate.status)||!assigned.size)return [];
- return items.filter(x=>x.id!==candidate.id&&!['canceled','completed','done'].includes(x.status)&&x.startMs<candidate.endMs&&x.endMs>candidate.startMs)
+ return items.filter(x=>x.removedAtMs==null&&x.id!==candidate.id&&!['canceled','completed','done'].includes(x.status)&&x.startMs<candidate.endMs&&x.endMs>candidate.startMs)
   .flatMap(x=>x.assignedPeople.filter(p=>assigned.has(resolve(p))).map(person=>({itemId:x.id,title:x.title,person,startMs:x.startMs,endMs:x.endMs})));
+}
+// This path never deletes documents or touches marketplace/payment collections.
+// Unknown economic bindings fail closed instead of treating them as calendar work.
+function removalAction(row){
+ const fields=['id','title','type','customerId','startMs','durationMinutes','endMs','timeZone','location','assignedPeople','notes','status','linkedItemId','estimate','businessId','version','createdAtMs','updatedAtMs','updatedBy','removedAtMs','removedBy','removalAction'];
+ if(!TYPES.includes(row.type)||Object.keys(row).some(k=>!fields.includes(k)))return null;
+ if(['completed','done'].includes(row.status))return 'archive';
+ if(row.type==='task'&&!row.customerId&&!row.linkedItemId&&!row.estimate)return 'delete';
+ return 'cancel';
 }
 function fieldItem(row,customer,peopleLabels){return {id:row.id,title:row.title,type:row.type,status:row.status,startMs:row.startMs,endMs:row.endMs,durationMinutes:row.durationMinutes,timeZone:row.timeZone,location:row.location,
  assignedPeople:row.assignedPeople,assignedLabels:row.assignedPeople.map(p=>peopleLabels[p]||'Team member'),customer:customer?{name:customer.name,company:customer.company||''}:null,version:row.version};}
-module.exports={VERSION,STAGES,TYPES,NOTIFICATIONS,fail,text,id,strict,choice,hash,normalize,contactKeys,customer,item,people,conflicts,fieldItem};
+module.exports={VERSION,STAGES,TYPES,NOTIFICATIONS,fail,text,id,strict,choice,hash,normalize,contactKeys,customer,item,people,conflicts,fieldItem,removalAction};

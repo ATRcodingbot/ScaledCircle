@@ -7,7 +7,7 @@ import '../services/business_workspace_service.dart';
 class AuthenticatedSignOutButton extends StatelessWidget {
   const AuthenticatedSignOutButton({super.key});
 
-  Future<void> _signOut(BuildContext context) async {
+  static Future<void> signOut(BuildContext context) async {
     final router = AppRouterScope.maybeOf(context);
     final navigator = Navigator.of(context);
     BusinessWorkspaceSession.clear();
@@ -25,6 +25,6 @@ class AuthenticatedSignOutButton extends StatelessWidget {
   Widget build(BuildContext context) => IconButton(
     tooltip: 'Sign Out',
     icon: const Icon(Icons.logout),
-    onPressed: () => _signOut(context),
+    onPressed: () => signOut(context),
   );
 }

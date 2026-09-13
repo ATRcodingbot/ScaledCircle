@@ -25,11 +25,11 @@ function createService({db,FieldValue,authority,now=Date.now}){
   const {fromMs,toMs}=input;if(!Number.isSafeInteger(fromMs)||!Number.isSafeInteger(toMs)||toMs<=fromMs||toMs-fromMs>45*86400000)m.fail('invalid-argument','Choose a date range of up to 45 days.');
   if(!['customersView','scheduleView','jobsView','jobsAssigned'].some(p=>can(a,p)))m.fail('permission-denied','Ask your Business owner for Customers or Schedule access.');
   const [roster,allCustomers,allItems,prefs]=await Promise.all([people(a),can(a,'customersView')?bounded(root(a.businessId).collection('customers')):[],bounded(root(a.businessId).collection('items').where('startMs','>=',fromMs-86400000).where('startMs','<',toMs)),ref(a.businessId,'preferences',a.actorUid).get()]);
-  const visibleItems=allItems.filter(x=>x.endMs>fromMs&&itemAccess(a,x,roster));
+  const visibleItems=allItems.filter(x=>x.removedAtMs==null&&x.endMs>fromMs&&itemAccess(a,x,roster));
   const full=can(a,'customersView');const labels=Object.fromEntries(roster.map(p=>[p.id,p.name]));
   const linked=new Map(allCustomers.map(c=>[c.id,c]));
   if(!full)for(const key of new Set(visibleItems.map(i=>i.customerId).filter(Boolean))){const d=await ref(a.businessId,'customers',key).get();if(d.exists)linked.set(d.id,{name:d.data().name,company:d.data().company});}
-  const items=visibleItems.map(x=>full?{...x,assignedLabels:x.assignedPeople.map(p=>labels[p]||'Former team member')}:m.fieldItem(x,linked.get(x.customerId),labels));
+  const items=visibleItems.map(x=>({...full?{...x,assignedLabels:x.assignedPeople.map(p=>labels[p]||'Former team member')}:m.fieldItem(x,linked.get(x.customerId),labels),removalAction:a.activePaid&&can(a,x.type==='job'?'jobsEdit':'scheduleEdit')?m.removalAction(x):null}));
   const leads=can(a,'customersView')?await bounded(db.collection('salesLeads').where('ownerUid','==',a.businessId)):[];
   const imported=new Set(allCustomers.flatMap(c=>[c.sourceRef?.leadId,...(c.linkedLeadIds||[])]).filter(Boolean));
   const inbound=leads.filter(l=>l.leadType==='landing_page_inquiry'&&!imported.has(l.id)).map(l=>({id:l.id,name:l.contactName||'Landing-page inquiry',email:l.contactEmail||'',source:'Landing page'}));
@@ -56,7 +56,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
     }
    }
   }
-  return {customer,items:items.filter(i=>can(a,i.type==='job'?'jobsView':'scheduleView')),events:[...events,...email].sort((a,b)=>(b.atMs||0)-(a.atMs||0)),revenue:'Not verified',emailContentIncluded:false};
+  return {customer,items:items.filter(i=>can(a,i.type==='job'?'jobsView':'scheduleView')).map(i=>({...i,removalAction:i.removedAtMs==null&&a.activePaid&&can(a,i.type==='job'?'jobsEdit':'scheduleEdit')?m.removalAction(i):null})),events:[...events,...email].sort((a,b)=>(b.atMs||0)-(a.atMs||0)),revenue:'Not verified',emailContentIncluded:false};
  }
  async function mutate(request){
   const outer=await authority(request,{write:true}),{operation,input={},requestId}=request.data;m.id(requestId);
@@ -101,6 +101,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
     requirePermission(a,data.type==='job'?'jobsEdit':'scheduleEdit');
     if(current&&current.type!==data.type)requirePermission(a,current.type==='job'?'jobsEdit':'scheduleEdit');
     const ver=version(current,input.expectedVersion);if(input.itemId&&!current)m.fail('not-found','Scheduled item not found.');
+    if(current?.removedAtMs!=null)m.fail('failed-precondition','This item was removed from the schedule. Its history is preserved.');
     if(current?.estimate&&(current.type!==data.type||current.customerId!==data.customerId))m.fail('failed-precondition','This estimate has a recorded outcome. Keep its customer and type; create a separate item for different work.');
     // Omission means the creator for new work, and preservation for edits.
     // An explicit empty list is an intentional Unassigned choice.
@@ -113,7 +114,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
     checkPeople(data.assignedPeople,roster);
     let customerBefore=data.customerId?await readCustomer(data.customerId):null;
     if(data.customerId&&!can(a,'customersView'))requirePermission(a,'customersView');
-    if(data.linkedItemId){const link=(await tx.get(ref(a.businessId,'items',data.linkedItemId))).data();if(!link||link.customerId!==data.customerId||!['estimate','job'].includes(link.type))m.fail('invalid-argument','Choose a related estimate or job for this customer.');}
+    if(data.linkedItemId){const link=(await tx.get(ref(a.businessId,'items',data.linkedItemId))).data();if(!link||link.removedAtMs!=null||link.customerId!==data.customerId||!['estimate','job'].includes(link.type))m.fail('invalid-argument','Choose a related estimate or job for this customer.');}
     const existing=await bounded(root(a.businessId).collection('items').where('startMs','>=',data.startMs-86400000).where('startMs','<',data.endMs),tx);
     const overlaps=m.conflicts({...data,id:itemId},existing,resolver(roster));
     if(overlaps.length&&input.overrideConflict!==true)m.fail('failed-precondition','Someone is already scheduled at this time.',{conflicts:overlaps.map(c=>({startMs:c.startMs,endMs:c.endMs,personName:roster.find(p=>p.id===c.person)?.name||'Team member'}))});
@@ -126,8 +127,31 @@ function createService({db,FieldValue,authority,now=Date.now}){
     if(customerBefore&&(!current||current.customerId!==data.customerId)&&['estimate','job','follow_up'].includes(data.type)&&data.status==='scheduled'&&can(a,'customersEdit')){const stage=data.type==='estimate'?'estimate_scheduled':data.type==='job'?'job_scheduled':'follow_up';queue(ref(a.businessId,'customers',data.customerId),{stage,version:customerBefore.version+1,updatedAtMs:now()},true);event(data.customerId,'stage_changed','Customer stage updated',{itemId,stage});}
     for(const p of data.assignedPeople){const person=resolver(roster)(p);if(person.startsWith('user:')&&person.slice(5)!==a.actorUid){const uid=person.slice(5),pref=(await tx.get(ref(a.businessId,'preferences',uid))).data();if(pref?.choices?.scheduleChanges!==false&&(data.type!=='job'||pref?.choices?.assignedJobs!==false))notifications.push({uid,itemId,title:data.title,startMs:data.startMs});}}
     result={itemId,customerId:data.customerId,saved:true,conflictOverride:overlaps.length>0};
+   }else if(operation==='removeItem'){
+    m.strict(input,['itemId','expectedVersion','removalAction']);const itemId=m.id(input.itemId),before=(await tx.get(ref(a.businessId,'items',itemId))).data();
+    if(!before||before.businessId!==a.businessId)m.fail('not-found','Scheduled item not found in this Business.');
+    requirePermission(a,before.type==='job'?'jobsEdit':'scheduleEdit');
+    const action=m.removalAction(before);if(!action)m.fail('failed-precondition','This work must be managed through its original workflow. Nothing was removed.');
+    if(before.removedAtMs!=null)return {saved:true,itemId,removalAction:before.removalAction,alreadyRemoved:true,financialEffect:false};
+    const ver=version(before,input.expectedVersion);
+    if(input.removalAction!==action)m.fail('aborted','This item changed. Refresh and review its removal options.');
+    const status=action==='archive'?before.status:'canceled';
+    const siblings=before.customerId?await bounded(root(a.businessId).collection('items').where('customerId','==',before.customerId),tx):[];
+    const customer=before.customerId?await readCustomer(before.customerId):null;
+    queue(ref(a.businessId,'items',itemId),{status,removedAtMs:now(),removedBy:a.actorUid,removalAction:action,version:ver,updatedAtMs:now(),updatedBy:a.actorUid},true);
+    event(before.customerId,'schedule_removed',action==='archive'?'Completed work archived':action==='delete'?'Schedule item deleted':'Scheduled item canceled',{itemId,previous:before.status,status,removalAction:action,historyPreserved:true});
+    // Only retire a scheduling stage when its final supporting item disappears.
+    // This is lifecycle reconciliation, not permission to edit customer details.
+    const represented=customer?.stage==='estimate_scheduled'?'estimate':['job_scheduled','in_progress'].includes(customer?.stage)?'job':null;
+    if(action!=='archive'&&represented===before.type&&!siblings.some(i=>i.id!==itemId&&i.type===represented&&i.removedAtMs==null&&['scheduled','in_progress'].includes(i.status))){
+     queue(ref(a.businessId,'customers',before.customerId),{stage:'follow_up',version:customer.version+1,updatedAtMs:now(),updatedBy:a.actorUid},true);
+     event(before.customerId,'stage_changed','Scheduling removed; follow-up needed',{itemId,previous:customer.stage,stage:'follow_up'});
+    }
+    for(const p of before.assignedPeople){const person=resolver(roster)(p);if(person.startsWith('user:')&&person.slice(5)!==a.actorUid){const uid=person.slice(5),pref=(await tx.get(ref(a.businessId,'preferences',uid))).data();if(pref?.choices?.scheduleChanges!==false)notifications.push({uid,itemId});}}
+    result={saved:true,itemId,removalAction:action,historyPreserved:true,financialEffect:false};
    }else if(operation==='setItemStatus'){
     m.strict(input,['itemId','expectedVersion','status']);const itemId=m.id(input.itemId),before=(await tx.get(ref(a.businessId,'items',itemId))).data();if(!before)m.fail('not-found','Scheduled item not found.');
+    if(before.removedAtMs!=null)m.fail('failed-precondition','This item was removed from the schedule. Its history is preserved.');
     const ver=version(before,input.expectedVersion);const editor=can(a,before.type==='job'?'jobsEdit':'scheduleEdit');
     if(!editor&&!(before.type==='job'&&can(a,'jobsStatus')&&ownAssignment(a,before,roster)))m.fail('permission-denied','You can update only your assigned work.');
     const status=m.choice(input.status,before.type==='task'?['open','done','canceled']:['scheduled','in_progress','completed','canceled']);
@@ -162,6 +186,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
    }else if(operation==='recordEstimate'){
     requirePermission(a,'customersEdit');m.strict(input,['itemId','expectedVersion','quotedAmountCents','outcome','note']);const itemId=m.id(input.itemId),before=(await tx.get(ref(a.businessId,'items',itemId))).data();
     if(before?.type!=='estimate'||!before.customerId)m.fail('failed-precondition','Choose a customer estimate.');requirePermission(a,'scheduleEdit');
+    if(before.removedAtMs!=null)m.fail('failed-precondition','This item was removed from the schedule. Its history is preserved.');
     const amount=input.quotedAmountCents;if(amount!==null&&(!Number.isSafeInteger(amount)||amount<0||amount>100000000))m.fail('invalid-argument','Enter a valid quoted amount.');
     const outcome=m.choice(input.outcome,['pending','won','lost']),note=m.text(input.note||'',2000),customer=await readCustomer(before.customerId),stage=outcome==='pending'?'estimate_given':outcome;
     queue(ref(a.businessId,'items',itemId),{estimate:{quotedAmountCents:amount,outcome,note,evidenceType:'owner_recorded',collectedRevenueCents:null},version:version(before,input.expectedVersion),updatedAtMs:now()},true);
