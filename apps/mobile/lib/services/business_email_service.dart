@@ -48,6 +48,9 @@ class BusinessEmailService {
 }
 
 String businessEmailState(dynamic state) => switch (state) {
+  'queued' => 'Campaign approved — waiting for its send window',
+  'suppressed' => 'Skipped — recipient is excluded',
+  'held' => 'Needs attention — nothing sent',
   'sent' => 'Sent — delivery not confirmed',
   'draft' => 'Draft — not sent',
   'sending' ||

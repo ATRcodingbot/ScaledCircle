@@ -22,7 +22,7 @@ function exactThread(op,withReply=true) {
   return {id:op.providerThreadId,messages:[original,...(withReply?[message('reply-one',op.recipient,op.from,'Controlled reply',{'In-Reply-To':reference})]:[])]};
 }
 beforeEach(async()=>{
-  for(const c of ['businessMailboxes','businessEmailCallbackStates','agentProspects','agentCommunicationPreferences','salesLeads','users','businessWorkspaces','businessSubscriptions','legalConsents'])
+  for(const c of ['businessMailboxes','businessEmailCallbackStates','agentProspects','agentCommunicationPreferences','salesLeads','users','businessWorkspaces','businessSubscriptions','legalConsents','businessOperations'])
     for(const ref of await db.collection(c).listDocuments())await db.recursiveDelete(ref);
   clock=Date.parse('2026-09-12T15:00:00Z');sends=0;
   beta={mailbox:'owner@example.test',certificationRecipient:'recipient@example.test',certificationOnly:true,configured:true};
@@ -159,11 +159,12 @@ test('ambiguous provider outcome is held; retry cannot send again or create a ne
 });
 
 test('concurrent distinct sends enforce workspace hourly and daily limits; retries consume no extra slot',async()=>{
+  beta.certificationOnly=false;
   const source=(await db.doc('agentProspects/prospect').get()).data();
   const drafts=[];
   for(let i=0;i<21;i++){
     const prospectId='limit_'+i;
-    await db.doc('agentProspects/'+prospectId).set(source);
+    await db.doc('agentProspects/'+prospectId).set({...source,email:'recipient'+i+'@example.test'});
     drafts.push(await draft({prospectId}));
   }
   const outcomes=await Promise.allSettled(drafts.slice(0,6).map(send));

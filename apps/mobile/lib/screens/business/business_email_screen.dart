@@ -321,11 +321,15 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       ),
                       Text(businessEmailHealth(c['connectionHealth'])),
                     ],
+                    if (_data!['sendEnabled'] == true && c['send'] == true)
+                      const Text(
+                        'Send reviewed messages from your Business mailbox. Each message needs your approval; automatic sending is off.',
+                      ),
                     if (_data!['sendEnabled'] == false)
                       Text(
                         _data!['certificationSendEnabled'] == true
                             ? 'One reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
-                            : 'Sending is not available yet. You can review messages without sending them.',
+                            : 'Your mailbox is connected for review. Message sending needs workspace approval; automatic sending is off.',
                       ),
                     const Text(
                       'Receive lead replies and send messages you explicitly approve. Automatic sending is off.',
@@ -498,6 +502,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                                 ),
                               if (op['state'] == 'sent' &&
                                   op['certification'] != true &&
+                                  op['campaignId'] == null &&
                                   c['send'] == true &&
                                   ((op['replyCount'] as num? ?? 0) > 0 ||
                                       (_data!['learning']?['followups']

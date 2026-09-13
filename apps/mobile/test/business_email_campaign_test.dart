@@ -89,7 +89,13 @@ void main() {
         find.textContaining('Sending and scheduling remain blocked'),
         findsOneWidget,
       );
+      await tester.scrollUntilVisible(
+        find.text('Review Opt-Out History'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.ensureVisible(find.text('Review Opt-Out History'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Review Opt-Out History'));
       await tester.pumpAndSettle();
       expect(

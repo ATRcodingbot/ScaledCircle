@@ -42,7 +42,8 @@ exports.businessEmailCallbackV1=onRequest(options,async(req,res)=>{
 exports.syncBusinessEmailRepliesV1=onSchedule({...options,schedule:'every 5 minutes',retryCount:0},async()=>{
   const beta=JSON.parse(process.env.BUSINESS_EMAIL_PRIVATE_BETA||'{}');
   for(const [businessId,record] of Object.entries(beta)) {
-    try{await service().syncReplies({auth:{uid:record.ownerUid},data:{businessId}});}
+    try{await service().syncReplies({auth:{uid:record.ownerUid},data:{businessId}});
+      if(record.campaignSendEnabled===true)await service().syncCampaigns({auth:{uid:record.ownerUid},data:{businessId}});}
     catch(error){console.warn('Business reply check held',{code:error.code||'unavailable'});}
   }
 });

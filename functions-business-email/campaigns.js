@@ -1,6 +1,6 @@
 'use strict';
-// Private campaign preparation only. No provider send, approval or scheduling
-// executor is reachable from this service.
+// Candidate discovery and draft preparation never send. The separate delivery
+// authority requires an invited owner to confirm an immutable campaign version.
 const crypto=require('node:crypto'),gmail=require('./gmail');
 const {convert}=require('html-to-text');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -90,7 +90,8 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
     if(!sources.some(s=>s.kind==='gmail_conversation'&&hash(s.messageIds)===hash(source.messageIds)))sources.push(source);
     if(sources.length>20)fail('resource-exhausted','This contact history needs a separate review.');
     const status=hasOptout||restriction?.active?'suppressed':auto?'excluded_automated':old?.status||'needs_review';
-    tx.set(ref,{businessId:a.businessId,email,name:old?.name||'',sources,status,audienceCategory:old?.audienceCategory||'unclassified',roleReviewRequired:true,reviewedForSend:false,
+    const stillReviewed=old?.reviewedForSend===true&&old.reviewedSourceHash===require('./campaign_delivery').sourceHash({sources})&&!hasOptout&&!auto&&!restriction?.active;
+    tx.set(ref,{businessId:a.businessId,email,name:old?.name||'',sources,status,audienceCategory:old?.audienceCategory||'unclassified',roleReviewRequired:!stillReviewed,reviewedForSend:stillReviewed,
      evidence:[...new Map([...(old?.evidence||[]),...evidence].map(m=>[m.providerMessageId,m])).values()].slice(-20),historyCheckedAt:now(),historyComplete:!page.nextPageToken&&!errors.length,updatedAt:now(),...(old?{}:{createdAt:now()})},{merge:true});
     if(hasOptout){
      if(!priorAudit.exists)tx.create(audit,{businessId:a.businessId,recipient:email,action:'historical_optout_recorded',providerMessageId:signal.providerMessageId,providerThreadId:signal.providerThreadId,priorRestriction:restriction||null,actorUid:a.actorUid,recordedAt:now()});
@@ -110,13 +111,31 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
    const prior=await tx.get(audit);if(!prior.exists)tx.create(audit,{businessId:a.businessId,recipient:d.email,action:'campaign_restriction',reason:input.reason,actorUid:a.actorUid,priorRestriction:old||null,recordedAt:now()});
    tx.set(r,{businessId:a.businessId,recipient:d.email,active:true,reason:input.reason,source:'owner_recorded',actorUid:a.actorUid,updatedAt:now()});tx.update(ref,{status:'suppressed',reviewedForSend:false});});return {saved:true,sent:0};
  }
- async function saveDraft(a,input){gate(a);strict(input,['campaignId','title','subject','body','recipientIds','mailingAddress','proposedSendAt','expectedVersion']);
+ async function reviewContact(a,input){gate(a);strict(input,['candidateId','sourceHash','projectType','confirm']);
+  if(input.confirm!==true)fail('failed-precondition','Review the prior inquiry before marking this contact eligible.');
+  const projectType=text(input.projectType,600),ref=sourceRef(a.businessId,'campaignCandidates',input.candidateId);
+  return db.runTransaction(async tx=>{const c=(await tx.get(ref)).data(),restriction=c?(await tx.get(sub(a.businessId,'suppression',hash(c.email)))).data():null;
+    if(c?.businessId!==a.businessId||!c.evidence?.length||!c.sources?.some(s=>s.kind==='owner_workbook')||input.sourceHash!==require('./campaign_delivery').sourceHash(c))fail('failed-precondition','Review the saved inquiry source first.');
+    if(restriction?.active||['suppressed','excluded_automated'].includes(c.status))fail('failed-precondition','This contact is excluded.');
+    tx.update(ref,{reviewedForSend:true,roleReviewRequired:false,projectType,reviewedSourceHash:input.sourceHash,reviewedBy:a.actorUid,reviewedAt:now()});
+    return {saved:true,message:'Relationship and project context reviewed. No email was sent.'};});
+ }
+ async function saveDraft(a,input){gate(a);strict(input,['campaignId','title','subject','body','recipientIds','recipientDetails','mailingAddress','proposedSendAt','expectedVersion','objective']);
   const campaignId=text(input.campaignId,80);if(!/^[a-z0-9_-]+$/.test(campaignId)||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0||!Array.isArray(input.recipientIds)||!input.recipientIds.length||input.recipientIds.length>25||new Set(input.recipientIds).size!==input.recipientIds.length||input.recipientIds.some(id=>!/^[a-f0-9]{64}$/.test(id)))fail('invalid-argument','Choose up to 25 distinct saved candidates.');
   const title=text(input.title,120),subject=text(input.subject,160),body=text(input.body,10000),mailingAddress=input.mailingAddress?text(input.mailingAddress,500):null;
   if(input.proposedSendAt!==null&&(!Number.isSafeInteger(input.proposedSendAt)||input.proposedSendAt<=now()))fail('invalid-argument','Choose a future proposed time or leave it unplanned.');
+  if(/[\r\n]/.test(subject))fail('invalid-argument','Use a single-line subject.');
+  const details=input.recipientDetails||[];if(!Array.isArray(details)||details.length>25||details.some(d=>!d||!input.recipientIds.includes(d.candidateId))||new Set(details.map(d=>d.candidateId)).size!==details.length)fail('invalid-argument','Personalization must match the saved audience.');
   return db.runTransaction(async tx=>{const ref=sourceRef(a.businessId,'campaigns',campaignId),old=(await tx.get(ref)).data();if((old?.version||0)!==input.expectedVersion)fail('aborted','The campaign changed. Refresh before saving.');
+   if(old?.approved)fail('failed-precondition','This approved version is immutable. Review its results instead of editing or resending it.');
    const records=await Promise.all(input.recipientIds.map(id=>tx.get(sourceRef(a.businessId,'campaignCandidates',id))));
-   const audience=records.map(d=>{const c=d.data();if(c?.businessId!==a.businessId)fail('permission-denied','Choose candidates in this Business.');if(c.status==='suppressed'||c.status==='excluded_automated')fail('failed-precondition','Remove excluded contacts from the proposed audience.');return {candidateId:d.id,email:c.email,name:c.name||'',category:c.audienceCategory,sourceCount:(c.sources||[]).length,reviewRequired:true};});
+   const audience=records.map(d=>{const c=d.data();if(c?.businessId!==a.businessId)fail('permission-denied','Choose candidates in this Business.');if(c.status==='suppressed'||c.status==='excluded_automated')fail('failed-precondition','Remove excluded contacts from the proposed audience.');
+    const detail=details.find(x=>x.candidateId===d.id),sourceHash=require('./campaign_delivery').sourceHash(c);
+    if(detail){strict(detail,['candidateId','sourceHash','firstName','projectType']);if(detail.sourceHash!==sourceHash)fail('aborted','The inquiry source changed. Review it again.');}
+    return {candidateId:d.id,email:c.email,name:c.name||'',firstName:detail?text(detail.firstName,120):(c.name||'').trim().split(/\s+/)[0],
+      projectType:detail?text(detail.projectType,600):(c.reviewedSourceHash===sourceHash?c.projectType||'':''),sourceHash,
+      provenance:(c.sources||[]).filter(s=>s.kind==='owner_workbook').map(s=>({label:s.label,context:s.context,inquiryDate:s.inquiryDate,sha256:s.sha256})),
+      category:c.audienceCategory,sourceCount:(c.sources||[]).length,reviewRequired:true};});
    const restrictions=await Promise.all(audience.map(c=>tx.get(sub(a.businessId,'suppression',hash(c.email)))));
    const links=await Promise.all(audience.map(c=>tx.get(sub(a.businessId,'optoutLinks',hash(c.email)))));
    if(restrictions.some(d=>d.data()?.active))fail('failed-precondition','Remove restricted recipients before saving the proposed audience.');
@@ -128,10 +147,11 @@ function createCampaigns({db,now=Date.now,current,adapter,credentialAccess,root,
     c.unsubscribeUrl=`https://us-east1-${project}.cloudfunctions.net/businessEmailUnsubscribeV1?token=${encodeURIComponent(token)}`;
    }
    const saved={businessId:a.businessId,campaignId,title,subject,body,sender:a.beta.mailbox,audience,mailingAddress,proposedSendAt:input.proposedSendAt,
+    audienceType:'historical_inquiry',objective:input.objective?text(input.objective,160):old?.objective||'historical_inquiry → estimate_scheduled',
     version:(old?.version||0)+1,status:mailingAddress?'needs_founder_review':'needs_mailing_address',sendingEnabled:false,scheduled:false,approved:false,
     footerIdentitySource:mailingAddress?'owner_supplied':null,results:{sent:0,delivered:null,replies:0,bounced:0,unsubscribed:0,appointments:0,won:0},updatedAt:now(),actorUid:a.actorUid};
    tx.set(ref,saved);for(const c of audience)tx.create(sourceRef(a.businessId,'contactHistory',hash([campaignId,saved.version,c.email])),{businessId:a.businessId,recipient:c.email,candidateId:c.candidateId,campaignId,action:'campaign_draft_prepared',version:saved.version,actorUid:a.actorUid,recordedAt:now(),sent:false});return saved;});
  }
- return {load,importWorkbook,discover,restrict,saveDraft};
+ return {load,importWorkbook,discover,restrict,saveDraft,reviewContact};
 }
 module.exports={createCampaigns,messages,mailbox,reasons};

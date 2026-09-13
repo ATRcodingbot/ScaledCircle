@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/business_email_service.dart';
 import '../../widgets/customer_page_body.dart';
+import 'business_email_campaign_review.dart';
 
 String campaignContactStatus(dynamic status) => switch (status) {
   'suppressed' => 'Do not contact',
@@ -44,6 +45,88 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
   String? feedback;
   final selected = <String>{};
   final pages = <String, String>{};
+  String contactFilter = 'Needs Review';
+  List<Map<String, dynamic>> get contacts =>
+      (data?['candidates'] as List? ?? [])
+          .whereType<Map>()
+          .map((c) => Map<String, dynamic>.from(c))
+          .toList();
+  String group(Map c) => c['status'] == 'suppressed'
+      ? 'Do Not Contact'
+      : c['status'] == 'excluded_automated'
+      ? 'Excluded'
+      : c['reviewedForSend'] == true
+      ? 'Eligible'
+      : 'Needs Review';
+
+  Future<void> openCampaign(Map<String, dynamic> campaign) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BusinessEmailCampaignReview(
+          campaign: campaign,
+          service: service,
+          candidates: contacts,
+        ),
+      ),
+    );
+    await run('loadCampaigns');
+  }
+
+  Future<void> reviewContact(Map<String, dynamic> c) async {
+    final project = TextEditingController(text: c['projectType'] ?? '');
+    final reviewed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Review relationship and inquiry'),
+        content: SizedBox(
+          width: 550,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${c['name']} · ${c['email']}'),
+                for (final s
+                    in (c['sources'] as List? ?? []).whereType<Map>().where(
+                      (s) => s['context'] != null,
+                    ))
+                  Text('${s['context']}'),
+                const Text(
+                  'Confirm this is a relevant prior inquiry. Historical contact does not establish a completed job or current interest.',
+                ),
+                TextField(
+                  controller: project,
+                  decoration: const InputDecoration(
+                    labelText: 'Project type supported by this source',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep Reviewing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Mark Eligible'),
+          ),
+        ],
+      ),
+    );
+    if (reviewed == true) {
+      await run('reviewCampaignContact', {
+        'candidateId': c['id'],
+        'sourceHash': c['sourceHash'],
+        'projectType': project.text.trim(),
+        'confirm': true,
+      });
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    project.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -204,7 +287,7 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Sender: ${data?['sender']}\n${selected.length} proposed recipients · sending blocked',
+                  'Sender: ${data?['sender']}\n${selected.length} proposed recipients · review draft only, not sent',
                 ),
                 TextField(
                   controller: subject,
@@ -277,14 +360,56 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const Text('Review a small, relevant audience'),
-          const Text(
-            'These are candidates, not approved recipients. Historical correspondence is not permission to send marketing. Sending and scheduling remain blocked.',
+          Text(
+            data?['sendingEnabled'] == true
+                ? 'Review the saved campaign or build a new audience below. Only an explicit final confirmation sends or schedules messages. Automatic follow-up is off.'
+                : 'These are candidates, not approved recipients. Historical correspondence is not permission to send marketing. Sending and scheduling remain blocked.',
           ),
           if (busy) const LinearProgressIndicator(),
           if (feedback != null)
             Semantics(liveRegion: true, child: Text(feedback!)),
           if (data != null) ...[
             Text('Sender: ${data!['sender']}'),
+            Text(
+              'Saved Campaigns',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            for (final c
+                in (data!['campaigns'] as List? ?? []).whereType<Map>())
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        c['subject'] ?? 'Review draft',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        '${(c['audience'] as List? ?? []).length} reviewed recipients · ${emailCampaignStatus(c['status'])}',
+                      ),
+                      Text(
+                        'Sent: ${c['results']?['sent'] ?? 0} · Replies: ${c['results']?['replies'] ?? 0}',
+                      ),
+                      FilledButton(
+                        onPressed: busy
+                            ? null
+                            : () => openCampaign(Map<String, dynamic>.from(c)),
+                        child: const Text('Review Campaign'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 20),
+            Text(
+              'Discovered Contacts · New Campaign',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const Text(
+              'Selection below is for a new draft. Your saved campaign keeps its own reviewed audience.',
+            ),
             Wrap(
               spacing: 12,
               runSpacing: 8,
@@ -316,39 +441,64 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
                   ? 'Opt-out search reviewed. Individual context and audience review are still required.'
                   : 'Historical opt-out review is incomplete. An empty restriction list does not mean nobody opted out.',
             ),
-            for (final row in (data!['candidates'] as List? ?? []))
-              candidate(Map<String, dynamic>.from(row)),
-            Text('${selected.length} proposed recipients · maximum 25'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final label in [
+                  'Eligible',
+                  'Needs Review',
+                  'Excluded',
+                  'Do Not Contact',
+                ])
+                  ChoiceChip(
+                    label: Text(
+                      '$label (${contacts.where((c) => group(c) == label).length})',
+                    ),
+                    selected: contactFilter == label,
+                    onSelected: busy
+                        ? null
+                        : (_) => setState(() => contactFilter = label),
+                  ),
+              ],
+            ),
+            Wrap(
+              spacing: 12,
+              children: [
+                TextButton(
+                  onPressed: busy
+                      ? null
+                      : () => setState(
+                          () => selected.addAll(
+                            contacts
+                                .where((c) => group(c) == 'Eligible')
+                                .take(25)
+                                .map((c) => c['id'] as String),
+                          ),
+                        ),
+                  child: const Text('Select eligible'),
+                ),
+                TextButton(
+                  onPressed: busy ? null : () => setState(selected.clear),
+                  child: const Text('Clear selection'),
+                ),
+              ],
+            ),
+            for (final row in contacts.where((c) => group(c) == contactFilter))
+              candidate(row),
+            Text(
+              'New campaign selection: ${selected.length} recipients · maximum 25',
+            ),
+            if (selected.isEmpty)
+              const Text(
+                'Select a reviewed, eligible contact to prepare a new draft, or open your saved campaign above.',
+              ),
             FilledButton(
               onPressed: busy || selected.isEmpty || selected.length > 25
                   ? null
                   : prepare,
               child: const Text('Prepare Review Draft'),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Saved Campaigns',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            for (final c in (data!['campaigns'] as List? ?? []))
-              ExpansionTile(
-                title: Text(c['subject'] ?? 'Review draft'),
-                subtitle: Text(
-                  c['mailingAddress'] == null
-                      ? 'Mailing address required · not sent'
-                      : 'Needs Founder review · not sent',
-                ),
-                children: [
-                  SelectableText(
-                    'Sender: ${c['sender']}\nAudience: ${(c['audience'] as List).length}\nSchedule: not scheduled\n\n${c['body']}\n\n${c['mailingAddress'] ?? 'Mailing address awaiting confirmation'}\nUnsubscribe: individual no-login link per recipient\nSent: 0 · Replies: 0 · Delivery: not available',
-                  ),
-                  for (final a in c['audience'])
-                    ListTile(
-                      title: Text(a['name']),
-                      subtitle: Text(a['email']),
-                    ),
-                ],
-              ),
           ] else if (!busy)
             const Text(
               'This campaign beta requires the invited Business owner.',
@@ -366,12 +516,16 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
     return ExpansionTile(
       key: PageStorageKey(c['id']),
       title: Text('${c['name'] == '' ? 'Contact' : c['name']} · ${c['email']}'),
-      subtitle: Text(campaignContactStatus(c['status'])),
+      subtitle: Text(
+        group(c) == 'Eligible'
+            ? 'Reviewed prior inquiry · eligible'
+            : campaignContactStatus(c['status']),
+      ),
       children: [
         CheckboxListTile(
           value: selected.contains(c['id']) && !restricted,
           title: const Text('Include in proposed audience for review'),
-          onChanged: busy || restricted
+          onChanged: busy || restricted || c['reviewedForSend'] != true
               ? null
               : (value) => setState(() {
                   if (value == true) {
@@ -392,6 +546,11 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
               s['context'] ??
                   'Historical correspondence · relationship still needs review',
             ),
+          ),
+        if (!restricted && c['reviewedForSend'] != true)
+          OutlinedButton(
+            onPressed: busy ? null : () => reviewContact(c),
+            child: const Text('Review Eligibility'),
           ),
         OutlinedButton(
           onPressed: busy ? null : () => history('contact', c['id']),

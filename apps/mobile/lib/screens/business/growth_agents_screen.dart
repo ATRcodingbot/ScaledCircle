@@ -35,6 +35,8 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
   String? _error;
   bool _busy = false;
   Timer? _timer;
+  final _opportunitiesKey = GlobalKey();
+  final _reportsKey = GlobalKey();
   List<Map<String, dynamic>> _list(dynamic value) => (value as List? ?? [])
       .whereType<Map>()
       .map((x) => Map<String, dynamic>.from(x))
@@ -152,11 +154,248 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     }
   }
 
-  String _time(dynamic value) => value is num
-      ? DateTime.fromMillisecondsSinceEpoch(
-          value.toInt(),
-        ).toLocal().toString().split('.').first
-      : 'Not recorded';
+  String _time(dynamic value) {
+    final raw = value is num
+        ? DateTime.fromMillisecondsSinceEpoch(value.toInt()).toIso8601String()
+        : value?.toString();
+    return DateTime.tryParse(raw ?? '') == null
+        ? 'Not recorded'
+        : socialCustomerTime(context, raw);
+  }
+
+  Future<void> _research() async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Check for new opportunities?'),
+        content: const Text(
+          'This researches official sources using your saved services and service areas. It may return the current saved cycle. It will not email, message or call anyone, launch ads, or approve Social content.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Check Sources'),
+          ),
+        ],
+      ),
+    );
+    if (approved == true && mounted) {
+      await _action('runGrowthDogfoodResearchV1');
+    }
+  }
+
+  void _performance() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: const Text('Social Performance')),
+          body: CustomerPageBody(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: _customerOverview(_data!),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _recommendations() {
+    final reports = _list(_data?['reports']);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: Text('$_specialistTitle · Recommendations')),
+          body: CustomerPageBody(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                if (reports.isEmpty)
+                  const Text(
+                    'No saved recommendations yet. Return to the manager and check for new opportunities. Research does not contact anyone.',
+                  ),
+                for (final r in reports)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${r['period']}'),
+                          Text(
+                            '${r['summary']?['learned'] ?? 'No recorded result'}',
+                          ),
+                          Text(
+                            'Next: ${r['summary']?['next'] ?? 'Review the next research cycle'}',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _reviewPeople(String type) {
+    final rows = _list(_data?['prospects'])
+        .where(
+          (p) => type == 'workforce_recruiter'
+              ? p['kind'] == 'scaler' ||
+                    p['kind'] == 'referral_partner' ||
+                    p['opportunityType'] == 'recruitment_channel'
+              : p['kind'] != 'scaler' &&
+                    p['opportunityType'] != 'recruitment_channel',
+        )
+        .toList();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          type == 'workforce_recruiter'
+              ? 'Candidates and Recruiting Channels'
+              : 'Review Leads',
+        ),
+        content: SizedBox(
+          width: 640,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (rows.isEmpty)
+                  const Text('No eligible sourced records yet.'),
+                for (final p in rows)
+                  ExpansionTile(
+                    title: Text('${p['displayName']}'),
+                    subtitle: Text(
+                      '${p['reason'] ?? 'Review source evidence'}',
+                    ),
+                    children: [
+                      Text(
+                        'Last action: ${p['lastAction'] ?? 'No recorded action'}\nResult: ${p['result'] ?? 'Unavailable'}\nNext: ${p['nextAction'] ?? 'Review evidence'}',
+                      ),
+                      SelectableText(
+                        '${p['draft'] ?? 'Draft not prepared yet'}',
+                      ),
+                      TextButton(
+                        onPressed: () => launchUrl(
+                          Uri.parse('${p['sourceUrl']}'),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                        child: const Text('View Evidence'),
+                      ),
+                      if (_mailbox != null &&
+                          p['qualified'] == true &&
+                          p['doNotContact'] != true &&
+                          p['sourceAvailable'] == true &&
+                          p['email'] is String)
+                        BusinessEmailDraftButton(
+                          mailbox: _mailbox!,
+                          prospect: p,
+                        ),
+                      TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                await _action('reviewGrowthProspectV1', {
+                                  'prospectId': p['id'],
+                                  'decision': 'do_not_contact',
+                                });
+                                if (context.mounted) Navigator.pop(context);
+                              },
+                        child: const Text('Do Not Contact'),
+                      ),
+                      TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                await _action('reviewGrowthProspectV1', {
+                                  'prospectId': p['id'],
+                                  'decision': 'ready_for_founder_send',
+                                });
+                                if (context.mounted) Navigator.pop(context);
+                              },
+                        child: const Text('Mark Reviewed — Don’t Send'),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Back'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _managerActions(
+    Map<String, dynamic> agent,
+    Map<String, dynamic> data,
+  ) {
+    final type = agent['type']?.toString();
+    final label = const {
+      'lead_generation': 'Review Leads',
+      'workforce_recruiter': 'Review Candidates / Recruiting Channels',
+      'marketing_manager': 'Review Content',
+      'ad_manager': 'Open Ad Manager',
+      'business_assistant': 'Open Business Assistant',
+      'growth_strategist': 'Review Growth Plan',
+    }[type];
+    if (label == null) return const SizedBox.shrink();
+    void open() {
+      if (type == 'marketing_manager') {
+        AppNavigation.push(
+          context,
+          '/business/social-operations?review=content',
+        );
+        return;
+      }
+      if (widget.focusId == type) {
+        if (type == 'lead_generation' || type == 'workforce_recruiter') {
+          _reviewPeople(type!);
+        } else {
+          _recommendations();
+        }
+        return;
+      }
+      AppNavigation.push(context, '/business/growth-agents?agent=$type');
+    }
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      children: [
+        FilledButton(onPressed: open, child: Text(label)),
+        if (type == 'marketing_manager' || type == 'ad_manager')
+          OutlinedButton(
+            onPressed: _performance,
+            child: Text(
+              type == 'ad_manager'
+                  ? 'Review Organic Results'
+                  : 'View Performance',
+            ),
+          ),
+        if (type == 'business_assistant')
+          OutlinedButton(
+            onPressed: _recommendations,
+            child: const Text('Review Recommendations'),
+          ),
+      ],
+    );
+  }
+
   Widget _line(String title, dynamic value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Text('$title: ${value ?? 'Unknown'}'),
@@ -236,6 +475,23 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
   Widget _content(BuildContext context) {
     final d = _data!, s = Map<String, dynamic>.from(d['summary'] as Map? ?? {});
     final prospects = _list(d['prospects']);
+    if (widget.focusId == 'lead_generation') {
+      prospects.removeWhere(
+        (p) =>
+            p['kind'] == 'scaler' ||
+            p['opportunityType'] == 'workforce_candidate' ||
+            p['opportunityType'] == 'recruitment_channel',
+      );
+    }
+    if (widget.focusId == 'workforce_recruiter') {
+      prospects.removeWhere(
+        (p) =>
+            p['kind'] != 'scaler' &&
+            p['kind'] != 'referral_partner' &&
+            p['opportunityType'] != 'workforce_candidate' &&
+            p['opportunityType'] != 'recruitment_channel',
+      );
+    }
     if (widget.focusId != null) {
       prospects.sort(
         (a, b) => (b['id'] == widget.focusId ? 1 : 0).compareTo(
@@ -336,28 +592,45 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        ..._list(d['agents']).map(
-          (a) => Card(
-            child: ExpansionTile(
-              initiallyExpanded: a['type'] == widget.focusId,
-              title: Text(a['name'].toString()),
-              subtitle: Text(a['status'].toString()),
-              childrenPadding: const EdgeInsets.all(16),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _line('Last action', a['lastAction']),
-                _line('Result', a['result']),
-                _line('Next action', a['nextAction']),
-                const Text('External action needs approval'),
-              ],
+        ..._list(d['agents'])
+            .where(
+              (a) =>
+                  ![
+                    'growth_strategist',
+                    'lead_generation',
+                    'workforce_recruiter',
+                    'ad_manager',
+                    'business_assistant',
+                  ].contains(widget.focusId) ||
+                  a['type'] == widget.focusId,
+            )
+            .map(
+              (a) => Card(
+                child: ExpansionTile(
+                  initiallyExpanded: a['type'] == widget.focusId,
+                  title: Text(a['name'].toString()),
+                  subtitle: Text(a['status'].toString()),
+                  childrenPadding: const EdgeInsets.all(16),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _line('Last action', a['lastAction']),
+                    _line('Result', a['result']),
+                    _line('Next action', a['nextAction']),
+                    const Text('External action needs approval'),
+                    if (a['type'] == 'lead_generation')
+                      Text(
+                        '${prospects.length} prospects · ${prospects.where((p) => (p['draft']?.toString() ?? '').isNotEmpty).length} drafts · ${_mailbox?['learning']?['replied'] ?? d['outreach']?['replied'] ?? 'Unavailable'} conversations with replies',
+                      ),
+                    _managerActions(a, d),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: _busy || (widget.customer && d['initialized'] != true)
               ? null
-              : () => _action('runGrowthDogfoodResearchV1'),
+              : _research,
           icon: const Icon(Icons.search),
           label: Text(
             _busy
@@ -404,6 +677,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           ),
         Text(
           'Review opportunities',
+          key: _opportunitiesKey,
           style: Theme.of(context).textTheme.titleLarge,
         ),
         if (prospects.isEmpty)
@@ -483,7 +757,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                             Uri.parse(p['sourceUrl'].toString()),
                             mode: LaunchMode.externalApplication,
                           ),
-                          child: const Text('Open public source'),
+                          child: const Text('View Evidence'),
                         ),
                         _line('Source checked', _time(p['lastCheckedAt'])),
                         _line('Recommended channel', p['recommendedChannel']),
@@ -521,7 +795,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                               : p['approvalState'] == 'do_not_contact'
                               ? 'Do not contact'
                               : p['approvalState'] == 'ready_for_founder_send'
-                              ? 'Reviewed · external contact still held'
+                              ? 'Reviewed · awaiting your final send approval'
                               : 'Research required',
                         ),
                         if (p['approvalState'] == 'awaiting_approval')
@@ -587,7 +861,15 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
               )
               .toList(),
         ),
-        Text('Reports', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Reports and Recommendations',
+          key: _reportsKey,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        if (_list(d['reports']).isEmpty)
+          const Text(
+            'No saved recommendations yet. Check for new opportunities to prepare the next research cycle; nothing will be sent.',
+          ),
         ..._list(d['reports']).map(
           (r) => Card(
             child: ExpansionTile(
@@ -609,7 +891,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                   ),
                 ),
                 const Text(
-                  'Contacted: 0 · Replies, meetings, signups, paid conversions: No Data. No performance result is inferred from research.',
+                  'This research report does not establish contacts, replies, appointments or revenue. Review the linked conversation and recorded CRM outcomes for current results.',
                 ),
               ],
             ),
@@ -673,10 +955,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     final social = Map<String, dynamic>.from(d['social'] as Map? ?? {});
     return [
       const SizedBox(height: 24),
-      Text(
-        'Social strategy and baseline',
-        style: Theme.of(context).textTheme.titleLarge,
-      ),
+      Text('Social Performance', style: Theme.of(context).textTheme.titleLarge),
       _line(
         'Plan status',
         social['review']?['title'] ?? 'Checking saved status',
@@ -688,20 +967,25 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
             '${baseline['provider'] == 'facebook' ? 'Facebook' : 'Instagram'} baseline',
           ),
           subtitle: Text(
-            'Observed: ${baseline['observedAt'] ?? 'Not recorded'}',
+            'Baseline captured · ${_time(baseline['observedAt'])}',
           ),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final entry in (baseline['metrics'] as Map? ?? {}).entries)
+            for (final entry
+                in (baseline['metrics'] as Map? ?? {}).entries.where(
+                  (e) => _metricName(e.key.toString()) != null,
+                ))
               _line(
-                _metricName(entry.key.toString()),
+                _metricName(entry.key.toString())!,
                 entry.value is Map
                     ? (entry.value['value'] ?? 'Unavailable')
                     : 'Unavailable',
               ),
             _line(
-              'Recent provider posts observed',
-              _list(baseline['latest']).length,
+              'Recent content observed',
+              baseline['latest'] is List
+                  ? _list(baseline['latest']).length
+                  : 'Unavailable',
             ),
             const Text(
               'Provider metrics keep their original period. Missing values remain unavailable; reach is not summed across days.',
@@ -740,24 +1024,22 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
         'Social: Baseline → Published → Reach and engagement → Attributed traffic and leads',
       ),
       const SizedBox(height: 8),
-      const Text(
-        'Contacted: 0. Appointments, estimates, won work, hires and attributed revenue: No Data. Research is not a sale or a hire.',
+      Text(
+        'Emails sent: ${_mailbox?['learning']?['sent'] ?? d['outreach']?['sent'] ?? 'Unavailable'} · Conversations with replies: ${_mailbox?['learning']?['replied'] ?? d['outreach']?['replied'] ?? 'Unavailable'}. Stage progression, appointments and revenue require recorded CRM evidence.',
       ),
     ];
   }
 
-  String _metricName(String key) =>
-      const {
-        'followers': 'Followers',
-        'impressions': 'Impressions',
-        'views': 'Views',
-        'reach': 'Reach',
-        'mediaCount': 'Account media count',
-        'page_media_view': 'Page media views',
-        'page_post_engagements': 'Page post engagements',
-        'page_views_total': 'Page views',
-        'total_interactions': 'Interactions',
-        'profile_links_taps': 'Profile link taps',
-      }[key] ??
-      'Other provider metric';
+  String? _metricName(String key) => const {
+    'followers': 'Followers',
+    'impressions': 'Impressions',
+    'views': 'Views',
+    'reach': 'Reach',
+    'mediaCount': 'Account media count',
+    'page_media_view': 'Page media views',
+    'page_post_engagements': 'Page post engagements',
+    'page_views_total': 'Page views',
+    'total_interactions': 'Interactions',
+    'profile_links_taps': 'Profile link taps',
+  }[key];
 }
