@@ -139,6 +139,12 @@ void main() {
     expect(find.text('Local Gig Worker'), findsOneWidget);
     expect(find.text('Independent Marketing Professional'), findsNothing);
     expect(find.text('EDIT PROFILE'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('EDIT WORK PREFERENCES'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('EDIT WORK PREFERENCES'), findsOneWidget);
     expect(find.text('Dump Runs'), findsOneWidget);
     expect(find.textContaining('door_to_door'), findsNothing);

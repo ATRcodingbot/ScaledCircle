@@ -280,7 +280,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const ContextBackButton(fallback: '/business/growth'),
-        title: const Text('Business Email · Private Beta'),
+        title: const Text('Business Email'),
       ),
       body: CustomerPageBody(
         child: _loading
@@ -324,8 +324,8 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                     if (_data!['sendEnabled'] == false)
                       Text(
                         _data!['certificationSendEnabled'] == true
-                            ? 'Server send hold: On · Certification only. Only one reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
-                            : 'Server send hold: On. No customer or prospect email can be sent. Controlled messages can be reviewed without sending.',
+                            ? 'Sending is limited to one reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
+                            : 'Sending is not available yet. You can review messages without sending them.',
                       ),
                     const Text(
                       'Receive lead replies and send messages you explicitly approve. Automatic sending is off.',
@@ -338,7 +338,10 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       const Text(
                         'Finish connecting with your email provider. This attempt expires after 10 minutes.',
                       ),
-                    if (c['error'] != null) Text(c['error'].toString()),
+                    if (c['error'] != null)
+                      const Text(
+                        'Your email connection needs attention. Try connecting again.',
+                      ),
                     SwitchListTile(
                       title: const Text('Read leads'),
                       subtitle: const Text(

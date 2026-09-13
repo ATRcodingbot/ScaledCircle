@@ -16,7 +16,7 @@ class ScalerFunnelScreen extends StatelessWidget {
         title: 'LOCAL WORK. CLEAR FROM THE START.',
         body:
             'See the area, the task, the materials, and the pay before you apply.',
-        primaryLabel: 'Create Scaler Account',
+        primaryLabel: 'Join as a Scaler',
         secondaryLabel: 'Join Scaler Waitlist',
         accent: scalerBlue,
         onPrimary: () => openPublicAccountRegistration(context, 'scaler'),
@@ -84,10 +84,10 @@ class ScalerFunnelScreen extends StatelessWidget {
       const _CrewAndTrustBand(),
       FunnelFinalCta(
         title: 'READY TO FIND LOCAL WORK?',
-        primary: 'Create Scaler Account',
+        primary: 'Join as a Scaler',
         accent: scalerBlue,
         supportingCopy:
-            "Set up your ScaledCircle account now and we'll let you know as access becomes available.",
+            "Set up your account and saved work areas. Opportunities depend on local availability; work is not guaranteed.",
         waitlistLabel: 'Join Scaler Waitlist',
         onPrimary: () => openPublicAccountRegistration(context, 'scaler'),
         onWaitlist: () => openPublicWaitlist(context, 'scaler'),

@@ -25,14 +25,14 @@ void main() {
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,
-            ).copyWith(textScaler: const TextScaler.linear(1.6)),
+            ).copyWith(textScaler: const TextScaler.linear(2.0)),
             child: child!,
           ),
           home: const PublicLandingScreen(),
         ),
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('Put local marketing into motion.'), findsOneWidget);
+      expect(find.text('Run your business. Grow locally.'), findsOneWidget);
       expect(find.textContaining('422 homes'), findsNothing);
       expect(find.textContaining('98% coverage'), findsNothing);
       expect(find.textContaining('THIS WEEK'), findsNothing);
@@ -61,7 +61,7 @@ void main() {
     await tester.tap(find.byKey(const Key('business-primary-cta')));
     await tester.pumpAndSettle();
     expect(find.text('FOR LOCAL BUSINESSES'), findsOneWidget);
-    expect(find.text('SEE WHERE GROWTH CAN HAPPEN.'), findsOneWidget);
+    expect(find.text('RUN YOUR BUSINESS. GROW LOCALLY.'), findsOneWidget);
     expect(find.text('Business Dashboard'), findsOneWidget);
     expect(find.text('Analyze Main Service Area'), findsOneWidget);
   });
@@ -70,16 +70,16 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(app());
-    expect(find.text('Put local marketing into motion.'), findsOneWidget);
+    expect(find.text('Run your business. Grow locally.'), findsOneWidget);
     expect(
-      find.textContaining('Choose the area. Set the work and pay.'),
+      find.textContaining('Keep customers, schedule, jobs and your team'),
       findsOneWidget,
     );
-    expect(find.textContaining('Evidence you can review'), findsOneWidget);
+    expect(find.textContaining('Results you can review'), findsOneWidget);
     expect(find.text('VALIDATED SMART ZONE • DEMO'), findsOneWidget);
     expect(find.textContaining('Route not yet verified'), findsWidgets);
-    expect(find.text('Grow My Business'), findsWidgets);
-    expect(find.text('Become a Scaler'), findsWidgets);
+    expect(find.text('Start Your Business'), findsWidgets);
+    expect(find.text('Join as a Scaler'), findsWidgets);
   });
 
   testWidgets('homepage opens the dedicated Scaler funnel', (tester) async {
@@ -235,7 +235,7 @@ void main() {
       find.byKey(const Key('funnel-create-account')),
       600,
     );
-    expect(find.text('Create My Business Account'), findsWidgets);
+    expect(find.text('Start Your Business'), findsWidgets);
     expect(find.text('Join Business Waitlist'), findsWidgets);
     expect(find.text('Log In'), findsWidgets);
     expect(
@@ -252,11 +252,11 @@ void main() {
       find.byKey(const Key('funnel-create-account')),
       600,
     );
-    expect(find.text('Create Scaler Account'), findsWidgets);
+    expect(find.text('Join as a Scaler'), findsWidgets);
     expect(find.text('Join Scaler Waitlist'), findsWidgets);
     expect(find.text('Log In'), findsWidgets);
     expect(
-      find.textContaining("we'll let you know as access becomes available"),
+      find.textContaining("work is not guaranteed"),
       findsOneWidget,
     );
   });

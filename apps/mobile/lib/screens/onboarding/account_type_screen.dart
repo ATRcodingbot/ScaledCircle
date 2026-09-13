@@ -48,7 +48,7 @@ class AccountTypeScreen extends StatelessWidget {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save account type: $e')),
+        SnackBar(content: Text('We could not save your account type. Please try again.')),
       );
     }
   }

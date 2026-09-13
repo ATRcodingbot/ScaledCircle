@@ -290,7 +290,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
               title: Text(p['name'].toString()),
               subtitle: Text(
                 p['kind'] == 'crew'
-                    ? 'Crew resource · no login seat'
+                    ? 'Crew member · no login seat'
                     : 'Workspace user',
               ),
               onChanged: (v) => update(() {
@@ -675,13 +675,13 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
   Future<void> resource([Map<String, dynamic>? before]) async {
     final name = TextEditingController(text: before?['name'] ?? '');
     final value = await form<String>(
-      'Crew resource',
+      'Crew member',
       (_) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           field(name, 'Name', required: true, maxLength: 120),
           const Text(
-            'A crew resource can be assigned work. It has no login, no data access and uses no workspace seat.',
+            'Add someone to the schedule without giving them account access or using a paid seat.',
           ),
         ],
       ),
@@ -929,28 +929,21 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
   Future<void> removeItem(Map<String, dynamic> item) async {
     final action = item['removalAction'];
     if (!['delete', 'cancel', 'archive'].contains(action) || busy) return;
-    final verb = action == 'delete'
-        ? 'Delete'
-        : action == 'archive'
-        ? 'Archive'
-        : 'Cancel';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text('$verb this schedule item?'),
-        content: Text(
-          action == 'delete'
-              ? 'This will remove it from the active schedule.'
-              : 'This will remove it from the active schedule. Its history will remain available.',
+        title: const Text('Remove this schedule item?'),
+        content: const Text(
+          'This will remove it from the active schedule. Its history will remain available.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialog, false),
-            child: Text(action == 'cancel' ? 'Keep item' : 'Cancel'),
+            child: const Text('Keep item'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialog, true),
-            child: Text(verb),
+            child: const Text('Remove item'),
           ),
         ],
       ),
@@ -961,7 +954,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
       'expectedVersion': item['version'],
       'removalAction': action,
     });
-    if (result != null) message('Removed from schedule.');
+    if (result != null) message('Schedule item removed');
   }
 
   Widget itemCard(Map<String, dynamic> i) {
@@ -1085,7 +1078,8 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
     appBar: AppBar(
       automaticallyImplyLeading: false,
       leadingWidth: 92,
-      leading: widget.workspaceHome && !(ModalRoute.of(context)?.canPop ?? false)
+      leading:
+          widget.workspaceHome && !(ModalRoute.of(context)?.canPop ?? false)
           ? null
           : TextButton.icon(
               icon: const Icon(Icons.arrow_back),
@@ -1255,7 +1249,9 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                       if (filteredItems.isEmpty)
                         const Padding(
                           padding: EdgeInsets.all(24),
-                          child: Text('No matching work in this date range.'),
+                          child: Text(
+                            'Nothing scheduled in this view. Try another date or filter.',
+                          ),
                         ),
                       for (final i in filteredItems) itemCard(i),
                     ],
@@ -1378,7 +1374,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                         '${people.where((p) => p['kind'] == 'user').length} workspace user(s) · ${data!['seatLimit']} total seats on this plan',
                       ),
                       const Text(
-                        'Crew resources do not use login seats. Invite workspace users through Account → Team.',
+                        'Crew members do not use login seats. Invite workspace users through Account → Team.',
                       ),
                       if (editable)
                         Align(
@@ -1386,7 +1382,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                           child: FilledButton.icon(
                             onPressed: busy ? null : resource,
                             icon: const Icon(Icons.group_add_outlined),
-                            label: const Text('Add crew resource'),
+                            label: const Text('Add crew member'),
                           ),
                         ),
                       for (final p in people)
@@ -1399,7 +1395,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                                 Text(p['name']),
                                 Text(
                                   p['kind'] == 'crew'
-                                      ? 'Crew resource${p['linkedUid'] == null ? ' · No login' : ' · Linked to workspace user'}'
+                                      ? 'Crew member${p['linkedUid'] == null ? ' · No login' : ' · Linked to workspace user'}'
                                       : 'Workspace user',
                                 ),
                                 if (p['kind'] == 'crew' && editable)
@@ -1431,7 +1427,9 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                                                 'name': p['name'],
                                                 'status': 'inactive',
                                               }),
-                                        child: const Text('Archive resource'),
+                                        child: const Text(
+                                          'Archive crew member',
+                                        ),
                                       ),
                                     ],
                                   ),

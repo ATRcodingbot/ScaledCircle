@@ -448,7 +448,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Unable to confirm materials: $error')),
+        SnackBar(content: Text('Materials could not be confirmed. Please try again.')),
       );
     } finally {
       if (mounted) setState(() => _submittingMaterialReceipt = false);

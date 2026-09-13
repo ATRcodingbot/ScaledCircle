@@ -82,7 +82,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ).showSnackBar(SnackBar(content: Text('We could not create your campaign. Check your details and try again.')));
     }
   }
 

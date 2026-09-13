@@ -90,7 +90,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to apply: $e')));
+      ).showSnackBar(SnackBar(content: Text('Your application could not be confirmed. Refresh this job before trying again.')));
     }
   }
 
@@ -191,7 +191,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to start zone: $e')));
+      ).showSnackBar(SnackBar(content: Text('Work could not be started. Check your connection and try again.')));
     }
   }
 
@@ -431,7 +431,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Submit failed: $e')));
+      ).showSnackBar(SnackBar(content: Text('Submission could not be confirmed. Check your job status before trying again.')));
     }
   }
 

@@ -149,7 +149,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
       if (mounted) setState(() => _state = state);
     } catch (error) {
       if (mounted) {
-        setState(() => _syncMessage = 'GPS state unavailable: $error');
+        setState(() => _syncMessage = 'Tracking status needs attention. Check location permission and your connection.');
       }
     } finally {
       _refreshing = false;
@@ -303,7 +303,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Checkpoint failed: $error')));
+        ).showSnackBar(SnackBar(content: Text('Your location note could not be saved. Please try again.')));
       }
     } finally {
       if (mounted) setState(() => _working = false);

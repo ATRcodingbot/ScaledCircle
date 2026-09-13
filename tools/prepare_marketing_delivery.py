@@ -21,8 +21,8 @@ def funnel(name):
 
 def content():
     landing = (SCREENS / 'public_landing_screen.dart').read_text(encoding='utf-8')
-    hero = 'Put local marketing into motion.'
-    intro = 'Choose the area. Set the work and pay. A Scaler carries out the campaign, and you review the tracked route before approving completed work.'
+    hero = 'Run your business. Grow locally.'
+    intro = 'Keep customers, schedule, jobs and your team in one place. Choose local growth tools as you need them, and track what worked.'
     assert hero in landing and intro in landing
     how = landing.split('class _HowItWorks ')[1].split('\nclass ')[0]
     steps = re.findall(r"title:\s*'([^']+)',\s*body:\s*'([^']+)'", how)
@@ -54,8 +54,8 @@ def content():
             '/pricing': [('Choose your plan', 'One Business workspace. Total users including the owner: Starter 1, Growth 3, Scale 5, Managed Growth 10.'), *pricing,
                          ('Controlled premium access', 'These capabilities are not generally available for purchase. Access requires an invitation; add-ons never add seats.'),
                          ('Business Assistant — Beta / Coming Soon', 'Planned recurring price: $399/month. Business information and recommended next steps.'),
-                         ('Lead Generation Research — Private Beta / Coming Soon', '$699/month when authorized. Prospect research, evidence and drafts. Research does not authorize outreach.'),
-                         ('Email Marketing — Coming Soon', 'Business-owned marketing campaigns are not available at launch. Account messages, billing receipts and Growth reports remain active.'),
+                         ('Lead Generation Research — Private Beta', '$699/month when authorized. Prospect research, evidence and drafts. Research does not authorize outreach.'),
+                         ('Email Campaigns — Private Beta', 'Controlled campaign preparation is available to invited Businesses. General campaign sending is not available. Account messages, billing receipts and Growth reports continue normally.'),
                          ('YouTube — Coming Soon', 'Customer YouTube management is not available at launch.'),
                          ('Supported Social channels', 'Facebook and Instagram support Business connection and permission review. Publishing requires separate approved content and execution authority. Customer X is Coming Soon.'),
                          ('Postcards — Private Beta', 'Choose an area, create and approve a design, and arrange fulfillment with ScaledCircle. General ordering is held until physical fulfillment certification.'),
@@ -72,7 +72,7 @@ def documents(*, staging=False):
     result = {}
     for route, sections in content().items():
         document = render(template, route).replace('$FLUTTER_BASE_HREF', '/')
-        primary = ('Create Scaler Account', '/#/scalers') if route == '/scalers' else ('Grow My Business', '/#/businesses')
+        primary = ('Join as a Scaler', '/#/scalers') if route == '/scalers' else ('Start Your Business', '/#/businesses')
         cta = lambda label: f'<p><a class="cta" href="{primary[1]}">{label}</a></p>'
         blocks = []
         for index, (title, body) in enumerate(sections):
@@ -91,7 +91,7 @@ def documents(*, staging=False):
             if index == 0:
                 blocks.append(cta(primary[0]))
                 if route == '/':
-                    blocks.append('<p><a href="/#/scalers">Become a Scaler</a> · <a href="/how-it-works">See How It Works</a></p>')
+                    blocks.append('<p><a href="/#/scalers">Join as a Scaler</a> · <a href="/how-it-works">See How It Works</a></p>')
                     blocks.append('<section class="example"><p class="eyebrow">A workflow example</p><h2>A contractor has a neighborhood in mind.</h2><p>Choose the area, define the work and accepted pay, then review the Scaler’s tracked route. Residents can respond through configured QR codes and landing pages. Recorded responses stay connected to their campaign.</p><p>This explains the workflow; it does not promise leads, conversions or revenue.</p></section>')
         if route in ('/', '/businesses', '/pricing'):
             capability_source = (ROOT / 'apps/mobile/lib/widgets/customer_capability_status.dart').read_text(encoding='utf-8')
@@ -105,9 +105,9 @@ def documents(*, staging=False):
             blocks.append('<section><h2>Pricing</h2><p>Subscription access and campaign costs are separate. Review compensation and platform fees before funding.</p><div class="capabilities">' + ''.join(
                 f'<article><h3>{html.escape(name)}</h3><p>{html.escape(price)}</p></article>'
                 for name, price in content()['/pricing'][1:5]) + '</div><p>Managed Growth and premium tools have controlled access. No add-on is included unless your plan or subscription explicitly includes it.</p><a href="/pricing">Compare plans and availability</a></section>')
-        blocks.append(cta('Create Scaler Account' if route == '/scalers' else 'Create Business Account'))
+        blocks.append(cta('Join as a Scaler' if route == '/scalers' else 'Create Business Account'))
         picture = ''
-        body = '<body><main id="marketing"><nav aria-label="Main">' + navigation + '<a class="cta" href="/#/businesses">Get Started</a></nav>' + ''.join(blocks) + picture + '''
+        body = '<body><main id="marketing"><nav aria-label="Main">' + navigation + '<a class="cta" href="/#/businesses">Choose Your Account</a></nav>' + ''.join(blocks) + picture + '''
 <p><a href="/#/login">Log in</a> · <a href="/#/businesses">Open Business experience</a> · <a href="/#/scalers">Open Scaler experience</a></p>
 <footer><a href="/#/privacy">Privacy</a> · <a href="/#/terms">Terms</a> · <a href="mailto:support@scaledcircle.com">Contact support</a></footer>
 </main>

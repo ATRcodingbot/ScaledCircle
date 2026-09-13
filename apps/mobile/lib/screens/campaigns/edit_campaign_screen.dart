@@ -93,7 +93,7 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Error updating campaign: $e")));
+      ).showSnackBar(SnackBar(content: Text("Your campaign could not be updated. Check your changes and try again.")));
     } finally {
       if (mounted) {
         setState(() {

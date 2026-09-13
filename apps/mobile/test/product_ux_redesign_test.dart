@@ -30,7 +30,7 @@ void main() {
     (tester) async {
       await tester.pumpWidget(const MaterialApp(home: PublicLandingScreen()));
       final headings = [
-        'Put local marketing into motion.',
+        'Run your business. Grow locally.',
         'HOW SCALEDCIRCLE WORKS',
         'A PRACTICAL EXAMPLE',
         'EVIDENCE YOU CAN REVIEW',

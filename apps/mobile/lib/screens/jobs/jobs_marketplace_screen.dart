@@ -209,7 +209,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Text(
-                        snapshot.error.toString(),
+                        'We could not load opportunities. Check your connection and try again.',
                         textAlign: TextAlign.center,
                       ),
                     ),

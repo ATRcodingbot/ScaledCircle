@@ -18,9 +18,10 @@ class BusinessFunnelScreen extends StatelessWidget {
     children: [
       FunnelHero(
         eyebrow: 'FOR LOCAL BUSINESSES',
-        title: 'SEE WHERE GROWTH CAN HAPPEN.',
-        body: 'Find the opportunity. Build the campaign. See the work happen.',
-        primaryLabel: 'Create Business Account',
+        title: 'RUN YOUR BUSINESS. GROW LOCALLY.',
+        body:
+            'Customers, schedule, jobs and your team in one place. Choose growth tools when you need them.',
+        primaryLabel: 'Start Your Business',
         secondaryLabel: 'Join Business Waitlist',
         accent: businessGreen,
         onPrimary: () => openPublicAccountRegistration(context, 'business'),
@@ -32,7 +33,7 @@ class BusinessFunnelScreen extends StatelessWidget {
         step: 'STEP 1',
         title: 'YOUR BUSINESS, READY TO REUSE.',
         body:
-            'Services, goals, and operating areas stay together for the next decision.',
+            'Keep customer history, estimates, jobs and follow-ups together. Organize the schedule and give your team clear responsibilities.',
         accent: businessGreen,
         visual: _BusinessProfileVisual(),
       ),
@@ -93,14 +94,30 @@ class BusinessFunnelScreen extends StatelessWidget {
         reverse: true,
         visual: _ResultsVisual(),
       ),
-      const Padding(padding: EdgeInsets.all(24), child: Column(children: [Text('CUSTOMERS & SCHEDULE', style: TextStyle(fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Keep leads, estimates, jobs, follow-ups and your team schedule together. Included with every paid Business plan.'), SizedBox(height: 8), Text('Lead → Estimate → Job → Follow-up') ])),
+      const Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Text(
+              'CUSTOMERS & SCHEDULE',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Keep leads, estimates, jobs, follow-ups and your team schedule together. Included with every paid Business plan.',
+            ),
+            SizedBox(height: 8),
+            Text('Lead → Estimate → Job → Follow-up'),
+          ],
+        ),
+      ),
       const _ManagedGrowthBand(),
       _BusinessPricing(
         onStart: () => openPublicAccountRegistration(context, 'business'),
       ),
       FunnelFinalCta(
         title: 'READY TO GROW LOCALLY?',
-        primary: 'Create My Business Account',
+        primary: 'Start Your Business',
         accent: businessGreen,
         supportingCopy:
             'Create your ScaledCircle account now. Marketplace access is being rolled out in stages.',
@@ -649,7 +666,9 @@ class _BusinessPricing extends StatelessWidget {
               const SizedBox(height: 14),
               OutlinedButton(
                 onPressed: id == 'managed_growth' ? null : onStart,
-                child: Text(id == 'managed_growth' ? 'Invite Only' : 'Get Started'),
+                child: Text(
+                  id == 'managed_growth' ? 'Invite Only' : 'Get Started',
+                ),
               ),
             ],
           ),

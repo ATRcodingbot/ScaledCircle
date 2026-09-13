@@ -6,10 +6,10 @@ from pathlib import Path
 import re
 
 ROUTES = {
-    '/': ('ScaledCircle: Put Local Marketing into Motion',
-          'Choose an area, set the work and pay, and review tracked routes before approving completed local campaigns.'),
-    '/businesses': ('Local Business Campaigns in Maryland — ScaledCircle',
-                    'Plan local campaigns, coordinate Scalers, and review completion evidence for your Maryland business.'),
+    '/': ('ScaledCircle: Run Your Business. Grow Locally.',
+          'Organize customers, schedule, jobs and your team. Choose local growth tools and track what worked.'),
+    '/businesses': ('Customers, Schedule and Local Growth — ScaledCircle',
+                    'Keep customers, leads, estimates, jobs and team responsibilities together. Choose growth tools with clear costs and permissions.'),
     '/scalers': ('Scaler Field Work in Maryland — ScaledCircle',
                  'Explore local field assignments, agreed compensation, job evidence, and earnings with ScaledCircle.'),
     '/how-it-works': ('How ScaledCircle Works',

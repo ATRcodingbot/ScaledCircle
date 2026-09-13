@@ -119,13 +119,13 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Remove from schedule'));
         await tester.pumpAndSettle();
-        expect(find.text('Delete this schedule item?'), findsOneWidget);
-        await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+        expect(find.text('Remove this schedule item?'), findsOneWidget);
+        await tester.tap(find.widgetWithText(TextButton, 'Keep item'));
         await tester.pumpAndSettle();
         expect(service.calls.where((x) => x == 'removeItem'), isEmpty);
         await tester.tap(find.text('Remove from schedule'));
         await tester.pumpAndSettle();
-        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.tap(find.widgetWithText(FilledButton, 'Remove item'));
         await tester.pumpAndSettle();
         expect(service.removedItem, {
           'itemId': 'accidental',
@@ -191,12 +191,7 @@ void main() {
         find.textContaining('Its history will remain available.'),
         findsOneWidget,
       );
-      await tester.tap(
-        find.widgetWithText(
-          TextButton,
-          action == 'cancel' ? 'Keep item' : 'Cancel',
-        ),
-      );
+      await tester.tap(find.widgetWithText(TextButton, 'Keep item'));
       await tester.pumpAndSettle();
       expect(service.removedItem, isNull);
       await tester.pumpWidget(const SizedBox());
@@ -217,9 +212,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Back'), findsNothing);
-    await tester.tap(find.text('Workspace'));
-    await tester.pumpAndSettle();
-    expect(find.text('Back'), findsNothing);
+      await tester.tap(find.text('Workspace'));
+      await tester.pumpAndSettle();
+      expect(find.text('Back'), findsNothing);
       for (final label in ['Account', 'Notifications', 'Sign Out']) {
         expect(find.text(label), findsOneWidget);
       }
@@ -340,7 +335,7 @@ void main() {
       expect(find.text('Workspace owner'), findsOneWidget);
       await tester.tap(find.text('Assigned to'));
       await tester.pumpAndSettle();
-      expect(find.text('Crew resource · no login seat'), findsOneWidget);
+      expect(find.text('Crew member · no login seat'), findsOneWidget);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       expect(service.savedItem!['assignedPeople'], ['user:owner']);

@@ -56,7 +56,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertIn("location.pathname !== '/' && location.pathname !== '/login'", value)
         self.assertEqual([x[1] for x in content()['/pricing'][1:5]], ['$99/month', '$299/month', '$499/month', '$999/month'])
         pricing = docs['/pricing']
-        for text in ['Controlled premium access', 'Business Assistant — Beta / Coming Soon', '$399/month', 'Lead Generation Research — Private Beta / Coming Soon', '$699/month', 'Growth Department — Private Beta', '$2,000/month', '10 total users']:
+        for text in ['Controlled premium access', 'Business Assistant — Beta / Coming Soon', '$399/month', 'Lead Generation Research — Private Beta', '$699/month', 'Growth Department — Private Beta', '$2,000/month', '10 total users']:
             self.assertIn(text, pricing)
         self.assertIn('Research does not authorize outreach', pricing)
 
@@ -97,7 +97,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
 
     def test_how_it_works_has_complete_truthful_story_without_image_dependency(self):
         page = documents(staging=True)['/how-it-works']
-        for copy in ['Turn a local market into a measurable growth system.',
+        for copy in ['Organize today. Plan your next move.',
                      'Choose the market', 'Build the campaign', 'Real people execute it',
                      'Measure what happened', 'Smart Mapping +', 'Weather Intelligence',
                      'Tracking + Attribution', 'Growth Intelligence',
@@ -147,9 +147,9 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertIn('href="/#' + route + '"', body)
             self.assertEqual(body.count('aria-label="ScaledCircle home"'), 1)
         business = docs['/businesses']
-        for tool in ['Business Assistant', 'Email Marketing', 'YouTube']:
+        for tool in ['Business Assistant', 'Email Campaigns', 'YouTube']:
             card = re.search(r'<article><h3>' + tool + r'</h3>(.*?)</article>', business, re.S).group(1)
-            self.assertIn('Coming Soon', card)
+            self.assertIn('Private Beta' if tool == 'Email Campaigns' else 'Coming Soon', card)
             self.assertNotIn('<a ', card)
             self.assertNotIn('<button', card)
         self.assertIn('A workflow example, not a case study', business)

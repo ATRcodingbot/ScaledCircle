@@ -87,7 +87,7 @@ class PublicLandingScreen extends StatelessWidget {
                           FilledButton(
                             key: const Key('business-after-proof-cta'),
                             onPressed: () => _start(context, 'business'),
-                            child: const Text('Build My First Campaign'),
+                            child: const Text('Start Your Business'),
                           ),
                           const _Gap(),
                           const _BusinessExperience(),
@@ -242,7 +242,7 @@ class _Hero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Put local marketing into motion.',
+            'Run your business. Grow locally.',
             key: Key('homepage-hero-title'),
             style: TextStyle(
               color: Colors.white,
@@ -254,12 +254,12 @@ class _Hero extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Choose the area. Set the work and pay. A Scaler carries out the campaign, and you review the tracked route before approving completed work.',
+            'Keep customers, schedule, jobs and your team in one place. Choose local growth tools as you need them, and track what worked.',
             style: TextStyle(color: _muted, fontSize: 19, height: 1.55),
           ),
           const SizedBox(height: 12),
           const Text(
-            'Clear costs. Defined work. Evidence you can review. No guaranteed leads or sales.',
+            'Clear responsibilities. Costs you approve. Results you can review.',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 28),
@@ -276,7 +276,7 @@ class _Hero extends StatelessWidget {
                   minimumSize: const Size(190, 52),
                 ),
                 icon: const Icon(Icons.trending_up),
-                label: const Text('Grow My Business'),
+                label: const Text('Start Your Business'),
               ),
               OutlinedButton.icon(
                 key: const Key('scaler-primary-cta'),
@@ -287,7 +287,7 @@ class _Hero extends StatelessWidget {
                   minimumSize: const Size(190, 52),
                 ),
                 icon: const Icon(Icons.directions_walk),
-                label: const Text('Become a Scaler'),
+                label: const Text('Join as a Scaler'),
               ),
             ],
           ),
@@ -327,8 +327,9 @@ class _HowItWorks extends StatelessWidget {
     children: [
       _Heading(
         eyebrow: 'HOW SCALEDCIRCLE WORKS',
-        title: 'From a local campaign to work you can review.',
-        subtitle: 'One clear workflow for the Business and the Scaler.',
+        title: 'Organize the work. Choose your next step.',
+        subtitle:
+            'Start with your customers and schedule. Add growth tools when you need them.',
       ),
       SizedBox(height: 22),
       _Cards(
@@ -336,23 +337,23 @@ class _HowItWorks extends StatelessWidget {
           _Outcome(
             number: '1',
             icon: Icons.travel_explore,
-            title: 'Choose the area and work',
+            title: 'Set up your Business',
             body:
-                'Define the territory, materials, schedule, base pay, and any offered bonus before funding.',
+                'Save your Business details, customers and service areas. Keep appointments, jobs and tasks together.',
           ),
           _Outcome(
             number: '2',
             icon: Icons.auto_awesome,
-            title: 'Publish and assign',
+            title: 'Choose how to grow',
             body:
-                'Scalers apply to funded campaigns. Review applicants and assign the agreed work.',
+                'Choose a campaign or an available growth tool. Review the work, permissions and costs before proceeding.',
           ),
           _Outcome(
             number: '3',
             icon: Icons.rocket_launch_outlined,
             title: 'Track and review',
             body:
-                'Active canvassing routes are recorded automatically. Review the evidence and payable amount before approving completion.',
+                'Follow work and customer responses, review the results, and use what you learn to plan your next step.',
           ),
         ],
       ),
@@ -470,7 +471,7 @@ class _ScalerExperience extends StatelessWidget {
                 backgroundColor: _blue,
                 minimumSize: const Size(150, 50),
               ),
-              child: const Text('Become a Scaler'),
+              child: const Text('Join as a Scaler'),
             ),
           ],
         );
@@ -529,7 +530,7 @@ class _Pricing extends StatelessWidget {
     'basic_ai_planning': 'Simple AI campaign planning',
     'advanced_analytics': 'Advanced campaign analytics',
     'ai_content_creation': 'AI-assisted content creation',
-    'lead_tracking': 'Lead and response tracking — Coming Soon',
+    'lead_tracking': 'Lead and response tracking',
     'property_intelligence': 'Property Intelligence — Beta',
     'weather_intelligence': 'Weather Intelligence — Beta',
     'priority_scaler_matching': 'Priority Scaler matching',
@@ -602,7 +603,7 @@ class _Pricing extends StatelessWidget {
           eyebrow: 'SIMPLE PRICING',
           title: 'Choose how much help you want.',
           subtitle:
-              'Software access is clear. Variable campaign costs are approved separately.',
+              'Every paid plan includes Customers & Leads, Schedule, Jobs, Tasks, Crew tools and campaign tools. Seats include the owner. Campaign costs are approved separately.',
         ),
         const SizedBox(height: 22),
         _PricingGrid(children: cards),
@@ -624,18 +625,18 @@ class _Pricing extends StatelessWidget {
               features: const [
                 'Current business and campaign state',
                 'Recommendations and observations',
-                'No autonomous accomplishments claimed',
+                'Review recommendations before acting',
               ],
               onGetStarted: null,
             ),
             _Price(
               name: 'LEAD GENERATION RESEARCH',
               price: '+\$699/month',
-              badge: 'BETA / COMING SOON',
+              badge: 'PRIVATE BETA',
               body:
                   'Prospect research, evidence, qualification and drafts. Research never authorizes contact.',
               features: const [
-                'Evidence and provenance',
+                'Sources behind each opportunity',
                 'Research and draft preparation',
                 'No automatic cold outreach',
               ],
@@ -647,21 +648,21 @@ class _Pricing extends StatelessWidget {
         _Price(
           name: 'GROWTH DEPARTMENT',
           price: '\$2,000/month',
-          badge: 'PRIVATE BETA / COMING SOON',
+          badge: 'PRIVATE BETA',
           body:
-              'The full current ScaledCircle growth stack: Managed Growth + Business Assistant Beta + Lead Generation Research Beta.',
+              'Managed Growth, Business Assistant and Lead Generation in one workspace. Private Beta access is controlled.',
           features: const [
             '10 total workspace users, including the owner',
             '\$2,097 separately · save \$1,164/year',
             'One bundle replaces the three individual recurring charges',
-            'Included agent capabilities remain Beta',
+            'Included growth tools remain Private Beta',
           ],
           onGetStarted: null,
         ),
         const SizedBox(height: 18),
         OutlinedButton(
           onPressed: onCompare,
-          child: const Text('Compare Plans'),
+          child: const Text('Log In to Manage Your Plan'),
         ),
         const SizedBox(height: 16),
         const Text(
@@ -735,7 +736,7 @@ class _FinalCta extends StatelessWidget {
               foregroundColor: _bg,
               minimumSize: const Size(180, 52),
             ),
-            child: const Text('Grow My Business'),
+            child: const Text('Start Your Business'),
           ),
           FilledButton(
             onPressed: onScaler,
@@ -743,7 +744,7 @@ class _FinalCta extends StatelessWidget {
               backgroundColor: _blue,
               minimumSize: const Size(180, 52),
             ),
-            child: const Text('Become a Scaler'),
+            child: const Text('Join as a Scaler'),
           ),
           TextButton(onPressed: onLogin, child: const Text('Log In')),
         ],

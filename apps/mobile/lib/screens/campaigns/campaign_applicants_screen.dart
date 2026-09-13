@@ -141,7 +141,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to load available zones: $e')),
+        SnackBar(content: Text('We could not load the available work areas. Please try again.')),
       );
 
       return null;
@@ -308,7 +308,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to assign applicant: $e')));
+      ).showSnackBar(SnackBar(content: Text('The assignment could not be confirmed. Refresh the applicants before trying again.')));
     }
   }
 
@@ -516,7 +516,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to assign applicant: $e')));
+      ).showSnackBar(SnackBar(content: Text('The assignment could not be confirmed. Refresh the applicants before trying again.')));
     }
   }
 
@@ -572,7 +572,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to reject applicant: $e')));
+      ).showSnackBar(SnackBar(content: Text('The application could not be updated. Please try again.')));
     }
   }
 
@@ -732,7 +732,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  snapshot.error.toString(),
+                  'We could not load applications. Check your access and try again.',
                   textAlign: TextAlign.center,
                 ),
               ),

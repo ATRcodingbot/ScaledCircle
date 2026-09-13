@@ -330,8 +330,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Unable to publish campaign: '
-            '${e.toString().replaceFirst('Exception: ', '')}',
+            'Your campaign could not be published. Check funding, work-area setup and account eligibility before trying again.',
           ),
         ),
       );
@@ -714,7 +713,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to request changes: $e')));
+      ).showSnackBar(SnackBar(content: Text('Changes could not be requested. Please try again.')));
     }
   }
 
@@ -921,7 +920,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Unable to delete campaign: $e')));
+      ).showSnackBar(SnackBar(content: Text('Your campaign could not be deleted. Check its status and try again.')));
     }
   }
 
@@ -1274,7 +1273,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
           return Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Text('Unable to load campaign zones: ${snapshot.error}'),
+              child: Text('We could not load the assigned work areas. Please try again.'),
             ),
           );
         }
@@ -2036,7 +2035,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         if (snapshot.hasError) {
           return Scaffold(
             appBar: _campaignAppBar(),
-            body: Center(child: Text(snapshot.error.toString())),
+            body: Center(child: Text('We could not load this campaign. Check your access and try again.')),
           );
         }
 
