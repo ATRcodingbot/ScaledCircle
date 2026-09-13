@@ -32,13 +32,33 @@ test('media requires exact approved owned revision and explicit rights',()=>{
    assert.throws(()=>assertSource({...good,revision:{...good.revision,...patch}}));
  assert.throws(()=>assertSource({...good,asset:{...good.asset,removed:true}}));
 });
-test('prepared derivative strips metadata and preserves portrait image within supported JPEG bounds',async()=>{
+test('Instagram preparation retains its supported portrait bounds and strips metadata',async()=>{
  const sharp=require('sharp');const original=await sharp({create:{width:400,height:900,channels:3,background:'#123456'}}).png().toBuffer();
- const prepared=await derivative(original,sharp),metadata=await sharp(prepared.bytes).metadata();
+ const prepared=await derivative(original,sharp,'instagram'),metadata=await sharp(prepared.bytes).metadata();
  assert.equal(metadata.format,'jpeg');assert.equal(metadata.width,1080);assert.equal(metadata.height,1080);assert.equal(metadata.exif,undefined);
  const deliveryId='b'.repeat(64),origin='https://us-east1-scaled-circle.cloudfunctions.net';
  const revision=mediaRevision({businessUid:'owner',assetId:'asset',provider:'instagram',productionOrigin:origin,customerDeliveryId:deliveryId,
   images:[{...prepared,bytes:prepared.bytes.length,url:origin+'/serveCustomerSocialMediaV1/'+deliveryId+'.jpg'}]});
  assert.equal(revision.customerDeliveryId,deliveryId);
  assert.throws(()=>mediaRevision({...revision,productionOrigin:'https://attacker.example'}));
+});
+
+test('Facebook upload preserves landscape, portrait and small originals without white bands or cropping',async()=>{
+ const sharp=require('sharp');
+ for(const [width,height,expectedWidth,expectedHeight] of [[1536,1024,1080,720],[400,900,400,900],[300,200,300,200]]){
+  const original=await sharp({create:{width,height,channels:3,background:'#123456'}})
+    .composite([{input:{create:{width:40,height:40,channels:3,background:'#ef3525'}},left:0,top:0},
+      {input:{create:{width:40,height:40,channels:3,background:'#25cf35'}},left:width-40,top:height-40}])
+    .withMetadata().png().toBuffer();
+  const prepared=await derivative(original,sharp,'facebook'),metadata=await sharp(prepared.bytes).metadata();
+  assert.equal(metadata.width,expectedWidth);assert.equal(metadata.height,expectedHeight);
+  assert.equal(metadata.format,'jpeg');assert.equal(metadata.exif,undefined);
+  const {data,info}=await sharp(prepared.bytes).removeAlpha().raw().toBuffer({resolveWithObject:true});
+  let white=0;for(let p=0;p<data.length;p+=info.channels)if(data[p]>245&&data[p+1]>245&&data[p+2]>245)white++;
+  assert.equal(white,0,'no added white pixels anywhere in the delivered file');
+  assert(data[0]>200&&data[1]<90,'top-left marker retained');
+  const last=data.length-info.channels;assert(data[last]<90&&data[last+1]>170,'bottom-right marker retained');
+ }
+ await assert.rejects(derivative(Buffer.from('invalid'),sharp,'facebook'));
+ await assert.rejects(derivative(Buffer.from('invalid'),sharp,'youtube'));
 });

@@ -13,7 +13,9 @@ test('approved own media attachment is isolated, concurrent-safe, revocable and 
  const bucket={file:(p,options)=>({download:async()=>{assert.equal(String(options?.generation||''),'1');return [storage.get(p)];},save:async(bytes,options)=>{
    assert.equal(options.preconditionOpts.ifGenerationMatch,0);if(storage.has(p))throw Object.assign(Error('exists'),{code:412});storage.set(p,bytes);},getMetadata:async()=>[{generation:'1'}]})};
  const image=Buffer.from('prepared public jpeg');
- const service=createMedia({db,bucket,project:'scaled-circle',enabledUids:[uid],prepareImage:async()=>({bytes:image,width:1080,height:1080,sha256:hash(image),mime:'image/jpeg'})});
+ const service=createMedia({db,bucket,project:'scaled-circle',enabledUids:[uid],prepareImage:async(bytes,sharp,provider)=>{
+  assert.deepEqual(bytes,original);assert.equal(provider,'facebook');
+  return {bytes:image,width:1080,height:720,sha256:hash(image),mime:'image/jpeg'};}});
  const ar=db.doc(`businessMediaLibraries/${uid}/mediaAssets/${assetId}`),rr=ar.collection('revisions').doc(revisionId),item=db.doc('socialContentItems/'+itemId);
  const version=social.contentItemVersion({businessUid:uid,planId:'media_plan',item:{itemKey:'post',scheduledFor:'2026-10-10T16:00:00Z',variants:[{provider:'facebook',copy:'Our approved work',mediaRequirement:'image'},{provider:'instagram',copy:'Separate Instagram post',mediaRequirement:'image'}]}});
  await Promise.all([ar.set({businessUid:uid,approvedRevisionId:revisionId}),rr.set({businessUid:uid,status:'ready',approvalStatus:'approved',rightsAttestation:true,altText:'A neutral work sample',privateOriginalPath:path,storageGeneration:'1',contentHash:hash(original)}),item.set({businessUid:uid,planId:'media_plan',currentVersion:1}),db.doc('socialContentVersions/'+itemId+'_v1').set(version)]);
@@ -26,6 +28,7 @@ test('approved own media attachment is isolated, concurrent-safe, revocable and 
  const delivery=(await db.collection('customerSocialMedia').where('businessUid','==',uid).get()).docs;assert.equal(delivery.length,1);
  assert.deepEqual(await service.delivery(delivery[0].id),image);assert.equal(await service.delivery('../private'),null);
  const media=(await db.collection(`socialMediaLibraries/${uid}/items`).get()).docs[0].data();
+ assert.equal(media.images[0].width,1080);assert.equal(media.images[0].height,720);
  assert.doesNotThrow(()=>meta.assertMediaEnvironment(media,'production'));assert.throws(()=>meta.assertMediaEnvironment(media,'staging'));
  await assertDeliveryAuthority({db,uid,revision:media});
  await assert.rejects(assertDeliveryAuthority({db,uid:'other',revision:media}));

@@ -16,11 +16,14 @@ function assertSource({uid,asset,revision,assetId,revisionId}) {
     !revision.altText?.trim()||!revision.privateOriginalPath?.startsWith(`business_media_private/${uid}/${assetId}/${revisionId}/`)||
     !/^[a-f0-9]{64}$/.test(revision.contentHash||'')||!revision.storageGeneration)throw Error('Choose a current approved Business image.');
 }
-async function derivative(bytes,sharp=require('sharp')) {
+async function derivative(bytes,sharp=require('sharp'),provider='facebook') {
   // Deterministic format preparation: no image generation or inferred artwork.
-  // Contain preserves all of the selected image and strips private EXIF metadata.
+  // Facebook accepts the original aspect ratio. Do not bake a square white
+  // canvas into its upload. Preserve Instagram's existing bounded preparation.
+  if(!['facebook','instagram'].includes(provider))throw Error('Choose a supported Social channel.');
+  const resize=provider==='facebook'?{fit:'inside',withoutEnlargement:true}:{fit:'contain',background:'#ffffff'};
   const result=await sharp(bytes,{failOn:'error',limitInputPixels:40000000}).rotate().resize(1080,1080,
-    {fit:'contain',background:'#ffffff'}).flatten({background:'#ffffff'}).toColourspace('srgb')
+    resize).flatten({background:'#ffffff'}).toColourspace('srgb')
     .jpeg({quality:92,chromaSubsampling:'4:4:4'}).toBuffer({resolveWithObject:true});
   if(result.data.length>8*1024*1024)throw Error('Choose a smaller image.');
   return {bytes:result.data,width:result.info.width,height:result.info.height,sha256:hash(result.data),mime:'image/jpeg'};
@@ -56,7 +59,7 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
       assertSource(source);
       const [bytes]=await storage().file(source.revision.privateOriginalPath,{generation:source.revision.storageGeneration}).download();
       if(bytes.length>20*1024*1024||hash(bytes)!==source.revision.contentHash)throw Error('The image could not be verified.');
-      const image=await prepareImage(bytes);
+      const image=await prepareImage(bytes,undefined,input.provider);
       const deliveryId=hash(JSON.stringify({uid,assetId:input.assetId,revisionId:input.revisionId,sha256:image.sha256}));
       const path=`customer_social_delivery/${deliveryId}.jpg`;
       await storage().file(path).save(image.bytes,{resumable:false,contentType:'image/jpeg',preconditionOpts:{ifGenerationMatch:0}})
