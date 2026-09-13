@@ -79,14 +79,95 @@ void main() {
       expect(ScalerCashoutService.parseCents(value), isNull);
     }
   });
-  test('production cannot enable TEST cash-out', () {
-    const environment = String.fromEnvironment('APP_ENV');
-    if (environment == 'production') {
-      expect(ScalerCashoutService.enabled, isFalse);
-    } else if (environment == 'staging') {
-      expect(ScalerCashoutService.enabled, const bool.fromEnvironment('ENABLE_TEST_CASHOUT'));
-    }
-  });
+  test(
+    'production selects LIVE service while TEST remains explicitly gated',
+    () {
+      const environment = String.fromEnvironment('APP_ENV');
+      if (environment == 'production') {
+        expect(ScalerCashoutService.enabled, isTrue);
+      } else if (environment == 'staging') {
+        expect(
+          ScalerCashoutService.enabled,
+          const bool.fromEnvironment('ENABLE_TEST_CASHOUT'),
+        );
+      }
+    },
+  );
+  testWidgets(
+    'LIVE cash-out requires explicit amount confirmation and never claims TEST or Paid while processing',
+    (tester) async {
+      final service = FakeCashout()
+        ..data = {
+          'mode': 'live',
+          'status': 'ready',
+          'executionEnabled': true,
+          'availableCents': 300,
+        };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ScalerCashoutCard(service: service),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Cash Out'), findsOneWidget);
+      expect(find.textContaining('No real bank deposit'), findsNothing);
+      await tester.enterText(find.byType(TextField), '3');
+      await tester.tap(find.text('Cash out'));
+      await tester.pumpAndSettle();
+      expect(service.requests, 0);
+      expect(find.text('Cash out \$3.00?'), findsOneWidget);
+      await tester.tap(find.text('Confirm cash out'));
+      await tester.pumpAndSettle();
+      expect(service.requests, 1);
+      expect(find.text('Cash-out processing'), findsOneWidget);
+      expect(find.text('Paid'), findsNothing);
+    },
+  );
+  testWidgets(
+    'narrow large-text LIVE waiting state has truthful feedback and no duplicate cash-out control',
+    (tester) async {
+      tester.view.physicalSize = const Size(375, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = FakeCashout()
+        ..data = {
+          'mode': 'live',
+          'status': 'ready',
+          'executionEnabled': true,
+          'availableCents': 0,
+          'operation': {
+            'operationId': 'op',
+            'status': 'pending',
+            'message': 'Waiting for funds',
+          },
+        };
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ScalerCashoutCard(service: service),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Waiting for funds'), findsOneWidget);
+      expect(find.text('Cash out'), findsNothing);
+      expect(tester.takeException(), isNull);
+      expect(service.requests, 0);
+    },
+  );
   testWidgets(
     'ready Wallet cash-out validates balance and reuses request ID after lost response',
     (tester) async {

@@ -18,8 +18,9 @@ abstract class ScalerCashoutService {
       '${mode == 'live' ? ' If the problem continues, contact support@scaledcircle.com.' : ''}';
 
   static bool get enabled =>
-      const bool.fromEnvironment('ENABLE_TEST_CASHOUT') &&
-      (AppEnvironmentConfig.isLocal || AppEnvironmentConfig.isStaging);
+      AppEnvironmentConfig.isProduction ||
+      (const bool.fromEnvironment('ENABLE_TEST_CASHOUT') &&
+          (AppEnvironmentConfig.isLocal || AppEnvironmentConfig.isStaging));
 
   static String requestId() {
     final random = Random.secure();
@@ -44,15 +45,16 @@ class FirebaseScalerCashoutService implements ScalerCashoutService {
     String name, [
     Map<String, dynamic> data = const {},
   ]) async {
-    if (!ScalerCashoutService.enabled || AppEnvironmentConfig.isProduction) {
-      throw StateError('Test payouts are unavailable.');
+    if (!ScalerCashoutService.enabled) {
+      throw StateError('Payouts are unavailable.');
     }
     final functions = FirebaseFunctions.instanceFor(
       region: AppEnvironmentConfig.functionsRegion,
     );
     final result = await functions.httpsCallable(name).call(data);
     final response = Map<String, dynamic>.from(result.data as Map);
-    if (response['mode'] != 'test') {
+    if (response['mode'] !=
+        (AppEnvironmentConfig.isProduction ? 'live' : 'test')) {
       throw StateError('Payout environment mismatch.');
     }
     return response;

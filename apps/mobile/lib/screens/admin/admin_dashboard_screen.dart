@@ -20,6 +20,7 @@ import 'admin_social_operations_screen.dart';
 import 'admin_subscription_overview_screen.dart';
 import 'business_access_approval_screen.dart';
 import 'admin_referrals_screen.dart';
+import 'admin_scaler_cashouts_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key, this.service});
@@ -76,6 +77,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ],
               ),
         actions: [
+          if (AppEnvironmentConfig.isProduction)
+            IconButton(
+              tooltip: 'Scaler payout support',
+              icon: const Icon(Icons.account_balance_outlined),
+              onPressed: () => _push(const AdminScalerCashoutsScreen()),
+            ),
           IconButton(
             tooltip: 'Referral review',
             icon: const Icon(Icons.group_add_outlined),

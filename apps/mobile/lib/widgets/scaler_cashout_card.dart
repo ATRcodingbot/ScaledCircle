@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -5,15 +6,22 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/scaler_cashout_service.dart';
 
 class ScalerCashoutCard extends StatefulWidget {
-  const ScalerCashoutCard({super.key, this.service, this.openOnboarding});
+  const ScalerCashoutCard({
+    super.key,
+    this.service,
+    this.openOnboarding,
+    this.onBalanceChanged,
+  });
   final ScalerCashoutService? service;
+  final VoidCallback? onBalanceChanged;
   final Future<bool> Function(Uri)? openOnboarding;
 
   @override
   State<ScalerCashoutCard> createState() => _ScalerCashoutCardState();
 }
 
-class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
+class _ScalerCashoutCardState extends State<ScalerCashoutCard>
+    with WidgetsBindingObserver {
   late final ScalerCashoutService _service =
       widget.service ?? FirebaseScalerCashoutService();
   final _amount = TextEditingController();
@@ -22,17 +30,31 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
   String? _error;
   String? _requestId;
   int? _requestedAmount;
+  Timer? _timer;
+  bool _foreground = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_foreground) _load();
+    });
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
     _amount.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) _load();
   }
 
   Future<void> _work(Future<void> Function() action) async {
@@ -74,7 +96,12 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
             op['status'] == 'pending'
         ? await _service.status()
         : data;
+    final changed =
+        _data != null &&
+        (_data?['availableCents'] != refreshed['availableCents'] ||
+            _data?['pendingCents'] != refreshed['pendingCents']);
     if (mounted) setState(() => _data = refreshed);
+    if (changed) widget.onBalanceChanged?.call();
   });
 
   Future<void> _setup() => _work(() async {
@@ -95,7 +122,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
     if (cents == null || cents > available) {
       setState(
         () => _error =
-            'Enter an amount within your available test balance (up to \$100).',
+            'Enter an amount within your available balance (up to \$100).',
       );
       return;
     }
@@ -106,10 +133,33 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
       );
       return;
     }
+    if (_data?['mode'] == 'live') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Cash out \$${(cents / 100).toStringAsFixed(2)}?'),
+          content: const Text(
+            'This amount will be reserved from your available balance while Stripe processes the payout. Your earned compensation remains recorded.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm cash out'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
     await _work(() async {
       _requestId ??= ScalerCashoutService.requestId();
       _requestedAmount = cents;
       await _service.request(_requestId!, cents);
+      widget.onBalanceChanged?.call();
       _requestId = null;
       _requestedAmount = null;
       final data = await _service.status();
@@ -119,12 +169,16 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
 
   @override
   Widget build(BuildContext context) {
+    final live = _data?['mode'] == 'live';
     final ready = _data?['status'] == 'ready';
     final executionEnabled = _data?['executionEnabled'] == true;
     final op = _data?['operation'];
     final status = op is Map ? op['status'] : null;
     final label = switch (status) {
-      'pending' => 'Cash-out processing',
+      'pending' =>
+        live
+            ? op['message'] as String? ?? 'Cash-out processing'
+            : 'Cash-out processing',
       'completed' => 'Completed',
       'failed' => 'Cash-out failed. Funds returned to your balance.',
       'needs_attention' =>
@@ -139,11 +193,14 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Test payouts',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Text(
+              live ? 'Cash Out' : 'Payouts',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            const Text('Test funds only. No real bank deposit.'),
+            if (_data?['mode'] == 'test')
+              const Text('Test funds only. No real bank deposit.'),
+            if (live)
+              const Text('Secure payout setup and processing through Stripe.'),
             if (_data != null)
               Text(
                 ready
@@ -155,7 +212,16 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard> {
                       ),
               ),
             if (_data != null && !executionEnabled)
-              const Text('TEST cash-out is paused for certification.'),
+              Text(
+                live
+                    ? ((_data?['message'] as String?) ??
+                          'Cash-out is temporarily paused. Your earnings are preserved.')
+                    : 'TEST cash-out is paused for certification.',
+              ),
+            if (live && ready && executionEnabled)
+              Text(
+                'Available to cash out: \$${(((_data?['availableCents'] as num?) ?? 0) / 100).toStringAsFixed(2)}',
+              ),
             if (label != null) Text(label),
             if (_error != null) Text(_error!),
             if (_busy) const LinearProgressIndicator(),

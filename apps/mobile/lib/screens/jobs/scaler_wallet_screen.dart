@@ -6,6 +6,8 @@ import '../../widgets/campaign_card_header.dart';
 import '../../widgets/scaler_wallet_metrics.dart';
 import '../../navigation/context_back_button.dart';
 import '../../navigation/app_routes.dart';
+import '../../services/scaler_cashout_service.dart';
+import '../../widgets/scaler_cashout_card.dart';
 
 /// All amounts and state transitions come from one server read snapshot.
 class ScalerWalletScreen extends StatefulWidget {
@@ -209,15 +211,22 @@ class _ScalerWalletScreenState extends State<ScalerWalletScreen>
                   const SizedBox(height: 8),
                   const Text('Approved money in your Wallet.'),
                   const SizedBox(height: 16),
-                  Text(
-                    (data['cashout'] as Map?)?['message'] as String? ??
-                        'Cash out is not available for this account yet.',
-                  ),
+                  if (!ScalerCashoutService.enabled ||
+                      widget.preview ||
+                      widget.loadSummary != null)
+                    Text(
+                      (data['cashout'] as Map?)?['message'] as String? ??
+                          'Cash out is not available for this account yet.',
+                    ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
+          if (!widget.preview &&
+              widget.loadSummary == null &&
+              ScalerCashoutService.enabled)
+            ScalerCashoutCard(onBalanceChanged: _load),
           ScalerWalletMetrics(
             awaitingReviewCents: data['awaitingReviewCents'] as int,
             reviewAmountUnknown: data['reviewAmountUnknown'] == true,

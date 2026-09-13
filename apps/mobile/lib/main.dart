@@ -1,3 +1,4 @@
+import 'screens/jobs/live_work_certification_screen.dart';
 import 'screens/business/growth_agents_screen.dart';
 import 'screens/admin/staging_payment_certification_screen.dart';
 import 'screens/auth/delete_account_screen.dart';
@@ -193,6 +194,11 @@ class ScaledCircleApp extends StatelessWidget {
     }
     if (route?.path == '/account/delete' && AppEnvironmentConfig.isStaging) {
       return MaterialPageRoute(settings: settings, builder: (_) => const DeleteAccountScreen());
+    }
+    if (route?.path == '/work/certification' && AppEnvironmentConfig.isProduction) {
+      return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(
+        routeName: settings.name!, audience: ProtectedRouteAudience.jobRoomParticipant,
+        builder: (_, _) => const LiveWorkCertificationScreen()));
     }
     if (route?.path == '/staging/payment-certification' && AppEnvironmentConfig.isStaging) {
       return MaterialPageRoute(settings: settings, builder: (_) => ProtectedRouteGate(

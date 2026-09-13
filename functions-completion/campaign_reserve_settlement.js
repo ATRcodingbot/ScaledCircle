@@ -21,19 +21,20 @@ function allocation(contract, earnedCents, rate = 2000) {
     finalCostCents:earnedCents+earnedFeeCents, maximumCostCents:maximumWorkerCents+maximumFeeCents};
 }
 
-function createService({db, FieldValue, project, stripe}) {
+function createService({db, FieldValue, project, stripe, productionAuthority = null}) {
   function staging() { if (project !== 'scaledcircle-staging') fail('This settlement release is staging only.'); }
   const now = () => FieldValue.serverTimestamp();
   // Internal semantic operation only. Callers must first prove ordinary evidence,
   // or an immutable paused-work offer accepted by the intended Scaler.
   async function commit(tx, {zoneId, zone, contract, paymentId, payment, payout, actorUid,
     completionId = null, source = 'ordinary_review', evidence = null}) {
-    staging();
+    if (productionAuthority) productionAuthority.assert({project,zoneId,zone,contract,paymentId,payment,payout,actorUid,completionId,source});
+    else staging();
     if (!funded(payment) || payment.campaignId !== zone.campaignId || payment.businessId !== zone.businessId ||
         contract.immutable !== true || contract.zoneId !== zoneId || contract.campaignId !== zone.campaignId ||
         contract.scalerId !== zone.assignedScalerId || contract.businessId !== zone.businessId ||
         zone.settlementBlocked === true || zone.disputeOpen === true) fail('Funding, assignment or compensation needs review.');
-    if (payment.stripeMode !== 'test' || !/^pi_/.test(payment.stripePaymentIntentId || '') ||
+    if (payment.stripeMode !== (productionAuthority ? 'live' : 'test') || !/^pi_/.test(payment.stripePaymentIntentId || '') ||
         (payment.currency && payment.currency !== 'usd')) fail('Verified staging TEST funding is required.');
     if (assertSafeCents(payout.baseAmountCents) > contract.baseAmountCents ||
         assertSafeCents(payout.bonusAmountCents) > (contract.bonusAmountCents || 0) ||
