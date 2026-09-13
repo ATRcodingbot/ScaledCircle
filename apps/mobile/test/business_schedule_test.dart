@@ -217,8 +217,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Back'), findsNothing);
-      await tester.tap(find.text('Workspace'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Workspace'));
+    await tester.pumpAndSettle();
+    expect(find.text('Back'), findsNothing);
       for (final label in ['Account', 'Notifications', 'Sign Out']) {
         expect(find.text(label), findsOneWidget);
       }

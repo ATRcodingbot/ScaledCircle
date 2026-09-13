@@ -1085,7 +1085,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
     appBar: AppBar(
       automaticallyImplyLeading: false,
       leadingWidth: 92,
-      leading: widget.workspaceHome && !Navigator.canPop(context)
+      leading: widget.workspaceHome && !(ModalRoute.of(context)?.canPop ?? false)
           ? null
           : TextButton.icon(
               icon: const Icon(Icons.arrow_back),
