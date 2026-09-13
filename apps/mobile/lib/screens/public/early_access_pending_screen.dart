@@ -249,7 +249,7 @@ class _EarlyAccessPendingScreenState extends State<EarlyAccessPendingScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'Referrals · Private Beta. Complete account approval and email verification to create your referral link. Signup alone does not earn a reward.',
+                        'Referrals. Complete account approval and email verification to create your referral link. Signup alone does not earn a reward.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Color(0xFF7FA0B8)),
                       ),

@@ -46,7 +46,7 @@ void main() {
       final business = File(
         'lib/screens/business/business_account_screen.dart',
       ).readAsStringSync();
-      expect(scaler, contains('Referrals · Private Beta'));
+      expect(scaler, contains('Referrals'));
       expect(business, contains("['isOwner'] == true"));
       expect(business, contains('ScalerAffiliateScreen'));
     },

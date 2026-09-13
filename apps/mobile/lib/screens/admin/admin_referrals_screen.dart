@@ -118,7 +118,7 @@ class _AdminReferralsScreenState extends State<AdminReferralsScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            'Referral Program · Private Beta',
+            'Referral Program',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const Text(

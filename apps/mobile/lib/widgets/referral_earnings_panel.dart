@@ -194,7 +194,7 @@ class _ReferralEarningsPanelState extends State<ReferralEarningsPanel> {
                 ),
               if (data['executionEnabled'] != true)
                 const Text(
-                  'Referral Program — Private Beta. Rewards are tracked now. ScaledCircle verifies qualifying activity and manually reviews initial payments. Automatic payouts are off; a review window ending does not mean money was sent.',
+                  'Referral Program. Rewards are tracked now. ScaledCircle verifies qualifying activity and manually reviews initial payments. Automatic payouts are off; a review window ending does not mean money was sent.',
                 ),
               for (final op in (data['operations'] as List? ?? []).where(
                 (o) => o['status'] != 'completed',

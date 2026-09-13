@@ -358,7 +358,7 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
         'An earned Wallet amount and provider payout are separate lifecycle states. Production payout and self-service cash-out remain gated pending final operating, physical-device, KYC, tax, and provider review. No bank payout date is promised, and a provider delay must not be described as erasing legitimately established earnings.',
       ]),
       _Section('Affiliate enrollment', [
-        'Referral participation is optional and separately accepted. Business referrals earn 10% of qualifying retained recurring subscription revenue. Scaler referrals earn 1% of final approved completed-work compensation, funded separately by ScaledCircle and never deducted from worker pay. Rewards are subject to eligibility, refunds, reversals and the Referral Program terms. During Private Beta, liabilities are tracked while payments receive manual review; automatic payouts are off and no payment date is promised.',
+        'Referral participation is optional and separately accepted. Business referrals earn 10% of qualifying retained recurring subscription revenue. Scaler referrals earn 1% of final approved completed-work compensation, funded separately by ScaledCircle and never deducted from worker pay. Rewards are subject to eligibility, refunds, reversals and the Referral Program terms. Referral rewards are tracked while initial payments receive manual review; automatic payouts are off and no payment date is promised.',
       ]),
       _Section(
         'Status and legal review',

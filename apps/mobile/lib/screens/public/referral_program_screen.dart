@@ -23,7 +23,7 @@ class ReferralProgramScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           children: const [
             Text(
-              'Referral Program — Private Beta',
+              'Referral Program',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 8),

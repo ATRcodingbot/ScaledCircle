@@ -418,7 +418,7 @@ class ScalerDashboardScreen extends StatelessWidget {
                         builder: (_) => const ScalerAffiliateScreen(),
                       ),
                     ),
-                    child: const Text('Referrals · Private Beta'),
+                    child: const Text('Referrals'),
                   ),
                 ],
               ),
