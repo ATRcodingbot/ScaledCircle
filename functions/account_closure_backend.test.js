@@ -15,7 +15,7 @@ beforeEach(async()=>{
   const auth={getUser:async id=>{if(!accounts.has(id))throw Object.assign(Error('missing'),{code:'auth/user-not-found'});return accounts.get(id);},
     updateUser:async(id,data)=>{calls.push('disable');Object.assign(accounts.get(id),data);},
     revokeRefreshTokens:async()=>{calls.push('revoke');},deleteUser:async id=>{calls.push('delete');accounts.delete(id);}};
-  service=createService({db,auth,FieldValue,project:'scaledcircle-staging',appEnv:'staging',now});
+  service=createService({db,auth,FieldValue,project:process.env.CLOSURE_PRODUCTION_RULES?'scaled-circle':'scaledcircle-staging',appEnv:process.env.CLOSURE_PRODUCTION_RULES?'production':'staging',now});
   await db.doc('users/'+uid).set({role:'scaler',active:true,email:'personal@example.com',pushToken:'personal-token'});
 });
 after(async()=>{await db.terminate();await app.delete();});
@@ -69,8 +69,8 @@ test('normal member deletion revokes its seat without changing owner or historic
   assert.equal((await db.doc('businessWorkspaces/business/members/'+uid).get()).data().status,'removed');
   assert.equal((await db.doc('businessWorkspaces/business/activity/original').get()).data().actorUid,uid);
 });
-test('production fails before touching Auth; durable closure can resume after provider failure',async()=>{
-  await assert.rejects(createService({db,auth:{},FieldValue,project:'scaled-circle',appEnv:'production'}).preflight(uid),/not enabled/);
+test('mismatched environment fails before touching Auth; durable closure can resume after provider failure',async()=>{
+  await assert.rejects(createService({db,auth:{},FieldValue,project:'scaled-circle',appEnv:'staging'}).preflight(uid),/not enabled/);
   let failOnce=true;
   const recovering=createService({db,FieldValue,project:'scaledcircle-staging',appEnv:'staging',auth:{getUser:async()=>accounts.get(uid),
     updateUser:async()=>{},revokeRefreshTokens:async()=>{},deleteUser:async()=>{if(failOnce){failOnce=false;throw Error('transient');}accounts.delete(uid);}}});
@@ -79,3 +79,7 @@ test('production fails before touching Auth; durable closure can resume after pr
   await recovering.finish(uid);assert.equal(accounts.has(uid),false);
   assert.equal((await db.doc('accountClosures/'+uid).get()).data().status,'completed');
 });
+
+test('unresolved earning protects zero-wallet user and retains the earning',async()=>{await db.doc(`wallets/${uid}/transactions/pending`).set({type:'scaler_earnings',status:'pending',amount:5});await assert.rejects(service.close(uid,confirmation),/Wallet/);assert.equal((await db.doc(`wallets/${uid}/transactions/pending`).get()).exists,true);});
+
+test('authoritatively transferred owner can close without removing workspace or subscription history',async()=>{await db.doc('users/'+uid).update({role:'business'});await db.doc('businessWorkspaces/'+uid).set({ownerId:'new_owner',businessName:'Retained'});await db.doc('businessSubscriptions/'+uid).set({plan:'starter'});await service.close(uid,confirmation);assert.equal((await db.doc('businessWorkspaces/'+uid).get()).data().ownerId,'new_owner');assert.equal((await db.doc('businessSubscriptions/'+uid).get()).exists,true);});

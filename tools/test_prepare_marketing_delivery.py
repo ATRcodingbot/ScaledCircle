@@ -56,9 +56,10 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertIn("location.pathname !== '/' && location.pathname !== '/login'", value)
         self.assertEqual([x[1] for x in content()['/pricing'][1:5]], ['$99/month', '$299/month', '$499/month', '$999/month'])
         pricing = docs['/pricing']
-        for text in ['Controlled premium access', 'Business Assistant — Beta / Coming Soon', '$399/month', 'Lead Generation Research — Private Beta', '$699/month', 'Growth Department — Private Beta', '$2,000/month', '10 total users']:
+        for text in ['Choose the plan that fits your business', 'Add more growth power', '+$399', '+$699', '$2,000', '10 total Business users', 'Request Access']:
             self.assertIn(text, pricing)
-        self.assertIn('Research does not authorize outreach', pricing)
+        self.assertNotIn('Controlled premium access', pricing)
+        self.assertNotIn('Grow My Business', pricing)
 
     def test_public_navigation_has_independent_routes_and_truthful_availability(self):
         for route, page in documents().items():
@@ -70,7 +71,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
             self.assertNotIn('href="/#pricing"', nav)
             self.assertNotIn('href="/#how-it-works"', nav)
         self.assertIn('Available Business plans', documents()['/pricing'])
-        self.assertIn('Private Beta plans', documents()['/pricing'])
+        self.assertIn('Private Beta / Invite Only', documents()['/pricing'])
         self.assertIn('residential photos are not required', documents()['/scalers'])
 
     def test_staging_indexing_and_truthful_conversion_paths(self):
@@ -89,7 +90,7 @@ for(const pathname of ['/','/pricing']) for(const ref of ['abc234','invalid-secr
 
     def test_core_operations_are_included_in_each_paid_plan_without_sync_claims(self):
         pricing = documents(staging=True)['/pricing']
-        self.assertEqual(pricing.count('Customers &amp; leads, schedule, jobs and tasks included.'), 4)
+        self.assertIn('Included with every paid plan', pricing)
         how = documents(staging=True)['/how-it-works']
         self.assertIn('Lead → Estimate → Job → Follow-up', how)
         self.assertIn('Included with every paid Business plan', how)

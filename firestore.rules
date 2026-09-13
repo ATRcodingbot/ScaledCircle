@@ -1031,7 +1031,8 @@ service cloud.firestore {
 
     function isSignedIn() {
 
-      return request.auth != null;
+      return request.auth != null
+        && !exists(/databases/$(database)/documents/accountClosures/$(request.auth.uid));
 
     }
 

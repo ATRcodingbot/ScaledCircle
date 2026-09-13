@@ -2,7 +2,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../config/app_environment.dart';
 import '../../navigation/app_router.dart';
 import '../../services/business_workspace_service.dart';
 
@@ -12,19 +11,15 @@ typedef AccountClosureCall =
 class DeleteAccountTile extends StatelessWidget {
   const DeleteAccountTile({super.key});
   @override
-  Widget build(BuildContext context) => !AppEnvironmentConfig.isStaging
-      ? const SizedBox.shrink()
-      : ListTile(
-          leading: const Icon(Icons.person_remove_outlined),
-          title: const Text('Delete Account'),
-          subtitle: const Text(
-            'Review obligations and permanently close your login',
-          ),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const DeleteAccountScreen()),
-          ),
-        );
+  Widget build(BuildContext context) => ListTile(
+    leading: const Icon(Icons.person_remove_outlined),
+    title: const Text('Delete Account'),
+    subtitle: const Text('Review obligations and permanently close your login'),
+    onTap: () => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DeleteAccountScreen()),
+    ),
+  );
 }
 
 class DeleteAccountScreen extends StatefulWidget {
@@ -49,7 +44,7 @@ class _DeleteAccountState extends State<DeleteAccountScreen> {
   Map<String, dynamic>? _status;
   bool _busy = false, _deleted = false;
   String? _error;
-  bool get _staging => widget.staging ?? AppEnvironmentConfig.isStaging;
+  bool get _staging => widget.staging ?? true;
   @override
   void initState() {
     super.initState();
@@ -69,7 +64,7 @@ class _DeleteAccountState extends State<DeleteAccountScreen> {
       : Map<String, dynamic>.from(
           (await FirebaseFunctions.instanceFor(
                 region: 'us-east1',
-              ).httpsCallable('stagingAccountClosureV1').call(input)).data
+              ).httpsCallable('accountClosureV1').call(input)).data
               as Map,
         );
   Future<void> _load() async {

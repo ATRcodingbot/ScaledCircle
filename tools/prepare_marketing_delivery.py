@@ -141,7 +141,7 @@ function startProduct() {
 }
 addEventListener('hashchange', startProduct); startProduct();
 </script></body>'''
-        if route in ('/how-it-works', '/businesses', '/scalers'):
+        if route in ('/how-it-works', '/businesses', '/scalers', '/pricing', '/referrals'):
             # Keep the same referral and authenticated product bootstrap below.
             # Only this public page receives the new presentation.
             shared = (ROOT / 'apps/mobile/web/marketing/how-it-works.html').read_text(encoding='utf-8')
@@ -168,10 +168,12 @@ img{max-width:100%;height:auto;margin-top:30px;border-radius:18px}
 .plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.plans article,.capabilities article{padding:24px;border:1px solid #29445b;border-radius:18px;background:#0b1d30}.plans h2{font-size:24px}.price{font-size:32px;font-weight:700;color:#fff}.example{margin-top:36px;padding:28px;background:#102b42;border-radius:20px}.eyebrow{text-transform:uppercase;letter-spacing:1px;font-size:14px}.mobile-menu summary{cursor:pointer;min-height:48px;padding:12px;list-style:none}.mobile-menu div{position:absolute;right:0;top:48px;z-index:5;padding:16px;background:#102b42;border:1px solid #29445b;border-radius:12px;min-width:220px}.mobile-menu a{display:block;padding:12px}summary:focus-visible{outline:3px solid white;outline-offset:4px}a{overflow-wrap:anywhere}section{padding-block:36px}
 @media(max-width:1100px){.desktop-links{display:none}.mobile-menu{display:block;position:relative}main{padding:20px}nav{gap:12px}.brand img{width:160px}.plans{grid-template-columns:1fr}h1{font-size:38px}.example{padding:22px}}
 </style></head>''')
-        if route in ('/how-it-works', '/businesses', '/scalers'):
+        if route in ('/how-it-works', '/businesses', '/scalers', '/pricing', '/referrals'):
             styles = (ROOT / 'apps/mobile/web/marketing/how-it-works.css').read_text(encoding='utf-8')
             if route != '/how-it-works':
                 styles += (ROOT / 'apps/mobile/web/marketing/audience-pages.css').read_text(encoding='utf-8')
+            if route in ('/pricing', '/referrals'):
+                styles += (ROOT / 'apps/mobile/web/marketing/sales-pages.css').read_text(encoding='utf-8')
             # Replace only the delivery stylesheet, never the maintained head,
             # structured metadata or auth-resolution script.
             document = re.sub(r'<style>\s*\.resolving-session #marketing.*?</style>',
