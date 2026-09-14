@@ -117,10 +117,11 @@ function createPreparation({db,editor,media,now=Date.now}) {
      const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
      if(item?.businessUid!==uid||(item.platformVersions?.[input.provider]??item.currentVersion)!==version.version||jobs.size>100||
        jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))throw Error('The post changed. Reopen its review.');
-     if(old?.attempt===attempt)tx.update(lease,{state:reviewCandidate?'creative_review':creativeStatus==='needs_creative'?'needs_attention':'prepared',reviewCandidate,generationStatus,version:version.version,finishedAt:now(),leaseUntil:0});});
+     if(old?.attempt===attempt)tx.update(lease,{state:reviewCandidate?'creative_review':creativeStatus==='needs_creative'?'needs_attention':'prepared',reviewCandidate,generationStatus,version:version.version,finishedAt:now(),leaseUntil:0,failureReason:null});});
    return result;
    }catch(error){
-     await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:old.reviewCandidate?'creative_review':'needs_attention',finishedAt:now(),leaseUntil:0});});
+     await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:old.reviewCandidate?'creative_review':'needs_attention',finishedAt:now(),leaseUntil:0,
+       failureReason:'Creative preparation could not finish. Your saved preview is preserved. Try the image check again or replace the image.'});});
      throw error;
    }
  }};

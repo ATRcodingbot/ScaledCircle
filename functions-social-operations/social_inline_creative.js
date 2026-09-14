@@ -12,7 +12,7 @@ async function proposal({db,ctx,read=ref=>ref.get()}) {
   if(!c)return null;
   const subject=c.preparation?.subjectQuality;
   if(subject?.policy!==require('./social_creative_subject').POLICY||subject.checkedSha256!==c.sha256||subject.status!=='passed')
-    throw Error(subject?.reasons?.join(' ')||'Preparing the image subject check before approval.');
+    throw Error(subject?.reasons?.join(' ')||ctx.creativePreparation?.failureReason||'Preparing the image subject check before approval.');
   const {uid,provider}=ctx,prefix=`business_media_private/${uid}/${c.assetId}/${c.revisionId}/`;
   if(!validId(c.assetId)||!validId(c.revisionId)||!validId(c.jobId)||c.status!=='pending_owner_review'||c.approved!==false||
     c.storagePath!==prefix+`renditions/social-review-${provider}-${c.sha256}.jpg`||!c.generation||

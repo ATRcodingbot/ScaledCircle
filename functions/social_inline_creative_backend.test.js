@@ -97,3 +97,18 @@ test('subject checks analyze exact derivative once, retain provider evidence and
  const result=(await db.collection('socialCreativeVisualAssessments').where('businessUid','==',uid).get()).docs[0].data();
  assert.equal(result.responseId,'mock_subject_response');assert.equal(result.sha256,sha256);
 });
+test('failed image analysis preserves only safe diagnostic codes and never approves the draft',async()=>{
+ const uid='subject_error_owner',bytes=Buffer.from('private generated candidate'),sha256=hash(bytes);
+ await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:false,authorizedBusinessUids:[uid]});
+ const check=require('../functions-social-operations/social_creative_subject').createSubjectCheck({db,clientFactory:async()=>({
+   models:{list:async()=>({data:[{id:'gpt-4.1-mini'}]})},responses:{create:async()=>{throw Object.assign(new Error('private body and authorization must not be retained'),{status:403,code:'model_not_found',type:'invalid_request_error',headers:{authorization:'private'}});}}
+ })});
+ await assert.rejects(check({uid,bytes,sha256,service:'decks'}),/draft is preserved/);
+ const record=(await db.collection('socialCreativeVisualAssessments').where('businessUid','==',uid).get()).docs[0].data();
+ assert.equal(record.status,'unavailable');assert.equal(record.diagnostic.status,403);assert.equal(record.diagnostic.code,'model_not_found');
+ assert.ok(!JSON.stringify(record).includes('private'));assert.equal((await db.collection('socialGrowthApprovals').where('businessUid','==',uid).get()).size,0);
+ const s=await setup('inline_failure_copy');const c={...s.candidate,preparation:{...s.candidate.preparation}};delete c.preparation.subjectQuality;
+ await s.lease.update({reviewCandidate:c,failureReason:'Creative preparation could not finish. Your saved preview is preserved.'});
+ const preview=await s.store.preview(s.uid,s.input);assert.equal(preview.ready,false);assert.equal(preview.reviewState,'needs_attention');
+ assert.ok(preview.reasons.some(r=>r.message?.includes('could not finish')));
+});
