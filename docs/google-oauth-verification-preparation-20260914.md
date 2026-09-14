@@ -1,0 +1,50 @@
+# Google Business Email verification preparation
+
+This is a preparation record, not provider approval or store-readiness certification.
+
+## Confirmed mismatch
+
+Production project `scaled-circle`, function `businessEmailOperationsV1`, revision `businessemailoperationsv1-00008-cuw` requests `openid`, `email` and, according to the owner's selected permissions, `https://www.googleapis.com/auth/gmail.readonly` and `https://www.googleapis.com/auth/gmail.send`. The deployed Gmail adapter SHA-256 is `1168d13822ad04adb960bc6bcd357fc4f5fbaba5d3e760cddca86e6728624612`.
+
+All three Data Access tables were empty in the production console. Google classifies Send as Sensitive and Read Only as Restricted. “Verification not required” on an empty declaration does not certify the deployed Gmail flow.
+
+Runtime client: `1010956217112-nqe30km9psk0q8cb6kqin40m43buegn4.apps.googleusercontent.com`. Callback: `https://us-east1-scaled-circle.cloudfunctions.net/businessEmailCallbackV1`. Preserve client, credentials, existing grants and working Attractive Remodel send/reply evidence.
+
+## Exact declaration prepared
+
+- `openid`
+- `https://www.googleapis.com/auth/userinfo.email` (Google's displayed equivalent of the runtime `email` identity scope)
+- `https://www.googleapis.com/auth/gmail.send`
+- `https://www.googleapis.com/auth/gmail.readonly`
+
+No profile, modify, compose, delete, full-mail or other API scope. Gmail use-case selection: Email productivity. The console draft has both justifications below. Saving is pending the requested action-time confirmation. A declaration is not a grant to any mailbox; each owner must still consent, and verification is separate.
+
+Send justification: Business owners connect their own Gmail or Google Workspace mailbox to send exact messages they have reviewed and approved, including approved Business Email campaigns and permitted outreach. Send is the narrow send-only scope used by the Gmail API. Broader compose, modify and full-mail scopes are not needed. Sending requires workspace authority, content approval and suppression checks. Connection alone does not enable automatic sending.
+
+Read justification: Read access supports authorized Business mailbox conversations, detection and deduplication of replies to approved sends, and CRM conversation context bound to the correct workspace and contact. Read Only retrieves message bodies and thread context; metadata alone cannot provide readable conversations or reply content. No modify/delete access and no reading unrelated mail for advertising. New-customer onboarding remains restricted pending approval.
+
+## Branding and public pages
+
+Use ScaledCircle and the existing canonical 120x120 native logo `apps/mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png`; do not regenerate it. Home: `https://scaledcircle.com/`. The actual rendered legal routes are `https://scaledcircle.com/#/privacy` and `https://scaledcircle.com/#/terms`. Bare `/privacy` is not a verified legal destination: it entered the authenticated application during inspection.
+
+Developer contact: `support@scaledcircle.com`. The current Google support dropdown offers only `attractiveremodel@gmail.com` and no managed Google Groups. Do not invent selection or broaden IAM to force the desired address. Founder must make the maintained support identity eligible through Google's normal account/group mechanism before it can be selected.
+
+The rendered production privacy page lacks specific Google mailbox data-use disclosures and contains outdated account-deletion wording. Review factual disclosures against implementation before publication: selected read/send capabilities; server processing/storage of message/thread context and CRM replies; workspace isolation; revocation/disconnection and deletion/retention behavior; service-provider transfers; prohibition on unrelated advertising use. Verify Limited Use compliance in processing, including any downstream AI access, before making a compliance assertion. Do not invent a security-assessment result or retention period.
+
+## Required real evidence before submission
+
+1. Verify Search Console ownership of `scaledcircle.com` with a Google account eligible for this project's verification. Domain listing alone is not ownership proof. Do not alter DNS blindly.
+2. Record an unlisted demonstration covering every relevant OAuth client in the project: signed-in owner, exact Read/Send choices, complete Google consent including any test warning, exact mailbox binding, existing authorized conversation/reply, reviewed send controls and suppression, and disconnect/revocation controls. Do not expose tokens, unrelated mail, or private recipient data. Use approved certification data; no new message is authorized merely for this video.
+3. Supply the real YouTube demo URL. The console requires one; none has been fabricated.
+4. Complete accurate privacy/security disclosures and sensitive/restricted verification. Google's Gmail documentation requires a security assessment when restricted-scope data is stored or transmitted on servers; obtain the applicable Google assessment instructions and qualified assessment outcome. Do not claim approval before Google provides it.
+5. Keep normal-customer Gmail connection held pending approval. Existing certified mailbox functionality may remain. Do not broaden runtime scope requests or revoke existing credentials for verification.
+
+Sources inspected 2026-09-14: https://developers.google.com/workspace/gmail/api/auth/scopes and the actual production Google Auth Platform console. Submission remains incomplete; external review is not a reason to hold unrelated Core OS/store preparation.
+
+## Completed provider readback, September 14
+
+Branding was saved, verified by Google and explicitly published. The resulting console says: “Your branding has been verified and is being shown to users.” Name ScaledCircle; existing canonical logo; exact live hash-based legal routes; developer contact support@scaledcircle.com. Support dropdown remains the existing eligible attractiveremodel@gmail.com address; no IAM or group change was made. All three pre-existing authorized domains were preserved (Google reordered them).
+
+Search Console Settings for the existing `https://scaledcircle.com/` URL-prefix property says “Ownership verification — You are a verified owner” while signed in as attractiveremodel@gmail.com. The separate domain-property URL was not accessible, but the existing verified URL-prefix property and successful Google branding verification mean no new DNS ownership change is indicated by this check. No DNS settings changed.
+
+Sensitive/restricted scope verification remains separate from this completed branding result. Scope draft remains unsaved pending action-time confirmation. No demo URL or Google data-access approval exists in this preparation record.

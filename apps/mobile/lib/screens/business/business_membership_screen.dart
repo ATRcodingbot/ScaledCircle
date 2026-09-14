@@ -1,4 +1,5 @@
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
+import '../../config/native_membership_policy.dart';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -163,7 +164,9 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                     'Existing funded campaigns and accepted Scaler obligations continue. Billing and account history remain available according to our retention policy.',
                   ),
                   const SizedBox(height: 24),
-                  if (scheduled && data['canWithdrawCancellation'] == true)
+                  if (NativeMembershipPolicy.purchasesAllowed &&
+                      scheduled &&
+                      data['canWithdrawCancellation'] == true)
                     FilledButton(
                       onPressed: _busy || _error != null
                           ? null
@@ -218,6 +221,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
   }
 
   Future<void> _change(String action) async {
+    if (action != 'cancel' && !NativeMembershipPolicy.purchasesAllowed) return;
     if (_busy) return;
     final cancel = action == 'cancel';
     final confirmed = await showDialog<bool>(
@@ -422,10 +426,126 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
     }
   }
 
+  Widget _nativeMembershipView(BuildContext context) {
+    final data = _data;
+    return Scaffold(
+      appBar: AuthenticatedAppBar(title: const Text('Membership')),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_error != null) Text(_error!),
+                if (data == null && _error == null)
+                  const Center(child: CircularProgressIndicator()),
+                if (data != null) ...[
+                  Text(
+                    data['paidAccess'] == true
+                        ? data['planName']?.toString() ?? 'Membership'
+                        : 'No active membership',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  if (data['seatStatus'] == 'verified' &&
+                      data['seatsUsed'] is num &&
+                      data['seatLimit'] is num &&
+                      data['seatsAvailable'] is num) ...[
+                    Text(
+                      '${data['seatsUsed']} of ${data['seatLimit']} seats used',
+                    ),
+                    Text(
+                      '${data['seatsAvailable']} seats available · Owner included',
+                    ),
+                    if ((data['seatsReserved'] as num? ?? 0) > 0)
+                      Text(
+                        '${data['seatsReserved']} ${data['seatsReserved'] == 1 ? 'seat' : 'seats'} reserved for invitations',
+                      ),
+                    if ((data['seatsUsed'] as num) > (data['seatLimit'] as num))
+                      const Text(
+                        'Review your team: current membership exceeds this plan’s capacity.',
+                      ),
+                  ] else ...[
+                    const Text('Seat availability could not be verified.'),
+                    TextButton(
+                      onPressed: _load,
+                      child: const Text('Retry Seat Availability'),
+                    ),
+                  ],
+                  if (data['paidAccess'] == true)
+                    Text(
+                      data['complimentary'] == true
+                          ? 'Complimentary access through $_end. No recurring charge.'
+                          : data['cancelAtPeriodEnd'] == true
+                          ? 'Cancellation scheduled. Access through $_end.'
+                          : 'Next renewal: $_recurring on $_end',
+                    ),
+                  for (final addon in (data['addons'] as List? ?? []))
+                    Text(billingAddOnLabels[addon] ?? 'Active add-on'),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'This app provides access to your existing workspace. Membership purchases and plan changes are not available in the app.',
+                  ),
+                  const SizedBox(height: 16),
+                  if (data['canCancel'] == true &&
+                      data['complimentary'] != true &&
+                      data['cancelAtPeriodEnd'] != true)
+                    OutlinedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => BusinessMembershipScreen(
+                            service: _service,
+                            businessId: _businessId,
+                            section: 'cancel',
+                          ),
+                        ),
+                      ),
+                      child: const Text('Cancel Membership'),
+                    ),
+                  const Text(
+                    'Billing History',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (data['billingHistoryStatus'] != 'verified')
+                    Text(
+                      data['complimentary'] == true
+                          ? 'Complimentary membership. No recurring subscription charge.'
+                          : 'Billing history could not be verified. Refresh to retry.',
+                    )
+                  else if ((data['billingHistory'] as List? ?? []).isEmpty)
+                    const Text('No reconciled membership payments yet.'),
+                  for (final row in (data['billingHistory'] as List? ?? []))
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        '${row['description'] ?? 'Membership payment'} · '
+                        '\$${((row['amountCents'] as num) / 100).toStringAsFixed(2)} · ${row['status']}',
+                      ),
+                    ),
+                ],
+                TextButton(
+                  onPressed: _load,
+                  child: const Text('Refresh Membership'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.section == 'cancel' && _data?['complimentary'] != true) {
       return _cancellationView(context);
+    }
+    if (!NativeMembershipPolicy.purchasesAllowed) {
+      return _nativeMembershipView(context);
     }
     final data = _data;
     return Scaffold(

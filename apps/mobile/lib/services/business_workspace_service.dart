@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../config/native_membership_policy.dart';
 
 const businessPermissionLabels = <String, String>{
   'campaigns': 'Campaigns',
@@ -113,6 +114,15 @@ class BusinessWorkspaceService {
     String name, [
     Map<String, dynamic> data = const {},
   ]) async {
+    if (name == 'createSubscriptionCheckoutSession' ||
+        name == 'createBillingPortalSession' ||
+        (name == 'changeBusinessMembership' &&
+            !const {
+              'cancel',
+              'cancelScheduledChange',
+            }.contains(data['action']))) {
+      NativeMembershipPolicy.requireWebPurchase();
+    }
     final result = await FirebaseFunctions.instanceFor(
       region: 'us-east1',
     ).httpsCallable(name).call(data).timeout(const Duration(seconds: 25));

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/business_membership_screen.dart';
 import 'package:flutter_app/services/business_workspace_service.dart';
@@ -107,7 +108,7 @@ void main() {
       );
       expect(
         find.text('Reactivate Membership'),
-        reconcile ? findsOneWidget : findsNothing,
+        reconcile && kIsWeb ? findsOneWidget : findsNothing,
       );
       expect(find.textContaining('Growth Department'), findsNothing);
       expect(tester.takeException(), isNull);

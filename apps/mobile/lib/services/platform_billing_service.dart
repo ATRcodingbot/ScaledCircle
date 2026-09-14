@@ -1,4 +1,5 @@
 import 'business_workspace_service.dart';
+import '../config/native_membership_policy.dart';
 import '../config/app_environment.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -161,6 +162,7 @@ class PlatformBillingService {
     bool manageExisting = false,
     Map<String, dynamic>? selection,
   }) async {
+    NativeMembershipPolicy.requireWebPurchase();
     final result = await _callSecureFunction(
       businessId: businessId,
       functionName: manageExisting

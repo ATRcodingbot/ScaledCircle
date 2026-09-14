@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/widgets/billing_selection_editor.dart';
 import 'package:flutter_app/screens/business/business_membership_screen.dart';
@@ -92,6 +93,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      if (!kIsWeb) {
+        expect(find.byType(BillingSelectionEditor), findsNothing);
+        expect(
+          service.calls.where((c) => c.$1 != 'getBusinessMembership'),
+          isEmpty,
+        );
+        return;
+      }
       await tester.ensureVisible(
         find.descendant(
           of: find.byType(BillingSelectionEditor),

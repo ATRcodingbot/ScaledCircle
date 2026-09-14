@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/native_membership_policy.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/business_workspace_service.dart';
@@ -55,6 +56,7 @@ class _StarterIntroOfferCardState extends State<StarterIntroOfferCard> {
   }
 
   Future<void> _load() async {
+    if (!NativeMembershipPolicy.purchasesAllowed) return;
     final businessId = widget.businessId;
     try {
       final value = await _call('previewBusinessMembershipChange', {
@@ -71,6 +73,7 @@ class _StarterIntroOfferCardState extends State<StarterIntroOfferCard> {
   }
 
   Future<void> _prepare() async {
+    if (!NativeMembershipPolicy.purchasesAllowed) return;
     if (_busy || _checkout != null) return;
     final businessId = widget.businessId;
     setState(() {

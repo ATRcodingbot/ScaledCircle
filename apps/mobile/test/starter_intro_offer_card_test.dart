@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/widgets/starter_intro_offer_card.dart';
 
@@ -62,6 +63,12 @@ void main() {
           return true;
         },
       );
+      if (!kIsWeb) {
+        expect(find.textContaining('Then \$99/month'), findsNothing);
+        expect(creates, 0);
+        expect(opens, 0);
+        return;
+      }
       expect(find.textContaining('Then \$99/month'), findsOneWidget);
       await tester.tap(find.text('Review \$1 Starter offer'));
       await tester.pumpAndSettle();
@@ -84,6 +91,11 @@ void main() {
       calls++;
       return {'amountDueCents': 9900};
     });
+    if (!kIsWeb) {
+      expect(find.text('Review \$1 Starter offer'), findsNothing);
+      expect(calls, 0);
+      return;
+    }
     await tester.tap(find.text('Review \$1 Starter offer'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Checkout needs verification.'), findsOneWidget);

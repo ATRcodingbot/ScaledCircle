@@ -1,4 +1,5 @@
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
+import '../../config/native_membership_policy.dart';
 import 'business_membership_screen.dart';
 import '../../services/business_workspace_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -231,6 +232,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!NativeMembershipPolicy.purchasesAllowed) {
+      return const BusinessMembershipScreen();
+    }
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(

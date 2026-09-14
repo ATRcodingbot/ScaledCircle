@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/business_membership_screen.dart';
 import 'package:flutter_app/services/business_workspace_service.dart';
@@ -78,7 +79,10 @@ void main() {
       expect(find.textContaining('No recurring charge'), findsOneWidget);
       expect(find.text('Cancel at End of Billing Period'), findsNothing);
       expect(find.text('Cancel Membership'), findsNothing);
-      expect(find.text('View Available Plans'), findsOneWidget);
+      expect(
+        find.text('View Available Plans'),
+        kIsWeb ? findsOneWidget : findsNothing,
+      );
       expect(tester.takeException(), isNull);
     },
   );

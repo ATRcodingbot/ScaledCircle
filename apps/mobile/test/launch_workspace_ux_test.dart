@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/navigation/startup_session_gate.dart';
 import 'package:flutter_app/screens/business/business_team_screen.dart';
@@ -199,14 +200,25 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.text('Cancel Membership'));
       await t.pumpAndSettle();
-      expect(service.calls, ['getBusinessMembership']);
+      if (!kIsWeb) {
+        await t.tap(find.text('Cancel at End of Billing Period'));
+        await t.pumpAndSettle();
+      }
+      final expectedReads = kIsWeb ? 1 : 2;
+      expect(
+        service.calls,
+        List.filled(expectedReads, 'getBusinessMembership'),
+      );
       expect(
         find.textContaining('Funded campaigns, accepted Scaler obligations'),
         findsOneWidget,
       );
       await t.tap(find.text('Go Back'));
       await t.pumpAndSettle();
-      expect(service.calls, ['getBusinessMembership']);
+      expect(
+        service.calls,
+        List.filled(expectedReads, 'getBusinessMembership'),
+      );
     },
   );
   for (final percent in [79.99, 80.0, 94.99, 95.0, 100.0]) {
