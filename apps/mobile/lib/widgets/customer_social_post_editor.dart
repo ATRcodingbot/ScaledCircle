@@ -196,13 +196,24 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
       'scheduledFor': _time!.toUtc().toIso8601String(),
       'textOnly': _textOnly,
     });
-    if (mounted) setState(() => _changed = false);
+    if (mounted) {
+      setState(() {
+        _changed = false;
+        _post = {
+          ..._post,
+          'version': result['version'],
+          'contentHash': result['contentHash'],
+        };
+      });
+    }
     await _refresh();
     if (mounted) {
       setState(() {
         _changed = false;
         _quality = Map<String, dynamic>.from(result['quality'] as Map? ?? {});
         _editing = false;
+        _creativeNotice =
+            'Changes saved. Review the updated post before scheduling.';
       });
     }
   }
@@ -702,6 +713,11 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             if (_changed)
               const Text(
                 'Save your changes to refresh the preview and automatic quality checks.',
+              ),
+            if (_post['reviewedPost']?['mediaOrigin'] ==
+                'generated_service_concept')
+              const Text(
+                'Generated concept — not verified as completed Business work.',
               ),
             if (!_busy && _quality != null) ...[
               for (final blocker

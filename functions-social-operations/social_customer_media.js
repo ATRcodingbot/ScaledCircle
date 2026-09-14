@@ -152,12 +152,11 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
         const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
         if(jobs.size>100||jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))
           throw Error('Review the existing scheduled post before replacing its image.');
-        const disclosure=source.revision.origin==='generated_service_concept'?source.revision.truthfulnessDisclosure:null;
         const next=social.contentItemVersion({businessUid:uid,planId:current.planId,previousVersion:item.data().currentVersion,now:now(),item:{...current,
           scheduledFor:new Date(current.scheduledFor?.toMillis?current.scheduledFor.toMillis():current.scheduledFor).toISOString(),
           variants:current.variants.map(v=>v.provider===input.provider?{...v,mediaAssetId:input.assetId,mediaRevisionId:prepared.id,
             mediaRequirement:'approved_image',format:'feed',altText:source.revision.altText,
-            copy:disclosure&&!v.copy.includes(disclosure)?v.copy+'\n\n'+disclosure:v.copy}:v)}});
+            copy:v.copy}:v)}});
         if(delivery.exists&&(delivery.data().businessUid!==uid||delivery.data().sha256!==image.sha256))throw Error('Image identity conflict.');
         if(!delivery.exists)tx.create(db.doc('customerSocialMedia/'+deliveryId),{businessUid:uid,status:'approved_for_social',
           path,generation:String(stored.generation),sha256:image.sha256,bytes:image.bytes.length,

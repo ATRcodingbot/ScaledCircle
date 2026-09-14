@@ -10,7 +10,7 @@ function reviewChecks({variant,revision,mediaAuthorityValid,recentVariants=[]}) 
   const required=variant?.provider==='instagram'||variant?.mediaRequirement!=='none';
   if(required&&(!mediaAuthorityValid||revision?.preparation?.policy!=='SocialFeedCreativeV2'||revision.preparation.pixelCheck!=='passed'||
       revision.preparation.checkedSha256!==revision.images?.[0]?.sha256))blockers.push('Prepare and verify the full-quality image.');
-  if(revision?.sourceOrigin==='generated_service_concept'&&(!revision.truthfulnessDisclosure||!copy.includes(revision.truthfulnessDisclosure)))blockers.push('Keep the service-concept disclosure with this image.');
+  if(revision?.sourceOrigin==='generated_service_concept' && /\b(?:our\s+(?:latest|recent|completed)\s+(?:project|work|deck|fence)|(?:we|our team)\s+(?:just\s+)?(?:completed|built|installed|finished)|another\s+happy\s+customer|before\s*(?:and|&|\/)\s*after)\b/i.test(copy))blockers.push('The caption describes this generated concept as completed Business work. Change that claim before publishing.');
   if(recentVariants.some(v=>v.provider===variant?.provider&&String(v.copy||'').trim()===copy))blockers.push('This exact text already appears in another post. Review the duplicate.');
   return {policy:'CustomerPostReviewChecksV1',passed:blockers.length===0,blockers};
 }

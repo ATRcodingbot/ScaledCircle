@@ -45,8 +45,13 @@ function createEditor({db,now=Date.now,enabledUids=[]}) {
       return db.runTransaction(async tx=>{
         const {ref,item,current}=await read(tx,uid,input);
         const next=editVersion({uid,current,input,nextVersionBase:item.currentVersion,now:now()});
+        const preparationRef=db.doc('socialCreativePreparation/'+require('./social_creative_diversity').leaseId(uid,input));
+        const preparation=(await tx.get(preparationRef)).data();
         tx.create(db.doc(`${'socialContentVersions'}/${input.itemId}_v${next.version}`),next);
         tx.update(ref,{currentVersion:next.version,platformVersions:platformVersions(item,current,input.provider,next.version),updatedAt:now()});
+        // Copy/time edits preserve the exact prepared creative, never its approval.
+        if(input.textOnly!==true && preparation?.businessUid===uid && preparation.version===current.version &&
+          ['prepared','creative_review'].includes(preparation.state))tx.update(preparationRef,{version:next.version});
         return {status:'ready_for_review',version:next.version,contentHash:next.contentHash,approved:false,scheduled:false};
       });
     },

@@ -39,6 +39,10 @@ test('transactional edit/assessment isolation; one new version; no approval, his
  await db.doc('socialGrowthJobs/editor_existing').set({businessUid:uid,provider:'facebook',versionId:itemId+'_v2',status:'scheduled'});
  await assert.rejects(editor.save(uid,{...input,version:2}));
  assert.deepEqual((await db.doc('socialContentItems/'+itemId).get()).data(),before);
+ const prepRef=db.doc('socialCreativePreparation/'+require('../functions-social-operations/social_creative_diversity').leaseId(uid,{itemId,provider:'instagram'}));
+ const candidate={sha256:'a'.repeat(64),status:'pending_owner_review',approved:false};
+ await prepRef.set({businessUid:uid,version:1,state:'creative_review',reviewCandidate:candidate});
  const other=await editor.save(uid,{...input,provider:'instagram',version:1,textOnly:false});assert.equal(other.version,3);
+ assert.equal((await prepRef.get()).data().version,3);assert.deepEqual((await prepRef.get()).data().reviewCandidate,candidate);
  const state=(await db.doc('socialContentItems/'+itemId).get()).data();assert.equal(state.platformVersions.facebook,2);assert.equal(state.platformVersions.instagram,3);
 });

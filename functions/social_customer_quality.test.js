@@ -12,10 +12,14 @@ test('media review requires exact prepared output checksum and current source au
  a.equal(reviewChecks({variant:v,revision,mediaAuthorityValid:false}).passed,false);
  a.equal(reviewChecks({variant:v,revision:{...revision,images:[{sha256:'b'}]},mediaAuthorityValid:true}).passed,false);
 });
-test('generated concepts retain their disclosure before owner approval',()=>{
+test('generated provenance does not require public disclaimer; completed-work claims fail closed',()=>{
  const disclosure='Service concept image — not completed Business work.';
  const revision={sourceOrigin:'generated_service_concept',truthfulnessDisclosure:disclosure,preparation:{policy:'SocialFeedCreativeV2',pixelCheck:'passed',checkedSha256:'a'},images:[{sha256:'a'}]};
  const v={...variant,mediaRequirement:'image'};
- a.equal(reviewChecks({variant:v,revision,mediaAuthorityValid:true}).passed,false);
+ a.equal(reviewChecks({variant:v,revision,mediaAuthorityValid:true}).passed,true);
+ for(const copy of ['This is a deck we completed last week.', 'Our latest project looks wonderful.', "Another happy customer's new fence.", 'Before and after: a new deck transformation.']) {
+  const check=reviewChecks({variant:{...v,copy},revision,mediaAuthorityValid:true});a.equal(check.passed,false);a.match(check.blockers[0],/completed Business work/);
+ }
+ for(const copy of ['Planning a deck project? Tell us what you want to build.', 'Thinking about replacing your fence? Ask us for an estimate.'])a.equal(reviewChecks({variant:{...v,copy},revision,mediaAuthorityValid:true}).passed,true);
  a.equal(reviewChecks({variant:{...v,copy:v.copy+'\n'+disclosure},revision,mediaAuthorityValid:true}).passed,true);
 });

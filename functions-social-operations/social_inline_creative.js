@@ -39,7 +39,7 @@ async function proposal({db,ctx,read=ref=>ref.get()}) {
   Object.assign(media,{preparation:c.preparation,sourceOrigin:source.origin,truthfulnessDisclosure:c.disclosure,sourceRevisionId:c.revisionId,sourceSha256:c.sourceSha256});
   const version=social.contentItemVersion({businessUid:uid,planId:ctx.version.planId,previousVersion:ctx.item.currentVersion,now:ctx.version.createdAt,
     item:{...ctx.version,variants:ctx.version.variants.map(v=>v.provider===provider?{...v,mediaAssetId:c.assetId,mediaRevisionId:media.id,
-      mediaRequirement:'approved_image',format:'feed',altText:source.altText,copy:v.copy.includes(c.disclosure)?v.copy:v.copy+'\n\n'+c.disclosure}:v)}});
+      mediaRequirement:'approved_image',format:'feed',altText:source.altText,copy:v.copy}:v)}});
   const recent=await read(db.collection('socialContentVersions').where('businessUid','==',uid).limit(101));
   if(recent.size>100)throw Error('Content history needs review.');
   const checks=require('./social_customer_quality').reviewChecks({variant:version.variants.find(v=>v.provider===provider),revision:media,mediaAuthorityValid:true,

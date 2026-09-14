@@ -48,7 +48,7 @@ test('one exact action atomically approves creative, post and schedule; concurre
  const again=await s.store.approve(s.uid,s.input);assert.equal(again.reused,true);
  for(const c of ['socialGrowthJobs','socialGrowthApprovals','socialCreativeApprovals','customerSocialMedia'])assert.equal((await db.collection(c).where('businessUid','==',s.uid).get()).size,1,c);
  assert.deepEqual((await db.doc('socialContentVersions/'+s.itemId+'_v1').get()).data(),s.version);
- const next=(await db.doc('socialContentVersions/'+s.itemId+'_v2').get()).data();assert.ok(next.variants[0].copy.includes(s.candidate.disclosure));
+ const next=(await db.doc('socialContentVersions/'+s.itemId+'_v2').get()).data();assert.equal(next.variants[0].copy,'Explore a deck concept for your next project.');assert.equal(next.variants[0].copy.includes(s.candidate.disclosure),false);
  const audit=(await db.doc('socialCreativeApprovals/'+s.input.inlineCreativeDigest).get()).data();
  assert.equal(audit.actorUid,s.uid);assert.equal(audit.creative.derivativeSha256,s.candidate.sha256);assert.equal(audit.schedule.jobId,again.jobId);
  assert.equal((await db.doc(`businessMediaLibraries/${s.uid}/mediaAssets/concept/revisions/r1`).get()).data().approvalStatus,'approved');
