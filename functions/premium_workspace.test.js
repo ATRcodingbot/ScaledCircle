@@ -62,3 +62,5 @@ test('provider-accepted contact overrides stale early CRM; same email shares con
  a.equal(project({...base,customers:[{...base.customers[0],stage:'won'}]}).prospects[0].lifecycleStage,'won');
  a.equal(project({...base,operations:[{...base.operations[0],businessId:'other'}]}).prospects[0].freshOutreachEligible,true);
 });
+
+test('established customer and vendor relationships never become fresh outreach when the recent-operation window is empty',()=>{for(const stage of ['won','estimate_scheduled','completed','vendor_review','onboarded'])a.equal(project({businessId:'b',prospects:[{id:'p',email:'p@example.test'}],customers:[{id:'c',email:'p@example.test',stage}],operations:[],outcomes:[]}).prospects[0].freshOutreachEligible,false);});

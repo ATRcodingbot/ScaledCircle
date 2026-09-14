@@ -34,7 +34,7 @@ function project({businessId,prospects,operations,outcomes,customers=[],entitlem
      pipelineType,pipelineStages:pipelineType==='workforce'?['Discovered','Qualified','Contacted','Replied','Available','Invited','Signed Up','Active / Used']:pipelineType==='vendor'||pipelineType==='recruitment_channel'?['Discovered','Qualified','Contacted','Replied','Vendor / Application Review','Approved / Onboarded','Active Opportunity']:['Discovered','Qualified','Contacted','Replied','Estimate Scheduled','Estimate Given','Won / Lost','Past Customer'],relationshipLabel:p.opportunityType==='property_management'?'Property Manager / Vendor Opportunity':pipelineType==='workforce'?'Recruitment Candidate':pipelineType==='recruitment_channel'?'Recruitment Channel':pipelineType==='vendor'?'Vendor / Partner Opportunity':'Direct Customer',
      awaitingReply:!!latest&&!replied,lastOutboundAt:latest?.providerAcceptedAt||latest?.requestedAt||null,
      sendOperationId:latest?.id||null,nextEligibleContactAt,
-     freshOutreachEligible:!blocked&&!latest&&!['replied','contacted'].includes(stage),
+     freshOutreachEligible:!blocked&&!latest&&['new_lead','discovered','qualified','drafted'].includes(stage),
      followupEligible:!blocked&&!!latest&&!replied&&now>=nextEligibleContactAt,
      nextContactAction:blocked?'Do not contact':replied?'Review reply':latest?(now>=nextEligibleContactAt?'Review follow-up eligibility':'Wait for reply'):'Review new outreach'};
  });
