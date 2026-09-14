@@ -74,3 +74,10 @@ t('scheduler attention is exactly once and cannot alert for an unrelated or publ
  assert.equal((await db.collection('notifications').where('userId','==',f.uid).get()).size,1);
  assert.equal((await db.doc('socialGrowthJobs/'+f.uid).get()).data().status,'scheduled');
 });
+
+t('historical publication remains openable without restoring publication push',async()=>{
+ const f=await fixture(),n=await f.notice('social_post_published',{businessId:f.uid,deepLink:{destination:'social_published',jobId:'job'}});
+ assert.equal((await n.get()).data().push.status,'in_app_only');
+ assert.equal((await f.svc.open(f.uid,n.id)).available,true);
+ assert.equal((await f.svc.open(f.other,n.id)).available,false);
+});

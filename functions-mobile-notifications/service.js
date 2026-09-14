@@ -8,7 +8,7 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
  async function actor(uid){if(!uid)fail('unauthenticated','Sign in to manage notifications.');const [identity,u]=await Promise.all([auth.getUser(uid),ref('users',uid).get()]);const user=u.data();if(identity.disabled||!identity.emailVerified||!user||user.disabled===true||user.deletedAt||['deleted','closing'].includes(user.accountStatus))fail('permission-denied');return user;}
  // Recheck current membership at delivery AND tap. Never infer membership from a token.
  async function authorized(uid,n){try{const user=await actor(uid);if(n.userId!==uid)return false;
-  let business=p.id(n.businessId||n.businessUid||n.metadata?.businessId);const type=p.policy(n);if(!type)return false;
+  let business=p.id(n.businessId||n.businessUid||n.metadata?.businessId);const type=p.policy(n)||(n.type==='social_post_published'?{category:'social'}:null);if(!type)return false;
   const zoneId=p.id(n.deepLink?.zoneId||n.zoneId);
   if(zoneId){
    const zone=(await ref('campaignZones',zoneId).get()).data();if(!zone||!p.id(zone.campaignId)||!p.id(zone.businessId))return false;
