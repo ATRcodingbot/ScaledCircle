@@ -234,7 +234,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AuthenticatedAppBar(title: const Text('Choose Your Plan'), centerTitle: true),
+      appBar: AuthenticatedAppBar(
+        title: const Text('Choose Your Plan'),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: user == null
             ? const Center(child: Text('You must be logged in.'))
@@ -507,7 +510,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             'For 3–5 initial Businesses building one coordinated digital + physical growth system.',
                         currentPlan: currentPlan,
                         subscriptionActive: subscriptionActive,
-                        availableForPurchase: false,
+                        availableForPurchase: true,
                         features: const [
                           'Everything in Scale',
                           'AI Business Growth Analysis',

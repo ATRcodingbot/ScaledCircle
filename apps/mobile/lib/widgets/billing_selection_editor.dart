@@ -52,9 +52,7 @@ class _BillingSelectionEditorState extends State<BillingSelectionEditor> {
         isExpanded: true,
         decoration: const InputDecoration(labelText: 'Workspace plan'),
         items: [
-          for (final item in billingPlanLabels.entries.where(
-            (item) => item.key != 'managed_growth' || _plan == 'managed_growth',
-          ))
+          for (final item in billingPlanLabels.entries)
             DropdownMenuItem(
               value: item.key,
               child: Text(item.value, overflow: TextOverflow.ellipsis),
@@ -70,7 +68,7 @@ class _BillingSelectionEditorState extends State<BillingSelectionEditor> {
               },
       ),
       const Text(
-        'The owner counts as one user. Managed Growth is Private Beta / Invite Only. Existing memberships remain visible.',
+        'The owner counts as one user. Managed Growth includes Social Manager and Email Campaigns. Business Assistant and Lead Generation are separate add-ons.',
       ),
       const SizedBox(height: 24),
       const Text(
@@ -84,17 +82,31 @@ class _BillingSelectionEditorState extends State<BillingSelectionEditor> {
           subtitle: Text(
             item.key == 'business_assistant'
                 ? 'Business information, recommendations and next steps. Actions need approval.'
-                : 'Prospect research, evidence and drafts. This does not authorize outreach.',
+                : 'AI-assisted lead generation with Business-reviewed outreach. You review outbound communication before it is sent.',
           ),
           value: _bundle || _addons.contains(item.key),
-          onChanged: null,
+          onChanged:
+              !widget.enabled ||
+                  _bundle ||
+                  item.key != 'lead_generation_research'
+              ? null
+              : (value) {
+                  setState(() {
+                    if (value == true) {
+                      _addons.add(item.key);
+                    } else {
+                      _addons.remove(item.key);
+                    }
+                  });
+                  _emit();
+                },
         ),
       const SizedBox(height: 16),
       Card(
         child: SwitchListTile(
           title: const Text('Growth Department — Private Beta / Coming Soon'),
           subtitle: const Text(
-            'Managed Growth + Business Assistant Beta + Lead Generation Research Beta. 10 total users. Save \$97/month (\$1,164/year) versus \$2,097 separately. Replaces those individual charges.',
+            'Managed Growth + Business Assistant Beta + Lead Generation. 10 total users. Save \$97/month (\$1,164/year) versus \$2,097 separately. Replaces those individual charges.',
           ),
           value: _bundle,
           onChanged: null,

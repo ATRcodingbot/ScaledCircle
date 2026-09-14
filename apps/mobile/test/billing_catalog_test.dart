@@ -57,7 +57,7 @@ void main() {
       expect(find.text('Choose your plan'), findsOneWidget);
       expect(find.text('Add more intelligence'), findsOneWidget);
       expect(
-        find.textContaining('does not authorize outreach'),
+        find.textContaining('You review outbound communication'),
         findsOneWidget,
       );
       await tester.tap(find.byType(Switch));
@@ -68,7 +68,10 @@ void main() {
         find.byType(CheckboxListTile),
       )) {
         expect(tile.value, false);
-        expect(tile.onChanged, isNull);
+        expect(
+          tile.onChanged == null,
+          (tile.title as Text).data!.startsWith('Business Assistant'),
+        );
       }
       expect(find.textContaining('Save \$97/month'), findsOneWidget);
       expect(tester.takeException(), isNull);

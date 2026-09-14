@@ -32,7 +32,7 @@ test('communication preferences validate exact input and daily/weekly independen
   assert.throws(()=>growth.preferences({mode:'daily',to:'other@example.org'}));
 });
 test('premium purchases fail closed while ordinary plans remain available',()=>{
-  for(const product of ['starter','growth','scale'])assert.equal(availability.allowed({product}),true);
+  for(const product of ['starter','growth','scale','managed_growth','lead_generation_research'])assert.equal(availability.allowed({product}),true);
   for(const product of availability.PRIVATE){assert.equal(availability.allowed({product,businessId:'biz'}),false);
     const grant={businessId:'biz',status:'approved',products:[product],expiresAtMillis:200};
     assert.equal(availability.allowed({product,businessId:'biz',grant,now:100}),true);
@@ -55,17 +55,26 @@ test('staging compatibility boundary preserves ordinary billing and rejects unin
  const invoke=wrap({original:{run:async r=>{calls++;return r.data.action||'checkout';}},db,project:'scaledcircle-staging',HttpsError});
  const auth={uid:'owner'};
  await assert.rejects(invoke({data:{plan:'starter'}}),e=>e.code==='unauthenticated');
- await assert.rejects(invoke({auth,data:{plan:'managed_growth'}}),e=>e.code==='failed-precondition');
+ await assert.rejects(invoke({auth,data:{selection:{plan:'starter',addons:['business_assistant']}}}),e=>e.code==='failed-precondition');
  assert.equal(calls,0);
  assert.equal(await invoke({auth,data:{plan:'starter'}}),'checkout');
  assert.equal(await invoke({auth,data:{action:'cancel'}}),'cancel');
  assert.equal(await invoke({auth,data:{action:'reactivate'}}),'reactivate');
  records['businessBillingQuotes/q']={actorUid:'other',businessId:'owner',plan:'scale'};
  await assert.rejects(invoke({auth,data:{action:'changePlan',quoteId:'q'}}),e=>e.code==='permission-denied');
- records['businessBillingQuotes/q']={actorUid:'owner',businessId:'owner',plan:'managed_growth'};
+ records['businessBillingQuotes/q']={actorUid:'owner',businessId:'owner',selection:{plan:'starter',addons:['business_assistant']}};
  await assert.rejects(invoke({auth,data:{action:'changePlan',quoteId:'q'}}),e=>e.code==='failed-precondition');
  assert.equal(calls,3);
  const prod=wrap({original:{run:async()=>{calls++;}},db,project:'scaled-circle',HttpsError});
  await assert.rejects(prod({auth,data:{plan:'starter'}}),e=>e.code==='failed-precondition');
  assert.equal(calls,3);
+});
+
+test('available Managed Growth and Lead Generation need no private grant but do not grant other addons',async()=>{
+ const db={doc(){throw Error('No invitation lookup should be required');}};
+ await availability.assertPurchase({db,businessId:'owner',selection:{plan:'managed_growth',addons:['lead_generation_research']}});
+ const c=require('./subscription_contract');
+ assert.deepEqual(c.selectionTerms({plan:'managed_growth'}).entitlements,['managed_growth']);
+ assert.equal(c.selectionTerms({plan:'managed_growth',addons:['lead_generation_research']}).monthlyCents,169800);
+ assert.equal(c.selectionTerms({plan:'managed_growth',addons:['lead_generation_research']}).seats,10);
 });

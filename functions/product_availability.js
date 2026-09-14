@@ -1,5 +1,5 @@
 'use strict';
-const PRIVATE=new Set(['managed_growth','business_assistant','lead_generation_research','growth_department','postcards']);
+const PRIVATE=new Set(['business_assistant','growth_department','postcards']);
 function allowed({product,businessId,grant,now=Date.now()}) {
   if(!PRIVATE.has(product))return true;
   const end=grant?.expiresAt?.toMillis?.()??grant?.expiresAtMillis;
