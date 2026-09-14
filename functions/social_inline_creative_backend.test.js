@@ -85,7 +85,7 @@ test('regeneration stays in draft flow and frozen posts are never replaced',asyn
 test('subject checks analyze exact derivative once, retain provider evidence and consume no generation units',async()=>{
  const uid='subject_check_owner',bytes=Buffer.from('owned generated derivative'),sha256=hash(bytes);let calls=0;
  await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:false,authorizedBusinessUids:[uid]});
- const check=require('../functions-social-operations/social_creative_subject').createSubjectCheck({db,clientFactory:async()=>({responses:{create:async request=>{
+ const check=require('../functions-social-operations/social_creative_subject').createSubjectCheck({db,clientFactory:async()=>({models:{list:async()=>({data:[{id:'gpt-4.1-mini'}]})},responses:{create:async request=>{
    calls++;assert.equal(request.store,false);assert.equal(request.input[0].content[1].image_url,'data:image/jpeg;base64,'+bytes.toString('base64'));
    return {id:'mock_subject_response',output_text:JSON.stringify({subjectVisible:true,relevantToService:true,backgroundDominant:false,severeCrop:false,
      blankBands:false,logoOrWatermark:false,subjectFraction:.6,confidence:.9}),usage:{input_tokens:100,output_tokens:80}};
