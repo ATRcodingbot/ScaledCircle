@@ -54,9 +54,13 @@ t('five distinct Social posts create one window record; replays and tenants stay
  const f=await fixture(),record=require('../functions-mobile-notifications/signals').record;
  const args=i=>({db,FieldValue,kind:'social',key:'assessment_'+i,now:()=>f.clock.value,
  after:{businessUid:f.uid,contentItemId:'post_'+i,provider:'facebook',readyToPublish:true,contentVersion:1}});
+ await Promise.all([0,1,2,3,4].map(i=>db.doc('socialContentItems/post_'+i).set({businessUid:f.uid,currentVersion:1})));
  await Promise.all([0,1,2,3,4,0,1].map(i=>record(args(i))));
  const docs=await db.collection('notifications').where('userId','==',f.uid).get();assert.equal(docs.size,1);
  const n=docs.docs[0];assert.equal(n.data().aggregateCount,5);assert.equal(n.data().deepLink.destination,'social_review');
+ await n.ref.update({read:true});await record(args(4));assert.equal((await n.ref.get()).data().read,true);
+ await db.doc('socialContentItems/post_5').set({businessUid:f.uid,currentVersion:1});await record(args(5));
+ assert.equal((await n.ref.get()).data().read,false);assert.equal((await n.ref.get()).data().aggregateCount,6);
  await f.svc.enqueue(n.id);assert.ok((await n.ref.get()).data().push.nextAttemptMs>f.clock.value);
  const other=args(0);other.after.businessUid=f.other;await record(other);
  assert.equal((await db.collection('notifications').where('userId','==',f.other).get()).size,1);
@@ -80,4 +84,26 @@ t('historical publication remains openable without restoring publication push',a
  assert.equal((await n.get()).data().push.status,'in_app_only');
  assert.equal((await f.svc.open(f.uid,n.id)).available,true);
  assert.equal((await f.svc.open(f.other,n.id)).available,false);
+});
+
+t('review push is suppressed when owner already approved the queued post',async()=>{
+ const f=await fixture(),record=require('../functions-mobile-notifications/signals').record;
+ const itemId='approved_'+f.uid;
+ await db.doc('socialContentItems/'+itemId).set({businessUid:f.uid,currentVersion:1,platformApprovals:{facebook:{version:1,status:'scheduled'}}});
+ await record({db,FieldValue,kind:'social',key:itemId,after:{businessUid:f.uid,contentItemId:itemId,provider:'facebook',readyToPublish:true,versionId:itemId+'_v1'}});
+ const notices=await db.collection('notifications').where('userId','==',f.uid).get();
+ await f.svc.sendGroup(notices.docs);assert.equal(f.sent.length,0);
+ assert.equal((await notices.docs[0].ref.get()).data().push.status,'suppressed');
+});
+
+t('Email attention uses communications access, not an unrelated intelligence permission',async()=>{
+ const f=await fixture(),business='email_business_'+f.uid;
+ await db.doc('users/'+business).set({role:'business',active:true});
+ await db.doc('businessSubscriptions/'+business).set({status:'active',plan:'managed_growth',expiresAt:Timestamp.fromMillis(f.clock.value+86400000)});
+ await db.doc('businessWorkspaces/'+business).set({ownerId:business});
+ const member=db.doc(`businessWorkspaces/${business}/members/${f.uid}`);
+ await member.set({businessId:business,uid:f.uid,status:'active',seatIndex:1,permissions:['communicationsRead']});
+ const n=await f.notice('email_campaign_attention',{businessId:business});
+ assert.equal(await f.svc.authorized(f.uid,(await n.get()).data()),true);
+ await member.update({permissions:['intelligence']});assert.equal(await f.svc.authorized(f.uid,(await n.get()).data()),false);
 });

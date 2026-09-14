@@ -35,13 +35,15 @@ async function record({db,FieldValue,kind,key,before,after,now=Date.now}){const 
   if(seen.exists||legacy?.exists||(!grouped&&old.exists))return {created:false};
   const count=(old.data()?.aggregateCount||0)+1;
   const title=kind==='social'?`${count} Social post${count===1?'':'s'} ready for your review`:kind==='reply'?`${count} customer repl${count===1?'y':'ies'} received`:kind==='email_draft'?`${count} email campaign${count===1?'':'s'} ready for review`:data.title;
+  const version=Number(after.contentVersion||after.version||String(after.versionId||'').match(/v(\d+)$/)?.[1])||null;
   const value={...data,identity:notificationId,title,aggregateCount:count,
+   ...(kind==='social'?{reviewItems:{...(old.data()?.reviewItems||{}),[hash(after.contentItemId+':'+after.provider)]:{itemId:after.contentItemId,provider:after.provider,version}}}:{}),
    ...(grouped?{aggregateWindowEndMs:(window+1)*windowMs,aggregationKind:kind}:{}),
    ...(kind==='social'?{deepLink:{destination:'social_review'},message:'Review the prepared posts. Nothing has been approved or scheduled.'}:{}),
    ...(kind==='email_draft'?{deepLink:{destination:'business_email_campaign'},message:'Review your prepared campaigns before sending.'}:{}),
    createdAt:old.data()?.createdAt||FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};
-  // Updating a window never resets delivery receipts or silently marks it unread.
-  if(old.exists){delete value.read;tx.set(ref,value,{merge:true});}else tx.create(ref,value);
+  // A distinct new event makes the growing summary unread; a replay exits above. Delivery receipts are never reset.
+  if(old.exists){tx.set(ref,value,{merge:true});}else tx.create(ref,value);
   tx.create(receipt,{notificationId,userId:data.userId,createdAt:FieldValue.serverTimestamp()});
   return {created:!old.exists,aggregated:grouped,count};
  });}

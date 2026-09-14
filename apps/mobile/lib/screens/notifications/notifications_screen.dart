@@ -218,6 +218,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               'agent_qualified_prospect',
               'agent_referral_partner',
               'generated_image_ready',
+              'generated_visual_ready',
               'creative_ready',
               'image_ready',
             }.contains(data['type']);

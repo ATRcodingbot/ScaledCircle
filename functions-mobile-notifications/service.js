@@ -21,7 +21,8 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
   if(business&&business!==uid){const a=await workspace.authority({uid,businessId:business,allowExpired:true});
    const grants=a.permissions;
    if(type.category==='money')return a.isOwner||(n.type.startsWith('billing_')||n.type.startsWith('subscription_'))&&grants.includes('billing');
-   if(['growth','social','email'].includes(type.category))return a.isOwner||grants.includes('intelligence');
+   if(type.category==='email')return a.isOwner||grants.includes('communicationsRead');
+   if(['growth','social'].includes(type.category))return a.isOwner||grants.includes('intelligence');
    if(type.category==='customers')return a.isOwner||grants.includes(n.type.includes('reply')?'communicationsRead':'customersView');
    if(n.type==='business_schedule_update'||n.type==='business_estimate_reminder'){
     const itemId=p.id(n.metadata?.itemId||n.deepLink?.itemId);if(!itemId)return false;
@@ -69,9 +70,25 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
   if(!policy||!created||now()-created>86400000){tx.update(r,{push:{status:'in_app_only',updatedAt:stamp()}});return;}
   tx.update(r,{push:{status:policy.immediate?'queued':'digest_queued',category:policy.category,nextAttemptMs:policy.immediate?now():Math.max(n.aggregateWindowEndMs||0,(Math.floor(now()/policy.aggregateMs)+1)*policy.aggregateMs)+30000,attempts:0,updatedAt:stamp()}});
  });}
+ async function pendingReviewCount(n){
+  if(n.type!=='social_drafts_ready')return null;
+  const entries=n.reviewItems?Object.values(n.reviewItems):[{itemId:n.deepLink?.itemId,provider:n.deepLink?.provider}];
+  if(!entries.length||entries.length>60)return 0;
+  let count=0;const business=n.businessId||n.userId;
+  for(const entry of entries){
+   if(!p.id(entry.itemId)||!['facebook','instagram'].includes(entry.provider))continue;
+   const item=(await ref('socialContentItems',entry.itemId).get()).data();
+   if(item?.businessUid!==business||item.humanReviewRequired===false)continue;
+   const version=item.platformVersions?.[entry.provider]??item.currentVersion;
+   if(entry.version&&entry.version!==version)continue;
+   const approval=item.platformApprovals?.[entry.provider];
+   if(approval?.version===version&&['approved','scheduled','publishing','published'].includes(approval.status))continue;
+   count++;
+  }return count;
+ }
  async function sendGroup(docs){const all=docs.map(d=>({id:d.id,...d.data()})),first=all[0];if(!first)return;
   const pref=await settings(first.userId).catch(()=>null),policy=p.policy(first);const eligible=[];
-  for(const n of all){const allowed=pref&&(pref.enabled||n.type==='mobile_push_check')&&(policy.required||pref.categories[policy.category]!==false)&&(policy.category!=='growth'||pref.growthDigest)&&await authorized(n.userId,n);
+  for(const n of all){const pending=await pendingReviewCount(n);if(pending!==null)n.aggregateCount=pending;const allowed=pending!==0&&pref&&(pref.enabled||n.type==='mobile_push_check')&&(policy.required||pref.categories[policy.category]!==false)&&(policy.category!=='growth'||pref.growthDigest)&&await authorized(n.userId,n);
    if(allowed&&!n.read)eligible.push(n);else await ref('notifications',n.id).update({'push.status':'suppressed','push.nextAttemptMs':FieldValue.delete(),'push.updatedAt':stamp()});}
   if(!eligible.length)return;
   const leader=eligible[0];const devices=(await db.collection('mobilePushDevices').where('uid','==',leader.userId).limit(10).get()).docs.filter(d=>{const v=d.data();return v.enabled&&v.environment===environment&&v.expiresAtMs>now()&&(!leader.targetDeviceId||leader.targetDeviceId===d.id);});

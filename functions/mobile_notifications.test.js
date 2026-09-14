@@ -36,3 +36,9 @@ test('campaign outcomes use provider submission counts, not invented delivery or
  const result=summary({status:'sending'},done);assert.equal(result.type,'email_campaign_completed');assert.match(result.message,/7 sent to the provider/);
  assert.equal(summary({status:'sending'},{...done,status:'needs_attention'}).type,'email_campaign_attention');
 });
+
+test('legacy digest opt-out and meaningful historical account/work types remain respected',()=>{
+ assert.equal(p.preferences({growthDigest:false}).categories.social,false);
+ assert.equal(p.preferences({growthDigest:false,categories:{social:true}}).categories.social,true);
+ for(const type of ['changes_requested','business_access_approved'])assert.equal(p.policy({type}).immediate,true);
+});
