@@ -1,6 +1,7 @@
 'use strict';
 const {assertSource,MEDIA_POLICY}=require('./social_customer_media');
 const crypto=require('node:crypto');
+const diversity=require('./social_creative_diversity');
 const toMillis=value=>value?.toMillis?value.toMillis():typeof value==='number'?value:Date.parse(value);
 function futureSlot(value,now=Date.now()) {
  const current=toMillis(value);
@@ -40,6 +41,7 @@ function createPreparation({db,editor,media,now=Date.now}) {
      if(jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))return 'preserved';
      const old=(await tx.get(lease)).data();
      if(old?.state==='preparing'&&old.leaseUntil>now())return 'preparing';
+     if(old?.state==='prepared'&&old.version===input.version&&old.recommendation?.policy===diversity.POLICY)return 'prepared';
      tx.set(lease,{businessUid:uid,itemId:input.itemId,provider:input.provider,attempt,state:'preparing',leaseUntil:now()+180000,startedAt:now()});
      return 'claimed';
    });
@@ -55,34 +57,40 @@ function createPreparation({db,editor,media,now=Date.now}) {
        scheduledFor:nextTime,textOnly:variant.mediaRequirement==='none'});
      version=await current(uid,input);variant=version.variants.find(v=>v.provider===input.provider);
    }
+   const context=await diversity.readCreativeContext(db,uid);
+   const recommendation=diversity.planCreativeMix(context).decisions[diversity.key(input)];
+   if(!recommendation)throw Error('This post is already scheduled.');
+   await lease.update({recommendation});
    let creativeStatus=variant.mediaRevisionId?'prepared':variant.mediaRequirement==='none'?'text_only':'needs_creative';
    const oldMedia=variant.mediaRevisionId?(await db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`).get()).data():null;
-   const brand=(await db.doc('businessBrandProfiles/'+uid).get()).data()||{};
    let generationRequest=null;
-   if(variant.mediaRequirement!=='none'&&oldMedia?.preparation?.policy!==MEDIA_POLICY) {
-     const inventory=await db.doc('businessMediaLibraries/'+uid).collection('mediaAssets').limit(51).get();
-     if(inventory.size>50)throw Error('Choose a suitable approved image from Brand Assets.');
-     const assets=await Promise.all(inventory.docs.map(async d=>{const a=d.data();return {id:d.id,...a,revisions:a.approvedRevisionId?[{id:a.approvedRevisionId,...(await d.ref.collection('revisions').doc(a.approvedRevisionId).get()).data()}]:[]};}));
-     let selected=null;
-     if(oldMedia?.assetId){
-       const asset=assets.find(a=>a.id===oldMedia.assetId),revision=asset?.revisions?.find(r=>r.id===asset.approvedRevisionId);
-       try{assertSource({uid,asset,revision,assetId:asset?.id,revisionId:revision?.id});selected={asset,revision,generated:revision.origin==='generated_service_concept'};}catch{}
-     }
-     selected=selected||selectAsset({uid,assets,variant,goal:version.goal||'',approvedServices:brand.approvedServiceCategories||[]});
-     if(selected){
-       await media.attach(uid,{...input,version:version.version,assetId:selected.asset.id,revisionId:selected.revision.id,confirmPublicUse:true});
+   let generationStatus=null;
+   if(recommendation.format==='text'){
+     if(variant.mediaRequirement!=='none'){
+       const disclosure="Service concept image — not a photo of this Business's completed work, team, customers, or property.";
+       await editor.save(uid,{...input,version:version.version,copy:variant.copy.replace(disclosure,'').trim(),
+         callToAction:variant.callToAction,destinationUrl:variant.destinationUrl,scheduledFor:nextTime,textOnly:true});
        version=await current(uid,input);variant=version.variants.find(v=>v.provider===input.provider);
-       creativeStatus=selected.generated?'approved_service_concept':'approved_business_image';
-     } else {
-       const service=(brand.approvedServiceCategories||[]).find(s=>typeof s==='string'&&!/logo|icon/i.test(s));
-       if(service)generationRequest={requestId:'social_'+key,serviceCategory:service,
-         visualDirection:'clean',materialSlot:'landing_page_hero'};
-       creativeStatus='needs_creative';
      }
+     creativeStatus='text_only';
+   }else if(recommendation.assetId){
+     if(oldMedia?.assetId!==recommendation.assetId||oldMedia?.preparation?.policy!==MEDIA_POLICY){
+       await media.attach(uid,{...input,version:version.version,assetId:recommendation.assetId,revisionId:recommendation.revisionId,confirmPublicUse:true});
+       version=await current(uid,input);variant=version.variants.find(v=>v.provider===input.provider);
+     }
+     creativeStatus=recommendation.format==='business_photo'?'approved_business_image':'approved_service_concept';
+   }else{
+     // Keep historical media immutable, but do not present it as the recommended
+     // new creative. A disabled provider is never bypassed by reusing an image.
+     const config=(await db.doc('providerConfigurations/generated-service-visuals').get()).data()||{};
+     generationStatus=config.providerGenerationEnabled===true?'available':'configuration_unavailable';
+     if(recommendation.service&&generationStatus==='available')generationRequest={requestId:recommendation.requestId,
+       serviceCategory:recommendation.service,visualDirection:recommendation.visualDirection,materialSlot:'landing_page_hero'};
+     creativeStatus='needs_creative';
    }
    const quality=await editor.assess(uid,{...input,version:version.version});
-   const result={version:version.version,creativeStatus,quality,generationRequest,approved:false,scheduled:false};
-   await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:creativeStatus==='needs_creative'?'needs_attention':'prepared',version:version.version,finishedAt:now(),leaseUntil:0});});
+   const result={version:version.version,creativeStatus,quality,generationRequest,generationStatus,approved:false,scheduled:false};
+   await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:creativeStatus==='needs_creative'?'needs_attention':'prepared',generationStatus,version:version.version,finishedAt:now(),leaseUntil:0});});
    return result;
    }catch(error){
      await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:'needs_attention',finishedAt:now(),leaseUntil:0});});

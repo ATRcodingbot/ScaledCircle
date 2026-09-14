@@ -93,24 +93,29 @@ class SocialOperationsService {
                   .data
               as Map,
         );
-        final generated = Map<String, dynamic>.from(
-          (await _functions
-                      .httpsCallable(
-                        'processGeneratedServiceVisual',
-                        options: HttpsCallableOptions(
-                          timeout: const Duration(seconds: 120),
-                        ),
-                      )
-                      .call(_workspace({'jobId': requested['jobId']})))
-                  .data
-              as Map,
-        );
+        final generated = requested['status'] == 'queued'
+            ? Map<String, dynamic>.from(
+                (await _functions
+                            .httpsCallable(
+                              'processGeneratedServiceVisual',
+                              options: HttpsCallableOptions(
+                                timeout: const Duration(seconds: 120),
+                              ),
+                            )
+                            .call(_workspace({'jobId': requested['jobId']})))
+                        .data
+                    as Map,
+              )
+            : requested;
         result['generatedCreative'] = generated;
         result['creativeStatus'] = generated['status'] == 'review_required'
             ? 'concept_needs_review'
             : 'preparing';
-      } catch (_) {
+      } on FirebaseFunctionsException catch (error) {
         result['creativeStatus'] = 'needs_creative';
+        result['generationMessage'] =
+            error.message ??
+            'Generation could not be completed. Review the saved status before retrying.';
       }
     }
     return result;

@@ -57,7 +57,62 @@ class QueueService extends SocialOperationsService {
   }
 }
 
+class DiversityQueueService extends QueueService {
+  @override
+  Map<String, dynamic> post(String id) => {
+    ...super.post(id),
+    'creativeRecommendation': {
+      'format': 'text',
+      'label': 'Text-only Facebook post',
+      'reason': 'A short question invites a clear conversation.',
+    },
+  };
+}
+
 void main() {
+  testWidgets(
+    'intentional text recommendation and reason wrap on a narrow large-text screen',
+    (tester) async {
+      tester.view.physicalSize = const Size(375, 812);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final service = DiversityQueueService();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: CustomerSocialReviewQueue(
+            workspace: service.workspace(),
+            service: service,
+            onSchedule: (_) async {
+              fail('No approval');
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('TEXT POST').first,
+        100,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(
+        find.textContaining('Recommended format: Text-only Facebook post'),
+        findsWidgets,
+      );
+      expect(
+        find.text('A short question invites a clear conversation.'),
+        findsWidgets,
+      );
+      expect(tester.takeException(), isNull);
+      expect(service.prepared, isEmpty);
+    },
+  );
   test(
     'queue separates ready, unfinished, scheduled and published without treating media absence as success',
     () {

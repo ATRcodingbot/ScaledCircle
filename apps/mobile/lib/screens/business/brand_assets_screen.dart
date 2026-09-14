@@ -655,8 +655,9 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
               _GeneratedVisualPanel(
                 generation: _generation,
                 generationEnabled:
-                    _generation['capability'] == 'enabled' ||
-                    _generation['capability'] == 'test_only',
+                    _generation['availability']?['available'] as bool? ??
+                    (_generation['capability'] == 'enabled' ||
+                        _generation['capability'] == 'test_only'),
                 busy: _generating,
                 onCreate: () => _createGenerated(),
                 onChooseServices: _brandSettings,
@@ -741,36 +742,39 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
                     : constraints.maxWidth >= 600
                     ? 2
                     : 1;
-                return GridView.count(
-                  crossAxisCount: columns,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: columns == 1 ? 1.25 : .82,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
                   children: _assets
                       .where((a) => a['removed'] != true)
                       .map(
-                        (asset) => _MediaCard(
-                          asset: asset,
-                          service: _service,
-                          onReview: () => _review(asset),
-                          onReject: () async {
-                            final revision = Map<String, dynamic>.from(
-                              asset['revision'] as Map,
-                            );
-                            await _service.reject(
-                              asset['assetId'].toString(),
-                              revision['revisionId'].toString(),
-                            );
-                            await _load(reset: true);
-                          },
-                          onReplace: () =>
-                              _upload(assetId: asset['assetId'].toString()),
-                          onRemove: () async {
-                            await _service.remove(asset['assetId'].toString());
-                            await _load(reset: true);
-                          },
+                        (asset) => SizedBox(
+                          width:
+                              (constraints.maxWidth - 16 * (columns - 1)) /
+                              columns,
+                          child: _MediaCard(
+                            asset: asset,
+                            service: _service,
+                            onReview: () => _review(asset),
+                            onReject: () async {
+                              final revision = Map<String, dynamic>.from(
+                                asset['revision'] as Map,
+                              );
+                              await _service.reject(
+                                asset['assetId'].toString(),
+                                revision['revisionId'].toString(),
+                              );
+                              await _load(reset: true);
+                            },
+                            onReplace: () =>
+                                _upload(assetId: asset['assetId'].toString()),
+                            onRemove: () async {
+                              await _service.remove(
+                                asset['assetId'].toString(),
+                              );
+                              await _load(reset: true);
+                            },
+                          ),
                         ),
                       )
                       .toList(),
@@ -855,7 +859,7 @@ class _GeneratedVisualPanel extends StatelessWidget {
     'approved' => 'Approved',
     'rejected' => 'Rejected',
     'blocked' => 'Blocked by visual safety checks',
-    'failed' => 'Temporarily unavailable',
+    'failed' => 'Generation failed',
     _ => 'Ready to generate',
   };
 
@@ -930,8 +934,9 @@ class _GeneratedVisualPanel extends StatelessWidget {
               const SizedBox(height: 12),
             ],
             if (!generationEnabled) ...[
-              const Text(
-                'Generated visuals are temporarily unavailable. Your existing images and pages are unaffected.',
+              Text(
+                generation['availability']?['message']?.toString() ??
+                    'Generation availability could not be confirmed. Existing images remain available.',
               ),
               const Text(
                 'Try another uses 1 generated visual when generation is available.',
@@ -1091,7 +1096,8 @@ class _MediaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
+            AspectRatio(
+              aspectRatio: 4 / 3,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: ColoredBox(
@@ -1116,6 +1122,22 @@ class _MediaCard extends StatelessWidget {
             ),
             Text(label, semanticsLabel: 'Status: $label'),
             Text(generated ? 'Generated concept' : 'Your photo'),
+            if (revision['serviceLabel']?.toString().isNotEmpty == true)
+              Text('Topic: ${revision['serviceLabel']}'),
+            if (asset['socialUsage']?['available'] == true) ...[
+              Text(
+                '${asset['socialUsage']['planned']} drafts · ${asset['socialUsage']['scheduled']} scheduled · ${asset['socialUsage']['published']} published',
+              ),
+              Text(
+                'Platforms: ${(asset['socialUsage']['platforms'] as List).map((p) => p == 'facebook' ? 'Facebook' : 'Instagram').join(', ')}',
+              ),
+              if (asset['socialUsage']['overused'] == true)
+                const Text('Used repeatedly — consider a different creative.'),
+              if (asset['socialUsage']['lastUsedAt'] != null)
+                Text(
+                  'Last published: ${DateTime.fromMillisecondsSinceEpoch((asset['socialUsage']['lastUsedAt'] as num).toInt()).toLocal().toString().split(' ').first}',
+                ),
+            ],
             if (generated && revision['truthfulnessDisclosure'] != null)
               Text(revision['truthfulnessDisclosure'].toString()),
             const SizedBox(height: 8),

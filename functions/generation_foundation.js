@@ -253,6 +253,16 @@ function deterministicTestAdapter({fixture, moderation = {status: "passed"}, env
   });
 }
 
+function availability({capability,authorized,budgetEnabled,usage={},configurationValid=true,providerUnavailable=false,globalLimit=false}){
+  const result=(state,message)=>({state,message,available:state==='available'});
+  if(capability==='disabled')return result('configuration_unavailable','Generation is not enabled. Your monthly allowance has not been used by this setting.');
+  if(!authorized)return result('access_unavailable','Generated visuals are not enabled for this Business.');
+  if(!configurationValid||!budgetEnabled)return result('configuration_unavailable','Generation configuration needs attention. Existing images remain available.');
+  if(usage?.limitReached)return result('monthly_limit_reached','Monthly generation limit reached. Existing images remain available until your allowance resets.');
+  if(globalLimit)return result('platform_capacity','Generation is paused at the platform capacity limit. Your unused allowance is preserved.');
+  if(providerUnavailable)return result('provider_temporarily_unavailable','The image provider is temporarily unavailable. Try again later.');
+  return result('available','Available — one initial concept per idea, within your monthly allowance.');
+}
 function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter = null,
   capability = async () => "disabled", budgetEnabled = async () => false,
   authorization = async () => generationAuthorizationPolicy(undefined, null),
@@ -261,6 +271,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
   serviceAreaVisualContext = async () => null, ingestCandidate,
   approveCandidate = async () => {}, rejectCandidate = async () => {}, providerAuthPreflight = null,
   usageSummary = async () => null, commercialOperations = async () => ({}),
+  availabilityDetails = async () => ({}),
   notifyReady = async () => {}, reportOperationalFailure = () => {}, now = () => Date.now()}) {
   const jobs = () => db.collection("visualGenerationJobs");
   async function gate(actor) {
@@ -283,7 +294,9 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     if (existing.exists) return {jobId, status: existing.data().status, idempotentReplay: true};
     const recent = await jobs().where("businessUid", "==", actor.uid)
       .orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc").limit(50).get();
-    const activeStates = new Set(["requested", "queued", "processing", "review_required"]);
+    // Delivered candidates await owner review, but no longer occupy provider
+    // execution slots. Monthly consumption and daily attempt caps still apply.
+    const activeStates = new Set(["requested", "queued", "processing", "unknown_provider_outcome"]);
     if (recent.docs.filter((doc) => activeStates.has(doc.data().status)).length >= MAX_ACTIVE_JOBS) {
       throw new Error("generation_rate_limited");
     }
@@ -439,7 +452,11 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     const last = docs.at(-1); const hasMore = snap.size > PAGE_SIZE;
     const access = await authorization(actor);
     const usage = await usageSummary(actor);
+    const generationAvailability=availability({capability:normalizeCapability(await capability(actor)),
+      authorized:access?.authorized===true,budgetEnabled:await budgetEnabled(actor),usage,
+      ...await availabilityDetails(actor)});
     return {schemaVersion: SCHEMA_VERSION, capability: normalizeCapability(await capability(actor)),
+      availability:generationAvailability,
       businessAuthorized: access?.authorized === true,
       rolloutMode: access?.rolloutMode || "founder_only", betaAvailable: access?.betaAvailable === true,
       budgetEnabled: await budgetEnabled(actor), approvedServiceCategories: (await approvedServices(actor)).slice(0, 12),
@@ -526,4 +543,4 @@ module.exports = {SCHEMA_VERSION, DISCLOSURE, PAGE_SIZE, MAX_ACTIVE_JOBS, MAX_RE
   MATERIAL_SLOTS, sanitizeRequest, serviceLanguage, sanitizeServiceAreaVisualContext,
   serviceAreaVisualContextFromSources, safeBrief,
   normalizeModeration, encodeCursor, decodeCursor,
-  deterministicTestAdapter, createGenerationService};
+  deterministicTestAdapter, createGenerationService, availability};

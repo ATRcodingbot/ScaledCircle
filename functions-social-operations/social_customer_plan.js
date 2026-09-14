@@ -30,6 +30,9 @@ function prepare({uid, planId, profile, scope, connections, now = Date.now()}) {
   const plan=social.createContentPlan({businessUid:uid,planId,businessName:name,goal:'Build local service understanding and qualified estimate inquiries over 30 days.',
     pillars:topics.map(t=>t[0]),items,startsOn:start.toISOString(),automationMode:'manual',now});
   plan.record.strategy={version:VERSION,approvalMode:'approval_required',cadence:'Two proposed posts per week on each connected account.',
+    creativeMix:{policy:'SocialCreativeDiversityV1',planningBasis:'Choose the format for each objective. Prefer relevant real Business photos; rotate approved visuals; prepare a new concept when recent assets repeat. Use text-first Facebook variations for questions and simple updates. Instagram keeps a visual.',
+      generationBudget:'One initial candidate per idea. Share a source across platforms only for the same idea, with separate platform compositions.',
+      learning:'Hold format frequency changes until compatible publication evidence supports a recommendation.'},
     timingBasis:'Initial experiment at noon Eastern for this draft window; not claimed to be a proven best time. Owner reviews all proposed times.',
     geography:scope.areas.map(a=>a.label),services,objective:'Measure qualified estimate inquiries, not assumed revenue.',
     measurement:'Capture the current provider baseline. After separately approved publication, measure at 24 hours and 7 days; attribute traffic/leads only with actual response evidence.',

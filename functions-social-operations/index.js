@@ -204,6 +204,15 @@ exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3
       return await require('./social_customer_preparation').createPreparation({db,editor,media:customerMediaStore()}).prepare(business.uid,request.data);
     }
     const result=await (method==='attach'?customerMediaStore():editor)[method](business.uid,request.data||{});
+    if(method==='attach'||method==='save'&&request.data.textOnly===true){
+      const diversity=require('./social_creative_diversity');
+      await db.doc('socialCreativePreparation/'+diversity.leaseId(business.uid,request.data)).set({
+        businessUid:business.uid,itemId:request.data.itemId,provider:request.data.provider,version:result.version,state:'prepared',
+        recommendation:{policy:diversity.POLICY,format:method==='save'&&request.data.textOnly===true?'text':'owner_selected',
+          label:method==='save'&&request.data.textOnly===true?'Text-only Facebook post':'Business-selected creative',
+          reason:'Selected by your Business for this exact post.',service:null,evidence:'Owner selection'},
+        actorUid:request.auth.uid,finishedAt:Date.now(),leaseUntil:0},{merge:true});
+    }
     if(method!=='assess')result.quality=await editor.assess(business.uid,{...request.data,version:result.version});
     return result;
   }
@@ -261,12 +270,15 @@ exports.getSocialOperationsWorkspace = onCall(
     const cadenceJobMap=new Map(cadenceJobs.docs.map(doc=>[doc.id,doc.data()]));
     const cadence=require('./social_customer_cadence');
     const qualityMap=new Map(qualityAssessments.docs.map(doc=>[doc.id,doc.data()]));
-    const cadenceLearning=['facebook','instagram'].map(provider=>cadence.recommend({uid:business.uid,provider,
-      observations:cadenceObservations.docs.map(doc=>{const row=doc.data(),q=qualityMap.get(row.contentVersionId+'_'+row.provider)||qualityMap.get(row.contentVersionId);
+    const learningObservations=cadenceObservations.docs.map(doc=>{const row=doc.data(),q=qualityMap.get(row.contentVersionId+'_'+row.provider)||qualityMap.get(row.contentVersionId);
         const valid=q?.businessUid===business.uid&&q.immutableSourceHash===row.contentHash;
         const variant=valid?q.variantAssessments?.find(v=>v.provider===row.provider):null;
         return {...row,hoursAfterPublication:cadenceJobMap.get(doc.id)?.hoursAfterPublication,
-          qualityReady:valid&&q.readyToPublish===true,fatigueObserved:variant?.repetition?.repeated};})}));
+          qualityReady:valid&&q.readyToPublish===true,fatigueObserved:variant?.repetition?.repeated};});
+    const cadenceLearning=['facebook','instagram'].map(provider=>cadence.recommend({uid:business.uid,provider,observations:learningObservations}));
+    const formatLearning=require('./social_format_learning');
+    const creativeLearning=formatLearning.recommend({uid:business.uid,
+      observations:await formatLearning.enrich(db,business.uid,learningObservations)});
 
 
     return {
@@ -281,6 +293,7 @@ exports.getSocialOperationsWorkspace = onCall(
       performance: require('./social_performance_presentation').project(performance,customerPlans),
       plans: customerPlans,
       cadence: {startingCopy:cadence.startingCopy,platforms:cadenceLearning},
+      creativeLearning,
       emailPlans: emailPlans.docs.map((doc) => ({id: doc.id, ...doc.data()})),
       ads: [
         socialOperations.adAccountHealth({provider: "meta_ads", ...(metaAds.data() || {})}),

@@ -269,6 +269,12 @@ test("daily and active request limits are enforced per tenant", async () => {
     requestId: `active_request_${index}_safe`, serviceCategory: "Decks", visualDirection: "clean"}});
   await assert.rejects(service.request({actor, input: {requestId: "active_request_3_safe",
     serviceCategory: "Decks", visualDirection: "clean"}}), /generation_rate_limited/);
+  for (const [path, record] of env.docs) if (path.startsWith('visualGenerationJobs/') && record.businessUid === actor.uid) {
+    env.docs.set(path, {...record, status: 'review_required'});
+  }
+  const next = await service.request({actor, input: {requestId: 'next_idea_request_safe',
+    serviceCategory: 'Decks', visualDirection: 'practical'}});
+  assert.equal(next.status, 'queued'); // Delivered candidates do not occupy execution slots.
   const dailyActor = {uid: "daily-limited-business"};
   for (let index = 0; index < 8; index++) env.docs.set(`visualGenerationJobs/daily_${index}`, {
     businessUid: dailyActor.uid, status: "approved", createdAt: now - index});

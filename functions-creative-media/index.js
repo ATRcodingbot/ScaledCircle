@@ -449,6 +449,16 @@ const generationService = generationFoundation.createGenerationService({
   rejectCandidate: (input) => creativeMediaService.rejectGeneratedCandidate(input),
   providerAuthPreflight: generationProviderAuthPreflight,
   usageSummary: generationBusinessUsageSummary,
+  availabilityDetails: async () => {
+    if (generationIsLocal) return {};
+    const [config, ops] = await Promise.all([generationProviderConfig(), generationCommercialOperations()]);
+    return { configurationValid: config.authenticationMode === 'gcp_workload_identity' && config.provider === 'openai',
+      providerUnavailable: config.providerHealth === 'unavailable',
+      globalLimit: ops.utilization.dailyCalls >= ops.limits.globalDailyMaximum ||
+      ops.utilization.monthlyCalls >= ops.limits.globalMonthlyMaximum ||
+      ops.utilization.dailyCostMicros >= ops.limits.globalDailyCostMicros ||
+      ops.utilization.monthlyCostMicros >= ops.limits.globalMonthlyCostMicros };
+  },
   commercialOperations: generationCommercialOperations,
   notifyReady: async ({ businessUid, jobId, serviceCategory }) => {
     const notificationId = `generated-visual-ready_${jobId}`;
@@ -12197,6 +12207,65 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function requireCreativeMediaBusiness(request) {
   const context = await requireVerifiedUser(request, "Log in to manage Brand Assets.");
   if (context.role !== "business" || context.user.active !== true) {
@@ -12280,8 +12349,10 @@ function generationHttpsError(error) {
   if (["generation_access_denied", "generation_job_not_found"].includes(code)) {
     return new HttpsError("permission-denied", "That generated visual is not available.");
   }
-  if (["generation_disabled", "provider_unavailable", "budget_disabled", "test_adapter_forbidden",
-  "business_not_authorized_for_provider_generation"].includes(code)) {
+  if (code === 'generation_disabled') return new HttpsError('failed-precondition', 'Generation is not enabled.', { reason: 'CONFIGURATION_UNAVAILABLE' });
+  if (code === 'business_not_authorized_for_provider_generation') return new HttpsError('permission-denied', 'Generated visuals are not enabled for this Business.', { reason: 'ACCESS_UNAVAILABLE' });
+  if (["provider_unavailable", "budget_disabled", "test_adapter_forbidden"].
+  includes(code)) {
     return new HttpsError("failed-precondition", "Generated visuals are temporarily unavailable.");
   }
   if (code === "generation_rate_limited") {
@@ -12292,8 +12363,8 @@ function generationHttpsError(error) {
     { reason: "MONTHLY_LIMIT_REACHED" });
   }
   if (code === "global_budget_exhausted") {
-    return new HttpsError("unavailable", "Generated visuals are temporarily unavailable.",
-    { reason: "PROVIDER_TEMPORARILY_UNAVAILABLE" });
+    return new HttpsError("resource-exhausted", "Generation is paused at the platform capacity limit.",
+    { reason: "PLATFORM_CAPACITY" });
   }
   if (["invalid_generation_request", "unsupported_service_category", "invalid_visual_direction",
   "invalid_generated_purpose", "invalid_generation_cursor", "invalid_generation_campaign",

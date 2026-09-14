@@ -437,6 +437,28 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
     ]);
     const growthServices = availableServiceCategories(growthProfile.data()?.servicesOffered);
     const brandServices = availableServiceCategories(brand.data()?.approvedServiceCategories);
+    // Derived from canonical current platform bindings and publication jobs;
+    // revisions/crops never inflate the number of uses.
+    const [socialItems,socialJobs]=await Promise.all([
+      db.collection('socialContentItems').where('businessUid','==',actor.uid).limit(101).get(),
+      db.collection('socialGrowthJobs').where('businessUid','==',actor.uid).limit(101).get()]);
+    const usageComplete=socialItems.size<=100&&socialJobs.size<=100,uses=[];
+    if(usageComplete)for(const doc of socialItems.docs)for(const provider of ['facebook','instagram']){
+      const version=doc.data().platformVersions?.[provider]??doc.data().currentVersion;
+      const current=(await db.doc(`socialContentVersions/${doc.id}_v${version}`).get()).data();
+      if(current?.businessUid!==actor.uid)continue;
+      const variant=current.variants?.find(v=>v.provider===provider);if(!variant?.mediaAssetId)continue;
+      const job=socialJobs.docs.map(d=>d.data()).find(j=>j.provider===provider&&j.versionId?.startsWith(doc.id+'_v')&&j.status!=='canceled');
+      const at=job?.publishedAt||job?.scheduledFor;
+      uses.push({assetId:variant.mediaAssetId,provider,status:job?.status||'draft',at:typeof at==='string'?Date.parse(at):timestampMillis(at)});
+    }
+    for(const asset of result){const matching=uses.filter(u=>u.assetId===asset.assetId);
+      asset.socialUsage={available:usageComplete,planned:matching.filter(u=>u.status==='draft').length,
+        scheduled:matching.filter(u=>!['draft','published'].includes(u.status)).length,
+        published:matching.filter(u=>u.status==='published').length,
+        lastUsedAt:Math.max(0,...matching.filter(u=>u.status==='published').map(u=>u.at||0))||null,
+        platforms:[...new Set(matching.map(u=>u.provider))],overused:matching.length>2};
+    }
     return {assets: result, hasMore, nextCursor: hasMore && last ? encodeCursor(timestampMillis(last.data().createdAt), last.id) : null,
       brandProfile: brand.exists ? brand.data() : null,
       availableServiceCategories: growthServices.length ? growthServices : brandServices,

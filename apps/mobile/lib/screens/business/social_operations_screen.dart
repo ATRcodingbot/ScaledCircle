@@ -1900,6 +1900,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
 
   Widget _plans(SocialOperationsWorkspace workspace) {
     final cadence = workspace.data['cadence'] as Map?;
+    final creativeLearning = workspace.data['creativeLearning'] as Map?;
     final alignment = workspace.internalPlanAlignment;
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
@@ -1916,6 +1917,16 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   Text(cadence['startingCopy']?.toString() ?? ''),
+                  if (creativeLearning != null) ...[
+                    const SizedBox(height: 8),
+                    Text(creativeLearning['reason']?.toString() ?? ''),
+                    for (final comparison
+                        in (creativeLearning['comparisons'] as List? ?? [])
+                            .whereType<Map>())
+                      Text(
+                        '${socialProviderName(comparison['provider']?.toString() ?? '')} · ${comparison['label']}: ${comparison['reason']}',
+                      ),
+                  ],
                   const Text(
                     'Adaptive recommendations. Cadence changes need your approval; no managed range has been granted.',
                   ),

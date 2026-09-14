@@ -60,7 +60,9 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _run(
-          _post['ready'] == true || _post['publicationStatus'] != null
+          (_post['ready'] == true &&
+                      _post['creativeNeedsPreparation'] != true) ||
+                  _post['publicationStatus'] != null
               ? _refresh
               : _prepare,
         );
@@ -80,7 +82,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     if (mounted) {
       _creativeNotice = result['creativeStatus'] == 'concept_needs_review'
           ? 'A new service concept is prepared. Review it in Brand Assets before using it in this post.'
-          : null;
+          : result['generationMessage']?.toString();
       setState(
         () => _quality = Map<String, dynamic>.from(
           result['quality'] as Map? ?? {},
@@ -131,6 +133,8 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
           fresh['reviewedPost']?['quality'] as Map? ?? {},
         );
         if (!_changed) {
+          _textOnly =
+              fresh['reviewedPost']?['variant']?['mediaRequirement'] == 'none';
           _copy.text =
               fresh['reviewedPost']?['variant']?['copy']?.toString() ??
               _copy.text;
@@ -302,7 +306,6 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final variant = _post['reviewedPost']?['variant'] as Map? ?? {};
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -346,6 +349,17 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               const Text('Preparing your preview…'),
             ],
             Text(_post['provider'] == 'instagram' ? 'Instagram' : 'Facebook'),
+            if (_post['creativeRecommendation'] != null) ...[
+              Text(
+                'Recommended format: ${_post['creativeRecommendation']['label']}',
+              ),
+              Text(_post['creativeRecommendation']['reason'].toString()),
+              if (_post['creativeRecommendation']['generationStatus'] ==
+                  'configuration_unavailable')
+                const Text(
+                  'Generation is not enabled. Your monthly allowance remains available. Upload an approved photo or return when generation is enabled.',
+                ),
+            ],
             for (final image
                 in (_post['reviewedPost']?['images'] as List? ?? [])
                     .whereType<Map>())
@@ -450,7 +464,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             const SizedBox(height: 20),
             if (!_busy)
               Text(
-                variant['mediaRevisionId'] != null
+                (_post['reviewedPost']?['images'] as List? ?? []).isNotEmpty
                     ? 'Creative prepared'
                     : _textOnly
                     ? 'Text-only post'

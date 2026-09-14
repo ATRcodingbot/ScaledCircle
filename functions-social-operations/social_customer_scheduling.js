@@ -15,7 +15,7 @@ const messages = {
   paused: 'Publishing is paused by a workspace safety restriction. Your post is preserved.',
 };
 function readiness({uid, plan, item, version, provider, connection, revision, quality,
-  schedulerEnabled = false, health, config, environment, entitlement, conflictingSchedule = false, mediaAuthorityValid=true, now = Date.now()}) {
+  schedulerEnabled = false, health, config, environment, entitlement, conflictingSchedule = false, mediaAuthorityValid=true, creativePreparation=null, now = Date.now()}) {
   const reasons = [];
   const add = key => reasons.push({code:key, message:messages[key]});
   if (!plan || plan.businessUid !== uid || !item || item.businessUid !== uid ||
@@ -37,6 +37,7 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
   if (mediaRequired && (!variant?.mediaAssetId || !variant?.mediaRevisionId || !revision)) add('creative');
   if(revision?.customerDeliveryId&&revision.preparation?.policy!==require('./social_customer_media').MEDIA_POLICY&&!reasons.some(r=>r.code==='creative'))add('creative');
   if(!mediaAuthorityValid&&!reasons.some(r=>r.code==='creative'))add('creative');
+  if((creativePreparation?.state==='preparing'||creativePreparation?.recommendation?.format==='generated'&&creativePreparation.state!=='prepared')&&!reasons.some(r=>r.code==='creative'))add('creative');
   if (!connection || connection.businessUid!==uid || connection.status!=='connected_write' ||
       connection.environment!==environment || connection.tokenHealth!=='healthy' || connection.requiresReconnect===true || !connection.credentialId ||
       !/^\d+$/.test(connection.providerUserId||'') ||
@@ -83,12 +84,13 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
     const itemRef=db.doc('socialContentItems/'+input.itemId),item=(await read(itemRef)).data();
     if(!item || item.businessUid!==uid) throw Error('This post is not available in your Business.');
     const versionId=input.itemId+'_v'+(item.platformVersions?.[input.provider]??item.currentVersion);
-    const [p,v,c,q,h,config,entitlement,platformQuality] = await Promise.all([
+    const [p,v,c,q,h,config,entitlement,platformQuality,preparation] = await Promise.all([
       read(db.doc('socialContentPlans/'+item.planId)),read(db.doc('socialContentVersions/'+versionId)),
       read(db.doc(`socialConnections/${uid}/providers/${input.provider}`)),
       read(db.doc('socialContentQualityAssessments/'+versionId)),read(db.doc('agentHealth/'+uid)),
       read(db.doc('socialProviderConfigs/'+environment+'_meta')),read(db.doc('businessSubscriptions/'+uid)),
-      read(db.doc('socialContentQualityAssessments/'+versionId+'_'+input.provider))]);
+      read(db.doc('socialContentQualityAssessments/'+versionId+'_'+input.provider)),
+      read(db.doc('socialCreativePreparation/'+require('./social_creative_diversity').leaseId(uid,input)))]);
     const jobs=await read(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
     if(jobs.size>100)throw Error('Publication history requires review.');
     const existingJob=jobs.docs.map(d=>d.data()).find(job=>job.provider===input.provider&&job.versionId?.startsWith(input.itemId+'_v')&&job.customerApproval===true&&job.status!=='canceled');
@@ -99,13 +101,18 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
     let mediaAuthorityValid=true;
     try{await require('./social_customer_media').assertDeliveryAuthority({db,read,uid,revision});}
     catch{mediaAuthorityValid=false;}
-    return {uid,plan:p.data(),item,version,versionId,itemRef,provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality:platformQuality.data()||q.data(),
+    return {uid,plan:p.data(),item,version,versionId,itemRef,creativePreparation:preparation.data(),provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality:platformQuality.data()||q.data(),
       conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
   }
   return {
     async preview(uid,input) {
       const ctx=await context(null,uid,input), result=readiness(ctx);
       const bindingHash=ctx.version?growth.contentBinding({id:ctx.versionId,record:ctx.version},uid).bindingHash:null;
+      const recommendation=require('./social_creative_diversity').presentation(ctx.creativePreparation);
+      const needsNew=!!recommendation&&recommendation.format==='generated'&&recommendation.state!=='prepared';
+      result.creativeRecommendation=recommendation;
+      result.creativeNeedsPreparation=!ctx.existingJob&&(!recommendation||ctx.creativePreparation.version!==ctx.version?.version);
+      if(needsNew)ctx.revision=null;
       return {...result,publicationStatus:ctx.existingJob?.status||null,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256,width:i.width,height:i.height}))||[],creativePrepared:ctx.revision?.preparation?.policy===require('./social_customer_media').MEDIA_POLICY,quality:ctx.quality||null,scheduledFor:result.scheduledFor}:null};
     },
     async approve(uid,input,{actorUid=uid}={}) {

@@ -95,7 +95,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
       final row = _rows[i];
       if (row['publicationStatus'] != null ||
           row['version'] == null ||
-          row['ready'] == true ||
+          (row['ready'] == true && row['creativeNeedsPreparation'] != true) ||
           !_attempted.add(_key(row))) {
         continue;
       }
@@ -201,6 +201,13 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
           ),
           if (_rows.any((r) => r['preparing'] == true))
             const LinearProgressIndicator(),
+          if (_rows.any((r) => r['creativeRecommendation'] != null))
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'Creative mix for remaining posts: ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'text').length} text posts · ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'generated').length} versions with new concepts. Platform versions may share a concept for the same idea.',
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               key: const PageStorageKey('social-review-content'),
@@ -251,6 +258,24 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         Text(row['strategyTitle'].toString()),
+                        if (row['creativeRecommendation']?['format'] == 'text')
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Chip(label: Text('TEXT POST')),
+                          ),
+                        if (row['creativeRecommendation'] != null) ...[
+                          Text(
+                            'Recommended format: ${row['creativeRecommendation']['label']}',
+                          ),
+                          Text(
+                            row['creativeRecommendation']['reason'].toString(),
+                          ),
+                          if (row['creativeRecommendation']['generationStatus'] ==
+                              'configuration_unavailable')
+                            const Text(
+                              'New creative is waiting: generation is not enabled. Your monthly allowance has not been used.',
+                            ),
+                        ],
                         Text(group),
                         Text(socialCustomerTime(context, row['scheduledFor'])),
                         if (row['preparationError'] != null)

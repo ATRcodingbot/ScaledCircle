@@ -380,7 +380,10 @@ void main() {
       find.textContaining('Try another uses 1 generated visual'),
       findsOneWidget,
     );
-    expect(find.textContaining('temporarily unavailable'), findsOneWidget);
+    expect(
+      find.textContaining('availability could not be confirmed'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Upload your own photo'), findsOneWidget);
     expect(find.text('Approve concept'), findsOneWidget);
     expect(find.text('Create service visual'), findsNothing);
