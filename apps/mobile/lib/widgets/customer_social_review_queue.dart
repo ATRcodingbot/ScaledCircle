@@ -208,7 +208,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
-                'Recommended mix for remaining posts: ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'text').length} text posts · ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'generated').length} versions calling for new concepts. Platform versions may share a concept for the same idea.',
+                'Recommended mix for remaining posts: ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'text').length} text posts · ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] != 'text').length} image posts. Platform versions may share a concept for the same idea.',
               ),
             ),
           if (_rows.where((r) => r['creativeSupply'] is Map).isNotEmpty)

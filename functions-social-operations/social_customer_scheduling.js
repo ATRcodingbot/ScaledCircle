@@ -133,7 +133,7 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
         result.creativeAssets=mix.assets;
         const planned=mix.decisions[diversity.key(input)],old=original.creativePreparation?.recommendation;
         if(old?.format!=='owner_selected'&&planned&&(old?.historyPolicy!=='SocialCreativeHistoryV2'||old?.assetId!==planned.assetId||old?.requestId!==planned.requestId))result.creativeNeedsPreparation=true;
-        result.creativeLabel=original.creativePreparation?.reviewCandidate?'New creative':
+        result.creativeLabel=original.creativePreparation?.reviewCandidate||planned?.format==='generated'?'New creative':
           ctx.version?.variants?.find(v=>v.provider===input.provider)?.mediaRequirement==='none'?'Text-only recommendation':
           ctx.revision?.sourceOrigin==='generated_service_concept'?'Reused asset':'Real business photo';
       }
