@@ -56,12 +56,18 @@ function createPreparation({db,editor,media,now=Date.now}) {
          const prior=(await tx.get(db.doc('visualGenerationJobs/'+jobId))).data();
          if(!prior||['queued','processing','unknown_provider_outcome'].includes(prior.status))throw Error('A new image is already being prepared or confirmed. Reopen this preview to resume the same request.');
        }
+       const draft=(await tx.get(db.doc('socialContentVersions/'+input.itemId+'_v'+input.version))).data();
+       if(draft?.businessUid!==uid)throw Error('The post changed. Reopen the current preview.');
+       const mediaId=draft.variants?.find(v=>v.provider===input.provider)?.mediaRevisionId;
+       const priorMedia=mediaId?(await tx.get(db.doc(`socialMediaLibraries/${uid}/items/${mediaId}`))).data():null;
+       if(priorMedia&&priorMedia.businessUid!==uid)throw Error('The image binding needs review.');
+       const previousSourceSha256=old?.reviewCandidate?.sourceSha256||priorMedia?.sourceSha256||null;
        const regenerationSequence=(old?.regenerationSequence||0)+1;
        const requestId='social_regen_'+crypto.createHash('sha256').update(uid+':'+input.itemId+':'+input.provider+':'+input.version+':'+(input.candidateSha256||'no_candidate')+':'+regenerationSequence).digest('hex');
        const override={...freshRecommendation,format:'generated',label:'New service concept',requestId,assetId:null,revisionId:null,sourceHash:null,
          reason:'A replacement requested for this exact draft. Review it before approval.',visualDirection:freshRecommendation.visualDirection||'practical'};
        if(old?.state==='preparing'&&old.leaseUntil>now())throw Error('Creative preparation is already in progress.');
-       tx.set(lease,{...old,businessUid:uid,itemId:input.itemId,provider:input.provider,version:input.version,regenerationSequence,generationOverride:override,state:'regeneration_requested',regenerationRequestedAt:now(),regenerationPreviousSourceSha256:old?.reviewCandidate?.sourceSha256||null});
+       tx.set(lease,{...old,businessUid:uid,itemId:input.itemId,provider:input.provider,version:input.version,regenerationSequence,generationOverride:override,state:'regeneration_requested',regenerationRequestedAt:now(),regenerationPreviousSourceSha256:previousSourceSha256});
      });
    }
    const latestContext=await diversity.readCreativeContext(db,uid);
@@ -92,7 +98,8 @@ function createPreparation({db,editor,media,now=Date.now}) {
    }
    const context=await diversity.readCreativeContext(db,uid);
    const override=(await lease.get()).data()?.generationOverride;
-   const recommendation=override||diversity.planCreativeMix(context).decisions[diversity.key(input)];
+   const currentRecommendation=diversity.planCreativeMix(context).decisions[diversity.key(input)];
+   const recommendation=override&&!(currentRecommendation?.assetId&&currentRecommendation.requestId===override.requestId)?override:currentRecommendation;
    if(!recommendation)throw Error('This post is already scheduled.');
    await lease.update({recommendation,version:version.version});
    let creativeStatus=variant.mediaRevisionId?'prepared':variant.mediaRequirement==='none'?'text_only':'needs_creative';

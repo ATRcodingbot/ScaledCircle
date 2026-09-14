@@ -130,3 +130,20 @@ test('regenerate freezes exact draft, creates a distinct budgeted request, and r
  assert.deepEqual((await db.doc('socialContentVersions/'+s.itemId+'_v1').get()).data(),s.version);
  assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',s.uid).get()).size,0);
 });
+
+test('regenerating an attached approved image carries its original source into the new brief',async()=>{
+ const s=await setup('regen_attached_context');
+ await db.doc('businessBrandProfiles/'+s.uid).set({businessUid:s.uid,approvedServiceCategories:['decks']});
+ await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:true});
+ await s.lease.update({reviewCandidate:null});
+ const version={...s.version,variants:s.version.variants.map(v=>({...v,mediaRevisionId:'attached'}))};
+ await db.doc('socialContentVersions/'+s.itemId+'_v1').set(version);
+ await db.doc(`socialMediaLibraries/${s.uid}/items/attached`).set({businessUid:s.uid,assetId:'concept',sourceSha256:s.source.contentHash});
+ const editor=require('../functions-social-operations/social_customer_editor').createEditor({db,enabledUids:[s.uid],now:()=>s.f.now});
+ const prep=require('../functions-social-operations/social_customer_preparation').createPreparation({db,editor,media:{prepareCandidate:async()=>null},now:()=>s.f.now});
+ const result=await prep.prepare(s.uid,{...s.input,action:'regenerate',confirmRegeneration:true});
+ const ctx=await require('./social_generation_context').readContext(db,{uid:s.uid},result.generationRequest);
+ assert.equal(ctx.previousSourceSha256,s.source.contentHash);
+ assert.deepEqual((await db.doc('socialContentVersions/'+s.itemId+'_v1').get()).data(),version);
+ assert.equal((await db.collection('socialGrowthApprovals').where('businessUid','==',s.uid).get()).size,0);
+});

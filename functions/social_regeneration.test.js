@@ -28,3 +28,9 @@ test('owner-selected reuse is explicit, while text is a strategy choice rather t
  assert.equal(result.decisions['ideamanual:instagram'].format,'owner_selected');
  assert.equal(d.intentionalText({...row(1,'facebook'),goal:'Explore a service'}),false);
 });
+test('a candidate approved separately becomes usable without losing its exact source identity',()=>{
+ const a=asset(1),r=row(1),p={itemId:r.itemId,provider:r.provider,version:1,reviewCandidate:{assetId:a.id},recommendation:{policy:d.POLICY,format:'generated',requestId:'social_original_request',service:'decks'}};
+ const result=d.planCreativeMix({uid,services:['decks'],assets:[a],rows:[r],preparations:[p]});
+ assert.equal(result.decisions['idea1:instagram'].assetId,a.id);assert.equal(result.decisions['idea1:instagram'].sourceHash,a.revision.contentHash);
+ assert.equal(result.decisions['idea1:instagram'].candidateAvailable,false);assert.equal(result.supply.conceptsNeeded,0);
+});

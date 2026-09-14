@@ -60,7 +60,7 @@ function planCreativeMix({uid,rows,assets,services=[],preparations=[]}){
   const service=(relevant.length===1?relevant[0]:services[ordinal%Math.max(1,services.length)])||null;
   const base={policy:POLICY,historyPolicy:'SocialCreativeHistoryV2',service,objective:row.goal||row.pillar,topic:row.pillar,initialCandidateLimit:1,
    evidence:'Initial creative mix; performance has not established a preferred format.'};
-  const requestId='social_mix_'+crypto.createHash('sha256').update(uid+':'+row.itemId+':'+POLICY).digest('hex');
+  let requestId='social_mix_'+crypto.createHash('sha256').update(uid+':'+row.itemId+':'+POLICY).digest('hex');
   const jobId='visual_job_'+crypto.createHash('sha256').update(uid+'\n'+requestId).digest('hex').slice(0,40);
   if(intentionalText(row)){decisions[key(row)]={...base,format:'text',label:'Text-only Facebook post',
    reason:'This short question or expectation-setting post invites a clear conversation without a decorative image.'};continue;}
@@ -73,7 +73,11 @@ function planCreativeMix({uid,rows,assets,services=[],preparations=[]}){
   }
   if(existing?.reviewCandidate&&existing.recommendation?.format==='generated'){
    const candidate=assets.find(a=>a.id===existing.reviewCandidate.assetId);
-   if(candidate&&!recentUse(candidate,row,frozen).uses){decisions[key(row)]={...existing.recommendation,historyPolicy:'SocialCreativeHistoryV2',candidateAvailable:true};selected.push({...row,decision:decisions[key(row)]});continue;}
+   if(candidate&&!recentUse(candidate,row,frozen).uses){
+    const approved=usable.find(a=>a.id===candidate.id);
+    decisions[key(row)]={...existing.recommendation,historyPolicy:'SocialCreativeHistoryV2',candidateAvailable:!approved,
+      ...(approved?{assetId:approved.id,revisionId:approved.approvedRevisionId,sourceHash:approved.revision.contentHash}:{} )};
+    selected.push({...row,decision:decisions[key(row)]});continue;}
   }
   const ownCandidate=usable.find(a=>a.revision.generationJobId===jobId&&!recentUse(a,row,frozen).uses);
   if(ownCandidate){decisions[key(row)]={...base,format:'generated',label:'New service concept',
@@ -93,6 +97,10 @@ function planCreativeMix({uid,rows,assets,services=[],preparations=[]}){
    return {a,real:a.revision.origin!=='generated_service_concept',score:similarity(description,row.copy+' '+row.goal)-topicUses*.05};
   }).filter(Boolean).sort((a,b)=>Number(b.real)-Number(a.real)||b.score-a.score||a.a.id.localeCompare(b.a.id));
   const asset=candidates[0]?.a;
+  if(!asset&&assets.some(a=>a.revision?.generationJobId===jobId&&recentUse(a,row,frozen).uses)){
+    const blockedHashes=frozen.map(r=>r.media?.sourceSha256||r.media?.assetId).filter(Boolean).sort();
+    requestId='social_refresh_'+crypto.createHash('sha256').update(requestId+':'+JSON.stringify(blockedHashes)).digest('hex');
+  }
   const decision=asset?{...base,format:asset.revision.origin==='generated_service_concept'?'approved_asset':'business_photo',
    label:asset.revision.origin==='generated_service_concept'?'Reusable approved service concept':'Real Business photo',
    reason:asset.revision.origin==='generated_service_concept'?'This approved concept fits the topic and has no competing use in this 30-day window.':'This approved Business photo fits the topic and gives the post authentic project context.',
@@ -103,15 +111,15 @@ function planCreativeMix({uid,rows,assets,services=[],preparations=[]}){
     visualDirection:['clean','practical','modern','friendly','premium'][ordinal%5]};
   decisions[key(row)]=decision;selected.push({...row,decision});
  }
- return {policy:POLICY,supply:supply(decisions,rows,assets),decisions,assets:assets.map(a=>({assetId:a.id,...assetHistory(a,rows)})),
+ return {policy:POLICY,supply:supply(decisions,rows,usable),decisions,assets:assets.map(a=>({assetId:a.id,...assetHistory(a,rows)})),
   learning:{recommendation:'hold',reason:'Compare format results only after compatible, attributed publication measurements exist.'}};
 }
 async function readCreativeContext(db,uid){
  const [items,jobs,library,brand]=await Promise.all([
   db.collection('socialContentItems').where('businessUid','==',uid).limit(101).get(),
   db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101).get(),
-  db.collection(`businessMediaLibraries/${uid}/mediaAssets`).limit(51).get(),db.doc('businessBrandProfiles/'+uid).get()]);
- if(items.size>100||jobs.size>100||library.size>50)throw Error('Creative history needs review before automatic preparation.');
+  db.collection(`businessMediaLibraries/${uid}/mediaAssets`).limit(201).get(),db.doc('businessBrandProfiles/'+uid).get()]);
+ if(items.size>100||jobs.size>100||library.size>200)throw Error('Creative history needs review before automatic preparation.');
  const jobRows=jobs.docs.map(d=>({historyJobId:d.id,...d.data()})).filter(j=>j.status!=='canceled'),rows=[];
  const preparations=(await db.collection('socialCreativePreparation').where('businessUid','==',uid).limit(201).get()).docs.map(d=>d.data());
  for(const item of items.docs)for(const provider of ['facebook','instagram']){
