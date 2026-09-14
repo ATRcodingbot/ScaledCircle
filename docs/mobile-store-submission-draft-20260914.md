@@ -35,3 +35,9 @@ Reviewer access must use a real maintained account prepared for review. Do not p
 ## Independent launch holds
 
 Social normal-customer runtime enrollment and final regression must complete before source freeze. Property Intelligence's saved-area failure remains separately reported; its launch disposition is not resolved by this submission draft. Google external review alone is not a reason to delay the otherwise-ready app, but these independent product gates cannot be called passed.
+
+## Live console readback in latest continuation
+
+App Store Connect session expired; sign-in is required before live field/build inspection. Google Play Dashboard showed 0 of 11 setup tasks complete and Production inactive. Saved the verified https://scaledcircle.com/#/privacy address in the privacy-policy field; Google confirms the change is saved for review, not submitted. Remaining declarations and listing assets must still be completed from evidence. No public release or review submission occurred.
+
+Google Play also saved App / Business category as a review draft and published only contact metadata: support@scaledcircle.com and https://scaledcircle.com (no phone invented). No app binary was publicly released.

@@ -10,7 +10,7 @@ class SocialPlanOverview extends StatelessWidget {
     this.refreshingApproval = false,
   });
   final SocialPlanPresentation presentation;
-  final VoidCallback onReview;
+  final VoidCallback? onReview;
   final bool refreshingApproval;
 
   @override

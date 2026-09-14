@@ -27,20 +27,23 @@ class SocialOperationsScreen extends StatefulWidget {
     this.initialItemId,
     this.initialProvider,
     this.initialPublishedJobId,
+    this.service,
   });
   final String? initialReview;
   final String? initialItemId, initialProvider, initialPublishedJobId;
+  final SocialOperationsService? service;
 
   @override
   State<SocialOperationsScreen> createState() => _SocialOperationsScreenState();
 }
 
 class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
-  final _service = SocialOperationsService();
-  final _attribution = AttributionService();
+  late final _service = widget.service ?? SocialOperationsService();
+  late final _attribution = AttributionService();
   SocialOperationsWorkspace? _workspace;
   Map<String, dynamic>? _firstX;
   bool _loading = true;
+  bool _preparingPlan = false;
   int _loadGeneration = 0;
   int _approvalReadAttempts = 0;
   Timer? _approvalRefresh;
@@ -201,98 +204,38 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     }
   }
 
-  Future<void> _createPlan() async {
-    final goal = TextEditingController();
-    var mode = 'manual';
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
-          title: const Text('Start a 30-day content plan'),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: goal,
-                  decoration: const InputDecoration(
-                    labelText: 'Growth goal',
-                    hintText:
-                        'Example: Help local businesses understand ScaledCircle',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: mode,
-                  decoration: const InputDecoration(
-                    labelText: 'Automation level',
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'manual',
-                      child: Text('Manual — approve every item'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'approve_plan',
-                      child: Text('Approve Plan — calendar approval'),
-                    ),
-                  ],
-                  onChanged: (value) =>
-                      setModalState(() => mode = value ?? 'manual'),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'This creates reviewable drafts only. It does not connect accounts, publish posts, send email, or launch ads.',
-                ),
-              ],
+  Future<void> _prepareCustomerPlan() async {
+    if (_loading ||
+        _preparingPlan ||
+        _workspace?.managedPublishingAvailable != true ||
+        _workspace!.plans.isNotEmpty) {
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _preparingPlan = true;
+    });
+    try {
+      await _service.prepareCustomerPlan();
+      if (mounted) await _load();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The plan could not be confirmed. Refresh to check saved plans before retrying.',
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, goal.text.trim().isNotEmpty),
-              child: const Text('Create Draft Plan'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (accepted == true) {
-      try {
-        final now = DateTime.now().toUtc();
-        await _service.createPlan(
-          goal: goal.text.trim(),
-          startsOn: now,
-          automationMode: mode,
         );
-        await _load();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                '30-day draft plan created for review. Nothing was published.',
-              ),
-            ),
-          );
-        }
-      } on FirebaseFunctionsException catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                socialEvidenceText(error.message, 'Unable to create the plan.'),
-              ),
-            ),
-          );
-        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _preparingPlan = false;
+        });
       }
     }
-    goal.dispose();
   }
 
   Future<void> _approvePlan(Map<String, dynamic> plan) async {
@@ -1175,7 +1118,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     ),
                     refreshingApproval: _approvalReadback.pending,
                     onReview: workspace.plans.isEmpty
-                        ? _createPlan
+                        ? workspace.managedPublishingAvailable &&
+                                  !_loading &&
+                                  !_preparingPlan
+                              ? _prepareCustomerPlan
+                              : null
                         : () => _reviewSavedPlans(workspace),
                   ),
                 ),
@@ -1984,27 +1931,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ),
         if (workspace.managedPublishingAvailable && workspace.plans.isEmpty)
           FilledButton.icon(
-            onPressed: _loading
-                ? null
-                : () async {
-                    setState(() => _loading = true);
-                    try {
-                      await _service.prepareCustomerPlan();
-                      await _load();
-                    } catch (_) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'The plan could not be confirmed. Refresh to check saved plans before retrying.',
-                            ),
-                          ),
-                        );
-                      }
-                    } finally {
-                      if (mounted) setState(() => _loading = false);
-                    }
-                  },
+            onPressed: _loading || _preparingPlan ? null : _prepareCustomerPlan,
             icon: const Icon(Icons.auto_awesome_outlined),
             label: const Text('Prepare my 30-day draft strategy'),
           ),
