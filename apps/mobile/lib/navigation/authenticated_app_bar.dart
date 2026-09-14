@@ -213,9 +213,12 @@ class AuthenticatedAppBar extends StatelessWidget
           Semantics(
             label: 'ScaledCircle Home',
             button: true,
+            container: true,
+            onTap: () => AppNavigation.home(context, home),
             excludeSemantics: true,
             child: Tooltip(
               message: 'ScaledCircle Home',
+              excludeFromSemantics: true,
               child: InkWell(
                 onTap: () => AppNavigation.home(context, home),
                 borderRadius: BorderRadius.circular(8),

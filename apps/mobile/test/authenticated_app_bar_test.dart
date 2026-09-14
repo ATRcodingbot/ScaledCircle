@@ -1,3 +1,4 @@
+import 'dart:ui' show SemanticsAction;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
@@ -47,8 +48,24 @@ void main() {
   testWidgets('logo returns owner to Home, not the workflow parent', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(fixture());
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .getSemantics(find.byTooltip('ScaledCircle Home'))
+          .getSemanticsData()
+          .label,
+      'ScaledCircle Home',
+    );
+    expect(
+      tester
+          .getSemantics(find.byTooltip('ScaledCircle Home'))
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    semantics.dispose();
     await tester.tap(find.byTooltip('ScaledCircle Home'));
     await tester.pumpAndSettle();
     expect(find.text('Destination /business'), findsOneWidget);
