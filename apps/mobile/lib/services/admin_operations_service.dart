@@ -81,10 +81,6 @@ class AdminOperationsService {
           'rolloutMode': 'beta_cohort',
           'betaCohortStage': 'initial_5',
           'betaCohortBusinessJobIds': [generationJobId.trim()],
-          'globalDailyMaximum': 50,
-          'globalMonthlyMaximum': 300,
-          'globalDailyCostMicros': 10000000,
-          'globalMonthlyCostMicros': 100000000,
         });
     return Map<String, dynamic>.from(result.data);
   }
@@ -112,7 +108,7 @@ class AdminOperationsService {
         .httpsCallable('updateGeneratedMediaSafetyConfiguration')
         .call<Map<Object?, Object?>>({
           'providerGenerationEnabled': enabled,
-          'founderProofOnly': true,
+          'privateBetaOnly': true,
         });
     return Map<String, dynamic>.from(result.data);
   }

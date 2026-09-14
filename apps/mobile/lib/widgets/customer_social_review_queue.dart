@@ -211,6 +211,13 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                 'Recommended mix for remaining posts: ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'text').length} text posts · ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'generated').length} versions calling for new concepts. Platform versions may share a concept for the same idea.',
               ),
             ),
+          if (_rows.where((r) => r['creativeSupply'] is Map).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text(
+                '${_rows.where((r) => r['creativeSupply'] is Map).last['creativeSupply']['conceptsNeeded']} additional concepts needed for fresh coverage. New concepts are prepared within your allowance; paired platform sizes share one source.',
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               key: const PageStorageKey('social-review-content'),
@@ -249,6 +256,11 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                                 ),
                               ),
                             ),
+                          ),
+                        if (row['creativeLabel'] != null)
+                          Text(
+                            row['creativeLabel'].toString(),
+                            style: Theme.of(context).textTheme.labelLarge,
                           ),
                         Text(
                           row['provider'] == 'instagram'

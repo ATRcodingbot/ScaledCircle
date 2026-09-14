@@ -40,28 +40,41 @@ function createPreparation({db,editor,media,now=Date.now}) {
      const config=(await db.doc('providerConfigurations/generated-service-visuals').get()).data();
      if(config?.providerGenerationEnabled!==true)return {creativeStatus:'generation_unavailable',
        generationMessage:'Image generation is currently paused. Your saved preview is preserved. Upload an image or choose a different asset.'};
+     const creativeContext=await diversity.readCreativeContext(db,uid);
+     const freshRecommendation=diversity.planCreativeMix({...creativeContext,preparations:[]}).decisions[diversity.key(input)];
+     if(!freshRecommendation)throw Error('Only an unscheduled current draft can get new creative.');
+     if(!freshRecommendation?.service)throw Error('Choose a maintained service for this post before generating.');
      await db.runTransaction(async tx=>{
        const [oldSnap,itemSnap,jobs]=await Promise.all([tx.get(lease),tx.get(db.doc('socialContentItems/'+input.itemId)),
          tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101))]);
        const old=oldSnap.data(),item=itemSnap.data();
        if(item?.businessUid!==uid||(item.platformVersions?.[input.provider]??item.currentVersion)!==input.version||
          jobs.size>100||jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))throw Error('Only an unscheduled current draft can get new creative.');
-       if(!old?.recommendation?.service||old.reviewCandidate?.sha256!==(input.candidateSha256||undefined))throw Error('Review the current image before regenerating it.');
-       const requestId='social_regen_'+crypto.createHash('sha256').update(uid+':'+input.itemId+':'+input.provider+':'+input.version+':'+(input.candidateSha256||'no_candidate')).digest('hex');
-       const override={...old.recommendation,format:'generated',label:'New service concept',requestId,assetId:null,revisionId:null,sourceHash:null,
-         reason:'A replacement requested for this exact draft. Review it before approval.',visualDirection:old.recommendation.visualDirection||'practical'};
-       tx.update(lease,{generationOverride:override,state:'regeneration_requested',regenerationRequestedAt:now()});
+       if(old?.reviewCandidate?.sha256!==(input.candidateSha256||undefined))throw Error('Review the current image before regenerating it.');
+       if(old?.generationOverride&&!old.reviewCandidate){
+         const jobId='visual_job_'+crypto.createHash('sha256').update(uid+'\n'+old.generationOverride.requestId).digest('hex').slice(0,40);
+         const prior=(await tx.get(db.doc('visualGenerationJobs/'+jobId))).data();
+         if(!prior||['queued','processing','unknown_provider_outcome'].includes(prior.status))throw Error('A new image is already being prepared or confirmed. Reopen this preview to resume the same request.');
+       }
+       const regenerationSequence=(old?.regenerationSequence||0)+1;
+       const requestId='social_regen_'+crypto.createHash('sha256').update(uid+':'+input.itemId+':'+input.provider+':'+input.version+':'+(input.candidateSha256||'no_candidate')+':'+regenerationSequence).digest('hex');
+       const override={...freshRecommendation,format:'generated',label:'New service concept',requestId,assetId:null,revisionId:null,sourceHash:null,
+         reason:'A replacement requested for this exact draft. Review it before approval.',visualDirection:freshRecommendation.visualDirection||'practical'};
+       if(old?.state==='preparing'&&old.leaseUntil>now())throw Error('Creative preparation is already in progress.');
+       tx.set(lease,{...old,businessUid:uid,itemId:input.itemId,provider:input.provider,version:input.version,regenerationSequence,generationOverride:override,state:'regeneration_requested',regenerationRequestedAt:now(),regenerationPreviousSourceSha256:old?.reviewCandidate?.sourceSha256||null});
      });
    }
+   const latestContext=await diversity.readCreativeContext(db,uid);
+   const planned=diversity.planCreativeMix(latestContext).decisions[diversity.key(input)];
    const claimed=await db.runTransaction(async tx=>{
      const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
      if(jobs.size>100)throw Error('Publication history needs review.');
      if(jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))return 'preserved';
      const old=(await tx.get(lease)).data();
      if(old?.state==='preparing'&&old.leaseUntil>now())return 'preparing';
-     if(old?.state==='prepared'&&old.version===input.version&&old.recommendation?.policy===diversity.POLICY)return 'prepared';
+     if(old?.state==='prepared'&&old.version===input.version&&old.recommendation?.policy===diversity.POLICY&&old.recommendation?.historyPolicy==='SocialCreativeHistoryV2'&&JSON.stringify(old.recommendation)===JSON.stringify(planned))return 'prepared';
      tx.set(lease,{businessUid:uid,itemId:input.itemId,provider:input.provider,attempt,state:'preparing',leaseUntil:now()+180000,startedAt:now(),generationOverride:old?.generationOverride||null,
-       reviewCandidate:old?.reviewCandidate||null,version:old?.version||input.version});
+       reviewCandidate:old?.reviewCandidate||null,version:input.version,regenerationSequence:old?.regenerationSequence||0,regenerationPreviousSourceSha256:old?.regenerationPreviousSourceSha256||null});
      return 'claimed';
    });
    if(claimed!=='claimed')return {creativeStatus:claimed,approved:false,scheduled:false};
@@ -71,7 +84,8 @@ function createPreparation({db,editor,media,now=Date.now}) {
    let variant=version.variants.find(v=>v.provider===input.provider);
    const nextTime=futureSlot(version.scheduledFor,now());
    const oldTime=toMillis(version.scheduledFor);
-   if(!Number.isFinite(oldTime)||nextTime!==new Date(oldTime).toISOString()) {
+   const regenerating=!!(await lease.get()).data()?.generationOverride;
+   if(!regenerating&&(!Number.isFinite(oldTime)||nextTime!==new Date(oldTime).toISOString())) {
      await editor.save(uid,{...input,copy:variant.copy,callToAction:variant.callToAction,destinationUrl:variant.destinationUrl,
        scheduledFor:nextTime,textOnly:variant.mediaRequirement==='none'});
      version=await current(uid,input);variant=version.variants.find(v=>v.provider===input.provider);
@@ -80,13 +94,15 @@ function createPreparation({db,editor,media,now=Date.now}) {
    const override=(await lease.get()).data()?.generationOverride;
    const recommendation=override||diversity.planCreativeMix(context).decisions[diversity.key(input)];
    if(!recommendation)throw Error('This post is already scheduled.');
-   await lease.update({recommendation});
+   await lease.update({recommendation,version:version.version});
    let creativeStatus=variant.mediaRevisionId?'prepared':variant.mediaRequirement==='none'?'text_only':'needs_creative';
    const oldMedia=variant.mediaRevisionId?(await db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`).get()).data():null;
    let generationRequest=null;
    let generationStatus=null;
    let reviewCandidate=null;
-   if(recommendation.format==='text'){
+   if(recommendation.format==='owner_selected'){
+     creativeStatus='prepared';
+   }else if(recommendation.format==='text'){
      if(variant.mediaRequirement!=='none'){
        const disclosure="Service concept image — not a photo of this Business's completed work, team, customers, or property.";
        await editor.save(uid,{...input,version:version.version,copy:variant.copy.replace(disclosure,'').trim(),
@@ -107,7 +123,7 @@ function createPreparation({db,editor,media,now=Date.now}) {
      reviewCandidate=media.prepareCandidate?await media.prepareCandidate(uid,{...input,version:version.version},recommendation):null;
      generationStatus=reviewCandidate?'review_required':config.providerGenerationEnabled===true?'available':'configuration_unavailable';
      if(!reviewCandidate&&recommendation.service&&generationStatus==='available')generationRequest={requestId:recommendation.requestId,
-       serviceCategory:recommendation.service,visualDirection:recommendation.visualDirection,materialSlot:'landing_page_hero'};
+       serviceCategory:recommendation.service,visualDirection:recommendation.visualDirection,materialSlot:'landing_page_hero',socialPost:{itemId:input.itemId,provider:input.provider,version:version.version}};
      creativeStatus=reviewCandidate?'concept_needs_review':'needs_creative';
    }
    const quality=await editor.assess(uid,{...input,version:version.version});

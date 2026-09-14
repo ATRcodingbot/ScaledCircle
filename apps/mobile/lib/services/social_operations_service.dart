@@ -69,6 +69,27 @@ class SocialOperationsService {
   FirebaseFunctions get _functions =>
       _providedFunctions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
 
+  Future<Map<String, dynamic>> generationAvailability() async {
+    try {
+      final data = Map<String, dynamic>.from(
+        (await _functions
+                    .httpsCallable('getGeneratedServiceVisualWorkspace')
+                    .call(_workspace({})))
+                .data
+            as Map,
+      );
+      return {'availability': data['availability'], 'usage': data['usage']};
+    } catch (_) {
+      return {
+        'availability': {
+          'available': false,
+          'state': 'provider_temporarily_unavailable',
+          'message': 'Creative generation is temporarily unavailable.',
+        },
+      };
+    }
+  }
+
   Future<Map<String, dynamic>> preparePost(Map<String, dynamic> input) async {
     final result = Map<String, dynamic>.from(
       (await _functions
@@ -127,9 +148,19 @@ class SocialOperationsService {
               );
           result.addAll(Map<String, dynamic>.from(prepared.data as Map));
         }
-        result['creativeStatus'] = generated['status'] == 'review_required'
-            ? 'concept_needs_review'
-            : 'preparing';
+        if (generated['status'] == 'review_required') {
+          result['creativeStatus'] = result['reviewCandidate'] != null
+              ? 'concept_needs_review'
+              : 'needs_creative';
+        } else if (['queued', 'processing'].contains(generated['status'])) {
+          result['creativeStatus'] = 'preparing';
+          result['generationMessage'] =
+              'Preparing new creative. Your saved image is preserved; check the preview again shortly.';
+        } else {
+          result['creativeStatus'] = 'needs_attention';
+          result['generationMessage'] =
+              'Creative generation could not finish. Your saved post is preserved. Try again later or choose another image.';
+        }
       } on FirebaseFunctionsException catch (error) {
         result['creativeStatus'] = 'needs_creative';
         result['generationMessage'] =

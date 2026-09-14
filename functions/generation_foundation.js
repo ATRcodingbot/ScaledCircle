@@ -116,7 +116,8 @@ function sanitizeRequest(input, approvedServices = []) {
   if (campaignId && !/^[A-Za-z0-9_-]{3,160}$/.test(campaignId)) throw new Error("invalid_generation_campaign");
   const materialSlot = clean(input?.materialSlot || "landing_page_hero", 40).toLowerCase();
   if (!MATERIAL_SLOTS.has(materialSlot)) throw new Error("invalid_generation_material_slot");
-  return {requestId, serviceCategory, visualDirection, requestedPurpose, campaignId, materialSlot};
+  const socialPost=input?.socialPost==null?null:{itemId:clean(input.socialPost.itemId,220),provider:clean(input.socialPost.provider,20),version:input.socialPost.version};
+  return {requestId, serviceCategory, visualDirection, requestedPurpose, campaignId, materialSlot, ...(socialPost?{socialPost}:{})};
 }
 
 function serviceLanguage(value) {
@@ -195,7 +196,7 @@ function serviceAreaVisualContextFromSources({campaign = null, growth = null,
       discoveredArea ? "business_discovery_preferences" : "business_growth_profile"});
 }
 
-function safeBrief(request, brand = {}, serviceAreaContext = null) {
+function safeBrief(request, brand = {}, serviceAreaContext = null, socialCreativeContext = null) {
   const language = serviceLanguage(request.serviceCategory);
   const context = sanitizeServiceAreaVisualContext(serviceAreaContext);
   return Object.freeze({
@@ -208,6 +209,7 @@ function safeBrief(request, brand = {}, serviceAreaContext = null) {
     materialSlot: request.materialSlot || "landing_page_hero",
     serviceLanguage: language,
     serviceAreaVisualContext: context,
+    ...(socialCreativeContext?{socialCreativeContext}:{}),
     visualSubject: language.visualSubject,
     workmanship: "physically plausible professional execution with clean lines, realistic proportions, and appropriate site conditions",
     composition: request.materialSlot === "door_hanger_service_hero" ?
@@ -268,7 +270,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
   authorization = async () => generationAuthorizationPolicy(undefined, null),
   budgetAuthority = null,
   approvedServices = async () => [], brandProfile = async () => ({}),
-  serviceAreaVisualContext = async () => null, ingestCandidate,
+  serviceAreaVisualContext = async () => null, socialCreativeContext = async () => null, ingestCandidate,
   approveCandidate = async () => {}, rejectCandidate = async () => {}, providerAuthPreflight = null,
   usageSummary = async () => null, commercialOperations = async () => ({}),
   availabilityDetails = async () => ({}),
@@ -304,7 +306,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     if (recent.docs.filter((doc) => millis(doc.data().createdAt) >= dayStartMillis).length >= MAX_REQUESTS_PER_DAY) {
       throw new Error("generation_rate_limited");
     }
-    const brief = safeBrief(valid, await brandProfile(actor), await serviceAreaVisualContext(actor, valid));
+    const brief = safeBrief(valid, await brandProfile(actor), await serviceAreaVisualContext(actor, valid), await socialCreativeContext(actor,valid));
     const at = FieldValue.serverTimestamp();
     await ref.create({schemaVersion: SCHEMA_VERSION, jobId, businessUid: actor.uid,
       requestId: valid.requestId, status: "queued", serviceCategory: valid.serviceCategory,
@@ -373,7 +375,9 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
           completedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()});
         return {jobId: ref.id, status: "blocked"};
       }
+      if(job.safeBrief?.socialCreativeContext?.previousSourceSha256===crypto.createHash('sha256').update(result.binary).digest('hex'))throw Error('invalid_output');
       const candidate = await ingestCandidate({businessUid: job.businessUid, requestId: job.requestId,
+        conceptLabel:job.safeBrief?.socialCreativeContext?.conceptLabel||null, creativeContext:job.safeBrief?.socialCreativeContext||null,
         purpose: job.requestedPurpose, serviceCategory: job.serviceCategory, binary: result.binary,
         disclosure: DISCLOSURE, moderation, jobId: ref.id});
       await db.runTransaction(async (tx) => {

@@ -237,7 +237,7 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
     }
   }
   async function ingestGeneratedCandidate({businessUid, requestId: rawRequestId, purpose, serviceCategory,
-    binary, disclosure, moderation, jobId}) {
+    binary, disclosure, moderation, jobId, conceptLabel=null, creativeContext=null}) {
     const idempotencyKey = requestId(rawRequestId);
     if (!Buffer.isBuffer(binary) || binary.length < 1 || binary.length > MAX_BYTES) throw new Error("invalid_output");
     if (!PURPOSES.has(purpose) || purpose === "logo") throw new Error("invalid_generated_purpose");
@@ -259,14 +259,14 @@ function createCreativeMediaService({db, bucket, FieldPath, FieldValue, Timestam
       const assetTotal = Number(librarySnap.data()?.assetCount || 0);
       if (!assetSnap.exists && assetTotal >= MAX_ASSETS) throw new Error("media_asset_limit_reached");
       if (!assetSnap.exists) tx.create(assetRef, {schemaVersion: SCHEMA_VERSION, businessUid,
-        purpose, title: `${text(serviceCategory, 80)} generated concept`, currentRevisionId: revisionId,
+        purpose, title: text(conceptLabel,160) || `${text(serviceCategory, 80)} generated concept`, currentRevisionId: revisionId,
         approvedRevisionId: null, removed: false, createdAt: at, updatedAt: at});
       if (!revisionSnap.exists) tx.create(revisionRef, {schemaVersion: SCHEMA_VERSION, businessUid,
         assetId, revisionId, origin: "generated_service_concept", purpose, status: "upload_pending",
         approvalStatus: "pending", moderationStatus: "passed", moderation,
         truthfulnessDisclosure: text(disclosure, 320), generatedContentAcknowledged: false,
         privateOriginalPath: originalPath, renditions: {}, altText: `Concept image illustrating ${text(serviceCategory, 80)}`,
-        serviceLabel: text(serviceCategory, 80), rightsAttestation: false, requestId: idempotencyKey,
+        serviceLabel: text(serviceCategory, 80), conceptLabel:text(conceptLabel,160)||null, creativeContext, rightsAttestation: false, requestId: idempotencyKey,
         generationJobId: text(jobId, 160), createdAt: at, createdBy: "creative-media-core", updatedAt: at});
       tx.set(intentRef, {schemaVersion: SCHEMA_VERSION, businessUid, assetId, revisionId,
         storagePath: originalPath, status: "open", generatedBackendWrite: true, maximumBytes: MAX_BYTES,

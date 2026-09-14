@@ -34,6 +34,11 @@ class EditorService extends SocialOperationsService {
     },
   };
   @override
+  Future<Map<String, dynamic>> generationAvailability() async => {
+    'availability': {'available': true},
+    'usage': {'used': 5, 'total': 60, 'remaining': 55},
+  };
+  @override
   Future<Map<String, dynamic>> previewPost(Map<String, dynamic> post) async =>
       this.post();
   @override

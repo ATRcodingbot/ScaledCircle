@@ -5,6 +5,7 @@ import '../services/business_media_service.dart';
 import '../screens/business/brand_assets_screen.dart';
 import '../models/social_plan_presentation.dart';
 import 'social_candidate_preview.dart';
+import 'social_asset_choice.dart';
 
 /// Preparation is intentionally separate from the exact approval confirmation.
 class CustomerSocialPostEditor extends StatefulWidget {
@@ -53,6 +54,9 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   late bool _textOnly =
       _post['reviewedPost']?['variant']?['mediaRequirement'] == 'none';
   String? _error, _creativeNotice;
+  Map<String, dynamic> _generation = {};
+  bool get _generationAvailable =>
+      _generation['availability']?['available'] == true;
   Map<String, dynamic>? _quality;
   Map<String, dynamic> get _identity => {
     'itemId': _post['itemId'],
@@ -82,7 +86,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
           'action': 'auto',
           'confirmOwnerExecution': true,
         })
-        .timeout(const Duration(seconds: 90));
+        .timeout(const Duration(minutes: 4));
     await _refresh();
     if (mounted) {
       _creativeNotice = result['creativeStatus'] == 'concept_needs_review'
@@ -131,9 +135,11 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
 
   Future<void> _refresh() async {
     final fresh = await widget.service.previewPost(_identity);
+    final generation = await widget.service.generationAvailability();
     if (mounted) {
       setState(() {
         _post = {..._post, ...fresh, 'itemId': _post['itemId']};
+        _generation = generation;
         _quality = Map<String, dynamic>.from(
           fresh['reviewedPost']?['quality'] as Map? ?? {},
         );
@@ -218,8 +224,8 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Regenerate image?'),
-        content: const Text(
-          'Prepare one new concept for this draft using your monthly allowance. Existing approved and scheduled posts stay unchanged. Nothing will be approved automatically.',
+        content: Text(
+          'Generate one NEW concept for this exact post. A successful source concept uses one unit; platform sizes use no extra units. Nothing is approved or scheduled.\n\n${_generation['usage']?['remaining'] ?? 'Check your'} concepts remaining this month.',
         ),
         actions: [
           TextButton(
@@ -357,8 +363,17 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             for (final asset in assets)
               SimpleDialogOption(
                 onPressed: () => Navigator.pop(context, asset),
-                child: Text(
-                  asset['title']?.toString() ?? 'Approved Business image',
+                child: SocialAssetChoice(
+                  asset: Map<String, dynamic>.from(asset),
+                  history: Map<String, dynamic>.from(
+                    ((_post['creativeAssets'] as List? ?? [])
+                            .whereType<Map>()
+                            .where((h) => h['assetId'] == asset['assetId'])
+                            .firstOrNull) ??
+                        {},
+                  ),
+                  load: () =>
+                      media.previewBytes(Map<String, dynamic>.from(asset)),
                 ),
               ),
             if (assets.isEmpty)
@@ -643,11 +658,30 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               child: const Text('Use Different Asset'),
             ),
             OutlinedButton(
-              onPressed: _busy || _changed || _post['publicationStatus'] != null
+              onPressed:
+                  _busy ||
+                      _changed ||
+                      !_generationAvailable ||
+                      _post['publicationStatus'] != null
                   ? null
                   : () => _run(_regenerate),
               child: const Text('Regenerate Image'),
             ),
+            if (!_generationAvailable) ...[
+              Text(
+                _generation['availability']?['message']?.toString() ??
+                    'Creative generation is temporarily unavailable.',
+              ),
+              TextButton(
+                onPressed: _busy ? null : () => _run(_refresh),
+                child: const Text('Try Again Later'),
+              ),
+            ],
+            if (_generation['usage'] is Map)
+              Text(
+                '${_generation['usage']['used']} of ${_generation['usage']['total']} generated concepts used · ${_generation['usage']['remaining']} remaining',
+              ),
+
             if (_changed)
               const Text(
                 'Save your changes to refresh the preview and automatic quality checks.',

@@ -78,6 +78,10 @@ function reviewDigest(ctx,bindingHash) {
 }
 function createStore({db, now=Date.now, enabledUids=[], environment,authorizeActor,bucket,stageInline}) {
   const enabled = uid => enabledUids.includes(uid);
+  // One workspace response reuses its bounded history read across platform cards.
+  // Authority checks below always read exact current records independently.
+  const historyReads=new Map();
+  const creativeHistory=uid=>{if(!historyReads.has(uid))historyReads.set(uid,require('./social_creative_diversity').readCreativeContext(db,uid));return historyReads.get(uid);};
   async function context(tx, uid, input) {
     if(!/^[a-zA-Z0-9_-]{1,220}$/.test(input?.itemId||'') || !['facebook','instagram'].includes(input?.provider)) throw Error('Choose a current post.');
     const read = ref => tx ? tx.get(ref) : ref.get();
@@ -123,6 +127,16 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
       result.creativeNeedsPreparation=!original.existingJob&&(!recommendation||original.creativePreparation.version!==original.version?.version);
       if(original.creativePreparation?.reviewCandidate&&!original.creativePreparation.reviewCandidate.preparation?.subjectQuality)result.creativeNeedsPreparation=true;
       if(inline)result.reviewCandidate=inline.candidate;
+      if(!original.existingJob){
+        const diversity=require('./social_creative_diversity'),history=await creativeHistory(uid),mix=diversity.planCreativeMix(history);
+        result.creativeSupply=mix.supply;
+        result.creativeAssets=mix.assets;
+        const planned=mix.decisions[diversity.key(input)],old=original.creativePreparation?.recommendation;
+        if(old?.format!=='owner_selected'&&planned&&(old?.historyPolicy!=='SocialCreativeHistoryV2'||old?.assetId!==planned.assetId||old?.requestId!==planned.requestId))result.creativeNeedsPreparation=true;
+        result.creativeLabel=original.creativePreparation?.reviewCandidate?'New creative':
+          ctx.version?.variants?.find(v=>v.provider===input.provider)?.mediaRequirement==='none'?'Text-only recommendation':
+          ctx.revision?.sourceOrigin==='generated_service_concept'?'Reused asset':'Real business photo';
+      }
       if(inline&&actorUid!==uid){result.ready=false;result.reasons.push({code:'creative_owner',message:'The Business owner must approve this new service-concept image.'});}
       if(inlineError){result.ready=false;result.reasons=result.reasons.filter(r=>r.code!=='creative');result.reasons.push({code:'creative',message:inlineError});}
       if(needsNew&&!inline)ctx.revision=null;

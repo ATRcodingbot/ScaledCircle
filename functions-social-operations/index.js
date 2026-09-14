@@ -212,6 +212,7 @@ exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3
         recommendation:{policy:diversity.POLICY,format:method==='save'&&request.data.textOnly===true?'text':'owner_selected',
           label:method==='save'&&request.data.textOnly===true?'Text-only Facebook post':'Business-selected creative',
           reason:'Selected by your Business for this exact post.',service:null,evidence:'Owner selection'},
+        reviewCandidate:null,generationOverride:null,generationStatus:null,failureReason:null,
         actorUid:request.auth.uid,finishedAt:Date.now(),leaseUntil:0},{merge:true});
     }
     if(method!=='assess')result.quality=await editor.assess(business.uid,{...request.data,version:result.version});

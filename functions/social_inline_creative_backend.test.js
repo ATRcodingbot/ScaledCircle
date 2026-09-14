@@ -112,3 +112,21 @@ test('failed image analysis preserves only safe diagnostic codes and never appro
  const preview=await s.store.preview(s.uid,s.input);assert.equal(preview.ready,false);assert.equal(preview.reviewState,'needs_attention');
  assert.ok(preview.reasons.some(r=>r.message?.includes('could not finish')));
 });
+
+test('regenerate freezes exact draft, creates a distinct budgeted request, and rejects duplicate pending requests',async()=>{
+ const s=await setup('regen_exact_context');
+ await db.doc('businessBrandProfiles/'+s.uid).set({businessUid:s.uid,approvedServiceCategories:['decks']});
+ await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:true});
+ const editor=require('../functions-social-operations/social_customer_editor').createEditor({db,enabledUids:[s.uid],now:()=>s.f.now});
+ const prep=require('../functions-social-operations/social_customer_preparation').createPreparation({db,editor,media:{prepareCandidate:async()=>null},now:()=>s.f.now});
+ const result=await prep.prepare(s.uid,{...s.input,action:'regenerate',candidateSha256:s.candidate.sha256,confirmRegeneration:true});
+ assert.match(result.generationRequest.requestId,/^social_regen_/);assert.deepEqual(result.generationRequest.socialPost,{itemId:s.itemId,provider:'facebook',version:1});
+ const ctx=await require('./social_generation_context').readContext(db,{uid:s.uid},result.generationRequest);
+ assert.equal(ctx.post.contentHash,s.version.contentHash);assert.equal(ctx.previousSourceSha256,s.candidate.sourceSha256);
+ assert.ok(ctx.conceptLabel);assert.ok(ctx.composition);
+ await assert.rejects(require('./social_generation_context').readContext(db,{uid:'unrelated'},result.generationRequest),/access_denied/);
+ await assert.rejects(prep.prepare(s.uid,{...s.input,action:'regenerate',confirmRegeneration:true}),/already being prepared/);
+ const replay=await prep.prepare(s.uid,{...s.input,action:'auto'});assert.equal(replay.generationRequest.requestId,result.generationRequest.requestId);
+ assert.deepEqual((await db.doc('socialContentVersions/'+s.itemId+'_v1').get()).data(),s.version);
+ assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',s.uid).get()).size,0);
+});

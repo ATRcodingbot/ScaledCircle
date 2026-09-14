@@ -370,7 +370,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           content: Text(
             applied
                 ? enabled
-                      ? 'Provider enabled for the bounded Founder proof.'
+                      ? 'Generation enabled for invited, entitled Private Beta Businesses.'
                       : 'Provider disabled.'
                 : 'Provider state could not be verified safely.',
           ),
@@ -900,7 +900,7 @@ class AdminOperationsContent extends StatelessWidget {
                     onRestoreFounderOnlyControls != null) ...[
                   const SizedBox(height: 10),
                   const Text(
-                    'Private Beta staging uses the same server-resolved Business evidence. Founder-only clears the commercial cohort and safely preconfigures 50 calls/day, 300 calls/month, \$10/day, and \$100/month. Both actions keep provider generation disabled.',
+                    'Private Beta staging uses the same server-resolved Business evidence. Founder-only clears the commercial cohort and safely preconfigures 50 calls/day, 300 calls/month, \$10/day, and \$100/month. Both actions keep provider generation disabled until explicitly enabled below.',
                     style: TextStyle(fontStyle: FontStyle.italic),
                   ),
                   const SizedBox(height: 10),
@@ -929,12 +929,12 @@ class AdminOperationsContent extends StatelessWidget {
               if (onSetStagingProviderEnabled != null) ...[
                 const Divider(height: 28),
                 Text(
-                  'Bounded Founder generation',
+                  'Invited Private Beta generation',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Requires exactly one Founder-authorized Business. Existing allowances and safety limits remain in force. Disable after the approved run.',
+                  'Available only to the invited cohort with active plan entitlement. Monthly allowances and provider spend caps remain enforced. Owner approval is still required before publication.',
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -948,7 +948,7 @@ class AdminOperationsContent extends StatelessWidget {
                           ? null
                           : () => onSetStagingProviderEnabled!(true),
                       icon: const Icon(Icons.play_arrow_outlined),
-                      label: const Text('Enable bounded Founder run'),
+                      label: const Text('Enable invited Beta generation'),
                     ),
                     OutlinedButton.icon(
                       onPressed:

@@ -444,6 +444,7 @@ const generationService = generationFoundation.createGenerationService({
     return generationFoundation.serviceAreaVisualContextFromSources({ campaign, growth, discovery,
       campaignSelected: Boolean(request.campaignId) });
   },
+  socialCreativeContext: (actor, request) => require('./social_generation_context').readContext(db, actor, request),
   ingestCandidate: (input) => creativeMediaService.ingestGeneratedCandidate(input),
   approveCandidate: (input) => creativeMediaService.approveGeneratedCandidate(input),
   rejectCandidate: (input) => creativeMediaService.rejectGeneratedCandidate(input),
@@ -12421,7 +12422,7 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
     const context = await authenticatedUserContext(request, "Admin access is required.");
     if (context.isAdmin !== true) throw new HttpsError("permission-denied", "Admin access is required.");
     const input = request.data || {};const patch = {};
-    const allowedFields = new Set(["providerGenerationEnabled", "rolloutMode", "betaCohortStage", "founderProofOnly",
+    const allowedFields = new Set(["providerGenerationEnabled", "rolloutMode", "betaCohortStage", "founderProofOnly", "privateBetaOnly",
     "authorizedBusinessUids",
     "authorizedBusinessJobIds", "betaCohortBusinessJobIds", "globalDailyMaximum", "globalMonthlyMaximum",
     "globalDailyCostMicros", "globalMonthlyCostMicros"]);
@@ -12518,6 +12519,11 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
     await db.runTransaction(async (tx) => {
       const ref = db.collection("providerConfigurations").doc("generated-service-visuals");
       const current = (await tx.get(ref)).data() || {};
+      if (input.privateBetaOnly === true && patch.providerGenerationEnabled === true) {
+        const merged = { ...current, ...patch };
+        const policy = generationFoundation.generationAuthorizationPolicy(merged, null, {});
+        if (Object.keys(patch).length !== 1 || merged.rolloutMode !== 'beta_cohort' || !policy.configurationValid || policy.betaCohortCount < 1) throw new HttpsError('failed-precondition', 'Select an invited Private Beta cohort before enabling generation.');
+      }
       if (input.founderProofOnly === true && patch.providerGenerationEnabled === true && (
       Object.keys(patch).length !== 1 || current.rolloutMode !== "founder_only" ||
       !Array.isArray(current.authorizedBusinessUids) || current.authorizedBusinessUids.length !== 1)) {
