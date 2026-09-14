@@ -290,7 +290,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                       if (p['pipelineStages'] is List)
                         Text((p['pipelineStages'] as List).join(' → ')),
                       Text(
-                        'Last action: ${p['lastAction'] ?? 'No recorded action'}\nResult: ${p['result'] ?? 'Unavailable'}\nNext: ${p['nextAction'] ?? 'Review evidence'}',
+                        'Last action: ${p['lastAction'] ?? 'No recorded action'}\nResult: ${p['result'] ?? 'Unavailable'}\nNext: ${p['nextContactAction'] ?? p['nextAction'] ?? 'Review evidence'}',
                       ),
                       if (p['freshOutreachEligible'] != false)
                         SelectableText(
@@ -825,7 +825,10 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                         _line('Recommended CTA', p['recommendedCta']),
                         _line('Last action', p['lastAction']),
                         _line('Result', p['result']),
-                        _line('Next action', p['nextAction']),
+                        _line(
+                          'Next action',
+                          p['nextContactAction'] ?? p['nextAction'],
+                        ),
                         const SizedBox(height: 8),
                         if (p['freshOutreachEligible'] != false)
                           const Text(
