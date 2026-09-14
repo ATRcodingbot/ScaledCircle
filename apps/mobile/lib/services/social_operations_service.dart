@@ -1,4 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'dart:typed_data';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'business_workspace_service.dart';
 
@@ -47,6 +49,10 @@ class SocialOperationsWorkspace {
 }
 
 class SocialOperationsService {
+  Future<Uint8List?> previewCreative(Map<String, dynamic> candidate) =>
+      FirebaseStorage.instance
+          .ref(candidate['storagePath'].toString())
+          .getData(8 * 1024 * 1024);
   SocialOperationsService({FirebaseFunctions? functions})
     : _providedFunctions = functions;
 
@@ -78,7 +84,8 @@ class SocialOperationsService {
     );
     // Reuse the budgeted, moderated generation authority. Stable request identity
     // prevents another provider generation when this review is reopened.
-    if (input['action'] == 'auto' && result['generationRequest'] is Map) {
+    if (['auto', 'regenerate'].contains(input['action']) &&
+        result['generationRequest'] is Map) {
       try {
         final requested = Map<String, dynamic>.from(
           (await _functions
@@ -114,6 +121,7 @@ class SocialOperationsService {
               .call(
                 _workspace({
                   ...input,
+                  'action': 'auto',
                   'version': result['version'] ?? input['version'],
                 }),
               );

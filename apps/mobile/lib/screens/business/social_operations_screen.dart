@@ -2,6 +2,9 @@ import '../../widgets/social_performance_panel.dart';
 import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'dart:typed_data';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/customer_social_plan_card.dart';
 import '../../widgets/customer_social_post_editor.dart';
@@ -1806,6 +1809,27 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
       }
       final reviewed = preview['reviewedPost'] as Map;
       final variant = reviewed['variant'] as Map;
+      Uint8List? candidateBytes;
+      if (preview['inlineCreativeApproval'] != null) {
+        final candidate = preview['reviewCandidate'] as Map;
+        candidateBytes = await FirebaseStorage.instance
+            .ref(candidate['storagePath'])
+            .getData(8 * 1024 * 1024);
+        if (candidateBytes == null ||
+            sha256.convert(candidateBytes).toString() != candidate['sha256']) {
+          throw StateError('Image integrity failed.');
+        }
+        if (!mounted) return;
+        var failed = false;
+        await precacheImage(
+          MemoryImage(candidateBytes),
+          context,
+          onError: (_, _) {
+            failed = true;
+          },
+        );
+        if (failed) throw StateError('Creative could not be displayed.');
+      }
       for (final image
           in (reviewed['images'] as List? ?? []).whereType<Map>()) {
         if (!mounted) return;
@@ -1828,6 +1852,17 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (candidateBytes != null) ...[
+                  Image.memory(
+                    candidateBytes,
+                    height: 300,
+                    fit: BoxFit.contain,
+                  ),
+                  Text(preview['reviewCandidate']['disclosure'].toString()),
+                  const Text(
+                    'This confirmation approves this exact service-concept image for this post and as a reusable Business asset. It also approves the post and future schedule shown below.',
+                  ),
+                ],
                 for (final image
                     in (reviewed['images'] as List? ?? []).whereType<Map>())
                   Image.network(
@@ -1871,6 +1906,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         'contentHash': preview['contentHash'],
         'bindingHash': preview['bindingHash'],
         'reviewDigest': preview['reviewDigest'],
+        if (preview['inlineCreativeApproval'] != null) ...{
+          'inlineCreativeDigest': preview['inlineCreativeApproval']['digest'],
+          'confirmCreativeAndSchedule': true,
+        },
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

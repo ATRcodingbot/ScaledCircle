@@ -69,6 +69,20 @@ class BusinessMediaService
     required String purpose,
     String? assetId,
   }) async {
+    await uploadForReview(
+      bytes: bytes,
+      filename: filename,
+      purpose: purpose,
+      assetId: assetId,
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadForReview({
+    required Uint8List bytes,
+    required String filename,
+    required String purpose,
+    String? assetId,
+  }) async {
     final requestId =
         'upload_${DateTime.now().microsecondsSinceEpoch}_${bytes.length}';
     final created = await _functions
@@ -88,6 +102,7 @@ class BusinessMediaService
       'assetId': data['assetId'],
       'revisionId': data['revisionId'],
     });
+    return data;
   }
 
   @override

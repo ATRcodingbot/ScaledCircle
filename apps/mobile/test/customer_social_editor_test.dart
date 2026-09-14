@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/widgets/customer_social_post_editor.dart';
 import 'package:flutter_app/services/social_operations_service.dart';
@@ -49,7 +52,100 @@ class EditorService extends SocialOperationsService {
   ) => throw StateError('Preparation cannot approve');
 }
 
+class InlineEditorService extends EditorService {
+  final bytes = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWMwdgk1dgllgFAAFdYDMQlC68kAAAAASUVORK5CYII=',
+  );
+  bool badBytes = false;
+  @override
+  Map<String, dynamic> post() => {
+    ...super.post(),
+    'ready': true,
+    'reviewState': 'ready_for_review',
+    'creativeNeedsPreparation': false,
+    'inlineCreativeApproval': {'digest': 'exact-review'},
+    'reviewCandidate': {
+      'sha256': sha256.convert(bytes).toString(),
+      'storagePath': 'private-concept',
+      'width': 1024,
+      'height': 1024,
+      'status': 'pending_owner_review',
+      'approved': false,
+      'disclosure': 'Service concept — not completed Business work.',
+    },
+  };
+  @override
+  Future<Uint8List?> previewCreative(Map<String, dynamic> candidate) async =>
+      badBytes ? Uint8List.fromList([1, 2, 3]) : bytes;
+}
+
 void main() {
+  for (final corrupt in [false, true]) {
+    testWidgets(
+      'inline exact creative approval requires decoded verified bytes: corrupt=$corrupt',
+      (tester) async {
+        tester.view.physicalSize = const Size(375, 812);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final service = InlineEditorService()..badBytes = corrupt;
+        var confirmations = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: CustomerSocialPostEditor(
+              post: service.post(),
+              service: service,
+              onSchedule: (post) async {
+                expect(
+                  post['inlineCreativeApproval']['digest'],
+                  'exact-review',
+                );
+                confirmations++;
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        if (!corrupt) {
+          await tester.runAsync(
+            () => precacheImage(
+              MemoryImage(service.bytes),
+              tester.element(find.byType(CustomerSocialPostEditor)),
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(confirmations, 0);
+        await tester.scrollUntilVisible(
+          find.text('Approve Creative & Schedule'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        final button = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Approve Creative & Schedule'),
+        );
+        expect(button.onPressed, corrupt ? isNull : isNotNull);
+        expect(find.text('Ready for your review'), findsNothing);
+        expect(
+          find.textContaining('Creative needs attention. Automatic'),
+          findsNothing,
+        );
+        if (!corrupt) {
+          await tester.tap(find.text('Approve Creative & Schedule'));
+          await tester.pumpAndSettle();
+          expect(confirmations, 1);
+        }
+        expect(service.calls, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   testWidgets('an unavailable preview image cannot be approved', (
     tester,
   ) async {

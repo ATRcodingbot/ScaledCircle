@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/social_operations_service.dart';
 import '../services/business_media_service.dart';
 import '../screens/business/brand_assets_screen.dart';
@@ -43,9 +44,12 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   )?.toLocal();
   bool _busy = false, _changed = false, _editing = false;
   final Set<String> _loadedPreviewImages = {};
-  bool get _imagesVisible => (_post['reviewedPost']?['images'] as List? ?? [])
-      .whereType<Map>()
-      .every((image) => _loadedPreviewImages.contains(image['url'].toString()));
+  bool get _imagesVisible =>
+      (_post['reviewedPost']?['images'] as List? ?? []).whereType<Map>().every(
+        (image) => _loadedPreviewImages.contains(image['url'].toString()),
+      ) &&
+      (_post['reviewCandidate'] == null ||
+          _loadedPreviewImages.contains(_post['reviewCandidate']['sha256']));
   late bool _textOnly =
       _post['reviewedPost']?['variant']?['mediaRequirement'] == 'none';
   String? _error, _creativeNotice;
@@ -82,7 +86,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     await _refresh();
     if (mounted) {
       _creativeNotice = result['creativeStatus'] == 'concept_needs_review'
-          ? 'A new service concept is prepared. Review it in Brand Assets before using it in this post.'
+          ? 'Review this concept and post together. Your confirmation approves the exact creative and schedules this version.'
           : result['generationMessage']?.toString();
       setState(
         () => _quality = Map<String, dynamic>.from(
@@ -139,6 +143,13 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
           _copy.text =
               fresh['reviewedPost']?['variant']?['copy']?.toString() ??
               _copy.text;
+          _cta.text =
+              fresh['reviewedPost']?['variant']?['callToAction']?.toString() ??
+              _cta.text;
+          _destination.text =
+              fresh['reviewedPost']?['variant']?['destinationUrl']
+                  ?.toString() ??
+              _destination.text;
           _time = DateTime.tryParse(
             fresh['scheduledFor']?.toString() ?? '',
           )?.toLocal();
@@ -162,6 +173,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
       'scheduledFor': _time!.toUtc().toIso8601String(),
       'textOnly': _textOnly,
     });
+    if (mounted) setState(() => _changed = false);
     await _refresh();
     if (mounted) {
       setState(() {
@@ -199,6 +211,125 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
         _changed = true;
       });
     }
+  }
+
+  Future<void> _regenerate() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Regenerate image?'),
+        content: const Text(
+          'Prepare one new concept for this draft using your monthly allowance. Existing approved and scheduled posts stay unchanged. Nothing will be approved automatically.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Regenerate Image'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (mounted) setState(() => _creativeNotice = 'Preparing new creative…');
+    final result = await widget.service.preparePost({
+      ..._identity,
+      'action': 'regenerate',
+      'candidateSha256': _post['reviewCandidate']?['sha256'],
+      'confirmRegeneration': true,
+    });
+    await _refresh();
+    if (mounted) {
+      setState(
+        () => _creativeNotice =
+            result['generationMessage']?.toString() ??
+            (result['creativeStatus'] == 'concept_needs_review'
+                ? 'New creative prepared. Review it with this post before approval.'
+                : 'Your creative status has been updated.'),
+      );
+    }
+  }
+
+  Future<void> _uploadImage() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 12000,
+      maxHeight: 12000,
+    );
+    if (picked == null || !mounted) return;
+    final description = TextEditingController();
+    bool rights = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('Use your image'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(picked.name),
+                TextField(
+                  controller: description,
+                  decoration: const InputDecoration(
+                    labelText: 'Describe the image',
+                  ),
+                ),
+                CheckboxListTile(
+                  value: rights,
+                  onChanged: (value) => update(() => rights = value == true),
+                  title: const Text(
+                    'I own this image or have permission to publish it.',
+                  ),
+                ),
+                const Text(
+                  'The full platform preview will appear here before post approval.',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Back'),
+            ),
+            FilledButton(
+              onPressed: rights ? () => Navigator.pop(context, true) : null,
+              child: const Text('Use this image'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final alt = description.text.trim();
+    description.dispose();
+    if (confirmed != true || alt.isEmpty) return;
+    final media = BusinessMediaService();
+    final created = await media.uploadForReview(
+      bytes: await picked.readAsBytes(),
+      filename: picked.name,
+      purpose: 'service_visual',
+    );
+    await media.saveReviewMetadata(
+      assetId: created['assetId'],
+      revisionId: created['revisionId'],
+      altText: alt,
+      serviceLabel:
+          _post['creativeRecommendation']?['service']?.toString() ?? '',
+      rightsAttestation: true,
+    );
+    await media.approve(created['assetId'], created['revisionId']);
+    await widget.service.preparePost({
+      ..._identity,
+      'action': 'attach',
+      'assetId': created['assetId'],
+      'revisionId': created['revisionId'],
+      'confirmPublicUse': true,
+    });
+    await _refresh();
   }
 
   Future<void> _chooseImage() async {
@@ -352,9 +483,20 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             Text(_post['provider'] == 'instagram' ? 'Instagram' : 'Facebook'),
             if (_post['reviewCandidate'] is Map)
               SocialCandidatePreview(
+                load: () => widget.service.previewCreative(
+                  Map<String, dynamic>.from(_post['reviewCandidate']),
+                ),
                 candidate: Map<String, dynamic>.from(
                   _post['reviewCandidate'] as Map,
                 ),
+                onReady: () {
+                  final digest = _post['reviewCandidate']?['sha256'];
+                  if (mounted &&
+                      digest is String &&
+                      !_loadedPreviewImages.contains(digest)) {
+                    setState(() => _loadedPreviewImages.add(digest));
+                  }
+                },
               ),
             if (_post['creativeRecommendation'] != null) ...[
               Text(
@@ -378,6 +520,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                     context,
                   ).width.clamp(0, 640).toDouble(),
                   fit: BoxFit.contain,
+                  height: 340,
                   frameBuilder: (context, child, frame, synchronous) {
                     final url = image['url'].toString();
                     if ((frame != null || synchronous) &&
@@ -471,41 +614,45 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             const SizedBox(height: 20),
             if (!_busy)
               Text(
-                (_post['reviewedPost']?['images'] as List? ?? []).isNotEmpty
-                    ? 'Creative prepared'
-                    : _textOnly
-                    ? 'Text-only post'
-                    : 'Creative needs attention. Automatic preparation has not produced an approved, usable image yet.',
+                _post['publicationStatus'] != null
+                    ? 'Approved version'
+                    : _post['ready'] == true
+                    ? 'Ready for Review'
+                    : _post['reviewState'] == 'preparing_creative'
+                    ? 'Preparing Creative'
+                    : _post['reviewState'] == 'needs_creative'
+                    ? 'Needs Creative'
+                    : 'Needs Attention',
               ),
             if (_creativeNotice != null) Text(_creativeNotice!),
+            if (_post['creativeNeedsPreparation'] == true && !_busy)
+              TextButton(
+                onPressed: _changed ? null : () => _run(_prepare),
+                child: const Text('Retry image check'),
+              ),
             OutlinedButton(
-              onPressed: _busy || _changed ? null : () => _run(_chooseImage),
+              onPressed: _busy || _changed || _post['publicationStatus'] != null
+                  ? null
+                  : () => _run(_uploadImage),
               child: const Text('Upload / Replace Image'),
             ),
             OutlinedButton(
-              onPressed: _busy || _changed
+              onPressed: _busy || _changed || _post['publicationStatus'] != null
                   ? null
-                  : () => _run(() async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const BrandAssetsScreen(),
-                        ),
-                      );
-                      if (mounted) await _chooseImage();
-                    }),
-              child: const Text('Review / Regenerate Creative'),
+                  : () => _run(_chooseImage),
+              child: const Text('Use Different Asset'),
+            ),
+            OutlinedButton(
+              onPressed: _busy || _changed || _post['publicationStatus'] != null
+                  ? null
+                  : () => _run(_regenerate),
+              child: const Text('Regenerate Image'),
             ),
             if (_changed)
               const Text(
                 'Save your changes to refresh the preview and automatic quality checks.',
               ),
             if (!_busy && _quality != null) ...[
-              Text(
-                _quality!['readyToPublish'] == true
-                    ? 'Ready for your review'
-                    : 'Post needs changes before approval',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
               for (final blocker
                   in (_quality!['reviewChecks']?['blockers'] as List? ?? []))
                 Text(blocker.toString()),
@@ -551,7 +698,11 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                         await widget.onSchedule!(_post);
                         await _refresh();
                       }),
-                child: const Text('Approve & Schedule'),
+                child: Text(
+                  _post['inlineCreativeApproval'] != null
+                      ? 'Approve Creative & Schedule'
+                      : 'Approve & Schedule',
+                ),
               ),
             TextButton(
               onPressed: () => Navigator.pop(context),

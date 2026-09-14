@@ -43,10 +43,10 @@ String socialQueueGroup(Map<String, dynamic> row) {
   if (['scheduled', 'publishing'].contains(row['publicationStatus'])) {
     return 'Scheduled';
   }
-  if (row['preparing'] == true) return 'Preparing Creative';
-  if (row['preparationError'] == null &&
-      (row['ready'] == true ||
-          row['reviewCandidate']?['status'] == 'pending_owner_review')) {
+  if (row['preparing'] == true || row['reviewState'] == 'preparing_creative') {
+    return 'Preparing Creative';
+  }
+  if (row['preparationError'] == null && row['ready'] == true) {
     return 'Ready for Review';
   }
   return 'Needs Attention';

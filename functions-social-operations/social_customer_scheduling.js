@@ -76,7 +76,7 @@ function reviewDigest(ctx,bindingHash) {
   return growth.hash({uid:ctx.uid,provider:ctx.provider,bindingHash,planVersion:ctx.plan?.planVersion,
     account:[c.providerUserId,c.linkedPageId,c.credentialId,c.connectionRevision,c.credentialRotationGeneration].map(v=>v??null)});
 }
-function createStore({db, now=Date.now, enabledUids=[], environment,authorizeActor}) {
+function createStore({db, now=Date.now, enabledUids=[], environment,authorizeActor,bucket,stageInline}) {
   const enabled = uid => enabledUids.includes(uid);
   async function context(tx, uid, input) {
     if(!/^[a-zA-Z0-9_-]{1,220}$/.test(input?.itemId||'') || !['facebook','instagram'].includes(input?.provider)) throw Error('Choose a current post.');
@@ -105,8 +105,10 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
       conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
   }
   return {
-    async preview(uid,input) {
-      const ctx=await context(null,uid,input), result=readiness(ctx);
+    async preview(uid,input,{actorUid=uid}={}) {
+      const original=await context(null,uid,input);let inline=null,inlineError=null;
+      if(!original.existingJob)try{inline=await require('./social_inline_creative').proposal({db,ctx:original});}catch(e){inlineError=e.message;}
+      const ctx=inline?.ctx||original, result=readiness(ctx);
       const bindingHash=ctx.version?growth.contentBinding({id:ctx.versionId,record:ctx.version},uid).bindingHash:null;
       const recommendation=require('./social_creative_diversity').presentation(ctx.creativePreparation);
       const needsNew=!!recommendation&&recommendation.format==='generated'&&recommendation.state!=='prepared';
@@ -118,20 +120,53 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
         if(a?.businessUid===uid&&!a.removed&&a.currentRevisionId===candidate.revisionId&&r?.status==='ready'&&r.approvalStatus==='pending'&&r.contentHash===candidate.sourceSha256)
           result.reviewCandidate=candidate;
       }
-      result.creativeNeedsPreparation=!ctx.existingJob&&(!recommendation||ctx.creativePreparation.version!==ctx.version?.version);
-      if(needsNew)ctx.revision=null;
-      return {...result,publicationStatus:ctx.existingJob?.status||null,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256,width:i.width,height:i.height}))||[],creativePrepared:ctx.revision?.preparation?.policy===require('./social_customer_media').MEDIA_POLICY,quality:ctx.quality||null,scheduledFor:result.scheduledFor}:null};
+      result.creativeNeedsPreparation=!original.existingJob&&(!recommendation||original.creativePreparation.version!==original.version?.version);
+      if(original.creativePreparation?.reviewCandidate&&!original.creativePreparation.reviewCandidate.preparation?.subjectQuality)result.creativeNeedsPreparation=true;
+      if(inline)result.reviewCandidate=inline.candidate;
+      if(inline&&actorUid!==uid){result.ready=false;result.reasons.push({code:'creative_owner',message:'The Business owner must approve this new service-concept image.'});}
+      if(inlineError){result.ready=false;result.reasons=result.reasons.filter(r=>r.code!=='creative');result.reasons.push({code:'creative',message:inlineError});}
+      if(needsNew&&!inline)ctx.revision=null;
+      const state=ctx.existingJob?.status|| (original.creativePreparation?.state==='preparing'?'preparing_creative':result.ready?'ready_for_review':
+        !inline&&!result.reviewCandidate&&result.reasons.some(r=>r.code==='creative')?'needs_creative':'needs_attention');
+      return {...result,version:original.version?.version,contentHash:original.version?.contentHash,reviewState:state,
+        inlineCreativeApproval:inline?{digest:inline.digest,creativeSha256:inline.candidate.sha256,prospectiveVersion:inline.version.version}:null,
+        reviewCandidate:result.reviewCandidate||null,publicationStatus:ctx.existingJob?.status||null,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,
+        reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:inline?[]:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256,width:i.width,height:i.height}))||[],creativePrepared:ctx.revision?.preparation?.policy===require('./social_customer_media').MEDIA_POLICY,quality:ctx.quality||null,scheduledFor:result.scheduledFor}:null};
     },
     async approve(uid,input,{actorUid=uid}={}) {
       if(!/^[a-zA-Z0-9_-]{1,220}$/.test(input?.itemId||'') || !['facebook','instagram'].includes(input.provider) ||
         !Number.isSafeInteger(input.version) || !/^[a-f0-9]{64}$/.test(input.contentHash||'') || !/^[a-f0-9]{64}$/.test(input.bindingHash||'') || !/^[a-f0-9]{64}$/.test(input.reviewDigest||'')) throw Error('Review the exact current post first.');
+      const inlineApi=require('./social_inline_creative');let staged=null;
+      const receiptId=input.inlineCreativeDigest;
+      if(receiptId!=null){
+        if(actorUid!==uid)throw Error('The Business owner must approve a new service-concept image.');
+        if(!/^[a-f0-9]{64}$/.test(receiptId)||input.confirmCreativeAndSchedule!==true)throw Error('Confirm the exact creative and post together.');
+        // A retry returns the one committed job. It never creates a second version.
+        const done=(await db.doc('socialCreativeApprovals/'+receiptId).get()).data();
+        if(done){
+          if(done.businessUid!==uid||done.itemId!==input.itemId||done.provider!==input.provider||done.actorUid!==actorUid)throw Error('Approval belongs to another review.');
+          const job=(await db.doc('socialGrowthJobs/'+done.schedule.jobId).get()).data();
+          if(!job||job.businessUid!==uid)throw Error('Confirming the saved schedule.');
+          return {status:job.status,jobId:job.id,provider:job.provider,scheduledFor:job.scheduledFor,reused:true};
+        }
+        const original=await context(null,uid,input),p=await inlineApi.proposal({db,ctx:original});
+        if(!p||p.digest!==receiptId||original.version.version!==input.version||original.version.contentHash!==input.contentHash)throw Error('The creative or post changed. Review it again.');
+        const ready=readiness(p.ctx);if(!ready.ready)return {status:'blocked',...ready};
+        staged=await (stageInline||inlineApi.stage)({bucket,proposal:p});
+      }
       return db.runTransaction(async tx=>{
         if(actorUid!==uid){
           if(!authorizeActor)throw Error('Your team access does not allow Social approval.');
           await authorizeActor({businessUid:uid,actorUid,approve:true,transaction:tx});
         }
-        const ctx=await context(tx,uid,input);
-        if(ctx.version?.version!==input.version || ctx.version.contentHash!==input.contentHash) throw Error('The post changed. Review the current version.');
+        const original=await context(tx,uid,input);
+        if(receiptId){const done=(await tx.get(db.doc('socialCreativeApprovals/'+receiptId))).data();if(done){
+          if(done.businessUid!==uid||done.actorUid!==actorUid||done.itemId!==input.itemId||done.provider!==input.provider)throw Error('Approval identity changed.');
+          const j=(await tx.get(db.doc('socialGrowthJobs/'+done.schedule.jobId))).data();return {status:j.status,jobId:j.id,provider:j.provider,scheduledFor:j.scheduledFor,reused:true};}}
+        if(original.version?.version!==input.version || original.version.contentHash!==input.contentHash) throw Error('The post changed. Review the current version.');
+        const inline=receiptId?await inlineApi.proposal({db,ctx:original,read:ref=>tx.get(ref)}):null;
+        if(receiptId&&(!inline||inline.digest!==receiptId||inline.candidate.sha256!==staged.sha256))throw Error('The image changed. Review it again.');
+        const ctx=inline?.ctx||original;
         const binding=growth.contentBinding({id:ctx.versionId,record:ctx.version},uid);
         if(binding.bindingHash!==input.bindingHash || reviewDigest(ctx,binding.bindingHash)!==input.reviewDigest)throw Error('The post or its publish time changed. Review it again.');
         const identity={businessUid:uid,versionId:ctx.versionId,provider:input.provider};
@@ -152,9 +187,11 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
         const approval={...canonical,id:'growth_approval_'+growth.hash(canonical),approvedAt:now(),externalPublishingEnabled:true};
         const job={...growth.jobs(approval)[0],status:'scheduled',customerApproval:true,externalPublishingEnabled:true};
         if(job.id!==jobId)throw Error('Publication identity mismatch.');
+        const targets=inline?await inlineApi.readCommitTargets({db,tx,uid,p:inline}):null;
+        if(inline)inlineApi.commit({tx,uid,actorUid,p:inline,staged,targets,now:now(),approvalId:approval.id,jobId});
         tx.create(db.doc('socialGrowthApprovals/'+approval.id),approval);
         tx.create(ref,job);
-        tx.update(ctx.itemRef,{['platformApprovals.'+input.provider]:{version:input.version,approvalId:approval.id,jobId,
+        tx.update(ctx.itemRef,{['platformApprovals.'+input.provider]:{version:ctx.version.version,approvalId:approval.id,jobId,
           status:'scheduled',approvedAt:now(),scheduledFor:check.scheduledFor}});
         return {status:'scheduled',jobId,provider:input.provider,scheduledFor:check.scheduledFor,reused:false};
       });

@@ -35,6 +35,24 @@ function createPreparation({db,editor,media,now=Date.now}) {
    require('./social_customer_editor').validate(input);
    const key=crypto.createHash('sha256').update(uid+':'+input.itemId+':'+input.provider).digest('hex');
    const lease=db.doc('socialCreativePreparation/'+key),attempt=crypto.randomUUID();
+   if(input.action==='regenerate'){
+     if(input.confirmRegeneration!==true)throw Error('Confirm preparation of one new image.');
+     const config=(await db.doc('providerConfigurations/generated-service-visuals').get()).data();
+     if(config?.providerGenerationEnabled!==true)return {creativeStatus:'generation_unavailable',
+       generationMessage:'Image generation is currently paused. Your saved preview is preserved. Upload an image or choose a different asset.'};
+     await db.runTransaction(async tx=>{
+       const [oldSnap,itemSnap,jobs]=await Promise.all([tx.get(lease),tx.get(db.doc('socialContentItems/'+input.itemId)),
+         tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101))]);
+       const old=oldSnap.data(),item=itemSnap.data();
+       if(item?.businessUid!==uid||(item.platformVersions?.[input.provider]??item.currentVersion)!==input.version||
+         jobs.size>100||jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))throw Error('Only an unscheduled current draft can get new creative.');
+       if(!old?.recommendation?.service||old.reviewCandidate?.sha256!==(input.candidateSha256||undefined))throw Error('Review the current image before regenerating it.');
+       const requestId='social_regen_'+crypto.createHash('sha256').update(uid+':'+input.itemId+':'+input.provider+':'+input.version+':'+(input.candidateSha256||'no_candidate')).digest('hex');
+       const override={...old.recommendation,format:'generated',label:'New service concept',requestId,assetId:null,revisionId:null,sourceHash:null,
+         reason:'A replacement requested for this exact draft. Review it before approval.',visualDirection:old.recommendation.visualDirection||'practical'};
+       tx.update(lease,{generationOverride:override,state:'regeneration_requested',regenerationRequestedAt:now()});
+     });
+   }
    const claimed=await db.runTransaction(async tx=>{
      const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
      if(jobs.size>100)throw Error('Publication history needs review.');
@@ -42,7 +60,8 @@ function createPreparation({db,editor,media,now=Date.now}) {
      const old=(await tx.get(lease)).data();
      if(old?.state==='preparing'&&old.leaseUntil>now())return 'preparing';
      if(old?.state==='prepared'&&old.version===input.version&&old.recommendation?.policy===diversity.POLICY)return 'prepared';
-     tx.set(lease,{businessUid:uid,itemId:input.itemId,provider:input.provider,attempt,state:'preparing',leaseUntil:now()+180000,startedAt:now()});
+     tx.set(lease,{businessUid:uid,itemId:input.itemId,provider:input.provider,attempt,state:'preparing',leaseUntil:now()+180000,startedAt:now(),generationOverride:old?.generationOverride||null,
+       reviewCandidate:old?.reviewCandidate||null,version:old?.version||input.version});
      return 'claimed';
    });
    if(claimed!=='claimed')return {creativeStatus:claimed,approved:false,scheduled:false};
@@ -58,7 +77,8 @@ function createPreparation({db,editor,media,now=Date.now}) {
      version=await current(uid,input);variant=version.variants.find(v=>v.provider===input.provider);
    }
    const context=await diversity.readCreativeContext(db,uid);
-   const recommendation=diversity.planCreativeMix(context).decisions[diversity.key(input)];
+   const override=(await lease.get()).data()?.generationOverride;
+   const recommendation=override||diversity.planCreativeMix(context).decisions[diversity.key(input)];
    if(!recommendation)throw Error('This post is already scheduled.');
    await lease.update({recommendation});
    let creativeStatus=variant.mediaRevisionId?'prepared':variant.mediaRequirement==='none'?'text_only':'needs_creative';
@@ -100,7 +120,7 @@ function createPreparation({db,editor,media,now=Date.now}) {
      if(old?.attempt===attempt)tx.update(lease,{state:reviewCandidate?'creative_review':creativeStatus==='needs_creative'?'needs_attention':'prepared',reviewCandidate,generationStatus,version:version.version,finishedAt:now(),leaseUntil:0});});
    return result;
    }catch(error){
-     await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:'needs_attention',finishedAt:now(),leaseUntil:0});});
+     await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:old.reviewCandidate?'creative_review':'needs_attention',finishedAt:now(),leaseUntil:0});});
      throw error;
    }
  }};

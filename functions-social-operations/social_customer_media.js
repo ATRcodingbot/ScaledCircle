@@ -66,7 +66,7 @@ async function assertDeliveryAuthority({db,read=ref=>ref.get(),uid,revision}) {
     source.data()?.businessUid!==uid||source.data()?.status!=='ready'||source.data()?.approvalStatus!=='approved'||
     !sourceRights(source.data(),uid))throw Error('Image approval needs review.');
 }
-function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage=derivative}) {
+function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage=derivative,subjectCheck}) {
   if(!['scaled-circle','scaledcircle-staging'].includes(project))throw Error('Media environment unavailable.');
   const origin=`https://us-east1-${project}.cloudfunctions.net`;
   const storage=()=>typeof bucket==='function'?bucket():bucket;
@@ -99,6 +99,10 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
       const [bytes]=await storage().file(revision.privateOriginalPath,{generation:revision.storageGeneration}).download();
       if(bytes.length>20*1024*1024||hash(bytes)!==revision.contentHash)throw Error('Creative integrity failed.');
       const image=await prepareImage(bytes,undefined,input.provider);
+      if(subjectCheck){
+        const subjectQuality=await subjectCheck({uid,bytes:image.bytes,sha256:image.sha256,service:revision.serviceLabel||recommendation.service});
+        image.preparation={...image.preparation,subjectQuality};
+      }
       const path=prefix+`renditions/social-review-${input.provider}-${image.sha256}.jpg`;
       await storage().file(path).save(image.bytes,{resumable:false,contentType:'image/jpeg',metadata:{cacheControl:'private,no-store'},preconditionOpts:{ifGenerationMatch:0}})
         .catch(e=>{if(e.code!==412)throw e;});

@@ -71,7 +71,7 @@ class DiversityQueueService extends QueueService {
 
 void main() {
   test(
-    'private concept is reviewable without becoming approved or schedulable',
+    'private concept is ready only when inline approval and all scheduling requirements pass',
     () {
       final row = <String, dynamic>{
         'ready': false,
@@ -80,7 +80,15 @@ void main() {
           'approved': false,
         },
       };
-      expect(socialQueueGroup(row), 'Ready for Review');
+      expect(socialQueueGroup(row), 'Needs Attention');
+      expect(
+        socialQueueGroup({
+          ...row,
+          'ready': true,
+          'inlineCreativeApproval': {'digest': 'review'},
+        }),
+        'Ready for Review',
+      );
       expect(row['ready'], false);
       expect(
         socialQueueGroup({...row, 'publicationStatus': 'scheduled'}),

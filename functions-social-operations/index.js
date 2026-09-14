@@ -150,6 +150,7 @@ async function requireManagedGrowthBusiness(request) {
 // deployment allowlist fails closed; no plan approval enables this path.
 function customerSchedulingStore() {
   return require('./social_customer_scheduling').createStore({db, environment:runtimeEnvironment(),
+    bucket:()=>require('firebase-admin/storage').getStorage().bucket(),
     authorizeActor:customerWorkspaceAuthority(),
     enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
 }
@@ -192,11 +193,11 @@ exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3
   if(business.role!=='business'||!metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
     throw new HttpsError('permission-denied','Social Manager is Private Beta. An invitation is required.');
   const method=request.data?.action;
-  if(!['save','assess','attach','auto'].includes(method))throw new HttpsError('invalid-argument','Choose a supported preparation action.');
+  if(!['save','assess','attach','auto','regenerate'].includes(method))throw new HttpsError('invalid-argument','Choose a supported preparation action.');
   const editor=require('./social_customer_editor').createEditor({db,
     enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
   try{
-    if(method==='auto'){
+    if(method==='auto'||method==='regenerate'){
       const preflight=await customerSchedulingStore().preview(business.uid,request.data);
       if(preflight.reasons.some(r=>['permission','scheduler'].includes(r.code)))
         throw Error(preflight.reasons.find(r=>['permission','scheduler'].includes(r.code)).message);
@@ -221,6 +222,7 @@ exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3
 });
 
 function customerMediaStore(){return require('./social_customer_media').createMedia({db,
+  subjectCheck:require('./social_creative_subject').createSubjectCheck({db}),
   bucket:()=>require('firebase-admin/storage').getStorage().bucket(),
   project:process.env.GCLOUD_PROJECT||process.env.GCP_PROJECT,
   enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});}

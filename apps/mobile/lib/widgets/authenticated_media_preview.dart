@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +10,8 @@ class AuthenticatedMediaPreview extends StatefulWidget {
     required this.semanticLabel,
     this.fit = BoxFit.cover,
     this.compact = false,
+    this.expectedSha256,
+    this.onReady,
     super.key,
   });
 
@@ -17,6 +20,8 @@ class AuthenticatedMediaPreview extends StatefulWidget {
   final String semanticLabel;
   final BoxFit fit;
   final bool compact;
+  final String? expectedSha256;
+  final VoidCallback? onReady;
 
   @override
   State<AuthenticatedMediaPreview> createState() =>
@@ -49,7 +54,11 @@ class _AuthenticatedMediaPreviewState extends State<AuthenticatedMediaPreview> {
           ),
         );
       }
-      if (snapshot.hasError || snapshot.data == null) {
+      if (snapshot.hasError ||
+          snapshot.data == null ||
+          (widget.expectedSha256 != null &&
+              sha256.convert(snapshot.data!).toString() !=
+                  widget.expectedSha256)) {
         return Semantics(
           label: 'Preview unavailable',
           child: Center(
@@ -75,6 +84,17 @@ class _AuthenticatedMediaPreviewState extends State<AuthenticatedMediaPreview> {
         snapshot.data!,
         fit: widget.fit,
         semanticLabel: widget.semanticLabel,
+        frameBuilder: (context, child, frame, synchronous) {
+          if ((frame != null || synchronous) && widget.onReady != null) {
+            final identity = widget.identity;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && widget.identity == identity) {
+                widget.onReady?.call();
+              }
+            });
+          }
+          return child;
+        },
         errorBuilder: (_, _, _) => Semantics(
           label: 'Preview unavailable',
           child: Center(
