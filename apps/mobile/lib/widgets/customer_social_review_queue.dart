@@ -273,7 +273,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                           if (row['creativeRecommendation']['generationStatus'] ==
                               'configuration_unavailable')
                             const Text(
-                              'New creative is waiting: generation is not enabled. Your monthly allowance has not been used.',
+                              'New creative is waiting: generation is not enabled. No visual was generated for this request.',
                             ),
                         ],
                         Text(group),
