@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/public/public_landing_screen.dart';
 import 'package:flutter_app/services/subscription_plan_service.dart';
@@ -97,18 +98,18 @@ void main() {
         final plan = entry.value;
         expect(
           find.byKey(Key('public-plan-$planId'), skipOffstage: false),
-          findsOneWidget,
+          kIsWeb ? findsOneWidget : findsNothing,
         );
         expect(
           find.text(plan['name'].toString().toUpperCase(), skipOffstage: false),
-          findsWidgets,
+          kIsWeb ? findsWidgets : findsNothing,
         );
         expect(
           find.text(
             '\$${(plan['price'] as num).toStringAsFixed(0)}/month',
             skipOffstage: false,
           ),
-          findsOneWidget,
+          kIsWeb ? findsOneWidget : findsNothing,
         );
       }
     });

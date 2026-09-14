@@ -11,7 +11,7 @@ const VERSION='CustomerGrowthWorkspaceV1';
 const fail=(code,message)=>{const error=Error(message);error.code=code;throw error;};
 const clean=(s,max=500)=>typeof s==='string'?s.trim().slice(0,max):'';
 
-function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='',readSource,now=Date.now}) {
+function createService({db,auth,FieldValue,Timestamp,project,readSource,now=Date.now}) {
   const ws=workspace.createWorkspaceService({db,auth,FieldValue,Timestamp,now});
   const consent=legal.createLegalConsentService({db,FieldValue});
   async function authority(request) {
@@ -19,9 +19,11 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
     if(!uid)fail('unauthenticated','Sign in to your Business.');
     await ws.actor(uid);
     const businessId=request.data?.businessId||uid;
-    if(!allowedBusinesses.split(',').map(s=>s.trim()).includes(businessId))fail('permission-denied','Growth Agents are available by private invitation.');
     const a=await ws.authority({uid,businessId,permission:'intelligence'});
-    if(!entitlements.hasActiveManagedGrowthEntitlement(a.entitlement,{nowMillis:now()}))fail('permission-denied','An active Managed Growth workspace is required.');
+    const options={nowMillis:now()};
+    if(!entitlements.hasActiveManagedGrowthEntitlement(a.entitlement,options)&&
+        !entitlements.hasActiveProductEntitlement(a.entitlement,'lead_generation_research',options))
+      fail('permission-denied','An active Managed Growth or Lead Generation subscription is required.');
     await consent.requireCurrent({uid,agreementTypes:['terms','privacy']});
     return a;
   }
@@ -114,6 +116,9 @@ function createService({db,auth,FieldValue,Timestamp,project,allowedBusinesses='
     const a=await authority(request),c=await context(a),data=request.data||{};
     if(Object.keys(data).some(k=>!['businessId','operation','input'].includes(k)))fail('invalid-argument','Unsupported request.');
     const op=data.operation||'load';
+    if(['research','review'].includes(op)&&
+        !entitlements.hasActiveProductEntitlement(a.entitlement,'lead_generation_research',{nowMillis:now()}))
+      fail('permission-denied','An active Lead Generation subscription is required for opportunity research and review.');
     if(op==='load')return load(a,c);
     if(op==='initialize')return initialize(a,c);
     if(op==='reviewRecommendation'){

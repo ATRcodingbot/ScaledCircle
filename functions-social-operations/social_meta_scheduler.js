@@ -2,15 +2,26 @@
 
 // Shares canonical growth jobs with X, but never reads or changes X allowances.
 // Certification discovers/evaluates real jobs without creating synthetic approvals.
-async function run({db, publisher, businessUid, now=Date.now(),inspectOnly=false,customerOnly=false}) {
+async function run({db, publisher, businessUid, now=Date.now(),inspectOnly=false,customerOnly=false,jobIds=null}) {
   const results=[];
   for (const provider of ["facebook","instagram"]) {
-    const snapshots=await (customerOnly ? db.collection("socialGrowthJobs").where("businessUid","==",businessUid) : db.collection("socialGrowthJobs").where("provider","==",provider)).limit(101).get();
-    if(customerOnly && snapshots.size>100)throw Error("customer_history_requires_pagination");
+    const snapshots=jobIds?{docs:await Promise.all(jobIds.map(id=>db.doc('socialGrowthJobs/'+id).get())),size:jobIds.length}:
+      await (customerOnly ? db.collection("socialGrowthJobs").where("businessUid","==",businessUid) : db.collection("socialGrowthJobs").where("provider","==",provider)).limit(101).get();
+    if(customerOnly && snapshots.size>(jobIds?125:100))throw Error("customer_history_requires_pagination");
     for (const snapshot of snapshots.docs) {
       const job=snapshot.data();
+      if(!job)continue;
+      if(jobIds&&!jobIds.includes(snapshot.id))continue;
       if(job.businessUid!==businessUid || job.provider!==provider || (customerOnly && job.customerApproval!==true) || job.id!==snapshot.id ||
           ["published","canceled"].includes(job.status))continue;
+      if(jobIds&&!inspectOnly&&job.status==='approved'&&now>Date.parse(job.scheduledFor)+15*60000){
+        await db.runTransaction(async tx=>{
+          const current=(await tx.get(snapshot.ref)).data();
+          if(current?.status==='approved'&&current.businessUid===businessUid&&current.scheduledFor===job.scheduledFor)
+            tx.update(snapshot.ref,{status:'authority_review_required',blockedReason:'schedule_window_closed'});
+        });
+        results.push({jobId:job.id,status:'authority_review_required'});continue;
+      }
       try {
         const inspection=await publisher.inspect(job.id);
         if (!inspection.deploymentAllowsCreates || !inspection.allowanceEnabled) {

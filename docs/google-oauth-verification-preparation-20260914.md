@@ -17,7 +17,7 @@ Runtime client: `1010956217112-nqe30km9psk0q8cb6kqin40m43buegn4.apps.googleuserc
 - `https://www.googleapis.com/auth/gmail.send`
 - `https://www.googleapis.com/auth/gmail.readonly`
 
-No profile, modify, compose, delete, full-mail or other API scope. Gmail use-case selection: Email productivity. The console draft has both justifications below. Saving is pending the requested action-time confirmation. A declaration is not a grant to any mailbox; each owner must still consent, and verification is separate.
+No profile, modify, compose, delete, full-mail or other API scope. Gmail use-case selection: Email productivity. Founder confirmed the exact save and Google returned “Data access changes saved!” on September 14. The saved submission summary contains exactly these four scopes and both justifications below. A declaration is not a grant to any mailbox; each owner must still consent, and verification is separate.
 
 Send justification: Business owners connect their own Gmail or Google Workspace mailbox to send exact messages they have reviewed and approved, including approved Business Email campaigns and permitted outreach. Send is the narrow send-only scope used by the Gmail API. Broader compose, modify and full-mail scopes are not needed. Sending requires workspace authority, content approval and suppression checks. Connection alone does not enable automatic sending.
 
@@ -47,4 +47,6 @@ Branding was saved, verified by Google and explicitly published. The resulting c
 
 Search Console Settings for the existing `https://scaledcircle.com/` URL-prefix property says “Ownership verification — You are a verified owner” while signed in as attractiveremodel@gmail.com. The separate domain-property URL was not accessible, but the existing verified URL-prefix property and successful Google branding verification mean no new DNS ownership change is indicated by this check. No DNS settings changed.
 
-Sensitive/restricted scope verification remains separate from this completed branding result. Scope draft remains unsaved pending action-time confirmation. No demo URL or Google data-access approval exists in this preparation record.
+Sensitive/restricted scope verification remains separate from this completed branding result. After the confirmed scope save, Verification Center explicitly reports that data access is not verified and requires verification. Prepare for verification lists “Missing the following fields for one or more requested scopes: demo video”; Confirm is disabled. No demo URL, submitted review, or Google data-access approval exists in this preparation record.
+
+The production Business Email UI was read after the declaration save: Attractive Remodel remains Connected to attractiveremodel@gmail.com, Read and Send are enabled, automatic sending is Off. No reconnect, token revocation, credential edit, callback change or new send was performed. This is connection-presentation readback, not a fresh send/reply certification.

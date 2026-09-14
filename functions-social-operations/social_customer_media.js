@@ -66,14 +66,15 @@ async function assertDeliveryAuthority({db,read=ref=>ref.get(),uid,revision}) {
     source.data()?.businessUid!==uid||source.data()?.status!=='ready'||source.data()?.approvalStatus!=='approved'||
     !sourceRights(source.data(),uid))throw Error('Image approval needs review.');
 }
-function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage=derivative,subjectCheck}) {
+function createMedia({db,bucket,project,now=Date.now,enabledUids=[],planEntitled=false,prepareImage=derivative,subjectCheck}) {
   if(!['scaled-circle','scaledcircle-staging'].includes(project))throw Error('Media environment unavailable.');
   const origin=`https://us-east1-${project}.cloudfunctions.net`;
   const storage=()=>typeof bucket==='function'?bucket():bucket;
+  const enabled=(uid,read)=>planEntitled?require('./social_customer_enrollment').authorized({db,uid,read,now:now()}):Promise.resolve(enabledUids.includes(uid));
   return {
     async prepareCandidate(uid,input,recommendation){
       validate(input);
-      if(!enabledUids.includes(uid))throw Error('Creative preparation is unavailable.');
+      if(!await enabled(uid))throw Error('Creative preparation is unavailable.');
       const jobId='visual_job_'+hash(uid+'\n'+recommendation.requestId).slice(0,40);
       const job=(await db.doc('visualGenerationJobs/'+jobId).get()).data();
       if(!job)return null;
@@ -116,7 +117,7 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
     async attach(uid,input){
       validate(input);
       if(!/^[A-Za-z0-9_-]{1,160}$/.test(input.assetId||'')||!/^[A-Za-z0-9_-]{1,160}$/.test(input.revisionId||''))throw Error('Choose an approved image.');
-      if(!enabledUids.includes(uid)||input.confirmPublicUse!==true)throw Error('Confirm this approved image may be used for public Social content.');
+      if(!await enabled(uid)||input.confirmPublicUse!==true)throw Error('Confirm this approved image may be used for public Social content.');
       const assetRef=db.doc(`businessMediaLibraries/${uid}/mediaAssets/${input.assetId}`);
       const revisionRef=assetRef.collection('revisions').doc(input.revisionId);
       const [a,r]=await Promise.all([assetRef.get(),revisionRef.get()]);
@@ -139,6 +140,7 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
       prepared.sourceRevisionId=input.revisionId;
       prepared.sourceSha256=source.revision.contentHash;
       return db.runTransaction(async tx=>{
+        if(!await enabled(uid,ref=>tx.get(ref)))throw Error('An active Managed Growth subscription is required.');
         const itemRef=db.doc('socialContentItems/'+input.itemId);
         const [item,latestAsset,latestRevision,delivery,existingMedia]=await Promise.all([
           tx.get(itemRef),tx.get(assetRef),tx.get(revisionRef),tx.get(db.doc('customerSocialMedia/'+deliveryId)),
@@ -171,7 +173,7 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
       if(!/^[a-f0-9]{64}$/.test(id))return null;
       const record=(await db.doc('customerSocialMedia/'+id).get()).data();
       if(record?.status!=='approved_for_social'||record.path!==`customer_social_delivery/${id}.jpg`||!record.generation)return null;
-      if(!enabledUids.includes(record.businessUid))return null;
+      if(!await enabled(record.businessUid))return null;
       const asset=(await db.doc(`businessMediaLibraries/${record.businessUid}/mediaAssets/${record.assetId}`).get()).data();
       const revision=(await db.doc(`businessMediaLibraries/${record.businessUid}/mediaAssets/${record.assetId}/revisions/${record.revisionId}`).get()).data();
       if(asset?.removed===true||asset?.businessUid!==record.businessUid||asset?.approvedRevisionId!==record.revisionId||revision?.businessUid!==record.businessUid||revision?.status!=='ready'||revision?.approvalStatus!=='approved'||!sourceRights(revision,record.businessUid))return null;

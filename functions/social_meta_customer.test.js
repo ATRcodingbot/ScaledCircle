@@ -1,11 +1,11 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const customer=require('../functions-social-operations/social_meta_customer');
-test('customer publishing pilot never inherits internal Admin or another workspace grant',()=>{
- const business={uid:'owner',role:'business',planId:'managed_growth',isAdmin:false};
+test('customer enrollment uses current entitlement and never inherits internal Admin grants',()=>{
+ const business={uid:'owner',role:'business',planId:'managed_growth',isAdmin:false,entitlement:{planId:'managed_growth',status:'active',expiresAt:new Date(Date.now()+86400000)}};
  assert.equal(customer.available(business,'owner'),true);assert.equal(customer.available({...business,isAdmin:true},'owner'),false);
- assert.equal(customer.available({...business,uid:'other'},'owner'),false);assert.equal(customer.available(business,''),false);
- assert.equal(customer.available({...business,planId:'starter'},'owner'),false);
+ assert.equal(customer.available({...business,entitlement:null},'owner'),false);assert.equal(customer.available(business,''),true);
+ assert.equal(customer.available({...business,entitlement:{...business.entitlement,planId:'starter'}},'owner'),false);
 });
 test('permission upgrade binds the already-selected Page and current credential',()=>{
  const c={status:'connected_read_only',providerUserId:'123',credentialId:'cred'};

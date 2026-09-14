@@ -13,7 +13,8 @@ test('approved own media preserves a Firestore schedule, is isolated, concurrent
  const bucket={file:(p,options)=>({download:async()=>{assert.equal(String(options?.generation||''),'1');return [storage.get(p)];},save:async(bytes,options)=>{
    assert.equal(options.preconditionOpts.ifGenerationMatch,0);if(storage.has(p))throw Object.assign(Error('exists'),{code:412});storage.set(p,bytes);},getMetadata:async()=>[{generation:'1'}]})};
  const image=Buffer.from('prepared public jpeg');
- const service=createMedia({db,bucket,project:'scaled-circle',enabledUids:[uid],prepareImage:async(bytes,sharp,provider)=>{
+ await db.doc('businessSubscriptions/'+uid).set({planId:'managed_growth',status:'active',expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
+ const service=createMedia({db,bucket,project:'scaled-circle',planEntitled:true,prepareImage:async(bytes,sharp,provider)=>{
   assert.deepEqual(bytes,original);assert.equal(provider,'facebook');
   return {bytes:image,width:1080,height:720,sha256:hash(image),mime:'image/jpeg'};}});
  const ar=db.doc(`businessMediaLibraries/${uid}/mediaAssets/${assetId}`),rr=ar.collection('revisions').doc(revisionId),item=db.doc('socialContentItems/'+itemId);
@@ -21,6 +22,9 @@ test('approved own media preserves a Firestore schedule, is isolated, concurrent
  version.scheduledFor=Timestamp.fromDate(new Date('2026-10-10T16:00:00Z'));
  await Promise.all([ar.set({businessUid:uid,approvedRevisionId:revisionId}),rr.set({businessUid:uid,status:'ready',approvalStatus:'approved',rightsAttestation:true,altText:'A neutral work sample',privateOriginalPath:path,storageGeneration:'1',contentHash:hash(original)}),item.set({businessUid:uid,planId:'media_plan',currentVersion:1}),db.doc('socialContentVersions/'+itemId+'_v1').set(version)]);
  const input={itemId,provider:'facebook',version:1,assetId,revisionId,confirmPublicUse:true};
+ await db.doc('businessSubscriptions/'+uid).update({status:'canceled'});
+ await assert.rejects(service.attach(uid,input));assert.equal(storage.size,1);
+ await db.doc('businessSubscriptions/'+uid).update({status:'active'});
  for(const altered of [{...input,confirmPublicUse:false},{...input,assetId:'../other'}])await assert.rejects(service.attach(uid,altered));
  await assert.rejects(service.attach('other',input));
  const results=await Promise.allSettled([service.attach(uid,input),service.attach(uid,input)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);

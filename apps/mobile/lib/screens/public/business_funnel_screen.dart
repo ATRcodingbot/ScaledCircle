@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
@@ -112,9 +113,10 @@ class BusinessFunnelScreen extends StatelessWidget {
         ),
       ),
       const _ManagedGrowthBand(),
-      _BusinessPricing(
-        onStart: () => openPublicAccountRegistration(context, 'business'),
-      ),
+      if (kIsWeb)
+        _BusinessPricing(
+          onStart: () => openPublicAccountRegistration(context, 'business'),
+        ),
       FunnelFinalCta(
         title: 'READY TO GROW LOCALLY?',
         primary: 'Start Your Business',

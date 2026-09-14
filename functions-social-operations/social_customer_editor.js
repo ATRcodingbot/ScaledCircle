@@ -25,10 +25,11 @@ function editVersion({uid,current,input,nextVersionBase=current?.version,now=Dat
   return social.contentItemVersion({businessUid:uid,planId:current.planId,previousVersion:nextVersionBase,now,
     item:{...current,scheduledFor:new Date(time).toISOString(),variants:current.variants.map(v=>v.provider===input.provider?variant:v)}});
 }
-function createEditor({db,now=Date.now,enabledUids=[]}) {
-  const enabled=uid=>{if(!enabledUids.includes(uid))throw Error('Social Manager is invite only.');};
+function createEditor({db,now=Date.now,enabledUids=[],planEntitled=false}) {
   async function read(tx,uid,input){
-    validate(input);enabled(uid);
+    validate(input);
+    if(!(planEntitled?await require('./social_customer_enrollment').authorized({db,uid,read:ref=>tx.get(ref),now:now()}):enabledUids.includes(uid)))
+      throw Error('An active Managed Growth subscription is required.');
     const ref=db.doc('socialContentItems/'+input.itemId),item=(await tx.get(ref)).data();
     if(item?.businessUid!==uid)throw Error('This post is not available.');
     const activeVersion=item.platformVersions?.[input.provider]??item.currentVersion;

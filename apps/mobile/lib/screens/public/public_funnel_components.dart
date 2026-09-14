@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import 'public_legal_footer.dart';
 
@@ -137,7 +138,8 @@ class PublicTopNavigation extends StatelessWidget {
                     value: '/how-it-works',
                     child: Text('How It Works'),
                   ),
-                  PopupMenuItem(value: '/pricing', child: Text('Pricing')),
+                  if (kIsWeb)
+                    PopupMenuItem(value: '/pricing', child: Text('Pricing')),
                   PopupMenuItem(
                     value: '/referrals',
                     child: Text('Referral Program'),
@@ -170,7 +172,8 @@ class PublicTopNavigation extends StatelessWidget {
             PublicNavLink(label: 'For Businesses', route: AppRoutes.businesses),
             PublicNavLink(label: 'For Scalers', route: AppRoutes.scalers),
             const PublicNavLink(label: 'How It Works', route: '/how-it-works'),
-            const PublicNavLink(label: 'Pricing', route: '/pricing'),
+            if (kIsWeb)
+              const PublicNavLink(label: 'Pricing', route: '/pricing'),
             const PublicNavLink(label: 'Referrals', route: '/referrals'),
             TextButton(
               onPressed: () => AppNavigation.push(context, AppRoutes.login),

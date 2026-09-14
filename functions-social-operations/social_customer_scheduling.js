@@ -76,8 +76,8 @@ function reviewDigest(ctx,bindingHash) {
   return growth.hash({uid:ctx.uid,provider:ctx.provider,bindingHash,planVersion:ctx.plan?.planVersion,
     account:[c.providerUserId,c.linkedPageId,c.credentialId,c.connectionRevision,c.credentialRotationGeneration].map(v=>v??null)});
 }
-function createStore({db, now=Date.now, enabledUids=[], environment,authorizeActor,bucket,stageInline}) {
-  const enabled = uid => enabledUids.includes(uid);
+function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, environment,authorizeActor,bucket,stageInline}) {
+  const enabled = (uid,entitlement) => planEntitled?require('./social_customer_enrollment').eligible(entitlement,now()):enabledUids.includes(uid);
   // One workspace response reuses its bounded history read across platform cards.
   // Authority checks below always read exact current records independently.
   const historyReads=new Map();
@@ -114,7 +114,7 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
       quality={...quality,readyToPublish:checks.passed,reviewChecks:checks};
     }
     return {uid,plan:p.data(),item,version,versionId,itemRef,creativePreparation:preparation.data(),provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality,
-      conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
+      conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid,entitlement.data()),now:now()};
   }
   return {
     async preview(uid,input,{actorUid=uid}={}) {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -230,7 +231,9 @@ class _BusinessTeamScreenState extends State<BusinessTeamScreen> {
           SnackBar(
             content: Text(
               e.toString().contains('resource-exhausted')
-                  ? 'No seats are available. Remove a member or upgrade your plan.'
+                  ? kIsWeb
+                        ? 'No seats are available. Remove a member or upgrade your plan.'
+                        : 'No seats are available. Remove a member before inviting another person.'
                   : 'Invitation was not confirmed. Refresh Team before retrying.',
             ),
           ),

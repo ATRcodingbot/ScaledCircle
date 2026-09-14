@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/business/business_membership_screen.dart';
 import 'package:flutter_app/services/business_workspace_service.dart';
 import 'package:flutter_app/widgets/starter_intro_offer_card.dart';
+import 'package:flutter_app/screens/public/public_landing_screen.dart';
+import 'package:flutter_app/screens/public/business_funnel_screen.dart';
 
 class ExistingMembership extends BusinessWorkspaceService {
   final calls = <String>[];
@@ -38,6 +40,40 @@ class ExistingMembership extends BusinessWorkspaceService {
 }
 
 void main() {
+  for (final width in [390.0, 1440.0]) {
+    for (final entry in <String, Widget>{
+      'home': const PublicLandingScreen(),
+      'pricing deep link': const PublicLandingScreen(page: '/pricing'),
+      'business signup funnel': const BusinessFunnelScreen(),
+    }.entries) {
+      testWidgets(
+        'native ${entry.key} hides sales and preserves signup at $width',
+        (tester) async {
+          await tester.binding.setSurfaceSize(Size(width, 1000));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          await tester.pumpWidget(MaterialApp(home: entry.value));
+          await tester.pump();
+          expect(
+            find.textContaining('/month', skipOffstage: false),
+            findsNothing,
+          );
+          expect(find.text('Pricing', skipOffstage: false), findsNothing);
+          expect(find.text('View Pricing', skipOffstage: false), findsNothing);
+          final signup = find.text('Get Started').first;
+          await tester.ensureVisible(signup);
+          await tester.tap(signup);
+          await tester.pumpAndSettle();
+          expect(
+            find.text('How do you want to use ScaledCircle?'),
+            findsOneWidget,
+          );
+          expect(find.text('Grow My Business'), findsOneWidget);
+          expect(find.text('Find Work as a Scaler'), findsOneWidget);
+        },
+      );
+    }
+  }
+
   testWidgets(
     'native deep-linked billing shows existing state without purchase or portal',
     (tester) async {

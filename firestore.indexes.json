@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "socialGrowthJobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "customerApproval", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "scheduledFor", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "mediaAssets",
       "queryScope": "COLLECTION",
       "fields": [

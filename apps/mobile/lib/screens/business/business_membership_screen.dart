@@ -252,7 +252,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     _requestId ??=
-        'membership_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}';
+        'membership_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(0x100000000)}';
     try {
       await _service.call('changeBusinessMembership', {
         'businessId': _businessId,
@@ -307,7 +307,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
       );
       if (confirmed != true || !mounted) return;
       final requestId =
-          'plan_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}';
+          'plan_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(0x100000000)}';
       await _service.call('changeBusinessMembership', {
         'businessId': _businessId,
         'action': 'changePlan',
@@ -368,7 +368,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
         'action': 'changeSelection',
         'quoteId': quote['quoteId'],
         'requestId':
-            'selection_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}',
+            'selection_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(0x100000000)}',
       });
       await _load();
     } catch (_) {
@@ -411,7 +411,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
         'businessId': _businessId,
         'action': 'cancelScheduledChange',
         'requestId':
-            'unschedule_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}',
+            'unschedule_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(0x100000000)}',
       });
       await _load();
     } catch (_) {

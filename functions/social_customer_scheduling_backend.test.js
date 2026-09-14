@@ -16,9 +16,16 @@ test('real transaction: one exact approval/job on concurrent taps, no plan/versi
   write('socialContentVersions/'+itemId+'_v1',version),write(`socialConnections/${uid}/providers/facebook`,{...f.connection,businessUid:null,grantedScopes:[...f.connection.grantedScopes,'public_profile']}),
   write('socialContentQualityAssessments/'+itemId+'_v1',{...f.quality,businessUid:uid}),write('agentHealth/'+uid,f.health),
   write('socialProviderConfigs/production_meta',f.config),write('businessSubscriptions/'+uid,f.entitlement)]);
- const store=createStore({db,enabledUids:[uid],environment:'production',now:()=>f.now});
+ const store=createStore({db,planEntitled:true,environment:'production',now:()=>f.now});
  const input={itemId,provider:'facebook',version:1,contentHash:version.contentHash,bindingHash:require('../functions-social-operations/social_growth_cycle').contentBinding({id:itemId+'_v1',record:version},uid).bindingHash};
  input.reviewDigest=(await store.preview(uid,input)).reviewDigest;
+ assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',uid).get()).size,0);
+ for(const denied of [{...f.entitlement,planId:'scale'},{...f.entitlement,status:'canceled'}]){
+  await write('businessSubscriptions/'+uid,denied);
+  assert.ok((await store.preview(uid,input)).reasons.some(r=>r.code==='scheduler'));
+  assert.equal((await store.approve(uid,input)).status,'blocked');
+ }
+ await write('businessSubscriptions/'+uid,f.entitlement);
  const beforePlan=(await db.doc('socialContentPlans/customer_plan').get()).data(),beforeVersion=(await db.doc('socialContentVersions/'+itemId+'_v1').get()).data();
  await assert.rejects(store.approve('unrelated',input));
  await assert.rejects(store.approve(uid,{...input,contentHash:'b'.repeat(64)}));

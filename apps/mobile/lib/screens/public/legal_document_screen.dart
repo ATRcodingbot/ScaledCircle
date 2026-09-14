@@ -297,6 +297,11 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
       _Section('Payments and providers', [
         'Stripe processes Business payment and refund activity and may support later worker-transfer workflows. ScaledCircle stores operational payment identifiers and reconciled payment, refund, earning, and transfer-status records; it does not expose payment-method secrets in the app. Other providers may support email, storage, maps, analytics, hosting, or campaign services.',
       ]),
+      _Section('Connected Google Business Email', [
+        'When you connect Google Business Email, ScaledCircle uses your Google account identifier and email address to identify the authorized mailbox. With Read permission, we read relevant conversations, including participants, subjects, message text, dates, and message identifiers, to show inquiries and replies, review historical contact context and opt-out requests, and reconcile approved outreach. Relevant conversation excerpts, replies, contact records, and campaign records are stored in your Business workspace.',
+        'With Send permission, ScaledCircle sends messages you explicitly approve, including campaigns approved for later delivery. While connected, background checks can update replies and process approved campaigns. Connecting a mailbox does not itself approve a message or campaign.',
+        'Connection credentials are encrypted on our servers. Disconnecting removes ScaledCircle\'s stored connection credential and disables new operations using that credential; it does not delete previously saved records or revoke permission in your Google Account. You can separately manage ScaledCircle access in your Google Account. Contact support to request deletion of stored information, subject to applicable retention requirements.',
+      ]),
       _Section('Location and evidence', [
         'During an active tracked assignment, the mobile app may collect device location to verify route and work completion. The maintained Android design uses a foreground location service and visible service notification; it does not request ACCESS_BACKGROUND_LOCATION. Tracking is not intended to run between jobs and stops after completion, cancellation, or another terminal session state. Photos or checkpoints are captured only when the user chooses the maintained evidence flow or a campaign requires them. Evidence is used for campaign review, work verification, support, and dispute review where applicable.',
       ]),
@@ -309,7 +314,7 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
       _Section(
         'Your choices and requests',
         [
-          'Optional launch or promotional email can be declined. Sales suppression and opt-out status are maintained for outreach controls. A complete self-service data export or account-deletion workflow is not currently promised. Contact support to request access, correction, deletion, or other privacy assistance; the response may depend on identity verification, applicable law, and records that must be retained.',
+          'Optional launch or promotional email can be declined. Sales suppression and opt-out status are maintained for outreach controls. You can request account deletion through the account deletion flow. Unresolved financial or workspace obligations may require attention, and required financial, security, or audit records may be retained. Contact support to request access, correction, export, deletion, or other privacy assistance; the response may depend on identity verification, applicable law, and records that must be retained.',
         ],
         links: [('Support', AppRoutes.support)],
       ),

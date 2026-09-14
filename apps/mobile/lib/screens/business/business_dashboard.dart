@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../preferences/market_state_screen.dart';
 import '../../services/business_workspace_records.dart';
@@ -364,8 +365,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                     : 'Your ${_planService.getPlanName(planId)} plan allows '
                           '$campaignLimit active '
                           'campaign${campaignLimit == 1 ? '' : 's'}. '
-                          'Complete an existing campaign or upgrade your plan '
-                          'before creating another one.',
+                          '${kIsWeb ? 'Complete an existing campaign or upgrade your plan before creating another one.' : 'Complete an existing campaign before creating another one.'}',
               ),
               actions: [
                 TextButton(
@@ -448,7 +448,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                       ),
                       SizedBox(height: 10),
                       Text(
-                        'UPGRADE TO SCALE',
+                        kIsWeb ? 'UPGRADE TO SCALE' : 'VIEW MEMBERSHIP',
                         style: TextStyle(
                           color: AppColors.secondary,
                           fontSize: 12,
@@ -1354,7 +1354,13 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
                   ? 'Explore authoritative housing-stock patterns with qualified AI interpretation.'
                   : 'AI intelligence included with Scale.',
             ),
-            trailing: Text(entitled ? 'Open' : 'Upgrade to Scale'),
+            trailing: Text(
+              entitled
+                  ? 'Open'
+                  : kIsWeb
+                  ? 'Upgrade to Scale'
+                  : 'View membership',
+            ),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -1381,7 +1387,13 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             subtitle: const Text(
               'Coordinated growth planning and Social support. Business Assistant and Lead Generation are separate add-ons. Postcards and Business Email remain Private Beta.',
             ),
-            trailing: Text(entitled ? 'Open' : 'Upgrade • \$999/mo'),
+            trailing: Text(
+              entitled
+                  ? 'Open'
+                  : kIsWeb
+                  ? 'Upgrade • \$999/mo'
+                  : 'View membership',
+            ),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(

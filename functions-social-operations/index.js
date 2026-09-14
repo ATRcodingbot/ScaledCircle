@@ -119,12 +119,9 @@ async function requireSocialOperationsBusiness(request,{allowMember=false}={}) {
   if (!context.isAdmin && context.role !== "business") {
     throw new HttpsError("permission-denied", "Social Operations is available to Business accounts.");
   }
-  if (!launchAvailability.invited(context, process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS)) {
-    throw new HttpsError('permission-denied', 'Social Manager is Private Beta. An invitation is required.', {reason:'SOCIAL_INVITATION_REQUIRED'});
-  }
   const entitlement = (await db.collection("businessSubscriptions").doc(context.uid).get()).data();
   if (!context.isAdmin && !subscriptionEntitlements.hasActiveManagedGrowthEntitlement(entitlement)) {
-    throw new HttpsError("permission-denied", "Managed Growth includes Social Manager. Private Beta access is by invitation.");
+    throw new HttpsError("permission-denied", "An active Managed Growth subscription is required for Social Manager.");
   }
   return {
     ...context,
@@ -146,12 +143,13 @@ async function requireManagedGrowthBusiness(request) {
   return {...context, entitlement: entitlement || {}};
 }
 
-// Customer approvals are separate from internal dogfood allowances. An empty
-// deployment allowlist fails closed; no plan approval enables this path.
+// Paid customer enrollment is separate from exact owner approval and internal
+// dogfood allowances. Eligibility alone never creates a publication job.
 function customerSchedulingStore() {
   return require('./social_customer_scheduling').createStore({db, environment:runtimeEnvironment(),
     bucket:()=>require('firebase-admin/storage').getStorage().bucket(),
     authorizeActor:customerWorkspaceAuthority(),
+    planEntitled:process.env.SOCIAL_CUSTOMER_ENROLLMENT_MODE==='plan_entitled',
     enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
 }
 function customerWorkspaceAuthority(){return require('./social_workspace_authority').createAuthority({db,
@@ -160,13 +158,15 @@ async function customerPublishingPresentation(business) {
   const [health,config,connections]=await Promise.all([db.doc('agentHealth/'+business.uid).get(),
     providerConfigRef('meta').get(),db.doc('socialConnections/'+business.uid).collection('providers').get()]);
   const legacy=require('./social_owner_execution').legacySetupHold(health.data(),business.uid);
-  const enabled=(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').includes(business.uid);
+  const enabled=process.env.SOCIAL_CUSTOMER_ENROLLMENT_MODE==='plan_entitled'?
+    require('./social_customer_enrollment').eligible(business.entitlement):
+    (process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).includes(business.uid);
   return {legacySetupHold:legacy,providers:Object.fromEntries(connections.docs.map(d=>{
     const c=d.data();let label='Connection needs attention';
     if(c.status==='connected_write'&&c.tokenHealth==='healthy'&&c.requiresReconnect!==true){
       label=!require('./social_customer_scheduling').hasPublishingScopes(c,d.id)?'Publishing permission missing':
         config.data()?.enabled!==true||config.data()?.writeScopesEnabled!==true?'Provider publishing unavailable':
-        !enabled?'Private Beta invitation required':health.data()?.killSwitchActive===true&&!legacy?'Connected — publishing paused':
+        !enabled?'Scheduling is not available for this workspace yet':health.data()?.killSwitchActive===true&&!legacy?'Connected — publishing paused':
         legacy?'Connected — prepare your post preview':'Connected — owner approval required';
     }
     return [d.id,label];
@@ -175,7 +175,7 @@ async function customerPublishingPresentation(business) {
 function customerPostCallable(method) {
   return onCall({enforceAppCheck:false,maxInstances:3},async request=>{
     const business=await requireSocialOperationsBusiness(request,{allowMember:true});
-    if(business.role!=='business' || !metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
+    if(business.role!=='business' || !metaCustomer.available(business))
       throw new HttpsError('permission-denied','Post scheduling is not available for this Business.');
     try{return await customerSchedulingStore()[method](business.uid,request.data||{},{actorUid:request.auth.uid});}
     catch(error){
@@ -190,12 +190,12 @@ exports.approveAndScheduleCustomerSocialPostV1=customerPostCallable('approve');
 
 exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3,concurrency:1,memory:'1GiB',timeoutSeconds:120},async request=>{
   const business=await requireSocialOperationsBusiness(request,{allowMember:true});
-  if(business.role!=='business'||!metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))
-    throw new HttpsError('permission-denied','Social Manager is Private Beta. An invitation is required.');
+  if(business.role!=='business'||!metaCustomer.available(business))
+    throw new HttpsError('permission-denied','An active Managed Growth subscription is required for Social Manager.');
   const method=request.data?.action;
   if(!['save','assess','attach','auto','regenerate'].includes(method))throw new HttpsError('invalid-argument','Choose a supported preparation action.');
   const editor=require('./social_customer_editor').createEditor({db,
-    enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
+    planEntitled:true});
   try{
     if(method==='auto'||method==='regenerate'){
       const preflight=await customerSchedulingStore().preview(business.uid,request.data);
@@ -226,7 +226,7 @@ function customerMediaStore(){return require('./social_customer_media').createMe
   subjectCheck:require('./social_creative_subject').createSubjectCheck({db}),
   bucket:()=>require('firebase-admin/storage').getStorage().bucket(),
   project:process.env.GCLOUD_PROJECT||process.env.GCP_PROJECT,
-  enabledUids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)});}
+  planEntitled:true});}
 
 // Public delivery contains only the derivative explicitly released by its owner.
 // Neither private originals nor arbitrary Storage paths are addressable here.
@@ -291,7 +291,7 @@ exports.getSocialOperationsWorkspace = onCall(
       planId: business.planId,
       managedGrowth: business.planId === "managed_growth",
       connections: safeConnections.map(c=>({...c,publishingState:publishingPresentation.providers[c.provider]})),
-      managedPublishingAvailable: metaCustomer.available(business, process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS),
+      managedPublishingAvailable: metaCustomer.available(business),
       publishingState: publishingPresentation,
       performance: require('./social_performance_presentation').project(performance,customerPlans),
       plans: customerPlans,
@@ -2019,7 +2019,7 @@ exports.reconcileFirstXRepairV1 = onCall(
 
 exports.prepareCustomerSocialPlanV1 = onCall({enforceAppCheck:false,maxInstances:2},async request=>{
   const business=await requireSocialOperationsBusiness(request);
-  if(!metaCustomer.available(business,process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))throw new HttpsError('permission-denied','This planning pilot is private.');
+  if(!metaCustomer.available(business))throw new HttpsError('permission-denied','An active Managed Growth subscription is required for Social planning.');
   if(Object.keys(request.data||{}).length)throw new HttpsError('invalid-argument','Plans use your saved Business context.');
   const [profile,geography,connections]=await Promise.all([db.doc('businessGrowthProfiles/'+business.uid).get(),
     db.doc('discoveryPreferences/'+business.uid).get(),db.collection('socialConnections').doc(business.uid).collection('providers').get()]);
@@ -2355,7 +2355,7 @@ exports.beginSocialOAuthConnectionV1 = onCall(
     const environment = runtimeEnvironment();
     const customerManaged = request.data?.capability === "managed_publishing";
     if (request.data?.capability && !customerManaged) throw new HttpsError("invalid-argument", "Choose a supported permission.");
-    if (customerManaged && (provider !== "meta" || !metaCustomer.available(business, process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS))) {
+    if (customerManaged && (provider !== "meta" || !metaCustomer.available(business))) {
       throw new HttpsError("permission-denied", "Managed publishing is not available for this workspace yet.");
     }
     let config, metaWrite, requestWriteScopes, proposed;
@@ -2681,7 +2681,7 @@ exports.confirmSocialOAuthConnectionV1 = onCall(
       attempt?.purpose === "x_connection_authority";
     const metaWrite = attempt?.provider === "meta" && attempt?.purpose === "meta_connection_authority";
     const customerManaged = attempt?.provider === "meta" && attempt?.purpose === metaCustomer.PURPOSE;
-    if (customerManaged && !metaCustomer.available(business, process.env.SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS)) throw new HttpsError("permission-denied", "Managed publishing is unavailable for this workspace.");
+    if (customerManaged && !metaCustomer.available(business)) throw new HttpsError("permission-denied", "Managed publishing is unavailable for this workspace.");
     if (!attempt || attempt.businessUid !== business.uid ||
         (attempt.purpose && !["read_only_connection", "x_connection_authority", "meta_connection_authority", metaCustomer.PURPOSE]
           .includes(attempt.purpose))) {
@@ -3543,15 +3543,25 @@ exports.runMetaGrowthPublisherV1=onSchedule({schedule:"every 5 minutes",timeZone
 // and their allowances are never selected or changed by this scheduler.
 exports.runCustomerMetaPublisherV1=onSchedule({schedule:'every 5 minutes',timeZone:'UTC',
   maxInstances:1,timeoutSeconds:120,retryCount:0,secrets:[socialOAuthEncryptionKey]},async()=>{
-  const customerUids=(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean);
-  if(customerUids.length>25)throw Error('customer_scheduler_inventory_review_required');
+  const enrolled=process.env.SOCIAL_CUSTOMER_ENROLLMENT_MODE==='plan_entitled';
+  const page=enrolled?await require('./social_customer_enrollment').inventory({db}):
+    {uids:(process.env.SOCIAL_CUSTOMER_SCHEDULING_UIDS||'').split(',').map(x=>x.trim()).filter(Boolean)};
+  const customerUids=page.uids;
+  if(!enrolled&&customerUids.length>25)throw Error('customer_scheduler_inventory_review_required');
   const publisher=require('./social_meta_runtime').createPublisher({db,project:process.env.GCLOUD_PROJECT,
     providerCreatesEnabled:process.env.GCLOUD_PROJECT==='scaled-circle',customerUids,credentials:loadMetaPublisherCredential});
-  for(const businessUid of customerUids) {
-    const result=await require('./social_meta_scheduler').run({db,publisher,businessUid,customerOnly:true});
-    await require('./social_attention_notifications').record({db,FieldValue,businessUid,results:result.results});
-    require('firebase-functions/logger').info('customer_social_scheduler',{businessUid,results:result.results});
-  }
+  const pending=[...customerUids];
+  const worker=async()=>{while(pending.length){
+    const businessUid=pending.shift();
+    try {
+      const result=await require('./social_meta_scheduler').run({db,publisher,businessUid,customerOnly:true,jobIds:enrolled?page.jobIdsByBusiness[businessUid]:null});
+      await require('./social_attention_notifications').record({db,FieldValue,businessUid,results:result.results});
+      require('firebase-functions/logger').info('customer_social_scheduler',{businessUid,results:result.results});
+    } catch (_) {
+      require('firebase-functions/logger').warn('customer_social_scheduler_held',{businessUid,reason:'workspace_review_required'});
+    }
+  }};
+  await Promise.all(Array.from({length:enrolled?4:1},worker));
 });
 
 exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",timeZone:"UTC",

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../navigation/app_routes.dart';
 import '../../navigation/public_page_navigation.dart';
@@ -175,7 +176,8 @@ class _Navigation extends StatelessWidget {
                     value: '/how-it-works',
                     child: Text('How It Works'),
                   ),
-                  PopupMenuItem(value: '/pricing', child: Text('Pricing')),
+                  if (kIsWeb)
+                    PopupMenuItem(value: '/pricing', child: Text('Pricing')),
                   PopupMenuItem(
                     value: '/referrals',
                     child: Text('Referral Program'),
@@ -189,7 +191,7 @@ class _Navigation extends StatelessWidget {
                   _NavText('For Businesses', onPressed: onBusiness),
                   _NavText('For Scalers', onPressed: onScaler),
                   _NavText('How It Works', onPressed: onHowItWorks),
-                  _NavText('Pricing', onPressed: onPricing),
+                  if (kIsWeb) _NavText('Pricing', onPressed: onPricing),
                   _NavText(
                     'Referrals',
                     onPressed: () => openPublicPage(context, '/referrals'),
@@ -535,8 +537,10 @@ class _Pricing extends StatelessWidget {
     'weather_intelligence': 'Weather Intelligence — Beta',
     'priority_scaler_matching': 'Priority Scaler matching',
     'managed_growth_planning': '30-day Managed Growth planning',
-    'email_campaign_manager': 'Email Campaigns with CRM audiences and reply tracking',
-    'social_content_package': 'Facebook/Instagram Social Manager and creative preparation',
+    'email_campaign_manager':
+        'Email Campaigns with CRM audiences and reply tracking',
+    'social_content_package':
+        'Facebook/Instagram Social Manager and creative preparation',
     'seo_action_plan': 'SEO action planning',
   };
 
@@ -580,6 +584,12 @@ class _Pricing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb) {
+      return const Text(
+        'Access your existing workspace in the app. Membership purchases and plan changes are not available in the app.',
+        style: TextStyle(color: _muted),
+      );
+    }
     final cards = _order
         .map((planId) {
           final plan = SubscriptionPlanService.plans[planId]!;

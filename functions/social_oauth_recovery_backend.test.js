@@ -7,6 +7,7 @@ const key=Buffer.alloc(32,7).toString('base64'),source=path.resolve(__dirname,'.
 const createRequire=require('module').createRequire,local=createRequire(source),exportsObject={};
 const req=name=>{
  if(name==='firebase-admin/app')return {getApps:()=>[{}],initializeApp:()=>({})};
+ if(name==='firebase-admin/auth')return {getAuth:()=>({getUser:async uid=>({uid,disabled:false,emailVerified:true})})};
  if(name==='firebase-admin/firestore')return {getFirestore:()=>new Proxy(db,{get:(t,k)=>k==="runTransaction"?((fn)=>t.runTransaction(tx=>Promise.resolve(fn(tx)))):typeof t[k]==="function"?t[k].bind(t):t[k]}),FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp};
  if(name==='firebase-functions/v2')return {setGlobalOptions:()=>{}};
  if(name==='firebase-functions/v2/https')return {onCall:(_,h)=>h,onRequest:(_,h)=>h,HttpsError:require('firebase-functions/v2/https').HttpsError};
@@ -14,7 +15,7 @@ const req=name=>{
  if(name==='firebase-functions/params')return {defineSecret:()=>({value:()=>key})};
  return local(name);
 };
-vm.runInNewContext(fs.readFileSync(source,'utf8'),{require:req,exports:exportsObject,process:{env:{GCLOUD_PROJECT:'scaled-circle',SOCIAL_CUSTOMER_PUBLISHING_BETA_UIDS:'owner'}},console,Buffer,URL,Date,setTimeout,clearTimeout});
+vm.runInNewContext(fs.readFileSync(source,'utf8'),{require:req,exports:exportsObject,process:{env:{GCLOUD_PROJECT:'scaled-circle'}},console,Buffer,URL,Date,setTimeout,clearTimeout});
 const call=(name,data={},uid='owner')=>exportsObject[name]({auth:{uid,token:{email_verified:true}},data});
 beforeEach(async()=>{
  for(const c of ['users','businessSubscriptions','socialConnections','socialOAuthAttempts','socialProviderConfigs','socialConnectionCredentials','socialPlanningRuns','socialContentPlans','socialContentItems','socialContentVersions','businessGrowthProfiles','discoveryPreferences'])await db.recursiveDelete(db.collection(c));

@@ -10,13 +10,36 @@ const call=(operation='load',uid='owner',businessId='owner',input)=>service.exec
 beforeEach(async()=>{
  for(const c of ['users','businessWorkspaces','businessSubscriptions','legalConsents','discoveryPreferences','businessGrowthProfiles','agentProfiles','agentHealth','agentApprovals','agentProspects','agentCrmProspects','agentActions','agentRuns','agentReports','agentObservations','agentCommunicationPreferences','notifications','wallets','outboundEmailJobs'])await db.recursiveDelete(db.collection(c));
  await db.doc('users/owner').set({role:'business',active:true,name:'Example Builder'});
- await db.doc('businessSubscriptions/owner').set({planId:'managed_growth',status:'active',expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
+ await db.doc('businessSubscriptions/owner').set({planId:'managed_growth',status:'active',source:'stripe',addons:['lead_generation_research'],productEntitlements:['lead_generation_research'],expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
  await db.doc('businessGrowthProfiles/owner').set({businessUid:'owner',businessName:'Example Builder',servicesOffered:['decks','fences'],plannedAdBudget:'$0'});
  await db.doc('discoveryPreferences/owner').set({schemaVersion:'ServiceAreaPreferencesV1',userUid:'owner',role:'business',preferenceVersion:1,areas:[{id:'aa',type:'place',geographyType:'county',county:'Anne Arundel County',state:'Maryland',displayName:'Anne Arundel County',enabled:true}]});
  for(const uid of ['owner','member'])for(const type of ['terms','privacy'])await db.doc(`legalConsents/${uid}_${type}_${legal.AGREEMENTS[type]}`).set({uid,agreementType:type,agreementVersion:legal.AGREEMENTS[type]});
- reads=0;service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',allowedBusinesses:'owner',readSource:async source=>{reads++;return source.signals.join(' ')+' '+(source.email||'');}});
+ reads=0;service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',readSource:async source=>{reads++;return source.signals.join(' ')+' '+(source.email||'');}});
 });
 after(()=>app.delete());
+test('normal paid Lead purchasers enroll without invitation; Managed Growth alone cannot research',async()=>{
+ const ref=db.doc('businessSubscriptions/owner');
+ for(const planId of ['starter','growth','scale']){
+  await ref.update({planId});
+  assert.equal((await call('initialize')).initialized,true);
+  assert.equal((await call()).workspaceKind,'customer');
+ }
+ await call('research');assert.ok(reads>0);
+ await ref.update({planId:'managed_growth',addons:[],productEntitlements:[]});
+ assert.equal((await call()).workspaceKind,'customer');
+ const previousReads=reads;
+ await assert.rejects(call('research'),/Lead Generation subscription/);
+ await assert.rejects(call('review'),/Lead Generation subscription/);
+ assert.equal(reads,previousReads);
+ for(const invalid of [
+  {planId:'starter',addons:[],productEntitlements:[]},
+  {planId:'starter',addons:['lead_generation_research'],productEntitlements:[],source:'stripe'},
+  {planId:'starter',addons:['lead_generation_research'],productEntitlements:['lead_generation_research'],source:'manual'},
+  {source:'stripe',status:'canceled'},
+  {status:'active',expiresAt:Timestamp.fromMillis(Date.now()-1)},
+ ]){await ref.update(invalid);await assert.rejects(call(),/subscription|Reactivate membership/);}
+});
+
 test('Growth uses exact Social plan approval version and preserves all source records',async()=>{
  await call('initialize');
  const ref=db.doc('socialContentPlans/approved-social');
@@ -35,7 +58,7 @@ test('Growth uses exact Social plan approval version and preserves all source re
 });
 test('normal owner customer authority, legal consent, plan and isolated data are required',async()=>{
  await assert.rejects(call('load',null),/Sign in/);await assert.rejects(call('load','other'),/access/);
- await assert.rejects(call('load','owner','other'),/invitation/);
+ await assert.rejects(call('load','owner','other'),/unavailable|access/);
  await assert.rejects(call('load','disabled'),/verified/);await assert.rejects(call('load','unverified'),/verified/);
  await db.doc('legalConsents/owner_privacy_'+legal.AGREEMENTS.privacy).delete();await assert.rejects(call(),/consent/);
  assert.equal((await db.collection('agentProfiles').get()).size,0);
@@ -111,4 +134,8 @@ test('customer report email is owner-bound, preference-controlled and deduplicat
  await queue({data:{data:()=>({...report.data(),businessUid:'other'})},params:{reportId:'cross'}});
  await call('preferences','owner','owner',{mode:'off'});
  await queue({...event,params:{reportId:'disabled'}});assert.equal((await db.collection('outboundEmailJobs').get()).size,1);
+ await db.doc('businessSubscriptions/owner').update({addons:[],productEntitlements:[]});
+ await db.doc('agentCommunicationPreferences/owner').set({daily:true,important:true});
+ await queue({...event,params:{reportId:'entitlement_removed'}});
+ assert.equal((await db.collection('outboundEmailJobs').get()).size,1);
 });

@@ -1,12 +1,14 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const launch=require('../functions-social-operations/social_launch_availability');
-test('Social eligibility is a private server invitation, never inferred from a subscription',()=>{
- const paid={uid:'business',role:'business',planId:'managed_growth'};
- assert.equal(launch.invited(paid,''),false);
- assert.equal(launch.invited(paid,'other'),false);
+test('Social enrollment uses the current server subscription, never a plan label or invitation',()=>{
+ const paid={uid:'business',role:'business',planId:'managed_growth',entitlement:{planId:'managed_growth',status:'active',expiresAt:new Date(Date.now()+86400000)}};
+ assert.equal(launch.invited(paid,''),true);
+ assert.equal(launch.invited(paid,'other'),true);
  assert.equal(launch.invited(paid,' business,other '),true);
  assert.equal(launch.invited({...paid,role:'scaler'},'business'),false);
+ assert.equal(launch.invited({...paid,entitlement:null},'business'),false);
+ assert.equal(launch.invited({...paid,entitlement:{...paid.entitlement,status:'canceled'}},'business'),false);
  assert.equal(launch.invited({isAdmin:true}),true);
 });
 test('normal customers only get Meta channels; internal certification cannot enable X or YouTube',()=>{

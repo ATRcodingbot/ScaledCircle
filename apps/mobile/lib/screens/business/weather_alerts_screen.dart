@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -324,7 +325,7 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
           description:
               'Real-time county alerts, opportunity estimates, and service '
               'recommendations are included with the Scale subscription.',
-          primaryActionLabel: 'View Scale Upgrade',
+          primaryActionLabel: kIsWeb ? 'View Scale Upgrade' : 'View Membership',
           primaryActionIcon: Icons.workspace_premium_outlined,
           onPrimaryAction: () async {
             final upgraded = await Navigator.push<bool>(

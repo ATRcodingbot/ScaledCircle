@@ -3,10 +3,9 @@
 // Customer permissions are separate from the internal publishing pilot and
 // from permission to execute any specific publication.
 const PURPOSE = "meta_customer_managed";
-function available(business, allowlist = "") {
+function available(business) {
   return !business.isAdmin && business.role === "business" &&
-    ["scale", "managed_growth"].includes(business.planId) &&
-    allowlist.split(",").map(s => s.trim()).filter(Boolean).includes(business.uid);
+    require('./social_customer_enrollment').eligible(business.entitlement);
 }
 function publishingTarget(connection) {
   if (!connection || !["connected_read_only", "connected_write"].includes(connection.status) ||

@@ -24,8 +24,7 @@ exports.customerGrowthOperationsV1 = onCall({enforceAppCheck:false,maxInstances:
   try {
     return await customerGrowth.createService({db,auth:getAuth(),FieldValue,
       Timestamp:require('firebase-admin/firestore').Timestamp,
-      project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,
-      allowedBusinesses:process.env.GROWTH_CUSTOMER_BETA_UIDS||''}).execute(request);
+      project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT}).execute(request);
   } catch(error) {
     console.error('Customer Growth action held',{code:error.code||'unavailable',message:error.message});
     throw new HttpsError(error.code||'unavailable',error.code?error.message:'This action could not finish. Refresh to check saved activity.');
@@ -34,10 +33,12 @@ exports.customerGrowthOperationsV1 = onCall({enforceAppCheck:false,maxInstances:
 
 exports.queueCustomerGrowthReportEmailV1 = onDocumentCreated({document:'agentReports/{reportId}',maxInstances:2,retry:true},async event=>{
   const report=event.data?.data(),uid=report?.businessUid;
-  if(report?.workspaceKind!=='customer'||!(process.env.GROWTH_CUSTOMER_BETA_UIDS||'').split(',').map(s=>s.trim()).includes(uid))return;
+  if(report?.workspaceKind!=='customer'||typeof uid!=='string'||!uid||uid.includes('/'))return;
   const account=await getAuth().getUser(uid);
   if(account.disabled||!account.emailVerified||!account.email)return;
   await db.runTransaction(async tx=>{
+    const entitlement=(await tx.get(db.doc('businessSubscriptions/'+uid))).data();
+    if(!require('./shared/subscription_entitlements').hasActiveProductEntitlement(entitlement,'lead_generation_research'))return;
     const prefs=(await tx.get(db.doc('agentCommunicationPreferences/'+uid))).data()||growth.preferences();
     const health=(await tx.get(db.doc('agentHealth/'+uid))).data();
     if(health?.workspaceKind!=='customer')return;

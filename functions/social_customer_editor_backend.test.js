@@ -19,9 +19,14 @@ test('transactional edit/assessment isolation; one new version; no approval, his
   [`socialConnections/${uid}/providers/facebook`]:{...f.connection,businessUid:uid},['agentHealth/'+uid]:f.health,
   ['socialProviderConfigs/production_meta']:f.config,['businessSubscriptions/'+uid]:f.entitlement};
  await Promise.all(Object.entries(writes).map(([p,v])=>db.doc(p).set(v)));
- const editor=createEditor({db,enabledUids:[uid],now:()=>f.now}),store=createStore({db,enabledUids:[uid],environment:'production',now:()=>f.now});
+ const editor=createEditor({db,planEntitled:true,now:()=>f.now}),store=createStore({db,planEntitled:true,environment:'production',now:()=>f.now});
  const input={itemId,provider:'facebook',version:1,copy:initial.variants[0].copy+' New draft.',callToAction:'Learn more',destinationUrl:'https://example.com/services',
   scheduledFor:new Date(f.now+3600000).toISOString(),textOnly:true};
+ for(const denied of [{...f.entitlement,planId:'scale'},{...f.entitlement,status:'canceled'}]){
+  await db.doc('businessSubscriptions/'+uid).set(denied);
+  await assert.rejects(editor.save(uid,input),/Managed Growth/);
+ }
+ await db.doc('businessSubscriptions/'+uid).set(f.entitlement);
  const concurrent=await Promise.allSettled([editor.save(uid,input),editor.save(uid,input)]);
  assert.equal(concurrent.filter(r=>r.status==='fulfilled').length,1);
  assert.equal((await db.doc('socialContentItems/'+itemId).get()).data().platformVersions.instagram,1);

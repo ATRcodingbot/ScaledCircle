@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../navigation/context_back_button.dart';
 import '../../services/business_workspace_service.dart';
@@ -791,7 +792,11 @@ class _PropertyIntelligenceCenterScreenState
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
-                  const Text('Included with Scale — \$499/month'),
+                  const Text(
+                    kIsWeb
+                        ? 'Included with Scale — \$499/month'
+                        : 'Not included in your current membership',
+                  ),
                   const SizedBox(height: 14),
                   const Text(
                     'Analyze housing-stock age, compare target areas, understand construction eras, and turn selected areas into ScaledCircle campaigns.',
@@ -806,7 +811,9 @@ class _PropertyIntelligenceCenterScreenState
                       ),
                     ),
                     icon: const Icon(Icons.upgrade),
-                    label: const Text('Upgrade to Scale'),
+                    label: const Text(
+                      kIsWeb ? 'Upgrade to Scale' : 'View Membership',
+                    ),
                   ),
                 ],
               ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
@@ -34,7 +35,9 @@ class ScaledCircleServicesScreen extends StatelessWidget {
         final plan = data['subscriptionPlan']?.toString().toLowerCase();
         final status = data['subscriptionStatus']?.toString() ?? 'inactive';
         return Scaffold(
-          appBar: AuthenticatedAppBar(title: const Text('ScaledCircle Services')),
+          appBar: AuthenticatedAppBar(
+            title: const Text('ScaledCircle Services'),
+          ),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -102,7 +105,11 @@ class ScaledCircleServicesScreen extends StatelessWidget {
     child: ListTile(
       leading: const Icon(Icons.workspace_premium_outlined),
       title: const Text('SUBSCRIPTION'),
-      subtitle: Text('${_planName(plan)} • ${_price(plan)} • $status'),
+      subtitle: Text(
+        kIsWeb
+            ? '${_planName(plan)} • ${_price(plan)} • $status'
+            : '${_planName(plan)} • $status',
+      ),
     ),
   );
 
@@ -142,7 +149,9 @@ class ScaledCircleServicesScreen extends StatelessWidget {
                     ? item.beta
                           ? 'Included • BETA'
                           : 'Included'
-                    : 'Requires ${_planName(item.requiredPlan)} • Upgrade / Learn More',
+                    : kIsWeb
+                    ? 'Requires ${_planName(item.requiredPlan)} • Upgrade / Learn More'
+                    : 'Not included in your current membership',
               ),
               trailing: item.comingSoon
                   ? const Chip(label: Text('COMING SOON'))
