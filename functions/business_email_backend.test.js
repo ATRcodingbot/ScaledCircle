@@ -235,7 +235,9 @@ test('replies need exact provider conversation, recipient and reference; duplica
 test('certification reply binds one conversation and CRM record, never becomes a Growth outcome',async()=>{
  const d=await draft({certification:true,prospectId:null});await send(d);const ref=db.doc('businessMailboxes/owner/operations/'+d.operationId),op=(await ref.get()).data();
  provider.thread=async()=>exactThread(op,false);assert.equal((await call('reconcile',{operationId:d.operationId})).replies,0);
- provider.thread=async()=>exactThread(op);await call('reconcile',{operationId:d.operationId});await call('reconcile',{operationId:d.operationId});
+ await db.doc('businessMailboxes/owner/operations/pending_followup').set({businessId:'owner',recipient:op.recipient,state:'queued',followupTo:d.operationId});
+ provider.thread=async()=>exactThread(op);await call('reconcile',{operationId:d.operationId});
+ assert.equal((await db.doc('businessMailboxes/owner/operations/pending_followup').get()).data().state,'suppressed');await call('reconcile',{operationId:d.operationId});
  const data=await call('load');assert.equal(data.operations[0].replyCount,1);assert.equal(data.operations[0].replyCheckStatus,'reply_received');
  assert.equal(data.replies.length,1);assert.equal(data.replies[0].operationId,d.operationId);assert.equal(data.replies[0].providerThreadId,op.providerThreadId);
  assert.equal(data.replies[0].businessId,'owner');assert.equal(data.replies[0].certification,true);
@@ -348,4 +350,36 @@ test('production certification permit cannot enable internal mailbox, arbitrary 
  assert(productionPermit(config,clock));assert(exactProductionMessage(config,d,clock));
  for(const extra of [{kind:'internal'},{certificationOnly:false},{sendEnabled:true},{certificationSendEnabled:false},{mailbox:'another@example.test'}])assert.equal(productionPermit({...config,...extra},clock),false);
  for(const extra of [{recipient:'another@example.test'},{body:'Changed'},{subject:'Changed'},{provider:'microsoft'},{certification:false}])assert.equal(exactProductionMessage(config,{...d,...extra},clock),false);
+});
+
+test('accepted email advances early CRM stages without inventing interest and records exact receipt',async()=>{
+ beta.certificationOnly=false;const d=await draft();await send(d);
+ const op=(await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data();
+ const c=(await db.doc('businessOperations/owner/customers/'+op.crmCustomerId).get()).data();
+ assert.equal(c.stage,'contacted');assert.equal(c.awaitingReply,true);assert.equal(c.sendOperationId,d.operationId);
+ assert.equal(c.providerMessageId,'google-message');assert.equal(c.providerThreadId,'google-thread');assert.equal(c.mailbox,'owner@example.test');
+ assert.equal(c.nextEligibleContactAt,clock+5*86400000);assert.equal(sends,1);
+});
+test('same normalized contact cannot be cold-introduced by a second prospect even after cooldown',async()=>{
+ beta.certificationOnly=false;const d=await draft();await send(d);clock+=6*86400000;
+ await db.doc('agentProspects/other').set({...((await db.doc('agentProspects/prospect').get()).data()),lastCheckedAt:clock});
+ const other=await call('saveDraft',{prospectId:'other',subject:'Other intro',body:'A second introduction.',expectedVersion:0});
+ await assert.rejects(send(other),/already contacted/);assert.equal(sends,1);
+});
+
+test('historical receipt repairs once without another send or extending cooldown; actual reply clears waiting',async()=>{
+ beta.certificationOnly=false;const d=await draft();await send(d);
+ const opRef=db.doc('businessMailboxes/owner/operations/'+d.operationId),op=(await opRef.get()).data();
+ const cRef=db.doc('businessOperations/owner/customers/'+op.crmCustomerId);
+ await cRef.update({stage:'new_lead',sendOperationId:admin.firestore.FieldValue.delete()});
+ const contact=require('../functions-business-email/contact_relationship');
+ const repair=()=>db.runTransaction(async tx=>{const action=await contact.sent({db,tx,businessId:'owner',opId:d.operationId,op,now:clock+100000,receipt:{id:op.providerMessageId,threadId:op.providerThreadId}});action();});
+ await repair();const first=(await cRef.get()).data();await repair();assert.deepEqual((await cRef.get()).data(),first);
+ assert.equal(first.nextEligibleContactAt,op.providerAcceptedAt+5*86400000);assert.equal(sends,1);
+ await db.doc('businessMailboxes/owner/operations/pending_followup').set({businessId:'owner',recipient:op.recipient,state:'queued',followupTo:d.operationId});
+ provider.thread=async()=>exactThread(op);await call('reconcile',{operationId:d.operationId});
+ assert.equal((await db.doc('businessMailboxes/owner/operations/pending_followup').get()).data().state,'suppressed');
+ const replied=(await cRef.get()).data();assert.equal(replied.stage,'replied');assert.equal(replied.awaitingReply,false);
+ assert.equal((await db.doc('businessOperations/owner/contactAuthority/'+hash(op.recipient)).get()).data().genericFollowupBlocked,true);
+ assert.equal(sends,1);
 });

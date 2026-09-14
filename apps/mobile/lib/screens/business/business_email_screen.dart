@@ -714,36 +714,103 @@ class BusinessEmailDraftButton extends StatelessWidget {
     this.certification = false,
     this.recipient,
     this.service,
+    this.onChanged,
   });
   final Map<String, dynamic> mailbox;
   final Map? prospect;
   final bool certification;
   final String? recipient;
   final BusinessEmailService? service;
+  final Future<void> Function()? onChanged;
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
-    icon: const Icon(Icons.edit_outlined),
-    onPressed:
-        mailbox['connection']?['send'] != true ||
-            !certification && mailbox['sendEnabled'] == false
-        ? null
-        : () => showDialog(
-            context: context,
-            builder: (_) => _DraftDialog(
-              mailbox: mailbox,
-              prospect: prospect,
-              certification: certification,
-              recipient: recipient,
-              service: service,
-              followupTo: prospect?['followupTo']?.toString(),
+  Widget build(BuildContext context) {
+    final sent =
+        (mailbox['operations'] as List? ?? [])
+            .whereType<Map>()
+            .where(
+              (o) =>
+                  o['state'] == 'sent' &&
+                  o['certification'] != true &&
+                  (o['prospectId'] == prospect?['id'] ||
+                      (prospect?['email'] != null &&
+                          '${o['recipient']}'.trim().toLowerCase() ==
+                              '${prospect?['email']}'.trim().toLowerCase())),
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                ((b['providerAcceptedAt'] ?? b['requestedAt'] ?? 0) as num)
+                    .compareTo(
+                      (a['providerAcceptedAt'] ?? a['requestedAt'] ?? 0) as num,
+                    ),
+          );
+    if (!certification && prospect?['followupTo'] == null && sent.isNotEmpty) {
+      final op = sent.first;
+      final replied = sent.any((o) => (o['replyCount'] ?? 0) > 0);
+      final at = DateTime.fromMillisecondsSinceEpoch(
+        (op['providerAcceptedAt'] ?? op['requestedAt']) as int,
+      );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            replied
+                ? 'Replied — Review conversation'
+                : 'Contacted — Awaiting reply',
+          ),
+          Text(
+            'Last contact: Email · ${MaterialLocalizations.of(context).formatMediumDate(at)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(at))}',
+          ),
+          Text(
+            replied
+                ? 'Next: Review reply'
+                : 'Next: Wait for reply. Follow-ups require review after the five-day cooldown.',
+          ),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.forum_outlined),
+            label: const Text('View Conversation'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BusinessEmailScreen(
+                  initialOperationId: op['id'] as String,
+                  service: service,
+                ),
+              ),
             ),
           ),
-    label: Text(
-      certification
-          ? 'Review Controlled Test Message'
-          : 'Edit Draft / Approve & Send Email',
-    ),
-  );
+        ],
+      );
+    }
+    return OutlinedButton.icon(
+      icon: const Icon(Icons.edit_outlined),
+      onPressed:
+          mailbox['connection']?['send'] != true ||
+              !certification && mailbox['sendEnabled'] == false
+          ? null
+          : () async {
+              await showDialog(
+                context: context,
+                builder: (_) => _DraftDialog(
+                  mailbox: mailbox,
+                  prospect: prospect,
+                  certification: certification,
+                  recipient: recipient,
+                  service: service,
+                  followupTo: prospect?['followupTo']?.toString(),
+                ),
+              );
+              await onChanged?.call();
+            },
+      label: Text(
+        certification
+            ? 'Review Controlled Test Message'
+            : prospect?['followupTo'] != null
+            ? 'Prepare Follow-up'
+            : 'Edit Draft / Approve & Send Email',
+      ),
+    );
+  }
 }
 
 class _DraftDialog extends StatefulWidget {

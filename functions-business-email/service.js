@@ -260,8 +260,11 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   }
   async function recordSent(a,ref,result) {
     await db.runTransaction(async tx=>{
-      const op=(await tx.get(ref)).data();if(op.state==='sent')return;
-      const recordContact=await require('./contact_relationship').sent({db,tx,businessId:a.businessId,opId:ref.id,op,now:now()});
+      const op=(await tx.get(ref)).data();
+      if(op.state==='sent'){
+        const repair=await require('./contact_relationship').sent({db,tx,businessId:a.businessId,opId:ref.id,op,now:now(),receipt:{id:op.providerMessageId,threadId:op.providerThreadId}});repair();return;
+      }
+      const recordContact=await require('./contact_relationship').sent({db,tx,businessId:a.businessId,opId:ref.id,op,now:now(),receipt:result});
       recordContact();
       tx.update(ref,{state:'sent',providerMessageId:result.id,providerThreadId:result.threadId,conversationId:hash([a.businessId,ref.id]),providerAcceptedAt:stamp(),delivered:false});
       if(!op.campaignId)tx.update(sub(a.businessId,'drafts',op.prospectId),{state:'sent'});
@@ -285,6 +288,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       if(!receipt)return {state:'needs_reconciliation',retryAllowed:false};
       await recordSent(a,ref,receipt);return {state:'sent',delivered:false};
     }
+    await recordSent(a,ref,{id:op.providerMessageId,threadId:op.providerThreadId});
     const replies=await p.replies(credentials,op,onRefresh,a.beta.otherMailbox);
     const replyKey=r=>c.provider&&c.provider!=='google'?hash([c.provider,c.subject,r.providerMessageId]):id(r.providerMessageId);
     const replyCount=await db.runTransaction(async tx=>{
@@ -299,6 +303,12 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       const newReplies=replies.filter((_,i)=>!saved[i].exists);
       const customerRef=op.crmCustomerId?db.doc('businessOperations/'+a.businessId+'/customers/'+op.crmCustomerId):null;
       const customer=customerRef?(await tx.get(customerRef)).data():null;
+      const contactRef=db.doc('businessOperations/'+a.businessId+'/contactAuthority/'+hash(op.recipient));
+      const contact=(await tx.get(contactRef)).data();
+      const prospectRef=!op.campaignId&&op.prospectId?db.doc('agentProspects/'+op.prospectId):null;
+      const replyProspect=prospectRef?(await tx.get(prospectRef)).data():null;
+      const queuedFollowups=newReplies.length?await tx.get(root(a.businessId).collection('operations').where('recipient','==',op.recipient).limit(101)):null;
+      if(queuedFollowups?.size>100)fail('failed-precondition','Contact history needs a bounded review.');
       const optout=newReplies.find(r=>/^\s*(?:please\s+)?(?:unsubscribe me|remove me from (?:your|the) (?:list|mailing)|do not (?:email|contact)|stop (?:emailing|contacting))/i.test(r.body||''));
       const restrictionRef=sub(a.businessId,'suppression',hash(op.recipient));
       if(optout)await tx.get(restrictionRef);
@@ -306,7 +316,10 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
         ...replies[i],provider:c.provider||'google',conversationId:hash([a.businessId,ref.id]),businessId:a.businessId,operationId:ref.id,prospectId:op.prospectId,certification:op.certification===true,
         ...(op.campaignId?{campaignId:op.campaignId,candidateId:op.candidateId}:{})});
       const count=(latest.replyCount||0)+saved.filter(s=>!s.exists).length;
-      if(customer&&newReplies.length)tx.update(customerRef,{lastInboundAt:Math.max(customer.lastInboundAt||0,...newReplies.map(r=>r.receivedAt)),version:(customer.version||0)+1,updatedAtMs:stamp()});
+      if(customer&&newReplies.length)tx.update(customerRef,{awaitingReply:false,...(['new_lead','discovered','qualified','drafted','contacted','replied'].includes(customer.stage)?{stage:'replied'}:{}),lastInboundAt:Math.max(customer.lastInboundAt||0,...newReplies.map(r=>r.receivedAt)),version:(customer.version||0)+1,updatedAtMs:stamp()});
+      for(const pending of queuedFollowups?.docs||[])if(pending.data().state==='queued'&&pending.data().followupTo)tx.update(pending.ref,{state:'suppressed',suppressionReason:'Reply received — review the conversation',lastCheckedAt:stamp()});
+      if(count&&replyProspect?.businessUid===a.businessId)tx.update(prospectRef,{awaitingReply:false,...(['discovered','drafted','qualified','contacted','replied'].includes(replyProspect.lifecycleState)?{lifecycleState:'replied'}:{})});
+      if(count&&contact)tx.update(contactRef,{awaitingReply:false,lastInboundAt:Math.max(contact.lastInboundAt||0,...replies.map(r=>r.receivedAt||stamp())),genericFollowupBlocked:true});
       if(optout)tx.set(restrictionRef,{businessId:a.businessId,recipient:op.recipient,active:true,reason:'unsubscribed',source:'matched_provider_reply',providerMessageId:optout.providerMessageId,updatedAt:stamp()},{merge:true});
       tx.update(ref,{replyCount:count,lastCheckedAt:stamp(),replyCheckStatus:count?'reply_received':'no_reply_yet'});
       if(count)tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,

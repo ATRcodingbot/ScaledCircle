@@ -53,3 +53,12 @@ test('performance labels compare instantaneous counts but never mismatched rolli
  const result=p([y,x]).platforms[0];a.equal(result.metrics[0].change,2);a.equal(result.metrics[1].change,null);a.equal(result.published,0);
  a.equal(p([x]).platforms[0].metrics[0].change,null);
 });
+
+test('provider-accepted contact overrides stale early CRM; same email shares contact and cooldown',()=>{
+ const now=1000000,base={businessId:'b',prospects:[{id:'p',email:'ASPEN@example.test',opportunityType:'property_management',qualified:true}],customers:[{id:'c',email:'aspen@example.test',stage:'new_lead'}],operations:[{id:'send',businessId:'b',prospectId:'other',recipient:'aspen@example.test',state:'sent',providerAcceptedAt:now,replyCount:0}],outcomes:[],now};
+ const p=project(base).prospects[0];a.equal(p.lifecycleStage,'contacted');a.equal(p.awaitingReply,true);a.equal(p.freshOutreachEligible,false);a.equal(p.followupEligible,false);a.equal(p.pipelineType,'vendor');
+ a.equal(project({...base,now:now+5*86400000}).prospects[0].followupEligible,true);
+ const replied=project({...base,operations:[{...base.operations[0],replyCount:1}]}).prospects[0];a.equal(replied.lifecycleStage,'replied');a.equal(replied.awaitingReply,false);a.equal(replied.followupEligible,false);
+ a.equal(project({...base,customers:[{...base.customers[0],stage:'won'}]}).prospects[0].lifecycleStage,'won');
+ a.equal(project({...base,operations:[{...base.operations[0],businessId:'other'}]}).prospects[0].freshOutreachEligible,true);
+});

@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 const customerStageLabels = <String, String>{
   'new_lead': 'New lead',
   'contacted': 'Contacted',
+  'replied': 'Replied',
   'estimate_scheduled': 'Estimate scheduled',
   'estimate_given': 'Estimate given',
   'won': 'Won',

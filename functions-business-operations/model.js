@@ -1,7 +1,7 @@
 'use strict';
 const crypto=require('node:crypto');
 const VERSION='BusinessOperationsV1';
-const STAGES=Object.freeze(['new_lead','contacted','estimate_scheduled','estimate_given','won','lost','job_scheduled','in_progress','completed','follow_up']);
+const STAGES=Object.freeze(['new_lead','contacted','replied','estimate_scheduled','estimate_given','won','lost','job_scheduled','in_progress','completed','follow_up']);
 const TYPES=Object.freeze(['estimate','job','follow_up','meeting','task']);
 const NOTIFICATIONS=Object.freeze(['assignedJobs','scheduleChanges','leadUpdates','customerReplies','estimateReminders','paymentBilling','growthApprovals','socialApprovals']);
 function fail(code,message,details){const e=Error(message);e.code=code;e.details=details;throw e;}

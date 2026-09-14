@@ -188,7 +188,7 @@ class PremiumAgentWorkspace extends StatelessWidget {
         '${p['displayName']}',
         () => onReviewPeople(type, '${p['id']}'),
         detail:
-            '${p['lifecycleLabel'] ?? (p['qualified'] == true ? 'Qualified' : 'Discovered')} · ${p['reason'] ?? 'Review source evidence'}',
+            '${p['relationshipLabel'] ?? ''} · ${p['lifecycleLabel'] ?? (p['qualified'] == true ? 'Qualified' : 'Discovered')} · ${p['nextContactAction'] ?? p['reason'] ?? 'Review source evidence'}',
       ),
   ];
 
@@ -321,11 +321,12 @@ class PremiumAgentWorkspace extends StatelessWidget {
         _section(context, 'Opportunity Pipeline', [
           _pipeline(context, model['leads'] as Map?),
         ]),
-        _section(context, 'Needs Review', [
+        _section(context, 'Needs Attention', [
           _action(
-            'Review Prospects',
+            'Review New Prospects',
             () => onReviewPeople(type, null),
-            detail: '${leads.length} sourced prospects',
+            detail:
+                '${leads.where((p) => p['freshOutreachEligible'] != false).length} prospects eligible for new-outreach review',
           ),
         ]),
         _section(
@@ -337,7 +338,8 @@ class PremiumAgentWorkspace extends StatelessWidget {
                 .where(
                   (p) =>
                       (p['draft'] ?? '').toString().isNotEmpty &&
-                      p['approvalState'] != 'do_not_contact',
+                      p['approvalState'] != 'do_not_contact' &&
+                      p['freshOutreachEligible'] != false,
                 )
                 .toList(),
             type,
@@ -346,12 +348,17 @@ class PremiumAgentWorkspace extends StatelessWidget {
         ),
         _section(
           context,
-          'Active Prospects',
+          'Awaiting Reply',
           _people(
             context,
-            leads.where((p) => p['doNotContact'] != true).toList(),
+            leads
+                .where(
+                  (p) =>
+                      p['awaitingReply'] == true && p['doNotContact'] != true,
+                )
+                .toList(),
             type,
-            'active prospects',
+            'contacts awaiting reply',
           ),
         ),
         _section(context, 'Replies / Follow-ups', [

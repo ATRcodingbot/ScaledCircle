@@ -258,7 +258,11 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
               : p['kind'] != 'scaler' &&
                     p['opportunityType'] != 'recruitment_channel',
         )
-        .where((p) => prospectId == null || p['id'] == prospectId)
+        .where(
+          (p) => prospectId == null
+              ? p['freshOutreachEligible'] != false
+              : p['id'] == prospectId,
+        )
         .toList();
     showDialog<void>(
       context: context,
@@ -280,15 +284,18 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                   ExpansionTile(
                     title: Text('${p['displayName']}'),
                     subtitle: Text(
-                      '${p['reason'] ?? 'Review source evidence'}',
+                      '${p['relationshipLabel'] ?? ''} · ${p['lifecycleLabel'] ?? 'Review source evidence'}',
                     ),
                     children: [
+                      if (p['pipelineStages'] is List)
+                        Text((p['pipelineStages'] as List).join(' → ')),
                       Text(
                         'Last action: ${p['lastAction'] ?? 'No recorded action'}\nResult: ${p['result'] ?? 'Unavailable'}\nNext: ${p['nextAction'] ?? 'Review evidence'}',
                       ),
-                      SelectableText(
-                        '${p['draft'] ?? 'Draft not prepared yet'}',
-                      ),
+                      if (p['freshOutreachEligible'] != false)
+                        SelectableText(
+                          '${p['draft'] ?? 'Draft not prepared yet'}',
+                        ),
                       TextButton(
                         onPressed: () => launchUrl(
                           Uri.parse('${p['sourceUrl']}'),
@@ -303,6 +310,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                           p['email'] is String)
                         BusinessEmailDraftButton(
                           mailbox: _mailbox!,
+                          onChanged: _load,
                           prospect: p,
                         ),
                       TextButton(
@@ -819,14 +827,16 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                         _line('Result', p['result']),
                         _line('Next action', p['nextAction']),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Proposed outreach — not sent',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        SelectableText(
-                          p['draft']?.toString() ??
-                              'More source review required.',
-                        ),
+                        if (p['freshOutreachEligible'] != false)
+                          const Text(
+                            'Proposed outreach — not sent',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        if (p['freshOutreachEligible'] != false)
+                          SelectableText(
+                            p['draft']?.toString() ??
+                                'More source review required.',
+                          ),
                         const SizedBox(height: 12),
                         if (_mailbox != null &&
                             p['doNotContact'] != true &&
@@ -836,6 +846,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                             p['excludedByGrowthPreferences'] != true)
                           BusinessEmailDraftButton(
                             mailbox: _mailbox!,
+                            onChanged: _load,
                             prospect: p,
                           ),
                         Text(

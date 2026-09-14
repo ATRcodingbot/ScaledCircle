@@ -21,10 +21,22 @@ function project({businessId,prospects,operations,outcomes,customers=[],entitlem
      : agent==='lead_generation'?'Invited opportunity review · paid research not included':'Recommendations only · paid Assistant not included';
  }
  const enriched=prospects.map(p=>{
-   const records=valid.filter(o=>o.prospectId===p.id),matches=customers.filter(c=>c.email&&c.email.toLowerCase()===p.email?.toLowerCase());
-   const crm=matches.length===1?matches[0]:null;
-   const stage=crm?.stage||(records.some(o=>o.replyCount>0)?'replied':records.length?'contacted':p.qualified?'qualified':'discovered');
-   return {...p,lifecycleStage:stage,lifecycleLabel:stage.replaceAll('_',' '),crmCustomerId:crm?.id||null};
+   const normalize=v=>typeof v==='string'?v.trim().toLowerCase():'';
+   const records=valid.filter(o=>o.prospectId===p.id||(normalize(p.email)&&normalize(o.recipient)===normalize(p.email)))
+     .sort((a,b)=>(b.providerAcceptedAt||b.requestedAt||0)-(a.providerAcceptedAt||a.requestedAt||0));
+   const matches=customers.filter(c=>normalize(c.email)&&normalize(c.email)===normalize(p.email)),crm=matches.length===1?matches[0]:null;
+   const latest=records[0],replied=records.some(o=>o.replyCount>0),early=['new_lead','discovered','qualified','drafted','contacted','replied'];
+   const stage=crm?.stage&&!early.includes(crm.stage)?crm.stage:replied?'replied':latest?'contacted':crm?.stage||(p.qualified?'qualified':'discovered');
+   const nextEligibleContactAt=latest?(latest.providerAcceptedAt||latest.requestedAt)+5*86400000:null;
+   const blocked=p.doNotContact===true||crm?.doNotContact===true;
+   const pipelineType=person(p)?'workforce':workforce(p)?'recruitment_channel':['property_management','property_facility','partner_channel','commercial','public_bid','business_account'].includes(p.opportunityType)?'vendor':'direct';
+   return {...p,lifecycleStage:stage,lifecycleLabel:stage.replaceAll('_',' '),crmCustomerId:crm?.id||null,
+     pipelineType,pipelineStages:pipelineType==='workforce'?['Discovered','Qualified','Contacted','Replied','Available','Invited','Signed Up','Active / Used']:pipelineType==='vendor'||pipelineType==='recruitment_channel'?['Discovered','Qualified','Contacted','Replied','Vendor / Application Review','Approved / Onboarded','Active Opportunity']:['Discovered','Qualified','Contacted','Replied','Estimate Scheduled','Estimate Given','Won / Lost','Past Customer'],relationshipLabel:p.opportunityType==='property_management'?'Property Manager / Vendor Opportunity':pipelineType==='workforce'?'Recruitment Candidate':pipelineType==='recruitment_channel'?'Recruitment Channel':pipelineType==='vendor'?'Vendor / Partner Opportunity':'Direct Customer',
+     awaitingReply:!!latest&&!replied,lastOutboundAt:latest?.providerAcceptedAt||latest?.requestedAt||null,
+     sendOperationId:latest?.id||null,nextEligibleContactAt,
+     freshOutreachEligible:!blocked&&!latest&&!['replied','contacted'].includes(stage),
+     followupEligible:!blocked&&!!latest&&!replied&&now>=nextEligibleContactAt,
+     nextContactAction:blocked?'Do not contact':replied?'Review reply':latest?(now>=nextEligibleContactAt?'Review follow-up eligibility':'Wait for reply'):'Review new outreach'};
  });
  return {prospects:enriched,premium:{access,overall:pipeline(prospects,true),leads:pipeline(prospects.filter(p=>!workforce(p))),
    workforce:pipeline(prospects.filter(person)),ads:{approvedBudget:null,spend:null,activeCampaigns:null,leads:null,conversions:null}}};
