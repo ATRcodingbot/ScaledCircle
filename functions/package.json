@@ -50,6 +50,7 @@
     "nodemailer": "9.0.5",
     "openai": "^7.4.0",
     "pdf-lib": "^1.17.1",
+    "polygon-clipping": "0.15.7",
     "qrcode": "^1.5.4",
     "sharp": "0.35.4",
     "stripe": "^22.4.0"

@@ -120,7 +120,7 @@ void main() {
     expect(propertySource, contains('clamp(520.0, 760.0)'));
     expect(propertySource, contains('clamp(360.0, 560.0)'));
     expect(propertySource, contains('SegmentedButton<_PropertyDiscoveryMode>'));
-    expect(propertySource, contains('_loadSavedArea(contextArea);'));
+    expect(propertySource, contains('_loadSavedArea(selected);'));
     expect(propertySource, contains('Future<void> _exploreAnywhere() async'));
     expect(propertySource, contains('_selectedSavedAreaName = null;'));
   });

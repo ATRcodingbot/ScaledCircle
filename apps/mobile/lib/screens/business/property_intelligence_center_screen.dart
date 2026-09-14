@@ -1,8 +1,9 @@
+import 'dart:math';
+import '../../widgets/property_territory_shortlist.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../navigation/context_back_button.dart';
 import '../../services/business_workspace_service.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -55,9 +56,29 @@ class _PropertyIntelligenceCenterScreenState
   PropertyIntelligenceAnalysis? _analysis;
   bool _analyzing = false;
   bool _askingAi = false;
-  bool _fromSavedArea = false;
+  bool _fromSavedArea = true;
   bool _outsideUsualArea = false;
-  String? _selectedSavedAreaName;
+  String? _selectedSavedAreaName = 'All enabled service areas';
+  String? _selectedSavedAreaId;
+  Map<String, dynamic>? _territoryReport;
+  List<Map<String, dynamic>> _territories = [];
+  String? _selectedTerritoryId;
+  int _scopeVersion = 0;
+  String? _savedRequestId;
+  bool _territoryBusy = false;
+
+  void _invalidateScope() {
+    _scopeVersion++;
+    _savedRequestId = null;
+    _territoryReport = null;
+    _territories = [];
+    _selectedTerritoryId = null;
+    _analyzing = false;
+    _askingAi = false;
+    _analysis = null;
+    _aiInterpretation = null;
+  }
+
   List<SavedPropertyAreaContext> _savedAreaContexts = const [];
   ScaledCircleAiInterpretation? _aiInterpretation;
   List<BusinessOpportunityGoal> _goals = const [];
@@ -66,7 +87,12 @@ class _PropertyIntelligenceCenterScreenState
   @override
   void initState() {
     super.initState();
+    _objectiveController.addListener(_objectiveChanged);
     _loadGoals();
+  }
+
+  void _objectiveChanged() {
+    if (mounted) setState(_invalidateScope);
   }
 
   Future<void> _loadGoals() async {
@@ -219,6 +245,8 @@ class _PropertyIntelligenceCenterScreenState
   }
 
   void _addPoint(TapPosition _, LatLng point) {
+    if (_fromSavedArea) return;
+    _invalidateScope();
     setState(() {
       _fromSavedArea = false;
       _selectedSavedAreaName = null;
@@ -252,57 +280,48 @@ class _PropertyIntelligenceCenterScreenState
       );
       return;
     }
-    final selected = areas.length == 1
-        ? areas.single
-        : await showDialog<Map<String, dynamic>>(
-            context: context,
-            builder: (context) => SimpleDialog(
-              title: const Text('Which service area should we analyze?'),
-              children: areas
-                  .map(
-                    (area) => SimpleDialogOption(
-                      onPressed: () => Navigator.pop(context, area),
-                      child: Text(area['name']?.toString() ?? 'Service area'),
-                    ),
-                  )
-                  .toList(),
-            ),
-          );
-    if (selected == null || !mounted) return;
-    final contextArea = _areaContextService.resolve(selected);
-    if (contextArea == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'This saved place needs a mapped boundary before Property Intelligence can analyze it. Edit the service area to add one.',
+    final selected = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Which service areas should we analyze?'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, <String, dynamic>{
+              'name': 'All enabled service areas',
+            }),
+            child: const Text('All enabled service areas'),
           ),
-        ),
-      );
-      return;
-    }
-    _loadSavedArea(contextArea);
+          for (final area in areas)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, area),
+              child: Text(area['name']?.toString() ?? 'Service area'),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted) return;
+    _loadSavedArea(selected);
   }
 
-  void _loadSavedArea(SavedPropertyAreaContext area) {
+  void _loadSavedArea(Map<String, dynamic> area) {
     setState(() {
-      _shape = CampaignAreaShape.polygon;
-      _inputPoints
-        ..clear()
-        ..addAll(area.polygon);
-      _area = area.polygon;
+      _invalidateScope();
+      _selectedSavedAreaId = area['id']?.toString();
+      _selectedSavedAreaName = area['name']?.toString();
       _fromSavedArea = true;
       _outsideUsualArea = false;
-      _selectedSavedAreaName = area.name;
+      _area = [];
+      _inputPoints.clear();
       _analysis = null;
       _aiInterpretation = null;
-      _searchController.text = area.name;
     });
-    _mapController.move(area.polygon.first, 11);
   }
 
   Future<void> _exploreAnywhere() async {
+    _invalidateScope();
+    final version = _scopeVersion;
     final saved = await DiscoveryPreferencesService().load();
-    if (!mounted) return;
+    if (!mounted || version != _scopeVersion) return;
     setState(() {
       _savedAreaContexts = _areaContextService.resolveEnabledAreas(saved);
       _fromSavedArea = false;
@@ -317,6 +336,7 @@ class _PropertyIntelligenceCenterScreenState
   }
 
   void _selectShape(CampaignAreaShape shape) {
+    _invalidateScope();
     setState(() {
       _shape = shape;
       _inputPoints.clear();
@@ -329,6 +349,7 @@ class _PropertyIntelligenceCenterScreenState
   }
 
   void _clearArea() {
+    _invalidateScope();
     setState(() {
       _area.clear();
       _inputPoints.clear();
@@ -339,46 +360,163 @@ class _PropertyIntelligenceCenterScreenState
     });
   }
 
-  Future<void> _analyzeArea() async {
-    if (_area.length < 3 || _analyzing) return;
-    setState(() => _analyzing = true);
-    try {
-      final analysis = await _service.analyzeArea(_geometry);
-      if (!mounted) return;
-      setState(() {
-        _outsideUsualArea =
-            !_fromSavedArea &&
-            !_areaContextService.overlapsSavedArea(_area, _savedAreaContexts);
-        _analysis = analysis;
-        _aiInterpretation = null;
-        final analysisId = analysis.data['analysisId']?.toString();
-        _analyses.removeWhere(
-          (entry) => analysisId != null && entry.analysisId == analysisId,
-        );
-        _analyses.add(
-          _ExploratoryAnalysis(
-            label:
-                _selectedSavedAreaName ??
-                (_searchController.text.trim().isEmpty
-                    ? 'Analysis ${_analyses.length + 1}'
-                    : _searchController.text.trim()),
-            geometry: List<Map<String, double>>.from(_geometry),
-            analysis: analysis,
+  void _selectTerritory(Map<String, dynamic> territory) {
+    final geometry = (territory['geometry'] as List? ?? [])
+        .whereType<Map>()
+        .where((p) => p['latitude'] is num && p['longitude'] is num)
+        .map(
+          (p) => LatLng(
+            (p['latitude'] as num).toDouble(),
+            (p['longitude'] as num).toDouble(),
           ),
-        );
-      });
-    } on FirebaseFunctionsException catch (error) {
-      if (!mounted) return;
+        )
+        .toList();
+    if (geometry.length < 3 || territory['analysis'] is! Map) return;
+    setState(() {
+      _scopeVersion++;
+      _analyzing = false;
+      _askingAi = false;
+      _area = geometry;
+      _shape = CampaignAreaShape.polygon;
+      _selectedTerritoryId = territory['id']?.toString();
+      _analysis = PropertyIntelligenceAnalysis(
+        Map<String, dynamic>.from(territory['analysis'] as Map),
+      );
+      _aiInterpretation = null;
+    });
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(geometry),
+        padding: const EdgeInsets.all(35),
+      ),
+    );
+  }
+
+  void _territoryError() {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            error.message ??
-                'Property Intelligence is temporarily unavailable.',
+            'Property Intelligence could not be confirmed. Check your saved results or try again.',
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _showTerritoryHistory() async {
+    if (_territoryBusy) return;
+    final version = _scopeVersion;
+    setState(() => _territoryBusy = true);
+    try {
+      final history = await _service.territoryHistory();
+      if (!mounted || version != _scopeVersion) return;
+      setState(() {
+        _territories = history;
+        _analysis = null;
+        _area = [];
+        _selectedTerritoryId = null;
+        _territoryReport = {
+          'summary': 'Your territory history',
+          'historyNote':
+              'Saved territories are separate from My Service Areas.',
+        };
+      });
+    } catch (_) {
+      _territoryError();
     } finally {
-      if (mounted) setState(() => _analyzing = false);
+      if (mounted) setState(() => _territoryBusy = false);
+    }
+  }
+
+  Future<void> _saveTerritory(Map<String, dynamic> territory) async {
+    if (_territoryBusy || territory['id'] == null) return;
+    final version = _scopeVersion;
+    setState(() => _territoryBusy = true);
+    try {
+      final saved = await _service.saveTerritory(territory['id'].toString());
+      if (!mounted || version != _scopeVersion) return;
+      setState(() {
+        _territories = _territories
+            .map(
+              (item) => item['id'] == saved['id'] ? {...item, ...saved} : item,
+            )
+            .toList();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Territory saved. My Service Areas are unchanged.'),
+        ),
+      );
+    } catch (_) {
+      _territoryError();
+    } finally {
+      if (mounted) setState(() => _territoryBusy = false);
+    }
+  }
+
+  Future<void> _analyzeArea() async {
+    if ((!_fromSavedArea && _area.length < 3) || _analyzing) return;
+    final version = _scopeVersion;
+    final geometry = _geometry;
+    final label = _selectedSavedAreaName ?? _searchController.text.trim();
+    final objective = _objectiveController.text.trim();
+    setState(() => _analyzing = true);
+    try {
+      if (_fromSavedArea) {
+        _savedRequestId ??=
+            'property_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(0x100000000)}';
+        final report = await _service.analyzeSavedAreas(
+          objective: objective,
+          requestId: _savedRequestId!,
+          savedAreaId: _selectedSavedAreaId,
+        );
+        if (!mounted || version != _scopeVersion) return;
+        final recommendations = (report['recommendations'] as List? ?? [])
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList();
+        setState(() {
+          _territoryReport = report;
+          _savedRequestId = null;
+          _territories = recommendations;
+          _analysis = null;
+          _area = [];
+          _selectedTerritoryId = null;
+        });
+        if (recommendations.isNotEmpty) _selectTerritory(recommendations.first);
+      } else {
+        final analysis = await _service.analyzeArea(
+          geometry,
+          objective: objective,
+        );
+        if (!mounted || version != _scopeVersion) return;
+        setState(() {
+          _outsideUsualArea = !_areaContextService.overlapsSavedArea(
+            _area,
+            _savedAreaContexts,
+          );
+          _analysis = analysis;
+          _aiInterpretation = null;
+          final analysisId = analysis.data['analysisId']?.toString();
+          _analyses.removeWhere(
+            (entry) => analysisId != null && entry.analysisId == analysisId,
+          );
+          _analyses.add(
+            _ExploratoryAnalysis(
+              label: label.isEmpty ? 'Analysis ${_analyses.length + 1}' : label,
+              geometry: geometry,
+              analysis: analysis,
+            ),
+          );
+        });
+      }
+    } catch (_) {
+      if (version == _scopeVersion) _territoryError();
+    } finally {
+      if (mounted && version == _scopeVersion) {
+        setState(() => _analyzing = false);
+      }
     }
   }
 
@@ -413,6 +551,7 @@ class _PropertyIntelligenceCenterScreenState
   }
 
   Future<void> _askAi({bool combineWithWeather = false}) async {
+    final version = _scopeVersion;
     final analysis = _analysis;
     final analysisId = analysis?.data['analysisId']?.toString() ?? '';
     final geometryDigest = analysis?.data['geometryDigest']?.toString() ?? '';
@@ -445,19 +584,21 @@ class _PropertyIntelligenceCenterScreenState
               businessObjective: _objectiveController.text,
               question: _questionController.text,
             );
-      if (!mounted) return;
+      if (!mounted || version != _scopeVersion) return;
       setState(() => _aiInterpretation = result);
-    } on FirebaseFunctionsException catch (error) {
-      if (!mounted) return;
+    } catch (_) {
+      if (!mounted || version != _scopeVersion) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            error.message ?? 'AI analysis is temporarily unavailable.',
+            'AI analysis is temporarily unavailable. Your property facts remain available.',
           ),
         ),
       );
     } finally {
-      if (mounted) setState(() => _askingAi = false);
+      if (mounted && version == _scopeVersion) {
+        setState(() => _askingAi = false);
+      }
     }
   }
 
@@ -661,6 +802,13 @@ class _PropertyIntelligenceCenterScreenState
     );
   }
 
+  String? get _selectedTerritoryName {
+    final territory = _territories
+        .where((item) => item['id'] == _selectedTerritoryId)
+        .firstOrNull;
+    return territory?['name']?.toString();
+  }
+
   Future<void> _createCampaign() async {
     final analysis = _analysis;
     if (analysis == null || _area.length < 3) return;
@@ -670,7 +818,9 @@ class _PropertyIntelligenceCenterScreenState
         builder: (_) => MaterialDistributionCampaignScreen(
           campaignType: CampaignType.flyerDistribution,
           initialServiceArea: List<Map<String, double>>.from(_geometry),
-          initialServiceAreaName: _selectedSavedAreaName,
+          initialServiceAreaName: _fromSavedArea
+              ? _selectedTerritoryName
+              : _selectedSavedAreaName,
           initialGoal: _selectedGoal?.label ?? _objectiveController.text.trim(),
           initialService: _selectedGoal?.service,
           propertyIntelligenceAnalysisId: analysis.data['analysisId']
@@ -826,15 +976,42 @@ class _PropertyIntelligenceCenterScreenState
 
   Widget _buildOperationalCenter() {
     final polygon = _area.length < 3
-        ? const <Polygon>[]
+        ? <Polygon>[]
         : <Polygon>[
             Polygon(
               points: _area,
               borderStrokeWidth: 3,
               borderColor: const Color(0xFF19C7A2),
               color: const Color(0x3319C7A2),
+              label: _fromSavedArea ? _selectedTerritoryName : null,
             ),
           ];
+    if (_fromSavedArea) {
+      for (final territory in _territories) {
+        final points = (territory['geometry'] as List? ?? [])
+            .whereType<Map>()
+            .where((p) => p['latitude'] is num && p['longitude'] is num)
+            .map(
+              (p) => LatLng(
+                (p['latitude'] as num).toDouble(),
+                (p['longitude'] as num).toDouble(),
+              ),
+            )
+            .toList();
+        if (points.length >= 3 && territory['id'] != _selectedTerritoryId) {
+          polygon.add(
+            Polygon(
+              points: points,
+              borderStrokeWidth: 2,
+              borderColor: Colors.blue,
+              color: const Color(0x222878FF),
+              label:
+                  '${territory['rank'] ?? ''}. ${territory['name'] ?? 'Territory'}',
+            ),
+          );
+        }
+      }
+    }
     return Scaffold(
       appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(
@@ -928,7 +1105,9 @@ class _PropertyIntelligenceCenterScreenState
                         onSelectionChanged: (selection) {
                           if (selection.first ==
                               _PropertyDiscoveryMode.serviceAreas) {
-                            _chooseSavedArea();
+                            _loadSavedArea({
+                              'name': 'All enabled service areas',
+                            });
                           } else {
                             _exploreAnywhere();
                           }
@@ -1020,7 +1199,7 @@ class _PropertyIntelligenceCenterScreenState
                     options: MapOptions(
                       initialCenter: _defaultCenter,
                       initialZoom: 12,
-                      onTap: _addPoint,
+                      onTap: _fromSavedArea ? null : _addPoint,
                     ),
                     children: [
                       TileLayer(
@@ -1059,7 +1238,9 @@ class _PropertyIntelligenceCenterScreenState
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        !CampaignAreaGeometry.isComplete(_shape, _area)
+                        _fromSavedArea
+                            ? 'Analyze your saved service areas for ranked territories. No campaign is created.'
+                            : !CampaignAreaGeometry.isComplete(_shape, _area)
                             ? 'Draw a ${CampaignAreaGeometry.label(_shape).toLowerCase()} using the same controls as campaign maps.'
                             : '${CampaignAreaGeometry.label(_shape)} ready with ${_area.length} normalized polygon points. Analysis does not create a campaign.',
                       ),
@@ -1070,10 +1251,11 @@ class _PropertyIntelligenceCenterScreenState
                         children: [
                           FilledButton.icon(
                             onPressed:
-                                CampaignAreaGeometry.isComplete(
-                                      _shape,
-                                      _area,
-                                    ) &&
+                                (_fromSavedArea ||
+                                        CampaignAreaGeometry.isComplete(
+                                          _shape,
+                                          _area,
+                                        )) &&
                                     !_analyzing
                                 ? _analyzeArea
                                 : null,
@@ -1089,12 +1271,34 @@ class _PropertyIntelligenceCenterScreenState
                             label: const Text('Analyze Area'),
                           ),
                           OutlinedButton.icon(
-                            onPressed: _area.isEmpty ? null : _clearArea,
+                            onPressed: _fromSavedArea
+                                ? _chooseSavedArea
+                                : _area.isEmpty
+                                ? null
+                                : _clearArea,
                             icon: const Icon(Icons.refresh),
                             label: const Text('Clear / Change Area'),
                           ),
                         ],
                       ),
+                      if (_fromSavedArea) ...[
+                        TextButton.icon(
+                          onPressed: _territoryBusy
+                              ? null
+                              : _showTerritoryHistory,
+                          icon: const Icon(Icons.history),
+                          label: const Text('Territory History'),
+                        ),
+                        if (_territoryReport != null)
+                          PropertyTerritoryShortlist(
+                            report: _territoryReport!,
+                            recommendations: _territories,
+                            selectedId: _selectedTerritoryId,
+                            busy: _territoryBusy,
+                            onSelect: _selectTerritory,
+                            onSave: _saveTerritory,
+                          ),
+                      ],
                       if (_analysis != null) ...[
                         const SizedBox(height: 12),
                         PropertyIntelligencePanel(

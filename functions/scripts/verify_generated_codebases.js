@@ -81,7 +81,7 @@ function resolveFrom(packageName, packageRoot) {
   require.resolve(packageName, {paths: [packageRoot]});
 }
 
-for (const dependency of ["firebase-functions", "firebase-admin", "openai"]) {
+for (const dependency of ["firebase-functions", "firebase-admin", "openai", "polygon-clipping"]) {
   resolveFrom(dependency, platformRoot);
 }
 for (const dependency of ["firebase-functions", "firebase-admin", "nodemailer", "stripe"]) {

@@ -55,6 +55,8 @@ const smartZoneGeography = require("./smart_zone_geography");
 const signupNotifications = require("./signup_notifications");
 const transactionalEmail = require("./transactional_email");
 const propertyIntelligence = require("./property_intelligence");
+const propertyServiceAreaAnalysis = require("./property_service_area_analysis");
+const propertyServiceAreaRuntime = require("./property_service_area_runtime");
 const scaledCircleIntelligence = require("./scaled_circle_intelligence");
 const groupAssignment = require("./group_assignment");
 const multiScalerRollout = require("./multi_scaler_rollout");
@@ -4878,7 +4880,7 @@ exports.applySmartZonePlan = onCall(
 
 /** Server-authoritative, industry-neutral property/housing-stock analysis. */
 exports.analyzePropertyIntelligence = onCall(
-  {enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 60, memory: "512MiB", secrets: [CENSUS_API_KEY]},
+  {enforceAppCheck: false, maxInstances: 4, timeoutSeconds: 180, memory: "512MiB", secrets: [CENSUS_API_KEY]},
   businessOperation("analyzePropertyIntelligence", async (request) => {
     const context = await authenticatedUserContext(request,
       "You must be logged in to use Property Intelligence.");
@@ -4897,6 +4899,34 @@ exports.analyzePropertyIntelligence = onCall(
         "permission-denied",
         "Property Intelligence requires an active Scale subscription.",
       );
+    }
+    if (request.data?.scope === "saved_service_areas") {
+      const input = request.data || {};
+      const allowed = new Set(["scope", "action", "objective", "requestId", "savedAreaId",
+        "recommendationId", "businessId", "workspaceId"]);
+      if (Object.keys(input).some(key => !allowed.has(key))) {
+        throw new HttpsError("invalid-argument", "Choose a saved service area and a Business goal.");
+      }
+      const service = propertyServiceAreaAnalysis.createService({db, FieldValue,
+        analyze: propertyServiceAreaRuntime.createAnalyzer({db, FieldValue,
+          apiKey: CENSUS_API_KEY.value() || ""})});
+      const actor = {businessId: context.uid, actorUid: context.actorUid || context.uid};
+      if (input.action === "history") {
+        return {success: true, history: await service.history(actor)};
+      }
+      if (input.action === "save_territory") {
+        return {success: true, recommendation: await service.save({...actor,
+          recommendationId: input.recommendationId})};
+      }
+      if (input.action && input.action !== "analyze") {
+        throw new HttpsError("invalid-argument", "Choose a supported territory action.");
+      }
+      const report = await service.run({...actor, objective: input.objective,
+        requestId: input.requestId, savedAreaId: input.savedAreaId});
+      return {success: true, analysisScope: "saved_service_areas", report};
+    }
+    if (request.data?.scope) {
+      throw new HttpsError("invalid-argument", "Choose saved service areas or a custom analysis area.");
     }
     const zoneId = readText(request.data?.zoneId, 160);
     const exploratoryGeometry = request.data?.geometry;
@@ -4917,7 +4947,10 @@ exports.analyzePropertyIntelligence = onCall(
       catch (_) { throw new HttpsError("failed-precondition", "Save a valid campaign area before requesting Property Intelligence."); }
     } else {
       try { geometry = propertyIntelligence.validateGeometry(exploratoryGeometry); }
-      catch (_) { throw new HttpsError("invalid-argument", "Draw a valid analysis area before requesting Property Intelligence."); }
+      catch (error) { throw new HttpsError("invalid-argument",
+        error.message.includes("too large")
+          ? "Choose a smaller custom area. Use My Service Areas to analyze saved areas in sections."
+          : "Choose a valid custom area, or select My Service Areas."); }
     }
     const digest = propertyIntelligence.geometryDigest(geometry);
     const addPhysicalChannelSuitability = (value) => {

@@ -40,7 +40,8 @@ void main() {
 
       expect(source, contains('PropertyIntelligenceCenterScreen'));
       expect(source, contains("'Analyze Area'"));
-      expect(source, contains('analyzeArea(_geometry)'));
+      expect(source, contains('_service.analyzeArea('));
+      expect(source, contains('objective: objective'));
       expect(source, isNot(contains("collection('campaigns')")));
       expect(source, isNot(contains("collection('campaignZones')")));
       expect(source, isNot(contains('fundCampaign')));
@@ -54,7 +55,10 @@ void main() {
       final source = File(
         'lib/screens/business/property_intelligence_center_screen.dart',
       ).readAsStringSync();
-      expect(source, contains("snapshot.data?['propertyIntelligenceAvailable'] == true"));
+      expect(
+        source,
+        contains("snapshot.data?['propertyIntelligenceAvailable'] == true"),
+      );
       expect(source, contains('_buildPremiumGate'));
       expect(source, contains("'Upgrade to Scale'"));
       expect(

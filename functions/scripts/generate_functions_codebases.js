@@ -455,7 +455,7 @@ function writePackageManifest(mode, destination) {
   const sourcePackage = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package.json"), "utf8"));
   const sourceLock = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package-lock.json"), "utf8"));
   const dependencyNames = mode === "platform"
-    ? ["firebase-admin", "firebase-functions", "openai"]
+    ? ["firebase-admin", "firebase-functions", "openai", "polygon-clipping"]
     : mode === "wallet"
       ? ["firebase-admin", "firebase-functions"]
       : mode === "artifact-email"
@@ -493,7 +493,7 @@ function writePackageManifest(mode, destination) {
           "@pdf-lib/fontkit", "@fontsource/roboto", "stripe", "@hyzyla/pdfium"]
       : mode === "business-profile"
         ? ["firebase-admin", "firebase-functions"]
-      : ["firebase-admin", "firebase-functions", "nodemailer", "stripe"];
+      : ["firebase-admin", "firebase-functions", "nodemailer", "stripe", "polygon-clipping"];
   const dependencies = Object.fromEntries(dependencyNames.map((name) => [name, sourcePackage.dependencies[name]]));
   const generatedPackage = {
     name: `scaledcircle-functions-${mode}`,

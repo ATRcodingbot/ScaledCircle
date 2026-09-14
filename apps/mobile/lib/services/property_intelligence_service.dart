@@ -67,6 +67,60 @@ class PropertyIntelligenceService {
     : _functions =
           functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
 
+  static Map<String, dynamic> buildSavedAreasRequest({
+    required String objective,
+    required String requestId,
+    String? savedAreaId,
+  }) => {
+    'scope': 'saved_service_areas',
+    'objective': objective.trim(),
+    'requestId': requestId,
+    'savedAreaId': ?savedAreaId,
+  };
+
+  Future<Map<String, dynamic>> analyzeSavedAreas({
+    required String objective,
+    required String requestId,
+    String? savedAreaId,
+  }) async {
+    final response = await _functions
+        .httpsCallable(
+          'analyzePropertyIntelligence',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 180)),
+        )
+        .call(
+          buildSavedAreasRequest(
+            objective: objective,
+            requestId: requestId,
+            savedAreaId: savedAreaId,
+          ),
+        );
+    return Map<String, dynamic>.from((response.data as Map)['report'] as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> territoryHistory() async {
+    final response = await _functions
+        .httpsCallable('analyzePropertyIntelligence')
+        .call({'scope': 'saved_service_areas', 'action': 'history'});
+    return ((response.data as Map)['history'] as List? ?? [])
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> saveTerritory(String recommendationId) async {
+    final response = await _functions
+        .httpsCallable('analyzePropertyIntelligence')
+        .call({
+          'scope': 'saved_service_areas',
+          'action': 'save_territory',
+          'recommendationId': recommendationId,
+        });
+    return Map<String, dynamic>.from(
+      (response.data as Map)['recommendation'] as Map,
+    );
+  }
+
   Future<PropertyIntelligenceAnalysis> analyzeZone(
     String zoneId, {
     String objective = '',
