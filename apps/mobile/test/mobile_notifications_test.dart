@@ -120,4 +120,30 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('successful preference retry clears prior failure', (
+    tester,
+  ) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NotificationPreferencesScreen(
+          invoke: (action, input) async {
+            if (++attempts == 1) throw StateError('temporary');
+            return {
+              'enabled': false,
+              'categories': <String, bool>{},
+              'growthDigest': true,
+            };
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('could not load'), findsOneWidget);
+    await tester.tap(find.text('Retry preferences'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('could not load'), findsNothing);
+    expect(find.text('Work & Schedule'), findsOneWidget);
+    expect(attempts, 2);
+  });
 }
