@@ -24,7 +24,103 @@ class RegenService extends InlineEditorService {
   }
 }
 
+class QueuePreparationService extends RegenService {
+  bool pending = true;
+  @override
+  Map<String, dynamic> post() => {
+    ...super.post(),
+    'version': pending ? 1 : 2,
+    'ready': !pending,
+    'creativeNeedsPreparation': pending,
+    'reviewState': pending ? 'preparing_creative' : 'ready_for_review',
+  };
+  @override
+  Future<Map<String, dynamic>> preparePost(Map<String, dynamic> input) async {
+    calls.add(input);
+    return {'creativeStatus': 'preparing'};
+  }
+}
+
 void main() {
+  testWidgets(
+    'Preview waits for queue preparation and uses its reconciled version',
+    (tester) async {
+      final service = QueuePreparationService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CustomerSocialPostEditor(
+            post: service.post(),
+            service: service,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.scrollUntilVisible(
+        find.text('Regenerate Image'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Regenerate Image'),
+            )
+            .onPressed,
+        isNull,
+      );
+      service.pending = false;
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Regenerate Image'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(service.calls.length, 1);
+      expect(service.calls.single['action'], 'auto');
+      expect(find.text('Preparing your preview…'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'rejected regeneration clears its preparing notice and makes no automatic retry',
+    (tester) async {
+      final service = RegenService();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CustomerSocialPostEditor(
+            post: service.post(),
+            service: service,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Regenerate Image'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Regenerate Image'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Regenerate Image'));
+      await tester.pump(const Duration(milliseconds: 350));
+      service.completion.completeError(StateError('Draft changed'));
+      await tester.pumpAndSettle();
+      expect(find.text('Preparing new creative…'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.textContaining('could not confirm'),
+        -180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.textContaining('could not confirm'), findsOneWidget);
+      expect(service.calls.length, 1);
+      expect(service.calls.single['action'], 'regenerate');
+    },
+  );
+
   testWidgets(
     'Regenerate stays in Preview, calls generation, returns status and never opens asset selection',
     (tester) async {

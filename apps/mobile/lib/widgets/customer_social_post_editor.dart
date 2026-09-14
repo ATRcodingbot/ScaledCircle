@@ -87,16 +87,30 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
           'confirmOwnerExecution': true,
         })
         .timeout(const Duration(minutes: 4));
+    // The queue may already own preparation of this draft. Wait for that same
+    // authoritative operation instead of enabling edits against its old version.
+    if (result['creativeStatus'] == 'preparing') {
+      for (var check = 0; check < 30; check++) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
+        final fresh = await widget.service.previewPost(_identity);
+        setState(() => _post = {..._post, ...fresh, 'itemId': _post['itemId']});
+        if (fresh['reviewState'] != 'preparing_creative') break;
+        if (check == 29) throw StateError('Preparation is still confirming.');
+      }
+    }
     await _refresh();
     if (mounted) {
       _creativeNotice = result['creativeStatus'] == 'concept_needs_review'
           ? 'Review this concept and post together. Your confirmation approves the exact creative and schedules this version.'
           : result['generationMessage']?.toString();
-      setState(
-        () => _quality = Map<String, dynamic>.from(
-          result['quality'] as Map? ?? {},
-        ),
-      );
+      if (result['quality'] is Map) {
+        setState(
+          () => _quality = Map<String, dynamic>.from(
+            result['quality'] as Map? ?? {},
+          ),
+        );
+      }
     }
   }
 
@@ -113,6 +127,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     setState(() {
       _busy = true;
       _error = null;
+      _creativeNotice = null;
     });
     try {
       await action();
@@ -123,10 +138,11 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
         // Keep the current text when the authoritative readback is unavailable.
       }
       if (mounted) {
-        setState(
-          () => _error =
-              'We could not confirm this change. Your text is kept here. Reload the saved post before retrying.',
-        );
+        setState(() {
+          _creativeNotice = null;
+          _error =
+              'We could not confirm this change. Your text is kept here. Reload the saved post before retrying.';
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
