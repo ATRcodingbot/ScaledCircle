@@ -105,7 +105,15 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
     let mediaAuthorityValid=true;
     try{await require('./social_customer_media').assertDeliveryAuthority({db,read,uid,revision});}
     catch{mediaAuthorityValid=false;}
-    return {uid,plan:p.data(),item,version,versionId,itemRef,creativePreparation:preparation.data(),provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality:platformQuality.data()||q.data(),
+    let quality=platformQuality.data()||q.data();
+    if(!existingJob && quality?.businessUid===uid && quality.immutableSourceHash===version?.contentHash){
+      const recent=await read(db.collection('socialContentVersions').where('businessUid','==',uid).limit(101));
+      if(recent.size>100)throw Error('Content history needs review.');
+      const checks=require('./social_customer_quality').reviewChecks({variant,revision,mediaAuthorityValid,
+        recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[])});
+      quality={...quality,readyToPublish:checks.passed,reviewChecks:checks};
+    }
+    return {uid,plan:p.data(),item,version,versionId,itemRef,creativePreparation:preparation.data(),provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality,
       conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid),now:now()};
   }
   return {
