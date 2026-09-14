@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -568,7 +569,7 @@ class _LandingPageBuilderScreenState extends State<LandingPageBuilderScreen> {
       }
     },
     child: Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: BusinessBackButton(onPressed: _handleBack),
         title: const Text('Landing Page — Beta'),
       ),

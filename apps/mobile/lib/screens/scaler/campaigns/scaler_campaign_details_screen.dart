@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../widgets/production_compensation_acceptance.dart';
 import '../../../widgets/campaign_card_header.dart';
 import '../../../widgets/public_logistics_summary.dart';
@@ -562,7 +563,7 @@ class _ScalerCampaignDetailsScreenState
     final campaign = widget.campaign;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Campaign Details")),
+      appBar: AuthenticatedAppBar(title: const Text("Campaign Details")),
 
       body: ListView(
         padding: const EdgeInsets.all(20),

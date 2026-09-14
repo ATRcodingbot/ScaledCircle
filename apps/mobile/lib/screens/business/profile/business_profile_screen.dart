@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -22,7 +23,7 @@ class BusinessProfileScreen extends StatelessWidget {
     final profileService = ProfileService();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Business Profile")),
+      appBar: AuthenticatedAppBar(title: const Text("Business Profile")),
 
       body: StreamBuilder<Map<String, dynamic>?>(
         stream: profileService.watchProfile(userId),

@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -408,7 +409,7 @@ class _CreateReviewScreenState extends State<CreateReviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Review')),
+      appBar: AuthenticatedAppBar(title: const Text('Review')),
       body: _loadingReview
           ? const Center(child: CircularProgressIndicator())
           : _existingReview != null

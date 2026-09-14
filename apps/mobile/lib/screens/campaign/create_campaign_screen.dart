@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -104,7 +105,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Create Campaign")),
+      appBar: AuthenticatedAppBar(title: const Text("Create Campaign")),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Form(

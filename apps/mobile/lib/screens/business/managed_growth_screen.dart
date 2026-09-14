@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -620,7 +621,7 @@ class _ManagedGrowthScreenState extends State<ManagedGrowthScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Managed Growth — Beta')),
+    appBar: AuthenticatedAppBar(title: const Text('Managed Growth — Beta')),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : _loadFailed

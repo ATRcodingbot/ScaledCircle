@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/social_operations_service.dart';
@@ -470,7 +471,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: Text(
           widget.positionLabel == null
               ? 'Post Preview'

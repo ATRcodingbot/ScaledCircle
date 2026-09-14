@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../navigation/workspace_presentation.dart';
 import '../../navigation/app_router.dart';
@@ -24,7 +25,7 @@ class BusinessWorkspaceHome extends StatelessWidget {
     if (access.owner) return ownerBuilder(context);
     if (access.operations) return scheduleBuilder(context);
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: Text(access.name),
         actions: const [MemberAccountActions()],
       ),

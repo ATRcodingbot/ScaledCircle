@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 class DumpRunCampaignScreen extends StatelessWidget {
@@ -6,7 +7,7 @@ class DumpRunCampaignScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Dump Run")),
+      appBar: AuthenticatedAppBar(title: const Text("Dump Run")),
 
       body: ListView(
         padding: const EdgeInsets.all(20),

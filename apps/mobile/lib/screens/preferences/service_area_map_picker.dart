@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -64,7 +65,7 @@ class _ServiceAreaMapPickerState extends State<ServiceAreaMapPicker> {
         ? _points.length >= 3
         : _points.length == 1;
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: Text(
           widget.confirmationOnly
               ? 'Confirm service area'

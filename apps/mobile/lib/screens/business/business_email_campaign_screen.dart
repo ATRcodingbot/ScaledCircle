@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/business_email_service.dart';
@@ -382,7 +383,7 @@ class _CampaignState extends State<BusinessEmailCampaignScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Email Campaigns')),
+    appBar: AuthenticatedAppBar(title: const Text('Email Campaigns')),
     body: CustomerPageBody(
       child: ListView(
         padding: const EdgeInsets.all(16),

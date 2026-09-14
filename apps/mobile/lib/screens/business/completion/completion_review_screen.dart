@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../widgets/reserve_settlement_panel.dart';
 import '../../jobs/job_room_screen.dart';
 import 'package:flutter/material.dart';
@@ -248,7 +249,7 @@ class _CompletionReviewScreenState extends State<CompletionReviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Completion Review")),
+      appBar: AuthenticatedAppBar(title: const Text("Completion Review")),
 
       body: FutureBuilder<CampaignCompletion?>(
         future: _completionFuture,

@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -316,7 +317,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
     final c = _data?['connection'] as Map? ?? {},
         learning = _data?['learning'] as Map? ?? {};
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(fallback: '/business/growth'),
         title: const Text('Business Email'),
       ),

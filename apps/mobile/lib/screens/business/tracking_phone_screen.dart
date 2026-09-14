@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../../navigation/business_back_button.dart';
@@ -24,7 +25,7 @@ class _TrackingPhoneScreenState extends State<TrackingPhoneScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       leading: const BusinessBackButton(),
       title: const Text('Tracking Numbers — Beta'),
       actions: [IconButton(onPressed: _reload, tooltip: 'Refresh', icon: const Icon(Icons.refresh))],

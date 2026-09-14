@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../../navigation/context_back_button.dart';
 import 'package:flutter/services.dart';
@@ -91,7 +92,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
   Widget build(BuildContext context) {
     if (!widget.enableAttribution) {
       return Scaffold(
-        appBar: AppBar(
+        appBar: AuthenticatedAppBar(
           leading: const ContextBackButton(),
           title: const Text('Referrals'),
         ),
@@ -115,7 +116,7 @@ class _ScalerAffiliateScreenState extends State<ScalerAffiliateScreen> {
         ? null
         : AffiliateService.referralUrl(code, scaler: _scaler);
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(),
         title: const Text('Referrals'),
       ),

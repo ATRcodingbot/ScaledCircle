@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../services/mobile_notifications_service.dart';
 import '../../navigation/context_back_button.dart';
@@ -70,7 +71,7 @@ class _NotificationPreferencesScreenState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       leading: const ContextBackButton(),
       title: const Text('Notification preferences'),
     ),

@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../models/social_plan_presentation.dart';
 import 'property_intelligence_center_screen.dart';
 import 'weather_alerts_screen.dart';
@@ -74,7 +75,7 @@ class _BusinessGrowthHomeState extends State<BusinessGrowthHome> {
     final summary = _data?['summary'] as Map?;
     final agents = (_data?['agents'] as List? ?? []).whereType<Map>();
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(
           fallback: '/business',
           businessOnly: true,

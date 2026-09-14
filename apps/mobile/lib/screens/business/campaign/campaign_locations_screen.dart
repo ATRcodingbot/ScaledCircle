@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -196,7 +197,7 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
               }
 
               return Scaffold(
-                appBar: AppBar(
+                appBar: AuthenticatedAppBar(
                   title: const Text('Drop Location Pin'),
                   centerTitle: true,
                 ),
@@ -784,7 +785,7 @@ class _CampaignLocationsScreenState extends State<CampaignLocationsScreen> {
         final locations = snapshot.data ?? [];
 
         return Scaffold(
-          appBar: AppBar(title: Text(_screenTitle), centerTitle: true),
+          appBar: AuthenticatedAppBar(title: Text(_screenTitle), centerTitle: true),
           body: SafeArea(
             child: ListView(
               padding: const EdgeInsets.all(20),

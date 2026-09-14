@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../navigation/app_routes.dart';
 import '../../navigation/app_router.dart';
 import '../../config/app_environment.dart';
@@ -33,7 +34,7 @@ class ScaledCircleServicesScreen extends StatelessWidget {
         final plan = data['subscriptionPlan']?.toString().toLowerCase();
         final status = data['subscriptionStatus']?.toString() ?? 'inactive';
         return Scaffold(
-          appBar: AppBar(title: const Text('ScaledCircle Services')),
+          appBar: AuthenticatedAppBar(title: const Text('ScaledCircle Services')),
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [

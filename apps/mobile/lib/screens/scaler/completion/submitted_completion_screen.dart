@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../../models/work_lifecycle_presentation.dart';
 import '../../../navigation/app_router.dart';
@@ -97,7 +98,7 @@ class _SubmittedCompletionScreenState extends State<SubmittedCompletionScreen> {
       if (!didPop) (widget.onBackToWork ?? () => returnToMyWork(context))();
     },
     child: Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text('Job Submitted'),
         automaticallyImplyLeading: false,
       ),

@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../models/social_plan_presentation.dart';
 import '../services/social_operations_service.dart';
@@ -175,7 +176,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Review Content')),
+    appBar: AuthenticatedAppBar(title: const Text('Review Content')),
     body: SafeArea(
       child: Column(
         children: [

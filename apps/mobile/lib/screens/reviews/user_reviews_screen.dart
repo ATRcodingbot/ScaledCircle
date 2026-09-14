@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/review_service.dart';
@@ -17,7 +18,7 @@ class UserReviewsScreen extends StatelessWidget {
     final ReviewService reviewService = ReviewService();
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Reputation")),
+      appBar: AuthenticatedAppBar(title: const Text("Reputation")),
 
       body: StreamBuilder(
         stream: reviewService.getUserReviews(userId),

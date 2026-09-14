@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -147,7 +148,7 @@ class _WeatherAlertsScreenState extends State<WeatherAlertsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(
           fallback: '/business/growth',
           businessOnly: true,

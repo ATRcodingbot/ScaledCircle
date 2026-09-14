@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/app_environment.dart';
 import 'job_room_screen.dart';
 import '../../models/work_lifecycle_presentation.dart';
@@ -539,7 +540,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
   Widget build(BuildContext context) {
     if (_zoneUnavailable || _resolvedZone == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Checking work status')),
+        appBar: AuthenticatedAppBar(title: const Text('Checking work status')),
         body: Center(
           child: _zoneUnavailable
               ? Column(
@@ -570,7 +571,7 @@ class _NativeJobInProgressScreenState extends State<NativeJobInProgressScreen>
     return PopScope(
       canPop: true,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Job in Progress')),
+        appBar: AuthenticatedAppBar(title: const Text('Job in Progress')),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [

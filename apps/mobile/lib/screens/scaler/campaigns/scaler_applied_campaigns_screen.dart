@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../widgets/campaign_card_header.dart';
 import 'package:flutter/material.dart';
 import '../../../services/campaign_service.dart';
@@ -21,7 +22,7 @@ class ScalerAppliedCampaignsScreen extends StatelessWidget {
 
     return Scaffold(
 
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text(
           "Applied Campaigns",
         ),

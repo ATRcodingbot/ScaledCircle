@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -608,7 +609,7 @@ class _BrandAssetsScreenState extends State<BrandAssetsScreen> {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const BusinessBackButton(),
         title: const Text('Brand Assets'),
         actions: compact

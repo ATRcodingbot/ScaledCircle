@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/staging_qa_discovery.dart';
 import '../../widgets/paused_work_panel.dart';
@@ -580,7 +581,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(
+        appBar: AuthenticatedAppBar(
           title: const Text('Job Room'),
           leading: const ContextBackButton(),
         ),
@@ -589,7 +590,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
     }
     if (_loadFailed) {
       return Scaffold(
-        appBar: AppBar(
+        appBar: AuthenticatedAppBar(
           title: const Text('Job Room'),
           leading: const ContextBackButton(),
         ),
@@ -677,7 +678,7 @@ class _JobRoomScreenState extends State<JobRoomScreen> {
       data['completionEvidence'] as Map? ?? {},
     );
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text('Job Room'),
         leading: ContextBackButton(
           fallback: viewerRole == 'scaler'

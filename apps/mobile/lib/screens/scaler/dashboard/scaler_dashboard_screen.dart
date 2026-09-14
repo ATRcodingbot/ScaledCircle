@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../preferences/market_state_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -179,7 +180,7 @@ class ScalerDashboardScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const ScaledCircleBrand(compact: true),
         actions: [
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

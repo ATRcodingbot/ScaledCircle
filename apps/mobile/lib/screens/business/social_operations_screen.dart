@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/social_performance_panel.dart';
 import 'dart:async';
 
@@ -1019,7 +1020,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(
           fallback: '/business/growth',
           businessOnly: true,

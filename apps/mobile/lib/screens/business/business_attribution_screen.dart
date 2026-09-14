@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -37,7 +38,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
   Widget build(BuildContext context) {
     if (!widget.enabled) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Response tracking — Coming Soon')),
+        appBar: AuthenticatedAppBar(title: const Text('Response tracking — Coming Soon')),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
@@ -50,7 +51,7 @@ class _BusinessAttributionScreenState extends State<BusinessAttributionScreen> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Response tracking — Beta')),
+      appBar: AuthenticatedAppBar(title: const Text('Response tracking — Beta')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _creating ? null : _create,
         icon: const Icon(Icons.add_link),

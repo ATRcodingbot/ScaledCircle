@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/secure_function_service.dart';
@@ -108,7 +109,7 @@ class _InternalBetaEntitlementsScreenState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Beta Entitlements')),
+    appBar: AuthenticatedAppBar(title: const Text('Beta Entitlements')),
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [

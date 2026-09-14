@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -406,7 +407,7 @@ class _SocialApprovalScreenState extends State<SocialApprovalScreen> {
       (provider) => provider.canPublish,
     );
     return Scaffold(
-      appBar: AppBar(title: const Text('Your Posts Are Ready')),
+      appBar: AuthenticatedAppBar(title: const Text('Your Posts Are Ready')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

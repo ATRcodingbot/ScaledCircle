@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../models/canvassing_photo_policy.dart';
@@ -173,7 +174,7 @@ class _SubmitCompletionScreenState extends State<SubmitCompletionScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Review Completion')),
+    appBar: AuthenticatedAppBar(title: const Text('Review Completion')),
     body: ListView(
       padding: const EdgeInsets.all(20),
       children: [

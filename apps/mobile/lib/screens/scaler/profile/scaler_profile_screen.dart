@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../preferences/market_state_screen.dart';
 import '../../auth/delete_account_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -150,7 +151,7 @@ class ScalerProfileScreen extends StatelessWidget {
     final fallbackAuthName = authDisplayName ?? authUser?.displayName;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scaler Profile')),
+      appBar: AuthenticatedAppBar(title: const Text('Scaler Profile')),
       body: StreamBuilder<Map<String, dynamic>?>(
         stream: watchProfile(userId),
         builder: (context, snapshot) {

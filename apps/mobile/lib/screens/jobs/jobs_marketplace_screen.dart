@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/campaign_card_header.dart';
 import '../../services/staging_qa_discovery.dart';
 import 'dart:math' as math;
@@ -56,7 +57,7 @@ class _JobsMarketplaceScreenState extends State<JobsMarketplaceScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: Text(
           currentIndex == 0
               ? 'Available Jobs'

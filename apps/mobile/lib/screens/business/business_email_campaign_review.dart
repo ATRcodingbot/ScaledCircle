@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -415,7 +416,7 @@ class _ReviewState extends State<BusinessEmailCampaignReview> {
     final results = campaign['results'] as Map? ?? {},
         approved = campaign['approved'] == true;
     return Scaffold(
-      appBar: AppBar(title: const Text('Review Campaign')),
+      appBar: AuthenticatedAppBar(title: const Text('Review Campaign')),
       body: CustomerPageBody(
         child: ListView(
           controller: scroll,

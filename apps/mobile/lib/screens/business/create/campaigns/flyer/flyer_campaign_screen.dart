@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../../../services/business_workspace_service.dart';
 import 'dart:async';
 
@@ -1053,7 +1054,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         : 1;
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: Text('Create ${_campaignTypeLabel(_campaignType)}'),
         centerTitle: true,
       ),

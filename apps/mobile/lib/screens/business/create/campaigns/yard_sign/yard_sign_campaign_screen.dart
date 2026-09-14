@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 class YardSignCampaignScreen extends StatelessWidget {
@@ -6,7 +7,7 @@ class YardSignCampaignScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text("Yard Sign Installation"),
         centerTitle: true,
       ),

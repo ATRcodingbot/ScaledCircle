@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../preferences/market_state_screen.dart';
 import '../../services/business_workspace_records.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -574,7 +575,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const ScaledCircleBrand(compact: true),
         actions: [
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(

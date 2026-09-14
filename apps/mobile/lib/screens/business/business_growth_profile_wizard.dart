@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/managed_growth_service.dart';
@@ -402,7 +403,7 @@ class _BusinessGrowthProfileWizardState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Set Up Your Growth Profile')),
+    appBar: AuthenticatedAppBar(title: const Text('Set Up Your Growth Profile')),
     body: Column(
       children: [
         LinearProgressIndicator(value: (_step + 1) / 9),

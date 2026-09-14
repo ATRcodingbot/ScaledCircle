@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 import 'postcard_creation_screen.dart';
 import 'dart:convert';
@@ -749,7 +750,7 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       title: Text(
         widget.admin ? 'Postcard fulfillment' : 'Neighborhood Postcards',
       ),

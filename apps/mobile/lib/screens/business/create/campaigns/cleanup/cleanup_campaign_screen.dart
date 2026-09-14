@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../../../services/business_workspace_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -170,7 +171,7 @@ class _CleanupCampaignScreenState extends State<CleanupCampaignScreen> {
     final scalers = int.tryParse(scalerController.text.trim()) ?? 1;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Cleanup Campaign")),
+      appBar: AuthenticatedAppBar(title: const Text("Cleanup Campaign")),
 
       body: Form(
         key: _formKey,

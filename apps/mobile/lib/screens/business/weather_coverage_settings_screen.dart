@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -91,7 +92,7 @@ class _WeatherCoverageSettingsScreenState
     final email =
         FirebaseAuth.instance.currentUser?.email ?? 'your account email';
     return Scaffold(
-      appBar: AppBar(title: const ScaledCircleBrand(compact: true)),
+      appBar: AuthenticatedAppBar(title: const ScaledCircleBrand(compact: true)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(

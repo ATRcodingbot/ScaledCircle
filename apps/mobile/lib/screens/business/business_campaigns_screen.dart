@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'business_results_overview.dart';
 import '../../navigation/context_back_button.dart';
 import '../../widgets/campaign_card_header.dart';
@@ -40,7 +41,7 @@ class BusinessCampaignsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       leading: const ContextBackButton(
         fallback: '/business',
         businessOnly: true,

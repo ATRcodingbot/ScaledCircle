@@ -1,3 +1,4 @@
+import 'navigation/app_shell_identity.dart';
 import 'widgets/mobile_notification_coordinator.dart';
 import 'screens/jobs/live_work_certification_screen.dart';
 import 'screens/business/growth_agents_screen.dart';
@@ -597,7 +598,7 @@ class ScaledCircleApp extends StatelessWidget {
       builder: (context, child) {
         final content = MobileNotificationCoordinator(
           navigatorKey: _routerDelegate.navigatorKey,
-          child: child ?? const SizedBox(),
+          child: AppShellSession(child: child ?? const SizedBox()),
         );
         if (AppEnvironmentConfig.isProduction) {
           return content;

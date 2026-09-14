@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/app_environment.dart';
 import 'job_room_screen.dart';
 import '../../models/canvassing_photo_policy.dart';
@@ -719,7 +720,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         final status = data['status']?.toString() ?? 'open';
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Job Details')),
+          appBar: AuthenticatedAppBar(title: const Text('Job Details')),
 
           body: ListView(
             padding: const EdgeInsets.all(20),

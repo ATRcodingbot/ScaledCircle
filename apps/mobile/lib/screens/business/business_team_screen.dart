@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/business_workspace_service.dart';
@@ -254,7 +255,7 @@ class _BusinessTeamScreenState extends State<BusinessTeamScreen> {
   Widget build(BuildContext context) {
     final data = _data;
     return Scaffold(
-      appBar: AppBar(title: const Text('Team')),
+      appBar: AuthenticatedAppBar(title: const Text('Team')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),

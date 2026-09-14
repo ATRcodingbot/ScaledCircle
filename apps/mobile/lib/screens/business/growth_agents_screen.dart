@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/social_performance_panel.dart';
 import '../../models/social_plan_presentation.dart';
 import '../../services/business_email_service.dart';
@@ -196,7 +197,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => Scaffold(
-          appBar: AppBar(title: const Text('Social Performance')),
+          appBar: AuthenticatedAppBar(title: const Text('Social Performance')),
           body: CustomerPageBody(
             child: ListView(
               padding: const EdgeInsets.all(20),
@@ -213,7 +214,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => Scaffold(
-          appBar: AppBar(title: Text('$_specialistTitle · Recommendations')),
+          appBar: AuthenticatedAppBar(title: Text('$_specialistTitle · Recommendations')),
           body: CustomerPageBody(
             child: ListView(
               padding: const EdgeInsets.all(20),
@@ -415,7 +416,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
   );
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       leading: widget.customer
           ? const ContextBackButton(
               fallback: '/business/growth',

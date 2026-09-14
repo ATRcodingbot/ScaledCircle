@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import '../../services/market_rollout_service.dart';
 import '../../widgets/authenticated_sign_out_button.dart';
@@ -97,7 +98,7 @@ class _MarketStateScreenState extends State<MarketStateScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       title: const Text('Your state'),
       actions: const [AuthenticatedSignOutButton()],
     ),

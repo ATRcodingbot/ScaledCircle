@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../widgets/campaign_card_header.dart';
 import 'package:flutter/material.dart';
 
@@ -13,7 +14,7 @@ class ScalerCampaignMarketplaceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Available Campaigns")),
+      appBar: AuthenticatedAppBar(title: const Text("Available Campaigns")),
 
       body: StreamBuilder<List<CampaignModel>>(
         stream: _campaignService.getOpenCampaigns(),

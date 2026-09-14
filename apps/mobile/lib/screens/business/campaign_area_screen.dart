@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../services/business_workspace_service.dart';
 import 'weather_alerts_screen.dart';
 import 'dart:math' as math;
@@ -1058,7 +1059,7 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
     final metrics = _calculateZoneMetrics();
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: Text(
           _mappingLocked
               ? 'Campaign Area (Locked)'

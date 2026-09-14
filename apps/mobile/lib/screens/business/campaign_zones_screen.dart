@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../config/app_environment.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1622,7 +1623,7 @@ class CampaignZonesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text('Campaign Zones'),
         centerTitle: true,
         actions: [

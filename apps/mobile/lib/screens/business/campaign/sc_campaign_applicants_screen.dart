@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -122,7 +123,7 @@ class _ScCampaignApplicantsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Campaign Applicants")),
+      appBar: AuthenticatedAppBar(title: const Text("Campaign Applicants")),
 
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _campaignService.getCampaignApplications(widget.campaignId),

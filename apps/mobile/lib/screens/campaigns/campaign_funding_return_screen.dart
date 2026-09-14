@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -167,7 +168,7 @@ class _CampaignFundingReturnScreenState
     VoidCallback? action,
   }) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Campaign Funding')),
+      appBar: AuthenticatedAppBar(title: const Text('Campaign Funding')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),

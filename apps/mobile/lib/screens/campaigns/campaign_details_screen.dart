@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/campaign_card_header.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -74,7 +75,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     AppNavigation.push(context, widget.fallbackRoute);
   }
 
-  AppBar _campaignAppBar() => AppBar(
+  PreferredSizeWidget _campaignAppBar() => AuthenticatedAppBar(
     leading: BackButton(onPressed: _leaveCampaignDetails),
     title: const Text('Campaign Details'),
     centerTitle: true,

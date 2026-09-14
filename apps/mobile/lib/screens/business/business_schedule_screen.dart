@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1134,7 +1135,7 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
       );
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       automaticallyImplyLeading: false,
       leadingWidth: 92,
       leading:

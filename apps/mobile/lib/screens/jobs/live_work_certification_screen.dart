@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -204,7 +205,7 @@ class _LiveWorkCertificationState extends State<LiveWorkCertificationScreen> {
     final data = _data;
     final actions = List<String>.from(data?['actions'] as List? ?? []);
     return Scaffold(
-      appBar: AppBar(title: const Text('Yard Cleanup Check')),
+      appBar: AuthenticatedAppBar(title: const Text('Yard Cleanup Check')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 700),

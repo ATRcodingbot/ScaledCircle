@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../config/app_environment.dart';
@@ -167,7 +168,7 @@ class _ScalerWalletScreenState extends State<ScalerWalletScreen>
         : _content(_data!);
     if (widget.embedded) return body;
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text('Earnings'),
         leading: const ContextBackButton(fallback: AppRoutes.scalerDashboard),
       ),

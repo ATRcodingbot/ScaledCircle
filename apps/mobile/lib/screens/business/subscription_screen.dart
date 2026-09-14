@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'business_membership_screen.dart';
 import '../../services/business_workspace_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -233,7 +234,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Choose Your Plan'), centerTitle: true),
+      appBar: AuthenticatedAppBar(title: const Text('Choose Your Plan'), centerTitle: true),
       body: SafeArea(
         child: user == null
             ? const Center(child: Text('You must be logged in.'))

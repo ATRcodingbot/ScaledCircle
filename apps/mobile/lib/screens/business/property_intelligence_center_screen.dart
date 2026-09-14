@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../navigation/context_back_button.dart';
 import '../../services/business_workspace_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -765,7 +766,7 @@ class _PropertyIntelligenceCenterScreenState
 
   Widget _buildPremiumGate() {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(
           fallback: '/business/growth',
           businessOnly: true,
@@ -828,7 +829,7 @@ class _PropertyIntelligenceCenterScreenState
             ),
           ];
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const ContextBackButton(
           fallback: '/business/growth',
           businessOnly: true,

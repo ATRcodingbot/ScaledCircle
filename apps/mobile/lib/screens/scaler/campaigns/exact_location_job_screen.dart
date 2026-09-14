@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -1122,13 +1123,13 @@ class _ExactLocationJobScreenState extends State<ExactLocationJobScreen> {
 
     if (_loadingCompletion) {
       return Scaffold(
-        appBar: AppBar(title: Text(_screenTitle), centerTitle: true),
+        appBar: AuthenticatedAppBar(title: Text(_screenTitle), centerTitle: true),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: Text(_screenTitle),
         centerTitle: true,
         actions: [

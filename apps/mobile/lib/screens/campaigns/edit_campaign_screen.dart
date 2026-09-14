@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -113,7 +114,7 @@ class _EditCampaignScreenState extends State<EditCampaignScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Edit Campaign"), centerTitle: true),
+      appBar: AuthenticatedAppBar(title: const Text("Edit Campaign"), centerTitle: true),
       body: Form(
         key: _formKey,
         child: ListView(

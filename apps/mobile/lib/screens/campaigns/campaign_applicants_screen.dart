@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -718,7 +719,7 @@ class CampaignApplicantsScreen extends StatelessWidget {
         campaignType == 'event_marketing';
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text('Campaign Applicants'),
         centerTitle: true,
       ),

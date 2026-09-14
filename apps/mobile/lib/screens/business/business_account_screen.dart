@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../preferences/market_state_screen.dart';
 import '../auth/delete_account_screen.dart';
 import '../scaler/affiliate/scaler_affiliate_screen.dart';
@@ -14,7 +15,7 @@ class BusinessAccountScreen extends StatelessWidget {
   const BusinessAccountScreen({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       title: const Text('Account'),
       actions: const [AuthenticatedSignOutButton()],
     ),

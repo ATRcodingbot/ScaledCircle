@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -916,7 +917,7 @@ class _AreasPreferencesScreenState extends State<AreasPreferencesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       title: Text(
         widget.onboarding ? 'Set Up Work Preferences' : 'Areas & Preferences',
       ),

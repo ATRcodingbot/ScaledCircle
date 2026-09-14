@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -716,7 +717,7 @@ class _PostcardCreationScreenState extends State<PostcardCreationScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Create your postcard')),
+    appBar: AuthenticatedAppBar(title: const Text('Create your postcard')),
     body: Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(

@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../../config/app_environment.dart';
@@ -373,7 +374,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
+    appBar: AuthenticatedAppBar(
       leading: const BusinessBackButton(),
       title: const Text('Physical Marketing — Beta'),
       actions: [

@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../models/campaign/campaign.dart';
@@ -18,7 +19,7 @@ class CreateCampaignScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         leading: const BusinessBackButton(),
         title: const Text("Create Campaign"),
         centerTitle: true,

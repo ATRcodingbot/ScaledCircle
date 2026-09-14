@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -792,7 +793,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
         : previewWorkerBudget;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Campaign'), centerTitle: true),
+      appBar: AuthenticatedAppBar(title: const Text('Create Campaign'), centerTitle: true),
       body: SafeArea(
         child: Form(
           key: _formKey,

@@ -1,3 +1,4 @@
+import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -98,7 +99,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
     };
     void account() => AppNavigation.replace(context, '/billing');
     return Scaffold(
-      appBar: AppBar(
+      appBar: AuthenticatedAppBar(
         title: const Text('Cancel Membership'),
         leading: BackButton(onPressed: _busy ? null : account),
       ),
@@ -428,7 +429,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
     }
     final data = _data;
     return Scaffold(
-      appBar: AppBar(title: const Text('Billing / Plan')),
+      appBar: AuthenticatedAppBar(title: const Text('Billing / Plan')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
