@@ -5,8 +5,10 @@ an engineering and product-control record, not legal advice or a commercial acti
 
 ## Product decisions
 
-The server-authoritative monthly customer allowances are Starter 5, Growth 15, Scale 30, and
-Managed Growth 60. The window is the UTC calendar month and resets at 00:00 UTC on day one. There
+Managed Growth Private Beta includes up to 60 generated source concepts per month. Starter,
+Growth and Scale have no included Social generation allowance. Growth Department inherits
+Managed Growth once; it does not receive a second allowance. Facebook/Instagram derivatives,
+real Business photos and intentional text-only posts consume no additional generation unit. The window is the UTC calendar month and resets at 00:00 UTC on day one. There
 is no rollover and no pay-per-image overage. The existing per-Business ceiling of eight intentional
 generation attempts per rolling day remains independent of monthly entitlement.
 

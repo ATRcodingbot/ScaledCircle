@@ -77,11 +77,11 @@ test("commercial rollout modes fail closed and enforce cohort plus canonical pla
     "beta", {eligible: true, plan: "scale"}).authorized, false);
   const beta = {...founderConfig, rolloutMode: "beta_cohort"};
   assert.equal(generation.generationAuthorizationPolicy(beta, "beta",
-    {eligible: true, plan: "growth"}).authorized, true);
+    {eligible: true, plan: "managed_growth"}).authorized, true);
   assert.equal(generation.generationAuthorizationPolicy(beta, "other",
-    {eligible: true, plan: "growth"}).authorized, false);
+    {eligible: true, plan: "managed_growth"}).authorized, false);
   assert.equal(generation.generationAuthorizationPolicy(beta, "beta",
-    {eligible: false, plan: "growth"}).authorized, false);
+    {eligible: false, plan: "managed_growth"}).authorized, false);
   const commercial = {...founderConfig, rolloutMode: "plan_entitled"};
   assert.equal(generation.generationAuthorizationPolicy(commercial, "paid",
     {eligible: true, plan: "managed_growth"}).authorized, true);
@@ -89,15 +89,15 @@ test("commercial rollout modes fail closed and enforce cohort plus canonical pla
     {eligible: false, plan: "scale"}).authorized, false);
   const six = Array.from({length: 6}, (_, index) => `business-${index}`);
   assert.equal(generation.generationAuthorizationPolicy({rolloutMode: "beta_cohort",
-    betaCohortBusinessUids: six}, "business-0", {eligible: true, plan: "starter"}).authorized, false);
+    betaCohortBusinessUids: six}, "business-0", {eligible: true, plan: "managed_growth"}).authorized, false);
   assert.equal(generation.generationAuthorizationPolicy({rolloutMode: "beta_cohort",
     betaCohortStage: "expanded_10", betaCohortBusinessUids: six}, "business-0",
-  {eligible: true, plan: "starter"}).authorized, true);
+  {eligible: true, plan: "managed_growth"}).authorized, true);
   assert.equal(generation.generationAuthorizationPolicy({rolloutMode: "beta_cohort",
     betaCohortStage: "invalid", betaCohortBusinessUids: six}, "business-0",
-  {eligible: true, plan: "starter"}).authorized, false);
+  {eligible: true, plan: "managed_growth"}).authorized, false);
   assert.deepEqual(generation.PLAN_MONTHLY_ALLOWANCES,
-    {starter: 5, growth: 15, scale: 30, managed_growth: 60});
+    {managed_growth: 60});
 });
 
 test("safe request accepts only approved services and bounded visual directions", () => {
@@ -369,4 +369,13 @@ test("unauthorized request and Try another fail before reservation or provider d
   assert.equal(env.docs.has(`visualGenerationJobs/${generation.stableId("visual_job", actor.uid,
     "try_another_request_002")}`), false);
   assert.equal(env.docs.get(`visualGenerationJobs/${first.jobId}`).status, "queued");
+});
+
+test('lower plans never receive included Social generation; bundle uses its canonical Managed Growth base',()=>{
+ for(const plan of ['starter','growth','scale']){
+  assert.equal(generation.planMonthlyAllowance(plan),0);
+  for(const rolloutMode of ['beta_cohort','plan_entitled'])assert.equal(generation.generationAuthorizationPolicy({rolloutMode,betaCohortBusinessUids:['owner']},'owner',{eligible:true,plan}).authorized,false);
+ }
+ const selection=require('./subscription_contract').selection({bundle:'growth_department'});
+ assert.equal(selection.plan,'managed_growth');assert.equal(generation.planMonthlyAllowance(selection.plan),60);
 });

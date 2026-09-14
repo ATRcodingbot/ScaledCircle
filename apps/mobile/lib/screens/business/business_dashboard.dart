@@ -1575,7 +1575,7 @@ class _BusinessDashboardState extends State<BusinessDashboard> {
             'Intelligence Beta.';
 
       case 'managed_growth':
-        return 'Everything in Scale, 10 total seats and coordinated growth planning and Social support. Private Beta / Invite Only. Business Assistant and Lead Generation are separate add-ons; Postcards remain Private Beta.';
+        return 'Core Business OS, 10 total seats, Facebook/Instagram Social Manager and Email Campaigns. Up to 60 generated source concepts per month. Private Beta / Invite Only. Business Assistant and Lead Generation are separate add-ons; Postcards remain Private Beta.';
 
       default:
         return 'Choose a Scaled Circle subscription plan.';

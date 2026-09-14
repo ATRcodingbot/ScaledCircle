@@ -123,8 +123,8 @@ async function requireSocialOperationsBusiness(request,{allowMember=false}={}) {
     throw new HttpsError('permission-denied', 'Social Manager is Private Beta. An invitation is required.', {reason:'SOCIAL_INVITATION_REQUIRED'});
   }
   const entitlement = (await db.collection("businessSubscriptions").doc(context.uid).get()).data();
-  if (!context.isAdmin && !subscriptionEntitlements.hasActiveScaleEntitlement(entitlement)) {
-    throw new HttpsError("permission-denied", "An active Scale or Managed Growth entitlement is required.");
+  if (!context.isAdmin && !subscriptionEntitlements.hasActiveManagedGrowthEntitlement(entitlement)) {
+    throw new HttpsError("permission-denied", "Managed Growth includes Social Manager. Private Beta access is by invitation.");
   }
   return {
     ...context,

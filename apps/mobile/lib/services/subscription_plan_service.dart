@@ -97,6 +97,8 @@ class SubscriptionPlanService {
         'weather_intelligence',
         'managed_growth_planning',
         'social_content_package',
+        'email_campaign_manager',
+        'social_creative_generation',
         'advertising_strategy_package',
         'seo_action_plan',
         'email_sequence_package',

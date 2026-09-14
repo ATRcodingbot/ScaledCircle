@@ -5,6 +5,9 @@ function createAuthority({db,auth,FieldValue,Timestamp}) {
  return async ({businessUid,actorUid,approve=false,transaction=null})=>{
   await workspace.actor(actorUid);
   const access=await workspace.authority({uid:actorUid,businessId:businessUid,permission:'intelligence',transaction});
+  if(!require('./subscription_entitlements').hasActiveManagedGrowthEntitlement(access.entitlement)) {
+   const error=Error('Managed Growth is required for Social Manager.');error.code='permission-denied';throw error;
+  }
   if(approve&&!access.isOwner)await workspace.authority({uid:actorUid,businessId:businessUid,permission:'outreachApproval',transaction});
   return access;
  };

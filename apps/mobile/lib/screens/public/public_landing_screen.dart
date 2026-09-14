@@ -535,7 +535,8 @@ class _Pricing extends StatelessWidget {
     'weather_intelligence': 'Weather Intelligence — Beta',
     'priority_scaler_matching': 'Priority Scaler matching',
     'managed_growth_planning': '30-day Managed Growth planning',
-    'social_content_package': 'Social content ready for approval',
+    'email_campaign_manager': 'Email Campaigns with CRM audiences and reply tracking',
+    'social_content_package': 'Facebook/Instagram Social Manager and creative preparation',
     'seo_action_plan': 'SEO action planning',
   };
 
@@ -567,7 +568,7 @@ class _Pricing extends StatelessWidget {
         'business_schedule',
         'managed_growth_planning',
         'social_content_package',
-        'seo_action_plan',
+        'email_campaign_manager',
       ],
     };
     final available = (plan['features'] as List? ?? const []).toSet();

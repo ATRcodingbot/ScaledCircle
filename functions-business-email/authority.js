@@ -10,7 +10,7 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
     const uid=request.auth?.uid;if(!uid)deny('Sign in to your Business.');
     const who=await ws.actor(uid),businessId=request.data?.businessId||uid;
     if(!/^[a-zA-Z0-9_-]{1,128}$/.test(businessId)||!beta[businessId]?.mailbox)deny('Business Email is available by private invitation.');
-    const config=beta[businessId];
+    const config={...beta[businessId]};
     if(config.ownerUid!==uid)deny('Only the invited workspace owner can manage this private beta.');
     if(config.kind==='internal') {
       const user=await db.doc('users/'+uid).get();
@@ -32,6 +32,9 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
       const a=await ws.authority({uid,businessId,permission:operation==='load'||operation==='reconcile'?'communicationsRead':'communicationsSend'});
       if(!a.isOwner)deny('The invited Business owner must approve mailbox actions.');
       if(!entitlements.hasActivePaidBusinessEntitlement(a.entitlement))deny('An active paid Business plan is required for Business Email.');
+      const managed=entitlements.hasActiveManagedGrowthEntitlement(a.entitlement);
+      if(!managed && /Campaign/.test(operation) && operation!=='restrictCampaignContact')deny('Managed Growth includes Email Campaigns. Private Beta access is by invitation.');
+      if(!managed){config.campaignReadEnabled=false;config.campaignSendEnabled=false;}
     }
     // The existing internal Admin namespace has no customer Business identity.
     // Normal customer workspaces retain their maintained legal-consent gate.

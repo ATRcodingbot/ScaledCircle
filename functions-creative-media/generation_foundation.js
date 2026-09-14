@@ -11,8 +11,7 @@ const MAX_AUTHORIZED_BUSINESSES = 20;
 const MAX_BETA_COHORT_BUSINESSES = 10;
 const ROLLOUT_MODES = new Set(["founder_only", "beta_cohort", "plan_entitled"]);
 const BETA_COHORT_STAGES = new Set(["initial_5", "expanded_10"]);
-const PLAN_MONTHLY_ALLOWANCES = Object.freeze({starter: 5, growth: 15, scale: 30,
-  managed_growth: 60});
+const PLAN_MONTHLY_ALLOWANCES = Object.freeze({managed_growth: 60});
 const CAPABILITIES = new Set(["disabled", "test_only", "enabled"]);
 const DIRECTIONS = new Set(["clean", "friendly", "premium", "practical", "modern"]);
 const PURPOSES = new Set(["service_visual", "hero"]);

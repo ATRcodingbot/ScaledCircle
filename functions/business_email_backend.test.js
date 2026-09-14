@@ -383,3 +383,22 @@ test('historical receipt repairs once without another send or extending cooldown
  assert.equal((await db.doc('businessOperations/owner/contactAuthority/'+hash(op.recipient)).get()).data().genericFollowupBlocked,true);
  assert.equal(sends,1);
 });
+
+test('Managed Growth owns campaign execution; lower paid plans keep mailbox/Core access',async()=>{
+ const legal=require('./legal_consent');
+ const config={ownerUid:'owner',mailbox:'owner@example.test',campaignReadEnabled:true,campaignSendEnabled:true};
+ const authority=createAuthority({db,auth:{getUser:async uid=>({uid,email:'owner@example.test',emailVerified:true,disabled:false})},FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,project:'demo-business-email',beta:{owner:config},configured:true});
+ const social=require('../functions-social-operations/social_workspace_authority').createAuthority({db,auth:{getUser:async uid=>({uid,email:'owner@example.test',emailVerified:true,disabled:false})},FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp});
+ await db.doc('users/owner').set({role:'business',active:true});
+ for(const type of ['terms','privacy'])await db.doc(`legalConsents/owner_${type}_${legal.AGREEMENTS[type]}`).set({uid:'owner',agreementType:type,agreementVersion:legal.AGREEMENTS[type]});
+ const request={auth:{uid:'owner'},data:{businessId:'owner'}};
+ for(const plan of ['starter','growth','scale','managed_growth']){
+  await db.doc('businessSubscriptions/owner').set({planId:plan,status:'active',expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});
+  const loaded=await authority(request,'load');assert.equal(loaded.beta.campaignReadEnabled,plan==='managed_growth');
+  assert.equal(config.campaignReadEnabled,true,'Never mutate the saved invitation');
+  for(const op of ['loadCampaigns','saveCampaignDraft','approveCampaign','sendCampaign','resumeCampaign']){
+   if(plan==='managed_growth')assert.equal((await authority(request,op)).businessId,'owner');else await assert.rejects(authority(request,op),/Managed Growth/);
+  }
+  if(plan==='managed_growth')await social({businessUid:'owner',actorUid:'owner',approve:true});else await assert.rejects(social({businessUid:'owner',actorUid:'owner',approve:true}),/Managed Growth/);
+ }
+});
