@@ -116,7 +116,8 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
           tx.create(db.doc('agentCrmProspects/'+crm.id),{...crm.record,kind:source.kind,individualCandidate:!partner&&source.kind==='scaler'});
           const action=agentic.createAction({businessUid:target,agentType:partner?'lead_generation':'lead_generation',actionType:'draft_outreach',subjectId:id,inputEvidenceIds:[obsId],payload:{draft,channel:prospect.recommendedChannel,cta:prospect.recommendedCta},now:now()});
           tx.create(db.doc('agentActions/'+action.id),{...action.record,state:'awaiting_approval',displayAgent:agentType});
-          tx.create(db.doc('notifications/'+id),{userId:target,type:partner?'agent_referral_partner':'agent_qualified_prospect',title:partner?'Referral partner opportunity':'New qualified prospect',message:source.name+' is ready for source and draft review. No contact has occurred.',deepLink:{destination:customer?'business_growth_agents':'growth_agents',prospectId:id},read:false,createdAt:FieldValue.serverTimestamp()});
+          // Discovery remains in CRM/action history; the daily/weekly report summarizes it.
+
         }
       }
       tx.update(ref,{status:'completed',...(customerContext?.researchVersion?{discoveryVersion:customerContext.researchVersion,discoveryChecks:discovered.checks}:{}),serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});

@@ -49,3 +49,28 @@ t('reply event replay creates one in-app identity and notification starts unread
 });
 
 test.after(async()=>{if(app)await deleteApp(app);});
+
+t('five distinct Social posts create one window record; replays and tenants stay isolated',async()=>{
+ const f=await fixture(),record=require('../functions-mobile-notifications/signals').record;
+ const args=i=>({db,FieldValue,kind:'social',key:'assessment_'+i,now:()=>f.clock.value,
+ after:{businessUid:f.uid,contentItemId:'post_'+i,provider:'facebook',readyToPublish:true,contentVersion:1}});
+ await Promise.all([0,1,2,3,4,0,1].map(i=>record(args(i))));
+ const docs=await db.collection('notifications').where('userId','==',f.uid).get();assert.equal(docs.size,1);
+ const n=docs.docs[0];assert.equal(n.data().aggregateCount,5);assert.equal(n.data().deepLink.destination,'social_review');
+ await f.svc.enqueue(n.id);assert.ok((await n.ref.get()).data().push.nextAttemptMs>f.clock.value);
+ const other=args(0);other.after.businessUid=f.other;await record(other);
+ assert.equal((await db.collection('notifications').where('userId','==',f.other).get()).size,1);
+ await f.svc.sendGroup([await n.ref.get()]);await f.svc.sendGroup([await n.ref.get()]);assert.equal(f.sent.length,1);
+});
+
+t('scheduler attention is exactly once and cannot alert for an unrelated or published job',async()=>{
+ const f=await fixture(),record=require('../functions-social-operations/social_attention_notifications').record;
+ await db.doc('socialGrowthJobs/'+f.uid).set({businessUid:f.uid,customerApproval:true,status:'scheduled'});
+ const args={db,FieldValue,businessUid:f.uid,results:[{jobId:f.uid,status:'reconciliation_required'}]};
+ await Promise.all([record(args),record(args)]);
+ assert.equal((await db.collection('notifications').where('userId','==',f.uid).get()).size,1);
+ await db.doc('socialGrowthJobs/'+f.other).set({businessUid:f.other,customerApproval:true,status:'published'});
+ await record({...args,results:[{jobId:f.other,status:'needs_attention'}]});
+ assert.equal((await db.collection('notifications').where('userId','==',f.uid).get()).size,1);
+ assert.equal((await db.doc('socialGrowthJobs/'+f.uid).get()).data().status,'scheduled');
+});

@@ -3549,6 +3549,7 @@ exports.runCustomerMetaPublisherV1=onSchedule({schedule:'every 5 minutes',timeZo
     providerCreatesEnabled:process.env.GCLOUD_PROJECT==='scaled-circle',customerUids,credentials:loadMetaPublisherCredential});
   for(const businessUid of customerUids) {
     const result=await require('./social_meta_scheduler').run({db,publisher,businessUid,customerOnly:true});
+    await require('./social_attention_notifications').record({db,FieldValue,businessUid,results:result.results});
     require('firebase-functions/logger').info('customer_social_scheduler',{businessUid,results:result.results});
   }
 });

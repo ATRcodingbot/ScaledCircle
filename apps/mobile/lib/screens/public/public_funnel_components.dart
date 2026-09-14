@@ -79,7 +79,7 @@ class ScaledCircleBrand extends StatelessWidget {
     builder: (context, constraints) {
       final showWordmark = !compact || constraints.maxWidth >= 130;
       return Semantics(
-        label: 'ScaledCircle home',
+        label: 'ScaledCircle Home',
         button: true,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),

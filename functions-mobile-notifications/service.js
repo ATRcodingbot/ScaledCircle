@@ -21,7 +21,7 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
   if(business&&business!==uid){const a=await workspace.authority({uid,businessId:business,allowExpired:true});
    const grants=a.permissions;
    if(type.category==='money')return a.isOwner||(n.type.startsWith('billing_')||n.type.startsWith('subscription_'))&&grants.includes('billing');
-   if(type.category==='growth')return a.isOwner||grants.includes('intelligence');
+   if(['growth','social','email'].includes(type.category))return a.isOwner||grants.includes('intelligence');
    if(type.category==='customers')return a.isOwner||grants.includes(n.type.includes('reply')?'communicationsRead':'customersView');
    if(n.type==='business_schedule_update'||n.type==='business_estimate_reminder'){
     const itemId=p.id(n.metadata?.itemId||n.deepLink?.itemId);if(!itemId)return false;
@@ -67,7 +67,7 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
  async function check(uid,input){await actor(uid);const deviceId=installation(input),device=(await ref('mobilePushDevices',deviceId).get()).data();if(device?.uid!==uid||device.environment!==environment||!device.enabled)fail('failed-precondition','Enable notifications on this device first.');const notificationId='push_check_'+p.hash([uid,deviceId,Math.floor(now()/300000)].join(':')),n=ref('notifications',notificationId);await db.runTransaction(async tx=>{if((await tx.get(n)).exists)return;tx.create(n,{userId:uid,type:'mobile_push_check',title:'Notification check',message:'This is your requested device notification check. No work or payment was created.',read:false,createdAt:stamp(),deepLink:{destination:'notification_check'},source:{kind:'self_requested_device_check',actorUid:uid},targetDeviceId:deviceId});});return {notificationId};}
  async function enqueue(notificationId){const r=ref('notifications',notificationId);await db.runTransaction(async tx=>{const n=(await tx.get(r)).data();if(!n||n.push?.status)return;const policy=p.policy(n),created=n.createdAt?.toMillis?.()||0;
   if(!policy||!created||now()-created>86400000){tx.update(r,{push:{status:'in_app_only',updatedAt:stamp()}});return;}
-  tx.update(r,{push:{status:policy.immediate?'queued':'digest_queued',category:policy.category,nextAttemptMs:policy.immediate?now():Math.ceil(now()/3600000)*3600000,attempts:0,updatedAt:stamp()}});
+  tx.update(r,{push:{status:policy.immediate?'queued':'digest_queued',category:policy.category,nextAttemptMs:policy.immediate?now():Math.max(n.aggregateWindowEndMs||0,(Math.floor(now()/policy.aggregateMs)+1)*policy.aggregateMs)+30000,attempts:0,updatedAt:stamp()}});
  });}
  async function sendGroup(docs){const all=docs.map(d=>({id:d.id,...d.data()})),first=all[0];if(!first)return;
   const pref=await settings(first.userId).catch(()=>null),policy=p.policy(first);const eligible=[];
@@ -99,7 +99,7 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
    await ref('notifications',n.id).update({'push.status':retry?'retry_pending':uncertain?'confirmation_unknown':configuration?'provider_needs_attention':accepted?'provider_accepted':devices.length?'not_delivered':'no_registered_device','push.attempts':Math.max(0,...states.map(r=>r.attempts)),'push.acceptedDevices':accepted,'push.digestCount':eligible.length,'push.nextAttemptMs':retry?now()+300000:FieldValue.delete(),'push.updatedAt':stamp()});
   }
  }
- async function drain(){const due=await db.collection('notifications').where('push.nextAttemptMs','<=',now()).limit(100).get();const groups=new Map();for(const doc of due.docs){const n=doc.data(),policy=p.policy(n);if(!policy)continue;const key=policy.immediate?doc.id:n.userId+':'+policy.category;groups.set(key,[...(groups.get(key)||[]),doc]);}for(const group of groups.values())await sendGroup(group);return {processed:due.size};}
+ async function drain(){const due=await db.collection('notifications').where('push.nextAttemptMs','<=',now()).limit(100).get();const groups=new Map();for(const doc of due.docs){const n=doc.data(),policy=p.policy(n);if(!policy){await doc.ref.update({'push.status':'in_app_only','push.nextAttemptMs':FieldValue.delete()});continue;}const key=policy.immediate?doc.id:[n.userId,n.businessId||n.metadata?.businessId||'',policy.category,n.type,n.deepLink?.operationId||'',n.aggregateWindowEndMs||Math.floor((n.createdAt?.toMillis?.()||0)/policy.aggregateMs)].join(':');groups.set(key,[...(groups.get(key)||[]),doc]);}for(const group of groups.values())await sendGroup(group);return {processed:due.size};}
  return {actor,authorized,settings,configure,register,unregister,open,check,enqueue,drain,sendGroup};
 }
 module.exports={createService};

@@ -54,7 +54,7 @@ test('real persistence dedupes research/CRM/approvals/reports without financial 
   await service.run();await service.run();
   assert.equal(checks,6);
   for(const c of ['agentProspects','agentCrmProspects','agentActions','agentObservations'])assert.equal((await db.collection(c).get()).size,6);
-  assert.equal((await db.collection('agentReports').get()).size,2);assert.equal((await db.collection('notifications').get()).size,8);
+  assert.equal((await db.collection('agentReports').get()).size,2);assert.equal((await db.collection('notifications').get()).size,2);
   const data=await service.load();assert.equal(data.summary.businessesFound,3);assert.equal(data.summary.partnersFound,3);assert.equal(data.summary.individualScalersFound,0);
   assert.equal((await db.doc('wallets/protected').get()).data().balance,123);
   assert.equal((await db.doc('agentHealth/owner').get()).data().killSwitchActive,true);
@@ -110,5 +110,5 @@ test('new internal territory revision permits one bounded cycle, preserving old 
 });
 test('internal notification view excludes unrelated tenants and non-growth account alerts',async()=>{
  await service.run();await db.doc('notifications/unrelated').set({userId:'other',type:'agent_daily_brief',title:'private'});await db.doc('notifications/billing').set({userId:'owner',type:'invoice_paid',title:'private billing'});
- const view=await service.load();assert.equal(view.notifications.length,8);assert.ok(view.notifications.every(n=>!n.title.includes('private')));assert.ok(view.notifications.every(n=>n.userId===undefined));
+ const view=await service.load();assert.equal(view.notifications.length,2);assert.ok(view.notifications.every(n=>!n.title.includes('private')));assert.ok(view.notifications.every(n=>n.userId===undefined));
 });

@@ -13,7 +13,7 @@ function fixture(){return {uid:'owner',provider:'facebook',environment:'producti
  plan:{businessUid:'owner',status:'approved',planVersion:1,approvedVersion:1},
  item:{businessUid:'owner',planId:'plan',currentVersion:1},
  version:{businessUid:'owner',planId:'plan',version:1,contentHash:'a'.repeat(64),scheduledFor:new Date(1900000600000).toISOString(),
-  variants:[{provider:'facebook',format:'text',copy:'Exact reviewed text',mediaRequirement:'none'}]},
+  variants:[{provider:'facebook',format:'text',copy:'Exact reviewed customer post text',mediaRequirement:'none'}]},
  connection:{businessUid:'owner',environment:'production',status:'connected_write',tokenHealth:'healthy',credentialId:'credential',
   providerUserId:'123',linkedPageId:'123',connectionRevision:1,credentialRotationGeneration:1,grantedScopes:scopes,capabilities:{publishText:true}},
  quality:{businessUid:'owner',immutableSourceHash:'a'.repeat(64),readyToPublish:true},health:{killSwitchActive:false},

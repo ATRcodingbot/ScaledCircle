@@ -100,6 +100,13 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
       ).toString(),
     );
   }
+  if (destination == 'social_review') {
+    return const NotificationDestination(
+      'route',
+      'Review Content',
+      route: '/business/social-operations?review=posts',
+    );
+  }
   if (destination == 'social_draft') {
     if (!{'facebook', 'instagram'}.contains(link['provider']) ||
         id(link['itemId']) == null) {

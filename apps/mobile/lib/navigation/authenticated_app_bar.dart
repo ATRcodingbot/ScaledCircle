@@ -98,12 +98,25 @@ class AuthenticatedAppBar extends StatelessWidget
         (profile['activeView'] ?? profile['accountType'] ?? profile['role']) ==
             'business';
     final admin = profile['role'] == 'admin';
-    final home = business
+    final access = workspace == null ? null : WorkspacePresentation(workspace);
+    final limitedSchedule =
+        access != null &&
+        !access.owner &&
+        access.operations &&
+        !access.any(const [
+          'intelligence',
+          'analytics',
+          'campaigns',
+          'teamManagement',
+          'billing',
+        ]);
+    final home = limitedSchedule
+        ? '/business/schedule'
+        : business
         ? '/business'
         : admin
         ? '/admin'
         : '/scaler';
-    final access = workspace == null ? null : WorkspacePresentation(workspace);
     final name =
         access?.name ??
         (business
@@ -122,10 +135,16 @@ class AuthenticatedAppBar extends StatelessWidget
           'billing',
         ]);
     final root =
-        (route == home || scheduleRoot) &&
+        (route == home ||
+            scheduleRoot ||
+            (limitedSchedule && route == '/business')) &&
         !(ModalRoute.of(context)?.canPop ?? false);
     final wide = MediaQuery.sizeOf(context).width >= 800;
     void open(String destination) {
+      if (destination == home) {
+        AppNavigation.home(context, home);
+        return;
+      }
       if (destination == route) return;
       AppNavigation.push(context, destination);
     }
@@ -191,21 +210,36 @@ class AuthenticatedAppBar extends StatelessWidget
       centerTitle: false,
       title: Row(
         children: [
-          if (wide || root) ...[
-            SizedBox(
-              width: wide ? 116 : 76,
-              child: const ScaledCircleBrand(compact: true),
+          Semantics(
+            label: 'ScaledCircle Home',
+            button: true,
+            excludeSemantics: true,
+            child: Tooltip(
+              message: 'ScaledCircle Home',
+              child: InkWell(
+                onTap: () => AppNavigation.home(context, home),
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  height: 48,
+                  width: wide
+                      ? 116
+                      : root
+                      ? 76
+                      : 48,
+                  child: Center(
+                    child: wide || root
+                        ? const ScaledCircleBrand(compact: true)
+                        : Image.asset(
+                            'assets/brand/scaledcircle-symbol.png',
+                            width: 24,
+                            height: 24,
+                          ),
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
-          ] else ...[
-            Image.asset(
-              'assets/brand/scaledcircle-symbol.png',
-              width: 24,
-              height: 24,
-              semanticLabel: 'ScaledCircle',
-            ),
-            const SizedBox(width: 8),
-          ],
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

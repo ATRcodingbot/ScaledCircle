@@ -44,6 +44,25 @@ Widget fixture({
   ),
 );
 void main() {
+  testWidgets('logo returns owner to Home, not the workflow parent', (
+    tester,
+  ) async {
+    await tester.pumpWidget(fixture());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('ScaledCircle Home'));
+    await tester.pumpAndSettle();
+    expect(find.text('Destination /business'), findsOneWidget);
+  });
+  testWidgets('logo returns Schedule-only member to authorized root', (
+    tester,
+  ) async {
+    await tester.pumpWidget(fixture(owner: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('ScaledCircle Home'));
+    await tester.pumpAndSettle();
+    expect(find.text('Destination /business/schedule'), findsOneWidget);
+  });
+
   test('contextual parents stay inside product', () {
     expect(
       appShellParent('/business/growth-agents', '/business'),

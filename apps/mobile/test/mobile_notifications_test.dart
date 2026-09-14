@@ -86,7 +86,7 @@ void main() {
     );
   });
   testWidgets(
-    'preferences show all five groups, honest mobile gate and no security suppression',
+    'preferences show outcome groups, honest mobile gate and no security suppression',
     (tester) async {
       tester.view.resetPhysicalSize();
       await tester.pumpWidget(
@@ -108,10 +108,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Work & Schedule'), findsOneWidget);
-      expect(find.text('Leads & Customers'), findsOneWidget);
-      expect(find.text('Marketplace'), findsOneWidget);
+      expect(find.text('Leads & Replies'), findsOneWidget);
+      expect(find.text('Marketplace Work'), findsOneWidget);
+      await tester.drag(find.byType(ListView), const Offset(0, -500));
+      await tester.pumpAndSettle();
       expect(
-        find.textContaining('Required security and account notices'),
+        find.textContaining('Security / Account: required notices'),
         findsOneWidget,
       );
       expect(find.text('Mute security notices'), findsNothing);

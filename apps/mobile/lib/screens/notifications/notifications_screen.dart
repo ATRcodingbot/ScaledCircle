@@ -212,7 +212,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final notifications = snapshot.data?.docs ?? [];
+          final notifications = (snapshot.data?.docs ?? []).where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return !const {
+              'agent_qualified_prospect',
+              'agent_referral_partner',
+              'generated_image_ready',
+              'creative_ready',
+              'image_ready',
+            }.contains(data['type']);
+          }).toList();
           if (!initialOpened &&
               snapshot.hasData &&
               (widget.initialNotificationId != null ||

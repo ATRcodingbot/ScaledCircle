@@ -171,7 +171,12 @@ function createDelivery({db,root,sub,current,adapter,credentialAccess,authority,
     if(a.beta.campaignSendEnabled!==true)return {attempted:0};
     const docs=await root(a.businessId).collection('campaigns').where('approved','==',true).limit(26).get();
     if(docs.size>25)fail('resource-exhausted','Campaign queue needs review.');
-    let attempted=0;for(const d of docs.docs){if(attempted>=2)break;attempted+=(await pump(a,d.id,2-attempted)).attempted;}return {attempted};
+    let attempted=0;for(const d of docs.docs){if(attempted>=2)break;
+      const before=await view(a,d.data());
+      attempted+=(await pump(a,d.id,2-attempted)).attempted;
+      const after=await view(a,d.data());
+      await require('./campaign_notifications').record({db,businessId:a.businessId,before,after,now});
+    }return {attempted};
   }
   async function check(a,input){
     const c=(await sub(a.businessId,'campaigns',input.campaignId).get()).data();if(!c||c.businessId!==a.businessId)fail('not-found','Choose a saved campaign.');

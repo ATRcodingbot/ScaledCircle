@@ -36,7 +36,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
    require("./social_customer_scheduling").authorizeRuntime({approval:a,connection:require("./social_customer_scheduling").connectionFromOwnedPath(c,job.businessUid),config:p,uid:job.businessUid,
     provider:job.provider,environment,enabledUids:customerUids});
    const subscription=(await read(db.doc('businessSubscriptions/'+job.businessUid))).data();
-   if(!require("./subscription_entitlements").hasActiveScaleEntitlement(subscription))throw Error('meta_customer_entitlement_required');
+   if(!require("./subscription_entitlements").hasActiveManagedGrowthEntitlement(subscription))throw Error('meta_customer_entitlement_required');
   } else connectionPolicy.authorize(p,job.businessUid);
   if(!a || a.businessUid!==job.businessUid || !(customer?require('./social_workspace_authority').validApprovalActor(a,job.businessUid):a.approvedByUid===job.businessUid) ||
    !growth.jobs(a).some(x=>x.id===job.id&&x.bindingHash===job.bindingHash&&isDeepStrictEqual(x.binding,job.binding)))throw Error("meta_approval_mismatch");

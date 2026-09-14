@@ -46,7 +46,7 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
   if(!hasPublishingScopes(connection,provider) && !reasons.some(r=>r.code==='permission'))add('permission');
   if (quality?.businessUid!==uid || quality.immutableSourceHash!==version.contentHash || quality.readyToPublish!==true) add('quality');
   if (!schedulerEnabled || config?.enabled!==true || config.writeScopesEnabled!==true || config.provider!=='meta' || config.environment!==environment ||
-      !require("./subscription_entitlements").hasActiveScaleEntitlement(entitlement,{nowMillis:now})) add('scheduler');
+      !require("./subscription_entitlements").hasActiveManagedGrowthEntitlement(entitlement,{nowMillis:now})) add('scheduler');
   if (health?.killSwitchActive===true) add('paused');
   if (conflictingSchedule) add('existing');
   if (!reasons.some(r=>['creative','permission','content'].includes(r.code))) {

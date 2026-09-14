@@ -8,7 +8,11 @@ Uri? initialReferralRoute(Uri browserLocation, {required bool enabled}) {
   if (!enabled) return null;
   final route = Uri.tryParse(browserLocation.fragment);
   if (route == null || route.hasAuthority || route.hasScheme) return null;
-  if (const {'/referrals', '/referral-portal', '/growth-agents'}.contains(route.path)) {
+  if (const {
+    '/referrals',
+    '/referral-portal',
+    '/growth-agents',
+  }.contains(route.path)) {
     return route;
   }
   final code =
@@ -214,6 +218,34 @@ class AppRouterScope extends InheritedWidget {
 }
 
 abstract final class AppNavigation {
+  /// Dismiss imperative reviews while honoring their unsaved-change guards.
+  /// Resolve the router before popping: the originating preview may be disposed.
+  static Future<void> home(BuildContext context, String location) async {
+    final delegate = AppRouterScope.maybeOf(context);
+    final nav = Navigator.of(context);
+    while (nav.mounted && nav.canPop()) {
+      Route<dynamic>? before;
+      nav.popUntil((route) {
+        before = route;
+        return true;
+      });
+      await nav.maybePop();
+      Route<dynamic>? after;
+      if (!nav.mounted) return;
+      nav.popUntil((route) {
+        after = route;
+        return true;
+      });
+      if (identical(before, after)) return;
+    }
+    if (!nav.mounted) return;
+    if (delegate != null) {
+      delegate.navigate(location, context: nav.context);
+    } else {
+      nav.pushReplacementNamed(location);
+    }
+  }
+
   static void push(BuildContext context, String location, {Object? arguments}) {
     final delegate = AppRouterScope.maybeOf(context);
     if (delegate == null) {

@@ -47,7 +47,7 @@ test('real transaction: one exact approval/job on concurrent taps, no plan/versi
    customerUids:[uid],providerCreatesEnabled:true,now:()=>clock,
    credentials:async()=>({businessUid:uid,providerUserId:'123',linkedPageId:'123',tokenType:'PAGE',accessToken:'mock-only'}),
    fetchImpl:async(_url,options)=>{if(options.method==='POST')creates++;return {ok:true,json:async()=>options.method==='POST'
-     ? {id:'123_789'} : {id:'123_789',from:{id:'123'},message:'Exact reviewed text'}};}});
+     ? {id:'123_789'} : {id:'123_789',from:{id:'123'},message:version.variants[0].copy}};}});
  await assert.rejects(publisher.execute(result[0].jobId),/schedule_closed/);assert.equal(creates,0);
  clock=f.now+600000;
  await Promise.all([publisher.execute(result[0].jobId),publisher.execute(result[0].jobId)]);

@@ -109,10 +109,12 @@ class _NotificationPreferencesScreenState
           ),
           for (final category in const {
             'work': 'Work & Schedule',
-            'customers': 'Leads & Customers',
-            'growth': 'Growth',
-            'money': 'Money',
-            'marketplace': 'Marketplace',
+            'customers': 'Leads & Replies',
+            'growth': 'Growth Summary',
+            'social': 'Social Attention',
+            'email': 'Email Campaign Results',
+            'money': 'Money & Billing',
+            'marketplace': 'Marketplace Work',
           }.entries)
             SwitchListTile(
               title: Text(category.value),
@@ -135,7 +137,7 @@ class _NotificationPreferencesScreenState
           SwitchListTile(
             title: const Text('Grouped Growth updates'),
             subtitle: const Text(
-              'Combine low-urgency activity into an hourly summary. Turn off to keep it in-app only.',
+              'Receive grouped summaries instead of routine preparation updates. Turn off to keep Growth summaries in-app only.',
             ),
             value: prefs!['growthDigest'] == true,
             onChanged: busy
@@ -144,7 +146,7 @@ class _NotificationPreferencesScreenState
                       run(() => save({...prefs!, 'growthDigest': value})),
           ),
           const Text(
-            'Required security and account notices remain available. Lock-screen previews do not include customer details, addresses or payment amounts.',
+            'Security / Account: required notices remain available. Lock-screen previews do not include customer details, addresses or payment amounts.',
           ),
           if (MobileNotificationsService.supported) ...[
             const SizedBox(height: 16),
