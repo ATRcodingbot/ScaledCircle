@@ -31,11 +31,12 @@ class _NotificationPreferencesScreenState
   Future<void> load() async {
     try {
       final result = await call('settings');
-      if (mounted)
+      if (mounted) {
         setState(() {
           prefs = result;
           feedback = null;
         });
+      }
     } catch (_) {
       if (mounted) {
         setState(
