@@ -12421,7 +12421,7 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
     const context = await authenticatedUserContext(request, "Admin access is required.");
     if (context.isAdmin !== true) throw new HttpsError("permission-denied", "Admin access is required.");
     const input = request.data || {}; const patch = {};
-    const allowedFields = new Set(["providerGenerationEnabled", "rolloutMode", "betaCohortStage",
+    const allowedFields = new Set(["providerGenerationEnabled", "rolloutMode", "betaCohortStage", "founderProofOnly",
       "authorizedBusinessUids",
       "authorizedBusinessJobIds", "betaCohortBusinessJobIds", "globalDailyMaximum", "globalMonthlyMaximum",
       "globalDailyCostMicros", "globalMonthlyCostMicros"]);
@@ -12515,10 +12515,17 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
     if (Object.keys(patch).length === 0) {
       throw new HttpsError("invalid-argument", "Choose at least one generated-media safety setting.");
     }
-    await db.collection("providerConfigurations").doc("generated-service-visuals").set({
-      ...patch, safetyConfigurationUpdatedAt: FieldValue.serverTimestamp(),
-      safetyConfigurationUpdatedBy: context.uid,
-    }, {merge: true});
+    await db.runTransaction(async (tx) => {
+      const ref = db.collection("providerConfigurations").doc("generated-service-visuals");
+      const current = (await tx.get(ref)).data() || {};
+      if (input.founderProofOnly === true && patch.providerGenerationEnabled === true &&
+          (Object.keys(patch).length !== 1 || current.rolloutMode !== "founder_only" ||
+           !Array.isArray(current.authorizedBusinessUids) || current.authorizedBusinessUids.length !== 1)) {
+        throw new HttpsError("failed-precondition", "The bounded proof requires exactly one Founder-authorized Business.");
+      }
+      tx.set(ref, {...patch, safetyConfigurationUpdatedAt: FieldValue.serverTimestamp(),
+        safetyConfigurationUpdatedBy: context.uid}, {merge: true});
+    });
     const updated = await generationProviderConfig();
     const policy = generationFoundation.generationAuthorizationPolicy(updated, null, {});
     return {providerGenerationEnabled: updated.providerGenerationEnabled === true,

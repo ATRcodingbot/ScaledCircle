@@ -3,6 +3,7 @@ import '../services/social_operations_service.dart';
 import '../services/business_media_service.dart';
 import '../screens/business/brand_assets_screen.dart';
 import '../models/social_plan_presentation.dart';
+import 'social_candidate_preview.dart';
 
 /// Preparation is intentionally separate from the exact approval confirmation.
 class CustomerSocialPostEditor extends StatefulWidget {
@@ -349,6 +350,12 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               const Text('Preparing your preview…'),
             ],
             Text(_post['provider'] == 'instagram' ? 'Instagram' : 'Facebook'),
+            if (_post['reviewCandidate'] is Map)
+              SocialCandidatePreview(
+                candidate: Map<String, dynamic>.from(
+                  _post['reviewCandidate'] as Map,
+                ),
+              ),
             if (_post['creativeRecommendation'] != null) ...[
               Text(
                 'Recommended format: ${_post['creativeRecommendation']['label']}',

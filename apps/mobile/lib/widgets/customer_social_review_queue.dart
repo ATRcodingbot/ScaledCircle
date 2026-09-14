@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/social_plan_presentation.dart';
 import '../services/social_operations_service.dart';
 import 'customer_social_post_editor.dart';
+import 'social_candidate_preview.dart';
 
 const socialQueueGroups = [
   'Ready for Review',
@@ -43,7 +44,9 @@ String socialQueueGroup(Map<String, dynamic> row) {
     return 'Scheduled';
   }
   if (row['preparing'] == true) return 'Preparing Creative';
-  if (row['preparationError'] == null && row['ready'] == true) {
+  if (row['preparationError'] == null &&
+      (row['ready'] == true ||
+          row['reviewCandidate']?['status'] == 'pending_owner_review')) {
     return 'Ready for Review';
   }
   return 'Needs Attention';
@@ -258,6 +261,12 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         Text(row['strategyTitle'].toString()),
+                        if (row['reviewCandidate'] is Map)
+                          SocialCandidatePreview(
+                            candidate: Map<String, dynamic>.from(
+                              row['reviewCandidate'] as Map,
+                            ),
+                          ),
                         if (row['creativeRecommendation']?['format'] == 'text')
                           const Align(
                             alignment: Alignment.centerLeft,

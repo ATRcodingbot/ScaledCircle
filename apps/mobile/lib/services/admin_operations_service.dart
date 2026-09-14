@@ -110,7 +110,10 @@ class AdminOperationsService {
   ) async {
     final result = await _functions
         .httpsCallable('updateGeneratedMediaSafetyConfiguration')
-        .call<Map<Object?, Object?>>({'providerGenerationEnabled': enabled});
+        .call<Map<Object?, Object?>>({
+          'providerGenerationEnabled': enabled,
+          'founderProofOnly': true,
+        });
     return Map<String, dynamic>.from(result.data);
   }
 

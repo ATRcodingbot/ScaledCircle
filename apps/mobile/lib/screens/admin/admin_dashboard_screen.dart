@@ -185,9 +185,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   _restoreFounderOnlyControls,
                               stagingProviderUpdating: _stagingProviderUpdating,
                               onSetStagingProviderEnabled:
-                                  AppEnvironmentConfig.isStaging
-                                  ? _setStagingProviderEnabled
-                                  : null,
+                                  _setStagingProviderEnabled,
                               onOpenCampaign: (campaignId) => _push(
                                 AdminCampaignTimelineScreen(
                                   campaignId: campaignId,
@@ -359,7 +357,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _setStagingProviderEnabled(bool enabled) async {
-    if (_stagingProviderUpdating || !AppEnvironmentConfig.isStaging) return;
+    if (_stagingProviderUpdating) return;
     setState(() => _stagingProviderUpdating = true);
     try {
       final result = await _service.setStagingGeneratedMediaProviderEnabled(
@@ -372,9 +370,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           content: Text(
             applied
                 ? enabled
-                      ? 'Staging provider enabled for the bounded Founder proof.'
-                      : 'Staging provider disabled.'
-                : 'Staging provider state could not be verified safely.',
+                      ? 'Provider enabled for the bounded Founder proof.'
+                      : 'Provider disabled.'
+                : 'Provider state could not be verified safely.',
           ),
         ),
       );
@@ -382,7 +380,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Staging provider update failed safely.')),
+        const SnackBar(content: Text('Provider update failed safely.')),
       );
     } finally {
       if (mounted) setState(() => _stagingProviderUpdating = false);
@@ -931,12 +929,12 @@ class AdminOperationsContent extends StatelessWidget {
               if (onSetStagingProviderEnabled != null) ...[
                 const Divider(height: 28),
                 Text(
-                  'Bounded staging provider proof',
+                  'Bounded Founder generation',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Staging only. Keep the existing one-Business authorization and disable immediately after the approved proof request.',
+                  'Requires exactly one Founder-authorized Business. Existing allowances and safety limits remain in force. Disable after the approved run.',
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -950,7 +948,7 @@ class AdminOperationsContent extends StatelessWidget {
                           ? null
                           : () => onSetStagingProviderEnabled!(true),
                       icon: const Icon(Icons.play_arrow_outlined),
-                      label: const Text('Enable bounded staging proof'),
+                      label: const Text('Enable bounded Founder run'),
                     ),
                     OutlinedButton.icon(
                       onPressed:
@@ -959,7 +957,7 @@ class AdminOperationsContent extends StatelessWidget {
                           ? null
                           : () => onSetStagingProviderEnabled!(false),
                       icon: const Icon(Icons.stop_circle_outlined),
-                      label: const Text('Disable staging provider'),
+                      label: const Text('Disable generation'),
                     ),
                   ],
                 ),

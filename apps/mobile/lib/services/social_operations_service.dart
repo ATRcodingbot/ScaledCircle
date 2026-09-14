@@ -108,6 +108,17 @@ class SocialOperationsService {
               )
             : requested;
         result['generatedCreative'] = generated;
+        if (generated['status'] == 'review_required') {
+          final prepared = await _functions
+              .httpsCallable('prepareCustomerSocialPostV1')
+              .call(
+                _workspace({
+                  ...input,
+                  'version': result['version'] ?? input['version'],
+                }),
+              );
+          result.addAll(Map<String, dynamic>.from(prepared.data as Map));
+        }
         result['creativeStatus'] = generated['status'] == 'review_required'
             ? 'concept_needs_review'
             : 'preparing';

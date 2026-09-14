@@ -1,0 +1,42 @@
+'use strict';
+if(!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||''))throw Error('local_emulator_required');
+const {test,after}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const {initializeApp,deleteApp}=require('firebase-admin/app'),{getFirestore}=require('firebase-admin/firestore');
+const app=initializeApp({projectId:'demo-scaledcircle'},'candidate-review'),db=getFirestore(app);
+after(async()=>{await db.terminate();await deleteApp(app);});
+const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+test('one pending source produces private platform previews without approvals, public delivery, usage or content changes',async()=>{
+ const uid='candidate_owner',itemId='candidate_plan_post',requestId='social_mix_'+hash(uid+':'+itemId+':SocialCreativeDiversityV1'),assetId='candidate_asset',revisionId='r1';
+ const jobId='visual_job_'+hash(uid+'\n'+requestId).slice(0,40),original=Buffer.from('full resolution source'),prefix=`business_media_private/${uid}/${assetId}/${revisionId}/`;
+ const ar=db.doc(`businessMediaLibraries/${uid}/mediaAssets/${assetId}`),rr=ar.collection('revisions').doc(revisionId);
+ const asset={businessUid:uid,currentRevisionId:revisionId,approvedRevisionId:null,removed:false};
+ const revision={businessUid:uid,status:'ready',approvalStatus:'pending',origin:'generated_service_concept',createdBy:'creative-media-core',generationJobId:jobId,
+  moderationStatus:'passed',moderation:{status:'passed',flags:[]},privateOriginalPath:prefix+'original',storageGeneration:'1',contentHash:hash(original),truthfulnessDisclosure:'Service concept — not a completed Business project.'};
+ const job={businessUid:uid,status:'review_required',candidateAssetId:assetId,candidateRevisionId:revisionId,customerAllowanceConsumed:true};
+ await Promise.all([ar.set(asset),rr.set(revision),db.doc('visualGenerationJobs/'+jobId).set(job)]);
+ const files=new Map([[prefix+'original',original]]),bucket={file:p=>({download:async()=>[files.get(p)],save:async b=>files.set(p,b),getMetadata:async()=>[{generation:'1'}]})};
+ const media=require('../functions-social-operations/social_customer_media').createMedia({db,bucket,project:'scaled-circle',enabledUids:[uid],prepareImage:async(b,_,provider)=>{
+  assert.deepEqual(b,original);const bytes=Buffer.from('full quality '+provider);return {bytes,sha256:hash(bytes),width:1080,height:provider==='instagram'?1080:720};}});
+ const input={itemId,provider:'facebook',version:1};
+ const fb=await media.prepareCandidate(uid,input,{requestId}),ig=await media.prepareCandidate(uid,{...input,provider:'instagram'},{requestId});
+ assert.equal(fb.jobId,ig.jobId);assert.notEqual(fb.sha256,ig.sha256);assert.equal(fb.status,'pending_owner_review');assert.equal(fb.approved,false);
+ assert.ok(fb.storagePath.startsWith(prefix));assert.deepEqual(await media.prepareCandidate(uid,input,{requestId}),fb);
+ await assert.rejects(media.prepareCandidate('other',input,{requestId}));
+ await assert.rejects(media.attach(uid,{...input,assetId,revisionId,confirmPublicUse:true}));
+ assert.deepEqual((await ar.get()).data(),asset);assert.deepEqual((await rr.get()).data(),revision);assert.deepEqual((await db.doc('visualGenerationJobs/'+jobId).get()).data(),job);
+ for(const c of ['customerSocialMedia','socialGrowthJobs','socialGrowthApprovals','socialContentVersions'])assert.equal((await db.collection(c).where('businessUid','==',uid).get()).size,0);
+ const version=require('../functions-social-operations/social_operations').contentItemVersion({businessUid:uid,planId:'candidate_plan',item:{itemKey:'post',goal:'Explore a service',pillar:'Explore decks',scheduledFor:'2027-01-01T15:00:00Z',variants:['facebook','instagram'].map(provider=>({provider,copy:'Explore a deck concept for your next project.',mediaRequirement:'image'}))}});
+ await db.doc('socialContentItems/'+itemId).set({businessUid:uid,planId:'candidate_plan',currentVersion:1});
+ await db.doc('socialContentVersions/'+itemId+'_v1').set(version);
+ await db.doc('businessBrandProfiles/'+uid).set({approvedServiceCategories:['decks']});
+ const editor=require('../functions-social-operations/social_customer_editor').createEditor({db,enabledUids:[uid]});
+ const preparation=require('../functions-social-operations/social_customer_preparation').createPreparation({db,editor,media});
+ const prepared=await preparation.prepare(uid,input);assert.equal(prepared.creativeStatus,'concept_needs_review');assert.equal(prepared.generationRequest,null);
+ const preview=await require('../functions-social-operations/social_customer_scheduling').createStore({db,enabledUids:[uid],environment:'production'}).preview(uid,input);
+ assert.equal(preview.ready,false);assert.equal(preview.reviewCandidate.sha256,fb.sha256);assert.equal(preview.reviewedPost.images.length,0);
+ assert.deepEqual((await db.doc('socialContentVersions/'+itemId+'_v1').get()).data(),version);
+ assert.equal((await db.collection('socialContentVersions').where('businessUid','==',uid).get()).size,1);
+ await rr.update({moderationStatus:'blocked'});await assert.rejects(media.prepareCandidate(uid,input,{requestId}));await rr.set(revision);
+ const other=db.doc(`businessMediaLibraries/${uid}/mediaAssets/duplicate`);await other.set({currentRevisionId:'r'});await other.collection('revisions').doc('r').set({contentHash:revision.contentHash});
+ await assert.rejects(media.prepareCandidate(uid,input,{requestId}),/repeats/);
+});

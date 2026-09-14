@@ -58,18 +58,42 @@ const emptySnapshot = AdminOperationsSnapshot(
 );
 
 void main() {
-  testWidgets('Tracking Number operations are bounded and provider-free', (tester) async {
-    await tester.pumpWidget(subject(emptySnapshot, trackingPhoneOperations: const {
-      'provider': 'twilio', 'providerConfigured': false, 'numberInventory': 0,
-      'activeNumbers': 0, 'graceNumbers': 0, 'callSessions': 0, 'answeredCalls': 0,
-      'missedCalls': 0, 'failedProvisioning': 0, 'unknownOutcomes': 0,
-      'duplicateWebhookReceipts': 0, 'providerCostMicros': 0,
-    }));
-    await tester.scrollUntilVisible(find.text('Tracking Numbers — Beta'), 300,
-      scrollable: find.byType(Scrollable).first);
-    expect(find.textContaining('Provider: Twilio · Not configured'), findsOneWidget);
+  testWidgets('Tracking Number operations are bounded and provider-free', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      subject(
+        emptySnapshot,
+        trackingPhoneOperations: const {
+          'provider': 'twilio',
+          'providerConfigured': false,
+          'numberInventory': 0,
+          'activeNumbers': 0,
+          'graceNumbers': 0,
+          'callSessions': 0,
+          'answeredCalls': 0,
+          'missedCalls': 0,
+          'failedProvisioning': 0,
+          'unknownOutcomes': 0,
+          'duplicateWebhookReceipts': 0,
+          'providerCostMicros': 0,
+        },
+      ),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Tracking Numbers — Beta'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      find.textContaining('Provider: Twilio · Not configured'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Provider traffic: 0'), findsOneWidget);
-    expect(find.textContaining('Caller and forwarding numbers masked'), findsOneWidget);
+    expect(
+      find.textContaining('Caller and forwarding numbers masked'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Account Auth Token'), findsNothing);
   });
 
@@ -199,7 +223,7 @@ void main() {
     expect(find.textContaining('300 calls/month'), findsOneWidget);
   });
 
-  testWidgets('bounded staging proof control uses paired enable and disable', (
+  testWidgets('bounded Founder proof control uses paired enable and disable', (
     tester,
   ) async {
     final updates = <bool>[];
@@ -233,16 +257,19 @@ void main() {
       ),
     );
     await tester.scrollUntilVisible(
-      find.text('Enable bounded staging proof'),
+      find.text('Enable bounded Founder run'),
       500,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.textContaining('Staging only.'), findsOneWidget);
-    await tester.ensureVisible(find.text('Enable bounded staging proof'));
+    expect(
+      find.textContaining('Requires exactly one Founder-authorized Business.'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Enable bounded Founder run'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Enable bounded staging proof'));
+    await tester.tap(find.text('Enable bounded Founder run'));
     expect(updates, [true]);
-    expect(find.text('Disable staging provider'), findsOneWidget);
+    expect(find.text('Disable generation'), findsOneWidget);
   });
 
   testWidgets('Admin home presents the simple four-section command center', (

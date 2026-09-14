@@ -71,6 +71,44 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],prepareImage
   const origin=`https://us-east1-${project}.cloudfunctions.net`;
   const storage=()=>typeof bucket==='function'?bucket():bucket;
   return {
+    async prepareCandidate(uid,input,recommendation){
+      validate(input);
+      if(!enabledUids.includes(uid))throw Error('Creative preparation is unavailable.');
+      const jobId='visual_job_'+hash(uid+'\n'+recommendation.requestId).slice(0,40);
+      const job=(await db.doc('visualGenerationJobs/'+jobId).get()).data();
+      if(!job)return null;
+      if(job.businessUid!==uid||job.status!=='review_required')return null;
+      const assetId=job.candidateAssetId,revisionId=job.candidateRevisionId;
+      if(!/^[A-Za-z0-9_-]{1,160}$/.test(assetId||'')||!/^[A-Za-z0-9_-]{1,160}$/.test(revisionId||''))throw Error('Creative identity needs review.');
+      const ar=db.doc(`businessMediaLibraries/${uid}/mediaAssets/${assetId}`),rr=ar.collection('revisions').doc(revisionId);
+      const [a,r]=await Promise.all([ar.get(),rr.get()]);const revision=r.data(),asset=a.data();
+      const prefix=`business_media_private/${uid}/${assetId}/${revisionId}/`;
+      if(asset?.businessUid!==uid||asset.removed||asset.currentRevisionId!==revisionId||asset.approvedRevisionId||
+        revision?.businessUid!==uid||revision.status!=='ready'||revision.approvalStatus!=='pending'||
+        revision.origin!=='generated_service_concept'||revision.createdBy!=='creative-media-core'||revision.generationJobId!==jobId||
+        revision.moderationStatus!=='passed'||revision.moderation?.status!=='passed'||revision.moderation.flags?.length!==0||
+        !revision.privateOriginalPath?.startsWith(prefix)||!revision.storageGeneration||!revision.truthfulnessDisclosure||
+        !/^[a-f0-9]{64}$/.test(revision.contentHash||''))throw Error('Creative requires a valid private source.');
+      // Never recycle another idea's source, including pending concepts.
+      const library=await db.collection(`businessMediaLibraries/${uid}/mediaAssets`).limit(51).get();
+      if(library.size>50)throw Error('Creative history needs review.');
+      for(const other of library.docs){if(other.id===assetId)continue;const data=other.data();
+        const rid=data.currentRevisionId||data.approvedRevisionId;if(!rid)continue;
+        const rev=(await other.ref.collection('revisions').doc(rid).get()).data();
+        if(rev?.contentHash===revision.contentHash)throw Error('This concept repeats an existing image. Review creative before continuing.');}
+      const [bytes]=await storage().file(revision.privateOriginalPath,{generation:revision.storageGeneration}).download();
+      if(bytes.length>20*1024*1024||hash(bytes)!==revision.contentHash)throw Error('Creative integrity failed.');
+      const image=await prepareImage(bytes,undefined,input.provider);
+      const path=prefix+`renditions/social-review-${input.provider}-${image.sha256}.jpg`;
+      await storage().file(path).save(image.bytes,{resumable:false,contentType:'image/jpeg',metadata:{cacheControl:'private,no-store'},preconditionOpts:{ifGenerationMatch:0}})
+        .catch(e=>{if(e.code!==412)throw e;});
+      const [stored]=await storage().file(path).getMetadata();
+      const [readback]=await storage().file(path,{generation:String(stored.generation)}).download();
+      if(hash(readback)!==image.sha256)throw Error('Creative derivative integrity failed.');
+      return {assetId,revisionId,jobId,sourceSha256:revision.contentHash,storagePath:path,generation:String(stored.generation),
+        sha256:image.sha256,width:image.width,height:image.height,bytes:image.bytes.length,preparation:image.preparation||null,
+        disclosure:revision.truthfulnessDisclosure,status:'pending_owner_review',approved:false};
+    },
     async attach(uid,input){
       validate(input);
       if(!/^[A-Za-z0-9_-]{1,160}$/.test(input.assetId||'')||!/^[A-Za-z0-9_-]{1,160}$/.test(input.revisionId||''))throw Error('Choose an approved image.');

@@ -65,6 +65,7 @@ function createPreparation({db,editor,media,now=Date.now}) {
    const oldMedia=variant.mediaRevisionId?(await db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`).get()).data():null;
    let generationRequest=null;
    let generationStatus=null;
+   let reviewCandidate=null;
    if(recommendation.format==='text'){
      if(variant.mediaRequirement!=='none'){
        const disclosure="Service concept image — not a photo of this Business's completed work, team, customers, or property.";
@@ -83,14 +84,20 @@ function createPreparation({db,editor,media,now=Date.now}) {
      // Keep historical media immutable, but do not present it as the recommended
      // new creative. A disabled provider is never bypassed by reusing an image.
      const config=(await db.doc('providerConfigurations/generated-service-visuals').get()).data()||{};
-     generationStatus=config.providerGenerationEnabled===true?'available':'configuration_unavailable';
-     if(recommendation.service&&generationStatus==='available')generationRequest={requestId:recommendation.requestId,
+     reviewCandidate=media.prepareCandidate?await media.prepareCandidate(uid,{...input,version:version.version},recommendation):null;
+     generationStatus=reviewCandidate?'review_required':config.providerGenerationEnabled===true?'available':'configuration_unavailable';
+     if(!reviewCandidate&&recommendation.service&&generationStatus==='available')generationRequest={requestId:recommendation.requestId,
        serviceCategory:recommendation.service,visualDirection:recommendation.visualDirection,materialSlot:'landing_page_hero'};
-     creativeStatus='needs_creative';
+     creativeStatus=reviewCandidate?'concept_needs_review':'needs_creative';
    }
    const quality=await editor.assess(uid,{...input,version:version.version});
-   const result={version:version.version,creativeStatus,quality,generationRequest,generationStatus,approved:false,scheduled:false};
-   await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:creativeStatus==='needs_creative'?'needs_attention':'prepared',generationStatus,version:version.version,finishedAt:now(),leaseUntil:0});});
+   const result={version:version.version,creativeStatus,quality,generationRequest,generationStatus,reviewCandidate,approved:false,scheduled:false};
+   await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();
+     const item=(await tx.get(db.doc('socialContentItems/'+input.itemId))).data();
+     const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
+     if(item?.businessUid!==uid||(item.platformVersions?.[input.provider]??item.currentVersion)!==version.version||jobs.size>100||
+       jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))throw Error('The post changed. Reopen its review.');
+     if(old?.attempt===attempt)tx.update(lease,{state:reviewCandidate?'creative_review':creativeStatus==='needs_creative'?'needs_attention':'prepared',reviewCandidate,generationStatus,version:version.version,finishedAt:now(),leaseUntil:0});});
    return result;
    }catch(error){
      await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:'needs_attention',finishedAt:now(),leaseUntil:0});});

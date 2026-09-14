@@ -111,6 +111,13 @@ function createStore({db, now=Date.now, enabledUids=[], environment,authorizeAct
       const recommendation=require('./social_creative_diversity').presentation(ctx.creativePreparation);
       const needsNew=!!recommendation&&recommendation.format==='generated'&&recommendation.state!=='prepared';
       result.creativeRecommendation=recommendation;
+      const candidate=ctx.creativePreparation?.version===ctx.version?.version&&ctx.creativePreparation?.state==='creative_review'?ctx.creativePreparation.reviewCandidate:null;
+      if(candidate?.status==='pending_owner_review'&&candidate.approved===false){
+        const a=(await db.doc(`businessMediaLibraries/${uid}/mediaAssets/${candidate.assetId}`).get()).data();
+        const r=(await db.doc(`businessMediaLibraries/${uid}/mediaAssets/${candidate.assetId}/revisions/${candidate.revisionId}`).get()).data();
+        if(a?.businessUid===uid&&!a.removed&&a.currentRevisionId===candidate.revisionId&&r?.status==='ready'&&r.approvalStatus==='pending'&&r.contentHash===candidate.sourceSha256)
+          result.reviewCandidate=candidate;
+      }
       result.creativeNeedsPreparation=!ctx.existingJob&&(!recommendation||ctx.creativePreparation.version!==ctx.version?.version);
       if(needsNew)ctx.revision=null;
       return {...result,publicationStatus:ctx.existingJob?.status||null,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256,width:i.width,height:i.height}))||[],creativePrepared:ctx.revision?.preparation?.policy===require('./social_customer_media').MEDIA_POLICY,quality:ctx.quality||null,scheduledFor:result.scheduledFor}:null};

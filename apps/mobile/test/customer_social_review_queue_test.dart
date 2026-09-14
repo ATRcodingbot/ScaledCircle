@@ -70,6 +70,28 @@ class DiversityQueueService extends QueueService {
 }
 
 void main() {
+  test(
+    'private concept is reviewable without becoming approved or schedulable',
+    () {
+      final row = <String, dynamic>{
+        'ready': false,
+        'reviewCandidate': {
+          'status': 'pending_owner_review',
+          'approved': false,
+        },
+      };
+      expect(socialQueueGroup(row), 'Ready for Review');
+      expect(row['ready'], false);
+      expect(
+        socialQueueGroup({...row, 'publicationStatus': 'scheduled'}),
+        'Scheduled',
+      );
+      expect(
+        socialQueueGroup({...row, 'reviewCandidate': null}),
+        'Needs Attention',
+      );
+    },
+  );
   testWidgets(
     'intentional text recommendation and reason wrap on a narrow large-text screen',
     (tester) async {
