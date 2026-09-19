@@ -91,7 +91,7 @@ void main() {
       );
       await show(false);
       expect(find.text('30-Day Strategy · Approved'), findsOneWidget);
-      expect(find.text('Platform Versions: 16'), findsOneWidget);
+      expect(find.text('Strategy platform versions: 16'), findsOneWidget);
       expect(find.text('Scheduled versions: 0'), findsOneWidget);
       expect(find.text('Review 30-Day Plan'), findsNothing);
       expect(find.text('View Schedule'), findsNothing);
