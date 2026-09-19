@@ -449,6 +449,20 @@ void main() {
       await _pumpUntil(tester, find.byType(CampaignDetailsScreen));
       expect(find.byType(CampaignDetailsScreen), findsOneWidget);
       await _checkpoint('review-route-visible');
+      await _pumpUi(tester);
+      await tester.scrollUntilVisible(
+        find.text('Manage Campaign Zones'),
+        300,
+        scrollable: find.descendant(
+          of: find.byType(CampaignDetailsScreen),
+          matching: find.byType(Scrollable),
+        ).first,
+      );
+      await _pumpUi(tester);
+      expect(
+        find.text('We could not load the assigned work areas. Please try again.'),
+        findsNothing,
+      );
       final reviewRouteException = tester.takeException();
       if (reviewRouteException != null) {
         debugPrint(

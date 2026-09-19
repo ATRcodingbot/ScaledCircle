@@ -165,6 +165,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       if (exactLocationCampaign) {
         final locationsSnapshot = await FirebaseFirestore.instance
             .collection('campaignLocations')
+            .where('businessId', isEqualTo: liveCampaign.get('businessId'))
             .where('campaignId', isEqualTo: liveCampaign.id)
             .get();
 
@@ -214,6 +215,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
         locationCount = locationsSnapshot.docs.length;
       } else {
         final zonesSnapshot = await _zonesCollection
+            .where('businessId', isEqualTo: liveCampaign.get('businessId'))
             .where('campaignId', isEqualTo: liveCampaign.id)
             .get();
 
@@ -720,6 +722,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
   Future<void> _refreshCampaignCompletion(DocumentSnapshot liveCampaign) async {
     final zonesSnapshot = await _zonesCollection
+        .where('businessId', isEqualTo: liveCampaign.get('businessId'))
         .where('campaignId', isEqualTo: liveCampaign.id)
         .get();
 
@@ -1101,6 +1104,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     }
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _zonesCollection
+          .where('businessId', isEqualTo: liveCampaign.get('businessId'))
           .where('campaignId', isEqualTo: liveCampaign.id)
           .snapshots(),
       builder: (context, snapshot) {
@@ -1267,6 +1271,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   Widget _buildZoneReviewSection(DocumentSnapshot liveCampaign) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _zonesCollection
+          .where('businessId', isEqualTo: liveCampaign.get('businessId'))
           .where('campaignId', isEqualTo: liveCampaign.id)
           .snapshots(),
       builder: (context, snapshot) {
@@ -1944,6 +1949,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   Widget _submittedZoneAlert(DocumentSnapshot liveCampaign) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _zonesCollection
+          .where('businessId', isEqualTo: liveCampaign.get('businessId'))
           .where('campaignId', isEqualTo: liveCampaign.id)
           .where('status', isEqualTo: 'submitted')
           .snapshots(),
@@ -2538,6 +2544,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: FirebaseFirestore.instance
                   .collection('campaignZones')
+                  .where('businessId', isEqualTo: liveCampaign.get('businessId'))
                   .where('campaignId', isEqualTo: liveCampaign.id)
                   .limit(10)
                   .snapshots(),
