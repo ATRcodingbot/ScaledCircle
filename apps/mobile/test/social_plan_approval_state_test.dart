@@ -33,8 +33,8 @@ void main() {
       view.draftPosts,
       16,
     ); // Eight ideas contain sixteen independent platform drafts.
-    expect(view.primaryAction, 'Review Content');
-    expect(view.contentAction, 'Review Content');
+    expect(view.primaryAction, 'Upcoming Posts');
+    expect(view.contentAction, 'Upcoming Posts');
     expect(view.count('scheduled'), 0);
     expect(p['items'], plan()['items']);
     expect(
@@ -95,9 +95,9 @@ void main() {
       expect(find.text('Scheduled versions: 0'), findsOneWidget);
       expect(find.text('Review 30-Day Plan'), findsNothing);
       expect(find.text('View Schedule'), findsNothing);
-      await tester.ensureVisible(find.text('Review Content'));
+      await tester.ensureVisible(find.text('Upcoming Posts'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Review Content'));
+      await tester.tap(find.text('Upcoming Posts'));
       expect(reviews, 1);
       expect(tester.takeException(), isNull);
       await show(true);

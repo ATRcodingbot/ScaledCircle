@@ -11,3 +11,15 @@ Validation: 57 focused backend/emulator tests and 42 Flutter tests passed. Seven
 Production read-only context confirmed Attractive Remodel's approved eight-item strategy, its maintained services and website destination. No policy authorization, post approval, scheduling, provider publication, financial or geography mutation has been performed for this release verification. Live automatic publication remains an attended owner-authorization plus naturally scheduled provider-evidence gate. New mobile artifacts are not yet built.
 
 Related pending map source corrections are retained in this commit: explicit manual/service-area controls, half-hour planning minimum, address-format retry bounded to the callable time budget, and customer-safe workload errors. Social deployment does not select mapping Functions. Their full production retest is separate.
+
+## Production deployment and owner preview
+
+Runtime source `d8d8928b671218ceb905b540f3dc2b909c980222` is pushed. Nine exact selectors deployed successfully; all existing selected environments, secret bindings and service accounts were preserved. 245 unselected Function revisions remain unchanged. Rules remain `eabb947e-4e2b-41ca-a4e2-ef993e4dd3e8`.
+
+Revisions: `manageautomaticsocialpublishingv1-00001-juh`, `changescheduledsocialpostv1-00001-soz`, `runmanagedsocialpreparationv1-00001-vop`, `runmanagedsocialvisualgenerationv1-00001-mug`, `previewcustomersocialpostv1-00021-tiv`, `preparecustomersocialpostv1-00022-son`, `approveandschedulecustomersocialpostv1-00021-lef`, `runcustomermetapublisherv1-00012-wuv`, `getsocialoperationsworkspace-00026-vur`.
+
+Both new Cloud Scheduler jobs are ENABLED at 15-minute preparation / five-minute generation cadences. Existing publication remains every five minutes. At the first readback new jobs had not yet attempted execution; registration alone is not proof of a completed business cycle. No manual trigger was used.
+
+Initial Hosting `sites/scaled-circle/versions/c115ce823518f2d2` matched the local production main.dart.js hash. The real Attractive Remodel owner session opened the server-derived authorization preview successfully: Facebook/Instagram, two posts/week/channel, saved services and website, through October 18 local time. The final authorization button was deliberately left unsubmitted. Browser review found residual manual-review labels; this client-only follow-up changes them to Upcoming Posts and strategy-oriented wording. Its two focused Flutter suites passed (see local managed-label-tests.log).
+
+Founder test: Social Manager → Review & Authorize Strategy → inspect and authorize exact scope → Upcoming Posts. Let the real workers prepare and schedule without individual approval. Inspect/edit/reschedule/cancel optionally; Pause Publishing must prevent new scheduling and new provider creation, and Resume restores current authority. Wait for actual due-time publication and provider reconciliation before recording end-to-end production PASS. Do not infer publication from scheduling or worker registration.

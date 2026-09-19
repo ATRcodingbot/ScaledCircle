@@ -126,17 +126,17 @@ class SocialPlanPresentation {
       : !allApproved
       ? 'Review 30-Day Plan'
       : draftPosts > 0
-      ? 'Review Content'
+      ? 'Upcoming Posts'
       : (count('scheduled') ?? 0) > 0
       ? 'View Schedule'
       : (count('published') ?? 0) > 0
       ? 'View Results'
-      : 'Review Content';
+      : 'Upcoming Posts';
 
   String? get contentAction => (count('scheduled') ?? 0) > 0
       ? 'View Schedule'
       : draftPosts > 0
-      ? 'Review Content'
+      ? 'Upcoming Posts'
       : null;
 }
 

@@ -283,7 +283,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               '30-Day Plan Approved. Review the draft posts next.',
             ),
             action: SnackBarAction(
-              label: 'Review Content',
+              label: 'Upcoming Posts',
               onPressed: () {
                 final workspace = _workspace;
                 if (workspace != null) _reviewSavedPlans(workspace);
@@ -1048,7 +1048,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           ? [
               Text(
                 state == 'scheduled'
-                    ? 'Nothing scheduled. Preview and approve a finished post to schedule it.'
+                    ? 'Nothing scheduled. Authorize automatic publishing for routine posts, or schedule a finished post individually.'
                     : 'No ScaledCircle-published posts recorded yet.',
               ),
             ]
@@ -1073,7 +1073,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 alignment: Alignment.centerLeft,
                 child: Chip(label: Text('Private Beta')),
               ),
-              const Text('Preview → Approve & Schedule → Published → Measure'),
+              const Text('Authorize Strategy → Upcoming Posts → Published → Measure'),
               const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
@@ -1607,7 +1607,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                           workspace.runtimeStatus,
                         ).allApproved
                       ? (presentation.draftPosts > 0
-                            ? 'Review Content'
+                            ? 'Upcoming Posts'
                             : 'View Results')
                       : 'Review 30-Day Plan',
                 ),
@@ -2094,7 +2094,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Open a draft, prepare its creative and review content quality. Automated checks cover wording, relevance, repetition and timing. You review the actual image and claims before approval. Nothing changes on your connected accounts during review.',
+                  'Inspect upcoming posts or resolve items needing attention. Automated checks cover wording, relevance, repetition and timing. Routine posts within your authorized strategy schedule automatically. Previewing a post does not change it.',
                 ),
                 const SizedBox(height: 12),
                 Wrap(

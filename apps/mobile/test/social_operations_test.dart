@@ -10,7 +10,7 @@ void main() {
     expect(screen, contains('Social Manager'));
     expect(
       screen,
-      contains('Preview → Approve & Schedule → Published → Measure'),
+      contains('Authorize Strategy → Upcoming Posts → Published → Measure'),
     );
     expect(screen, contains('Your accounts. Your approval.'));
     expect(screen, contains('SocialConnectionCard'));
