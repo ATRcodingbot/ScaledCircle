@@ -806,6 +806,28 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                   expandedCrossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _line('Last action', a['lastAction']),
+                    if ([
+                      'lead_generation',
+                      'workforce_recruiter',
+                      'growth_strategist',
+                    ].contains(a['type'])) ...[
+                      _line(
+                        'Last research run',
+                        _time(
+                          (_list(d['runs'])..sort(
+                                (a, b) => ((b['createdAt'] as num?) ?? 0)
+                                    .compareTo((a['createdAt'] as num?) ?? 0),
+                              ))
+                              .firstOrNull?['completedAt'],
+                        ),
+                      ),
+                      _line(
+                        'Next eligible research',
+                        d['researchPaused'] == true
+                            ? 'Paused'
+                            : _time(d['nextResearchAfter']),
+                      ),
+                    ],
                     _line('Result', a['result']),
                     _line('Next action', a['nextAction']),
                     const Text('External action needs approval'),

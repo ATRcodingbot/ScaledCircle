@@ -122,7 +122,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
 
         }
       }
-      tx.update(ref,{status:'completed',...(customerContext?.researchVersion?{discoveryVersion:customerContext.researchVersion,discoveryChecks:discovered.checks}:{}),serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,newProspectCount:records.filter(r=>r.observation&&!r.old.exists).length,duplicatesExcludedCount,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
+      tx.update(ref,{status:'completed',...(customerContext?.researchVersion?{discoveryVersion:customerContext.researchVersion,discoveryChecks:discovered.checks}:{}),serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,newProspectCount:records.filter(r=>r.observation&&!r.old.exists).length,duplicatesExcludedCount:duplicatesExcludedCount+records.filter(r=>r.observation&&r.old.exists).length,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
       tx.set(db.doc('agentHealth/'+target),{researchEnabled:true,nextResearchAfter:customer?null:Date.parse(day(started)+'T13:00:00Z')+86400000,lastResearchRunId:runId,updatedAt:FieldValue.serverTimestamp()},{merge:true});
       if(!pref.exists)tx.create(pref.ref,{businessUid:target,...preferences(),updatedAt:FieldValue.serverTimestamp()});
     });

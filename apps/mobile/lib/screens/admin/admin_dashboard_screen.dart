@@ -1032,6 +1032,17 @@ class AdminOperationsContent extends StatelessWidget {
       ),
       const SizedBox(height: 28),
       Text('Administration', style: Theme.of(context).textTheme.headlineSmall),
+      const Card(
+        child: ListTile(
+          leading: Icon(Icons.people_outline),
+          title: Text('Delegating day-to-day work'),
+          subtitle: Text(
+            'Add assistants through the Business workspace Team settings and grant only the responsibilities they need. '
+            'Workspace access does not grant platform Admin, payouts, billing or security control. '
+            'Keep platform-level incidents with an authorized Admin.',
+          ),
+        ),
+      ),
       const SizedBox(height: 12),
       LayoutBuilder(
         builder: (context, constraints) {

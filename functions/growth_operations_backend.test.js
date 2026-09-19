@@ -112,3 +112,12 @@ test('internal notification view excludes unrelated tenants and non-growth accou
  await service.run();await db.doc('notifications/unrelated').set({userId:'other',type:'agent_daily_brief',title:'private'});await db.doc('notifications/billing').set({userId:'owner',type:'invoice_paid',title:'private billing'});
  const view=await service.load();assert.equal(view.notifications.length,2);assert.ok(view.notifications.every(n=>!n.title.includes('private')));assert.ok(view.notifications.every(n=>n.userId===undefined));
 });
+test('daily internal rechecks record zero new prospects and real deduplicated observations',async()=>{
+ const first=await service.run();const original=(await db.doc('agentRuns/'+first.runId).get()).data();
+ assert.equal(original.newProspectCount,6);assert.equal(original.duplicatesExcludedCount,0);
+ clock+=86400000;const second=await service.run();const next=(await db.doc('agentRuns/'+second.runId).get()).data();
+ assert.equal(next.newProspectCount,0);assert.equal(next.duplicatesExcludedCount,6);assert.equal(next.sourceChecks,6);
+ assert.equal(next.leaseUntil,0);assert.equal(next.externalMutationEnabled,false);
+ assert.deepEqual((await db.doc('agentRuns/'+first.runId).get()).data(),original);
+ assert.equal((await db.collection('agentProspects').get()).size,6);
+});
