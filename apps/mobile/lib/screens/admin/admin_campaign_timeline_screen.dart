@@ -13,6 +13,7 @@ class AdminCampaignTimelineScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AdminRoleGate(
+    allowOperationsRead: true,
     builder: (context) => Scaffold(
       appBar: AppBar(title: const Text('Campaign timeline')),
       body: FutureBuilder<AdminCampaignTimeline>(

@@ -14,7 +14,7 @@ class _AdminRoleManagementScreenState extends State<AdminRoleManagementScreen> {
   final _email = TextEditingController();
   final _reason = TextEditingController();
   final _replacementUid = TextEditingController();
-  String _action = 'promote';
+  String _action = 'grant_operations';
   bool _working = false;
   String? _result;
 
@@ -32,10 +32,14 @@ class _AdminRoleManagementScreenState extends State<AdminRoleManagementScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          '${_action == 'promote' ? 'Promote' : 'Demote'} administrator?',
+          _action.contains('operations')
+              ? 'Update read-only operations access?'
+              : '${_action == 'promote' ? 'Promote' : 'Demote'} administrator?',
         ),
         content: Text(
-          _action == 'promote'
+          _action.contains('operations')
+              ? 'This grants or revokes 30-day read-only platform operations access. Normal role and workspace permissions remain unchanged. No billing, payout, secret, security or publishing control is granted.'
+              : _action == 'promote'
               ? 'This grants application administrator authority. No product entitlement is created.'
               : 'Demotion requires another administrator whose Admin Dashboard login was recently verified.',
         ),
@@ -61,6 +65,7 @@ class _AdminRoleManagementScreenState extends State<AdminRoleManagementScreen> {
         'email': _email.text.trim(),
         'action': _action,
         'reason': _reason.text.trim(),
+        'requestId': 'ops_${DateTime.now().microsecondsSinceEpoch}',
       };
       if (_action == 'demote') {
         data['replacementAdminUid'] = _replacementUid.text.trim();
@@ -72,7 +77,9 @@ class _AdminRoleManagementScreenState extends State<AdminRoleManagementScreen> {
       if (mounted) {
         setState(
           () => _result = response['changed'] == true
-              ? 'Administrator role updated and audited.'
+              ? _action.contains('operations')
+                    ? 'Operations access updated and audited. Read-only page: /#/admin/operations'
+                    : 'Administrator role updated and audited.'
               : 'No role change was required.',
         );
       }
@@ -109,6 +116,14 @@ class _AdminRoleManagementScreenState extends State<AdminRoleManagementScreen> {
         DropdownButtonFormField<String>(
           initialValue: _action,
           items: const [
+            DropdownMenuItem(
+              value: 'grant_operations',
+              child: Text('Grant read-only operations (30 days)'),
+            ),
+            DropdownMenuItem(
+              value: 'revoke_operations',
+              child: Text('Revoke read-only operations'),
+            ),
             DropdownMenuItem(
               value: 'promote',
               child: Text('Promote to administrator'),

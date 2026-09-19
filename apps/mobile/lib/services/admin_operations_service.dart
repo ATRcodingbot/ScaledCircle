@@ -6,13 +6,50 @@ class AdminOperationsService {
           functions ?? FirebaseFunctions.instanceFor(region: 'us-east1');
   final FirebaseFunctions _functions;
 
-  Future<AdminOperationsSnapshot> loadOverview() async {
+  Future<AdminOperationsSnapshot> loadOverview({
+    bool includeInternalWorkspace = true,
+  }) async {
     final result = await _functions
         .httpsCallable('getAdminOperationsOverview')
         .call<Map<Object?, Object?>>();
-    return AdminOperationsSnapshot.fromMap(
-      Map<String, dynamic>.from(result.data),
-    );
+    final data = Map<String, dynamic>.from(result.data);
+    if (includeInternalWorkspace) {
+      try {
+        final internal = await _functions
+            .httpsCallable('getGrowthDogfoodWorkspaceV1')
+            .call<Map<Object?, Object?>>();
+        final view = Map<String, dynamic>.from(internal.data);
+        final runs = _maps(view['runs']);
+        data['launch'] = {
+          ..._map(data['launch']),
+          'internalGrowth': {
+            'status': view['researchPaused'] == true ? 'paused' : 'available',
+            'nextResearchAfter': view['nextResearchAfter'],
+            'lastRun': runs.isEmpty
+                ? null
+                : {
+                    for (final key in [
+                      'id',
+                      'status',
+                      'completedAt',
+                      'newProspectCount',
+                      'duplicatesExcludedCount',
+                      'unavailableSources',
+                      'leaseUntil',
+                    ])
+                      key: runs.first[key],
+                  },
+            'summary': _map(view['summary']),
+          },
+        };
+      } catch (_) {
+        data['launch'] = {
+          ..._map(data['launch']),
+          'internalGrowth': {'status': 'unavailable'},
+        };
+      }
+    }
+    return AdminOperationsSnapshot.fromMap(data);
   }
 
   Future<AdminCampaignTimeline> loadCampaignTimeline(String campaignId) async {
@@ -165,6 +202,7 @@ DateTime? _date(Object? value) =>
 
 class AdminOperationsSnapshot {
   const AdminOperationsSnapshot({
+    this.launch = const {},
     required this.metrics,
     required this.exceptions,
     required this.activity,
@@ -173,9 +211,10 @@ class AdminOperationsSnapshot {
   });
   factory AdminOperationsSnapshot.fromMap(Map<String, dynamic> map) =>
       AdminOperationsSnapshot(
+        launch: _map(map['launch']),
         metrics: _map(
           map['metrics'],
-        ).map((key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0)),
+        ).map((key, value) => MapEntry(key, (value as num?)?.toInt())),
         exceptions: _maps(
           map['exceptions'],
         ).map(AdminOpsException.fromMap).toList(growable: false),
@@ -187,7 +226,8 @@ class AdminOperationsSnapshot {
         ).map(AdminOpsHealth.fromMap).toList(growable: false),
         partial: map['partial'] == true,
       );
-  final Map<String, int> metrics;
+  final Map<String, int?> metrics;
+  final Map<String, dynamic> launch;
   final List<AdminOpsException> exceptions;
   final List<AdminOpsActivity> activity;
   final List<AdminOpsHealth> health;

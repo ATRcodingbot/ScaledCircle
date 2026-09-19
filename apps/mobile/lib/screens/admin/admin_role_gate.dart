@@ -3,9 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class AdminRoleGate extends StatelessWidget {
-  const AdminRoleGate({required this.builder, super.key});
+  const AdminRoleGate({
+    required this.builder,
+    this.allowOperationsRead = false,
+    super.key,
+  });
 
   final WidgetBuilder builder;
+  final bool allowOperationsRead;
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +31,18 @@ class AdminRoleGate extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        if (snapshot.data?.data()?['role'] != 'admin') {
+        final profile = snapshot.data?.data();
+        final access = profile?['adminOperationsAccess'];
+        final operations =
+            allowOperationsRead &&
+            user.emailVerified &&
+            profile?['disabled'] != true &&
+            access is Map &&
+            access['mode'] == 'read_only' &&
+            access['expiresAtMs'] is num &&
+            (access['expiresAtMs'] as num) >
+                DateTime.now().millisecondsSinceEpoch;
+        if (profile?['role'] != 'admin' && !operations) {
           return const Scaffold(
             body: Center(child: Text('Administrator authority is required.')),
           );

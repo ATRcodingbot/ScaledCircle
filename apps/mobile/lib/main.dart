@@ -1,3 +1,4 @@
+import 'screens/admin/admin_operations_reader_screen.dart';
 import 'navigation/app_shell_identity.dart';
 import 'widgets/mobile_notification_coordinator.dart';
 import 'screens/jobs/live_work_certification_screen.dart';
@@ -454,6 +455,15 @@ class ScaledCircleApp extends StatelessWidget {
             notification: settings.arguments as LoginNotificationData?,
             child: const ScalerDashboardScreen(),
           ),
+        ),
+      );
+    }
+    if (route?.path == '/admin/operations') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const StartupSessionGate(
+          signedOut: LoginScreen(returnRoute: '/admin/operations'),
+          authenticatedChild: AdminOperationsReaderScreen(),
         ),
       );
     }

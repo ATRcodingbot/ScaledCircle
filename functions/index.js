@@ -5093,6 +5093,12 @@ async function requireTrustedAdmin(request) {
   }
 }
 
+async function requireOperationsReader(request) {
+  const context=await authenticatedUserContext(request,'Sign in to view operations.');
+  if(context.role!=='admin')context.authDisabled=(await getAuth().getUser(context.uid)).disabled;
+  try{return adminOperations.assertOperationsReader(context);}catch(error){throw adminOperationsHttpsError(error);}
+}
+
 /** Verified Admin-only Business access; never grants a subscription. */
 async function businessAccessApprovalCall(request, operation) {
   const actor = await requireTrustedAdmin(request);
@@ -5177,9 +5183,18 @@ function adminOpsReadHttpsError(error) {
 exports.getAdminOperationsOverview = onCall(
   {enforceAppCheck: false, maxInstances: 4},
   async (request) => {
-    await requireTrustedAdmin(request);
+    await requireOperationsReader(request);
     try {
-      return await adminOpsReadService.getOverview();
+      const overview = await adminOpsReadService.getOverview();
+      const launch = await require('./admin_launch_overview').load({db,
+        project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT});
+      launch.runtime = await require('./admin_launch_runtime').load({
+        project:process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT,
+        credential:require('firebase-admin/app').getApp().options.credential});
+      launch.paidWork = launch.runtime.paidWork || 'unavailable';
+      const socialWorker=launch.runtime.workers?.find(w=>w.name==='firebase-schedule-runManagedSocialPreparationV1-us-east1');
+      for(const business of launch.businesses)business.social.nextWorkerRun=socialWorker?.nextRunAt||null;
+      return {...overview, launch, partial:overview.partial || launch.unavailableSources.length > 0};
     } catch (error) {
       throw adminOpsReadHttpsError(error);
     }
@@ -5211,7 +5226,7 @@ exports.adminMarketRolloutV1 = onCall({enforceAppCheck:false,maxInstances:2,invo
 exports.getAdminCampaignTimeline = onCall(
   {enforceAppCheck: false, maxInstances: 4},
   async (request) => {
-    await requireTrustedAdmin(request);
+    await requireOperationsReader(request);
     try {
       return await adminOpsReadService.getCampaignTimeline(request.data?.campaignId);
     } catch (error) {

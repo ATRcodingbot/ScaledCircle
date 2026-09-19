@@ -158,3 +158,22 @@ test("admin authority collections remain server-only in rules and no bootstrap o
   assert.doesNotMatch(index, /registerSalesRepresentative|salesCommission|claimSalesReferral/);
   assert.equal(fs.existsSync("./scripts/bootstrap_first_admin.js"), false);
 });
+
+test('operations delegation is audited, revocable, expiring and never changes role or financial authority',async()=>{
+ const env=environment();const before=structuredClone(env.documents.get('users/target'));
+ const grant={email:'target@example.test',action:'grant_operations',reason:'Read-only launch operations',requestId:'ops_request_000001'};
+ await env.service.setAdminRole(grant,actor);
+ const profile=env.documents.get('users/target');assert.equal(profile.role,before.role);assert.equal(profile.companyName,before.companyName);
+ const reader={uid:'target',role:'business',isAdmin:false,emailVerified:true,user:profile};
+ assert.equal(admin.assertOperationsReader(reader,NOW).uid,'target');assert.throws(()=>admin.assertTrustedAdmin(reader));
+ assert.throws(()=>admin.assertOperationsReader({...reader,authDisabled:true},NOW));
+ assert.throws(()=>admin.assertOperationsReader(reader,NOW+31*86400000));
+ const writes=env.writes.length;await env.service.setAdminRole(grant,actor);assert.equal(env.writes.length,writes);
+ await assert.rejects(env.service.setAdminRole(grant,reader));
+ await env.service.setAdminRole({...grant,action:'revoke_operations',requestId:'ops_request_000002'},actor);
+ assert.throws(()=>admin.assertOperationsReader({...reader,user:env.documents.get('users/target')},NOW));
+ assert(env.writes.every(w=>w.path.startsWith('users/')||w.path.startsWith('adminAuditEvents/')));
+});
+test('workspace permissions and client claims never imply platform operations access',()=>{
+ for(const user of [{},{permissions:['admin','analytics','payments']},{adminOperationsAccess:{mode:'read_only'}},{adminOperationsAccess:{mode:'read_only',expiresAtMs:NOW+100},disabled:true}])assert.throws(()=>admin.assertOperationsReader({uid:'other',role:'business',emailVerified:true,user},NOW));
+});

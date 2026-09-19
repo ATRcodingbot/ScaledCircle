@@ -255,8 +255,9 @@ function timelineEvents({campaign, paymentRecords, eventRecords, completionRecor
 
 async function readCollection(db, name, failures) {
   try {
-    const snapshot = await db.collection(name).limit(QUERY_LIMIT).get();
-    return snapshot.docs.map((doc) => ({id: doc.id, data: doc.data() || {}}));
+    const snapshot = await db.collection(name).limit(QUERY_LIMIT + 1).get();
+    if (snapshot.docs.length > QUERY_LIMIT) failures.push(name);
+    return snapshot.docs.slice(0, QUERY_LIMIT).map((doc) => ({id: doc.id, data: doc.data() || {}}));
   } catch (_) {
     failures.push(name);
     return [];
@@ -327,17 +328,18 @@ function createAdminOpsReadService({db, FieldValue, now = () => Date.now()}) {
       paymentRecords: data.campaignPayments, eventRecords: data.jobEvents,
       completionRecords: data.campaignCompletions, earningRecords: data.scalerEarnings,
       supportRecords: data.supportCases}).slice(0, 20);
+    const missing = name => failures.includes(name);
     return {schemaVersion: OPS_SCHEMA_VERSION, generatedAt: now(), partial: failures.length > 0,
       unavailableSources: failures,
       metrics: {
-        businesses: users.filter((r) => text(r.data.role, 40).toLowerCase() === "business").length,
-        approvedScalers: users.filter((r) => scalerReportingState(r.data) === "approved").length,
-        pendingScalers: users.filter((r) => scalerReportingState(r.data) === "pending").length,
-        openCampaigns: campaigns.filter((r) => ["open", "active", "in_progress"].includes(
+        businesses: missing("users") ? null : users.filter((r) => text(r.data.role, 40).toLowerCase() === "business").length,
+        approvedScalers: missing("users") ? null : users.filter((r) => scalerReportingState(r.data) === "approved").length,
+        pendingScalers: missing("users") ? null : users.filter((r) => scalerReportingState(r.data) === "pending").length,
+        openCampaigns: missing("campaigns") ? null : campaigns.filter((r) => ["open", "active", "in_progress"].includes(
           text(r.data.status, 50).toLowerCase())).length,
-        awaitingReview: data.campaignCompletions.filter((r) => ["submitted", "verification_pending", "review_pending"]
+        awaitingReview: missing("campaignCompletions") ? null : data.campaignCompletions.filter((r) => ["submitted", "verification_pending", "review_pending"]
           .includes(text(r.data.status || r.data.reviewStatus, 60).toLowerCase())).length,
-        openSupportCases: data.supportCases.filter((r) => !["resolved", "closed"]
+        openSupportCases: missing("supportCases") ? null : data.supportCases.filter((r) => !["resolved", "closed"]
           .includes(text(r.data.status, 40).toLowerCase())).length,
         exceptionCount: exceptions.length,
       }, exceptions, recentActivity, health: healthFromIssues(exceptions, failures)};

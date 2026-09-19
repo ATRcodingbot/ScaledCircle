@@ -27,6 +27,17 @@ function assertTrustedAdmin(actor) {
   return actor;
 }
 
+function assertOperationsReader(actor, now = Date.now()) {
+  if (actor?.role === 'admin') return assertTrustedAdmin(actor);
+  const grant=actor?.user?.adminOperationsAccess;
+  if(!actor?.uid || actor.emailVerified!==true || actor.user?.disabled===true ||
+    actor.authDisabled===true || grant?.mode!=='read_only' ||
+    !Number.isFinite(grant.expiresAtMs) || grant.expiresAtMs<=now) {
+    throw new Error('trusted_admin_required');
+  }
+  return actor;
+}
+
 function createAdminOperationsService({db, auth, FieldValue, now = () => Date.now()}) {
   const timestamp = () => FieldValue.serverTimestamp();
 
@@ -52,6 +63,7 @@ function createAdminOperationsService({db, auth, FieldValue, now = () => Date.no
     assertTrustedAdmin(actor);
     const action = text(input?.action, 20).toLowerCase();
     const reason = text(input?.reason, 500);
+    if(['grant_operations','revoke_operations'].includes(action))return setOperationsAccess(input,actor);
     if (!["promote", "demote"].includes(action)) throw new Error("invalid_admin_role_action");
     if (!reason) throw new Error("admin_role_reason_required");
     const target = await resolveTarget(input);
@@ -104,6 +116,25 @@ function createAdminOperationsService({db, auth, FieldValue, now = () => Date.no
         occurredAt: at,
       });
       return {changed: true, uid: target.authUser.uid, role: nextRole};
+    });
+  }
+
+  async function setOperationsAccess(input, actor) {
+    assertTrustedAdmin(actor);
+    const reason=text(input?.reason,500), requestId=text(input?.requestId,80);
+    if(!reason || !/^[A-Za-z0-9_-]{16,80}$/.test(requestId))throw new Error('admin_role_reason_required');
+    const target=await resolveTarget(input);
+    if(target.authUser.emailVerified!==true || target.authUser.disabled===true)throw new Error('target_email_unverified');
+    const enabled=input.action==='grant_operations';
+    const auditRef=db.collection('adminAuditEvents').doc(stableId(['operations-access',actor.uid,requestId]));
+    return db.runTransaction(async tx=>{
+      const [before,audit]=await Promise.all([tx.get(target.profileRef),tx.get(auditRef)]);
+      if(audit.exists){const prior=audit.data();if(prior.targetUid!==target.authUser.uid||prior.enabled!==enabled)throw new Error('invalid_admin_role_action');return {changed:false};}
+      if(before.data()?.role==='admin')throw new Error('invalid_admin_role_action');
+      const expiresAtMs=enabled?now()+30*86400000:0;
+      tx.update(target.profileRef,{adminOperationsAccess:{mode:enabled?'read_only':'revoked',expiresAtMs,grantedBy:actor.uid},updatedAt:timestamp()});
+      tx.create(auditRef,{schemaVersion:SCHEMA_VERSION,eventType:enabled?'operations_read_granted':'operations_read_revoked',targetUid:target.authUser.uid,enabled,expiresAtMs,reason,performedBy:actor.uid,occurredAt:timestamp()});
+      return {changed:true,uid:target.authUser.uid,mode:enabled?'read_only':'revoked',expiresAtMs};
     });
   }
 
@@ -165,4 +196,4 @@ function createAdminOperationsService({db, auth, FieldValue, now = () => Date.no
 
 module.exports = {SCHEMA_VERSION, SUPPORT_EMAIL, ACTIONABLE_SEVERITIES,
   ADMIN_READINESS_MAX_AGE_MS, text, normalizedEmail, stableId,
-  assertTrustedAdmin, createAdminOperationsService};
+  assertTrustedAdmin, assertOperationsReader, createAdminOperationsService};

@@ -6578,6 +6578,21 @@ exports.getLegalConsentStatus = onCall(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function readText(value, maximumLength = 500) {
   if (typeof value !== "string") {
     return "";

@@ -183,7 +183,7 @@ test("Admin Ops callables require trusted Admin authority and expose no secrets"
     "updateAdminSupportCaseStatus"]) {
     const start = source.indexOf(`exports.${name}`);
     assert.notEqual(start, -1);
-    assert.match(source.slice(start, start + 650), /requireTrustedAdmin\(request\)/);
+    assert.match(source.slice(start, start + 650), name === "updateAdminSupportCaseStatus" ? /requireTrustedAdmin\(request\)/ : /requireOperationsReader\(request\)/);
   }
   const readModel = fs.readFileSync(path.join(__dirname, "admin_ops_read_model.js"), "utf8");
   assert.doesNotMatch(readModel, /STRIPE_(?:LIVE|TEST|SECRET)|SMTP_PASSWORD|OPENAI_API_KEY|CENSUS_API_KEY/);

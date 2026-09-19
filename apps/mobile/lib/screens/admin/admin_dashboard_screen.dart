@@ -1,3 +1,4 @@
+import 'admin_launch_overview.dart';
 import 'admin_market_rollout_screen.dart';
 import 'package:flutter/material.dart';
 import '../../config/app_environment.dart';
@@ -72,7 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const Flexible(child: ScaledCircleBrand(compact: true)),
                   if (MediaQuery.sizeOf(context).width >= 720) ...[
                     const SizedBox(width: 12),
-                    const Text('ScaledCircle Command Center'),
+                    const Text('ScaledCircle Launch Operations'),
                   ],
                 ],
               ),
@@ -635,11 +636,12 @@ class AdminOperationsContent extends StatelessWidget {
           onTap: onOpenConfiguration,
         ),
       ),
-      const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          'OAuth verification, release candidates, and scheduler cycle status are not reported in this overview. Open the relevant operations page to review its available evidence.',
-        ),
+      AdminLaunchOverview(
+        data: snapshot.launch,
+        onBilling: onOpenSubscriptions,
+        onProviders: onOpenConfiguration,
+        onAgents: onOpenAgenticGrowth,
+        onSocial: onOpenSocialOperations,
       ),
       const SizedBox(height: 24),
       Text('Recent activity', style: Theme.of(context).textTheme.headlineSmall),
@@ -681,7 +683,7 @@ class AdminOperationsContent extends StatelessWidget {
           leading: const Icon(Icons.hub_outlined),
           title: const Text('Social Operations — Beta'),
           subtitle: const Text(
-            'Connections, publish queue, performance collection, and provider-free safety state.',
+            'Connections, upcoming posts, publication results and provider health.',
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: onOpenSocialOperations,
@@ -1037,7 +1039,7 @@ class AdminOperationsContent extends StatelessWidget {
           leading: Icon(Icons.people_outline),
           title: Text('Delegating day-to-day work'),
           subtitle: Text(
-            'Add assistants through the Business workspace Team settings and grant only the responsibilities they need. '
+            'Use Team → Custom for each authorized workspace: Analytics, View customers & leads, View schedule, and View all internal jobs. Add editing only when required. '
             'Workspace access does not grant platform Admin, payouts, billing or security control. '
             'Keep platform-level incidents with an authorized Admin.',
           ),

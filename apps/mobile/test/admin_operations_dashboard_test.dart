@@ -98,7 +98,7 @@ void main() {
       expect(billing, 1);
       expect(providers, 1);
       expect(
-        find.textContaining('OAuth verification, release candidates'),
+        find.textContaining('Gmail restricted-scope review'),
         findsOneWidget,
       );
       await tester.scrollUntilVisible(
