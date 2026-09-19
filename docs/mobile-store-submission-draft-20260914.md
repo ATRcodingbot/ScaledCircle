@@ -81,4 +81,3 @@ Declaration worksheet, to reconcile against the final SDK/binary inventory befor
 Native purchase disposition remains existing-account companion/status-only: no digital Checkout, upgrade, add-on or external purchase/portal CTA in native. Cancellation remains available; web Stripe purchasing is unchanged. This is the selected engineering treatment, not Apple/Google review approval. Final binary navigation checks and store review remain outstanding.
 
 Final pair is not authorized for a changing source. Freeze still requires closure or explicit disposition of Social next-cycle content supply, remaining launch-ops evidence gaps, then one full release regression, clean local/origin match, and the one matched production pair. Google review and naturally due Social/Lead evidence must proceed independently, not via repeated builds.
-

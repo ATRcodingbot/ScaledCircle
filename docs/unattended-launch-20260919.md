@@ -34,3 +34,9 @@ Google exact four-scope declaration and verified branding remain preserved. Exis
 Native status-only subscription companion treatment preserved; web purchasing unchanged. Final screenshot, privacy/data safety questionnaires, truthful reviewer access, final-binary navigation and physical push evidence remain. Store metadata/recording drafts were updated to remove the already-closed Property regression as a blocker. No final native pair was created while Social content-supply and remaining launch evidence gaps remain.
 
 Admin coverage remains deliberately bounded: authoritative marketplace/support issue summary and specialist pages exist; a consolidated live release/OAuth/Connect/agent-health command center and delegated platform support role are not claimed. Do not infer launch PASS from zero issues in the limited read model.
+
+## Hosting readback
+
+Runtime/client source: 42dbbdd (full SHA available from Git). Hosting version sites/scaled-circle/versions/d50b051ea1a2b331. Served main.dart.js SHA-256 7a79d5d0b0958d1223098396b36d9c10ff1f8cc008f12d92e265738dc47246a3 matches the local release artifact. All production Function revisions and Rules were identical before and after this Hosting-only deployment. Rules remain eabb947e-4e2b-41ca-a4e2-ef993e4dd3e8.
+
+Authenticated production Admin loaded the new Operational health entry via Provider readiness. Existing August completion/earning exceptions remain visible; no historical record or earning was fabricated to clear them. No source-freeze or launch-ready claim is made.
