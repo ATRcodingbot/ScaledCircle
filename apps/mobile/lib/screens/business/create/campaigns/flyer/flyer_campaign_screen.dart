@@ -499,7 +499,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   String _campaignTypeLabel(String type) {
     switch (type) {
       case 'neighborhoodCanvassing':
-        return 'Neighborhood Canvassing';
+        return 'Door-to-Door Outreach';
       case 'flyer_distribution':
         return 'Flyer Distribution';
 
@@ -526,7 +526,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
   String _campaignTypeDescription(String type) {
     switch (type) {
       case 'neighborhoodCanvassing':
-        return 'Mapped, authorized outreach with automatic route tracking. No property photos required.';
+        return 'Speak with residents or businesses in the selected area. Route tracking verifies coverage.';
       case 'flyer_distribution':
         return 'Scalers distribute flyers throughout mapped neighborhoods.';
 

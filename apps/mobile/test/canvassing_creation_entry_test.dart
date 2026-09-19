@@ -18,7 +18,7 @@ void main() {
             .campaignType,
         'neighborhoodCanvassing',
       );
-      expect(find.text('Create Neighborhood Canvassing'), findsOneWidget);
+      expect(find.text('Create Door-to-Door Outreach'), findsOneWidget);
       await tester.dragUntilVisible(
         find.text('Create & Define Zones'),
         find.byType(ListView),

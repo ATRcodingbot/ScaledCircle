@@ -52,8 +52,8 @@ class CreateCampaignScreen extends StatelessWidget {
           _campaignCard(
             context,
             Icons.location_on,
-            "Neighborhood Canvassing",
-            "Generate leads using GPS verified field outreach.",
+            "Door-to-Door Outreach",
+            "Speak with residents or businesses in the selected area. Route tracking verifies coverage.",
             const CanvassingCampaignScreen(),
           ),
 
