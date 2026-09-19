@@ -9,7 +9,7 @@ test('zero-result completed research remains healthy; stale lease needs attentio
  assert.equal(research(null,null,20).status,'unavailable');
 });
 test('tenant binding and document identity survive embedded ids; private fields never returned',async()=>{
- const db=store({socialManagedPolicies:{alpha:{id:'policy-1',businessUid:'alpha',status:'active',secret:'DO_NOT_RETURN'}},socialManagedCycles:{alpha:{businessUid:'alpha',status:'complete',token:'DO_NOT_RETURN'}},
+ const db=store({socialManagedPolicies:{alpha:{id:'policy-1',businessUid:'alpha',status:'active',secret:'DO_NOT_RETURN'}},socialManagedCycles:{alpha:{businessUid:'alpha',status:'complete',token:'DO_NOT_RETURN',results:[{status:'needs_attention'}]}},
  customerResearchSchedules:{alpha:{businessUid:'alpha',lastStatus:'completed',lastRunId:'run1'}},
  'agentRuns/run1':{businessUid:'other',newProspectCount:99},
  'socialConnections/alpha/providers/facebook':{status:'connected_write',tokenHealth:'healthy',accessToken:'DO_NOT_RETURN'},
@@ -17,6 +17,8 @@ test('tenant binding and document identity survive embedded ids; private fields 
  const result=await load({db,now:20,project:'scaled-circle'});
  assert.equal(result.businesses[0].social.authorization,'active');
  assert.equal(result.businesses[0].social.scheduled,1);
+ assert.equal(result.businesses[0].social.needsAttention,1);
+ assert.equal(result.businesses[0].social.failedPublishingJobs,0);
  assert.equal(result.businesses[0].research.newOpportunities,null);
  assert.doesNotMatch(JSON.stringify(result),/DO_NOT_RETURN|accessToken/);
  assert.equal(result.payoutCertification.cashoutAndBankReceipt,'pending');

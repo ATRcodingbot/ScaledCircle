@@ -159,7 +159,7 @@ class AdminLaunchOverview extends StatelessWidget {
                     ListTile(
                       title: Text('Social worker: ${state(s['workerStatus'])}'),
                       subtitle: Text(
-                        'Last completed: ${date(s['lastRunAt'])}\nNext worker invocation: ${s['nextWorkerRun'] ?? 'Unavailable'}\nScheduled: ${count(s['scheduled'])} • Publishing: ${count(s['publishing'])}\nPublished: ${count(s['published'])} • Needs attention: ${count(s['needsAttention'])}',
+                        'Last completed: ${date(s['lastRunAt'])}\nNext worker invocation: ${s['nextWorkerRun'] ?? 'Unavailable'}\nScheduled: ${count(s['scheduled'])} • Publishing: ${count(s['publishing'])}\nPublished: ${count(s['published'])} • Last cycle needs attention: ${count(s['needsAttention'])}\nFailed publishing jobs: ${count(s['failedPublishingJobs'])}',
                       ),
                     ),
                     Text(

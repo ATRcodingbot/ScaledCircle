@@ -68,7 +68,8 @@ async function load({db,now=Date.now(),paidWorkEnabled=null,project=null}) {
         workerStatus:cycle?.leaseUntil>0&&cycle.leaseUntil<now?'stale_lease':label(cycle?.status)||'unavailable',
         nextWorkerRun:null,connections,
         scheduled:count(own,j=>j.status==='scheduled'),publishing:count(own,j=>['publishing','processing'].includes(j.status)),
-        published:count(own,j=>j.status==='published'),needsAttention:count(own,j=>['failed','blocked','needs_attention'].includes(j.status)),
+        published:count(own,j=>j.status==='published'),needsAttention:Array.isArray(cycle?.results)?cycle.results.filter(r=>r.status==='needs_attention').length:null,
+        failedPublishingJobs:count(own,j=>['failed','blocked','needs_attention'].includes(j.status)),
         managedScheduled}};
   }));
   return {generatedAt:now,unavailableSources:[...new Set(unavailable)],boundedInventoryLimit:LIMIT-1,
