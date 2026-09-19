@@ -28,15 +28,13 @@ class SocialPlanOverview extends StatelessWidget {
                 : '${presentation.plans.length} saved plan${presentation.plans.length == 1 ? '' : 's'}',
           ),
           if (!refreshingApproval) ...[
-            Text('Content Ideas: ${presentation.ideas.length}'),
-            Text('Platform Versions: ${presentation.versions.length}'),
+            Text('Strategy content ideas: ${presentation.ideas.length}'),
+            Text('Strategy platform versions: ${presentation.versions.length}'),
             for (final platform in presentation.byPlatform.entries)
               Text(
-                '${socialProviderName(platform.key)}: ${platform.value.length} versions · ${platform.value.where((v) => !['approved', 'scheduled', 'published'].contains(v['status'])).length} drafts',
+                '${socialProviderName(platform.key)}: ${platform.value.length} strategy versions',
               ),
-            Text(
-              'Approved versions: ${presentation.versionsInState('approved')}',
-            ),
+
             Text(
               'Scheduled versions: ${presentation.count('scheduled') ?? 'Not confirmed'}',
             ),
