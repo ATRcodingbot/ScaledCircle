@@ -3604,7 +3604,7 @@ exports.runManagedSocialPreparationV1=onSchedule({schedule:'every 15 minutes',ti
       try{
         const editor=require('./social_customer_editor').createEditor({db,planEntitled:true});
         const preparation=require('./social_customer_preparation').createPreparation({db,editor,media:customerMediaStore()});
-        const owner=await getAuth().getUser(doc.id);
+        const owner=await require('firebase-admin/auth').getAuth().getUser(doc.id);
         if(owner.disabled||!owner.emailVerified)throw Error('managed_social_owner_unavailable');
         const cycle=require('./social_managed_cycle').createCycle({db,store:customerSchedulingStore(),preparation,editor,replenish:true});
         const result=await cycle.run(doc.id,{limit:1});
