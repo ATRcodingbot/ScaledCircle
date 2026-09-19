@@ -62,3 +62,12 @@ test('changed brand voice stops replenishment without rewriting the approved str
  assert.equal((await supply.replenish({db,uid:f.uid,now:f.now})).status,'context_changed');
  assert.equal((await rows('socialContentItems',f.uid)).length,0);
 });
+test('real scheduling readback accepts supplemental canonical draft without granting publication authority',async()=>{
+ const f=await fixture();await supply.replenish({db,uid:f.uid,now:f.now});
+ const [item]=await rows('socialContentItems',f.uid);
+ const store=require('../functions-social-operations/social_customer_scheduling').createStore({db,planEntitled:true,environment:'production',now:()=>f.now});
+ const preview=await store.preview(f.uid,{itemId:item.id,provider:'facebook'});
+ assert.equal(preview.version,1);assert.equal(preview.ready,false);
+ assert.match(preview.reviewedPost.variant.copy,/decks/);
+ assert.equal((await rows('socialGrowthJobs',f.uid)).length,0);
+});
