@@ -488,6 +488,57 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           ? 'Recruitment partners'
           : 'High-fit accounts',
   };
+  Widget _internalResearchStatus(Map<String, dynamic> data) {
+    final runs = _list(data['runs'])
+      ..sort(
+        (a, b) => ((b['createdAt'] as num?) ?? 0).compareTo(
+          (a['createdAt'] as num?) ?? 0,
+        ),
+      );
+    final latest = runs.isEmpty ? <String, dynamic>{} : runs.first;
+    final status = data['researchPaused'] == true
+        ? 'Paused'
+        : switch (latest['status']) {
+            'completed' => 'Active — awaiting next cycle',
+            'running' => 'Running',
+            'failed' || 'held' => 'Needs attention',
+            _ => 'No completed cycle recorded',
+          };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ScaledCircle research activity',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            _line('Status', status),
+            _line(
+              'Last run',
+              _time(latest['completedAt'] ?? latest['createdAt']),
+            ),
+            _line('Result', latest['result']),
+            _line('New opportunities', latest['newProspectCount']),
+            _line('Duplicates suppressed', latest['duplicatesExcludedCount']),
+            _line('Source checks', latest['sourceChecks']),
+            _line('Unavailable sources', latest['unavailableSources']),
+            _line(
+              'Next eligible run',
+              data['researchPaused'] == true
+                  ? 'Paused'
+                  : _time(data['nextResearchAfter']),
+            ),
+            const Text(
+              'A completed cycle may find no new opportunities. Research never authorizes outreach or publication.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _researchStatus(Map<String, dynamic> data) {
     final access = data['leadAccess'] is Map
         ? data['leadAccess'] as Map
@@ -649,7 +700,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        if (widget.customer) _researchStatus(d),
+        if (widget.customer) _researchStatus(d) else _internalResearchStatus(d),
         const Text(
           'Review what your team found and choose the next step. Research does not send messages, launch ads or approve Social posts.',
         ),

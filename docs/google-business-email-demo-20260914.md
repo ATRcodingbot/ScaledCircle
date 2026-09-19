@@ -19,7 +19,7 @@ The actual Prepare for verification form contains both saved scope justification
 
 Use a real screen recording, in English. Do not use a slideshow as proof of runtime behavior. Avoid unrelated recipients, message bodies, credentials and browser tabs.
 
-1. Show ScaledCircle's public homepage and public Privacy Policy. The Google-specific disclosure below still requires factual/policy review and publication before this segment can establish compliance.
+1. Show ScaledCircle's public homepage and public Privacy Policy at `https://scaledcircle.com/#/privacy`, including Connected Google Business Email. The disclosure was visibly verified in production September 19; it describes actual data handling, but is not itself evidence of organization-wide Limited Use compliance or Google's approval.
 2. Show the authenticated Business Email page for the intended Business. Explain the separate Read leads and Send approved email capabilities. Existing Attractive Remodel must remain connected.
 3. Show the actual OAuth consent grant, ScaledCircle branding, exact requested permissions and the client ID in Google's address bar. Use an existing truthful recording, or a separately authorized verification account. Do not revoke/reconnect Attractive Remodel just to manufacture this segment. The existing connected-state view is not evidence of a fresh grant.
 4. Show the saved Email Campaigns view and the existing campaign's Review Campaign screen. This initial review loads saved application records. Show the reviewed copy, approval/version context and saved results, concealing unrelated contacts. Do not press approval, send, schedule, resume, discovery or refresh actions.
@@ -29,7 +29,7 @@ Use a real screen recording, in English. Do not use a slideshow as proof of runt
 
 A recording of steps 1, 2 and 4 alone is insufficient: Google asks to see the grant flow and functionality enabled by each scope. No recording or uploaded video was fabricated in this work.
 
-## Proposed factual privacy disclosure — not yet published
+## Published factual privacy disclosure — production readback September 19
 
 When you connect Google Business Email, ScaledCircle uses your Google account identifier and email address to identify the authorized mailbox. With your permission, we read relevant conversations, including participants, subjects, message text, dates and message identifiers, to show inquiries and replies, review historical contact context and opt-out requests, and reconcile approved outreach. We store relevant conversation excerpts, replies, contact records and campaign records in your Business workspace. With Send permission, we send messages you explicitly approve, including campaigns approved for later delivery. While connected, background checks can update replies and process approved campaigns. Connection credentials are encrypted on our servers. Disconnecting removes ScaledCircle's stored connection credential and disables new operations using that credential; it does not delete previously saved records or revoke permission in your Google Account. Contact support to request deletion of stored information, subject to applicable retention requirements.
 
@@ -38,7 +38,7 @@ Source basis: functions-business-email/gmail.js, service.js, campaigns.js, campa
 ## Review gates
 
 - Real unlisted demo URL, including relevant OAuth clients and grant flow.
-- Published accurate Google data-use and deletion/retention disclosures.
+- Google data-use and deletion/retention disclosure is published and rendered. Policy/compliance review of downstream processing and applicable assessment requirements remains separate.
 - Google's required sensitive/restricted review and applicable independent security assessment. No assessment outcome is claimed.
 - Keep new-customer Gmail onboarding gated until the required review is satisfied. Existing authorized connections remain intact.
 

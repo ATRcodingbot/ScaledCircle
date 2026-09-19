@@ -2232,7 +2232,7 @@ exports.getSocialOperationsAdminSummary = onCall(
       throw new HttpsError("permission-denied", "Administrator authority is required.");
     }
     const [plans, jobs, connections, snapshots, configs, qualityAssessments,
-      pastPostRatings, replacementProposals] = await Promise.all([
+      pastPostRatings, replacementProposals, growthJobs] = await Promise.all([
       db.collection("socialContentPlans").count().get(),
       db.collection("socialPublishingJobs").count().get(),
       db.collectionGroup("providers").limit(100).get(),
@@ -2242,11 +2242,17 @@ exports.getSocialOperationsAdminSummary = onCall(
       db.collection("socialContentQualityAssessments").count().get(),
       db.collection("socialPastPostRatings").count().get(),
       db.collection("socialContentReplacementProposals").count().get(),
+      db.collection("socialGrowthJobs").limit(501).get(),
     ]);
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
       contentPlanCount: plans.data().count,
       publishJobCount: jobs.data().count,
+      growthPublicationHealth: {
+        ...require('./social_admin_health').summarizeJobs(growthJobs.docs.slice(0, 500).map(doc => doc.data())),
+        completeInventory: growthJobs.size <= 500,
+        checkedAt: Date.now(),
+      },
       connectionProjectionCount: connections.size,
       connections: connections.docs.map((doc) => {
         const data = doc.data();

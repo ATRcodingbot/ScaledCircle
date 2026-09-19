@@ -8,16 +8,16 @@ void main() {
       'lib/screens/admin/admin_social_operations_screen.dart',
     ).readAsStringSync();
     expect(screen, contains('Social connection operational health'));
-    expect(screen, contains('Token:'));
+    expect(screen, contains('Recorded token status:'));
     expect(screen, contains('Configure provider connection'));
     expect(
       screen,
       contains('AppEnvironmentConfig.socialOAuthCallback(provider)'),
     );
     expect(screen, contains("config['writeScopesEnabled'] == true"));
-    expect(screen, contains('External publishing'));
-    expect(screen, contains('Ad mutations'));
-    expect(screen, contains('Bulk email delivery'));
+    expect(screen, contains('Growth publication queue'));
+    expect(screen, contains('Legacy publish jobs'));
+    expect(screen, contains('This view does not execute posts'));
     expect(screen, contains('Tokens, passwords, private media'));
   });
 

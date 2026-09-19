@@ -4,6 +4,42 @@ import 'package:flutter_app/screens/business/growth_agents_screen.dart';
 import 'package:flutter_app/models/notification_destination.dart';
 
 void main() {
+  testWidgets(
+    'internal zero-result cycle remains active with truthful counters',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GrowthAgentsScreen(
+            loadOverride: () async => {
+                'summary': <String, dynamic>{},
+                'preferences': {'mode': 'important'},
+              'researchPaused': false,
+              'nextResearchAfter': 1790080000000,
+              'runs': [
+                {
+                  'createdAt': 1789990000000,
+                  'completedAt': 1789990010000,
+                  'status': 'completed',
+                  'result': 'No new opportunities found',
+                  'newProspectCount': 0,
+                  'duplicatesExcludedCount': 8,
+                  'sourceChecks': 8,
+                  'unavailableSources': 1,
+                },
+              ],
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Status: Active — awaiting next cycle'), findsOneWidget);
+      expect(find.text('New opportunities: 0'), findsOneWidget);
+      expect(find.text('Duplicates suppressed: 8'), findsOneWidget);
+      expect(find.text('Unavailable sources: 1'), findsOneWidget);
+      expect(find.textContaining('Next eligible run:'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final recorded in [true, false]) {
     testWidgets(
       'Lead research authoritative status and unknowns recorded=$recorded',
@@ -137,7 +173,17 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Individual Scaler candidates: 0'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('Individual Scaler candidates: 0'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Priority: Example City → Example County'),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('Discovery by service area'), findsOneWidget);
       expect(
         find.text('Priority: Example City → Example County'),

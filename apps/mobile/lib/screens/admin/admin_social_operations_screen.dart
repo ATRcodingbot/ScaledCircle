@@ -176,7 +176,13 @@ class _AdminSocialOperationsScreenState
             ),
             const SizedBox(height: 10),
             _metric('Content plans', value['contentPlanCount']),
-            _metric('Publish jobs', value['publishJobCount']),
+            _metric('Legacy publish jobs', value['publishJobCount']),
+            if (value['growthPublicationHealth'] is Map)
+              _publicationHealth(value['growthPublicationHealth'] as Map)
+            else
+              const Text(
+                'Current Growth publication inventory is unavailable. Legacy jobs are not the complete publishing queue.',
+              ),
             _metric(
               'Connection projections',
               value['connectionProjectionCount'],
@@ -214,14 +220,11 @@ class _AdminSocialOperationsScreenState
                   ),
                   subtitle: Text(
                     [
-                          connection['accountDisplayName']?.toString(),
-                          connection['handle']?.toString(),
-                          'Token: ${connection['tokenHealth'] ?? 'unknown'}',
-                          'Analytics: ${connection['analyticsAvailable'] == true ? 'Available' : 'Unavailable'}',
-                        ]
-                        .whereType<String>()
-                        .where((item) => item.isNotEmpty)
-                        .join(' · '),
+                      connection['accountDisplayName']?.toString(),
+                      connection['handle']?.toString(),
+                      'Recorded token status: ${connection['tokenHealth'] ?? 'unknown'}',
+                      'Analytics: ${connection['analyticsAvailable'] == true ? 'Available' : 'Unavailable'}',
+                    ].whereType<String>().where((item) => item.isNotEmpty).join(' · '),
                   ),
                 ),
               ),
@@ -233,22 +236,15 @@ class _AdminSocialOperationsScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Safety state',
+                      'Read-only operations view',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
-                    _state(
-                      'External publishing',
-                      value['externalPublishingEnabled'] == true,
+                    const Text(
+                      'This view does not execute posts, advertisements, email or provider cleanup. Publication depends on each workspace’s connection, exact approval and scheduled execution authority.',
                     ),
-                    _state('Ad mutations', value['adMutationsEnabled'] == true),
-                    _state(
-                      'Bulk email delivery',
-                      value['emailDeliveryEnabled'] == true,
-                    ),
-                    _state(
-                      'Provider cleanup mutations',
-                      value['providerCleanupMutationsEnabled'] == true,
+                    const Text(
+                      'Recorded connection status is not a fresh provider authentication test. Job history does not by itself prove scheduler health.',
                     ),
                     const Text(
                       'Tokens, passwords, private media, and content bodies are not shown.',
@@ -267,16 +263,44 @@ class _AdminSocialOperationsScreenState
     child: ListTile(
       title: Text(label),
       trailing: Text(
-        '${value ?? 0}',
+        '${value ?? 'Unknown'}',
         style: const TextStyle(fontWeight: FontWeight.w800),
       ),
     ),
   );
 
-  Widget _state(String label, bool enabled) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    leading: Icon(enabled ? Icons.warning_amber_outlined : Icons.lock_outline),
-    title: Text(label),
-    trailing: Text(enabled ? 'Enabled' : 'Off'),
+  Widget _publicationHealth(Map value) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Growth publication queue',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          Text(
+            '${value['observedJobs'] ?? 'Unknown'} jobs observed · ${value['published'] ?? 'Unknown'} published',
+          ),
+          Text(
+            '${value['scheduled'] ?? 'Unknown'} within schedule window · ${value['needsReview'] ?? 'Unknown'} need review',
+          ),
+          Text('${value['activeLeases'] ?? 'Unknown'} active job leases'),
+          Text('Last publication: ${_time(value['lastPublishedAt'])}'),
+          Text('Next queued publication: ${_time(value['nextPublishAt'])}'),
+          if (value['completeInventory'] != true)
+            const Text(
+              'Bounded inventory: additional historical jobs may exist.',
+            ),
+          const Text(
+            'Expired approvals require review. This page never retries or changes a post.',
+          ),
+        ],
+      ),
+    ),
   );
+
+  String _time(Object? value) => value is num
+      ? '${DateTime.fromMillisecondsSinceEpoch(value.toInt()).toLocal()} (device time)'
+      : 'Not recorded';
 }
