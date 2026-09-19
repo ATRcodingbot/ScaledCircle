@@ -461,9 +461,10 @@ class ScaledCircleApp extends StatelessWidget {
     if (route?.path == '/admin/operations') {
       return MaterialPageRoute(
         settings: settings,
-        builder: (_) => const StartupSessionGate(
-          signedOut: LoginScreen(returnRoute: '/admin/operations'),
-          authenticatedChild: AdminOperationsReaderScreen(),
+        builder: (_) => ProtectedRouteGate(
+          routeName: '/admin/operations',
+          audience: ProtectedRouteAudience.jobRoomParticipant,
+          builder: (_, _) => const AdminOperationsReaderScreen(),
         ),
       );
     }
