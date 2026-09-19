@@ -1866,7 +1866,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                     'Creative: ${variant['mediaRevisionId'] != null ? 'Prepared version shown in the post' : 'Text only'}',
                     'Call to action: ${variant['callToAction'] ?? 'None'}',
                     'Destination: ${variant['destinationUrl'] ?? 'None'}',
-                    'Publish: ${socialCustomerTime(context, preview['scheduledFor'])}',
+                    'Publish: ${socialCustomerTime(context, preview['scheduledFor'], label: preview['scheduledForLabel'])}',
                     'This approves only this exact post and future publish time.',
                   ].join('\n\n'),
                 ),
@@ -1993,7 +1993,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 child: ListTile(
                   title: const Text('30-Day Plan · Approved ✓'),
                   subtitle: Text(
-                    plan['goal']?.toString() ?? 'Approved strategy',
+                    socialEvidenceText(plan['goal'], 'Approved strategy'),
                   ),
                   trailing: TextButton(
                     onPressed: () =>
@@ -2013,7 +2013,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.calendar_month_outlined),
                   title: Text(
-                    plan['goal']?.toString() ?? '30-day content plan',
+                    socialEvidenceText(plan['goal'], '30-day content plan'),
                   ),
                   subtitle: Text(
                     '${(plan['itemCount'] as num?)?.toInt() ?? (plan['items'] is List ? (plan['items'] as List).length : 0)} calendar items · ${plan['status'] ?? 'ready for review'}',

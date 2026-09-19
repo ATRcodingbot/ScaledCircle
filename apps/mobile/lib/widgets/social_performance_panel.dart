@@ -23,11 +23,11 @@ class SocialPerformancePanel extends StatelessWidget {
                 Text(
                   p['baselineAt'] == null
                       ? 'No provider baseline captured.'
-                      : 'Baseline captured ${socialCustomerTime(context, p['baselineAt'])}',
+                      : 'Baseline captured ${socialCustomerTime(context, p['baselineAt'], label: p['baselineAtLabel'])}',
                 ),
                 if (p['currentAt'] != null)
                   Text(
-                    'Latest observation ${socialCustomerTime(context, p['currentAt'])}',
+                    'Latest observation ${socialCustomerTime(context, p['currentAt'], label: p['currentAtLabel'])}',
                   ),
                 const SizedBox(height: 12),
                 for (final m in (p['metrics'] as List? ?? []).whereType<Map>())

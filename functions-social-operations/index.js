@@ -302,6 +302,15 @@ exports.getSocialOperationsWorkspace = onCall(
       observations:await formatLearning.enrich(db,business.uid,learningObservations)});
 
 
+    const runtimeStatus = await require("./social_runtime_status").load(db, business.uid, {
+        plans: customerPlans, connections: safeConnections, automaticPublishing, timeZone:workspaceTimeZone, channels:safeConnections.map(c=>c.provider),
+      });
+    const performancePresentation=require('./social_performance_presentation').project(performance,customerPlans);
+    for(const platform of performancePresentation.platforms){
+      platform.published=runtimeStatus.available?runtimeStatus.posts.filter(p=>p.provider===platform.provider&&p.publicationStatus==='published').length:null;
+      platform.baselineAtLabel=require('./social_lifecycle_presentation').timeLabel(platform.baselineAt,runtimeStatus.timeZone);
+      platform.currentAtLabel=require('./social_lifecycle_presentation').timeLabel(platform.currentAt,runtimeStatus.timeZone);
+    }
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
       canonicalBusinessId: business.uid,
@@ -313,7 +322,7 @@ exports.getSocialOperationsWorkspace = onCall(
       publishingState: publishingPresentation,
       automaticPublishing,
       automaticPublishingCycle: (await db.doc('socialManagedCycles/'+business.uid).get()).data()||null,
-      performance: require('./social_performance_presentation').project(performance,customerPlans),
+      performance: performancePresentation,
       plans: customerPlans,
       cadence: {startingCopy:cadence.startingCopy,platforms:cadenceLearning},
       creativeLearning,
@@ -331,9 +340,7 @@ exports.getSocialOperationsWorkspace = onCall(
         assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),
         ratings: pastPostRatings.docs.map((doc) => ({id: doc.id, ...doc.data()})),
       }),
-      runtimeStatus: await require("./social_runtime_status").load(db, business.uid, {
-        plans: customerPlans, connections: safeConnections, automaticPublishing, timeZone:workspaceTimeZone, channels:safeConnections.map(c=>c.provider),
-      }),
+      runtimeStatus,
       contentQualityLearning: socialOperations.qualityLearningComparison({
         businessUid: business.uid,
         assessments: qualityAssessments.docs.map((doc) => ({id: doc.id, ...doc.data()})),
