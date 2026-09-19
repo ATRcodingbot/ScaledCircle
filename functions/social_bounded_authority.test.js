@@ -73,3 +73,11 @@ test('publisher rechecks pause, expiry, tenant and exact approved strategy', () 
   }
   assert.throws(()=>bounded.assertRuntimePolicy({...f,approval,plan:{...f.plan,strategy:{services:['roofs']}}}));
 });
+
+test('publication presentation requires actual provider activity and keeps ambiguous attempts in attention',()=>{
+ const {publicationPresentation}=require('../functions-social-operations/social_customer_scheduling');
+ assert.equal(publicationPresentation({status:'scheduled'},[],100),'scheduled');
+ assert.equal(publicationPresentation({status:'scheduled'},[{leaseUntil:200}],100),'publishing');
+ assert.equal(publicationPresentation({status:'scheduled'},[{leaseUntil:50}],100),'reconciliation_required');
+ assert.equal(publicationPresentation({status:'published'},[{leaseUntil:200}],100),'published');
+});

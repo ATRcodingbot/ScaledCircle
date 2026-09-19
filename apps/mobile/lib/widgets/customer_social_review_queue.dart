@@ -30,13 +30,14 @@ List<Map<String, dynamic>> socialReviewRows(
             'title': item['pillar'] ?? 'Social post',
             'strategyTitle': plan['goal'] ?? '30-Day Plan',
             'publicationStatus':
-                [
+                (variant['scheduling'] as Map?)?['publicationStatus'] ??
+                ([
                   'scheduled',
                   'publishing',
                   'published',
                 ].contains(variant['status'])
                 ? variant['status']
-                : null,
+                : null),
             'scheduledFor':
                 variant['scheduledFor'] ??
                 (variant['scheduling'] as Map?)?['scheduledFor'] ??
@@ -50,6 +51,7 @@ String socialQueueGroup(Map<String, dynamic> row) {
   if (row['publicationStatus'] == 'scheduled') {
     return 'Scheduled';
   }
+  if (row['publicationStatus'] != null) return 'Needs Attention';
   if (row['automaticMode'] == true && row['managedHold'] == null) {
     return row['automaticState'] == 'needs_attention'
         ? 'Needs Attention'

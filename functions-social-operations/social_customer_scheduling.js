@@ -121,6 +121,11 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
       const original=await context(null,uid,input);let inline=null,inlineError=null;
       if(!original.existingJob)try{inline=await require('./social_inline_creative').proposal({db,ctx:original});}catch(e){inlineError=e.message;}
       const ctx=inline?.ctx||original, result=readiness(ctx);
+      let publicationStatus=ctx.existingJob?.status||null;
+      if(publicationStatus==='scheduled'){
+        const steps=await db.doc('socialGrowthJobs/'+ctx.existingJob.id).collection('providerSteps').limit(20).get();
+        publicationStatus=publicationPresentation(ctx.existingJob,steps.docs.map(d=>d.data()),now());
+      }
       const managed=(await db.doc('socialManagedPolicies/'+uid).get()).data();
       result.automaticMode=false;
       try{require('./social_bounded_authority').assertRuntimePolicy({uid,policy:managed,plan:original.plan,
@@ -161,7 +166,7 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
         !inline&&!result.reviewCandidate&&result.reasons.some(r=>r.code==='creative')?'needs_creative':'needs_attention');
       return {...result,managedHold:original.item.managedHolds?.[input.provider]||null,jobId:ctx.existingJob?.id||null,version:original.version?.version,contentHash:original.version?.contentHash,reviewState:state,
         inlineCreativeApproval:inline?{digest:inline.digest,creativeSha256:inline.candidate.sha256,prospectiveVersion:inline.version.version}:null,
-        reviewCandidate:result.reviewCandidate||null,publicationStatus:ctx.existingJob?.status||null,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,
+        reviewCandidate:result.reviewCandidate||null,publicationStatus,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,
         reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {mediaOrigin:ctx.revision?.sourceOrigin||null,accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:inline?[]:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256,width:i.width,height:i.height}))||[],creativePrepared:ctx.revision?.preparation?.policy===require('./social_customer_media').MEDIA_POLICY,quality:ctx.quality||null,scheduledFor:result.scheduledFor}:null};
     },
     async approve(uid,input,{actorUid=uid,managedPolicyId=null}={}) {
@@ -275,4 +280,11 @@ function authorizeRuntime({approval,connection,config,uid,provider,environment,e
     throw Error('meta_customer_authority_changed');
   }
 }
-module.exports={SCHEMA,readiness,createStore,authorizeRuntime,hasPublishingScopes,connectionFromOwnedPath,messages};
+function publicationPresentation(job,steps,now=Date.now()){
+  if(job.status!=='scheduled'||!steps.length)return job.status;
+  if(steps.some(s=>!s.receipt&&s.leaseUntil>now))return 'publishing';
+  // A durable provider attempt without final job reconciliation is not a fresh
+  // scheduled post. Preserve its records and require safe reconciliation.
+  return 'reconciliation_required';
+}
+module.exports={SCHEMA,readiness,createStore,authorizeRuntime,hasPublishingScopes,connectionFromOwnedPath,messages,publicationPresentation};
