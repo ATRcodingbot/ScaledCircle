@@ -198,6 +198,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
     final live = _data?['mode'] == 'live';
     final ready = _data?['status'] == 'ready';
     final executionEnabled = _data?['executionEnabled'] == true;
+    final availableCents = (_data?['availableCents'] as num?) ?? 0;
     final op = _data?['operation'];
     final status = op is Map ? op['status'] : null;
     final label = switch (status) {
@@ -246,9 +247,13 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
                           'Cash-out is temporarily paused. Your earnings are preserved.')
                     : 'TEST cash-out is paused for certification.',
               ),
-            if (live && ready && executionEnabled)
+            if (live && ready)
               Text(
                 'Available to cash out: \$${(((_data?['availableCents'] as num?) ?? 0) / 100).toStringAsFixed(2)}',
+              ),
+            if (ready && availableCents <= 0)
+              const Text(
+                'Funds become available to cash out after approved earnings exist.',
               ),
             if (label != null) Text(label),
             if (_error != null) Text(_error!),
@@ -276,6 +281,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
                 status != 'pending' &&
                 status != 'needs_attention') ...[
               TextField(
+                enabled: availableCents > 0,
                 controller: _amount,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
@@ -286,7 +292,7 @@ class _ScalerCashoutCardState extends State<ScalerCashoutCard>
                 ),
               ),
               FilledButton(
-                onPressed: _busy ? null : _cashout,
+                onPressed: _busy || availableCents <= 0 ? null : _cashout,
                 child: const Text('Cash out'),
               ),
             ],

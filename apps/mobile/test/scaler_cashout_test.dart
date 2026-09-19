@@ -53,6 +53,51 @@ class FakeCashout implements ScalerCashoutService {
 
 void main() {
   testWidgets(
+    'ready zero-balance account keeps management but disables withdrawal',
+    (tester) async {
+      final service = FakeCashout()
+        ..data = {
+          'mode': 'live',
+          'status': 'ready',
+          'executionEnabled': true,
+          'availableCents': 0,
+          'setupRetryAllowed': true,
+        };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ScalerCashoutCard(service: service),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Payouts ready'), findsOneWidget);
+      expect(find.text(r'Available to cash out: $0.00'), findsOneWidget);
+      expect(
+        find.textContaining('after approved earnings exist'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Cash out'))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Manage payouts'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(service.requests, 0);
+      expect(service.setups, 0);
+    },
+  );
+  testWidgets(
     'production activation failure remains visible and disables another setup attempt',
     (tester) async {
       final service = FakeCashout()
