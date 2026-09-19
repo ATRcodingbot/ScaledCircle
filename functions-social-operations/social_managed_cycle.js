@@ -14,7 +14,7 @@ function candidates(plan,policy) {
   if(result.length>120)throw Error('managed_social_candidate_limit');
   return result;
 }
-function createCycle({db,store,preparation,editor,now=Date.now,leaseMillis=600000}) {
+function createCycle({db,store,preparation,editor,replenish=false,now=Date.now,leaseMillis=600000}) {
   return {async run(uid,{limit=2}={}) {
     if(!/^[A-Za-z0-9_-]{1,220}$/.test(uid)||!Number.isInteger(limit)||limit<1||limit>4)throw Error('managed_social_cycle_input');
     const ref=db.doc('socialManagedCycles/'+uid),token=crypto.randomUUID();
@@ -32,7 +32,14 @@ function createCycle({db,store,preparation,editor,now=Date.now,leaseMillis=60000
       const plan=(await db.doc('socialContentPlans/'+policy.planId).get()).data();
       const approval={businessUid:uid,planId:policy.planId,managedPolicyId:policy.id,managedStrategyDigest:policy.strategyDigest};
       bounded.assertRuntimePolicy({uid,policy,plan,approval,now:now()});
-      const queue=candidates(plan,policy);
+      let supply=null;
+      if(replenish)supply=await require('./social_managed_supply').replenish({db,uid,now:now()});
+      if(['history_incomplete','history_limit','context_changed','fresh_topics_exhausted'].includes(supply?.status)) {
+        throw Error('managed_social_supply_'+supply.status);
+      }
+      const extra=await require('./social_managed_supply').supplemental({db,uid,planId:policy.planId});
+      const known=new Set((plan.items||[]).map(i=>i.itemKey));
+      const queue=candidates({...plan,items:[...(plan.items||[]),...extra.filter(i=>!known.has(i.itemKey))]},policy);
       for(let n=0;n<Math.min(limit,queue.length);n++) {
         const input=queue[cursor%queue.length];cursor++;
         // Pause, revocation and strategy changes are checked between expensive
@@ -85,7 +92,7 @@ function createCycle({db,store,preparation,editor,now=Date.now,leaseMillis=60000
       await db.runTransaction(async tx=>{
         const current=(await tx.get(ref)).data();
         if(current?.token!==token)throw Error('managed_social_cycle_lease_changed');
-        tx.set(ref,{cursor,status:'complete',finishedAt:now(),leaseUntil:0,results},{merge:true});
+        tx.set(ref,{cursor,status:'complete',finishedAt:now(),leaseUntil:0,results,...(supply?{supply}: {})},{merge:true});
       });
       return {status:'complete',results};
     } catch(error) {

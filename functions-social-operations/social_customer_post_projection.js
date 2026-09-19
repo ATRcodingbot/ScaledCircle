@@ -15,6 +15,11 @@ async function load({db,uid,plans,store}) {
   const snapshot=await db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101).get();
   if(snapshot.size>100)throw Error('Social history needs a paginated review.');
   const hydrated=structuredClone(plans);
+  for(const plan of hydrated){
+    const extra=await require('./social_managed_supply').supplemental({db,uid,planId:plan.id});
+    const keys=new Set((plan.items||[]).map(i=>i.itemKey));
+    plan.items=[...(plan.items||[]),...extra.filter(i=>!keys.has(i.itemKey))];
+  }
   let count=0;
   for(const plan of hydrated)for(const item of plan.items||[]) {
     if(++count>60)throw Error('Too many proposed posts to review at once.');
