@@ -244,6 +244,15 @@ void main() {
         'active': true,
         'betaAccess': 'approved',
       });
+      await _adminSeed('marketProfiles/$uid', {
+        'role': 'business',
+        'selectionSource': 'explicit_user_selection',
+        'stateId': 'MD',
+      });
+      await _adminSeed('marketRollout/config', {
+        'schemaVersion': 'StateMarketRolloutV1',
+        'states': {'MD': 'ACTIVE'},
+      });
       const boundary = [
         {'latitude': 39.00, 'longitude': -76.62},
         {'latitude': 39.12, 'longitude': -76.50},
@@ -400,6 +409,7 @@ void main() {
       await _checkpoint('zone-query-started:$campaignId');
       final zones = await FirebaseFirestore.instance
           .collection('campaignZones')
+          .where('businessId', isEqualTo: uid)
           .where('campaignId', isEqualTo: campaignId)
           .get()
           .timeout(const Duration(seconds: 10));
@@ -462,6 +472,7 @@ void main() {
       debugPrint('campaign-zone-emulator: querying review zone');
       final finalZones = await FirebaseFirestore.instance
           .collection('campaignZones')
+          .where('businessId', isEqualTo: uid)
           .where('campaignId', isEqualTo: campaignId)
           .get();
       debugPrint(

@@ -74,3 +74,13 @@ Production Property history → selected map → Create Campaign Anyway opened F
 The published production Privacy Policy visibly contains the Google Business Email data-use/disconnect/retention disclosure. Exact scope justification and demo shot list are maintained in the two Google verification documents; real demo video and Google's review remain outstanding.
 
 Recurring research verification is delegated to the existing read-only heartbeat. The main repair session does not wait for, invoke, or reschedule a research cycle.
+
+## September 19 status overlay and campaign-map follow-up
+
+Status overlay source `70643a67aa344f9a75978752050e1e5b6361786c` was deployed to Hosting `sites/scaled-circle/versions/0fc2323312e13d2a` and `getsocialoperationsadminsummary-00003-pef`. Existing environment, secrets, service account and ingress were preserved; Rules remain `eabb947e-4e2b-41ca-a4e2-ef993e4dd3e8`. Production notifications opened the exact published Social post and Back returned to Notifications without approval/publication.
+
+Founder then explicitly authorized one unfunded, clearly labeled production QA draft for the selected Property territory. No financial, assignment or publication action was authorized. The actual editor exposed two additional boundaries: a pending zone attempted to read a nonexistent Firestore document; Use Analyzed Area supplied only a search boundary instead of an initial proposed polygon. The repair keeps unsaved geometry local and distinguishes the analyzed polygon from the optional manual drawing path. Flyer wizard return-to-review zone/location queries now include the canonical workspace predicate required by existing Rules.
+
+Validation: full Chrome/Auth/Firestore emulator catalog-to-draft-to-manual-zone-to-review flow passed; selected analyzed polygon/cancel/manual editor/revoked-account regression passed; 15 geometry/membership/native-policy Flutter tests passed; six-file analysis passed; generated-code verification passed. Emulator-only unavailable analysis falls back to an attempted write denied by production Rules; the production path already avoids that client fallback. No Rules relaxation is included.
+
+Production map repair deployment/browser verification and safe QA draft cleanup remain pending at this source checkpoint. The draft is explicitly QA/test-only, unfunded, and has no assigned Scaler, payment, completion, tracking session or earning. Do not claim final launch readiness from these tests.

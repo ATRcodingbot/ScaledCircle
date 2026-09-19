@@ -20,6 +20,9 @@ class CampaignAreaScreen extends StatefulWidget {
   final DocumentReference campaignReference;
   final Map<String, dynamic>? pendingZoneData;
   final List<Map<String, dynamic>> searchBoundary;
+  // A reviewed analysis selection is a proposed zone, not just a search bound.
+  // It remains unsaved until the owner explicitly chooses Save Zone.
+  final List<Map<String, dynamic>> initialArea;
   final int? materialQuantity;
 
   const CampaignAreaScreen({
@@ -27,6 +30,7 @@ class CampaignAreaScreen extends StatefulWidget {
     required this.campaignReference,
     this.pendingZoneData,
     this.searchBoundary = const [],
+    this.initialArea = const [],
     this.materialQuantity,
   });
 
@@ -67,6 +71,18 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
   }
 
   Future<void> _loadExistingArea() async {
+    // New zones have no Firestore document yet. Reading one would require
+    // ownership fields which do not exist; keep the proposal local until Save.
+    if (widget.pendingZoneData != null) {
+      _searchBoundary = _parsePoints(widget.searchBoundary);
+      final initial = _parsePoints(widget.initialArea);
+      if (initial.length >= 3) {
+        _inputPoints.addAll(initial);
+        _generatedArea = List<LatLng>.from(initial);
+      }
+      _loadingExistingArea = false;
+      return;
+    }
     try {
       final snapshot = await widget.campaignReference.get();
 
@@ -83,7 +99,12 @@ class _CampaignAreaScreenState extends State<CampaignAreaScreen> {
         if (_searchBoundary.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _mapController.move(_calculateCenter(_searchBoundary), 10);
+              _mapController.move(
+                _calculateCenter(
+                  _generatedArea.isNotEmpty ? _generatedArea : _searchBoundary,
+                ),
+                _generatedArea.isNotEmpty ? 15 : 10,
+              );
             }
           });
         }

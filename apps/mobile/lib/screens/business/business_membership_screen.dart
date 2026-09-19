@@ -656,7 +656,7 @@ class _BusinessMembershipScreenState extends State<BusinessMembershipScreen> {
                           scrollable: true,
                           title: const Text('Available Plans'),
                           content: const Text(
-                            'Starter — \$99/month · 1 total seat\nGrowth — \$299/month · 3 total seats\nScale — \$499/month · 5 total seats\nManaged Growth — Private Beta / Invite Only · \$999/month · 10 total seats\n\nYour complimentary access stays unchanged. Moving this grant to a paid plan is not currently available through membership management.',
+                            'Starter — \$99/month · 1 total seat\nGrowth — \$299/month · 3 total seats\nScale — \$499/month · 5 total seats\nManaged Growth — \$999/month · 10 total seats\n\nYour complimentary access stays unchanged. Moving this grant to a paid plan is not currently available through membership management.',
                           ),
                           actions: [
                             TextButton(

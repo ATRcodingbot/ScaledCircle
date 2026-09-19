@@ -823,6 +823,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
         final locationsSnapshot = await FirebaseFirestore.instance
             .collection('campaignLocations')
+            .where('businessId', isEqualTo: BusinessWorkspaceSession.businessIdFor(user.uid))
             .where('campaignId', isEqualTo: campaignReference.id)
             .get();
 
@@ -934,6 +935,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
 
       final zonesSnapshot = await FirebaseFirestore.instance
           .collection('campaignZones')
+          .where('businessId', isEqualTo: BusinessWorkspaceSession.businessIdFor(user.uid))
           .where('campaignId', isEqualTo: campaignReference.id)
           .get();
 

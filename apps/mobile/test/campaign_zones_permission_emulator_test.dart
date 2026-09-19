@@ -134,6 +134,9 @@ void main() {
         find.byType(CampaignAreaScreen),
       );
       expect(area.searchBoundary, boundary);
+      expect(area.initialArea, boundary);
+      expect(find.text('Polygon • 3 verification points'), findsOneWidget);
+      expect(find.textContaining('The saved area could not be loaded'), findsNothing);
       expect(area.pendingZoneData?['businessId'], uid);
       expect(area.pendingZoneData?['campaignId'], campaignId);
       expect(
@@ -145,6 +148,20 @@ void main() {
             .docs,
         isEmpty,
       );
+      // Manual drawing is distinct: it starts empty inside the same boundary.
+      await tester.ensureVisible(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Advanced Edit'));
+      await tester.tap(find.text('Advanced Edit'));
+      await tester.pumpAndSettle();
+      final manual = tester.widget<CampaignAreaScreen>(
+        find.byType(CampaignAreaScreen),
+      );
+      expect(manual.initialArea, isEmpty);
+      expect(manual.searchBoundary, boundary);
+      expect(find.text('Polygon • 0 verification points'), findsOneWidget);
       // A retained route must lose access when the account is no longer approved.
       await tester.pumpWidget(const SizedBox.shrink());
       await _adminSeed('users/$uid', {'role': 'business', 'active': false});

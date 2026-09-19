@@ -631,6 +631,7 @@ class CampaignZonesScreen extends StatelessWidget {
   Future<void> _createZone(
     BuildContext context, {
     bool skipNamePrompt = false,
+    bool useAnalyzedArea = false,
   }) async {
     final campaignData = campaign.data() as Map<String, dynamic>;
 
@@ -688,6 +689,7 @@ class CampaignZonesScreen extends StatelessWidget {
             campaignReference: zoneReference!,
             pendingZoneData: pendingZoneData,
             searchBoundary: _serviceAreaBoundary,
+            initialArea: useAnalyzedArea ? _serviceAreaBoundary : const [],
             materialQuantity: _materialQuantity,
           ),
         ),
@@ -1939,7 +1941,11 @@ class CampaignZonesScreen extends StatelessWidget {
                     onAdvancedEdit: () =>
                         _createZone(context, skipNamePrompt: true),
                     onUseAnalyzedArea: _hasTransferredAnalysisArea
-                        ? () => _createZone(context, skipNamePrompt: true)
+                        ? () => _createZone(
+                            context,
+                            skipNamePrompt: true,
+                            useAnalyzedArea: true,
+                          )
                         : null,
                   ),
 
