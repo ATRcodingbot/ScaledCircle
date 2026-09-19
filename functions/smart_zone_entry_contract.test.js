@@ -36,3 +36,10 @@ test("a resolved street address may use its server point for an around-address b
   assert.deepEqual(selected.center, {latitude: 39.29, longitude: -76.61});
   assert.deepEqual(selected.geometry, []);
 });
+
+test('workload request preserves the maintained half-hour to 192-hour range and useful errors',()=>{
+ for(const n of [.5,1,5,192])assert.equal(contract.workloadHours(n),n);
+ for(const n of [0,.49,193,NaN,Infinity])assert.throws(()=>contract.workloadHours(n),/campaign_workload_invalid/);
+ assert.match(contract.planningFailure(Error('campaign_workload_invalid')).message,/30 minutes/);
+ assert.match(contract.planningFailure(Error('selected_area_cannot_fit_workload_boundary')).message,/saved area is unchanged/);
+});

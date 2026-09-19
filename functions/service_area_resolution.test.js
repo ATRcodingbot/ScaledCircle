@@ -207,3 +207,17 @@ test("Census fallback supports city and ZCTA identities with honest source metad
     if (fixture.postcode) assert.match(response.results[0].sourceVintage, /ZCTA/);
   }
 });
+
+test('normal complete street input gets one same-address formatting fallback without invented results', async()=>{
+ const {addressQueryVariants}=require('./service_area_resolution');
+ const input='466 long towne ct glen burnie maryland 21061';
+ const variants=addressQueryVariants(input);
+ assert.deepEqual(variants,[input,'466 long towne Court, glen burnie, MD 21061']);
+ const queries=[],waits=[],db=fakeDb();
+ const result=await resolvePlace({query:input,db,now:1000,waitImpl:async ms=>waits.push(ms),fetchImpl:async url=>{
+  queries.push(new URL(url).searchParams.get('q'));
+  return {ok:true,json:async()=>queries.length===1?[]:[{...county,osm_type:'node',osm_id:99,addresstype:'house',geojson:null}]};
+ }});
+ assert.deepEqual(queries,variants);assert.equal(waits.length,1);assert.equal(result.results[0].id,'node-99');
+ assert.equal(result.results[0].geometry.length,0);
+});
