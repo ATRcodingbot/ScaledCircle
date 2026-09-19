@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_app/screens/public/public_landing_screen.dart';
@@ -36,7 +37,7 @@ void main() {
         'EVIDENCE YOU CAN REVIEW',
         'FOR SCALERS',
         'GROWTH TOOLS — BETA',
-        'SIMPLE PRICING',
+        if (kIsWeb) 'SIMPLE PRICING',
         'READY TO GROW LOCALLY?',
       ];
       var previous = -1.0;

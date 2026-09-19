@@ -106,10 +106,10 @@ void main() {
     expect(subscriptions, contains('Not available'));
     expect(subscriptions, contains('Revenue / MRR'));
     expect(subscriptions, contains('No Stripe or provider request'));
-    expect(health, contains('Stripe health telemetry'));
-    expect(health, contains('Advertising integrations'));
-    expect(health, contains('Direct Mail provider'));
-    expect(health, contains('exposes no secret metadata or values'));
+    expect(health, contains('Saved operational evidence'));
+    expect(health, contains('Missing evidence is not a healthy result'));
+    expect(health, contains('No provider health has been confirmed'));
+    expect(health, contains('They do not test a provider connection'));
     expect(health, isNot(contains('OPENAI_API_KEY')));
     expect(health, isNot(contains('CENSUS_API_KEY')));
   });
@@ -142,7 +142,7 @@ void main() {
   );
 
   test(
-    'Managed Growth stays invite-only while billing retains verified preview',
+    'Managed Growth enrollment retains verified purchase preview',
     () {
       final subscriptions = source(
         'lib/screens/business/subscription_screen.dart',
@@ -151,7 +151,7 @@ void main() {
       final managed = subscriptions.split("plan: 'managed_growth',").last;
       expect(
         managed.split('features: const').first,
-        contains('availableForPurchase: false'),
+        contains('availableForPurchase: true'),
       );
       expect(subscriptions, contains('Private Beta / Invite Only'));
       expect(subscriptions, contains('previewBusinessMembershipChange'));

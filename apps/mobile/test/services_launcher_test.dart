@@ -67,14 +67,15 @@ void main() {
   );
 
   test(
-    'Property channel recommendation is advisory and preserves both handoffs',
+    'Property recommendation preserves field handoff and gates unfinished Postcards',
     () {
       final source = File(
         'lib/screens/business/property_intelligence_center_screen.dart',
       ).readAsStringSync();
       expect(source, contains('RECOMMENDED PHYSICAL CHANNEL'));
-      expect(source, contains('Create Postcard Campaign'));
-      expect(source, contains('Choose Scaler Distribution Instead'));
+      expect(source, contains('Postcards — Coming Soon'));
+      expect(source, contains('Create Field Campaign'));
+      expect(source, isNot(contains('Create Postcard Campaign')));
       expect(source, contains('recommendation is advisory'));
       expect(source, contains('does not create a door-to-door outreach job'));
     },

@@ -62,7 +62,7 @@ test("normal growth deployment is reproducible and contains only its seven expor
 test("Social Operations has one dedicated narrowly-secret-bound codebase", () => {
   const config = firebase.functions.find((entry) => entry.codebase === "social-operations");
   assert.equal(config.source, "functions-social-operations");
-  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ["firebase-admin", "firebase-functions", "sharp"]);
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ["firebase-admin", "firebase-functions", "openai", "sharp"]);
   for (const forbidden of [
     "CENSUS_API_KEY", "TWILIO_", "OPENAI_", "STRIPE_", "SMTP_", "GOOGLE_ADS_",
   ]) assert.doesNotMatch(indexSource, new RegExp(forbidden));
@@ -103,6 +103,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "beginFirstXPublishAuthorizationV1",
     "beginSocialOAuthConnectionV1",
     "cancelSocialOAuthAttemptV1",
+    "changeScheduledSocialPostV1",
     "configureSocialProviderV1",
     "confirmFirstXPublishAuthorizationV1",
     "confirmSocialOAuthConnectionV1",
@@ -121,6 +122,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "getSocialOperationsWorkspace",
     "ingestScaledCircleLaunchPlanV1",
     "inspectMetaGrowthRuntimeV1","inspectMetaPageExecutionCredentialV1",
+    "manageAutomaticSocialPublishingV1",
     "prepareCustomerSocialPlanV1",
     "prepareCustomerSocialPostV1",
     "prepareFirstXPublishFoundationV1",
@@ -139,6 +141,7 @@ test("Social Operations exports provider-free surfaces plus one bounded X certif
     "registerFirstXProductionResponseAssetV1",
     "reviewScheduledSocialContentV1",
     "runCustomerMetaPublisherV1",
+    "runManagedSocialPreparationV1",
     "runMetaGrowthMeasurementsV1",
     "runMetaGrowthPublisherV1",
     "runSocialGrowthMeasurementsV1",

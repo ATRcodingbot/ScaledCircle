@@ -396,7 +396,7 @@ test("creative-media-core exclusively owns private Business media processing", (
     "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
     "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
     "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
-    "updateGeneratedMediaSafetyConfiguration"];
+    "updateGeneratedMediaSafetyConfiguration", "runManagedSocialVisualGenerationV1"];
   assert.deepEqual(exportsIn(creativeMediaCore).sort(), [...names].sort());
   for (const name of names) {
     assert.doesNotMatch(platform, new RegExp(`exports\\.${name}\\s*=`));
@@ -697,10 +697,10 @@ test("generated codebase preparation installs dependencies after regeneration", 
     assert.deepEqual(codebase.predeploy, ["npm --prefix functions run prepare:function-codebases"]);
   }
   assert.deepEqual(Object.keys(platformPackage.dependencies).sort(), [
-    "firebase-admin", "firebase-functions", "openai",
+    "firebase-admin", "firebase-functions", "openai", "polygon-clipping",
   ]);
   assert.deepEqual(Object.keys(legacyPackage.dependencies).sort(), [
-    "firebase-admin", "firebase-functions", "nodemailer", "stripe",
+    "firebase-admin", "firebase-functions", "nodemailer", "polygon-clipping", "stripe",
   ]);
   assert.deepEqual(Object.keys(walletPackage.dependencies).sort(), [
     "firebase-admin", "firebase-functions",

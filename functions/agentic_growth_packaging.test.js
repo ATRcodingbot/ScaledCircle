@@ -29,5 +29,6 @@ test("Agentic callable surface contains only provider-free read/observe authorit
     "initializeAgenticGrowthDogfoodV1", "runMarketingManagerObserveV1",
     "configureInternalGrowthWorkspaceV1", "internalGrowthWorkspaceBridgeV1",
     "customerGrowthOperationsV1", "queueCustomerGrowthReportEmailV1",
+    "grantCustomerGrowthDogfoodLeadV1", "runScheduledCustomerGrowthResearchV1",
   ].sort());
 });

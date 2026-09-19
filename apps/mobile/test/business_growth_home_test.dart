@@ -107,7 +107,7 @@ void main() {
     expect(find.text('Needs your review'), findsOneWidget);
     expect(find.textContaining('Nothing is scheduled'), findsOneWidget);
     expect(
-      find.textContaining('Account permissions do not approve posts'),
+      find.textContaining('Account connection alone does not authorize publishing'),
       findsOneWidget,
     );
   });

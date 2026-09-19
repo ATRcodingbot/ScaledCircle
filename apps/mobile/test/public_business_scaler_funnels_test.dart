@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,11 +112,10 @@ void main() {
     expect(setup, lessThan(intelligence));
     expect(intelligence, lessThan(marketing));
     expect(marketing, lessThan(campaigns));
-    expect(find.text('\$99/month'), findsOneWidget);
-    expect(find.text('\$299/month'), findsOneWidget);
-    expect(find.text('\$499/month'), findsOneWidget);
-    expect(find.text('\$999/month'), findsOneWidget);
-    expect(find.text('PRIVATE BETA / INVITE ONLY'), findsOneWidget);
+    for (final price in [99, 299, 499, 999]) {
+      expect(find.text('\$$price/month'), kIsWeb ? findsOneWidget : findsNothing);
+    }
+    expect(find.text('PRIVATE BETA / INVITE ONLY'), kIsWeb ? findsOneWidget : findsNothing);
     expect(find.textContaining('connection requires approval'), findsOneWidget);
     expect(find.text('Flyer Distribution Results'), findsOneWidget);
     expect(find.text('SAMPLE RESULTS'), findsOneWidget);
