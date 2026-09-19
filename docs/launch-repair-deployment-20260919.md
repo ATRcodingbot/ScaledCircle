@@ -84,3 +84,19 @@ Founder then explicitly authorized one unfunded, clearly labeled production QA d
 Validation: full Chrome/Auth/Firestore emulator catalog-to-draft-to-manual-zone-to-review flow passed; selected analyzed polygon/cancel/manual editor/revoked-account regression passed; 15 geometry/membership/native-policy Flutter tests passed; six-file analysis passed; generated-code verification passed. Emulator-only unavailable analysis falls back to an attempted write denied by production Rules; the production path already avoids that client fallback. No Rules relaxation is included.
 
 Production map repair deployment/browser verification and safe QA draft cleanup remain pending at this source checkpoint. The draft is explicitly QA/test-only, unfunded, and has no assigned Scaler, payment, completion, tracking session or earning. Do not claim final launch readiness from these tests.
+
+## Production campaign-map retest — completed September 19
+
+Client source `e80b7be473d52827cb74954f7360d24e336ab060` (including preceding `d1de094392955c496f3d8914140ed32399bc5696`) is deployed as Hosting `sites/scaled-circle/versions/d5cdfb7c5dadb8bf`. The second narrow change scopes all Campaign Details zone/location queries by their already-authorized campaign workspace. The full browser/emulator test now also scrolls the actual Details screen and rejects the previous work-area permission-error state. It passed; targeted analyzer passed. No Functions or Rules deployment was needed for these client fixes.
+
+Actual production owner UI, using the one explicitly authorized QA/test-only unfunded draft:
+- Existing Property selection opened as a four-point polygon with visible map tiles and a 236-acre preliminary geometric area. This is geometry, not a claim of serviceable homes or workload.
+- Advanced Edit remained a distinct initially empty drawing path. Point entry and Undo changed the visible point count; Cancel discarded local edits. The emulator separately proved distinct-coordinate manual geometry saving and return to review. Production temporary point entry is not a physical/native pointer certification.
+- Maintained address lookup returned Federal Hill, Baltimore and enabled area planning after explicit selection.
+- A 193-hour input was visibly rejected before analysis with the maintained 1–192-hour validation message.
+- Reopened Campaign Details truthfully showed No Campaign Zones, without the previous read error.
+- Authoritative draft readback retained the original four-point service area and analysis identity. Zero zones, campaign payments, completions, tracking sessions and earnings; assigned Scaler count zero. No funding/publishing/assignment action was taken. The placeholder base field is $55, not a funded compensation promise.
+- Authoritative saved Business profile/geography and Growth Preferences equal the preserved pre-analysis records.
+- Rules bytes still match the restrictive production ruleset, and all five restored immutable Social images retain their original SHA-256.
+
+The maintained permanent Delete Draft dialog is prepared for this exact QA draft. Action-time confirmation was requested under browser policy; cleanup is not yet claimed. No real campaign was used for this test.
