@@ -100,3 +100,5 @@ Actual production owner UI, using the one explicitly authorized QA/test-only unf
 - Rules bytes still match the restrictive production ruleset, and all five restored immutable Social images retain their original SHA-256.
 
 The maintained permanent Delete Draft dialog is prepared for this exact QA draft. Action-time confirmation was requested under browser policy; cleanup is not yet claimed. No real campaign was used for this test.
+
+Founder confirmed permanent deletion at the maintained dialog. Delete Draft succeeded. Authoritative readback at 12:22:53 UTC returned HTTP 404 for only the QA draft and zero related campaign zones, payments, completions, tracking sessions, earnings, applications and assignments. The product displayed Campaign not available afterward. QA cleanup is complete; prior campaign/history records were not selected or altered.
