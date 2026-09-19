@@ -9,7 +9,7 @@ const {fixture}=require('./social_customer_scheduling.test');
 const app=initializeApp({projectId:'demo-scaledcircle'},'customer-editor'),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app);});
 test('transactional edit/assessment isolation; one new version; no approval, history or other-platform changes',async()=>{
- const f=fixture(),uid='editor_business',itemId='editor_plan_post',planId='editor_plan';
+ const f=fixture(),uid='editor_'+require('node:crypto').randomUUID(),planId=uid+'_plan',itemId=planId+'_post';
  const initial=social.contentItemVersion({businessUid:uid,planId,item:{itemKey:'post',scheduledFor:f.version.scheduledFor,
   goal:'Local business services',variants:[{provider:'facebook',format:'text',copy:'Editor Company provides careful local repair services. Read our service details and contact the team.',
   callToAction:'Learn more',destinationUrl:'https://example.com/services',mediaRequirement:'none'},

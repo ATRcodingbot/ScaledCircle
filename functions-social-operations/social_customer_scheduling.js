@@ -168,7 +168,12 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
       const presentation=require('./social_lifecycle_presentation');
       const profile=(await db.doc('businessGrowthProfiles/'+uid).get()).data();
       const cycle=original.existingJob?.preparedCycleId?(await db.doc('socialGrowthCycles/'+original.existingJob.preparedCycleId).get()).data():null;
-      const timeZone=presentation.zone({timeZone:profile?.timeZone||profile?.timezone||original.plan?.timeZone||(cycle?.businessUid===uid?cycle.timeZone:null)});
+      let savedZone=profile?.timeZone||profile?.timezone||original.plan?.timeZone||(cycle?.businessUid===uid?cycle.timeZone:null);
+      if(!savedZone){
+        const cycles=await db.collection('socialGrowthCycles').where('businessUid','==',uid).limit(101).get();
+        if(cycles.size<=100){const zones=new Set(cycles.docs.map(d=>d.data()).filter(c=>c.businessUid===uid).map(c=>c.timeZone).filter(Boolean));if(zones.size===1)savedZone=[...zones][0];}
+      }
+      const timeZone=presentation.zone({timeZone:savedZone});
       result.creativeLabel=result.creativeLabel||presentation.creativeLabel({origin:ctx.revision?.sourceOrigin,format:ctx.revision?.format,mediaRequirement:ctx.version?.variants?.find(v=>v.provider===input.provider)?.mediaRequirement});
       return {...result,timeZone,scheduledForLabel:presentation.timeLabel(result.scheduledFor,timeZone),proposedFutureTimeLabel:presentation.timeLabel(require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),timeZone),managedHold:original.item.managedHolds?.[input.provider]||null,jobId:ctx.existingJob?.id||null,version:original.version?.version,contentHash:original.version?.contentHash,reviewState:state,
         inlineCreativeApproval:inline?{digest:inline.digest,creativeSha256:inline.candidate.sha256,prospectiveVersion:inline.version.version}:null,

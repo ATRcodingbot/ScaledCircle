@@ -70,6 +70,7 @@ String socialPostStateLabel(dynamic state) => switch (state) {
   'scheduled' => 'Scheduled',
   'published' => 'Published',
   'publishing' => 'Publishing',
+  'preparing' => 'Preparing automatically',
   'needs_attention' ||
   'reconciliation_required' ||
   'failed' => 'Needs Attention',

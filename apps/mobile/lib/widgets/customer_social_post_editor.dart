@@ -581,6 +581,8 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 _post['publicationStatus'] ??
                     (_post['automaticState'] == 'needs_attention'
                         ? 'needs_attention'
+                        : _post['automaticMode'] == true
+                        ? 'preparing'
                         : _post['reviewState']),
               ),
               style: Theme.of(context).textTheme.titleLarge,
@@ -700,7 +702,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               ),
             const SizedBox(height: 12),
             Text(
-              'Proposed time: ${socialCustomerTime(context, _time?.isAfter(DateTime.now()) == true ? _time?.toIso8601String() : _post['proposedFutureTime'], label: !_changed ? (_post['scheduledForLabel'] ?? _post['proposedFutureTimeLabel']) : null)}',
+              'Proposed time: ${socialCustomerTime(context, _time?.isAfter(DateTime.now()) == true ? _time?.toIso8601String() : _post['proposedFutureTime'], label: !_changed ? (_time?.isAfter(DateTime.now()) == true ? _post['scheduledForLabel'] : _post['proposedFutureTimeLabel']) : null)}',
             ),
             TextButton.icon(
               onPressed: _busy ? null : _chooseTime,
