@@ -60,8 +60,15 @@ function project({uid,jobs=[],plans=[],timeZone='UTC',channels=['facebook','inst
    scheduledForLabel:timeLabel(s.scheduledFor||v.scheduledFor||i.scheduledFor,timeZone),timeZone});
  }
  const counters={scheduled:0,publishing:0,published:0,needsAttention:0};
- for(const row of rows){if(['scheduled','publishing','published'].includes(row.publicationStatus))counters[row.publicationStatus]++;
- else if(row.publicationStatus==='needs_attention'||row.automaticState==='needs_attention'||row.preparationError||(row.reviewState==='needs_attention'||row.ready===false)&&!row.automaticMode&&!row.preparing&&row.reviewState!=='preparing_creative')counters.needsAttention++;}
+ for(const row of rows){
+  if(row.publicationStatus){
+   if(['scheduled','publishing','published'].includes(row.publicationStatus))counters[row.publicationStatus]++;
+   else if(row.publicationStatus==='needs_attention')counters.needsAttention++;
+  }else if(row.automaticMode){
+   if(row.automaticState==='needs_attention')counters.needsAttention++;
+  }else if(row.preparationError||(row.reviewState==='needs_attention'||row.ready===false)&&!row.preparing&&row.reviewState!=='preparing_creative')counters.needsAttention++;
+ }
+
  return {posts:rows,counters,timeZone:zone({timeZone})};
 }
 module.exports={state,text,zone,timeLabel,creativeLabel,project};

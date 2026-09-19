@@ -1,3 +1,4 @@
+import 'social_connection_card.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -76,7 +77,8 @@ String socialQueueGroup(Map<String, dynamic> row) {
     return 'Ready for Review';
   }
   if (row['preparationError'] != null ||
-      row['reviewState'] == 'needs_attention' || row['ready'] == false) {
+      row['reviewState'] == 'needs_attention' ||
+      row['ready'] == false) {
     return 'Needs Attention';
   }
   return 'Preparing Creative';
@@ -404,9 +406,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                             style: Theme.of(context).textTheme.labelLarge,
                           ),
                         Text(
-                          row['provider'] == 'instagram'
-                              ? 'Instagram'
-                              : 'Facebook',
+                          socialProviderName(row['provider']?.toString() ?? ''),
                           style: Theme.of(context).textTheme.labelLarge,
                         ),
                         Text(

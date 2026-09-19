@@ -19,3 +19,5 @@ test('timezone is server-rendered with daylight saving and never inferred from d
 test('asset ownership does not assert photography; internal labels are not shown',()=>{
  a.equal(p.creativeLabel({origin:'business_owned'}),'Business asset');a.equal(p.creativeLabel({origin:'generated_service_concept'}),'Generated graphic');a.equal(p.creativeLabel({format:'branded_graphic'}),'Branded graphic');a.equal(p.creativeLabel({format:'real_business_photo'}),'Real business photo');a.equal(p.creativeLabel({mediaRequirement:'none'}),'Text-only recommendation');a.equal(p.text('INITIAL_EXPERIMENT: goal'),'Social strategy');
 });
+
+test('canceled and published history never inherits draft attention',()=>{const current=structuredClone(plan);current.items[0].variants[0].scheduling.automaticState='needs_attention';const r=p.project({uid:'owner',plans:[current],jobs:[{...job,status:'published',providerPostId:'p'}]});a.equal(r.counters.needsAttention,0);a.equal(r.counters.published,1);});
