@@ -284,6 +284,8 @@ exports.getSocialOperationsWorkspace = onCall(
     const performance = snapshots.docs.map((doc) => ({id: doc.id, ...doc.data()}));
     const customerPlans=await require('./social_customer_post_projection').load({db,uid:business.uid,
       plans:plans.docs.map(doc=>({id:doc.id,...doc.data()})),store:customerSchedulingStore()});
+    const automaticPublishing=(await db.doc('socialManagedPolicies/'+business.uid).get()).data()||null;
+    const workspaceTimeZone=profileSnapshot.data()?.timeZone||profileSnapshot.data()?.timezone||customerPlans.find(p=>p.timeZone)?.timeZone||null;
     const cadenceObservations=await db.collection('socialMetaMeasurementSnapshots').where('businessUid','==',business.uid).limit(100).get();
     const cadenceJobs=await db.collection('socialMetaMeasurementJobs').where('businessUid','==',business.uid).limit(100).get();
     const cadenceJobMap=new Map(cadenceJobs.docs.map(doc=>[doc.id,doc.data()]));
@@ -309,7 +311,7 @@ exports.getSocialOperationsWorkspace = onCall(
       connections: safeConnections.map(c=>({...c,publishingState:publishingPresentation.providers[c.provider]})),
       managedPublishingAvailable: metaCustomer.available(business),
       publishingState: publishingPresentation,
-      automaticPublishing: (await db.doc('socialManagedPolicies/'+business.uid).get()).data()||null,
+      automaticPublishing,
       automaticPublishingCycle: (await db.doc('socialManagedCycles/'+business.uid).get()).data()||null,
       performance: require('./social_performance_presentation').project(performance,customerPlans),
       plans: customerPlans,
@@ -330,7 +332,7 @@ exports.getSocialOperationsWorkspace = onCall(
         ratings: pastPostRatings.docs.map((doc) => ({id: doc.id, ...doc.data()})),
       }),
       runtimeStatus: await require("./social_runtime_status").load(db, business.uid, {
-        plans: customerPlans, connections: safeConnections,
+        plans: customerPlans, connections: safeConnections, automaticPublishing, timeZone:workspaceTimeZone, channels:safeConnections.map(c=>c.provider),
       }),
       contentQualityLearning: socialOperations.qualityLearningComparison({
         businessUid: business.uid,

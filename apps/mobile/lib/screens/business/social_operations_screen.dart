@@ -1007,29 +1007,33 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
 
   String _socialSection = 'Content';
   Widget _history(SocialOperationsWorkspace workspace, String state) {
+    if (workspace.runtimeStatus['available'] != true) {
+      return const Text(
+        'Publication history is temporarily unavailable. Refresh to check saved status.',
+      );
+    }
     final rows = <Widget>[];
     Widget? requestedPost;
-    for (final p in workspace.plans) {
-      for (final i in (p['items'] as List? ?? []).whereType<Map>()) {
-        for (final v in (i['variants'] as List? ?? []).whereType<Map>()) {
-          if (v['status'] != state) continue;
-          final card = Card(
-            child: ListTile(
-              title: Text(
-                '${socialProviderName(v['provider']?.toString() ?? '')} · ${i['pillar'] ?? 'Post'}',
-              ),
-              subtitle: Text(
-                '${v['copy'] ?? ''}\n${socialCustomerTime(context, v['scheduledFor'])}',
-              ),
-            ),
-          );
-          if (v['jobId'] == widget.initialPublishedJobId &&
-              state == 'published') {
-            requestedPost = card;
-          } else {
-            rows.add(card);
-          }
-        }
+    for (final row in socialReviewRows(
+      workspace.plans,
+      workspace.runtimeStatus,
+    )) {
+      if (row['publicationStatus'] != state) continue;
+      final card = Card(
+        child: ListTile(
+          title: Text(
+            '${socialProviderName(row['provider']?.toString() ?? '')} · ${socialEvidenceText(row['title'], 'Social post')}',
+          ),
+          subtitle: Text(
+            '${row['reviewedPost']?['variant']?['copy'] ?? ''}\n${socialCustomerTime(context, row['scheduledFor'], label: row['scheduledForLabel'])}',
+          ),
+        ),
+      );
+      if (row['jobId'] == widget.initialPublishedJobId &&
+          state == 'published') {
+        requestedPost = card;
+      } else {
+        rows.add(card);
       }
     }
     if (state == 'published' && widget.initialPublishedJobId != null) {
@@ -1073,7 +1077,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 alignment: Alignment.centerLeft,
                 child: Chip(label: Text('Private Beta')),
               ),
-              const Text('Authorize Strategy → Upcoming Posts → Published → Measure'),
+              const Text(
+                'Authorize Strategy → Upcoming Posts → Published → Measure',
+              ),
               const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
@@ -1521,6 +1527,38 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     required bool scheduledOnly,
   }) {
     if (strategyOnly) return workspace.plans;
+    if (scheduledOnly && workspace.runtimeStatus['available'] == true) {
+      return [
+        {
+          'id': 'schedule-readback',
+          'goal': 'Scheduled Posts',
+          'status': 'approved',
+          'planVersion': 1,
+          'approvedVersion': 1,
+          'items': [
+            for (final row in socialReviewRows(
+              workspace.plans,
+              workspace.runtimeStatus,
+            ))
+              if (row['publicationStatus'] == 'scheduled')
+                {
+                  'pillar': row['title'],
+                  'variants': [
+                    {
+                      ...Map<String, dynamic>.from(
+                        row['reviewedPost']?['variant'] as Map? ?? {},
+                      ),
+                      'provider': row['provider'],
+                      'status': 'scheduled',
+                      'scheduledFor': row['scheduledFor'],
+                      'scheduling': row,
+                    },
+                  ],
+                },
+          ],
+        },
+      ];
+    }
     final drafts =
         SocialPlanPresentation(
           workspace.plans,
@@ -1620,7 +1658,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               const Padding(
                 padding: EdgeInsets.all(12),
                 child: Text(
-                  'Reviewing does not approve or schedule any content.',
+                  'Routine posts follow your authorized publishing strategy. Previewing does not change their saved schedule.',
                 ),
               ),
               Expanded(
@@ -2048,9 +2086,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
         health['assessmentStatus'] == 'assessed' ||
         (health['assessedCount'] is num &&
             (health['assessedCount'] as num) > 0);
-    final needsAttention = assessed
-        ? (health['needsAttentionCount'] as num?)?.toInt()
-        : null;
+    final needsAttention = presentation.count('needsAttention');
     final strong = assessed ? (health['strongCount'] as num?)?.toInt() : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2065,6 +2101,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               Icons.warning_amber,
             ),
             _healthMetric('Strong Posts', strong, Icons.star_outline),
+            _healthMetric(
+              'Published',
+              presentation.count('published'),
+              Icons.history,
+            ),
             if (presentation.count('scheduled') != null)
               _healthMetric(
                 'Scheduled',

@@ -14,13 +14,9 @@ class SocialRuntimeStatusCard extends StatelessWidget {
   final bool compact;
   final VoidCallback? onReviewPosts;
 
-  String _time(BuildContext context, dynamic raw) {
-    final value = DateTime.tryParse(raw?.toString() ?? '');
-    if (value == null) return 'Not scheduled';
-    final local = value.toLocal();
-    final labels = MaterialLocalizations.of(context);
-    return '${labels.formatMediumDate(local)}, ${labels.formatTimeOfDay(TimeOfDay.fromDateTime(local))} (device time)';
-  }
+  String _time(BuildContext context, dynamic raw, dynamic label) => raw == null
+      ? 'Not scheduled'
+      : socialCustomerTime(context, raw, label: label);
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +32,7 @@ class SocialRuntimeStatusCard extends StatelessWidget {
           _ => 'Social channel',
         }, style: const TextStyle(fontWeight: FontWeight.bold)),
         Text(
-          'Next ${channel['nextFormat'] ?? 'post'}: ${_time(context, channel['nextScheduledFor'])}',
+          'Next ${channel['nextFormat'] ?? 'post'}: ${_time(context, channel['nextScheduledFor'], channel['nextScheduledForLabel'])}',
         ),
         Text(
           socialEvidenceText(
@@ -45,7 +41,7 @@ class SocialRuntimeStatusCard extends StatelessWidget {
           ),
         ),
         Text(
-          'Next measurement: ${_time(context, channel['nextMeasurementAt'])}',
+          'Next measurement: ${_time(context, channel['nextMeasurementAt'], channel['nextMeasurementAtLabel'])}',
         ),
         Text(
           socialEvidenceText(channel['actionNeeded'], 'Review the saved plan.'),

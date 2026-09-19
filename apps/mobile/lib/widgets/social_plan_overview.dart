@@ -38,10 +38,10 @@ class SocialPlanOverview extends StatelessWidget {
               'Approved versions: ${presentation.versionsInState('approved')}',
             ),
             Text(
-              'Scheduled versions: ${presentation.count('scheduled') == null ? 'Not confirmed' : presentation.versionsInState('scheduled')}',
+              'Scheduled versions: ${presentation.count('scheduled') ?? 'Not confirmed'}',
             ),
             Text(
-              'Published versions: ${presentation.count('published') == null ? 'Not confirmed' : presentation.versionsInState('published')}',
+              'Published versions: ${presentation.count('published') ?? 'Not confirmed'}',
             ),
           ],
           const SizedBox(height: 12),

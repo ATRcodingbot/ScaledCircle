@@ -576,8 +576,19 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               'Post Preview',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            const Text(
-              'Your exact approval controls publication. Creative preparation and quality checks run automatically.',
+            Text(
+              socialPostStateLabel(
+                _post['publicationStatus'] ??
+                    (_post['automaticState'] == 'needs_attention'
+                        ? 'needs_attention'
+                        : _post['reviewState']),
+              ),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Text(
+              _post['automaticMode'] == true
+                  ? 'Routine posts within your authorized strategy are scheduled automatically. You can pause publishing or change upcoming posts.'
+                  : 'Publishing follows your saved approval settings.',
             ),
             if (_busy) ...[
               const LinearProgressIndicator(),
@@ -689,7 +700,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               ),
             const SizedBox(height: 12),
             Text(
-              'Proposed time: ${socialCustomerTime(context, _time?.isAfter(DateTime.now()) == true ? _time?.toIso8601String() : _post['proposedFutureTime'])}',
+              'Proposed time: ${socialCustomerTime(context, _time?.isAfter(DateTime.now()) == true ? _time?.toIso8601String() : _post['proposedFutureTime'], label: !_changed ? (_post['scheduledForLabel'] ?? _post['proposedFutureTimeLabel']) : null)}',
             ),
             TextButton.icon(
               onPressed: _busy ? null : _chooseTime,

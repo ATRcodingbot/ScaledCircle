@@ -28,7 +28,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
     return Card(
       child: ExpansionTile(
         initiallyExpanded: initiallyExpanded,
-        title: Text(plan['goal']?.toString() ?? '30-day Social strategy'),
+        title: Text(socialEvidenceText(plan['goal'], '30-day Social strategy')),
         subtitle: Text(
           socialPlanApproved(plan)
               ? 'Approved strategy'
@@ -89,7 +89,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Proposed: ${socialCustomerTime(context, (v['scheduling'] as Map?)?['proposedFutureTime'] ?? v['scheduledFor'] ?? item['scheduledFor'])}',
+                          'Proposed: ${socialCustomerTime(context, (v['scheduling'] as Map?)?['proposedFutureTime'] ?? v['scheduledFor'] ?? item['scheduledFor'], label: (v['scheduling'] as Map?)?['scheduledForLabel'])}',
                         ),
                         Text(
                           'Objective: ${item['goal'] ?? 'Review the proposed purpose'}',
@@ -115,7 +115,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
                             ),
                         ] else
                           Text(
-                            '${socialPostStateLabel(v['status'])}: ${socialCustomerTime(context, v['scheduledFor'])}',
+                            '${socialPostStateLabel(v['status'])}: ${socialCustomerTime(context, v['scheduledFor'], label: v['scheduling']?['scheduledForLabel'])}',
                           ),
                       ],
                     ),

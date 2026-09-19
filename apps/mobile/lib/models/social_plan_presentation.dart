@@ -8,7 +8,7 @@ String socialEvidenceText(dynamic raw, String fallback) {
         caseSensitive: false,
       ).hasMatch(value) ||
       RegExp(
-        r'\[[a-z_-]+/[a-z_-]+\]|\bHTTP\s*\d{3}\b|^[A-Z][A-Z_]+$',
+        r'INITIAL_EXPERIMENT|\[[a-z_-]+/[a-z_-]+\]|\bHTTP\s*\d{3}\b|^[A-Z][A-Z_]+$',
       ).hasMatch(value)) {
     return fallback;
   }
@@ -24,11 +24,12 @@ String socialQualityLabel(dynamic value) => switch (value) {
   'needs_attention' => 'Needs attention',
   _ => 'Not assessed yet',
 };
-String socialCustomerTime(BuildContext context, dynamic raw) {
-  final date = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+String socialCustomerTime(BuildContext context, dynamic raw, {dynamic label}) {
+  if (label is String && label.trim().isNotEmpty) return label;
+  final date = DateTime.tryParse(raw?.toString() ?? '')?.toUtc();
   if (date == null) return 'Choose a time';
   final labels = MaterialLocalizations.of(context);
-  return '${labels.formatMediumDate(date)} · ${labels.formatTimeOfDay(TimeOfDay.fromDateTime(date))} (device time)';
+  return '${labels.formatMediumDate(date)} · ${labels.formatTimeOfDay(TimeOfDay.fromDateTime(date))} UTC · Workspace timezone unavailable';
 }
 
 List<String> socialQualityAdvice(Map assessment) {
@@ -68,6 +69,12 @@ String socialPostStateLabel(dynamic state) => switch (state) {
   'approved' => 'Approved',
   'scheduled' => 'Scheduled',
   'published' => 'Published',
+  'publishing' => 'Publishing',
+  'needs_attention' ||
+  'reconciliation_required' ||
+  'failed' => 'Needs Attention',
+  'paused' => 'Paused',
+  'canceled' => 'Canceled',
   'ready_for_review' || 'needs_review' => 'Needs review',
   'draft' || null => 'Draft',
   _ => 'Needs status review',

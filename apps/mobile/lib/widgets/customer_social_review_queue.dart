@@ -15,37 +15,49 @@ const socialQueueGroups = [
   'Preparing Creative',
   'Needs Attention',
   'Canceled',
+  'Paused',
 ];
 List<Map<String, dynamic>> socialReviewRows(
-  List<Map<String, dynamic>> plans,
-) => [
-  for (final plan in plans)
-    for (final item in (plan['items'] as List? ?? []).whereType<Map>())
-      for (final variant in (item['variants'] as List? ?? []).whereType<Map>())
-        if (['facebook', 'instagram'].contains(variant['provider']))
-          {
-            ...Map<String, dynamic>.from(variant['scheduling'] as Map? ?? {}),
-            'itemId': '${plan['id']}_${item['itemKey']}',
-            'provider': variant['provider'],
-            'title': item['pillar'] ?? 'Social post',
-            'strategyTitle': plan['goal'] ?? '30-Day Plan',
-            'publicationStatus':
-                (variant['scheduling'] as Map?)?['publicationStatus'] ??
-                ([
-                  'scheduled',
-                  'publishing',
-                  'published',
-                ].contains(variant['status'])
-                ? variant['status']
-                : null),
-            'scheduledFor':
-                variant['scheduledFor'] ??
-                (variant['scheduling'] as Map?)?['scheduledFor'] ??
-                item['scheduledFor'],
-          },
-];
+  List<Map<String, dynamic>> plans, [
+  Map<String, dynamic>? runtime,
+]) => runtime?['available'] == true && runtime?['posts'] is List
+    ? (runtime!['posts'] as List)
+          .whereType<Map>()
+          .map((r) => Map<String, dynamic>.from(r))
+          .toList()
+    : [
+        for (final plan in plans)
+          for (final item in (plan['items'] as List? ?? []).whereType<Map>())
+            for (final variant
+                in (item['variants'] as List? ?? []).whereType<Map>())
+              if (['facebook', 'instagram'].contains(variant['provider']))
+                {
+                  ...Map<String, dynamic>.from(
+                    variant['scheduling'] as Map? ?? {},
+                  ),
+                  'itemId': '${plan['id']}_${item['itemKey']}',
+                  'provider': variant['provider'],
+                  'title': item['pillar'] ?? 'Social post',
+                  'strategyTitle': plan['goal'] ?? '30-Day Plan',
+                  'publicationStatus':
+                      (variant['scheduling'] as Map?)?['publicationStatus'] ??
+                      ([
+                            'scheduled',
+                            'publishing',
+                            'published',
+                          ].contains(variant['status'])
+                          ? variant['status']
+                          : null),
+                  'scheduledFor':
+                      variant['scheduledFor'] ??
+                      (variant['scheduling'] as Map?)?['scheduledFor'] ??
+                      item['scheduledFor'],
+                },
+      ];
 String socialQueueGroup(Map<String, dynamic> row) {
   if (row['managedHold']?['status'] == 'canceled') return 'Canceled';
+  if (row['publicationStatus'] == 'canceled') return 'Canceled';
+  if (row['publicationStatus'] == 'paused') return 'Paused';
   if (row['publicationStatus'] == 'published') return 'Published';
   if (row['publicationStatus'] == 'publishing') return 'Publishing';
   if (row['publicationStatus'] == 'scheduled') {
@@ -63,7 +75,11 @@ String socialQueueGroup(Map<String, dynamic> row) {
   if (row['preparationError'] == null && row['ready'] == true) {
     return 'Ready for Review';
   }
-  return 'Needs Attention';
+  if (row['preparationError'] != null ||
+      row['reviewState'] == 'needs_attention' || row['ready'] == false) {
+    return 'Needs Attention';
+  }
+  return 'Preparing Creative';
 }
 
 /// The queue stays in the navigation stack while previews change. Its scroll
@@ -89,6 +105,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
       widget.workspace.data['automaticPublishing']?['status'] == 'active';
   late List<Map<String, dynamic>> _rows = socialReviewRows(
     widget.workspace.plans,
+    widget.workspace.runtimeStatus,
   );
   final _scroll = ScrollController();
   final Set<String> _attempted = {};
@@ -113,7 +130,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
       final fresh = await widget.service.load();
       if (mounted) {
         setState(() {
-          _rows = socialReviewRows(fresh.plans);
+          _rows = socialReviewRows(fresh.plans, fresh.runtimeStatus);
           _automatic = fresh.data['automaticPublishing']?['status'] == 'active';
         });
       }
@@ -182,7 +199,8 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
     super.dispose();
   }
 
-  String _key(Map row) => '${row['itemId']}:${row['provider']}';
+  String _key(Map row) =>
+      row['canonicalKey']?.toString() ?? '${row['itemId']}:${row['provider']}';
   Future<void> _prepare() async {
     if (_preparing) return;
     _preparing = true;
@@ -233,6 +251,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
         .where(
           (r) =>
               (_group == null || socialQueueGroup(r) == _group) &&
+              r['historyOnly'] != true &&
               r['version'] != null &&
               r['preparing'] != true,
         )
@@ -252,7 +271,11 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
     if (!mounted) return;
     try {
       final fresh = await widget.service.load();
-      if (mounted) setState(() => _rows = socialReviewRows(fresh.plans));
+      if (mounted) {
+        setState(
+          () => _rows = socialReviewRows(fresh.plans, fresh.runtimeStatus),
+        );
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -390,7 +413,12 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                           row['title'].toString(),
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        Text(row['strategyTitle'].toString()),
+                        Text(
+                          socialEvidenceText(
+                            row['strategyTitle'],
+                            'Social strategy',
+                          ),
+                        ),
                         if (row['reviewCandidate'] is Map)
                           SocialCandidatePreview(
                             candidate: Map<String, dynamic>.from(
@@ -416,14 +444,27 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                             ),
                         ],
                         Text(group),
-                        for (final reason in (row['automaticReasons'] as List? ?? []).whereType<Map>())
-                          Text(reason['message']?.toString() ?? 'This post needs attention.'),
-                        Text(socialCustomerTime(context, row['scheduledFor'])),
+                        for (final reason
+                            in (row['automaticReasons'] as List? ?? [])
+                                .whereType<Map>())
+                          Text(
+                            reason['message']?.toString() ??
+                                'This post needs attention.',
+                          ),
+                        Text(
+                          socialCustomerTime(
+                            context,
+                            row['scheduledFor'],
+                            label: row['scheduledForLabel'],
+                          ),
+                        ),
                         if (row['preparationError'] != null)
                           Text(row['preparationError'].toString()),
                         FilledButton(
                           onPressed:
-                              row['preparing'] == true || row['version'] == null
+                              row['historyOnly'] == true ||
+                                  row['preparing'] == true ||
+                                  row['version'] == null
                               ? null
                               : () => _open(index),
                           child: const Text('Preview'),

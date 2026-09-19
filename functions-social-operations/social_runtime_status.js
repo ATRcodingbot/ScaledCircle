@@ -10,7 +10,7 @@ function iso(value) {
 function project({jobs, measurements, now = Date.now()}) {
   return ["x", "facebook", "instagram"].map(provider => {
     const owned = jobs.filter(j => j.provider === provider);
-    const pending = owned.filter(j => ["approved", "scheduled", "queued"].includes(j.status))
+    const pending = owned.filter(j => !j.providerPostId && !j.providerMediaId).filter(j => ["approved", "scheduled", "queued"].includes(j.status))
       .filter(j => iso(j.scheduledFor)).sort((a,b) => Date.parse(iso(a.scheduledFor))-Date.parse(iso(b.scheduledFor)));
     const published = owned.filter(j => j.providerPostId || j.providerMediaId);
     const failures = owned.filter(j => ["failed", "unknown_outcome", "hold", "reconciliation_required"].includes(j.status));
@@ -19,7 +19,7 @@ function project({jobs, measurements, now = Date.now()}) {
     const measurement = measurements.filter(m => (m.provider === provider || (provider === "x" && !m.provider)) && m.status === "pending" && iso(m.scheduledFor))
       .sort((a,b) => Date.parse(iso(a.scheduledFor))-Date.parse(iso(b.scheduledFor)))[0];
     return {provider, recordedJobCount: owned.length, approvedPendingCount: pending.length,
-      publishedWithIdCount: published.length, needsReviewCount: failures.length + due.length,
+      publishedWithIdCount: published.length, needsReviewCount: failures.length,
       nextScheduledFor: next ? iso(next.scheduledFor) : null,
       nextFormat: next?.story === true ? "Story" : "Feed post",
       result: failures.length ? "An execution needs review. Do not retry a publication blindly." :
@@ -38,7 +38,7 @@ function customerState({jobs = [], plans = [], connections = [], now = Date.now(
   const draftPlans = plans.filter(p => !require("./social_plan_state").approved(p));
   const published = jobs.filter(j => j.providerPostId || j.providerMediaId);
   const scheduled = jobs.filter(j => ['approved','scheduled','queued'].includes(j.status) && iso(j.scheduledFor));
-  const failed = jobs.some(j => ['failed','unknown_outcome','hold','reconciliation_required','blocked'].includes(j.status));
+  const failed = jobs.some(j => ['failed','unknown_outcome','hold','reconciliation_required','blocked','needs_attention'].includes(j.status));
   const draftPosts = review.draftPosts;
   const counters = {draftPlans: draftPlans.length, approvedPlans: plans.length - draftPlans.length, draftPosts, scheduled: scheduled.length, published: published.length};
   const result = (state, title, description) => ({state,title,description,counters,review,publicationAuthorizedByStatus:false});
@@ -59,16 +59,32 @@ function customerState({jobs = [], plans = [], connections = [], now = Date.now(
 async function load(db, uid, context = {}) {
   const scopes = [["socialGrowthJobs", "businessUid"], ["socialStoryJobs", "owner"],
     ["socialGrowthMeasurementJobs", "businessUid"], ["socialMetaMeasurementJobs", "businessUid"],
-    ["socialPublishingJobs", "businessUid"]];
+    ["socialPublishingJobs", "businessUid"], ["socialGrowthCycles", "businessUid"]];
   try {
     const snapshots = await Promise.all(scopes.map(([collection, field]) =>
       db.collection(collection).where(field, "==", uid).limit(101).get()));
     if (snapshots.some(s => s.size > 100)) return {available: false, reason: "More execution history needs review."};
-    const rows = snapshots.map(s => s.docs.map(d => d.data()));
+    const rows = snapshots.map((s,index) => s.docs.map(d => ({...d.data(),id:d.id,canonicalKey:scopes[index][0]+"/"+d.id})));
+    const zones=new Set(rows[5].map(c=>c.timeZone).filter(Boolean));
+    if(!context.timeZone && zones.size===1)context={...context,timeZone:[...zones][0]};
     const jobs = [...rows[0], ...rows[1].map(j => ({...j, story: true})), ...rows[4]];
-    return {available: true, checkedAt: new Date().toISOString(),
-      summary: customerState({...context,jobs}),
-      channels: project({jobs, measurements: [...rows[2], ...rows[3]]}).map(channel => ({...channel, actionNeeded: channel.recordedJobCount ? channel.actionNeeded : customerState({...context,jobs}).review.nextAction}))};
+    // Reuse the exact per-post provider-step readback used by preview.
+    for(const job of jobs){
+      job.timeZone=rows[5].find(c=>c.id===job.preparedCycleId)?.timeZone||context.timeZone;
+      const check=context.plans?.flatMap(p=>(p.items||[]).flatMap(i=>i.variants||[])).find(v=>v.scheduling?.jobId===job.id)?.scheduling;
+      if(check?.publicationStatus)job.status=check.publicationStatus;
+      job.status=require('./social_lifecycle_presentation').state(job);
+    }
+    const lifecycle=require('./social_lifecycle_presentation').project({...context,uid,jobs});
+    const summary=customerState({...context,jobs:jobs.filter(j=>(context.channels||['facebook','instagram']).includes(j.provider))});
+    Object.assign(summary.counters,lifecycle.counters);
+    if(lifecycle.counters.needsAttention){summary.state='blocked';summary.title='Needs Attention';summary.description='An exception needs your attention. Open Upcoming Posts for the saved reason.';}
+    if(context.automaticPublishing?.status==='active' && !lifecycle.counters.needsAttention && !lifecycle.counters.scheduled && !lifecycle.counters.publishing && !lifecycle.counters.published){
+      summary.state='preparing';summary.title='Preparing upcoming posts';summary.description='Routine posts within your authorized strategy are prepared and scheduled automatically.';
+    }
+    return {...lifecycle, available: true, checkedAt: new Date().toISOString(),
+      summary,
+      channels: project({jobs, measurements: [...rows[2], ...rows[3]]}).filter(c=>(context.channels||['facebook','instagram']).includes(c.provider)).map(channel => ({...channel,nextScheduledForLabel:require('./social_lifecycle_presentation').timeLabel(channel.nextScheduledFor,lifecycle.timeZone),nextMeasurementAtLabel:require('./social_lifecycle_presentation').timeLabel(channel.nextMeasurementAt,lifecycle.timeZone), actionNeeded: channel.recordedJobCount ? channel.actionNeeded : customerState({...context,jobs}).review.nextAction}))};
   } catch (_) {
     return {available: false, reason: "Saved execution status is temporarily unavailable. Refresh to retry."};
   }
