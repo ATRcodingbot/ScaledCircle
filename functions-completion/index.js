@@ -59,6 +59,8 @@ const marketplace = require("./marketplace_finance");
 
 
 
+
+
 const businessWorkspace = require("./business_workspace");
 const workspaceAccess = require("./workspace_access");
 
@@ -104,6 +106,17 @@ function businessOperation(name, handler) {
       throw new HttpsError('internal', 'The workspace operation could not complete. Please retry.');}
   };
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3720,6 +3733,34 @@ exports.submitZoneCompletion = onCall(
  * Approve a pending zone payout and move reserved business funds to the
  * Scaler's available balance.
  */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

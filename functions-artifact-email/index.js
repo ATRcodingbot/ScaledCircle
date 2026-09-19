@@ -64,6 +64,8 @@ const nodemailer = require("nodemailer");
 
 
 
+
+
 const managedGrowthDelivery = require("./managed_growth_delivery");
 
 
@@ -90,6 +92,17 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1412,6 +1425,70 @@ exports.sendArtifactDeliveryEmailJob = onDocumentCreated(
 );
 
 /** Sends one deterministic, server-authored matching-job alert to one Scaler. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

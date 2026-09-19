@@ -1,4 +1,5 @@
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/social_plan_presentation.dart';
 import '../services/social_operations_service.dart';
@@ -6,11 +7,14 @@ import 'customer_social_post_editor.dart';
 import 'social_candidate_preview.dart';
 
 const socialQueueGroups = [
+  'Scheduled',
+  'Publishing',
+  'Published',
+  'Preparing automatically',
   'Ready for Review',
   'Preparing Creative',
   'Needs Attention',
-  'Scheduled',
-  'Published',
+  'Canceled',
 ];
 List<Map<String, dynamic>> socialReviewRows(
   List<Map<String, dynamic>> plans,
@@ -40,9 +44,16 @@ List<Map<String, dynamic>> socialReviewRows(
           },
 ];
 String socialQueueGroup(Map<String, dynamic> row) {
+  if (row['managedHold']?['status'] == 'canceled') return 'Canceled';
   if (row['publicationStatus'] == 'published') return 'Published';
-  if (['scheduled', 'publishing'].contains(row['publicationStatus'])) {
+  if (row['publicationStatus'] == 'publishing') return 'Publishing';
+  if (row['publicationStatus'] == 'scheduled') {
     return 'Scheduled';
+  }
+  if (row['automaticMode'] == true && row['managedHold'] == null) {
+    return row['automaticState'] == 'needs_attention'
+        ? 'Needs Attention'
+        : 'Preparing automatically';
   }
   if (row['preparing'] == true || row['reviewState'] == 'preparing_creative') {
     return 'Preparing Creative';
@@ -71,6 +82,9 @@ class CustomerSocialReviewQueue extends StatefulWidget {
 }
 
 class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
+  Timer? _refreshTimer;
+  late bool _automatic =
+      widget.workspace.data['automaticPublishing']?['status'] == 'active';
   late List<Map<String, dynamic>> _rows = socialReviewRows(
     widget.workspace.plans,
   );
@@ -81,11 +95,87 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
+    if (!_automatic) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
+    }
+    if (_automatic) {
+      _refreshTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _refresh(),
+      );
+    }
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final fresh = await widget.service.load();
+      if (mounted) {
+        setState(() {
+          _rows = socialReviewRows(fresh.plans);
+          _automatic = fresh.data['automaticPublishing']?['status'] == 'active';
+        });
+      }
+    } catch (_) {
+      /* Keep the last verified state; explicit actions report errors. */
+    }
+  }
+
+  Future<void> _changePost(int index, String action) async {
+    final row = _rows[index];
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          action == 'cancel'
+              ? 'Cancel this post?'
+              : 'Edit this scheduled post?',
+        ),
+        content: Text(
+          action == 'cancel'
+              ? 'This post will not publish. Its history will be retained.'
+              : 'The pending schedule will be canceled safely. Review and save your changes before it is scheduled again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep schedule'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              action == 'cancel' ? 'Cancel post' : 'Edit / Reschedule',
+            ),
+          ),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    try {
+      await widget.service.changeScheduledPost({
+        'jobId': row['jobId'],
+        'action': action,
+      });
+      await _refresh();
+      if (mounted && action == 'edit') {
+        final current = _rows.indexWhere((r) => _key(r) == _key(row));
+        if (current >= 0) await _open(current);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This post could not be changed. Publication may already be starting. Refresh its status before trying again.',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _scroll.dispose();
     super.dispose();
   }
@@ -140,7 +230,7 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
     final reviewable = _rows
         .where(
           (r) =>
-              r['publicationStatus'] == null &&
+              (_group == null || socialQueueGroup(r) == _group) &&
               r['version'] != null &&
               r['preparing'] != true,
         )
@@ -176,16 +266,41 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AuthenticatedAppBar(title: const Text('Review Content')),
+    appBar: AuthenticatedAppBar(title: const Text('Upcoming Posts')),
     body: SafeArea(
       child: Column(
         children: [
+          if (_automatic)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: FilledButton.tonal(
+                onPressed: () async {
+                  try {
+                    await widget.service.automaticPublishing({
+                      'action': 'pause',
+                    });
+                    await _refresh();
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Pause could not be confirmed. Check publishing settings.',
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Pause Publishing'),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: DropdownButtonFormField<String>(
               initialValue: _group ?? 'All',
               isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Review queue'),
+              decoration: const InputDecoration(labelText: 'Post status'),
               items: [
                 DropdownMenuItem(
                   value: 'All',
@@ -299,17 +414,31 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                             ),
                         ],
                         Text(group),
+                        for (final reason in (row['automaticReasons'] as List? ?? []).whereType<Map>())
+                          Text(reason['message']?.toString() ?? 'This post needs attention.'),
                         Text(socialCustomerTime(context, row['scheduledFor'])),
                         if (row['preparationError'] != null)
                           Text(row['preparationError'].toString()),
-                        if (row['publicationStatus'] == null)
-                          FilledButton(
-                            onPressed:
-                                row['preparing'] == true ||
-                                    row['version'] == null
-                                ? null
-                                : () => _open(index),
-                            child: const Text('Preview'),
+                        FilledButton(
+                          onPressed:
+                              row['preparing'] == true || row['version'] == null
+                              ? null
+                              : () => _open(index),
+                          child: const Text('Preview'),
+                        ),
+                        if (row['publicationStatus'] == 'scheduled')
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              TextButton(
+                                onPressed: () => _changePost(index, 'edit'),
+                                child: const Text('Edit / Reschedule'),
+                              ),
+                              TextButton(
+                                onPressed: () => _changePost(index, 'cancel'),
+                                child: const Text('Cancel'),
+                              ),
+                            ],
                           ),
                       ],
                     ),

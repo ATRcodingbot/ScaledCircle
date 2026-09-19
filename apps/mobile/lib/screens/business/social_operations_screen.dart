@@ -1,5 +1,6 @@
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../widgets/social_performance_panel.dart';
+import '../../widgets/social_automatic_publishing_card.dart';
 import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
@@ -1892,6 +1893,16 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
       children: [
+        if (workspace.managedPublishingAvailable)
+          SocialAutomaticPublishingCard(
+            policy: workspace.data['automaticPublishing'] as Map?,
+            planId: workspace.plans
+                .where(socialPlanApproved)
+                .firstOrNull?['id']
+                ?.toString(),
+            invoke: _service.automaticPublishing,
+            onChanged: () => _load(quiet: true),
+          ),
         if (cadence != null)
           Card(
             child: Padding(
@@ -1914,8 +1925,10 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                         '${socialProviderName(comparison['provider']?.toString() ?? '')} · ${comparison['label']}: ${comparison['reason']}',
                       ),
                   ],
-                  const Text(
-                    'Adaptive recommendations. Cadence changes need your approval; no managed range has been granted.',
+                  Text(
+                    workspace.data['automaticPublishing'] is Map
+                        ? 'Cadence stays within your authorized publishing preferences.'
+                        : 'Authorize an automatic publishing cadence above, or keep reviewing posts individually.',
                   ),
                   for (final platform
                       in (cadence['platforms'] as List? ?? []).whereType<Map>())

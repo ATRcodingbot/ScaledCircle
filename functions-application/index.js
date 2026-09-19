@@ -60,6 +60,8 @@ const {
 
 
 
+
+
 const workspaceAccess = require("./workspace_access");
 
 
@@ -135,6 +137,17 @@ const db = getFirestore();
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2934,6 +2947,34 @@ async function assertPhysicalQaRequest(request) {
     throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

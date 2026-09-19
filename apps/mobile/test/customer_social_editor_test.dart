@@ -128,12 +128,12 @@ void main() {
         }
         expect(confirmations, 0);
         await tester.scrollUntilVisible(
-          find.text('Approve Creative & Schedule'),
+          find.text('Approve & Schedule'),
           200,
           scrollable: find.byType(Scrollable).first,
         );
         final button = tester.widget<FilledButton>(
-          find.widgetWithText(FilledButton, 'Approve Creative & Schedule'),
+          find.widgetWithText(FilledButton, 'Approve & Schedule'),
         );
         expect(button.onPressed, corrupt ? isNull : isNotNull);
         expect(find.text('Ready for your review'), findsNothing);
@@ -142,7 +142,9 @@ void main() {
           findsNothing,
         );
         if (!corrupt) {
-          await tester.tap(find.text('Approve Creative & Schedule'));
+          await Scrollable.ensureVisible(tester.element(find.text('Approve & Schedule')), alignment: 0.5);
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Approve & Schedule'));
           await tester.pumpAndSettle();
           expect(confirmations, 1);
         }

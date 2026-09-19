@@ -64,7 +64,7 @@ class _MappedAddressFieldState extends State<MappedAddressField> {
         _error = suggestions.isEmpty
             ? widget.allowManualAddress
                   ? "We couldn't confirm this address on the map."
-                  : 'No map matches found. Add city, state, or ZIP and try again.'
+                  : 'This exact address was not found. Try a nearby street, neighborhood or ZIP, or draw the area manually.'
             : null;
       });
       // The explicit Search action is sufficient confirmation when there is one

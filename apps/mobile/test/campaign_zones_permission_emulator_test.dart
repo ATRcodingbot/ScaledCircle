@@ -153,8 +153,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Advanced Edit'));
-      await tester.tap(find.text('Advanced Edit'));
+      await tester.ensureVisible(find.text('Draw My Own Area'));
+      await tester.tap(find.text('Draw My Own Area'));
       await tester.pumpAndSettle();
       final manual = tester.widget<CampaignAreaScreen>(
         find.byType(CampaignAreaScreen),

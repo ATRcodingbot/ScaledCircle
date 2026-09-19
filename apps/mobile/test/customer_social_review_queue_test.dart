@@ -207,7 +207,7 @@ void main() {
         expect(find.text('Post 1 of 2'), findsOneWidget);
         await tester.tap(find.byType(BackButton));
         await tester.pumpAndSettle();
-        expect(find.text('Review Content'), findsOneWidget);
+        expect(find.text('Upcoming Posts'), findsOneWidget);
         expect(find.text('Ready for Review (2)'), findsWidgets);
         expect(service.prepared, isEmpty);
         expect(approvals, 0);

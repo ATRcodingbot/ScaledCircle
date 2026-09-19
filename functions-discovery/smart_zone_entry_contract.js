@@ -34,4 +34,16 @@ function selectResolvedArea(selection, resolution) {
   };
 }
 
-module.exports = {normalizeAreaSelection, selectResolvedArea};
+function workloadHours(value = 5) {
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours < 0.5 || hours > 192) throw Error('campaign_workload_invalid');
+  return hours;
+}
+function planningFailure(error) {
+  if (error?.message === 'campaign_workload_invalid') return {code: 'invalid-argument',
+    message: 'Choose estimated work from 30 minutes to 192 hours.'};
+  if (error?.message === 'selected_area_cannot_fit_workload_boundary') return {code: 'failed-precondition',
+    message: 'Choose or draw a smaller campaign territory inside your service area. Your saved area is unchanged.'};
+  return {code: 'unavailable', message: 'We could not prepare workable Zones for this area. Keep your selection and try again, or draw a smaller territory.'};
+}
+module.exports = {normalizeAreaSelection, selectResolvedArea, workloadHours, planningFailure};

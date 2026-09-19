@@ -187,6 +187,22 @@ function customerPostCallable(method) {
 
 exports.previewCustomerSocialPostV1=customerPostCallable('preview');
 exports.approveAndScheduleCustomerSocialPostV1=customerPostCallable('approve');
+exports.changeScheduledSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3},async request=>{
+  const business=await requireSocialOperationsBusiness(request,{allowMember:true});
+  try{return await require('./social_scheduled_changes').createChanges({db}).cancel(business.uid,request.auth.uid,request.data||{});}
+  catch(error){throw new HttpsError('failed-precondition',error.message);}
+});
+
+exports.manageAutomaticSocialPublishingV1=onCall({enforceAppCheck:false,maxInstances:3},async request=>{
+  const business=await requireSocialOperationsBusiness(request,{allowMember:true});
+  if(business.role!=='business'||request.auth.uid!==business.uid||!metaCustomer.available(business))
+    throw new HttpsError('permission-denied','The Business owner must authorize automatic publishing.');
+  const settings=require('./social_managed_settings').createSettings({db,environment:runtimeEnvironment()});
+  try{return request.data?.action==='preview'?await settings.preview(business.uid,request.data):
+    await settings.change(business.uid,request.auth.uid,request.data||{});}
+  catch(error){require('firebase-functions/logger').warn('managed_social_settings_rejected',{businessUid:business.uid,reason:error.message});
+    throw new HttpsError('failed-precondition',error.message);}
+});
 
 exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3,concurrency:1,memory:'1GiB',timeoutSeconds:120},async request=>{
   const business=await requireSocialOperationsBusiness(request,{allowMember:true});
@@ -293,6 +309,8 @@ exports.getSocialOperationsWorkspace = onCall(
       connections: safeConnections.map(c=>({...c,publishingState:publishingPresentation.providers[c.provider]})),
       managedPublishingAvailable: metaCustomer.available(business),
       publishingState: publishingPresentation,
+      automaticPublishing: (await db.doc('socialManagedPolicies/'+business.uid).get()).data()||null,
+      automaticPublishingCycle: (await db.doc('socialManagedCycles/'+business.uid).get()).data()||null,
       performance: require('./social_performance_presentation').project(performance,customerPlans),
       plans: customerPlans,
       cadence: {startingCopy:cadence.startingCopy,platforms:cadenceLearning},
@@ -3568,6 +3586,31 @@ exports.runCustomerMetaPublisherV1=onSchedule({schedule:'every 5 minutes',timeZo
     }
   }};
   await Promise.all(Array.from({length:enrolled?4:1},worker));
+});
+
+// Independent bounded preparation. It never calls a provider publishing API.
+// A persistent inventory cursor prevents the same first page monopolizing runs.
+exports.runManagedSocialPreparationV1=onSchedule({schedule:'every 15 minutes',timeZone:'UTC',
+  maxInstances:1,concurrency:1,timeoutSeconds:540,memory:'1GiB',retryCount:0},async()=>{
+  const cursorRef=db.doc('socialManagedWorkerState/preparation');
+  const cursor=(await cursorRef.get()).data()?.lastUid;
+  let query=db.collection('socialManagedPolicies').orderBy('__name__');
+  if(cursor)query=query.startAfter(cursor);
+  const page=await query.limit(4).get();
+  if(page.empty){await cursorRef.set({lastUid:null,at:Date.now()});return;}
+  for(const doc of page.docs){
+    const policy=doc.data();
+    if(policy.businessUid===doc.id&&policy.status==='active'&&policy.endsAt>Date.now()){
+      try{
+        const editor=require('./social_customer_editor').createEditor({db,planEntitled:true});
+        const preparation=require('./social_customer_preparation').createPreparation({db,editor,media:customerMediaStore()});
+        const cycle=require('./social_managed_cycle').createCycle({db,store:customerSchedulingStore(),preparation,editor});
+        const result=await cycle.run(doc.id,{limit:1});
+        require('firebase-functions/logger').info('managed_social_preparation',{businessUid:doc.id,status:result.status,results:result.results});
+      }catch(error){require('firebase-functions/logger').warn('managed_social_preparation_held',{businessUid:doc.id,reason:error.message});}
+    }
+    await cursorRef.set({lastUid:doc.id,at:Date.now()});
+  }
 });
 
 exports.runMetaGrowthMeasurementsV1=onSchedule({schedule:"every 15 minutes",timeZone:"UTC",

@@ -58,6 +58,8 @@ const crypto = require("node:crypto");
 
 
 
+
+
 const subscriptionEntitlements = require("./subscription_entitlements");
 const businessWorkspace = require("./business_workspace");
 const workspaceAccess = require("./workspace_access");
@@ -114,6 +116,17 @@ function workspaceEndpoint(handler, options = {}) {
       logger.error('Workspace action failed.', { type: error?.constructor?.name });throw new HttpsError('internal', 'The request could not complete. Please retry.');}
   });
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -5451,6 +5464,70 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function requireManagedGrowthBusiness(request) {
   const context = await requireVerifiedUser(
     request,
@@ -5494,6 +5571,48 @@ exports.saveBusinessGrowthProfile = onCall(
 );
 
 /** Reads a public website and returns suggestions that the Business must confirm. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

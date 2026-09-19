@@ -59,6 +59,8 @@ const logger = require("firebase-functions/logger");
 
 
 
+
+
 const businessWorkspace = require("./business_workspace");
 const workspaceAccess = require("./workspace_access");
 
@@ -135,6 +137,17 @@ function businessOperation(name, handler) {
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -574,6 +587,112 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

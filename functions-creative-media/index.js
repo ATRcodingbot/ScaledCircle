@@ -4,7 +4,7 @@
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 
-
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 const { initializeApp, getApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
@@ -15,6 +15,8 @@ const {
   FieldValue,
   Timestamp
 } = require("firebase-admin/firestore");
+const logger = require("firebase-functions/logger");
+
 
 
 
@@ -12267,6 +12269,34 @@ async function requireVerifiedUser(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function requireCreativeMediaBusiness(request) {
   const context = await requireVerifiedUser(request, "Log in to manage Brand Assets.");
   if (context.role !== "business" || context.user.active !== true) {
@@ -12396,6 +12426,11 @@ exports.processGeneratedServiceVisual = onCall(
   businessOperation("processGeneratedServiceVisual", (request) => generationBusinessCall(request,
   ({ actor, input }) => generationService.process({ actor, jobId: input.jobId })))
 );
+exports.runManagedSocialVisualGenerationV1 = onSchedule({ schedule: 'every 5 minutes', timeZone: 'UTC', region: 'us-east1',
+  maxInstances: 1, concurrency: 1, timeoutSeconds: 300, memory: '1GiB', retryCount: 0 }, async () => {
+  const results = await require('./social_managed_visual_worker').createWorker({ db, auth: getAuth(), generation: generationService }).run();
+  logger.info('managed_social_visual_cycle', { results });
+});
 exports.approveGeneratedServiceVisual = onCall(
   { region: "us-east1", enforceAppCheck: false, maxInstances: 4 },
   businessOperation("approveGeneratedServiceVisual", (request) => generationBusinessCall(request, generationService.approve))

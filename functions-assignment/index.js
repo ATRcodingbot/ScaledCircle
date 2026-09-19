@@ -56,6 +56,8 @@ const operations = require("./operational_layer");
 
 
 
+
+
 const groupAssignment = require("./group_assignment");
 const multiScalerRollout = require("./multi_scaler_rollout");
 
@@ -135,6 +137,17 @@ function businessOperation(name, handler) {
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2934,6 +2947,34 @@ async function assertPhysicalQaRequest(request) {
     throw new HttpsError("permission-denied", "This internal certification job is unavailable.");
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -8,7 +8,7 @@ const {fixture}=require('./social_customer_scheduling.test');
 const app=initializeApp({projectId:'demo-scaledcircle'},'customer-scheduling'),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app)});
 test('real transaction: one exact approval/job on concurrent taps, no plan/version mutation',async()=>{
- const f=fixture(),uid='customer_schedule_transaction',itemId='customer_plan_post';
+ const f=fixture(),uid='customer_schedule_'+require('node:crypto').randomUUID(),itemId=uid+'_post';
  const version={...f.version,businessUid:uid,planId:'customer_plan'};
  const plan={...f.plan,businessUid:uid},item={...f.item,businessUid:uid,planId:'customer_plan'};
  const write=(path,value)=>db.doc(path).set(value);

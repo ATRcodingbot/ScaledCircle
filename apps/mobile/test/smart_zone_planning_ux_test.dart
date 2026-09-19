@@ -39,7 +39,7 @@ void main() {
       expect(source, contains("'areaSelection':"));
       expect(source, contains("'resultId': selectedArea.id"));
       expect(source, contains('Large campaigns are split into Zones'));
-      expect(source, contains('Use \${widget.savedAreaName}'));
+      expect(source, contains('Use My Service Area'));
       expect(source, contains('Finding future opportunities is separate'));
       expect(source, isNot(contains('AI neighborhood')));
       expect(
@@ -54,7 +54,7 @@ void main() {
       'lib/screens/business/campaign_zones_screen.dart',
     ).readAsStringSync();
     expect(source, contains("We couldn't analyze this area yet."));
-    expect(source, contains('Try a smaller area or use Advanced Edit'));
+    expect(source, contains('Try a smaller area or Draw My Own Area'));
   });
 
   test(

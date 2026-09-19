@@ -19,6 +19,7 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   return db.doc(`socialPublishingAuthorities/${uid}/providers/${provider}`);
  };
  async function context(tx,job,action) {
+  if(action!=='reconcile'&&job.status==='canceled')throw Error('meta_job_canceled');
   if(!["facebook","instagram"].includes(job.provider))throw Error("meta_provider_required");
   const read=ref=>tx?tx.get(ref):ref.get();
   const variant=job.binding?.variants?.find(v=>v.provider===job.provider);
@@ -31,6 +32,15 @@ function createPublisher({db,project,credentials,fetchImpl,now=Date.now,provider
   const customer=a?.schemaVersion==='CustomerPostApprovalV1';
   const q=customer?(await read(db.doc(`socialContentQualityAssessments/${job.versionId}_${job.provider}`))).data()||legacyQuality:legacyQuality;
   if(customer) {
+   if(action!=='reconcile'){
+    const publishingPolicy=(await read(db.doc('socialManagedPolicies/'+job.businessUid))).data();
+    if(publishingPolicy?.businessUid===job.businessUid&&publishingPolicy.status==='paused')throw Error('meta_managed_publishing_paused');
+   }
+   if(a.authorizationSource==='approved_strategy'&&action!=='reconcile'){
+    const policy=(await read(db.doc('socialManagedPolicies/'+job.businessUid))).data();
+    const plan=(await read(db.doc('socialContentPlans/'+a.planId))).data();
+    require('./social_bounded_authority').assertRuntimePolicy({uid:job.businessUid,policy,approval:a,plan,now:now()});
+   }
    if(a.approvedByUid!==job.businessUid&&action!=='reconcile')await require('./social_workspace_authority').createAuthority({db,
      auth:actorAuth||require('firebase-admin/auth').getAuth(),FieldValue:require('firebase-admin/firestore').FieldValue,Timestamp:require('firebase-admin/firestore').Timestamp})({businessUid:job.businessUid,actorUid:a.approvedByUid,approve:true,transaction:tx});
    require("./social_customer_scheduling").authorizeRuntime({approval:a,connection:require("./social_customer_scheduling").connectionFromOwnedPath(c,job.businessUid),config:p,uid:job.businessUid,

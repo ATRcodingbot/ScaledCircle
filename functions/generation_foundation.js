@@ -312,6 +312,8 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       visualDirection: valid.visualDirection, requestedPurpose: valid.requestedPurpose,
       campaignId: valid.campaignId, materialSlot: valid.materialSlot,
       requestedAt: at, requestedBy: actor.uid, providerAdapter: adapter.id,
+      ...(actor.managedAuthority?{authorizationSource:'approved_strategy',managedPolicyId:actor.managedAuthority.policyId,
+        executionActor:'managed_social_scheduler'}:{}),
       providerMode: mode === "test_only" ? "test" : "external", safeBrief: brief,
       providerExecutionMode: clean(adapter.executionMode, 30) || "synchronous",
       planId: clean(gated.access?.plan, 40) || null,

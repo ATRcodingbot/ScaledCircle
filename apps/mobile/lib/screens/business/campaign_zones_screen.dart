@@ -74,10 +74,10 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
 
   Future<void> _plan({required bool useSavedArea}) async {
     final hours = double.tryParse(_hoursController.text.trim());
-    if (hours == null || hours <= 0 || hours > 192) {
+    if (hours == null || hours < 0.5 || hours > 192) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter total work between 1 and 192 hours.'),
+          content: Text('Enter estimated work from 30 minutes (0.5 hours) to 192 hours.'),
         ),
       );
       return;
@@ -135,7 +135,7 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
             decoration: const InputDecoration(
               labelText: 'Estimated total campaign work (hours)',
               helperText:
-                  'Large campaigns are split into Zones of six hours or less.',
+                  'Minimum 30 minutes. Large campaigns are split into Zones of six hours or less.',
               border: OutlineInputBorder(),
             ),
           ),
@@ -167,10 +167,11 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
             OutlinedButton.icon(
               onPressed: widget.locked || _planning
                   ? null
-                  : () => _plan(useSavedArea: true),
+                  : widget.onAdvancedEdit,
               icon: const Icon(Icons.business_outlined),
-              label: Text('Use ${widget.savedAreaName}'),
+              label: const Text('Use My Service Area'),
             ),
+            Text('Draw a campaign territory within ${widget.savedAreaName}. Your service area is a search boundary, not one campaign.'),
           ],
           const SizedBox(height: 4),
           TextButton.icon(
@@ -178,7 +179,7 @@ class _SmartZoneEntryState extends State<_SmartZoneEntry> {
                 ? null
                 : widget.onAdvancedEdit,
             icon: const Icon(Icons.gesture),
-            label: const Text('Advanced Edit'),
+            label: const Text('Draw My Own Area'),
           ),
           const Text(
             'Finding future opportunities is separate from mapping an area you already know.',
@@ -561,8 +562,9 @@ class CampaignZonesScreen extends StatelessWidget {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            error.message ??
-                "We couldn't analyze this area yet. Try a smaller area or use Advanced Edit.",
+            (error.message ??
+                "We couldn't analyze this area yet. Try a smaller area or Draw My Own Area.")
+                .replaceAll(RegExp(r'\s*\[\d{3}\]'), ''),
           ),
         ),
       );

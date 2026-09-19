@@ -22,3 +22,11 @@ test('delivery manifests and private-media authority are server-only, including 
   await assertFails(db.doc('customerSocialMedia/delivery').delete());
  }
 });
+test('managed publishing, generation and schedule-change authority cannot be forged by any client',async()=>{
+ for(const context of [env.unauthenticatedContext(),...['owner','other','scaler','admin'].map(uid=>env.authenticatedContext(uid,{email_verified:true}))]){
+  for(const collection of ['socialManagedPolicies','socialManagedPolicyAudit','socialManagedCycles','socialManagedWorkerState','socialManagedGenerationRequests','socialScheduleChangeAudit']){
+   const ref=context.firestore().doc(collection+'/owner');
+   await assertFails(ref.get());await assertFails(ref.set({businessUid:'owner',status:'active',approvedByUid:'owner'}));
+  }
+ }
+});

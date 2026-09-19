@@ -44,7 +44,18 @@ async function proposal({db,ctx,read=ref=>ref.get()}) {
   if(recent.size>100)throw Error('Content history needs review.');
   const checks=require('./social_customer_quality').reviewChecks({variant:version.variants.find(v=>v.provider===provider),revision:media,mediaAuthorityValid:true,
     recentVariants:recent.docs.filter(d=>!d.id.startsWith(ctx.itemRef.id+'_v')).flatMap(d=>d.data().variants||[])});
-  const quality={businessUid:uid,immutableSourceHash:version.contentHash,readyToPublish:checks.passed,reviewChecks:checks,provider};
+  // Assess the prospective revision itself. A prior draft's score cannot confer
+  // strategy-based authority on a different image/content hash.
+  const profile=(await read(db.doc('businessGrowthProfiles/'+uid))).data()||{};
+  const discovery=(await read(db.doc('discoveryPreferences/'+uid))).data();
+  const geography=discovery?.userUid===uid?(discovery.areas||[]).filter(a=>a.enabled!==false).map(a=>a.displayName).filter(x=>typeof x==='string'):[];
+  const advisory=social.assessScheduledContent({businessUid:uid,contentItemId:ctx.itemRef.id,
+    versionRecord:{...version,variants:version.variants.filter(v=>v.provider===provider)},
+    businessContext:{businessName:profile.businessName,services:profile.services||profile.servicesOffered||[],
+      geography:geography.length?geography:[profile.serviceArea,profile.city,profile.county].filter(v=>typeof v==='string')},
+    recentVariants:recent.docs.filter(d=>!d.id.startsWith(ctx.itemRef.id+'_v')).flatMap(d=>d.data().variants||[]),now:ctx.now});
+  const quality={...advisory,businessUid:uid,immutableSourceHash:version.contentHash,
+    advisoryReady:advisory.readyToPublish,readyToPublish:checks.passed,reviewChecks:checks,provider};
   const binding={policy:POLICY,businessUid:uid,itemId:ctx.itemRef.id,provider,draftVersion:ctx.version.version,draftHash:ctx.version.contentHash,
     nextVersion:version.version,nextHash:version.contentHash,candidate:c,sourceGeneration:source.storageGeneration};
   return {candidate:c,source,asset,job,ar,rr,jr,media,deliveryId,version,quality,digest:hash(JSON.stringify(binding)),
@@ -78,17 +89,21 @@ async function readCommitTargets({db,tx,uid,p}) {
   return {refs,values,qualityRef:db.doc('socialContentQualityAssessments/'+p.ctx.versionId+'_'+p.ctx.provider),
     leaseRef:db.doc('socialCreativePreparation/'+require('./social_creative_diversity').leaseId(uid,{itemId:p.ctx.itemRef.id,provider:p.ctx.provider}))};
 }
-function commit({tx,uid,actorUid,p,staged,targets,now,approvalId,jobId}) {
+function commit({tx,uid,actorUid,p,staged,targets,now,approvalId,jobId,managedPolicy=null}) {
   const {refs,values}=targets,c=p.candidate;
+  const authorization=managedPolicy?{authorizationSource:'approved_strategy',managedPolicyId:managedPolicy.id,
+    strategyAuthorizedByUid:managedPolicy.approvedByUid,executionActor:'managed_social_scheduler'}:
+    {authorizationSource:'individual_post_approval'};
   const audit={schemaVersion:POLICY,businessUid:uid,actorUid,approvedAt:now,itemId:p.ctx.itemRef.id,provider:p.ctx.provider,
+    ...authorization,
     creative:{assetId:c.assetId,revisionId:c.revisionId,sourceSha256:c.sourceSha256,derivativeSha256:c.sha256,generatedContentAcknowledged:true},
     post:{version:p.version.version,contentHash:p.version.contentHash,approvalId},schedule:{jobId,scheduledFor:p.version.scheduledFor},reviewDigest:p.digest};
   tx.create(refs.audit,audit);
   if(p.source.approvalStatus!=='approved'){
-    tx.update(p.rr,{approvalStatus:'approved',generatedContentAcknowledged:true,approvedBy:actorUid,approvedByUid:actorUid,approvedAt:now,updatedAt:now});
+    tx.update(p.rr,{approvalStatus:'approved',generatedContentAcknowledged:true,approvedBy:actorUid,approvedByUid:actorUid,approvedAt:now,updatedAt:now,...authorization});
     tx.update(p.ar,{approvedRevisionId:c.revisionId,updatedAt:now});
   }
-  if(p.job.status!=='approved')tx.update(p.jr,{status:'approved',reviewedAt:now,reviewedBy:actorUid,generatedContentAcknowledged:true,updatedAt:now});
+  if(p.job.status!=='approved')tx.update(p.jr,{status:'approved',reviewedAt:now,reviewedBy:actorUid,generatedContentAcknowledged:true,updatedAt:now,...authorization});
   if(!values[0].exists)tx.create(refs.delivery,{businessUid:uid,status:'approved_for_social',path:staged.path,generation:staged.generation,
     sha256:c.sha256,bytes:c.bytes,assetId:c.assetId,revisionId:c.revisionId,approvedByUid:actorUid,approvedAt:now});
   if(!values[1].exists)tx.create(refs.media,p.media);

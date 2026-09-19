@@ -361,7 +361,7 @@ void main() {
       await _checkpoint('continue-enabled:${continueButton.onPressed != null}');
       expect(continueButton.onPressed, isNull);
 
-      final chooseTarget = find.text('Advanced Edit');
+      final chooseTarget = find.text('Draw My Own Area');
       await _checkpoint(
         'choose-target-count:${chooseTarget.evaluate().length}',
       );

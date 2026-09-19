@@ -4,6 +4,7 @@
 function reviewChecks({variant,revision,mediaAuthorityValid,recentVariants=[]}) {
   const blockers=[];
   const copy=String(variant?.copy||'').trim();
+  if(require('./social_public_caption').internalCopy.test(copy))blockers.push('Remove internal workflow language from the public caption.');
   if(copy.length<20||copy.length>(variant?.provider==='instagram'?2200:5000)||/\{\{|\[insert|lorem ipsum/i.test(copy))blockers.push('Complete the post text.');
   if(variant?.callToAction&&!variant?.destinationUrl)blockers.push('Add the destination for this call to action.');
   if(variant?.destinationUrl){try{const u=new URL(variant.destinationUrl);if(u.protocol!=='https:'||u.username||u.password)throw Error();}catch{blockers.push('Use a secure public destination.');}}

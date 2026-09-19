@@ -204,7 +204,7 @@ assert.deepEqual(Object.keys(creativeMedia).sort(), [
   "getBusinessMediaWorkspace", "getGeneratedMediaOperations",
   "getGeneratedServiceVisualWorkspace", "processGeneratedServiceVisual",
   "rejectBusinessMediaRevision", "rejectGeneratedServiceVisual",
-  "removeBusinessMediaAsset", "requestGeneratedServiceVisual",
+  "removeBusinessMediaAsset", "requestGeneratedServiceVisual", "runManagedSocialVisualGenerationV1",
   "updateBusinessBrandProfile", "updateBusinessMediaRevisionMetadata",
   "updateGeneratedMediaSafetyConfiguration",
 ].sort());

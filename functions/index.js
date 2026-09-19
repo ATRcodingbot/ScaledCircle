@@ -4713,6 +4713,7 @@ function smartZonePlanArguments(input, desiredHours, geographicSnapshot) {
 }
 
 async function generateSmartZonePlan(input, desiredHours) {
+  desiredHours = smartZoneEntryContract.workloadHours(desiredHours);
   const planningBoundary = smartZonePlanning.workloadBoundary({anchor: input.anchor,
     selectedBoundary: input.selectedBoundary, desiredHours: desiredHours ?? 5});
   const geographicSnapshot = await smartZoneGeography.fetchSnapshot({
@@ -4730,8 +4731,11 @@ exports.getSmartZonePlan = onCall(
     const input = await smartZoneCampaign(request);
     try {
       return (await generateSmartZonePlan(input, request.data?.desiredHours)).plan;
-    } catch (_) {
-      throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
+    } catch (error) {
+      logger.warn("Smart Zone planning failed", {campaignId: input.campaignId,
+        reason: String(error?.message || 'unknown').slice(0, 160)});
+      const failure = smartZoneEntryContract.planningFailure(error);
+      throw new HttpsError(failure.code, failure.message);
     }
   }),
 );
@@ -4747,8 +4751,11 @@ exports.applySmartZonePlan = onCall(
     let geographicSnapshot;
     try {
       ({plan, geographicSnapshot} = await generateSmartZonePlan(input, request.data?.desiredHours));
-    } catch (_) {
-      throw new HttpsError("invalid-argument", "Choose a supported campaign workload.");
+    } catch (error) {
+      logger.warn("Smart Zone preparation failed", {campaignId: input.campaignId,
+        reason: String(error?.message || 'unknown').slice(0, 160)});
+      const failure = smartZoneEntryContract.planningFailure(error);
+      throw new HttpsError(failure.code, failure.message);
     }
     if (request.data?.planId !== plan.planId) {
       throw new HttpsError("failed-precondition", "The recommendation changed. Review it again.");
@@ -12419,6 +12426,11 @@ exports.processGeneratedServiceVisual = onCall(
   businessOperation("processGeneratedServiceVisual", (request) => generationBusinessCall(request,
     ({actor, input}) => generationService.process({actor, jobId: input.jobId}))),
 );
+exports.runManagedSocialVisualGenerationV1=onSchedule({schedule:'every 5 minutes',timeZone:'UTC',region:'us-east1',
+  maxInstances:1,concurrency:1,timeoutSeconds:300,memory:'1GiB',retryCount:0},async()=>{
+  const results=await require('./social_managed_visual_worker').createWorker({db,auth:getAuth(),generation:generationService}).run();
+  logger.info('managed_social_visual_cycle',{results});
+});
 exports.approveGeneratedServiceVisual = onCall(
   {region: "us-east1", enforceAppCheck: false, maxInstances: 4},
   businessOperation("approveGeneratedServiceVisual", (request) => generationBusinessCall(request, generationService.approve)),

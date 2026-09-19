@@ -113,7 +113,7 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
         recentVariants:recent.docs.filter(d=>!d.id.startsWith(input.itemId+'_v')).flatMap(d=>d.data().variants||[])});
       quality={...quality,readyToPublish:checks.passed,reviewChecks:checks};
     }
-    return {uid,plan:p.data(),item,version,versionId,itemRef,creativePreparation:preparation.data(),provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality,
+    return {uid,plan:p.data(),item,version,versionId,itemRef,history:jobs.docs.map(d=>d.data()),creativePreparation:preparation.data(),provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality,
       conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid,entitlement.data()),now:now()};
   }
   return {
@@ -121,6 +121,15 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
       const original=await context(null,uid,input);let inline=null,inlineError=null;
       if(!original.existingJob)try{inline=await require('./social_inline_creative').proposal({db,ctx:original});}catch(e){inlineError=e.message;}
       const ctx=inline?.ctx||original, result=readiness(ctx);
+      const managed=(await db.doc('socialManagedPolicies/'+uid).get()).data();
+      result.automaticMode=false;
+      try{require('./social_bounded_authority').assertRuntimePolicy({uid,policy:managed,plan:original.plan,
+        approval:{businessUid:uid,planId:original.item.planId,managedPolicyId:managed?.id,managedStrategyDigest:managed?.strategyDigest},now:now()});result.automaticMode=true;}catch{/* Missing or changed authority is never inferred from an old plan. */}
+      if(result.automaticMode){
+        const state=(await db.doc(`socialManagedCycles/${uid}/posts/${input.itemId}_${input.provider}`).get()).data();
+        result.automaticState=state?.status==='needs_attention'?'needs_attention':'preparing';
+        result.automaticReasons=state?.reasons||[];
+      }
       const bindingHash=ctx.version?growth.contentBinding({id:ctx.versionId,record:ctx.version},uid).bindingHash:null;
       const recommendation=require('./social_creative_diversity').presentation(ctx.creativePreparation);
       const needsNew=!!recommendation&&recommendation.format==='generated'&&recommendation.state!=='prepared';
@@ -150,12 +159,12 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
       if(needsNew&&!inline)ctx.revision=null;
       const state=ctx.existingJob?.status|| (original.creativePreparation?.state==='preparing'?'preparing_creative':result.ready?'ready_for_review':
         !inline&&!result.reviewCandidate&&result.reasons.some(r=>r.code==='creative')?'needs_creative':'needs_attention');
-      return {...result,version:original.version?.version,contentHash:original.version?.contentHash,reviewState:state,
+      return {...result,managedHold:original.item.managedHolds?.[input.provider]||null,jobId:ctx.existingJob?.id||null,version:original.version?.version,contentHash:original.version?.contentHash,reviewState:state,
         inlineCreativeApproval:inline?{digest:inline.digest,creativeSha256:inline.candidate.sha256,prospectiveVersion:inline.version.version}:null,
         reviewCandidate:result.reviewCandidate||null,publicationStatus:ctx.existingJob?.status||null,proposedFutureTime:require('./social_customer_preparation').futureSlot(result.scheduledFor,now()),bindingHash,
         reviewDigest:reviewDigest(ctx,bindingHash),reviewedPost:ctx.version ? {mediaOrigin:ctx.revision?.sourceOrigin||null,accountName:ctx.connection?.accountDisplayName||ctx.connection?.handle||'Connected Business account',variant:ctx.version.variants?.find(v=>v.provider===input.provider),goal:ctx.version.goal||'',images:inline?[]:ctx.revision?.images?.map(i=>({url:i.url,sha256:i.sha256,width:i.width,height:i.height}))||[],creativePrepared:ctx.revision?.preparation?.policy===require('./social_customer_media').MEDIA_POLICY,quality:ctx.quality||null,scheduledFor:result.scheduledFor}:null};
     },
-    async approve(uid,input,{actorUid=uid}={}) {
+    async approve(uid,input,{actorUid=uid,managedPolicyId=null}={}) {
       if(!/^[a-zA-Z0-9_-]{1,220}$/.test(input?.itemId||'') || !['facebook','instagram'].includes(input.provider) ||
         !Number.isSafeInteger(input.version) || !/^[a-f0-9]{64}$/.test(input.contentHash||'') || !/^[a-f0-9]{64}$/.test(input.bindingHash||'') || !/^[a-f0-9]{64}$/.test(input.reviewDigest||'')) throw Error('Review the exact current post first.');
       const inlineApi=require('./social_inline_creative');let staged=null;
@@ -173,6 +182,13 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
         }
         const original=await context(null,uid,input),p=await inlineApi.proposal({db,ctx:original});
         if(!p||p.digest!==receiptId||original.version.version!==input.version||original.version.contentHash!==input.contentHash)throw Error('The creative or post changed. Review it again.');
+        if(managedPolicyId!==null){
+          const policy=(await db.doc('socialManagedPolicies/'+uid).get()).data();
+          if(policy?.id!==managedPolicyId)throw Error('Managed strategy authority changed.');
+          const check=require('./social_bounded_authority').assess({uid,policy,planId:original.item.planId,
+            plan:original.plan,version:p.ctx.version,provider:input.provider,quality:p.ctx.quality,history:original.history,now:now()});
+          if(!check.ready)return {status:'blocked',...check};
+        }
         const ready=readiness(p.ctx);if(!ready.ready)return {status:'blocked',...ready};
         staged=await (stageInline||inlineApi.stage)({bucket,proposal:p});
       }
@@ -189,6 +205,16 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
         const inline=receiptId?await inlineApi.proposal({db,ctx:original,read:ref=>tx.get(ref)}):null;
         if(receiptId&&(!inline||inline.digest!==receiptId||inline.candidate.sha256!==staged.sha256))throw Error('The image changed. Review it again.');
         const ctx=inline?.ctx||original;
+        let managedPolicy = null;
+        if (managedPolicyId !== null) {
+          if(original.item.managedHolds?.[input.provider])return {status:'blocked',reasons:[{code:'owner_hold',message:'This post is held for your edits or was canceled.'}]};
+          managedPolicy = (await tx.get(db.doc('socialManagedPolicies/'+uid))).data();
+          if (managedPolicy?.id !== managedPolicyId) throw Error('Managed strategy authority changed.');
+          const bounded = require('./social_bounded_authority').assess({uid, policy:managedPolicy,
+            planId:ctx.item.planId, plan:ctx.plan, version:ctx.version, provider:input.provider,
+            quality:ctx.quality, history:original.history.filter(j=>j.versionId!==ctx.versionId), now:now()});
+          if (!bounded.ready) return {status:'blocked', ...bounded};
+        }
         const binding=growth.contentBinding({id:ctx.versionId,record:ctx.version},uid);
         if(binding.bindingHash!==input.bindingHash || reviewDigest(ctx,binding.bindingHash)!==input.reviewDigest)throw Error('The post or its publish time changed. Review it again.');
         const identity={businessUid:uid,versionId:ctx.versionId,provider:input.provider};
@@ -204,19 +230,37 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
           connectionRevision:ctx.connection.connectionRevision,credentialRotationGeneration:ctx.connection.credentialRotationGeneration};
         if(!Number.isSafeInteger(account.connectionRevision)||!Number.isSafeInteger(account.credentialRotationGeneration)) throw Error(messages.permission);
         const canonical={schemaVersion:SCHEMA,businessUid:uid,approvedByUid:actorUid,
+          ...(managedPolicy ? {authorizationSource:'approved_strategy',managedPolicyId:managedPolicy.id,
+            managedStrategyDigest:managedPolicy.strategyDigest,strategyAuthorizedByUid:managedPolicy.approvedByUid,
+            executionActor:'managed_social_scheduler'} : {authorizationSource:'individual_post_approval'}),
           ...(actorUid===uid?{}:{actorAuthority:{type:'workspace_member',businessUid:uid,actorUid}}),providers:[input.provider],items:[binding],
           providerAccounts:{[input.provider]:account},planVersion:ctx.plan.planVersion,planId:ctx.item.planId};
         const approval={...canonical,id:'growth_approval_'+growth.hash(canonical),approvedAt:now(),externalPublishingEnabled:true};
         const job={...growth.jobs(approval)[0],status:'scheduled',customerApproval:true,externalPublishingEnabled:true};
         if(job.id!==jobId)throw Error('Publication identity mismatch.');
         const targets=inline?await inlineApi.readCommitTargets({db,tx,uid,p:inline}):null;
-        if(inline)inlineApi.commit({tx,uid,actorUid,p:inline,staged,targets,now:now(),approvalId:approval.id,jobId});
+        // Serialize different posts against the same cadence authority as well
+        // as deduplicating retries of one post. Concurrent workers cannot both
+        // consume the last permitted slot using an empty history snapshot.
+        if(managedPolicy)tx.update(db.doc('socialManagedPolicies/'+uid),{
+          lastScheduledJobId:jobId,lastScheduledAt:now()});
+        if(inline)inlineApi.commit({tx,uid,actorUid,p:inline,staged,targets,now:now(),approvalId:approval.id,jobId,managedPolicy});
         tx.create(db.doc('socialGrowthApprovals/'+approval.id),approval);
         tx.create(ref,job);
         tx.update(ctx.itemRef,{['platformApprovals.'+input.provider]:{version:ctx.version.version,approvalId:approval.id,jobId,
           status:'scheduled',approvedAt:now(),scheduledFor:check.scheduledFor}});
         return {status:'scheduled',jobId,provider:input.provider,scheduledFor:check.scheduledFor,reused:false};
       });
+    },
+    async scheduleManaged(uid,input,policyId) {
+      const preview=await this.preview(uid,input);
+      if(preview.publicationStatus) return {status:preview.publicationStatus,reused:true};
+      if(!preview.ready) return {status:'blocked',reasons:preview.reasons};
+      return this.approve(uid,{itemId:input.itemId,provider:input.provider,
+        version:preview.version,contentHash:preview.contentHash,bindingHash:preview.bindingHash,
+        reviewDigest:preview.reviewDigest,
+        ...(preview.inlineCreativeApproval?{inlineCreativeDigest:preview.inlineCreativeApproval.digest,confirmCreativeAndSchedule:true}:{})},
+      {actorUid:uid,managedPolicyId:policyId});
     },
   };
 }

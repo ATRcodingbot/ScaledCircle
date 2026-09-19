@@ -11,6 +11,22 @@ const PROVIDER_TIMEOUT_MS = 7000;
 const TIGER_BASE = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb";
 
 function normalizeQuery(value) { return String(value || "").trim().replace(/\s+/g, " ").slice(0, 180); }
+function addressQueryVariants(value) {
+  const original = normalizeQuery(value);
+  if (!/^\d+\s/.test(original)) return [original];
+  const states = require('./market_states').states;
+  const state = states.find(s => new RegExp(`(?:,|\\s)(${s.name}|${s.code})\\s+\\d{5}(?:-\\d{4})?$`, 'i').test(original));
+  if (!state) return [original];
+  const tail = new RegExp(`[,\\s]+(?:${state.name}|${state.code})\\s+(\\d{5}(?:-\\d{4})?)$`, 'i');
+  const match = original.match(tail);
+  const prefix = original.replace(tail, '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  const street = prefix.match(/^(\d+\s+.+?\s)(ct|court|rd|road|st|street|ave|avenue|dr|drive|ln|lane|blvd|boulevard|way|pl|place|ter|terrace)\.?\s+(.+)$/i);
+  if (!street) return [original];
+  const suffixes = {ct:'Court',rd:'Road',st:'Street',ave:'Avenue',dr:'Drive',ln:'Lane',blvd:'Boulevard',pl:'Place',ter:'Terrace'};
+  const suffix = suffixes[street[2].toLowerCase()] || street[2];
+  const structured = `${street[1]}${suffix}, ${street[3]}, ${state.code} ${match[1]}`;
+  return [...new Set([original, structured])];
+}
 function cacheId(query) { return crypto.createHash("sha256").update(`${CACHE_VERSION}:${query.toLowerCase()}`).digest("hex"); }
 function legacyCacheId(query) { return crypto.createHash("sha256").update(query.toLowerCase()).digest("hex"); }
 function simplifyRing(ring, maximum = 100) {
@@ -122,21 +138,24 @@ function tigerLayer(result) {
   if (result.geographyType === "zcta") return {service: "PUMA_TAD_TAZ_UGA_ZCTA", layers: [1]};
   return null;
 }
-async function fetchJson(url, fetchImpl, headers = {}) {
-  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+async function fetchJson(url, fetchImpl, headers = {}, deadline = Infinity) {
+  const remaining = Math.min(PROVIDER_TIMEOUT_MS, deadline - Date.now());
+  if (remaining <= 0) throw new Error('provider_unavailable');
+  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), remaining);
   try { const response = await fetchImpl(url, {signal: controller.signal, headers});
     if (!response.ok) throw new Error("provider_unavailable"); return await response.json();
   } finally { clearTimeout(timeout); }
 }
-async function censusBoundary(result, {fetchImpl, tigerBase = TIGER_BASE}) {
+async function censusBoundary(result, {fetchImpl, tigerBase = TIGER_BASE, deadline = Infinity}) {
   const target = tigerLayer(result); if (!target) return null;
   for (const layer of target.layers) {
+    if (Date.now() >= deadline) break;
     const endpoint = new URL(`${tigerBase}/${target.service}/MapServer/${layer}/query`);
     const parameters = {where: "1=1", geometry: `${result.longitude},${result.latitude}`,
       geometryType: "esriGeometryPoint", inSR: "4326", spatialRel: "esriSpatialRelIntersects",
       outFields: "GEOID,NAME,BASENAME,STATE,COUNTY,ZCTA5", returnGeometry: "true", outSR: "4326", f: "geojson"};
     Object.entries(parameters).forEach(([key, value]) => endpoint.searchParams.set(key, value));
-    let payload; try { payload = await fetchJson(endpoint, fetchImpl, {Accept: "application/geo+json, application/json"}); } catch (_) { continue; }
+    let payload; try { payload = await fetchJson(endpoint, fetchImpl, {Accept: "application/geo+json, application/json"}, deadline); } catch (_) { continue; }
     const feature = Array.isArray(payload?.features) ? payload.features[0] : null;
     const normalized = normalizeGeoJson(feature?.geometry); if (normalized.geometry.length < 3) continue;
     const properties = feature.properties || {};
@@ -151,7 +170,8 @@ async function writeCacheFailSoft(reference, results, now, onCacheWriteError) {
   catch (error) { if (onCacheWriteError) onCacheWriteError(error); }
 }
 async function resolvePlace({query: rawQuery, db, fetchImpl = fetch, now = Date.now(), baseUrl, tigerBase,
-  onCacheWriteError}) {
+  onCacheWriteError, waitImpl = ms => new Promise(resolve => setTimeout(resolve, ms))}) {
+  const startedAt = Date.now(), deadline = startedAt + 12000;
   const query = normalizeQuery(rawQuery); if (query.length < 2) throw new Error("invalid_query");
   const cacheReference = db.collection("serviceAreaResolutionCache").doc(cacheId(query));
   const cached = await cacheReference.get();
@@ -177,10 +197,25 @@ async function resolvePlace({query: rawQuery, db, fetchImpl = fetch, now = Date.
   const endpoint = new URL("/search", baseUrl || "https://nominatim.openstreetmap.org");
   Object.entries({q: query, format: "jsonv2", limit: "6", countrycodes: "us", addressdetails: "1", polygon_geojson: "1"})
     .forEach(([key, value]) => endpoint.searchParams.set(key, value));
-  const payload = await fetchJson(endpoint, fetchImpl, {"User-Agent": "ScaledCircle-Service-Area-Resolver/1.0 (+https://scaledcircle.com)", Accept: "application/json"});
+  const headers = {"User-Agent": "ScaledCircle-Service-Area-Resolver/1.0 (+https://scaledcircle.com)", Accept: "application/json"};
+  let payload = await fetchJson(endpoint, fetchImpl, headers, deadline);
+  const variants = addressQueryVariants(query);
+  if (Array.isArray(payload) && payload.length === 0 && variants.length > 1) {
+    // One bounded retry of the same address; never replace it with a guessed
+    // location. The normal shared provider throttle still applies.
+    await waitImpl(MIN_REQUEST_INTERVAL_MS);
+    const retryAt = now + Math.max(MIN_REQUEST_INTERVAL_MS, Date.now() - startedAt);
+    await db.runTransaction(async transaction => {
+      const throttle = await transaction.get(throttleReference);
+      if (Number(throttle.data()?.nextAllowedAtMs || 0) > retryAt) throw new Error('rate_limited');
+      transaction.set(throttleReference, {nextAllowedAtMs: retryAt + MIN_REQUEST_INTERVAL_MS, updatedAtMs: retryAt}, {merge: true});
+    });
+    endpoint.searchParams.set('q', variants[1]);
+    payload = await fetchJson(endpoint, fetchImpl, headers, deadline);
+  }
   const parsed = Array.isArray(payload) ? payload.map(parseResult).filter(Boolean) : [];
   const results = [];
-  for (const result of parsed) results.push(result.geometry.length >= 3 ? result : await censusBoundary(result, {fetchImpl, tigerBase}) || result);
+  for (const result of parsed) results.push(result.geometry.length >= 3 ? result : await censusBoundary(result, {fetchImpl, tigerBase, deadline}) || result);
   // Only usable boundaries receive the 30-day cache. Provider/network failures throw
   // before this point, and unresolved identities are deliberately not cached.
   if (results.some((result) => result.geometry.length >= 3)) {
@@ -191,4 +226,4 @@ async function resolvePlace({query: rawQuery, db, fetchImpl = fetch, now = Date.
 module.exports = {CACHE_VERSION, RESOLUTION_VERSION, CACHE_TTL_MS, MIN_REQUEST_INTERVAL_MS,
   PROVIDER_TIMEOUT_MS, normalizeQuery, normalizeGeoJson, parseResult, censusBoundary,
   encodeCacheResult, decodeCacheResult, encodeCacheDocument, decodeCacheDocument,
-  decodeLegacyCacheDocument, resolvePlace};
+  decodeLegacyCacheDocument, resolvePlace, addressQueryVariants};

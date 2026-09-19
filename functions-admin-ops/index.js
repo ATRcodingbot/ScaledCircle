@@ -60,6 +60,8 @@ const {
 
 
 
+
+
 const workspaceAccess = require("./workspace_access");
 
 
@@ -130,6 +132,17 @@ const adminOpsReadService = adminOpsReadModel.createAdminOpsReadService({
   db,
   FieldValue
 });
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -5007,6 +5020,48 @@ async function authenticatedUserContext(request, message) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function adminOperationsHttpsError(error) {
   const code = String(error?.message || "");
   if (code === "trusted_admin_required") {
@@ -5130,6 +5185,28 @@ exports.getAdminOperationsOverview = onCall(
     }
   }
 );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 exports.getAdminCampaignTimeline = onCall(
   { enforceAppCheck: false, maxInstances: 4 },

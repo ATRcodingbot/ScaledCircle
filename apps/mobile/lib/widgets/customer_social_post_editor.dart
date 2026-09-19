@@ -45,6 +45,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     _post['scheduledFor']?.toString() ?? '',
   )?.toLocal();
   bool _busy = false, _changed = false, _editing = false;
+  bool _authorityConfirmed = false, _revisionConflict = false;
   final Set<String> _loadedPreviewImages = {};
   bool get _imagesVisible =>
       (_post['reviewedPost']?['images'] as List? ?? []).whereType<Map>().every(
@@ -75,6 +76,8 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                   _post['publicationStatus'] != null
               ? _refresh
               : _prepare,
+          readOnly:
+              _post['ready'] == true || _post['publicationStatus'] != null,
         );
       }
     });
@@ -123,7 +126,10 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<void> _run(
+    Future<void> Function() action, {
+    bool readOnly = false,
+  }) async {
     if (_busy) return;
     setState(() {
       _busy = true;
@@ -133,16 +139,22 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     try {
       await action();
     } catch (_) {
+      var recovered = false;
       try {
         await _refresh().timeout(const Duration(seconds: 10));
+        recovered = true;
       } catch (_) {
         // Keep the current text when the authoritative readback is unavailable.
+        _authorityConfirmed = false;
       }
       if (mounted) {
         setState(() {
           _creativeNotice = null;
-          _error =
-              'We could not confirm this change. Your text is kept here. Reload the saved post before retrying.';
+          _error = readOnly && recovered
+              ? null
+              : readOnly
+              ? 'The latest saved post could not be loaded. Your text is kept here. Reload saved status before scheduling.'
+              : 'We could not confirm this change. Your text is kept here. Reload the saved post before retrying.';
         });
       }
     } finally {
@@ -155,7 +167,11 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
     final generation = await widget.service.generationAvailability();
     if (mounted) {
       setState(() {
+        _revisionConflict =
+            _revisionConflict ||
+            (_changed && fresh['version'] != _post['version']);
         _post = {..._post, ...fresh, 'itemId': _post['itemId']};
+        _authorityConfirmed = true;
         _generation = generation;
         _quality = Map<String, dynamic>.from(
           fresh['reviewedPost']?['quality'] as Map? ?? {},
@@ -183,6 +199,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
   }
 
   Future<void> _save() async {
+    if (_revisionConflict || _post['publicationStatus'] != null) return;
     if (_time == null) {
       setState(() => _error = 'Choose a future time.');
       return;
@@ -216,6 +233,49 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             'Changes saved. Review the updated post before scheduling.';
       });
     }
+  }
+
+  Future<void> _compareSavedVersion() async {
+    await _refresh();
+    if (!mounted) return;
+    final canReapply = _post['publicationStatus'] == null;
+    final keep = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Compare saved post and your edits'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Your unsaved text'),
+              SelectableText(_copy.text),
+              const SizedBox(height: 16),
+              const Text('Current saved text'),
+              SelectableText(
+                _post['reviewedPost']?['variant']?['copy']?.toString() ?? '',
+              ),
+              if (!canReapply)
+                const Text(
+                  'This post already has a publication record. Its approved revision cannot be overwritten here.',
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep reviewing'),
+          ),
+          if (canReapply)
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Keep my edits as a new draft'),
+            ),
+        ],
+      ),
+    );
+    if (keep == true && mounted) setState(() => _revisionConflict = false);
   }
 
   Future<void> _chooseTime() async {
@@ -599,7 +659,7 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
                 child: Text(_error!, semanticsLabel: _error),
               ),
               TextButton(
-                onPressed: _busy ? null : () => _run(_refresh),
+                onPressed: _busy ? null : () => _run(_refresh, readOnly: true),
                 child: const Text('Reload saved status (keep my text)'),
               ),
             ],
@@ -636,6 +696,60 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               icon: const Icon(Icons.schedule),
               label: const Text('Choose time'),
             ),
+            if (_post['publicationStatus'] == null &&
+                _post['automaticMode'] == true)
+              const Text(
+                'Automatic publishing is authorized. Saved changes are checked against your strategy before scheduling; you do not need to approve this post individually.',
+              ),
+            if (_post['publicationStatus'] == null &&
+                _post['automaticMode'] != true) ...[
+              FilledButton(
+                onPressed:
+                    _busy ||
+                        !_authorityConfirmed ||
+                        _changed ||
+                        _revisionConflict ||
+                        _post['ready'] != true ||
+                        !_imagesVisible ||
+                        widget.onSchedule == null
+                    ? null
+                    : () => _run(() async {
+                        await widget.onSchedule!(_post);
+                        await _refresh();
+                      }),
+                child: const Text('Approve & Schedule'),
+              ),
+              if (_changed)
+                const Text(
+                  'Save your edits before scheduling this exact version.',
+                ),
+              if (!_authorityConfirmed)
+                const Text(
+                  'Reload saved status to verify the current post before scheduling.',
+                ),
+              if (_authorityConfirmed && !_imagesVisible)
+                const Text(
+                  'The exact creative must finish loading before scheduling.',
+                ),
+              if (widget.onSchedule == null)
+                const Text('Scheduling is not available from this view.'),
+              if (_post['ready'] != true &&
+                  (_post['reasons'] as List? ?? []).isEmpty)
+                const Text(
+                  'The current post is not ready. Reload saved status for its requirements.',
+                ),
+            ],
+            if (_revisionConflict)
+              const Text(
+                'The saved post changed while you were editing. Your text is preserved. Compare it with the saved version before making another change.',
+              ),
+            if (_revisionConflict)
+              TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => _run(_compareSavedVersion, readOnly: true),
+                child: const Text('Compare saved version'),
+              ),
             if (_post['provider'] == 'facebook')
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
@@ -651,7 +765,12 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
               ),
             if (_changed)
               FilledButton(
-                onPressed: _busy ? null : () => _run(_save),
+                onPressed:
+                    _busy ||
+                        _revisionConflict ||
+                        _post['publicationStatus'] != null
+                    ? null
+                    : () => _run(_save),
                 child: Text(_busy ? 'Working…' : 'Save draft changes'),
               ),
             const SizedBox(height: 20),
@@ -753,23 +872,6 @@ class _CustomerSocialPostEditorState extends State<CustomerSocialPostEditor> {
             if (_post['publicationStatus'] != null)
               Text(
                 'Post ${_post['publicationStatus']}. Your saved approval and schedule are preserved.',
-              ),
-            if (_post['publicationStatus'] == null &&
-                _post['ready'] == true &&
-                !_changed &&
-                widget.onSchedule != null)
-              FilledButton(
-                onPressed: _busy || !_imagesVisible
-                    ? null
-                    : () => _run(() async {
-                        await widget.onSchedule!(_post);
-                        await _refresh();
-                      }),
-                child: Text(
-                  _post['inlineCreativeApproval'] != null
-                      ? 'Approve Creative & Schedule'
-                      : 'Approve & Schedule',
-                ),
               ),
             TextButton(
               onPressed: () => Navigator.pop(context),

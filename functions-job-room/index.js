@@ -56,6 +56,8 @@ const operations = require("./operational_layer");
 
 
 
+
+
 const groupAssignment = require("./group_assignment");
 
 
@@ -135,6 +137,17 @@ function workspaceEndpoint(handler, options = {}) {
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -585,6 +598,13 @@ async function requireVerifiedUser(request, message) {
   }
   return context;
 }
+
+
+
+
+
+
+
 
 
 
@@ -6256,6 +6276,63 @@ async function assertPhysicalQaRequest(request) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function cleanId(value) {
   if (typeof value !== "string") {
     return "";
@@ -8446,6 +8523,25 @@ function assertOperationalPayload(data, allowed, maximumBytes) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoom", async (request) => {
   assertTrackingPayload(request.data, new Set(["zoneId"]), 4096);
   const context = await requireVerifiedUser(request, "Verify your email to open this Job Room.");
@@ -8671,6 +8767,29 @@ exports.getJobRoom = trackingCallable("getJobRoom", businessOperation("getJobRoo
     ...((ownSubmittedEvidence || ownPausedEvidence) && response.completionEvidence ? { completionEvidence: response.completionEvidence } : {}),
     ...(ownPausedEvidence ? { pausedWork: response.pausedWork, messages: response.messages, canMessage: true } : {}) };
 }));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

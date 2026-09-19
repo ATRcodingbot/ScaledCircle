@@ -49,6 +49,21 @@ class SocialOperationsWorkspace {
 }
 
 class SocialOperationsService {
+  Future<void> changeScheduledPost(Map<String, dynamic> input) async {
+    await _functions
+        .httpsCallable('changeScheduledSocialPostV1')
+        .call(_workspace(input));
+  }
+
+  Future<Map<String, dynamic>> automaticPublishing(
+    Map<String, dynamic> input,
+  ) async {
+    final result = await _functions
+        .httpsCallable('manageAutomaticSocialPublishingV1')
+        .call(_workspace(input));
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
   Future<Uint8List?> previewCreative(Map<String, dynamic> candidate) =>
       FirebaseStorage.instance
           .ref(candidate['storagePath'].toString())

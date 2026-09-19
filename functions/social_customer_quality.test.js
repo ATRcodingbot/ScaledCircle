@@ -1,6 +1,14 @@
 const test=require('node:test'),a=require('node:assert/strict'),{reviewChecks}=require('../functions-social-operations/social_customer_quality');
 const variant={provider:'facebook',copy:'Before your estimate, prepare your project dimensions and preferred timing.',mediaRequirement:'none'};
 test('owner review does not require a keyword/hashtag/performance score',()=>{a.equal(reviewChecks({variant}).passed,true);});
+
+test('internal automation labels cannot pass public-caption quality checks',()=>{
+ for(const text of ['INITIAL_EXPERIMENT','confidence score','generation provenance','automated workflow','AI-generated']){
+  const result=reviewChecks({variant:{...variant,copy:variant.copy+' '+text}});
+  a.equal(result.passed,false);a.match(result.blockers[0],/internal workflow/);
+ }
+ a.equal(reviewChecks({variant:{...variant,copy:'Our team can help you explore options for your next deck project.'}}).passed,true);
+});
 test('missing creative, invalid destination, template text and exact duplicates remain blockers',()=>{
  for(const v of [{...variant,mediaRequirement:'image'},{...variant,provider:'instagram'}, {...variant,copy:'Hello {{Business}}'}, {...variant,destinationUrl:'http://example.com'}])a.equal(reviewChecks({variant:v}).passed,false);
  a.equal(reviewChecks({variant,recentVariants:[variant]}).passed,false);

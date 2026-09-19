@@ -6,6 +6,7 @@ const app=initializeApp({projectId:'demo-scaledcircle'},'inline-review'),db=getF
 after(async()=>{await db.terminate();await deleteApp(app);});
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 async function setup(uid){
+ uid+='_'+crypto.randomUUID().replaceAll('-','');
  const f=require('./social_customer_scheduling.test').fixture(),itemId=uid+'_post',planId=uid+'_plan';
  const requestId='social_mix_'+hash(uid+':'+itemId+':SocialCreativeDiversityV1'),jobId='visual_job_'+hash(uid+'\n'+requestId).slice(0,40);
  const assetId='concept',revisionId='r1',prefix=`business_media_private/${uid}/${assetId}/${revisionId}/`;
@@ -83,7 +84,7 @@ test('regeneration stays in draft flow and frozen posts are never replaced',asyn
  await assert.rejects(preparation.prepare(s.uid,{...s.input,version:2,action:'regenerate',candidateSha256:s.candidate.sha256,confirmRegeneration:true}),/unscheduled/);
 });
 test('subject checks analyze exact derivative once, retain provider evidence and consume no generation units',async()=>{
- const uid='subject_check_owner',bytes=Buffer.from('owned generated derivative'),sha256=hash(bytes);let calls=0;
+ const uid='subject_check_'+crypto.randomUUID(),bytes=Buffer.from('owned generated derivative'),sha256=hash(bytes);let calls=0;
  await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:false,authorizedBusinessUids:[uid]});
  const check=require('../functions-social-operations/social_creative_subject').createSubjectCheck({db,clientFactory:async()=>({models:{list:async()=>({data:[{id:'gpt-4.1-mini'}]})},responses:{create:async request=>{
    calls++;assert.equal(request.store,false);assert.equal(request.input[0].content[1].image_url,'data:image/jpeg;base64,'+bytes.toString('base64'));
@@ -98,7 +99,7 @@ test('subject checks analyze exact derivative once, retain provider evidence and
  assert.equal(result.responseId,'mock_subject_response');assert.equal(result.sha256,sha256);
 });
 test('failed image analysis preserves only safe diagnostic codes and never approves the draft',async()=>{
- const uid='subject_error_owner',bytes=Buffer.from('private generated candidate'),sha256=hash(bytes);
+ const uid='subject_error_'+crypto.randomUUID(),bytes=Buffer.from('private generated candidate'),sha256=hash(bytes);
  await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:false,authorizedBusinessUids:[uid]});
  const check=require('../functions-social-operations/social_creative_subject').createSubjectCheck({db,clientFactory:async()=>({
    models:{list:async()=>({data:[{id:'gpt-4.1-mini'}]})},responses:{create:async()=>{throw Object.assign(new Error('private body and authorization must not be retained'),{status:403,code:'model_not_found',type:'invalid_request_error',headers:{authorization:'private'}});}}

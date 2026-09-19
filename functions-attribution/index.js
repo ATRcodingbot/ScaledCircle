@@ -59,6 +59,8 @@ const crypto = require("node:crypto");
 
 
 
+
+
 const businessWorkspace = require("./business_workspace");
 const workspaceAccess = require("./workspace_access");
 
@@ -104,6 +106,17 @@ function businessOperation(name, handler) {
       throw new HttpsError('internal', 'The workspace operation could not complete. Please retry.');}
   };
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -574,6 +587,112 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

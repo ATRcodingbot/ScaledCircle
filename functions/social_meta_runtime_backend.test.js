@@ -9,7 +9,7 @@ const scopes=require("../functions-social-operations/social_oauth").META_PUBLISH
 const app=initializeApp({projectId:"demo-scaledcircle"},"meta-runtime"),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app)});
 test("persistent Meta week remains paused until exact approval; concurrent jobs publish once",async()=>{
- const uid="meta_runtime_fixture",at=Date.parse("2030-01-02T12:00:00Z");let clock=at-10000,creates=0;
+ const uid="meta_runtime_fixture_"+Date.now(),at=Date.parse("2030-01-02T12:00:00Z");let clock=at-10000,creates=0;
  const record={businessUid:uid,version:1,contentHash:"approved-copy",scheduledFor:new Date(at).toISOString(),
   variants:[{provider:"facebook",format:"text",copy:"Approved Page copy."}]};
  const item=growth.contentBinding({id:"meta_runtime_v1",record},uid);

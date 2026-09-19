@@ -60,6 +60,8 @@ const logger = require("firebase-functions/logger");
 
 
 
+
+
 const workspaceAccess = require("./workspace_access");
 
 
@@ -90,6 +92,17 @@ initializeApp();
 
 
 const db = getFirestore();
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -574,6 +587,13 @@ async function authenticatedUserContext(request, message) {
     emailVerified: request.auth.token.email_verified === true
   };
 }
+
+
+
+
+
+
+
 
 
 

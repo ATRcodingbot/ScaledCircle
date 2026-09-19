@@ -60,6 +60,8 @@ const logger = require("firebase-functions/logger");
 
 
 
+
+
 const workspaceAccess = require("./workspace_access");
 
 
@@ -135,6 +137,17 @@ const db = getFirestore();
 
 
 const legalConsentService = legalConsent.createLegalConsentService({ db, FieldValue });
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1311,6 +1324,70 @@ exports.getLegalConsentStatus = onCall(
 );
 
 /** Queue a verification-only message for the authenticated account owner. */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

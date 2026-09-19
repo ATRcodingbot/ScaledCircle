@@ -147,6 +147,7 @@ const creativeMediaExports = new Set([
   "rejectBusinessMediaRevision", "removeBusinessMediaAsset", "updateBusinessBrandProfile",
   "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
   "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
+  "runManagedSocialVisualGenerationV1",
   "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
   "updateGeneratedMediaSafetyConfiguration",
 ]);
