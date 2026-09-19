@@ -350,7 +350,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('System health'), findsOneWidget);
-    expect(find.text('Payments: HEALTHY'), findsOneWidget);
+    expect(find.text('Payments: No recorded issues'), findsOneWidget);
   });
 
   testWidgets('action-required exception is concise and navigable', (
@@ -482,12 +482,12 @@ void main() {
     expect(find.text('No issues in the available results.'), findsOneWidget);
     expect(find.text('Unknown'), findsWidgets);
     await tester.scrollUntilVisible(
-      find.text('Email: DEGRADED'),
+      find.text('Email: Evidence incomplete'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Email: DEGRADED'), findsOneWidget);
+    expect(find.text('Email: Evidence incomplete'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

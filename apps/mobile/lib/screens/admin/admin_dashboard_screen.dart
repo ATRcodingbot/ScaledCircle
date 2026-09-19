@@ -1161,7 +1161,14 @@ class _HealthChip extends StatelessWidget {
     };
     return Chip(
       avatar: Icon(Icons.circle, size: 12, color: color),
-      label: Text('${_category(item.metric)}: ${item.state.toUpperCase()}'),
+      label: Text(
+        '${_category(item.metric)}: ${switch (item.state) {
+          'healthy' => 'No recorded issues',
+          'attention' => 'Needs attention',
+          'degraded' => 'Evidence incomplete',
+          _ => 'Unknown',
+        }}',
+      ),
     );
   }
 }

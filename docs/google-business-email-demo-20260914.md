@@ -47,3 +47,11 @@ Google review does not block separate native preparation. Store freeze still dep
 References checked September 14, 2026:
 https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification
 https://developers.google.com/workspace/gmail/api/auth/scopes
+
+## Short attended recording handoff — September 19
+
+Prepare one unlisted English video showing the same production OAuth client and the actual consent plus read/send functionality. A connected-state screenshot alone does not satisfy the grant-flow segment. Use a separately authorized Founder-controlled verification mailbox if no previous truthful consent recording exists; do not revoke Attractive Remodel or send a new message without explicit authorization.
+
+Suggested narration: "ScaledCircle lets a Business connect its own mailbox to review relevant conversations, reconcile replies into that Business's CRM, and send content that the Business has approved. Read and Send are separate choices. Connection does not authorize unsolicited messages. Existing approved campaigns may execute later; replies reconcile in the background. Disconnect removes our stored credential and stops new mailbox operations. Saved Business history and legally required records follow our published retention and deletion policy."
+
+Show the exact scope justification and privacy disclosure already prepared above. Finish with the visible Disconnect control without activating it. Supply the real video URL for the saved Google form, then review the restricted-scope assessment requirements Google presents. No broader scopes, replacement client, credential rotation or new customer rollout is part of this handoff.

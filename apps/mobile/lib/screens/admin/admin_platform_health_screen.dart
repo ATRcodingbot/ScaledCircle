@@ -1,87 +1,133 @@
 import 'package:flutter/material.dart';
-
+import '../../services/admin_operations_service.dart';
 import 'admin_role_gate.dart';
 
 class AdminPlatformHealthScreen extends StatelessWidget {
   const AdminPlatformHealthScreen({super.key});
-
   @override
   Widget build(BuildContext context) => AdminRoleGate(
-    builder: (context) => Scaffold(
-      appBar: AppBar(title: const Text('Provider / platform health')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: const [
-          _HealthSection(
-            title: 'Firebase',
-            rows: [
-              ('Hosting', 'Configured'),
-              ('Functions', 'Configured'),
-              ('Firestore', 'Configured'),
-              ('Storage', 'Configured'),
-            ],
-          ),
-          _HealthSection(
-            title: 'Intelligence',
-            rows: [
-              ('Property Intelligence', 'Configured'),
-              ('AI Intelligence', 'Configured'),
-            ],
-          ),
-          _HealthSection(
-            title: 'Integrations',
-            rows: [
-              ('Stripe health telemetry', 'Not connected'),
-              ('Email health telemetry', 'Not connected'),
-              ('Advertising integrations', 'Not connected'),
-              ('Direct Mail provider', 'Not connected'),
-              ('Meta social publishing', 'External approval required'),
-              ('Google Business publishing', 'Not configured'),
-              ('LinkedIn publishing', 'Not configured'),
-            ],
-          ),
-          SizedBox(height: 12),
-          Text(
-            'These are safe application configuration states. Rendering this page makes no '
-            'provider request and exposes no secret metadata or values.',
-            style: TextStyle(fontStyle: FontStyle.italic),
-          ),
-        ],
-      ),
+    builder: (_) => AdminPlatformHealthBody(
+      load: () => AdminOperationsService().loadOverview(),
     ),
   );
 }
 
-class _HealthSection extends StatelessWidget {
-  const _HealthSection({required this.title, required this.rows});
-
-  final String title;
-  final List<(String, String)> rows;
-
+// Load only inside the role gate. The callable separately requires Admin
+// authority; this view never expands workspace Team permissions.
+class AdminPlatformHealthBody extends StatefulWidget {
+  const AdminPlatformHealthBody({super.key, required this.load});
+  final Future<AdminOperationsSnapshot> Function() load;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 18),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 6),
-        Card(
-          child: Column(
-            children: rows
-                .map(
-                  (row) => ListTile(
-                    title: Text(row.$1),
-                    trailing: Text(
-                      row.$2,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
+  State<AdminPlatformHealthBody> createState() => _HealthState();
+}
+
+class _HealthState extends State<AdminPlatformHealthBody> {
+  late Future<AdminOperationsSnapshot> _readback = widget.load();
+  void _refresh() => setState(() {
+    _readback = widget.load();
+  });
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Operational health'),
+      actions: [
+        IconButton(
+          onPressed: _refresh,
+          tooltip: 'Refresh status',
+          icon: const Icon(Icons.refresh),
         ),
       ],
     ),
+    body: FutureBuilder<AdminOperationsSnapshot>(
+      future: _readback,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Operational status could not be loaded. No provider health has been confirmed.',
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _refresh,
+                    child: const Text('Try again'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        final data = snapshot.data!;
+        return ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const Text(
+              'Saved operational evidence',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const Text(
+              'These results summarize recorded issues. They do not test a provider connection or certify that payments or publishing are available.',
+            ),
+            if (data.partial)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'Some sources could not be loaded. Missing evidence is not a healthy result.',
+                ),
+              ),
+            if (data.health.isEmpty)
+              const Text('No operational health results are available.'),
+            for (final item in data.health)
+              Card(
+                child: ListTile(
+                  title: Text(_label(item.metric)),
+                  subtitle: Text(
+                    '${_state(item.state)}\nRecorded issues: ${item.issueCount}',
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            const Text(
+              'Provider and release checks',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const Text(
+              'Stripe Connect activation, Google OAuth verification, mobile release readiness and actual scheduler invocations are not measured here. Use the maintained provider, release and specialist evidence before changing a hold.',
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Delegated operations',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const Text(
+              'Business assistants use the workspace’s existing Team permissions. A Business Team role does not grant platform Admin, payout or security authority. Do not grant Administrator access merely to delegate routine work.',
+            ),
+          ],
+        );
+      },
+    ),
   );
 }
+
+String _state(String value) => switch (value) {
+  'healthy' => 'No recorded issues',
+  'attention' => 'Needs attention',
+  'degraded' => 'Evidence unavailable or incomplete',
+  _ => 'Status unknown',
+};
+String _label(String value) => switch (value) {
+  'payments' => 'Campaign payments',
+  'email' => 'Account email delivery',
+  'campaigns' => 'Campaigns',
+  'completions' => 'Completion and earnings records',
+  'support' => 'Customer support',
+  'providers' => 'Recorded provider issues',
+  _ => 'Other operational records',
+};
