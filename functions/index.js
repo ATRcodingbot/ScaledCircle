@@ -4903,7 +4903,7 @@ exports.analyzePropertyIntelligence = onCall(
     if (request.data?.scope === "saved_service_areas") {
       const input = request.data || {};
       const allowed = new Set(["scope", "action", "objective", "requestId", "savedAreaId",
-        "recommendationId", "businessId", "workspaceId"]);
+        "recommendationId", "businessId", "workspaceId", "comparisonGeometry"]);
       if (Object.keys(input).some(key => !allowed.has(key))) {
         throw new HttpsError("invalid-argument", "Choose a saved service area and a Business goal.");
       }
@@ -4918,11 +4918,15 @@ exports.analyzePropertyIntelligence = onCall(
         return {success: true, recommendation: await service.save({...actor,
           recommendationId: input.recommendationId})};
       }
-      if (input.action && input.action !== "analyze") {
+      if (input.action && !["analyze", "compare_nearby"].includes(input.action)) {
         throw new HttpsError("invalid-argument", "Choose a supported territory action.");
       }
+      if (input.action === "compare_nearby" && !Array.isArray(input.comparisonGeometry)) {
+        throw new HttpsError("invalid-argument", "Select an analyzed area to find nearby alternatives.");
+      }
       const report = await service.run({...actor, objective: input.objective,
-        requestId: input.requestId, savedAreaId: input.savedAreaId});
+        requestId: input.requestId, savedAreaId: input.savedAreaId,
+        comparisonGeometry: input.action === "compare_nearby" ? input.comparisonGeometry : null});
       return {success: true, analysisScope: "saved_service_areas", report};
     }
     if (request.data?.scope) {
@@ -4953,21 +4957,7 @@ exports.analyzePropertyIntelligence = onCall(
           : "Choose a valid custom area, or select My Service Areas."); }
     }
     const digest = propertyIntelligence.geometryDigest(geometry);
-    const addPhysicalChannelSuitability = (value) => {
-      const walking = operations.calculateGeometryWalkingEstimate(geometry);
-      const homes = Number(value?.residentialStructureCount || value?.propertyCount || 0);
-      const areaSquareKm = walking.areaSquareMeters / 1000000;
-      const logisticsSignals = {
-        homesPerSquareKm: homes > 0 && areaSquareKm > 0 ? homes / areaSquareKm : null,
-        averagePropertySpacingMeters: homes > 0 ? Math.sqrt(walking.areaSquareMeters / homes) : null,
-        walkingMinutesPerReachableAddress: homes > 0 ? walking.estimatedWalkingMinutes / homes : null,
-        // Lot size and access are deliberately unavailable until an authoritative source supplies them.
-        accessStatus: "unknown",
-      };
-      return {...value, physicalLogisticsVersion: "PropertyPhysicalLogisticsV1",
-        physicalLogistics: logisticsSignals,
-        physicalChannelSuitability: managedGrowth.evaluatePhysicalChannelSuitability(logisticsSignals)};
-    };
+    const addPhysicalChannelSuitability = (value) => propertyServiceAreaRuntime.withPhysicalChannel(value, geometry);
     const cacheId = crypto.createHash("sha256").update(`${propertyIntelligence.ANALYSIS_VERSION}:${propertyIntelligence.DATA_SOURCE_BUNDLE_VERSION}:${digest}`).digest("hex");
     const cacheReference = db.collection(PROPERTY_INTELLIGENCE_CACHE_COLLECTION).doc(cacheId);
     const cacheSnapshot = await cacheReference.get();

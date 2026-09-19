@@ -19,6 +19,8 @@ This is an engineering interpretation to minimize launch risk, not store approva
 
 ## Regression evidence
 
+September 19 continuation: re-read the same official Apple Guidelines 3.1.3(f) and Google Play Payments FAQ. The bounded status-only native treatment remains the proposed launch disposition; this does not constitute store acceptance. The repaired membership route must retain these native purchase restrictions. Final matched binary inspection and physical push proof are still pending the web repair gate.
+
 Targeted native/public presentation suites: 41 passing, zero skipped. Native home/pricing/business pages omit paid acquisition and upgrade prompts, while signup/login remain available. Membership status preserves seats and unknown-state retry; cancellation remains explicit. A later 18-test native billing/policy rerun also passed; these overlapping suite counts must not be added as unique tests.
 
 Retained web purchase-preview/confirmation regression: 9 Chrome tests passed, zero skipped. The initial loading stall was a Flutter 3.44.8 Windows test-harness path-separator defect serving CanvasKit, not an application result. A temporary URI-path normalization in the local test harness allowed the normal runner to execute; the original SDK source, tool snapshot and stamp were then restored with byte-identical SHA256 checks. Evidence is in the ignored `.dart_tool/native-web-harness-evidence/` folder.

@@ -6,6 +6,20 @@ const path = require("node:path");
 const os = require("node:os");
 const sharp = require("sharp");
 const {prepare} = require("./scripts/prepare_meta_delivery_media");
+test("immutable published media survives ordinary Flutter Hosting releases", () => {
+  const folder = path.resolve(__dirname, "../apps/mobile/web/social");
+  const expected = [
+    "2f453997dd7b59c24aa1246a2e197b3ba05b40817daa678428befeb11c1db28d.png",
+    "36a6bcbcae69cc9e296e9bb784cbe5e790d622d1501980f09f98a8737deec06b.jpg",
+    "41e6977b5cb7a4a04b47f6892a838a14e47890a0eb525009506ca9280ca39d4b.jpg",
+    "68bc79bc60f57ea266172374e23bae20b60c7d0a4ef255ed013314bd5009feab.jpg",
+    "783e3bb9a5209ebdc9ecb05e88dcf016933f42cc2e4e86bfde5c2dff5463c160.jpg",
+  ];
+  for (const name of expected) {
+    const bytes = fs.readFileSync(path.join(folder, name));
+    assert.equal(require("node:crypto").createHash("sha256").update(bytes).digest("hex"), path.parse(name).name);
+  }
+});
 test("Meta delivery preserves PNG lineage and ordered reproducible JPEG derivatives", async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "sc-meta-"));
   try {

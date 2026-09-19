@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/notification_destination.dart';
+import '../../services/mobile_notifications_service.dart';
 import '../../navigation/context_back_button.dart';
 import '../../services/business_workspace_service.dart';
 
@@ -17,6 +18,8 @@ class NotificationsScreen extends StatefulWidget {
     this.currentUserId,
     this.notificationsStream,
     this.workspace,
+    this.resolveNotification,
+    this.markNotificationRead,
     this.initialNotificationId,
     this.initialResolvedData,
     this.unavailableDestination = false,
@@ -27,12 +30,16 @@ class NotificationsScreen extends StatefulWidget {
   final String? initialNotificationId;
   final Map<String, dynamic>? initialResolvedData;
   final bool unavailableDestination;
+  final Future<Map<String, dynamic>> Function(String id)? resolveNotification;
+  final Future<void> Function(QueryDocumentSnapshot notification)?
+  markNotificationRead;
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool initialOpened = false;
+  bool opening = false;
   String? get currentUserId => widget.currentUserId;
   Stream<QuerySnapshot>? get notificationsStream => widget.notificationsStream;
   Map<String, dynamic>? get workspace => widget.workspace;
@@ -82,12 +89,46 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     QueryDocumentSnapshot notification, {
     Map<String, dynamic>? resolvedData,
   }) async {
+    if (opening) return;
+    opening = true;
+    final uid = currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
     final data = notification.data() as Map<String, dynamic>;
-    final target = _destination(resolvedData ?? data);
-    if (target == null) return;
     try {
-      if (data['read'] != true) await _markAsRead(notification.reference);
-      if (!context.mounted) return;
+      // In-app and physical push use the same recipient/access authority.
+      final resolved =
+          resolvedData ??
+          await (widget.resolveNotification?.call(notification.id) ??
+              MobileNotificationsService.instance.call('open', {
+                'notificationId': notification.id,
+              }));
+      if (!context.mounted ||
+          uid != (currentUserId ?? FirebaseAuth.instance.currentUser?.uid)) {
+        return;
+      }
+      final target = resolved['available'] != true
+          ? null
+          : _destination(resolved);
+      if (target == null) {
+        _showMessage(
+          context,
+          'This notification is no longer available. Your current notifications are shown here.',
+        );
+        return;
+      }
+      if (data['read'] != true) {
+        // A read receipt is best effort; it must not block an authorized destination.
+        try {
+          if (widget.markNotificationRead != null) {
+            await widget.markNotificationRead!(notification);
+          } else {
+            await _markAsRead(notification.reference);
+          }
+        } catch (_) {}
+      }
+      if (!context.mounted ||
+          uid != (currentUserId ?? FirebaseAuth.instance.currentUser?.uid)) {
+        return;
+      }
       if (target.kind == 'earnings') {
         await Navigator.push(
           context,
@@ -122,6 +163,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (context.mounted) {
         _showMessage(context, "We couldn't open this notification. Try again.");
       }
+    } finally {
+      opening = false;
     }
   }
 
@@ -233,7 +276,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 .toList();
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
-              if (matching.isNotEmpty) {
+              if (matching.isNotEmpty && !widget.unavailableDestination) {
                 final n = matching.first;
                 if (_destination(
                       widget.initialResolvedData ??
@@ -250,8 +293,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   _showMessage(
                     context,
                     (n.data() as Map)['type'] == 'mobile_push_check'
-                        ? 'Notification check received. It is now marked as read.'
-                        : 'Notification received. It is now marked as read.',
+                        ? 'Notification check received.'
+                        : 'Notification received.',
                   );
                 }
               } else if (widget.unavailableDestination ||

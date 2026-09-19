@@ -30,3 +30,11 @@ test('authentication, role and authoritative entitlement precede saved-area anal
 test('custom geometry keeps its separate bounded validation instead of entering saved-area service',async()=>{
  const f=fixture();await assert.rejects(f.call({auth:{uid:'owner',role:'business'},data:{geometry:[{latitude:39,longitude:-77},{latitude:40,longitude:-77},{latitude:40,longitude:-76},{latitude:39,longitude:-76}]}}),e=>e.code==='invalid-argument'&&/My Service Areas/.test(e.message));assert.equal(f.calls.length,0);
 });
+test('nearby comparison forwards the anchor under authenticated workspace authority',async()=>{
+ const f=fixture(),auth={uid:'owner',role:'business'};
+ const comparisonGeometry=[{latitude:39,longitude:-76},{latitude:39.005,longitude:-76},{latitude:39.005,longitude:-75.995}];
+ await f.call({auth,data:{scope:'saved_service_areas',action:'compare_nearby',comparisonGeometry,requestId:'nearby'}});
+ assert.equal(f.calls[0].businessId,'owner');assert.deepEqual(f.calls[0].comparisonGeometry,comparisonGeometry);
+ await assert.rejects(f.call({auth,data:{scope:'saved_service_areas',action:'compare_nearby',requestId:'missing'}}),e=>e.code==='invalid-argument');
+ assert.equal(f.calls.length,1);
+});

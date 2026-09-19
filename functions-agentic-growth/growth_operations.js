@@ -82,10 +82,12 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
     const restrictions=await db.collection('businessMailboxes/'+target+'/suppression').where('active','==',true).limit(501).get();
     if(restrictions.size>500)fail('The contact restriction inventory needs a bounded review before more research.');
     const suppressedRecipients=new Set(restrictions.docs.map(d=>d.data().recipient));
-    const selected=geography.prioritizeSources([...discovered.sources,...sourceCatalog],scope,existing.map(p=>p.sourceUrl))
+    const eligible=geography.prioritizeSources([...discovered.sources,...sourceCatalog],scope,existing.map(p=>p.sourceUrl))
       .filter(source=>opportunityPreferences.enabled(source,initialPreferences))
-      .filter(source=>!suppressedRecipients.has(source.email?.toLowerCase()))
-      .filter(source=>!customerContext?.researchVersion||!existing.some(p=>p.id==='growth_prospect_'+hash([target,source.key]).slice(0,40)))
+      .filter(source=>!suppressedRecipients.has(source.email?.toLowerCase()));
+    const isPriorProspect=source=>Boolean(customerContext?.researchVersion&&existing.some(p=>p.id==='growth_prospect_'+hash([target,source.key]).slice(0,40)));
+    const duplicatesExcludedCount=eligible.filter(isPriorProspect).length;
+    const selected=eligible.filter(source=>!isPriorProspect(source))
       .map((source,index)=>{const area=scope.areas.findIndex(a=>a.id===geography.matchArea(source,scope)?.id);return {source,index,area:area<0?999:area};})
       .sort((a,b)=>a.area-b.area||require('./mailbox_growth_learning').priority(b.source,localLearning.patterns)-require('./mailbox_growth_learning').priority(a.source,localLearning.patterns)||a.index-b.index)
       .map(x=>x.source)
@@ -120,7 +122,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
 
         }
       }
-      tx.update(ref,{status:'completed',...(customerContext?.researchVersion?{discoveryVersion:customerContext.researchVersion,discoveryChecks:discovered.checks}:{}),serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
+      tx.update(ref,{status:'completed',...(customerContext?.researchVersion?{discoveryVersion:customerContext.researchVersion,discoveryChecks:discovered.checks}:{}),serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,newProspectCount:records.filter(r=>r.observation&&!r.old.exists).length,duplicatesExcludedCount,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
       tx.set(db.doc('agentHealth/'+target),{researchEnabled:true,nextResearchAfter:customer?null:Date.parse(day(started)+'T13:00:00Z')+86400000,lastResearchRunId:runId,updatedAt:FieldValue.serverTimestamp()},{merge:true});
       if(!pref.exists)tx.create(pref.ref,{businessUid:target,...preferences(),updatedAt:FieldValue.serverTimestamp()});
     });

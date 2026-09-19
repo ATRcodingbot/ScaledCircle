@@ -387,6 +387,7 @@ service cloud.firestore {
         if campaignId != 'staging_payment_certification_v1' && request.resource.data.get("status", "") == resource.data.get("status", "")
         && physicalQaCampaignRead(campaignId) && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
+        && request.resource.data.businessId == resource.data.businessId
         && (!(campaignId in ['ios_physical_qa_v1', 'android_physical_qa_v1', 'ios_physical_qa_v2', 'android_physical_qa_v2', 'ios_physical_qa_v3', 'android_physical_qa_v3', 'staging_payment_certification_v1'])
           || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'businessId', 'basePay', 'bonus', 'qualityBonus', 'workerBudget', 'status', 'isTestCampaign',

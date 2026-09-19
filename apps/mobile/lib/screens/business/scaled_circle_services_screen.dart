@@ -70,7 +70,7 @@ class ScaledCircleServicesScreen extends StatelessWidget {
                     ('Brand Assets — Beta', AppRoutes.businessBrandAssets),
                     ('Physical Marketing', AppRoutes.businessPhysicalMarketing),
                     (
-                      'Neighborhood Postcards — Beta',
+                      'Postcards — Coming Soon',
                       AppRoutes.businessPostcards,
                     ),
                     (

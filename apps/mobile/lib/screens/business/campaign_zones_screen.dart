@@ -209,6 +209,16 @@ class CampaignZonesScreen extends StatelessWidget {
     return FirebaseFirestore.instance.collection('campaignZones');
   }
 
+  // Firestore Rules authorize the tenant as well as the campaign. Use the
+  // canonical campaign owner, which can differ from an authorized team member.
+  Query<Map<String, dynamic>> get _campaignZonesQuery {
+    final data = campaign.data() as Map<String, dynamic>?;
+    final businessId = data?['businessId']?.toString() ?? '';
+    return _zonesCollection
+        .where('campaignId', isEqualTo: campaign.id)
+        .where('businessId', isEqualTo: businessId);
+  }
+
   bool get _campaignLocked {
     final data = campaign.data() as Map<String, dynamic>?;
     final status = data?['status']?.toString() ?? 'draft';
@@ -636,25 +646,25 @@ class CampaignZonesScreen extends StatelessWidget {
       return;
     }
 
-    final suggestedName = _hasTransferredAnalysisArea
-        ? 'Property Intelligence Area'
-        : await _nextSuggestedZoneName();
-
-    if (!context.mounted) {
-      return;
-    }
-
-    final zoneName = skipNamePrompt
-        ? suggestedName
-        : await _askForZoneName(context, initialValue: suggestedName);
-
-    if (zoneName == null || zoneName.isEmpty) {
-      return;
-    }
-
     DocumentReference<Map<String, dynamic>>? zoneReference;
 
     try {
+      final suggestedName = _hasTransferredAnalysisArea
+          ? 'Property Intelligence Area'
+          : await _nextSuggestedZoneName();
+
+      if (!context.mounted) {
+        return;
+      }
+
+      final zoneName = skipNamePrompt
+          ? suggestedName
+          : await _askForZoneName(context, initialValue: suggestedName);
+
+      if (zoneName == null || zoneName.isEmpty) {
+        return;
+      }
+
       zoneReference = _zonesCollection.doc();
 
       final pendingZoneData = <String, dynamic>{
@@ -730,9 +740,7 @@ class CampaignZonesScreen extends StatelessWidget {
   }
 
   Future<String> _nextSuggestedZoneName() async {
-    final snapshot = await _zonesCollection
-        .where('campaignId', isEqualTo: campaign.id)
-        .get();
+    final snapshot = await _campaignZonesQuery.get();
 
     final nextNumber = snapshot.docs.length + 1;
 
@@ -826,9 +834,11 @@ class CampaignZonesScreen extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('The name could not be saved. Please try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('The name could not be saved. Please try again.'),
+        ),
+      );
     }
   }
 
@@ -895,16 +905,18 @@ class CampaignZonesScreen extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Removal could not be confirmed. Check the current zones before trying again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Removal could not be confirmed. Check the current zones before trying again.',
+          ),
+        ),
+      );
     }
   }
 
   Future<void> _refreshCampaignTotals() async {
-    final zonesSnapshot = await _zonesCollection
-        .where('campaignId', isEqualTo: campaign.id)
-        .get();
+    final zonesSnapshot = await _campaignZonesQuery.get();
 
     int estimatedHomes = 0;
     int assignedZones = 0;
@@ -1301,9 +1313,13 @@ class CampaignZonesScreen extends StatelessWidget {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('The assignment change could not be confirmed. Check the current assignment before trying again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'The assignment change could not be confirmed. Check the current assignment before trying again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -1639,13 +1655,15 @@ class CampaignZonesScreen extends StatelessWidget {
       bottomNavigationBar: _campaignLocked
           ? null
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _zonesCollection
-                  .where('campaignId', isEqualTo: campaign.id)
-                  .snapshots(),
+              stream: _campaignZonesQuery.snapshots(),
               builder: (context, snapshot) {
-                final canContinue = campaignZonesCanContinue(
-                  (snapshot.data?.docs ?? const []).map((doc) => doc.data()),
-                );
+                final canContinue =
+                    !snapshot.hasError &&
+                    campaignZonesCanContinue(
+                      (snapshot.data?.docs ?? const []).map(
+                        (doc) => doc.data(),
+                      ),
+                    );
                 return SafeArea(
                   minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   child: Column(
@@ -1680,16 +1698,15 @@ class CampaignZonesScreen extends StatelessWidget {
         enabled: startWithAreaBuilder && !_campaignLocked,
         onOpen: () => _createZone(context, skipNamePrompt: true),
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _zonesCollection
-              .where('campaignId', isEqualTo: campaign.id)
-              .snapshots(),
+          stream: _campaignZonesQuery.snapshots(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Text(
-                    snapshot.error.toString(),
+                    "We couldn't load this campaign's areas. Return to the campaign "
+                    'and reopen its map. If this continues, check your workspace access.',
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -1960,7 +1977,8 @@ class CampaignZonesScreen extends StatelessWidget {
                               },
                       ),
 
-                      if (data['coverageAuthority']?['state'] == 'review_required' ||
+                      if (data['coverageAuthority']?['state'] ==
+                              'review_required' ||
                           data['analysisStatus'] != 'complete' ||
                           data['serverZoneMetricsVersion'] !=
                               'geometry_v1_server') ...[
@@ -1968,8 +1986,12 @@ class CampaignZonesScreen extends StatelessWidget {
                         OutlinedButton.icon(
                           onPressed: () => _retryZoneAnalysis(context, zone),
                           icon: const Icon(Icons.refresh),
-                          label: Text(data['coverageAuthority']?['state'] == 'review_required'
-                            ? 'Review mapped route' : 'Retry Zone Analysis'),
+                          label: Text(
+                            data['coverageAuthority']?['state'] ==
+                                    'review_required'
+                                ? 'Review mapped route'
+                                : 'Retry Zone Analysis',
+                          ),
                         ),
                       ],
 

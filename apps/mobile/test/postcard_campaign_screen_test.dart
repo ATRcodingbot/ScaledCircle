@@ -70,7 +70,7 @@ void main() {
     (tester) async {
       final gateway = Gateway([order('QUOTED')]);
       await screen(tester, gateway);
-      expect(find.text('Fulfilled by ScaledCircle'), findsOneWidget);
+      expect(find.text('Fulfillment testing'), findsOneWidget);
       expect(find.text('Total \$167.00'), findsOneWidget);
       expect(find.text('Attach private receipt'), findsNothing);
       await tester.ensureVisible(find.text('Review quote & pay'));
@@ -129,10 +129,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Customer payments'), findsNothing);
       expect(
-        find.textContaining('currently available to selected Businesses'),
+        find.textContaining('Postcard ordering is not available yet'),
         findsOneWidget,
       );
       expect(find.byType(FilledButton), findsNothing);
+      expect(find.text('Postcards — Coming Soon'), findsWidgets);
     },
     skip: AppEnvironmentConfig.isStaging,
   );

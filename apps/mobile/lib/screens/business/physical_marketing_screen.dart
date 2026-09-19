@@ -426,7 +426,7 @@ class _PhysicalMarketingScreenState extends State<PhysicalMarketingScreen> {
                     const SizedBox(height: 20),
                     const _FulfillmentChoices(),
                     ListTile(
-                      title: const Text('Neighborhood Postcards — Beta'),
+                      title: const Text('Postcards — Coming Soon'),
                       subtitle: const Text(
                         AppEnvironmentConfig.isStaging
                             ? 'Fulfilled by ScaledCircle. Review your design and confirmed quote before payment. Staging TEST orders only.'

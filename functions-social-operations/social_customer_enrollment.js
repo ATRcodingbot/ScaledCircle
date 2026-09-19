@@ -8,7 +8,9 @@ async function authorized({db,uid,read=ref=>ref.get(),now=Date.now()}) {
 // Select due owner-approved work, never empty subscribed workspaces. The
 // existing 15-minute execution window and approval records remain authority.
 async function inventory({db,now=Date.now()}) {
-  const base=db.collection('socialGrowthJobs').where('customerApproval','==',true).where('status','==','approved');
+  // Exact customer approval creates `scheduled` jobs. Keep legacy approved
+  // records eligible too; status alone never grants execution authority.
+  const base=db.collection('socialGrowthJobs').where('customerApproval','==',true).where('status','in',['approved','scheduled']);
   const page=await base
     .where('scheduledFor','>=',new Date(now-15*60000).toISOString())
     .where('scheduledFor','<=',new Date(now).toISOString()).orderBy('scheduledFor').limit(100).get();

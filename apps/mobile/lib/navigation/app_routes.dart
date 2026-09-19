@@ -5,6 +5,26 @@ abstract final class AppRoutes {
   static const businesses = '/businesses';
   static const scalers = '/scalers';
   static const businessDashboard = '/business';
+  static const businessMembership = '/business/membership';
+  static const membershipPaths = {
+    businessMembership,
+    '/business/billing',
+    '/billing',
+    '/billing/upgrade',
+    '/billing/addons',
+    '/billing/cancel',
+    '/billing/history',
+    '/business/billing/upgrade',
+    '/business/billing/addons',
+    '/business/billing/cancel',
+    '/business/billing/history',
+  };
+  static String? membershipPath(String? path) {
+    if (path == null) return null;
+    final normalized = path.startsWith('/') ? path : '/$path';
+    return membershipPaths.contains(normalized) ? normalized : null;
+  }
+
   static const businessAttribution = '/business/attribution';
   static const businessLandingPages = '/business/landing-pages';
   static const businessBrandAssets = '/business/brand-assets';

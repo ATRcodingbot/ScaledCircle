@@ -94,23 +94,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             onPressed: () => _push(const BusinessAccessApprovalScreen()),
           ),
           if (AppEnvironmentConfig.isStaging)
-            IconButton(
-              tooltip: 'Postcard fulfillment',
-              icon: const Icon(Icons.local_post_office_outlined),
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.adminPostcards),
-            ),
-          if (AppEnvironmentConfig.isStaging)
-            IconButton(
-              tooltip: 'Staging Scaler approval',
-              icon: const Icon(Icons.person_add_alt_1),
-              onPressed: () => _push(const StagingScalerApprovalScreen()),
-            ),
-          if (AppEnvironmentConfig.isStaging)
-            IconButton(
-              tooltip: 'Staging payment certification',
-              icon: const Icon(Icons.fact_check_outlined),
-              onPressed: () => _push(const StagingPaymentCertificationScreen()),
+            PopupMenuButton<String>(
+              tooltip: 'Controlled testing',
+              icon: const Icon(Icons.science_outlined),
+              onSelected: (value) {
+                switch (value) {
+                  case 'postcards':
+                    Navigator.pushNamed(context, AppRoutes.adminPostcards);
+                  case 'scaler':
+                    _push(const StagingScalerApprovalScreen());
+                  case 'payments':
+                    _push(const StagingPaymentCertificationScreen());
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'postcards',
+                  child: Text('Postcard fulfillment testing'),
+                ),
+                PopupMenuItem(
+                  value: 'scaler',
+                  child: Text('Staging Scaler approval'),
+                ),
+                PopupMenuItem(
+                  value: 'payments',
+                  child: Text('Staging payment certification'),
+                ),
+              ],
             ),
           if (MediaQuery.sizeOf(context).width >= 520)
             IconButton(
@@ -554,10 +564,14 @@ class AdminOperationsContent extends StatelessWidget {
           ),
         ),
       if (snapshot.exceptions.isEmpty)
-        const Card(
+        Card(
           child: ListTile(
-            leading: Icon(Icons.check_circle_outline),
-            title: Text('No issues need your attention.'),
+            leading: const Icon(Icons.check_circle_outline),
+            title: Text(
+              snapshot.partial
+                  ? 'No issues in the available results.'
+                  : 'No reported operational exceptions.',
+            ),
           ),
         )
       else
@@ -576,29 +590,56 @@ class AdminOperationsContent extends StatelessWidget {
         children: [
           _MetricCard(
             label: 'Businesses',
-            value: snapshot.metrics['businesses'] ?? 0,
+            value: snapshot.metrics['businesses'],
           ),
           _MetricCard(
             label: 'Approved Scalers',
-            value: snapshot.metrics['approvedScalers'] ?? 0,
+            value: snapshot.metrics['approvedScalers'],
           ),
           _MetricCard(
             label: 'Pending Scalers',
-            value: snapshot.metrics['pendingScalers'] ?? 0,
+            value: snapshot.metrics['pendingScalers'],
           ),
           _MetricCard(
             label: 'Open campaigns',
-            value: snapshot.metrics['openCampaigns'] ?? 0,
+            value: snapshot.metrics['openCampaigns'],
           ),
           _MetricCard(
             label: 'Awaiting review',
-            value: snapshot.metrics['awaitingReview'] ?? 0,
+            value: snapshot.metrics['awaitingReview'],
           ),
           _MetricCard(
             label: 'Open support',
-            value: snapshot.metrics['openSupportCases'] ?? 0,
+            value: snapshot.metrics['openSupportCases'],
           ),
         ],
+      ),
+      const SizedBox(height: 16),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.receipt_long_outlined),
+          title: const Text('Customer billing and access'),
+          subtitle: const Text('Review paid and comped membership authority.'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onOpenSubscriptions,
+        ),
+      ),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.settings_outlined),
+          title: const Text('Provider readiness'),
+          subtitle: const Text(
+            'Review available provider configuration and safety status.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onOpenConfiguration,
+        ),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          'OAuth verification, release candidates, and scheduler cycle status are not reported in this overview. Open the relevant operations page to review its available evidence.',
+        ),
       ),
       const SizedBox(height: 24),
       Text('Recent activity', style: Theme.of(context).textTheme.headlineSmall),
@@ -624,6 +665,8 @@ class AdminOperationsContent extends StatelessWidget {
             ),
       const SizedBox(height: 24),
       Text('System health', style: Theme.of(context).textTheme.headlineSmall),
+      if (snapshot.health.isEmpty)
+        const Text('Health status is not available in this overview.'),
       const SizedBox(height: 10),
       Wrap(
         spacing: 10,
@@ -657,314 +700,335 @@ class AdminOperationsContent extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 12),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Tracking Numbers — Beta',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 6),
-              if (trackingPhoneOperations == null)
-                const Text(
-                  'Tracking Number diagnostics are temporarily unavailable.',
-                )
-              else ...[
-                Text(
-                  'Provider: ${_category(trackingPhoneOperations!['provider']?.toString() ?? 'twilio')} · ${trackingPhoneOperations!['providerConfigured'] == true ? 'Configured' : 'Not configured'}',
-                ),
-                Text(
-                  'Numbers: ${trackingPhoneOperations!['numberInventory'] ?? 0} · Active: ${trackingPhoneOperations!['activeNumbers'] ?? 0} · Grace: ${trackingPhoneOperations!['graceNumbers'] ?? 0}',
-                ),
-                Text(
-                  'Calls: ${trackingPhoneOperations!['callSessions'] ?? 0} · Answered: ${trackingPhoneOperations!['answeredCalls'] ?? 0} · Missed: ${trackingPhoneOperations!['missedCalls'] ?? 0}',
-                ),
-                Text(
-                  'Provisioning failures: ${trackingPhoneOperations!['failedProvisioning'] ?? 0} · Unknown outcomes: ${trackingPhoneOperations!['unknownOutcomes'] ?? 0}',
-                ),
-                Text(
-                  'Webhook duplicates: ${trackingPhoneOperations!['duplicateWebhookReceipts'] ?? 0} · Provider cost: ${_money((trackingPhoneOperations!['providerCostMicros'] as num?)?.toInt() ?? 0)}',
-                ),
-                const Text(
-                  'Provider traffic: 0 · Recording, transcription, outbound calling, and SMS are off · Caller and forwarding numbers masked',
-                ),
-              ],
-            ],
-          ),
+      ExpansionTile(
+        key: const PageStorageKey('admin-diagnostics'),
+        maintainState: true,
+        title: const Text('Diagnostics and controlled testing'),
+        subtitle: const Text(
+          'Provider diagnostics, generated media controls, and Founder QA.',
         ),
-      ),
-      const SizedBox(height: 12),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Physical marketing artifacts',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 6),
-              if (physicalMarketingOperations == null)
-                const Text('Artifact diagnostics are temporarily unavailable.')
-              else ...[
-                Text(
-                  'Environment: ${_category(physicalMarketingOperations!['environment']?.toString() ?? 'provider_free')}',
-                ),
-                Text(
-                  'Materials: ${physicalMarketingOperations!['materials'] ?? 0} · Versions: ${physicalMarketingOperations!['versions'] ?? 0}',
-                ),
-                Text(
-                  'Artifacts: ${physicalMarketingOperations!['artifacts'] ?? 0} · Approvals: ${physicalMarketingOperations!['approvals'] ?? 0}',
-                ),
-                Text(
-                  'Preflight failures: ${physicalMarketingOperations!['preflightFailures'] ?? 0}',
-                ),
-                const Text(
-                  'Provider traffic: 0 · Recipient data and credentials hidden',
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      const SizedBox(height: 12),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Generated visual commercial controls',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              if (commercialMetrics == null)
-                const Text('Commercial metrics are temporarily unavailable.')
-              else ...[
-                Text(
-                  'Provider: ${commercialMetrics!.providerEnabled ? 'Enabled' : 'Disabled'}',
-                ),
-                Text('Rollout: ${_category(commercialMetrics!.rolloutMode)}'),
-                Text(
-                  'Beta cohort: ${commercialMetrics!.betaCohortEnabled ? 'Enabled' : 'Disabled'} · ${commercialMetrics!.betaCohortCount} / ${commercialMetrics!.betaCohortLimit} Businesses · ${_category(commercialMetrics!.betaCohortStage)}',
-                ),
-                Text(
-                  'Daily calls: ${commercialMetrics!.dailyCalls} / ${commercialMetrics!.dailyCallLimit}',
-                ),
-                Text(
-                  'Daily spend: ${_money(commercialMetrics!.dailyCostMicros)} / ${_money(commercialMetrics!.dailyCostLimitMicros)}',
-                ),
-                Text(
-                  'Monthly spend: ${_money(commercialMetrics!.monthlyCostMicros)} / ${_money(commercialMetrics!.monthlyCostLimitMicros)}',
-                ),
-                Text(
-                  'Outstanding reservations: ${commercialMetrics!.outstandingReservations}',
-                ),
-                Text(
-                  'System rejections: ${commercialMetrics!.systemRejections} · Limit exhaustion: ${commercialMetrics!.limitExhaustions}',
-                ),
-                Text(
-                  'Average completion: ${commercialMetrics!.averageLatencyMs > 0 ? '${(commercialMetrics!.averageLatencyMs / 1000).toStringAsFixed(1)}s' : 'No completed sample'}',
-                ),
-                Text(
-                  'Provider failures: ${commercialMetrics!.providerFailures}',
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Plan allowances: ${_planMap(commercialMetrics!.planAllowances)}',
-                ),
-                Text(
-                  'Requests by plan: ${_planMap(commercialMetrics!.requestsByPlan)}',
-                ),
-                Text(
-                  'Customer units by plan: ${_planMap(commercialMetrics!.customerUnitsByPlan)}',
-                ),
-                Text(
-                  'Provider-billed units by plan: ${_planMap(commercialMetrics!.providerUnitsByPlan)}',
-                ),
-              ],
-              const Divider(height: 28),
-              Text(
-                'Generated visual provider authentication',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 6),
-              Text(_providerAuthSummary(providerAuthPreflight)),
-              if (providerAuthPreflight?.failureCategory?.isNotEmpty == true)
-                Text(
-                  'Safe category: ${_category(providerAuthPreflight!.failureCategory!)}',
-                ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.tonalIcon(
-                  onPressed: providerAuthPreflightRunning
-                      ? null
-                      : onRunProviderAuthPreflight,
-                  icon: providerAuthPreflightRunning
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.verified_user_outlined),
-                  label: Text(
-                    providerAuthPreflightRunning
-                        ? 'Running preflight…'
-                        : 'Run zero-model auth preflight',
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tracking Numbers — Beta',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'This checks runtime identity and token exchange only. It does not request generated content.',
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
-              const Divider(height: 28),
-              Text(
-                'Reservation accounting',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                accountingReconciliation == null
-                    ? 'Rebuild bounded usage totals from canonical reservation evidence.'
-                    : 'Reconciled ${accountingReconciliation!['reservationCount'] ?? 0} reservations; released ${accountingReconciliation!['releasedJobCount'] ?? 0} definitive pre-provider failure.',
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: accountingReconciliationRunning
-                      ? null
-                      : onReconcileAccounting,
-                  icon: accountingReconciliationRunning
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.calculate_outlined),
-                  label: Text(
-                    accountingReconciliationRunning
-                        ? 'Reconciling…'
-                        : 'Reconcile accounting',
-                  ),
-                ),
-              ),
-              if (founderQaJobController != null &&
-                  onConfigureFounderQaAllowlist != null) ...[
-                const Divider(height: 28),
-                Text(
-                  'Founder QA generation access',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Select an existing internal QA generation job. Its Business becomes the only account authorized for future provider requests; generation stays disabled.',
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: founderQaJobController,
-                  enabled: !founderQaAllowlistUpdating,
-                  decoration: const InputDecoration(
-                    labelText: 'Internal QA generation job ID',
-                    helperText:
-                        'The Business UID is resolved server-side and is not displayed.',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton.tonalIcon(
-                    onPressed: founderQaAllowlistUpdating
-                        ? null
-                        : onConfigureFounderQaAllowlist,
-                    icon: founderQaAllowlistUpdating
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.lock_person_outlined),
-                    label: Text(
-                      founderQaAllowlistUpdating
-                          ? 'Restricting access…'
-                          : 'Restrict to this QA Business',
+                  const SizedBox(height: 6),
+                  if (trackingPhoneOperations == null)
+                    const Text(
+                      'Tracking Number diagnostics are temporarily unavailable.',
+                    )
+                  else ...[
+                    Text(
+                      'Provider: ${_category(trackingPhoneOperations!['provider']?.toString() ?? 'twilio')} · ${trackingPhoneOperations!['providerConfigured'] == true ? 'Configured' : 'Not configured'}',
                     ),
-                  ),
-                ),
-                if (onStagePrivateBetaControls != null &&
-                    onRestoreFounderOnlyControls != null) ...[
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Private Beta staging uses the same server-resolved Business evidence. Founder-only clears the commercial cohort and safely preconfigures 50 calls/day, 300 calls/month, \$10/day, and \$100/month. Both actions keep provider generation disabled until explicitly enabled below.',
-                    style: TextStyle(fontStyle: FontStyle.italic),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      FilledButton.tonalIcon(
-                        onPressed: commercialControlsUpdating
-                            ? null
-                            : onStagePrivateBetaControls,
-                        icon: const Icon(Icons.groups_outlined),
-                        label: const Text('Stage first-five Beta controls'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: commercialControlsUpdating
-                            ? null
-                            : onRestoreFounderOnlyControls,
-                        icon: const Icon(Icons.shield_outlined),
-                        label: const Text('Apply Founder-only safety controls'),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-              if (onSetStagingProviderEnabled != null) ...[
-                const Divider(height: 28),
-                Text(
-                  'Invited Private Beta generation',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Available only to the invited cohort with active plan entitlement. Monthly allowances and provider spend caps remain enforced. Owner approval is still required before publication.',
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed:
-                          stagingProviderUpdating ||
-                              commercialMetrics?.providerEnabled == true
-                          ? null
-                          : () => onSetStagingProviderEnabled!(true),
-                      icon: const Icon(Icons.play_arrow_outlined),
-                      label: const Text('Enable invited Beta generation'),
+                    Text(
+                      'Numbers: ${trackingPhoneOperations!['numberInventory'] ?? 0} · Active: ${trackingPhoneOperations!['activeNumbers'] ?? 0} · Grace: ${trackingPhoneOperations!['graceNumbers'] ?? 0}',
                     ),
-                    OutlinedButton.icon(
-                      onPressed:
-                          stagingProviderUpdating ||
-                              commercialMetrics?.providerEnabled != true
-                          ? null
-                          : () => onSetStagingProviderEnabled!(false),
-                      icon: const Icon(Icons.stop_circle_outlined),
-                      label: const Text('Disable generation'),
+                    Text(
+                      'Calls: ${trackingPhoneOperations!['callSessions'] ?? 0} · Answered: ${trackingPhoneOperations!['answeredCalls'] ?? 0} · Missed: ${trackingPhoneOperations!['missedCalls'] ?? 0}',
+                    ),
+                    Text(
+                      'Provisioning failures: ${trackingPhoneOperations!['failedProvisioning'] ?? 0} · Unknown outcomes: ${trackingPhoneOperations!['unknownOutcomes'] ?? 0}',
+                    ),
+                    Text(
+                      'Webhook duplicates: ${trackingPhoneOperations!['duplicateWebhookReceipts'] ?? 0} · Provider cost: ${_money((trackingPhoneOperations!['providerCostMicros'] as num?)?.toInt() ?? 0)}',
+                    ),
+                    const Text(
+                      'Provider traffic and capability readiness are not reported in this overview. Review Configuration for provider status.',
                     ),
                   ],
-                ),
-              ],
-            ],
+                ],
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Physical marketing artifacts',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  if (physicalMarketingOperations == null)
+                    const Text(
+                      'Artifact diagnostics are temporarily unavailable.',
+                    )
+                  else ...[
+                    Text(
+                      'Environment: ${_category(physicalMarketingOperations!['environment']?.toString() ?? 'provider_free')}',
+                    ),
+                    Text(
+                      'Materials: ${physicalMarketingOperations!['materials'] ?? 0} · Versions: ${physicalMarketingOperations!['versions'] ?? 0}',
+                    ),
+                    Text(
+                      'Artifacts: ${physicalMarketingOperations!['artifacts'] ?? 0} · Approvals: ${physicalMarketingOperations!['approvals'] ?? 0}',
+                    ),
+                    Text(
+                      'Preflight failures: ${physicalMarketingOperations!['preflightFailures'] ?? 0}',
+                    ),
+                    const Text(
+                      'Provider traffic and capability readiness are not reported in this overview. Review Configuration for provider status.',
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Generated visual commercial controls',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  if (commercialMetrics == null)
+                    const Text(
+                      'Commercial metrics are temporarily unavailable.',
+                    )
+                  else ...[
+                    Text(
+                      'Provider: ${commercialMetrics!.providerEnabled ? 'Enabled' : 'Disabled'}',
+                    ),
+                    Text(
+                      'Rollout: ${_category(commercialMetrics!.rolloutMode)}',
+                    ),
+                    Text(
+                      'Beta cohort: ${commercialMetrics!.betaCohortEnabled ? 'Enabled' : 'Disabled'} · ${commercialMetrics!.betaCohortCount} / ${commercialMetrics!.betaCohortLimit} Businesses · ${_category(commercialMetrics!.betaCohortStage)}',
+                    ),
+                    Text(
+                      'Daily calls: ${commercialMetrics!.dailyCalls} / ${commercialMetrics!.dailyCallLimit}',
+                    ),
+                    Text(
+                      'Daily spend: ${_money(commercialMetrics!.dailyCostMicros)} / ${_money(commercialMetrics!.dailyCostLimitMicros)}',
+                    ),
+                    Text(
+                      'Monthly spend: ${_money(commercialMetrics!.monthlyCostMicros)} / ${_money(commercialMetrics!.monthlyCostLimitMicros)}',
+                    ),
+                    Text(
+                      'Outstanding reservations: ${commercialMetrics!.outstandingReservations}',
+                    ),
+                    Text(
+                      'System rejections: ${commercialMetrics!.systemRejections} · Limit exhaustion: ${commercialMetrics!.limitExhaustions}',
+                    ),
+                    Text(
+                      'Average completion: ${commercialMetrics!.averageLatencyMs > 0 ? '${(commercialMetrics!.averageLatencyMs / 1000).toStringAsFixed(1)}s' : 'No completed sample'}',
+                    ),
+                    Text(
+                      'Provider failures: ${commercialMetrics!.providerFailures}',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Plan allowances: ${_planMap(commercialMetrics!.planAllowances)}',
+                    ),
+                    Text(
+                      'Requests by plan: ${_planMap(commercialMetrics!.requestsByPlan)}',
+                    ),
+                    Text(
+                      'Customer units by plan: ${_planMap(commercialMetrics!.customerUnitsByPlan)}',
+                    ),
+                    Text(
+                      'Provider-billed units by plan: ${_planMap(commercialMetrics!.providerUnitsByPlan)}',
+                    ),
+                  ],
+                  const Divider(height: 28),
+                  Text(
+                    'Generated visual provider authentication',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(_providerAuthSummary(providerAuthPreflight)),
+                  if (providerAuthPreflight?.failureCategory?.isNotEmpty ==
+                      true)
+                    Text(
+                      'Safe category: ${_category(providerAuthPreflight!.failureCategory!)}',
+                    ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonalIcon(
+                      onPressed: providerAuthPreflightRunning
+                          ? null
+                          : onRunProviderAuthPreflight,
+                      icon: providerAuthPreflightRunning
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.verified_user_outlined),
+                      label: Text(
+                        providerAuthPreflightRunning
+                            ? 'Running preflight…'
+                            : 'Run zero-model auth preflight',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'This checks runtime identity and token exchange only. It does not request generated content.',
+                    style: TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                  const Divider(height: 28),
+                  Text(
+                    'Reservation accounting',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    accountingReconciliation == null
+                        ? 'Rebuild bounded usage totals from canonical reservation evidence.'
+                        : 'Reconciled ${accountingReconciliation!['reservationCount'] ?? 0} reservations; released ${accountingReconciliation!['releasedJobCount'] ?? 0} definitive pre-provider failure.',
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: accountingReconciliationRunning
+                          ? null
+                          : onReconcileAccounting,
+                      icon: accountingReconciliationRunning
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.calculate_outlined),
+                      label: Text(
+                        accountingReconciliationRunning
+                            ? 'Reconciling…'
+                            : 'Reconcile accounting',
+                      ),
+                    ),
+                  ),
+                  if (founderQaJobController != null &&
+                      onConfigureFounderQaAllowlist != null) ...[
+                    const Divider(height: 28),
+                    Text(
+                      'Founder QA generation access',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Select an existing internal QA generation job. Its Business becomes the only account authorized for future provider requests; generation stays disabled.',
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: founderQaJobController,
+                      enabled: !founderQaAllowlistUpdating,
+                      decoration: const InputDecoration(
+                        labelText: 'Internal QA generation job ID',
+                        helperText:
+                            'The Business UID is resolved server-side and is not displayed.',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.tonalIcon(
+                        onPressed: founderQaAllowlistUpdating
+                            ? null
+                            : onConfigureFounderQaAllowlist,
+                        icon: founderQaAllowlistUpdating
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.lock_person_outlined),
+                        label: Text(
+                          founderQaAllowlistUpdating
+                              ? 'Restricting access…'
+                              : 'Restrict to this QA Business',
+                        ),
+                      ),
+                    ),
+                    if (onStagePrivateBetaControls != null &&
+                        onRestoreFounderOnlyControls != null) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Private Beta staging uses the same server-resolved Business evidence. Founder-only clears the commercial cohort and safely preconfigures 50 calls/day, 300 calls/month, \$10/day, and \$100/month. Both actions keep provider generation disabled until explicitly enabled below.',
+                        style: TextStyle(fontStyle: FontStyle.italic),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          FilledButton.tonalIcon(
+                            onPressed: commercialControlsUpdating
+                                ? null
+                                : onStagePrivateBetaControls,
+                            icon: const Icon(Icons.groups_outlined),
+                            label: const Text('Stage first-five Beta controls'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: commercialControlsUpdating
+                                ? null
+                                : onRestoreFounderOnlyControls,
+                            icon: const Icon(Icons.shield_outlined),
+                            label: const Text(
+                              'Apply Founder-only safety controls',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                  if (onSetStagingProviderEnabled != null) ...[
+                    const Divider(height: 28),
+                    Text(
+                      'Invited Private Beta generation',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Available only to the invited cohort with active plan entitlement. Monthly allowances and provider spend caps remain enforced. Owner approval is still required before publication.',
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed:
+                              stagingProviderUpdating ||
+                                  commercialMetrics?.providerEnabled == true
+                              ? null
+                              : () => onSetStagingProviderEnabled!(true),
+                          icon: const Icon(Icons.play_arrow_outlined),
+                          label: const Text('Enable invited Beta generation'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed:
+                              stagingProviderUpdating ||
+                                  commercialMetrics?.providerEnabled != true
+                              ? null
+                              : () => onSetStagingProviderEnabled!(false),
+                          icon: const Icon(Icons.stop_circle_outlined),
+                          label: const Text('Disable generation'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 28),
       Text('Administration', style: Theme.of(context).textTheme.headlineSmall),
@@ -1063,7 +1127,7 @@ class _ExceptionCard extends StatelessWidget {
 class _MetricCard extends StatelessWidget {
   const _MetricCard({required this.label, required this.value});
   final String label;
-  final int value;
+  final int? value;
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 180,
@@ -1073,7 +1137,10 @@ class _MetricCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$value', style: Theme.of(context).textTheme.headlineMedium),
+            Text(
+              value?.toString() ?? 'Unknown',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
             Text(label),
           ],
         ),

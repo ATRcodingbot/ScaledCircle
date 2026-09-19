@@ -752,7 +752,11 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AuthenticatedAppBar(
       title: Text(
-        widget.admin ? 'Postcard fulfillment' : 'Neighborhood Postcards',
+        widget.admin
+            ? 'Postcard fulfillment'
+            : _available
+            ? 'Neighborhood Postcards'
+            : 'Postcards — Coming Soon',
       ),
     ),
     body: Center(
@@ -762,16 +766,16 @@ class _PostcardCampaignScreenState extends State<PostcardCampaignScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             Text(
-              'Fulfilled by ScaledCircle',
+              _available ? 'Fulfillment testing' : 'Postcards — Coming Soon',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const Text(
-              'Private Beta for selected Businesses while real-world fulfillment testing is completed.',
+              'Postcard printing and mailing are not generally available. Controlled testing does not open fulfillment to other customers.',
             ),
             const SizedBox(height: 12),
             if (!_available)
               const Text(
-                'Postcards — Private Beta. ScaledCircle Postcards are currently available to selected Businesses while we complete real-world fulfillment testing.',
+                'Postcard ordering is not available yet. You can still prepare downloadable artwork or create a flyer distribution campaign using your own materials.',
               )
             else ...[
               const Text('STAGING · TEST payments only'),

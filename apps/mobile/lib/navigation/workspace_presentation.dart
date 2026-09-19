@@ -1,3 +1,5 @@
+import 'app_routes.dart';
+
 /// Presentation only. Server membership and per-action authority remain required.
 class WorkspacePresentation {
   WorkspacePresentation(Map<String, dynamic> context)
@@ -27,7 +29,7 @@ class WorkspacePresentation {
     if (path == '/business' || path == '/business/account') return true;
     if (path == '/business/schedule') return operations;
     if (path == '/business/team') return can('teamManagement');
-    if (path == '/business/membership' || path == '/business/billing') {
+    if (AppRoutes.membershipPath(path) != null) {
       return can('billing');
     }
     if (path == '/business/attribution') return can('analytics');

@@ -1,3 +1,4 @@
+import 'package:flutter_app/widgets/campaign_material_source_options.dart';
 import 'package:flutter_app/navigation/authenticated_app_bar.dart';
 import '../../../../../services/business_workspace_service.dart';
 import 'dart:async';
@@ -558,7 +559,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
         return 'Create Tracked Materials with Scaled Circle';
 
       case 'printed_by_scaled_circle':
-        return 'Scaled Circle Printing';
+        return 'ScaledCircle Printing — Coming Soon';
 
       default:
         return source;
@@ -1248,22 +1249,7 @@ class _FlyerCampaignScreenState extends State<FlyerCampaignScreen> {
                         labelText: 'Material Source',
                         border: OutlineInputBorder(),
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'business_provided',
-                          child: Text('I Already Have My Materials'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'scaled_circle_generated',
-                          child: Text(
-                            'Create Tracked Materials with Scaled Circle',
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'printed_by_scaled_circle',
-                          child: Text('Scaled Circle Printing'),
-                        ),
-                      ],
+                      items: campaignMaterialSourceOptions,
                       onChanged: publishing
                           ? null
                           : (value) {

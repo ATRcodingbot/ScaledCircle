@@ -141,20 +141,15 @@ class ScaledCircleApp extends StatelessWidget {
         builder: (_) => const AuthenticatedLandingGate(),
       );
     }
-    if (const {
-      '/billing',
-      '/billing/upgrade',
-      '/billing/addons',
-      '/billing/cancel',
-      '/billing/history',
-    }.contains(route?.path)) {
+    final membershipPath = AppRoutes.membershipPath(route?.path);
+    if (membershipPath != null) {
       return MaterialPageRoute(
         settings: settings,
         builder: (_) => ProtectedRouteGate(
-          routeName: settings.name!,
+          routeName: route!.replace(path: membershipPath).toString(),
           audience: ProtectedRouteAudience.business,
           builder: (_, _) =>
-              BusinessMembershipScreen(section: route!.path.split('/').last),
+              BusinessMembershipScreen(section: membershipPath.split('/').last),
         ),
       );
     }
@@ -292,8 +287,8 @@ class ScaledCircleApp extends StatelessWidget {
           audience: route?.path != '/growth-agents'
               ? ProtectedRouteAudience.business
               : ProtectedRouteAudience.admin,
-          builder: (_, _) => GrowthAgentsScreen(
-            customer: route?.path != '/growth-agents',
+          builder: (_, profile) => GrowthAgentsScreen(
+            customer: profile['role'] != 'admin',
             focusId:
                 route?.queryParameters['prospect'] ??
                 route?.queryParameters['report'] ??

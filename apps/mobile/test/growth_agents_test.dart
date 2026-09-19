@@ -4,6 +4,86 @@ import 'package:flutter_app/screens/business/growth_agents_screen.dart';
 import 'package:flutter_app/models/notification_destination.dart';
 
 void main() {
+  for (final recorded in [true, false]) {
+    testWidgets(
+      'Lead research authoritative status and unknowns recorded=$recorded',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 850);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.6)),
+              child: child!,
+            ),
+            home: GrowthAgentsScreen(
+              customer: true,
+              focusId: 'lead_generation',
+              loadOverride: () async => {
+                'initialized': true,
+                'businessContext': {'businessName': 'Test Business'},
+                'leadAccess': {
+                  'enabled': true,
+                  'source': 'internal_dogfood',
+                  'expiresAt': 1790000000000,
+                },
+                'researchSchedule': {
+                  'enabled': true,
+                  'cadence': 'daily',
+                  'lastStatus': recorded ? 'completed' : 'not_run',
+                  'lastAttemptAt': recorded ? 1789990000000 : null,
+                  'nextRunAt': 1790080000000,
+                  'lastCompletedCycle': recorded
+                      ? {
+                          'completedAt': 1789990000000,
+                          'sourceChecks': 8,
+                          'failedSourceCount': 2,
+                          'newProspectCount': 3,
+                          'duplicatesExcludedCount': 4,
+                        }
+                      : null,
+                },
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Access: Internal dogfood Lead Generation grant'),
+          findsOneWidget,
+        );
+        await tester.scrollUntilVisible(
+          find.textContaining('New prospects in last completed cycle:'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'New prospects in last completed cycle: ${recorded ? 3 : 'Unknown'}',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Duplicates excluded: ${recorded ? 4 : 'Unknown'}'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Unavailable sources: ${recorded ? 2 : 'Unknown'}'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('This access does not authorize messages'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   for (final width in [360.0, 1280.0]) {
     testWidgets('Growth agents decision package fits $width', (tester) async {
       tester.view.physicalSize = Size(width, 900);
@@ -125,6 +205,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Example Builder · Private Beta'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Activate research and drafts'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('Activate research and drafts'), findsOneWidget);
       expect(find.text('Register internal Growth workspace'), findsNothing);
       expect(tester.takeException(), isNull);

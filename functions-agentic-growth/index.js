@@ -24,6 +24,7 @@ exports.customerGrowthOperationsV1 = onCall({enforceAppCheck:false,maxInstances:
   try {
     return await customerGrowth.createService({db,auth:getAuth(),FieldValue,
       Timestamp:require('firebase-admin/firestore').Timestamp,
+      dogfoodBusinessUid:process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID,
       project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT}).execute(request);
   } catch(error) {
     console.error('Customer Growth action held',{code:error.code||'unavailable',message:error.message});
@@ -38,7 +39,9 @@ exports.queueCustomerGrowthReportEmailV1 = onDocumentCreated({document:'agentRep
   if(account.disabled||!account.emailVerified||!account.email)return;
   await db.runTransaction(async tx=>{
     const entitlement=(await tx.get(db.doc('businessSubscriptions/'+uid))).data();
-    if(!require('./shared/subscription_entitlements').hasActiveProductEntitlement(entitlement,'lead_generation_research'))return;
+    const grant=(await tx.get(db.doc('customerGrowthProductGrants/'+uid))).data();
+    if(!require('./shared/subscription_entitlements').hasActiveProductEntitlement(entitlement,'lead_generation_research')&&
+      !require('./customer_growth_grants').active(grant,uid,process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID,entitlement,Date.now()))return;
     const prefs=(await tx.get(db.doc('agentCommunicationPreferences/'+uid))).data()||growth.preferences();
     const health=(await tx.get(db.doc('agentHealth/'+uid))).data();
     if(health?.workspaceKind!=='customer')return;
@@ -118,6 +121,21 @@ exports.internalGrowthWorkspaceBridgeV1=onRequest({invoker:process.env.GROWTH_PR
 exports.runScheduledGrowthDogfoodV1=onSchedule({schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async()=>{
   if(process.env.GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
   await growthService().run();
+});
+exports.grantCustomerGrowthDogfoodLeadV1=onCall({enforceAppCheck:false,maxInstances:1},async request=>{
+  await growthActor(request);
+  if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)!=='scaled-circle')throw new HttpsError('permission-denied','Production dogfood grant only.');
+  try{return await require('./customer_growth_grants').createService({db,auth:getAuth(),FieldValue,
+    Timestamp:require('firebase-admin/firestore').Timestamp,allowedBusinessId:process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID})
+    .grant(request.data,{uid:request.auth.uid,role:'admin',isAdmin:true,emailVerified:true});}
+  catch(e){throw new HttpsError(e.code||'unavailable',e.code?e.message:'The dogfood grant could not finish.');}
+});
+exports.runScheduledCustomerGrowthResearchV1=onSchedule({schedule:'every 15 minutes',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:540},async()=>{
+  if(process.env.CUSTOMER_GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
+  const result=await customerGrowth.createService({db,auth:getAuth(),FieldValue,
+    Timestamp:require('firebase-admin/firestore').Timestamp,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,
+    dogfoodBusinessUid:process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID}).runScheduledResearch();
+  console.info('Customer research schedule completed',result);
 });
 exports.queueGrowthReportEmailV1=onDocumentCreated({document:'agentReports/{reportId}',maxInstances:2,retry:true},async event=>{
   if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)!=='scaledcircle-staging')return;

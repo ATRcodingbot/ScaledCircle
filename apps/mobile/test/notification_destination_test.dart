@@ -10,6 +10,8 @@ class _Document implements QueryDocumentSnapshot {
   _Document(this.value);
   final Map<String, dynamic> value;
   @override
+  String get id => "notice-one";
+  @override
   Map<String, dynamic> data() => value;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -89,6 +91,10 @@ void main() {
       MaterialApp(
         home: NotificationsScreen(
           currentUserId: 'self',
+          resolveNotification: (_) async => {
+            'available': true,
+            'type': 'worker_earning_established',
+          },
           notificationsStream: Stream.value(
             _Snapshot([
               _Document({
@@ -127,4 +133,68 @@ void main() {
     expect(find.text('View Earnings'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  for (final available in [true, false]) {
+    testWidgets(
+      'server destination authority available=$available survives read failure',
+      (tester) async {
+        var resolutions = 0;
+        var readAttempts = 0;
+        String? opened;
+        await tester.pumpWidget(
+          MaterialApp(
+            onGenerateRoute: (settings) {
+              opened = settings.name;
+              return MaterialPageRoute(
+                builder: (_) => const Scaffold(body: Text('Authorized record')),
+              );
+            },
+            home: NotificationsScreen(
+              currentUserId: 'self',
+              resolveNotification: (id) async {
+                expect(id, 'notice-one');
+                resolutions++;
+                return {
+                  'available': available,
+                  'deepLink': {
+                    'destination': 'business_inquiry',
+                    'leadId': 'current-lead',
+                    'businessId': 'business-one',
+                  },
+                };
+              },
+              markNotificationRead: (_) async {
+                readAttempts++;
+                throw StateError('receipt unavailable');
+              },
+              notificationsStream: Stream.value(
+                _Snapshot([
+                  _Document({
+                    'title': 'New inquiry',
+                    'read': false,
+                    'deepLink': {
+                      'destination': 'business_inquiry',
+                      'leadId': 'stale-lead',
+                      'businessId': 'business-one',
+                    },
+                  }),
+                ]),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('New inquiry'));
+        await tester.pumpAndSettle();
+        expect(resolutions, 1);
+        expect(readAttempts, available ? 1 : 0);
+        if (available) {
+          expect(Uri.parse(opened!).queryParameters['lead'], 'current-lead');
+          expect(find.text('Authorized record'), findsOneWidget);
+        } else {
+          expect(opened, isNull);
+          expect(find.textContaining('no longer available'), findsOneWidget);
+        }
+      },
+    );
+  }
 }

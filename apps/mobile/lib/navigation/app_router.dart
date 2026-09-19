@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'browser_history.dart';
+import 'app_routes.dart';
 
 typedef AppRouteFactory = Route<dynamic> Function(RouteSettings settings);
 
@@ -27,17 +28,12 @@ Uri? initialReferralRoute(Uri browserLocation, {required bool enabled}) {
 
 Uri? initialBillingRoute(Uri browserLocation) {
   final route = Uri.tryParse(browserLocation.fragment);
+  final path = AppRoutes.membershipPath(route?.path);
   return route != null &&
-          const {
-            '/billing',
-            '/billing/cancel',
-            '/billing/history',
-            '/billing/upgrade',
-            '/billing/addons',
-          }.contains(route.path) &&
+          path != null &&
           !route.hasAuthority &&
           !route.hasScheme
-      ? route
+      ? route.replace(path: path)
       : null;
 }
 

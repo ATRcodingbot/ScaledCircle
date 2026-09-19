@@ -71,3 +71,23 @@ test('failed request retries after cooldown with one lease, then completed repla
  assert.equal((await db.collection('propertyRecommendationWorkspaces/'+b+'/territories').get()).size,12);
  assert.deepEqual(await service.run(input),report);assert.equal(calls,firstCalls+12);
 });
+
+test('nearby comparison discovers six distinct contained alternatives without a second drawing',async()=>{
+ const {b,prefs}=await fixture();const service=createService({db,FieldValue,analyze:async()=>facts});
+ const anchor=rect(-76.99,39.01,.01),report=await service.run({businessId:b,actorUid:b,requestId:'nearby',objective:'Roofing',comparisonGeometry:anchor});
+ const geometry=require('./property_service_area_geometry'),union=geometry.normalizeAreas(prefs).union;
+ assert.equal(report.examinedCount,6);assert.equal(report.recommendations.length,6);
+ assert.ok(report.recommendations.every(r=>geometry.isContained(r.geometry,union)&&!geometry.overlapsGeometry(r.geometry,anchor)));
+ assert.ok(report.recommendations.every(r=>r.geometry.every(p=>p.longitude<-76.94)),'nearest west alternatives precede distant east area');
+ await assert.rejects(service.run({businessId:b,actorUid:b,requestId:'nearby',objective:'Roofing',comparisonGeometry:rect(-76.98,39.01,.01)}),e=>e.code==='already-exists');
+ const other=await fixture();await assert.rejects(service.run({businessId:other.b,actorUid:other.b,requestId:'outside',comparisonGeometry:rect(-79,39)}),e=>e.code==='failed-precondition');
+});
+
+test('90-day recommendation cooldown allows reconsideration and preserves every historical observation',async()=>{
+ const {b}=await fixture();let clock=Date.now();const service=createService({db,FieldValue,now:()=>clock,analyze:async()=>facts});
+ const input={businessId:b,actorUid:b,requestId:'original',objective:'Roofing'},first=await service.run(input);
+ clock+=91*86400000;const second=await service.run({...input,requestId:'revisit'});
+ assert.deepEqual(second.recommendations.map(r=>r.id),first.recommendations.map(r=>r.id));
+ const observations=await db.collection('propertyRecommendationWorkspaces/'+b+'/territories/'+first.recommendations[0].id+'/observations').get();
+ assert.equal(observations.size,2);assert.deepEqual((await db.doc('propertyRecommendationWorkspaces/'+b+'/runs/original').get()).data().report,first);
+});

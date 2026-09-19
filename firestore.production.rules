@@ -320,6 +320,7 @@ service cloud.firestore {
         if request.resource.data.get("status", "") == resource.data.get("status", "")
         && isApprovedAccount()
         && resource.data.businessId == request.auth.uid
+        && request.resource.data.businessId == resource.data.businessId
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt'])
         && (!('completionPolicyVersion' in resource.data)
           || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']))
@@ -1199,7 +1200,8 @@ service cloud.firestore {
 
     function isSignedIn() {
 
-      return request.auth != null;
+      return request.auth != null
+        && !exists(/databases/$(database)/documents/accountClosures/$(request.auth.uid));
 
     }
 

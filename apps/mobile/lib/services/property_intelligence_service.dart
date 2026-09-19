@@ -82,19 +82,24 @@ class PropertyIntelligenceService {
     required String objective,
     required String requestId,
     String? savedAreaId,
+    List<Map<String, double>>? comparisonGeometry,
   }) async {
     final response = await _functions
         .httpsCallable(
           'analyzePropertyIntelligence',
           options: HttpsCallableOptions(timeout: const Duration(seconds: 180)),
         )
-        .call(
-          buildSavedAreasRequest(
+        .call({
+          ...buildSavedAreasRequest(
             objective: objective,
             requestId: requestId,
             savedAreaId: savedAreaId,
           ),
-        );
+          if (comparisonGeometry != null) ...{
+            'action': 'compare_nearby',
+            'comparisonGeometry': comparisonGeometry,
+          },
+        });
     return Map<String, dynamic>.from((response.data as Map)['report'] as Map);
   }
 

@@ -8,7 +8,7 @@ let service,reads;
 const auth={getUser:async uid=>({uid,email:uid+'@example.test',disabled:uid==='disabled',emailVerified:uid!=='unverified'})};
 const call=(operation='load',uid='owner',businessId='owner',input)=>service.execute({auth:uid?{uid}:null,data:{operation,businessId,...(input?{input}:{})}});
 beforeEach(async()=>{
- for(const c of ['users','businessWorkspaces','businessSubscriptions','legalConsents','discoveryPreferences','businessGrowthProfiles','agentProfiles','agentHealth','agentApprovals','agentProspects','agentCrmProspects','agentActions','agentRuns','agentReports','agentObservations','agentCommunicationPreferences','notifications','wallets','outboundEmailJobs'])await db.recursiveDelete(db.collection(c));
+ for(const c of ['customerGrowthProductGrants','customerResearchSchedules','entitlementAuditEvents','users','businessWorkspaces','businessSubscriptions','legalConsents','discoveryPreferences','businessGrowthProfiles','agentProfiles','agentHealth','agentApprovals','agentProspects','agentCrmProspects','agentActions','agentRuns','agentReports','agentObservations','agentCommunicationPreferences','notifications','wallets','outboundEmailJobs'])await db.recursiveDelete(db.collection(c));
  await db.doc('users/owner').set({role:'business',active:true,name:'Example Builder'});
  await db.doc('businessSubscriptions/owner').set({planId:'managed_growth',status:'active',source:'stripe',addons:['lead_generation_research'],productEntitlements:['lead_generation_research'],expiresAt:Timestamp.fromMillis(Date.now()+86400000)});
  await db.doc('businessGrowthProfiles/owner').set({businessUid:'owner',businessName:'Example Builder',servicesOffered:['decks','fences'],plannedAdBudget:'$0'});
@@ -17,6 +17,85 @@ beforeEach(async()=>{
  reads=0;service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',readSource:async source=>{reads++;return source.signals.join(' ')+' '+(source.email||'');}});
 });
 after(()=>app.delete());
+test('exact dogfood Lead overlay preserves comped MG and financial records; audited replay and revocation isolate authority',async()=>{
+ const grants=require('../functions-agentic-growth/customer_growth_grants'),time=Date.now();
+ const base={planId:'managed_growth',status:'active',source:'internal_qa',comped:true,billingStatus:'comped',expiresAt:Timestamp.fromMillis(time+7*86400000)};
+ await db.doc('businessSubscriptions/owner').set(base);await db.doc('wallets/owner').set({balance:777});await db.doc('users/admin').set({role:'admin'});
+ const make=allowedBusinessId=>grants.createService({db,auth,FieldValue,Timestamp,allowedBusinessId,now:()=>time});
+ const input={businessUid:'owner',product:'lead_generation_research',reason:'Founder-approved exact Business dogfood',expiresAt:time+6*86400000,requestId:'grant-one',enableScheduledResearch:true};
+ const actor={uid:'admin',isAdmin:true,emailVerified:true,role:'admin'},serviceGrant=make('owner');
+ await assert.rejects(make(undefined).grant(input,actor),/configured/);
+ await assert.rejects(serviceGrant.grant({...input,businessUid:'other'},actor),/configured/);
+ await assert.rejects(serviceGrant.grant({...input,product:'business_assistant'},actor),/configured/);
+ await assert.rejects(serviceGrant.grant(input,{uid:'owner'}),/admin/);
+ const results=await Promise.all([serviceGrant.grant(input,actor),serviceGrant.grant(input,actor)]);
+ assert.equal(results.filter(r=>r.idempotentReplay).length,1);assert.equal((await db.collection('entitlementAuditEvents').get()).size,1);
+ await assert.rejects(serviceGrant.grant({...input,reason:'Changed'},actor),/different/);
+ assert.deepEqual((await db.doc('businessSubscriptions/owner').get()).data(),base);
+ assert.deepEqual((await db.doc('wallets/owner').get()).data(),{balance:777});
+ const record=(await db.doc('customerGrowthProductGrants/owner').get()).data();
+ assert.equal(grants.active(record,'owner','owner',base,time),true);
+ assert.equal(grants.active(record,'other','owner',base,time),false);
+ assert.equal(grants.active(record,'owner','owner',base,time+8*86400000),false);
+ assert.equal(require('./subscription_entitlements').hasActiveProductEntitlement(base,'lead_generation_research'),false);
+ service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',dogfoodBusinessUid:'owner',now:()=>time,readSource:async source=>{reads++;return source.signals.join(' ');}});
+ await call('initialize');assert.equal((await call()).leadAccess.source,'internal_dogfood');await call('research');assert.ok(reads>0);
+ const before=reads;await serviceGrant.revoke({businessUid:'owner',product:input.product,reason:'Dogfood complete'},actor);
+ await assert.rejects(call('research'),/Lead Generation/);assert.equal(reads,before);
+ assert.equal((await service.runScheduledResearch()).results[0].status,'held');assert.equal(reads,before);
+ assert.deepEqual((await db.doc('businessSubscriptions/owner').get()).data(),base);
+});
+
+test('opt-in recurring customer research runs multiple server cycles with lease dedupe and truthful zero-new results',async()=>{
+ let clock=Date.now();await db.doc('businessSubscriptions/owner').update({expiresAt:Timestamp.fromMillis(clock+10*86400000)});
+ service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',now:()=>clock,readSource:async source=>{reads++;return source.signals.join(' ');}});
+ await call('initialize');assert.equal((await service.runScheduledResearch()).examined,0);
+ await call('researchSchedule','owner','owner',{enabled:true});
+ const concurrent=await Promise.all([service.runScheduledResearch(),service.runScheduledResearch()]);
+ assert.equal(concurrent.flatMap(r=>r.results).length,1);assert.equal(reads,3);
+ let view=await call();assert.equal(view.researchSchedule.lastStatus,'completed');assert.equal(view.researchSchedule.lastCompletedCycle.newProspectCount,3);
+ const firstId=view.researchSchedule.lastCompletedCycle.runId;
+ assert.equal((await call('research')).reused,true);assert.equal(reads,3);
+ clock+=86400001;assert.equal((await service.runScheduledResearch()).results[0].status,'completed');
+ view=await call();assert.notEqual(view.researchSchedule.lastCompletedCycle.runId,firstId);
+ assert.equal(view.researchSchedule.lastCompletedCycle.newProspectCount,0);assert.equal(view.researchSchedule.lastCompletedCycle.duplicatesExcludedCount,3);
+ assert.equal(reads,3);assert.ok(view.researchSchedule.nextRunAt>clock);
+ await call('researchSchedule','owner','owner',{enabled:false});clock+=86400001;
+ assert.equal((await service.runScheduledResearch()).examined,0);
+ assert.equal((await db.collection('outboundEmailJobs').get()).size,0);
+});
+test('scheduled source failures remain real failures and owner stop wins an in-flight cycle',async()=>{
+ let entered,release;const waiting=new Promise(r=>entered=r),gate=new Promise(r=>release=r);
+ const scheduler=require('../functions-agentic-growth/customer_research_schedule').createService({db,FieldValue,run:async()=>{entered();await gate;return {runId:'saved-run',reused:false};}});
+ await scheduler.configure('owner','owner',true);const running=scheduler.runDue();await waiting;
+ await scheduler.configure('owner','owner',false);release();await running;
+ assert.equal((await db.doc('customerResearchSchedules/owner').get()).data().enabled,false);
+ service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',readSource:async()=>{reads++;throw Error('Public source unavailable');}});
+ await call('initialize');await call('researchSchedule','owner','owner',{enabled:true});await service.runScheduledResearch();
+ const view=await call();assert.equal(view.researchSchedule.lastCompletedCycle.failedSourceCount,3);
+ assert.equal(view.researchSchedule.lastCompletedCycle.newProspectCount,0);assert.equal(view.researchSchedule.lastCompletedCycle.sourceChecks,0);
+ assert.equal((await db.collection('outboundEmailJobs').get()).size,0);
+});
+test('production grant callable derives the exact verified admin actor and rejects forged callers',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+ const source=fs.readFileSync(path.join(__dirname,'../functions-agentic-growth/index.js'),'utf8');
+ const actorSource=source.slice(source.indexOf('async function growthActor('),source.indexOf('const growthEndpoint='));
+ const grantSource=source.slice(source.indexOf('exports.grantCustomerGrowthDogfoodLeadV1='),source.indexOf('exports.runScheduledCustomerGrowthResearchV1='));
+ const handlers={};class HttpsError extends Error{constructor(code,message){super(message);this.code=code;}}
+ vm.runInNewContext(actorSource+'\n'+grantSource,{exports:handlers,onCall:(_,fn)=>fn,HttpsError,db,getAuth:()=>auth,FieldValue,
+   process:{env:{GCLOUD_PROJECT:'scaled-circle',GROWTH_PRODUCTION_ADMIN_UID:'admin',CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID:'owner'}},
+   internalBridge:require('../functions-agentic-growth/internal_growth_bridge'),require:name=>name==='firebase-admin/firestore'?{Timestamp}:require(path.join(__dirname,'../functions-agentic-growth',name))});
+ await db.doc('users/admin').set({role:'admin',active:false});
+ await db.doc('businessSubscriptions/owner').update({source:'internal_qa',comped:true,billingStatus:'comped'});
+ const data={businessUid:'owner',product:'lead_generation_research',reason:'Exact configured Founder dogfood',expiresAt:Date.now()+3600000,requestId:'callable-grant',enableScheduledResearch:true};
+ const grant=handlers.grantCustomerGrowthDogfoodLeadV1;
+ await assert.rejects(grant({data}),/Sign in/);
+ await assert.rejects(grant({auth:{uid:'owner',token:{email_verified:true}},data}),/not available/);
+ await assert.rejects(grant({auth:{uid:'admin',token:{email_verified:false}},data}),/not available/);
+ await assert.rejects(grant({auth:{uid:'admin',token:{email_verified:true}},data:{...data,grantedBy:'fake'}}),/Unsupported/);
+ assert.equal((await grant({auth:{uid:'admin',token:{email_verified:true}},data})).granted,true);
+ const record=(await db.doc('customerGrowthProductGrants/owner').get()).data();assert.equal(record.grantedBy,'admin');assert.equal(record.source,'internal_dogfood');
+});
 test('normal paid Lead purchasers enroll without invitation; Managed Growth alone cannot research',async()=>{
  const ref=db.doc('businessSubscriptions/owner');
  for(const planId of ['starter','growth','scale']){
@@ -117,7 +196,7 @@ test('customer report email is owner-bound, preference-controlled and deduplicat
  const end=source.indexOf('\nfunction growthService()',start);
  assert.ok(start>=0&&end>start);const handlers={};
  vm.runInNewContext(source.slice(start,end),{exports:handlers,onDocumentCreated:(_,fn)=>fn,
-  getAuth:()=>auth,db:new Proxy(db,{get:(t,k)=>k==='runTransaction'?fn=>t.runTransaction(tx=>Promise.resolve(fn(tx))):typeof t[k]==='function'?t[k].bind(t):t[k]}),FieldValue,process:{env:{GROWTH_CUSTOMER_BETA_UIDS:'owner'}},
+  getAuth:()=>auth,db:new Proxy(db,{get:(t,k)=>k==='runTransaction'?fn=>t.runTransaction(tx=>Promise.resolve(fn(tx))):typeof t[k]==='function'?t[k].bind(t):t[k]}),FieldValue,process:{env:{GROWTH_CUSTOMER_BETA_UIDS:'owner',CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID:'owner'}},
   require:name=>require(require('node:path').join(__dirname,'../functions-agentic-growth',name)),growth:require('../functions-agentic-growth/growth_operations')});
  await call('initialize');await call('research');
  const report=(await db.collection('agentReports').where('kind','==','daily').get()).docs[0];
@@ -137,5 +216,12 @@ test('customer report email is owner-bound, preference-controlled and deduplicat
  await db.doc('businessSubscriptions/owner').update({addons:[],productEntitlements:[]});
  await db.doc('agentCommunicationPreferences/owner').set({daily:true,important:true});
  await queue({...event,params:{reportId:'entitlement_removed'}});
- assert.equal((await db.collection('outboundEmailJobs').get()).size,1);
+  assert.equal((await db.collection('outboundEmailJobs').get()).size,1);
+ await db.doc('businessSubscriptions/owner').update({source:'internal_qa',comped:true,billingStatus:'comped'});
+ await db.doc('users/admin').set({role:'admin'});
+ await require('../functions-agentic-growth/customer_growth_grants').createService({db,auth,FieldValue,Timestamp,allowedBusinessId:'owner'}).grant({
+   businessUid:'owner',product:'lead_generation_research',reason:'Exact dogfood report test',expiresAt:Date.now()+3600000,requestId:'report-grant',enableScheduledResearch:false},
+   {uid:'admin',role:'admin',isAdmin:true,emailVerified:true});
+ await queue({...event,params:{reportId:'dogfood_report'}});
+ assert.equal((await db.collection('outboundEmailJobs').get()).size,2);
 });

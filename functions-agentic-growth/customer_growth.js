@@ -7,13 +7,25 @@ const opportunities=require('./growth_opportunities');
 const workspace=require('./shared/business_workspace');
 const legal=require('./shared/legal_consent');
 const entitlements=require('./shared/subscription_entitlements');
+const grants=require('./customer_growth_grants');
+const schedules=require('./customer_research_schedule');
 const VERSION='CustomerGrowthWorkspaceV1';
 const fail=(code,message)=>{const error=Error(message);error.code=code;throw error;};
 const clean=(s,max=500)=>typeof s==='string'?s.trim().slice(0,max):'';
 
-function createService({db,auth,FieldValue,Timestamp,project,readSource,now=Date.now}) {
+function createService({db,auth,FieldValue,Timestamp,project,readSource,dogfoodBusinessUid,now=Date.now}) {
   const ws=workspace.createWorkspaceService({db,auth,FieldValue,Timestamp,now});
   const consent=legal.createLegalConsentService({db,FieldValue});
+  async function leadAllowed(a){
+    if(entitlements.hasActiveProductEntitlement(a.entitlement,'lead_generation_research',{nowMillis:now()}))return true;
+    if(a.businessId!==dogfoodBusinessUid)return false;
+    return grants.active((await db.doc('customerGrowthProductGrants/'+a.businessId).get()).data(),a.businessId,dogfoodBusinessUid,a.entitlement,now());
+  }
+  const schedule=schedules.createService({db,FieldValue,now,run:async businessId=>{
+    const a=await authority({auth:{uid:businessId},data:{businessId}});
+    if(!await leadAllowed(a))fail('permission-denied','An active Lead Generation entitlement is required.');
+    const c=await context(a);return research(a,c).run();
+  }});
   async function authority(request) {
     const uid=request.auth?.uid;
     if(!uid)fail('unauthenticated','Sign in to your Business.');
@@ -65,10 +77,28 @@ function createService({db,auth,FieldValue,Timestamp,project,readSource,now=Date
   }
   async function load(a,c) {
     const result=await research(a,c).load();
+    const grant=(await db.doc('customerGrowthProductGrants/'+a.businessId).get()).data();
+    const paid=entitlements.hasActiveProductEntitlement(a.entitlement,grants.PRODUCT,{nowMillis:now()});
+    const dogfood=grants.active(grant,a.businessId,dogfoodBusinessUid,a.entitlement,now());
+    result.leadAccess={enabled:paid||dogfood,source:paid?'stripe':dogfood?'internal_dogfood':'none',product:grants.PRODUCT,
+      label:paid?'Paid Lead Generation':dogfood?'Internal dogfood Lead Generation grant':'Lead Generation access required',
+      expiresAt:dogfood?grant.expiresAt.toMillis():null,reason:dogfood?grant.reason:null};
     result.prospects=result.prospects.map(p=>opportunities.project(p,now())).sort((a,b)=>b.ranking.score-a.ranking.score||a.displayName.localeCompare(b.displayName));
     result.summary.opportunityGroups=opportunities.summarize(result.prospects);
     result.summary.discoveryByServiceArea=result.summary.discoveryByServiceArea.map(area=>({...area,opportunityGroups:opportunities.summarize(result.prospects.filter(p=>p.serviceArea&&require('./growth_geography').matchArea(p,result.workspace.scope)?.id===area.serviceAreaId))}));
     const health=(await db.doc('agentHealth/'+a.businessId).get()).data();
+    const researchSchedule=(await db.doc('customerResearchSchedules/'+a.businessId).get()).data();
+    result.researchSchedule=researchSchedule?.businessUid===a.businessId?{
+      enabled:researchSchedule.enabled===true,cadence:researchSchedule.cadence,
+      nextRunAt:researchSchedule.enabled?researchSchedule.nextRunAt:null,
+      lastAttemptAt:researchSchedule.lastAttemptAt||null,lastCompletedAt:researchSchedule.lastCompletedAt||null,
+      lastStatus:researchSchedule.lastStatus||'not_run',lastRunId:researchSchedule.lastRunId||null,
+      lastSourceChecks:researchSchedule.lastSourceChecks??null,lastErrorCode:researchSchedule.lastErrorCode||null,
+    }:{enabled:false,cadence:'daily',nextRunAt:null,lastStatus:'not_configured'};
+    const latest=result.runs.filter(r=>r.status==='completed').sort((x,y)=>y.completedAt-x.completedAt)[0];
+    result.researchSchedule.lastCompletedCycle=latest?{runId:latest.id,completedAt:latest.completedAt,
+      sourceChecks:latest.sourceChecks??null,failedSourceCount:latest.unavailableSources??null,
+      newProspectCount:latest.newProspectCount??null,duplicatesExcludedCount:latest.duplicatesExcludedCount??null}:null;
     const [plans,snapshots,connections]=await Promise.all([
       db.collection('socialContentPlans').where('businessUid','==',a.businessId).limit(30).get(),
       db.collection('socialPerformanceSnapshots').where('businessUid','==',a.businessId).limit(30).get(),
@@ -110,14 +140,14 @@ function createService({db,auth,FieldValue,Timestamp,project,readSource,now=Date
     projected.premium.ads.accounts=adAccounts.map((s,i)=>({name:i?'Google Ads':'Meta Ads',status:s.exists?s.data().status:'not_connected'}));
     projected.premium.ads.noConnectedAccount=adAccounts.every(s=>!s.exists||s.data().status==='not_connected');
     result.prospects=projected.prospects;result.premium={...projected.premium,recommendationReviews:rows(reviews)};
+    if(dogfood&&!paid)result.premium.access.lead_generation='Internal dogfood Lead Generation grant';
     return result;
   }
   async function execute(request) {
     const a=await authority(request),c=await context(a),data=request.data||{};
     if(Object.keys(data).some(k=>!['businessId','operation','input'].includes(k)))fail('invalid-argument','Unsupported request.');
     const op=data.operation||'load';
-    if(['research','review'].includes(op)&&
-        !entitlements.hasActiveProductEntitlement(a.entitlement,'lead_generation_research',{nowMillis:now()}))
+    if(['research','review','researchSchedule'].includes(op)&&!await leadAllowed(a))
       fail('permission-denied','An active Lead Generation subscription is required for opportunity research and review.');
     if(op==='load')return load(a,c);
     if(op==='initialize')return initialize(a,c);
@@ -135,10 +165,15 @@ function createService({db,auth,FieldValue,Timestamp,project,readSource,now=Date
     const health=(await db.doc('agentHealth/'+a.businessId).get()).data();
     if(health?.workspaceKind!=='customer')fail('failed-precondition','Activate your Growth workspace first.');
     if(op==='research'){if(data.input&&Object.keys(data.input).length)fail('invalid-argument','Research uses your saved Business context.');return research(a,c).run();}
+    if(op==='researchSchedule'){
+      if(!a.isOwner)fail('permission-denied','The owner manages recurring research.');
+      if(Object.keys(data.input||{}).some(k=>k!=='enabled')||typeof data.input?.enabled!=='boolean')fail('invalid-argument','Choose whether recurring research is enabled.');
+      return schedule.configure(a.businessId,a.actorUid,data.input.enabled);
+    }
     if(op==='preferences'){if(!a.isOwner)fail('permission-denied','The owner manages report email preferences.');return research(a,c).savePreferences(data.input||{});}
     if(op==='review')return research(a,c).review(data.input||{},a.actorUid);
     fail('invalid-argument','Choose a supported action.');
   }
-  return {execute,authority};
+  return {execute,authority,runScheduledResearch:schedule.runDue};
 }
 module.exports={VERSION,createService};

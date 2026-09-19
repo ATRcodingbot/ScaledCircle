@@ -143,7 +143,8 @@ void main() {
 
     expect(source, contains('final List<_ExploratoryAnalysis> _analyses'));
     expect(source, contains("'Compare Property Intelligence'"));
-    expect(source, contains('Analyze at least two areas'));
+    expect(source, contains('comparisonGeometry: _geometry'));
+    expect(source, isNot(contains('Analyze at least two areas')));
   });
 
   test('campaign handoff is explicit and transfers selected geometry', () {

@@ -1,6 +1,7 @@
 param(
   [string]$FlutterSdk = $env:FLUTTER_ROOT,
-  [int]$TimeoutSeconds = 300
+  [int]$TimeoutSeconds = 300,
+  [string]$TestFile = 'test\flyer_campaign_zone_end_to_end_emulator_test.dart'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,7 +49,7 @@ try {
   $arguments = @(
     $flutterSnapshot,
     'test',
-    'test\flyer_campaign_zone_end_to_end_emulator_test.dart',
+    $TestFile,
     '--platform', 'chrome',
     '--dart-define=APP_ENV=local',
     '--dart-define=RUN_FIREBASE_EMULATOR_INTEGRATION=true',

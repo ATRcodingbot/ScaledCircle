@@ -11,6 +11,8 @@ test('shared cache contains neutral evidence and strips technical failures',asyn
   const first=await analyze(geometry),second=await analyze(geometry);
   assert.deepEqual(first,second);assert.equal(providers,1);assert.equal(stores.size,1);
   assert.deepEqual(first.limitations,['Public records can be incomplete.']);
+  assert.equal(first.physicalLogisticsVersion,'PropertyPhysicalLogisticsV1');
+  assert.deepEqual(first.physicalChannelSuitability,require('./managed_growth').evaluatePhysicalChannelSuitability(first.physicalLogistics));
   assert.doesNotMatch(JSON.stringify([...stores.values()]),/HTTP|private.invalid|providerFailures|businessId|goal|workspace/);
 });
 test('provider outage is truthful and not persisted as reusable evidence',async t=>{

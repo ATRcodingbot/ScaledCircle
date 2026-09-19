@@ -5,6 +5,8 @@ import 'package:flutter_app/services/admin_operations_service.dart';
 
 Widget subject(
   AdminOperationsSnapshot snapshot, {
+  VoidCallback? onOpenSubscriptions,
+  VoidCallback? onOpenConfiguration,
   GeneratedMediaCommercialMetrics? commercialMetrics,
   Map<String, dynamic>? trackingPhoneOperations,
   GeneratedMediaWifPreflight? providerAuthPreflight,
@@ -23,9 +25,9 @@ Widget subject(
       onOpenIssue: (_) {},
       onOpenAdminAccounts: () {},
       onOpenBeta: () {},
-      onOpenSubscriptions: () {},
+      onOpenSubscriptions: onOpenSubscriptions ?? () {},
       onOpenAttribution: () {},
-      onOpenConfiguration: () {},
+      onOpenConfiguration: onOpenConfiguration ?? () {},
       providerAuthPreflight: providerAuthPreflight,
       providerAuthPreflightRunning: false,
       onRunProviderAuthPreflight: onRunProviderAuthPreflight ?? () {},
@@ -57,7 +59,57 @@ const emptySnapshot = AdminOperationsSnapshot(
   partial: false,
 );
 
+Future<void> expandDiagnostics(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.text('Diagnostics and controlled testing'),
+    400,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(find.text('Diagnostics and controlled testing'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets(
+    'operational entry points work while testing controls stay secondary',
+    (tester) async {
+      var billing = 0;
+      var providers = 0;
+      await tester.pumpWidget(
+        subject(
+          emptySnapshot,
+          onOpenSubscriptions: () => billing++,
+          onOpenConfiguration: () => providers++,
+        ),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Customer billing and access'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Customer billing and access'));
+      await tester.scrollUntilVisible(
+        find.text('Provider readiness'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Provider readiness'));
+      expect(billing, 1);
+      expect(providers, 1);
+      expect(
+        find.textContaining('OAuth verification, release candidates'),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(
+        find.text('Diagnostics and controlled testing'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Generated visual commercial controls'), findsNothing);
+    },
+  );
+
   testWidgets('Tracking Number operations are bounded and provider-free', (
     tester,
   ) async {
@@ -80,6 +132,7 @@ void main() {
         },
       ),
     );
+    await expandDiagnostics(tester);
     await tester.scrollUntilVisible(
       find.text('Tracking Numbers — Beta'),
       300,
@@ -89,9 +142,12 @@ void main() {
       find.textContaining('Provider: Twilio · Not configured'),
       findsOneWidget,
     );
-    expect(find.textContaining('Provider traffic: 0'), findsOneWidget);
     expect(
-      find.textContaining('Caller and forwarding numbers masked'),
+      find.textContaining('Provider traffic and capability readiness'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Review Configuration for provider status.'),
       findsOneWidget,
     );
     expect(find.textContaining('Account Auth Token'), findsNothing);
@@ -133,6 +189,7 @@ void main() {
         ),
       ),
     );
+    await expandDiagnostics(tester);
     await tester.scrollUntilVisible(
       find.text('Generated visual commercial controls'),
       400,
@@ -166,6 +223,7 @@ void main() {
         onConfigureFounderQaAllowlist: () => submitted = true,
       ),
     );
+    await expandDiagnostics(tester);
     await tester.scrollUntilVisible(
       find.text('Founder QA generation access'),
       400,
@@ -201,6 +259,7 @@ void main() {
         onRestoreFounderOnlyControls: () => restored++,
       ),
     );
+    await expandDiagnostics(tester);
     await tester.scrollUntilVisible(
       find.text('Stage first-five Beta controls'),
       400,
@@ -223,7 +282,7 @@ void main() {
     expect(find.textContaining('300 calls/month'), findsOneWidget);
   });
 
-  testWidgets('bounded Founder proof control uses paired enable and disable', (
+  testWidgets('invited Beta control uses paired enable and disable', (
     tester,
   ) async {
     final updates = <bool>[];
@@ -256,18 +315,21 @@ void main() {
         onSetStagingProviderEnabled: updates.add,
       ),
     );
+    await expandDiagnostics(tester);
     await tester.scrollUntilVisible(
-      find.text('Enable bounded Founder run'),
+      find.text('Enable invited Beta generation'),
       500,
       scrollable: find.byType(Scrollable).first,
     );
     expect(
-      find.textContaining('Requires exactly one Founder-authorized Business.'),
+      find.textContaining(
+        'Available only to the invited cohort with active plan entitlement.',
+      ),
       findsOneWidget,
     );
-    await tester.ensureVisible(find.text('Enable bounded Founder run'));
+    await tester.ensureVisible(find.text('Enable invited Beta generation'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Enable bounded Founder run'));
+    await tester.tap(find.text('Enable invited Beta generation'));
     expect(updates, [true]);
     expect(find.text('Disable generation'), findsOneWidget);
   });
@@ -277,11 +339,11 @@ void main() {
   ) async {
     await tester.pumpWidget(subject(emptySnapshot));
     expect(find.text('Needs attention'), findsOneWidget);
-    expect(find.text('No issues need your attention.'), findsOneWidget);
+    expect(find.text('No reported operational exceptions.'), findsOneWidget);
     expect(find.text('Operational overview'), findsOneWidget);
     expect(find.text('4'), findsOneWidget);
     expect(find.text('Businesses'), findsOneWidget);
-    expect(find.text('Recent activity'), findsOneWidget);
+    expect(find.text('Founder QA generation access'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('System health'),
       300,
@@ -384,6 +446,11 @@ void main() {
         ),
       ),
     );
+    await tester.scrollUntilVisible(
+      find.text('Payment received'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Payment received'));
     expect(openedCampaign, 'campaign-one');
   });
@@ -412,7 +479,13 @@ void main() {
       find.text("Some operational status couldn't be loaded."),
       findsOneWidget,
     );
-    await tester.drag(find.byType(ListView), const Offset(0, -800));
+    expect(find.text('No issues in the available results.'), findsOneWidget);
+    expect(find.text('Unknown'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('Email: DEGRADED'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(find.text('Email: DEGRADED'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -433,6 +506,7 @@ void main() {
         onRunProviderAuthPreflight: () => invoked++,
       ),
     );
+    await expandDiagnostics(tester);
     await tester.scrollUntilVisible(
       find.text('Run zero-model auth preflight'),
       300,
@@ -444,7 +518,6 @@ void main() {
     );
     expect(find.textContaining('access token'), findsNothing);
     await tester.ensureVisible(find.text('Run zero-model auth preflight'));
-    await tester.drag(find.byType(ListView), const Offset(0, -100));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Run zero-model auth preflight'));
     expect(invoked, 1);

@@ -1,6 +1,7 @@
 'use strict';
 const {createHash}=require('node:crypto');
 const geometry=require('./property_service_area_geometry');
+const {validateGeometry}=require('./property_intelligence');
 const VERSION='PropertyServiceAreaAnalysisV1',DAY=86400000;
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
@@ -88,12 +89,16 @@ function createService({db,FieldValue,analyze,now=Date.now}){
       let found=false;for(const record of related){const g=shape(record);if(g){shapes.push(g);found=true;}}
       if(!found||terminal&&date===null)unknown++;
     }
-    for(const t of territories){if(t.businessId!==b)fail('failed-precondition','Saved recommendation ownership needs review.');const g=shape(t);if(g)shapes.push(g);else unknown++;}
+    for(const t of territories){if(t.businessId!==b)fail('failed-precondition','Saved recommendation ownership needs review.');
+      const last=millis(t.createdAtMs);if(last!==null&&last<now()-90*DAY)continue;
+      const g=shape(t);if(g)shapes.push(g);else unknown++;}
     return {shapes,unknown,territories};
   }
-  async function run({businessId,actorUid,objective,requestId,savedAreaId=null}){
+  async function run({businessId,actorUid,objective,requestId,savedAreaId=null,comparisonGeometry=null}){
     const b=id(businessId),actor=id(actorUid),request=id(requestId),goal=text(objective,800),areaId=savedAreaId===null?null:id(savedAreaId);
-    const inputHash=hash([b,goal,areaId]),ref=root(b).collection('runs').doc(request),control=root(b);
+    let anchor=null;
+    if(comparisonGeometry!==null){try{anchor=validateGeometry(comparisonGeometry);}catch(_){fail('invalid-argument','Select an analyzed area to find nearby alternatives.');}}
+    const inputHash=hash(anchor?[b,goal,areaId,anchor]:[b,goal,areaId]),ref=root(b).collection('runs').doc(request),control=root(b);
     const claim=await db.runTransaction(async tx=>{
       const [existing,state,p,s]=await Promise.all([tx.get(ref),tx.get(control),tx.get(profileRef(b)),tx.get(prefsRef(b))]);
       if(existing.exists){const prior=existing.data();if(prior.businessId!==b||prior.inputHash!==inputHash)fail('already-exists','This request identifier belongs to different analysis input.');
@@ -102,6 +107,7 @@ function createService({db,FieldValue,analyze,now=Date.now}){
       if(previous.leaseUntil>now())fail('aborted','Another area analysis is still running.');
       if(previous.cooldownUntil>now())fail('resource-exhausted','Wait briefly before analyzing more sections.');
       const source=sources(b,s.data(),p.data(),areaId);
+      if(anchor&&!geometry.intersects(polygon(anchor),source.normalized.union))fail('failed-precondition','Choose an area inside your saved service areas to find nearby alternatives.');
       source.context.goal=goal||text(s.data().defaultResponseGoal)||'Review opportunities for the saved Business services';
       tx.set(control,{businessId:b,leaseRequestId:request,leaseUntil:now()+180000},{merge:true});
       tx.set(ref,{schemaVersion:VERSION,businessId:b,actorUid:actor,requestId:request,inputHash,sourceVersion:source.version,status:'analyzing',
@@ -112,13 +118,15 @@ function createService({db,FieldValue,analyze,now=Date.now}){
     try{
       const past=await inventory(b),sample=geometry.candidates(claim.normalized);
       const relevant=sample.candidates.filter(c=>!areaId||c.areaIds.includes(areaId));let excluded=0;
-      const fresh=relevant.filter(c=>{if(past.shapes.some(g=>geometry.intersects(polygon(c.geometry),g))){excluded++;return false;}return true;});
-      const seed=hash([claim.normalized.digest,goal]);
+      const fresh=relevant.filter(c=>{if((anchor&&geometry.overlapsGeometry(c.geometry,anchor))||past.shapes.some(g=>geometry.intersects(polygon(c.geometry),g))){excluded++;return false;}return true;});
+      const seed=hash([b,claim.normalized.digest,goal,claim.context.services,claim.context.priorityServices]);
       const areaOrder=areaId?[areaId]:claim.normalized.areas.map(a=>a.id).sort((a,b)=>{
         const examined=x=>past.territories.filter(t=>Array.isArray(t.areaIds)&&t.areaIds.includes(x)).length;
         return examined(a)-examined(b)||hash([seed,a]).localeCompare(hash([seed,b]));
       });
-      const selected=selectSpread(fresh,areaOrder,seed,12);
+      const center=g=>g.reduce((a,p)=>[a[0]+p.latitude/g.length,a[1]+p.longitude/g.length],[0,0]);
+      const distance=g=>{const a=center(anchor),c=center(g);return (a[0]-c[0])**2+((a[1]-c[1])*Math.cos(a[0]*Math.PI/180))**2;};
+      const selected=anchor?[...fresh].sort((a,b)=>distance(a.geometry)-distance(b.geometry)||hash([seed,a.id]).localeCompare(hash([seed,b.id]))).slice(0,6):selectSpread(fresh,areaOrder,seed,12);
       const result=new Array(selected.length);let cursor=0;
       const worker=async()=>{while(cursor<selected.length){const i=cursor++,candidate=selected[i];try{
         const response=await analyze(candidate.geometry),analysis=JSON.parse(JSON.stringify(response?.analysis||response||null));
@@ -133,15 +141,23 @@ function createService({db,FieldValue,analyze,now=Date.now}){
       const report={id:request,summary:recommendations.length?`${recommendations.length} sections have supported planning signals from ${selected.length} examined sections.`:'No new section has enough supported data for a recommendation.',
         context:claim.context,recommendations,examinedCount:selected.length,remainingCandidateCount:fresh.length-selected.length,overlapsExcludedCount:excluded,
         failedSectionCount:result.filter(r=>r.status==='provider_failed').length,sampling:{...sample.sampling,wholeAreaAnalyzed:false,examinedThisRun:selected.length},
-        historyNote:`Overlap uses this Business's saved campaign geometry and previously examined recommendations. ${past.unknown?past.unknown+' records have unknown geometry or timing.':'No missing geometry was found in the bounded records read.'} CRM outcomes are not geographically attributed; other businesses were not read.`};
+        historyNote:`Overlap uses this Business's active campaign geometry and recommendations or completed marketing from the last 90 days. Older areas can be reconsidered. ${past.unknown?past.unknown+' records have unknown geometry or timing.':'No missing geometry was found in the bounded records read.'} CRM outcomes are not geographically attributed; other businesses were not read.`};
       await db.runTransaction(async tx=>{
         const [state,p,s]=await Promise.all([tx.get(control),tx.get(profileRef(b)),tx.get(prefsRef(b))]);
         if(state.data()?.leaseRequestId!==request||state.data()?.leaseUntil<=now())fail('aborted','This analysis expired; refresh before retrying.');
         if(sources(b,s.data(),p.data(),areaId).version!==claim.version)fail('aborted','Your saved profile or areas changed. Analyze again using the current settings.');
+        const previous=await Promise.all(result.map(r=>tx.get(root(b).collection('territories').doc(r.candidate.id))));
+        const archived=await Promise.all(result.map((r,i)=>previous[i].exists
+          ? tx.get(root(b).collection('territories').doc(r.candidate.id).collection('observations').doc(previous[i].data().runId)) : Promise.resolve(null)));
         tx.update(ref,{status:'completed',completedAtMs:now(),report});
-        for(const r of result)tx.create(root(b).collection('territories').doc(r.candidate.id),{schemaVersion:VERSION,businessId:b,runId:request,actorUid:actor,
+        for(const [index,r] of result.entries()){
+          const territory=root(b).collection('territories').doc(r.candidate.id),prior=previous[index].data();
+          if(prior&&!archived[index].exists)tx.create(territory.collection('observations').doc(prior.runId),prior);
+          const observation={schemaVersion:VERSION,businessId:b,runId:request,actorUid:actor,
           status:r.status,geometry:r.candidate.geometry,areaIds:r.candidate.areaIds,areaName:r.candidate.areaName,sourceVersion:claim.version,createdAtMs:now(),
-          proof:{analysis:r.analysis,ranking:r.ranking,goal:claim.context.goal}});
+          proof:{analysis:r.analysis,ranking:r.ranking,goal:claim.context.goal}};
+          tx.set(territory,observation);tx.create(territory.collection('observations').doc(request),observation);
+        }
         tx.set(control,{leaseUntil:0,leaseRequestId:null,cooldownUntil:now()+60000,lastRunId:request},{merge:true});
       });
       return report;

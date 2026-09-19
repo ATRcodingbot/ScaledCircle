@@ -90,6 +90,7 @@ class PremiumAgentWorkspace extends StatelessWidget {
     required this.onRecommendation,
     this.busy = false,
     this.error,
+    this.researchStatus,
   });
   final Map<String, dynamic> data;
   final String? focus;
@@ -100,6 +101,7 @@ class PremiumAgentWorkspace extends StatelessWidget {
   final Widget preferences;
   final bool busy;
   final String? error;
+  final Widget? researchStatus;
 
   Widget _section(BuildContext c, String title, List<Widget> children) =>
       Padding(
@@ -236,6 +238,9 @@ class PremiumAgentWorkspace extends StatelessWidget {
           if (access[type] is String) Chip(label: Text(access[type])),
         ],
       ),
+      if (researchStatus != null &&
+          const {'team', 'lead_generation', 'growth_strategist'}.contains(type))
+        researchStatus!,
       if (error != null)
         Padding(padding: const EdgeInsets.all(12), child: Text(error!)),
     ];

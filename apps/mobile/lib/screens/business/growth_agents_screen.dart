@@ -124,7 +124,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
       if (mounted && generation == _loadGeneration) {
         setState(
           () => _error = widget.customer
-              ? 'Unable to load your Growth workspace. Use your invited Business account with an active Managed Growth membership, then retry.'
+              ? 'Unable to load your Growth workspace. Confirm you are using your invited Business account, then retry.'
               : 'Unable to load this private workspace. Sign in as the ScaledCircle dogfood Admin, then retry.',
         );
       }
@@ -214,7 +214,9 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => Scaffold(
-          appBar: AuthenticatedAppBar(title: Text('$_specialistTitle · Recommendations')),
+          appBar: AuthenticatedAppBar(
+            title: Text('$_specialistTitle · Recommendations'),
+          ),
           body: CustomerPageBody(
             child: ListView(
               padding: const EdgeInsets.all(20),
@@ -486,10 +488,86 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           ? 'Recruitment partners'
           : 'High-fit accounts',
   };
+  Widget _researchStatus(Map<String, dynamic> data) {
+    final access = data['leadAccess'] is Map
+        ? data['leadAccess'] as Map
+        : const {};
+    final schedule = data['researchSchedule'] is Map
+        ? data['researchSchedule'] as Map
+        : const {};
+    final cycle = schedule['lastCompletedCycle'] is Map
+        ? schedule['lastCompletedCycle'] as Map
+        : const {};
+    final status = switch (schedule['lastStatus']) {
+      'running' => 'Running',
+      'completed' => 'Completed',
+      'held' => 'Held - review access or source availability',
+      'not_run' => 'Awaiting first scheduled cycle',
+      'not_configured' => 'Not configured',
+      _ => 'Unknown',
+    };
+    final accessLabel = switch (access['source']) {
+      'internal_dogfood' when access['enabled'] == true =>
+        'Internal dogfood Lead Generation grant',
+      'stripe' when access['enabled'] == true => 'Paid Lead Generation',
+      'none' => 'Lead Generation access required',
+      _ => 'Unknown',
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Lead research activity',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            _line('Access', accessLabel),
+            if (access['source'] == 'internal_dogfood' &&
+                access['enabled'] == true)
+              _line('Internal access expires', _time(access['expiresAt'])),
+            _line(
+              'Recurring research',
+              schedule['enabled'] == true
+                  ? (schedule['cadence'] == 'daily' ? 'Daily' : 'Enabled')
+                  : schedule['enabled'] == false
+                  ? 'Off'
+                  : 'Unknown',
+            ),
+            _line('Scheduled cycle status', status),
+            _line('Last attempt', _time(schedule['lastAttemptAt'])),
+            _line(
+              'Last completed cycle',
+              _time(cycle['completedAt'] ?? schedule['lastCompletedAt']),
+            ),
+            _line(
+              'Next scheduled cycle',
+              schedule['enabled'] == false
+                  ? 'Not scheduled'
+                  : _time(schedule['nextRunAt']),
+            ),
+            _line(
+              'New prospects in last completed cycle',
+              cycle['newProspectCount'],
+            ),
+            _line('Duplicates excluded', cycle['duplicatesExcludedCount']),
+            _line('Source checks', cycle['sourceChecks']),
+            _line('Unavailable sources', cycle['failedSourceCount']),
+            const Text(
+              'Research only. This access does not authorize messages, calls, advertising spend, or Social publication.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _content(BuildContext context) {
     if (widget.customer && _data!['initialized'] == true) {
       return PremiumAgentWorkspace(
         data: _data!,
+        researchStatus: _researchStatus(_data!),
         focus: widget.focusId,
         busy: _busy,
         error: _error,
@@ -571,6 +649,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
+        if (widget.customer) _researchStatus(d),
         const Text(
           'Review what your team found and choose the next step. Research does not send messages, launch ads or approve Social posts.',
         ),

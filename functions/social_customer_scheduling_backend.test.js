@@ -37,6 +37,10 @@ test('real transaction: one exact approval/job on concurrent taps, no plan/versi
  assert.equal(result[0].jobId,result[1].jobId);assert.equal(result.filter(r=>!r.reused).length,1);
  const jobs=await db.collection('socialGrowthJobs').where('businessUid','==',uid).get();assert.equal(jobs.size,1);
  assert.equal(jobs.docs[0].data().status,'scheduled');assert.equal(jobs.docs[0].data().customerApproval,true);
+ const enrollment=require('../functions-social-operations/social_customer_enrollment');
+ assert.ok(!(await enrollment.inventory({db,now:f.now})).uids.includes(uid));
+ const due=await enrollment.inventory({db,now:f.now+600000});
+ assert.deepEqual(due.jobIdsByBusiness[uid],[result[0].jobId]);
  assert.equal((await db.collection('socialGrowthApprovals').where('businessUid','==',uid).get()).size,1);
  assert.deepEqual((await db.doc('socialContentPlans/customer_plan').get()).data(),beforePlan);
  assert.deepEqual((await db.doc('socialContentVersions/'+itemId+'_v1').get()).data(),beforeVersion);
@@ -60,6 +64,26 @@ test('real transaction: one exact approval/job on concurrent taps, no plan/versi
  await Promise.all([publisher.execute(result[0].jobId),publisher.execute(result[0].jobId)]);
  assert.equal(creates,1);assert.equal((await jobs.docs[0].ref.get()).data().status,'published');
  await publisher.execute(result[0].jobId);assert.equal(creates,1);
+ assert.ok(!(await enrollment.inventory({db,now:clock})).uids.includes(uid));
+ // Use the real approval store for the missed-window regression as well.
+ const missedItem='customer_plan_missed',missedUid=uid+'_missed',missedVersion={...version,businessUid:missedUid,planId:missedItem};
+ await Promise.all([write('socialContentItems/'+missedItem,{...item,businessUid:missedUid,planId:missedItem}),
+  write('socialContentPlans/'+missedItem,{...plan,businessUid:missedUid}),
+  write('socialContentVersions/'+missedItem+'_v1',missedVersion),
+  write('socialContentQualityAssessments/'+missedItem+'_v1',{...f.quality,businessUid:missedUid}),
+  write('agentHealth/'+missedUid,f.health),write('businessSubscriptions/'+missedUid,f.entitlement),
+  write(`socialConnections/${missedUid}/providers/facebook`,{...f.connection,businessUid:missedUid})]);
+ const missedPreview=await store.preview(missedUid,{itemId:missedItem,provider:'facebook'});
+ const missedInput={...input,itemId:missedItem,bindingHash:missedPreview.bindingHash,reviewDigest:missedPreview.reviewDigest};
+ const missed=await store.approve(missedUid,missedInput),expiredNow=f.now+600000+15*60000+1;
+ assert.equal(missed.status,'scheduled');
+ const expired=await enrollment.inventory({db,now:expiredNow});assert.ok(expired.jobIdsByBusiness[missedUid].includes(missed.jobId));
+ let expiredProviderCalls=0;
+ await require('../functions-social-operations/social_meta_scheduler').run({db,businessUid:missedUid,customerOnly:true,jobIds:[missed.jobId],now:expiredNow,
+  publisher:{inspect:async()=>{expiredProviderCalls++;throw Error('expired_provider_forbidden');},execute:async()=>{expiredProviderCalls++;throw Error('expired_provider_forbidden');}}});
+ const expiredJob=(await db.doc('socialGrowthJobs/'+missed.jobId).get()).data();
+ assert.equal(expiredProviderCalls,0);assert.equal(expiredJob.status,'authority_review_required');assert.equal(expiredJob.blockedReason,'schedule_window_closed');
+ assert.deepEqual((await db.doc('socialContentVersions/'+missedItem+'_v1').get()).data(),missedVersion);
  const blockedUid='customer_schedule_blocked';
  await write('socialContentItems/blocked_item',{...item,businessUid:blockedUid});
  await write('socialContentPlans/customer_plan_blocked',{...plan,businessUid:blockedUid});

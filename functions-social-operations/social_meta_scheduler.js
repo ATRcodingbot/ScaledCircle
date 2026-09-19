@@ -14,10 +14,10 @@ async function run({db, publisher, businessUid, now=Date.now(),inspectOnly=false
       if(jobIds&&!jobIds.includes(snapshot.id))continue;
       if(job.businessUid!==businessUid || job.provider!==provider || (customerOnly && job.customerApproval!==true) || job.id!==snapshot.id ||
           ["published","canceled"].includes(job.status))continue;
-      if(jobIds&&!inspectOnly&&job.status==='approved'&&now>Date.parse(job.scheduledFor)+15*60000){
+      if(jobIds&&!inspectOnly&&['approved','scheduled'].includes(job.status)&&now>Date.parse(job.scheduledFor)+15*60000){
         await db.runTransaction(async tx=>{
           const current=(await tx.get(snapshot.ref)).data();
-          if(current?.status==='approved'&&current.businessUid===businessUid&&current.scheduledFor===job.scheduledFor)
+          if(['approved','scheduled'].includes(current?.status)&&current.businessUid===businessUid&&current.scheduledFor===job.scheduledFor)
             tx.update(snapshot.ref,{status:'authority_review_required',blockedReason:'schedule_window_closed'});
         });
         results.push({jobId:job.id,status:'authority_review_required'});continue;

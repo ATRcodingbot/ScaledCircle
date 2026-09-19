@@ -21,7 +21,6 @@ import '../../models/campaign/campaign.dart';
 import '../../widgets/mapped_address_field.dart';
 import '../../widgets/property_intelligence_panel.dart';
 import 'subscription_screen.dart';
-import 'managed_growth_screen.dart';
 import 'create/campaigns/distribution/material_distribution_campaign_screen.dart';
 import '../preferences/areas_preferences_screen.dart';
 
@@ -741,8 +740,8 @@ class _PropertyIntelligenceCenterScreenState
                     child: const Text('Create Flyer Campaign'),
                   ),
                   OutlinedButton(
-                    onPressed: _createPostcardCampaign,
-                    child: const Text('Plan a Postcard'),
+                    onPressed: _createCampaign,
+                    child: const Text('Create Campaign Anyway'),
                   ),
                 ],
               ),
@@ -754,10 +753,66 @@ class _PropertyIntelligenceCenterScreenState
   }
 
   Future<void> _compareAreas() async {
+    if (_analyzing || _analysis == null || _area.length < 3) return;
+    final version = _scopeVersion;
+    final current = _analysis!;
+    setState(() => _analyzing = true);
+    try {
+      final report = await _service.analyzeSavedAreas(
+        objective: _objectiveController.text.trim(),
+        requestId:
+            'nearby_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(0x100000000)}',
+        comparisonGeometry: _geometry,
+      );
+      if (!mounted || version != _scopeVersion) return;
+      final alternatives = (report['recommendations'] as List? ?? [])
+          .whereType<Map>()
+          .map((r) => Map<String, dynamic>.from(r))
+          .toList();
+      setState(() {
+        _territoryReport = report;
+        _territories = alternatives;
+        _analyses.clear();
+        _analyses.add(
+          _ExploratoryAnalysis(
+            label: 'Current area',
+            geometry: _geometry,
+            analysis: current,
+          ),
+        );
+        for (final area in alternatives) {
+          _analyses.add(
+            _ExploratoryAnalysis(
+              label: area['name'].toString(),
+              geometry: (area['geometry'] as List)
+                  .map(
+                    (p) => <String, double>{
+                      'latitude': (p['latitude'] as num).toDouble(),
+                      'longitude': (p['longitude'] as num).toDouble(),
+                    },
+                  )
+                  .toList(),
+              analysis: PropertyIntelligenceAnalysis(
+                Map<String, dynamic>.from(area['analysis'] as Map),
+              ),
+            ),
+          );
+        }
+      });
+    } catch (_) {
+      _territoryError();
+      return;
+    } finally {
+      if (mounted && version == _scopeVersion) {
+        setState(() => _analyzing = false);
+      }
+    }
     if (_analyses.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Analyze at least two areas before comparing them.'),
+          content: Text(
+            'No fresh nearby territory had enough property evidence. Your current analysis is preserved; review your saved service areas or try again later.',
+          ),
         ),
       );
       return;
@@ -830,26 +885,6 @@ class _PropertyIntelligenceCenterScreenState
     );
   }
 
-  Future<void> _createPostcardCampaign() async {
-    final analysis = _analysis;
-    if (analysis == null || _area.length < 3) return;
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ManagedGrowthScreen(
-          postcardHandoff: {
-            'geometry': List<Map<String, double>>.from(_geometry),
-            'analysisId': analysis.data['analysisId'],
-            'geometryDigest': analysis.data['geometryDigest'],
-            'propertyCount': analysis.propertyCount,
-            'businessObjective': _objectiveController.text.trim(),
-            'aiMessagingContext': _aiInterpretation?.summary,
-          },
-        ),
-      ),
-    );
-  }
-
   Widget _buildPhysicalChannelRecommendation() {
     final suitability = _analysis?.physicalChannelSuitability ?? const {};
     final recommendation = suitability['recommendation']?.toString();
@@ -890,16 +925,12 @@ class _PropertyIntelligenceCenterScreenState
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (directMail)
-                  FilledButton(
-                    onPressed: _createPostcardCampaign,
-                    child: const Text('Create Postcard Campaign'),
-                  ),
+                if (directMail) const Text('Postcards — Coming Soon'),
                 OutlinedButton(
                   onPressed: _createCampaign,
                   child: Text(
                     directMail
-                        ? 'Choose Scaler Distribution Instead'
+                        ? 'Create Campaign Anyway'
                         : 'Create Field Campaign',
                   ),
                 ),
@@ -1268,7 +1299,11 @@ class _PropertyIntelligenceCenterScreenState
                                     ),
                                   )
                                 : const Icon(Icons.analytics_outlined),
-                            label: const Text('Analyze Area'),
+                            label: Text(
+                              _fromSavedArea
+                                  ? 'Where should I market next?'
+                                  : 'Analyze Area',
+                            ),
                           ),
                           OutlinedButton.icon(
                             onPressed: _fromSavedArea
