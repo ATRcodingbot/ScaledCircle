@@ -110,3 +110,19 @@ test('onboarding-link failure retains the bound account and retry resumes that a
  const original=await get('stripeConnectedAccounts/'+uid);await db.doc('stripeConnectedAccounts/'+uid).update({setupState:'onboarding_incomplete'});let creates=0,links=0;stripe.v2.core.accounts.create=async()=>{creates++;throw Error('unexpected');};stripe.balanceSettings.update=async()=>{};stripe.v2.core.accountLinks={create:async()=>{links++;if(links===1)throw Error('link unavailable');return {url:'https://connect.stripe.com/setup/existing'};}};
  await assert.rejects(runtime.setup(uid));assert.equal((await get('stripeConnectedAccounts/'+uid)).stripeAccountId,original.stripeAccountId);await runtime.setup(uid);assert.equal(creates,0);assert.equal(links,2);
 });
+test('cleared platform setup hold permits original zero-balance onboarding retry but no withdrawal',async()=>{
+ await db.doc('wallets/'+uid).set({ownerId:uid,ownerType:'scaler',availableBalance:0});
+ await db.doc('wallets/'+uid+'/transactions/'+earningId).delete();await db.doc('walletTransactions/'+earningId).delete();
+ await db.doc('stripeConnectedAccounts/'+uid).set({scalerId:uid,mode:'live',authorityVersion:VERSION,accountApi:'accounts_v2',setupStartedAt:clock-1000,setupState:'rejected',setupFailure:{providerCode:'account_create_activation_required',providerRequestId:'req_historical'}});
+ let creates=0,links=0;stripe.v2.core.accounts.list=async()=>({data:[],next_page_url:null});
+ stripe.v2.core.accounts.create=async()=>{creates++;return {id:accountId,livemode:true,metadata:{scalerId:uid,mode:'live',authorityVersion:VERSION}};};
+ stripe.balanceSettings.update=async()=>{};stripe.v2.core.accountLinks={create:async()=>{links++;return {url:'https://connect.stripe.com/setup/genuine'};}};
+ const blocked=createRuntime({db,auth:{getUser:async()=>({email:'scaler@example.test',emailVerified:true,disabled:false})},stripe,config:{...config,setupBlockedReason:'platform_activation_required'},now:()=>clock});
+ assert.equal((await blocked.status(uid)).setupRetryAllowed,false);
+ // Production repair removes the environment override, not provider checks.
+ assert.equal((await runtime.status(uid)).setupRetryAllowed,true);
+ await runtime.setup(uid);await runtime.setup(uid);
+ assert.equal(creates,1);assert.equal(links,2);assert.equal((await get('stripeConnectedAccounts/'+uid)).stripeAccountId,accountId);
+ await assert.rejects(runtime.request(uid,req));assert.equal(calls.length,0);
+ assert.equal((await db.collection('financialOperations').get()).size,0);assert.equal((await get('wallets/'+uid)).availableBalance,0);
+});
