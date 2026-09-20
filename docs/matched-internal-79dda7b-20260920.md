@@ -14,7 +14,7 @@ Built and uploaded to existing Play Internal track 4700346819472257137, release 
 
 ## iOS 1.0.0 (29)
 
-Codemagic run `6ab00da5e921f1e26795ca82`, iOS Production Launch Candidate, tag internal-79dda7b. Prebuild guard passed; compilation in progress. Artifact/upload/processing/internal availability not yet verified. This document does not yet claim a completed matched pair.
+Codemagic run `6ab00da5e921f1e26795ca82`, iOS Production Launch Candidate, tag internal-79dda7b. Build and upload succeeded. Exact-source prebuild guard, IPA content/branding, signed and provisioning APNs entitlements, Apple Distribution / Team 4RXFR4Q2SA and strict signature checks passed on macOS. IPA SHA256 `fc44c92879a2bddaad9556b923c8cf96545260fa73473e39c2ac1fe5fa93835b`. Apple upload delivery UUID `b1069556-8b61-4e53-a294-3fc8cc639475`. These are genuinely matched application artifacts; Codemagic finished in 7m49s. Apple processing completed; build 29 now shows **Missing Compliance**. Founder encryption declaration is required; the exact build-29 dialog is open, unanswered. What to Test instructions are saved. Groups currently 0; after compliance, assign only the existing ScaledCircle Internal group and verify availability. No new tester or public release.
 
 ## Social execution evidence — independent of binaries
 
