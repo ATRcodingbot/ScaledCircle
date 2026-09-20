@@ -7,6 +7,14 @@ test('public bid titles with HTML entities retain their evidence match',()=>{
  assert.equal(analyzeSource({signals:['Blinds & Repairs'],url:'https://example.org'},'<div>Blinds &amp; Repairs</div>',now).qualified,true);
 });
 const row=(title,id,date,status='open')=>`<div class="fw-bold text-body d-none d-lg-block">${title}</div><span class="status-${status}-pill">${status}</span><strong>RFQ Number:</strong> ${id}<strong>Deadline:</strong> ${date}`;
+
+test('government-excluded customer never fetches bids to fill an exhausted discovery queue',async()=>{
+ const scope={areas:[{id:'baltimore',type:'city',locality:'Baltimore',state:'Maryland'}]};
+ let reads=0;
+ const result=await discovery.discover({profile,scope,now,opportunityPreferences:{government:false},readSource:async()=>{reads++;return row('Deck Repair','RFQ-999','09/25/2026');}});
+ assert.equal(reads,0);
+ assert.deepEqual(result,{sources:[],checks:[]});
+});
 test('live bid discovery is dynamic, service-aware and excludes expired or closed listings',()=>{
  const html=row('Office Renovation','RFQ-123','09/15/2026')+row('Fence Repair','RFQ-124','09/09/2026')+row('Fence Repair','RFQ-125','09/19/2026','closed')+row('Software supply','RFQ-126','09/19/2026');
  const found=discovery.parseBids(html,discovery.hubs[0],profile,now);assert.equal(found.length,1);assert.equal(found[0].sourceRecordId,'RFQ-123');assert.equal(found[0].explicitNeed,true);assert.match(found[0].unknowns,/eligibility/);
