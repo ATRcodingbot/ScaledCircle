@@ -1,4 +1,4 @@
-# Approved runtime applied; research activation awaits authenticated Admin
+# Dedicated research runtime applied; shared pilot activated
 
 Founder approval: `2885dba2-7858-4a22-97d6-001bd57f9f2e`, accepting proposal `ba94511` with inherited-access limitations. This supersedes proposal-only status in `dedicated-research-runtime-approval-20260920.md`.
 
@@ -12,15 +12,22 @@ Production endpoint's verified-token allowlist replaces the shared staging calle
 
 Non-billable integration preflights returned HTTP 200 from BOTH actual deployed runtimes. Central persisted proofs at 14:58:07.163 and 14:58:10.231 UTC contain the exact runtime emails/workspaces, shared grant ID `founder_research_20260920`, and provider model-catalog access. Preflights used a distinct handler branch and did not execute research. The initial Firebase CLI end-user ID token was rejected with HTTP 401 before dispatch; the existing gcloud user identity succeeded. No service-account impersonation/key creation or credential printing was used.
 
-## Activation pending, not a budget reapproval
+## Activation completed through authenticated Admin
 
-As of 14:58:37 UTC no research grant, usage or enabled adapter configuration exists. No paid access-validation call occurred; seven-day start/end are intentionally absent. The refreshed localhost Admin form at `http://127.0.0.1:18633/` requires Founder sign-in because the previous form used memory-only authentication. A pending user-input request explains this. Do not bypass maintained Admin authority through direct database writes.
+Founder signed in as support@scaledcircle.com. The maintained Admin action activated the existing fixed grant once, followed by exactly one authorized paid integration access check. No scheduled research run was invoked.
 
-After sign-in, run the already-authorized `getGeneratedMediaOperations` action `{researchPilotOperation:'activateAndValidate'}` once. It checks both recent runtime proofs, creates the one fixed seven-day grant, reserves/counts the one paid access check, verifies web_search execution, then authorizes recurring use. Unknown/failure keeps the reservation and prevents automatic retry. Save exact activation/expiry and actual/conservative accounted usage. This is integration validation, not natural discovery.
+- Grant: founder_research_20260920, shared across the two approved workspaces.
+- Start: 2026-09-20T15:40:00.530Z (September 20, 11:40:00.530 AM EDT).
+- Expiry: 2026-09-27T15:40:00.530Z (September 27, 11:40:00.530 AM EDT).
+- Accounted provider cost: $0.016936; outstanding reservation: $0; remaining shared allowance: $4.983064. Accounted usage is not a final provider invoice.
+- Requests: 1/28, including integration validation; 27 remain. Two/workspace/day remains enforced.
+- Both deployed runtime configuration branches returned HTTP 200 and persisted enabled adapters bound to their exact workspaces and this single central grant. This was metadata/configuration, not ordinary research execution.
+- Production and staging configuration readbacks completed at 15:40:29 and 15:41:02 UTC respectively.
+- Attractive Remodel next eligible timestamp remains 2026-09-21T11:34:08.496Z; normal unchanged 15-minute dispatcher can collect it thereafter. Lease is clear. ScaledCircle internal Growth remains daily 09:00 America/New_York, next September 21.
 
-Then run `.firebase/launch-close-20260919/research-runtime-preflight.cjs enable` to let each exact runtime save its own adapter configuration only after the central grant says recurring is enabled. This branch performs metadata/configuration only, never a research cycle. Read back both enabled configurations and the central grant/usage. Existing next natural cycles are September 21, internal ScaledCircle 09:00 Eastern; Attractive Remodel follows its existing next-eligible daily timestamp within the unchanged 15-minute dispatcher. Read the actual timestamp before final activation report.
+No fresh discovery is claimed from the access validation. Automatic outreach stays OFF. No automatic retries, renewal or top-up. Social funding is separate. Rollback and inherited-access limitations remain in the approved proposal.
 
-Budget remains $5 TOTAL, seven days from actual activation, two requests/workspace/day, 28 total including validation, $0.10 reservation/request, no automatic retries/renewal/top-up and no outreach. Social funds are separate. No fresh discovery claimed. Rollback commands and inherited-access findings remain in the approved proposal document; disable adapters before removing bindings, preserve ledger/history, never restore rejected shared production invocation.
+Evidence: research-runtime-enable-result.json, research-pilot-current-readback.json, research-enabled-readback.json under the existing local evidence directory.
 
 ## Social repair deployed, natural results pending
 
@@ -49,3 +56,12 @@ Runtime source `575fe931ece93c1064dba6c59748dc973e13a475`; additional activation
 22 focused tests passed (runtime/budget/cadence/selection/recovery), plus three activation persistence tests: missing proof cannot start clock, one validation counts once without term restart, failure holds cost and cannot auto-retry. Fixtures/emulators only. Twenty historical terminal records ahead of a fresh candidate are traversed in one bounded visit. Exact source syntax and whitespace checks passed.
 
 Evidence under `.firebase/launch-close-20260919`: `dedicated-research-iam-initial.private.json`, `dedicated-research-iam-applied.private.json`, `dedicated-scheduler-identity-applied.json`, `dedicatedpilot-final-readback.json`, `research-runtime-preflight-result.json`, `research-pilot-current-readback.json`, `social-transition-before-repair.private.json`, `social-transition-trace.private.json`. Preserve private evidence locally.
+
+## Natural Social readback after activation
+
+One read-only observation at 2026-09-20T15:40:39.050Z found genuine post-repair progress:
+
+- Attractive Remodel: one current-policy approved_strategy Facebook job, social_growth_job_da6c7c042ae82998b530eb86f400f40d5b3219ad6b2dd62a7e94889301cd61df. Status scheduled, immutable version v3, scheduledFor September 22 at 19:00 UTC / 3 PM EDT. The caption contains no internal/testing/AI/automation/provenance language and makes a maintained service statement, not a completed-project claim. No publication receipt yet. Instagram remains blocked by a missing current passing truth/quality assessment. No historical job counted as new proof.
+- ScaledCircle: zero current-policy jobs. Normal preparation finished at 15:37:44.982 UTC with preparing_creative for Instagram. The bounded corrective source path has progressed; cycle coverage reports two successful concepts, $0.087068 spent, $0 reserved against its separate $15 grant. A pending generation request remains; visual review, media attachment and scheduling still require normal worker completion. No publication is claimed.
+
+No worker, scheduling or publication was manually forced. Attractive Remodel's historical seven concepts and $4 unknown-cost reservation remain preserved. No new polling automation or native build.
