@@ -246,7 +246,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
    const item=doc.data(),code=item.emailLink?.acceptanceCode;if(!code||item.removedAtMs||item.startMs<=now())continue;
    const replies=await db.collection(`businessMailboxes/${a.businessId}/replies`).where('operationId','==',item.emailLink.operationId).limit(101).get();
    if(replies.size>100)continue;
-   const rows=(await require('./shared/email_conversation_context').read({db,businessId:a.businessId,operationId:item.emailLink.operationId})).rows,latest=rows.filter(r=>r.classification==='substantive').sort((x,y)=>y.receivedAt-x.receivedAt)[0];
+   const rows=(await require('../shared/email_conversation_context').read({db,businessId:a.businessId,operationId:item.emailLink.operationId})).rows,latest=rows.filter(r=>r.classification==='substantive').sort((x,y)=>y.receivedAt-x.receivedAt)[0];
    if(latest?.body?.trim()!==`Please book ${code}`||item.emailLink.lastAcceptanceMessageId===latest.id)continue;
    // No parser or model can broaden the offered slot. Use the same saveItem
    // transaction, roster, buffer/conflict checks, history and notifications.

@@ -5,7 +5,7 @@ const p=require('./lead_assistance_policy');
 const fail=(code,message)=>{const e=Error(message);e.code=code;throw e;};
 const keys=['autonomyMode','replyMode','timeZone','expiresAt','audiences','services','voice','claims','destinations','limits',
  'sendingDays','opensMinute','closesMinute','modelAssistance','modelDataConsent','bookingEnabled','availabilityRevision',
- 'schedulingRules','introductionsEnabled','followupsEnabled','notifications'];
+ 'schedulingRules','introductionsEnabled','followupsEnabled','notifications','businessName','templates','mailingAddress','newInquiriesEnabled','inquiryLabel','inquiryRoutingConfirmed','inquiryFilterDescription'];
 function cleanPolicy(value){
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!keys.includes(k))||JSON.stringify(value).length>12000)
   fail('invalid-argument','Review the supported assistance settings.');
@@ -17,7 +17,7 @@ function cleanPolicy(value){
   if(typeof value[k]!=='boolean')fail('invalid-argument','Review each assistance capability.');
  return JSON.parse(JSON.stringify(value));
 }
-function createAssistanceAuthority({db,now=Date.now}){
+function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
  const ref=a=>db.doc(`agentPermissions/${a.businessId}_lead_generator/authorizations/business_email`);
  const owner=a=>{if(a.beta.canManageConnection!==true||a.actorUid!==a.businessId)fail('permission-denied','The Business owner must manage email assistance.');};
  async function state(a,tx,policy){
@@ -25,23 +25,41 @@ function createAssistanceAuthority({db,now=Date.now}){
   const [mail,privateCredential,saved]=await Promise.all([read(db.doc('businessMailboxes/'+a.businessId)),
    read(db.doc(`businessMailboxes/${a.businessId}/private/credential`)),read(ref(a))]);
   const mailbox=mail.data(),grant=a.beta.leadAssistanceGrant;
-  // Budget is a server-authoritative prerequisite, not a value supplied by the
-  // browser. Until the separately authorized inference integration is complete,
-  // no budget is projected and model-assisted activation fails closed.
   const selected=policy||saved.data()?.policy;
+  const grantDoc=grant?.inferenceGrantId?await read(db.doc('emailAssistanceOperatingGrants/'+grant.inferenceGrantId)):null;
+  const shared=grantDoc?.data(),review=(await read(db.doc('emailAssistanceProviderReviews/openai_gmail_v1'))).data();
+  const usage=grantDoc? (await read(grantDoc.ref.collection('usage').doc('shared'))).data():null;
+  const reviewed=require('./provider_review').validReview(review);
+  const pending=shared?.status==='prepared',expiry=pending?now()+7*86400000:shared?.expiresAt;
+  const budget=shared?{...shared,expiresAt:expiry,availableMicros:Math.max(0,(shared.maximumCostMicros||0)-(usage?.actualCostMicros||0)-(usage?.outstandingCostMicros||0)),providerDataReviewComplete:reviewed}:null;
+  const effectiveGrant=grant?.status==='prepared'?{...grant,expiresAt:now()+7*86400000}:grant;
   const blockers=p.policyPreflight({businessId:a.businessId,actorUid:a.actorUid,isOwner:a.beta.canManageConnection===true,
-   mailbox,grant,policy:selected,budget:null,now:now()});
+   mailbox,grant:effectiveGrant,policy:selected,budget,now:now()});
+  if(!reviewed)blockers.push('model_data_review_required');
+  if(!providerReady)blockers.push('model_provider_binding_required');
+  if(!shared||!['prepared','active'].includes(shared.status))blockers.push('shared_pilot_enrollment_required');
+  if((usage?.requests||0)>=100&&selected?.modelAssistance)blockers.push('model_request_allowance_exhausted');
+  const schedule=(await read(db.doc('businessOperations/'+a.businessId+'/settings/scheduling'))).data();
+  if(selected?.bookingEnabled&&(schedule?.version!==selected.availabilityRevision||p.digest(schedule?.settings||null)!==p.digest(selected.schedulingRules||null)))blockers.push('maintained_schedule_availability_required');
   if(!privateCredential.exists||privateCredential.data().generation!==mailbox?.generation)blockers.push('mailbox_credentials_unavailable');
-  if(a.beta.sendEnabled!==true||a.beta.certificationOnly!==false)blockers.push('ordinary_send_authority_required');
-  // Deliberately not a configurable true flag: the end-to-end execution
-  // integration is unfinished, so persisting this source cannot enable sends.
-  blockers.push('assistance_execution_integration_pending');
-  return {saved:saved.data()||null,mailbox,grant,blockers:[...new Set(blockers)]};
+  // A valid scoped pilot may execute without changing the ordinary send hold.
+  if(!grant)blockers.push('audited_pilot_access_required');
+  const validTemplate=t=>typeof t?.subject==='string'&&!!t.subject.trim()&&t.subject.length<=200&&!/[\r\n\0]/.test(t.subject)&&typeof t.body==='string'&&!!t.body.trim()&&t.body.length<=6500&&!t.body.includes('\0');
+  if(selected?.introductionsEnabled&&!validTemplate(selected?.templates?.introduction)||selected?.followupsEnabled&&!validTemplate(selected?.templates?.followup))blockers.push('approved_message_templates_required');
+  if(selected?.notifications&&(typeof selected.notifications.email!=='boolean'||typeof selected.notifications.push!=='boolean'))blockers.push('notification_preferences_required');
+  if(selected?.notifications?.quietStartMinute!=null||selected?.notifications?.quietEndMinute!=null){try{require('./shared/lead_reply_alert').quietUntil(selected.notifications,selected.timeZone,now());}catch(_){blockers.push('valid_notification_quiet_hours_required');}}
+  if((selected?.introductionsEnabled||selected?.followupsEnabled)&&!selected?.mailingAddress)blockers.push('public_mailing_address_required');
+  if(selected?.newInquiriesEnabled&&!/^[A-Za-z0-9_-]{1,60}$/.test(selected.inquiryLabel||''))blockers.push('inquiry_label_required');
+  if(selected?.newInquiriesEnabled&&(selected.inquiryRoutingConfirmed!==true||typeof selected.inquiryFilterDescription!=='string'||selected.inquiryFilterDescription.trim().length<20))blockers.push('automatic_inquiry_filter_confirmation_required');
+  return {saved:saved.data()||null,mailbox,grant,budgetState:shared?.status||'not_prepared',blockers:[...new Set(blockers)]};
  }
  async function load(a){
   const s=await state(a,null);
-  return {policy:s.saved||null,canManage:a.beta.canManageConnection===true&&a.actorUid===a.businessId,
-   sender:s.mailbox?.email||null,blockers:s.blockers,automaticSending:false};
+  const [business,profile,availability]=await Promise.all([db.doc('users/'+a.businessId).get(),db.doc('businessGrowthProfiles/'+a.businessId).get(),db.doc('businessOperations/'+a.businessId+'/settings/scheduling').get()]);
+  const contacts=a.beta.canManageConnection&&a.actorUid===a.businessId?(await db.collection(`businessOperations/${a.businessId}/customers`).limit(50).get()).docs.map(d=>({id:d.id,name:d.data().name,email:d.data().email,version:d.data().version,permissionStatus:d.data().emailPermission?.status||'not_recorded'})):[];
+  return {contacts,businessId:a.businessId,policy:s.saved||null,canPreparePilot:a.businessId===require('./inference_budget').WORKSPACES[0]&&a.actorUid===a.businessId&&a.beta.kind==='internal'&&a.beta.canManageConnection===true,pilotStatus:s.budgetState,canManage:a.beta.canManageConnection===true&&a.actorUid===a.businessId,
+   sender:s.mailbox?.email||null,workspaceName:business.data()?.businessName||business.data()?.companyName||profile.data()?.businessName||'Current Business',timeZone:profile.data()?.timeZone||null,schedulingAvailability:availability.data()||null,
+   grantExpiresAt:s.grant?.expiresAt||null,blockers:s.blockers,blockerMessages:{model_data_review_required:'The model-data disclosure and Google-review processing assessment must be completed before pilot activation.',model_provider_binding_required:'The verified provider binding has not been enabled for this Email runtime.',shared_pilot_enrollment_required:'The approved shared pilot must be prepared without starting its clock.',audited_pilot_access_required:'The bounded pilot enrollment has not been activated.',model_consent_and_separate_budget_required:'Model-data review, your explicit consent and the separate shared allowance must be ready.',workspace_timezone_required:'Choose the actual Business timezone.',valid_policy_term_required:'Choose a policy expiry within the approved pilot term.',maintained_schedule_availability_required:'Save staff availability, duration and buffers in Schedule.',approved_message_templates_required:'Review the exact introduction/follow-up copy.',public_mailing_address_required:'Provide the authorized public Business mailing address.'},automaticSending:s.saved?.status==='active'&&s.saved.policy.expiresAt>now()&&s.blockers.length===0&&(s.saved.policy.introductionsEnabled===true||s.saved.policy.followupsEnabled===true)};
  }
  async function mutate(a,input){
   owner(a);
@@ -61,7 +79,7 @@ function createAssistanceAuthority({db,now=Date.now}){
    if(['activate','resume'].includes(action)&&s.blockers.length)fail('failed-precondition','Email assistance cannot activate: '+s.blockers.join(', '));
    if(['pause','revoke','resume'].includes(action)&&!old)fail('failed-precondition','No saved email assistance policy exists.');
    if(action==='resume'&&old.status==='revoked')fail('failed-precondition','Review and authorize a new policy after revocation.');
-   const version=(old?.version||0)+1,status=action==='prepare'?'prepared':action==='pause'?'paused':action==='revoke'?'revoked':'active';
+   const version=(old?.version||0)+1;let status=action==='prepare'?'prepared':action==='pause'?'paused':action==='revoke'?'revoked':'awaiting_pilot_activation';
    const saved={businessId:a.businessId,agentType:'lead_generator',capability:'business_email',version,status,
     policy:policy||old.policy,updatedBy:a.actorUid,updatedAt:now(),sender:s.mailbox?.email||null,
     connectionGeneration:s.mailbox?.generation||null,grantId:s.grant?.id||null,
@@ -69,7 +87,10 @@ function createAssistanceAuthority({db,now=Date.now}){
     ...(['activate','resume'].includes(action)?{approvedBy:a.actorUid,approvedAt:now()}:{}),
     ...(status==='revoked'?{revokedAt:now()}: {})};
    saved.digest=p.digest(saved);
-   const result={saved:true,version,status,automaticSending:false,blockers:s.blockers};
+   let activation=null;
+   if(['activate','resume'].includes(action)){activation=await require('./pilot_enrollment').createEnrollment({db,now}).activation(tx,a,saved,s.blockers);if(activation.activate){status='active';saved.status=status;saved.activatedAt=activation.startsAt;saved.policy={...saved.policy,expiresAt:Math.min(saved.policy.expiresAt,activation.expiresAt)};saved.digest=p.digest(saved);}}
+   const result={saved:true,version,status,automaticSending:status==='active'&&(saved.policy.introductionsEnabled||saved.policy.followupsEnabled),blockers:s.blockers};
+   if(activation?.activate)activation.apply();
    tx.set(ref(a),saved);
    tx.create(event,{businessId:a.businessId,actorUid:a.actorUid,action,at:now(),fingerprint,policySnapshot:saved,result});
    return result;

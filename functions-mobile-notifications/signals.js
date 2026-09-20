@@ -49,4 +49,10 @@ async function record({db,FieldValue,kind,key,before,after,now=Date.now}){const 
   return {created:!old.exists,aggregated:grouped,count};
  });}
 
-module.exports={signal,record};
+async function recordEmailReply({db,FieldValue,businessId,replyId,reply,now=Date.now}){
+ if(!id(businessId)||!id(replyId)||reply?.businessId!==businessId||!id(reply.operationId))return {created:false};
+ const op=(await db.doc(`businessMailboxes/${businessId}/operations/${reply.operationId}`).get()).data();
+ if(!['sent','received'].includes(op?.state)||op.certification===true||op.businessId!==businessId)return {created:false};
+ return record({db,FieldValue,kind:'reply',key:`businessMailboxes/${businessId}/replies/${replyId}`,after:reply,now});
+}
+module.exports={signal,record,recordEmailReply};

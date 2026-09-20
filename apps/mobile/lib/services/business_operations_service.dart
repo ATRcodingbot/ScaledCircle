@@ -23,6 +23,7 @@ const workTypeLabels = <String, String>{
 };
 const workStatusLabels = <String, String>{
   'scheduled': 'Scheduled',
+  'tentative': 'Tentative — not confirmed',
   'in_progress': 'In progress',
   'completed': 'Completed',
   'canceled': 'Canceled',

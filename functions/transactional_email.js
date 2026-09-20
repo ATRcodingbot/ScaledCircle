@@ -346,10 +346,11 @@ function validateDeliveryJob(job) {
   const billingTemplate = require('./billing_communications').TEMPLATES.has(template);
   const referralTemplate = require('./referral_email_templates').TEMPLATES.has(template);
   const growthTemplate = template === 'growth_agent_report_v1' && typeof job.businessUid === 'string' && ['important','daily','weekly'].includes(job.preferenceKind);
+  const replyTemplate = require('./lead_reply_alert').validJob(job);
   const allowedTemplate = template.startsWith("welcome_") || template.startsWith("support_") ||
-    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate;
+    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate || replyTemplate;
   const recipientAllowed = destination === SUPPORT_EMAIL || template.startsWith("welcome_") ||
-    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate;
+    template.startsWith("verification_") || template === "business_team_invitation_v1" || landingPageTemplate || billingTemplate || referralTemplate || growthTemplate || replyTemplate;
   const html = job?.html == null ? undefined : String(job.html).slice(0, 60000);
   const htmlAllowed = !html || job.trustedHtml === true;
   if (!validEmail(destination) || sender !== SUPPORT_EMAIL || !allowedTemplate || !recipientAllowed || !htmlAllowed) return false;
@@ -400,7 +401,7 @@ function deliveryHealth({workerAvailable, recipientAvailable = true, applicable 
 }
 
 async function processDeliveryJob({db, reference, jobId, FieldValue, createTransport, logger = console,
-  smtpPassword, leaseId = crypto.randomUUID()}) {
+  smtpPassword, leaseId = crypto.randomUUID(), now = Date.now, getOwner = uid=>require('firebase-admin/auth').getAuth().getUser(uid)}) {
   const snapshot = await reference.get();
   const job = snapshot.data() || {};
   if (!["queued", "retry_requested"].includes(job.status)) return {processed:false, reason:"ineligible_state"};
@@ -415,6 +416,13 @@ async function processDeliveryJob({db, reference, jobId, FieldValue, createTrans
     if(job.growthPreferenceRevision !== (p?.updatedAt?.toMillis?.() ?? 0)) {
       await reference.set({status:'suppressed',reason:'growth_preferences_changed'},{merge:true});
       return {processed:false,reason:'growth_preferences_changed'};
+    }
+  }
+  if(job.template==='business_email_owner_reply_v1'){
+    const alerts=require('./lead_reply_alert').createAlerts({db,getOwner,now});
+    if(!await alerts.permitted(job)){
+      if(await alerts.permitted(job,{ignoreQuiet:true})){await alerts.defer(job,reference);return {processed:false,reason:'quiet_hours'};}
+      await reference.set({status:'suppressed',reason:'owner_alert_authority_changed'},{merge:true});return {processed:false,reason:'owner_alert_authority_changed'};
     }
   }
   const claimed = await claimQueuedJob({db,reference,FieldValue,leaseId});

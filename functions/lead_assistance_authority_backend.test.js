@@ -25,7 +25,7 @@ test('exact owner may prepare isolated immutable settings without enabling mail 
  for(const id of ['scaledcircle','remodel']){
   const result=await service.mutate(actor(id),prepare());assert.equal(result.status,'prepared');assert.equal(result.automaticSending,false);
   const view=await service.load(actor(id));assert.equal(view.policy.businessId,id);assert.equal(view.sender,id+'@example.test');
-  assert.ok(view.blockers.includes('assistance_execution_integration_pending'));
+  assert.ok(view.blockers.includes('model_data_review_required'));
   assert.equal((await db.doc(`agentPermissions/${id}_lead_generator`).get()).data().maySend,false);
   assert.equal((await db.doc('businessMailboxes/'+id).get()).data().automaticSending,false);
  }

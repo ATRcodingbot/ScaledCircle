@@ -60,7 +60,7 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
   }
   if(n.type==='business_email_reply'){
    const opId=p.id(n.deepLink?.operationId);if(!opId)return {available:false};
-   const op=(await db.doc(`businessMailboxes/${business}/operations/${opId}`).get()).data();if(op?.state!=='sent'||op.businessId!==business)return {available:false};
+   const op=(await db.doc(`businessMailboxes/${business}/operations/${opId}`).get()).data();if(!['sent','received'].includes(op?.state)||op.businessId!==business)return {available:false};
   }
   if(n.type==='landing_page_inquiry'&&p.id(n.entityId))data.deepLink={destination:'business_inquiry',leadId:n.entityId,businessId:business};
   return {available:true,notificationId,...data};
@@ -88,7 +88,16 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
  }
  async function sendGroup(docs){const all=docs.map(d=>({id:d.id,...d.data()})),first=all[0];if(!first)return;
   const pref=await settings(first.userId).catch(()=>null),policy=p.policy(first);const eligible=[];
-  for(const n of all){const pending=await pendingReviewCount(n);if(pending!==null)n.aggregateCount=pending;const allowed=pending!==0&&pref&&(pref.enabled||n.type==='mobile_push_check')&&(policy.required||pref.categories[policy.category]!==false)&&(policy.category!=='growth'||pref.growthDigest)&&await authorized(n.userId,n);
+  for(const n of all){
+   if(n.type==='business_email_reply'){
+    const business=p.id(n.businessId||n.userId),saved=business?(await db.doc(`agentPermissions/${business}_lead_generator/authorizations/business_email`).get()).data():null;
+    if(saved?.policy?.notifications){
+     if(saved.revokedAt||saved.policy.notifications.push===false){await ref('notifications',n.id).update({'push.status':'suppressed','push.nextAttemptMs':FieldValue.delete()});continue;}
+     let next;try{next=require('./shared/lead_reply_alert').quietUntil(saved.policy.notifications,saved.policy.timeZone,now());}catch(_){next=now()+3600000;}
+     if(next>now()){await ref('notifications',n.id).update({'push.status':'quiet_hours','push.nextAttemptMs':next});continue;}
+    }
+   }
+   const pending=await pendingReviewCount(n);if(pending!==null)n.aggregateCount=pending;const allowed=pending!==0&&pref&&(pref.enabled||n.type==='mobile_push_check')&&(policy.required||pref.categories[policy.category]!==false)&&(policy.category!=='growth'||pref.growthDigest)&&await authorized(n.userId,n);
    if(allowed&&!n.read)eligible.push(n);else await ref('notifications',n.id).update({'push.status':'suppressed','push.nextAttemptMs':FieldValue.delete(),'push.updatedAt':stamp()});}
   if(!eligible.length)return;
   const leader=eligible[0];const devices=(await db.collection('mobilePushDevices').where('uid','==',leader.userId).limit(10).get()).docs.filter(d=>{const v=d.data();return v.enabled&&v.environment===environment&&v.expiresAtMs>now()&&(!leader.targetDeviceId||leader.targetDeviceId===d.id);});

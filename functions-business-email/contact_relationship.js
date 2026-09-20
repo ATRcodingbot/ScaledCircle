@@ -15,7 +15,7 @@ async function reserve({db,tx,businessId,opId,recipient,name,relationshipType,so
   if(restriction?.active===true||previous?.suppressed===true||customer?.data()?.doNotContact===true)fail('Do not contact this CRM relationship.');
   if(previous?.pendingOperationId&&previous.pendingOperationId!==opId)fail('Another channel has a pending contact operation. Reconcile it first.');
   const replied=replyTo?(await tx.get(db.doc('businessMailboxes/'+businessId+'/operations/'+replyTo))).data():null;
-  const answering=replied?.businessId===businessId&&replied.recipient===recipient&&replied.state==='sent'&&replied.replyCount>0;
+  const answering=replied?.businessId===businessId&&replied.recipient===recipient&&['sent','received'].includes(replied.state)&&replied.replyCount>0;
   if(previous?.lastOperationId!==opId&&previous?.cooldownUntil>now&&!answering)fail('This contact is in a cooldown after earlier outreach. Review the shared conversation before sending again.');
   if(previous?.lastOperationId!==opId&&previous?.lastOutboundAt&&!answering){
     if(previous.awaitingReply===false&&previous.lastInboundAt)fail('This contact replied. Review the conversation before contacting them again.');

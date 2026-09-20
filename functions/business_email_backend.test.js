@@ -353,7 +353,7 @@ test('follow-up requires a confirmed prior send and five-day window or actual re
 test('a new persisted inbound invalidates the exact reviewed follow-up without a provider attempt',async()=>{
  const d=await draft();await send(d);clock+=5*86400000;
  const f=await draft({expectedVersion:1,followupTo:d.operationId,subject:'Reply to current context'});
- await db.doc('businessMailboxes/owner/replies/new_reply').set({businessId:'owner',operationId:d.operationId,providerMessageId:'incoming_new',receivedAt:clock,body:'My request has changed.'});
+ await db.doc('businessMailboxes/owner/replies/new_reply').set({businessId:'owner',operationId:d.operationId,providerMessageId:'incoming_new',from:(await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data().recipient,receivedAt:clock,body:'My request has changed.'});
  await assert.rejects(send(f),/new reply arrived/);assert.equal(sends,1);
  assert.equal((await db.doc('businessMailboxes/owner/operations/'+f.operationId).get()).exists,false);
 });

@@ -7,6 +7,7 @@ import '../../navigation/app_router.dart';
 import '../../services/business_operations_service.dart';
 import '../../services/business_workspace_service.dart';
 import 'business_member_home.dart';
+import 'business_email_screen.dart';
 
 class BusinessScheduleScreen extends StatefulWidget {
   const BusinessScheduleScreen({
@@ -1053,12 +1054,25 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
               Text(
                 'Quote: ${i['estimate']['quotedAmountCents'] == null ? 'Not recorded' : '\$${((i['estimate']['quotedAmountCents'] as num) / 100).toStringAsFixed(2)}'} · ${i['estimate']['outcome']} · Not collected revenue',
               ),
+            if (i['emailLink'] is Map && can('communicationsRead'))
+              TextButton.icon(
+                icon: const Icon(Icons.forum_outlined),
+                label: const Text('View conversation'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => BusinessEmailScreen(
+                      initialOperationId: i['emailLink']['operationId']
+                          .toString(),
+                    ),
+                  ),
+                ),
+              ),
             if (editable && !removed)
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  if (editor)
+                  if (editor && i['emailLink'] == null)
                     TextButton(
                       onPressed: busy ? null : () => editItem(i),
                       child: const Text('Edit'),
@@ -1074,7 +1088,8 @@ class _BusinessScheduleScreenState extends State<BusinessScheduleScreen>
                       icon: const Icon(Icons.event_busy_outlined),
                       label: const Text('Remove from schedule'),
                     ),
-                  if (editor || i['type'] == 'job' && can('jobsStatus'))
+                  if ((editor || i['type'] == 'job' && can('jobsStatus')) &&
+                      !(i['emailLink'] is Map && i['status'] == 'tentative'))
                     PopupMenuButton<String>(
                       tooltip: 'Update status',
                       onSelected: (v) => change('setItemStatus', {

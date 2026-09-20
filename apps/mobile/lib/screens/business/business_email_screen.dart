@@ -8,6 +8,8 @@ import '../../navigation/context_back_button.dart';
 import '../../widgets/customer_page_body.dart';
 import '../../widgets/business_email_providers.dart';
 import 'business_email_campaign_screen.dart';
+import 'business_email_assistance_screen.dart';
+import 'business_email_conversation_screen.dart';
 
 class BusinessEmailScreen extends StatefulWidget {
   const BusinessEmailScreen({
@@ -224,6 +226,19 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
   }
 
   Future<void> _viewConversation(Map op) async {
+    if (op['crmCustomerId'] != null && op['certification'] != true) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BusinessEmailConversationScreen(
+            service: _service,
+            operationId: op['id'].toString(),
+          ),
+        ),
+      );
+      await _load();
+      return;
+    }
     final replies =
         (_data!['replies'] as List? ?? [])
             .whereType<Map>()
@@ -262,7 +277,9 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                   ),
                 const SizedBox(height: 16),
                 Text('From: ${op['from']}'),
-                Text('To: ${op['recipient']}'),
+                Text(
+                  '${op['state'] == 'received' ? 'From' : 'To'}: ${op['recipient']}',
+                ),
                 Text('Sent ${time(op['providerAcceptedAt'])}'),
                 const SizedBox(height: 8),
                 SelectableText(
@@ -414,6 +431,19 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                         ),
                       ),
                     if (c['status'] == 'connected') ...[
+                      if (_data!['assistanceSetupAvailable'] == true)
+                        OutlinedButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BusinessEmailAssistanceScreen(
+                                service: _service,
+                              ),
+                            ),
+                          ),
+                          icon: const Icon(Icons.tune),
+                          label: const Text('Email assistance settings'),
+                        ),
                       if (_data!['canManageConnection'] == true)
                         Align(
                           alignment: Alignment.centerLeft,
@@ -439,12 +469,16 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                     if (c['status'] == 'connected' &&
                         _data!['sendEnabled'] == false)
                       Text(
-                        _data!['certificationSendEnabled'] == true
+                        c['automaticSending'] == true
+                            ? 'Bounded Email assistance is active under your saved policy. Ordinary sends outside that policy remain held.'
+                            : _data!['certificationSendEnabled'] == true
                             ? 'One reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
                             : 'Your mailbox is connected for review. Message sending needs workspace approval; automatic sending is off.',
                       ),
-                    const Text(
-                      'Receive lead replies and send messages you explicitly approve. Automatic sending is off.',
+                    Text(
+                      c['automaticSending'] == true
+                          ? 'Eligible introductions and follow-ups use your approved policy. Replies still require exact message approval.'
+                          : 'Receive lead replies and send messages you explicitly approve. Automatic sending is off.',
                     ),
                     if (_data!['configured'] != true)
                       const Text(
@@ -478,9 +512,13 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                           ? null
                           : (v) => setState(() => _send = v),
                     ),
-                    const ListTile(
-                      title: Text('Automatic sending'),
-                      trailing: Text('Off'),
+                    ListTile(
+                      title: const Text('Automatic sending'),
+                      trailing: Text(
+                        c['automaticSending'] == true
+                            ? 'Bounded policy on'
+                            : 'Off',
+                      ),
                     ),
                     BusinessEmailProviders(
                       providers:
@@ -576,7 +614,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                     ],
                     const SizedBox(height: 24),
                     Text(
-                      'Outreach history',
+                      'Conversations and email history',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     for (final op
@@ -589,7 +627,9 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(op['subject'].toString()),
-                              Text('To: ${op['recipient']}'),
+                              Text(
+                                '${op['state'] == 'received' ? 'From' : 'To'}: ${op['recipient']}',
+                              ),
                               Text(businessEmailState(op['state'])),
                               Text('Replies: ${op['replyCount'] ?? 0}'),
                               for (final outcome
@@ -608,6 +648,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                               if (op['state'] == 'sent' &&
                                   op['certification'] != true &&
                                   op['campaignId'] == null &&
+                                  op['crmCustomerId'] == null &&
                                   c['send'] == true &&
                                   ((op['replyCount'] as num? ?? 0) > 0 ||
                                       (_data!['learning']?['followups']

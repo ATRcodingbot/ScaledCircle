@@ -7,22 +7,21 @@ const fail=(code,message)=>{const e=Error(message);e.code=code;throw e;};
 const id=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(value))fail('invalid-argument','Choose a saved record.');return value;};
 const strict=(input,keys)=>{if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!keys.includes(k)))fail('invalid-argument','Unsupported action.');};
 const text=(v,max)=>{if(typeof v!=='string'||!v.trim()||v.length>max||v.includes('\0'))fail('invalid-argument','Enter a complete message within the displayed limits.');return v.trim();};
-function createService({db,authority,provider,providers,key,project,now=Date.now}) {
+function createService({db,authority,provider,providers,key,project,now=Date.now,getOwner,runInference,scheduleService}) {
   const registry=providers||createRegistry({google:provider});
   const adapter=(a,name='google')=>registry.get(name,a.beta);
   const root=b=>db.doc('businessMailboxes/'+id(b));
   const sub=(b,c,i)=>root(b).collection(c).doc(id(i));
   const stamp=()=>now();
   const binding=(a)=>'BusinessMailboxV1/'+a.businessId;
-  const assistance=require('./lead_assistance_authority').createAssistanceAuthority({db,now});
+  const pilot=require('./pilot_execution').createPilot({db,now});
+  const assistance=require('./lead_assistance_authority').createAssistanceAuthority({db,now,providerReady:!!runInference});
+  const ownerAlerts=require('./shared/lead_reply_alert').createAlerts({db,now,getOwner:getOwner||(uid=>require('firebase-admin/auth').getAuth().getUser(uid))});
   async function inboundContext(a,operationId,tx=null){
-    const query=root(a.businessId).collection('replies').where('operationId','==',operationId).limit(101);
-    const result=await(tx?tx.get(query):query.get());
-    if(result.size>100)fail('failed-precondition','This conversation needs a bounded review before replying.');
-    const rows=result.docs.map(d=>({id:d.id,...d.data()})).sort((x,y)=>x.id.localeCompare(y.id));
-    if(rows.some(r=>r.businessId!==a.businessId))fail('permission-denied','Choose a conversation from this Business.');
-    return hash(rows.map(r=>[r.id,r.providerMessageId,r.receivedAt,r.body,r.classification||'substantive']));
+    return (await require('./shared/email_conversation_context').read({db,businessId:a.businessId,operationId,tx})).digest;
   }
+  let inferenceVisits=0;
+  const suggest=require('./suggestions').createSuggestions({db,now,runInference:runInference?async input=>{inferenceVisits++;return runInference(input);}:null,inboundContext,mayPrepare:()=>inferenceVisits<1});
   const checkConnection=c=>{if(c?.status!=='connected')fail('failed-precondition','Connect Business Email first.');};
   async function current(a,tx=null) {
     const read=r=>tx?tx.get(r):r.get();
@@ -48,6 +47,10 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       db.collection('agentProspects').where('businessUid','==',a.businessId).limit(250).get()]);
     const c=connection.data()||{},pending=c.pendingAttempt?await sub(a.businessId,'attempts',c.pendingAttempt).get():null;
     const active=['pending','verifying'].includes(pending?.data()?.status)&&pending.data().expiresAt>now();
+    const emailPolicy=(await db.doc(`agentPermissions/${a.businessId}_lead_generator/authorizations/business_email`).get()).data(),pilotGrant=a.beta.leadAssistanceGrant;
+    const assistanceActive=emailPolicy?.status==='active'&&!emailPolicy.revokedAt&&emailPolicy.approvedBy===a.businessId&&emailPolicy.policy.expiresAt>now()&&
+      pilotGrant?.status==='active'&&!pilotGrant.revokedAt&&pilotGrant.expiresAt>now()&&c.status==='connected'&&c.permissions?.send===true&&emailPolicy.connectionGeneration===c.generation;
+    const automaticSending=!!(assistanceActive&&(emailPolicy.policy.introductionsEnabled||emailPolicy.policy.followupsEnabled));
     const credential=(await sub(a.businessId,'private','credential').get()).data();
     const healthy=c.status==='connected'&&c.health==='connected'&&credential?.generation===c.generation&&
       (!credential.businessId||credential.businessId===a.businessId)&&c.email===a.beta.mailbox;
@@ -62,7 +65,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     const googleRoundTripVerified=project==='scaled-circle'&&healthy&&ops.some(op=>op.certification===true&&op.state==='sent'&&
       (op.provider||'google')==='google'&&op.from===c.email&&op.providerMessageId&&op.providerThreadId&&
       replies.some(r=>r.certification===true&&r.businessId===a.businessId&&r.operationId===op.id&&r.from===op.recipient));
-    return {available:true,includedWithManagedGrowth:a.beta.includedWithManagedGrowth===true,readOnly:a.beta.readOnly===true,connectionAllowed:a.beta.connectionAllowed!==false,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta,{googleRoundTripVerified}),sendEnabled:a.beta.sendEnabled!==false,
+    return {available:true,assistanceSetupAvailable:require('./inference_budget').WORKSPACES.includes(a.businessId)&&a.actorUid===a.businessId,includedWithManagedGrowth:a.beta.includedWithManagedGrowth===true,readOnly:a.beta.readOnly===true,connectionAllowed:a.beta.connectionAllowed!==false,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta,{googleRoundTripVerified}),sendEnabled:a.beta.sendEnabled!==false,
       deliveryLimits:{individualPerHour:5,individualPerDay:20,campaignAudience:25,campaignSending:a.beta.campaignSendEnabled===true},
       canManageConnection:a.beta.canManageConnection===true,
       certificationDraft:a.beta.certificationDraft||null,
@@ -70,7 +73,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
         provider:c.provider||'google',providerLabel:contract.LABELS[c.provider||'google'],...contract.capabilities(c),
         read:c.status==='connected'&&c.permissions?.read===true,send:c.status==='connected'&&c.permissions?.send===true,
-        automaticSending:false,landingSender:c.landingSender||'account_notifications',pending:active,
+        automaticSending,landingSender:c.landingSender||'account_notifications',pending:active,
         error:healthy?null:!active&&c.pendingAttempt?'The latest connection attempt ended. Your existing connection is unchanged.':c.lastConnectionError||null},
       evidenceWindow:'Up to 100 recent outreach operations and their recorded outcomes.',operations:ops.sort((a,b)=>b.requestedAt-a.requestedAt),drafts:drafts.docs.map(d=>({id:d.id,...d.data()})),replies,outcomes:events.docs.map(d=>d.data()),restrictions:restrictions.docs.map(d=>({recipient:d.data().recipient,reason:d.data().reason})),
       landingLeads:leadDocs.docs.filter(d=>d.data().leadType==='landing_page_inquiry'&&!d.data().suppressionStatus).map(d=>({id:d.id,email:d.data().contactEmail,displayName:d.data().contactName,
@@ -183,41 +186,50 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     if(a.beta.certificationOnly!==false&&recipient!==gmail.email(a.beta.certificationRecipient))fail('permission-denied','Private certification is limited to the Founder-controlled recipient.');
     return {...p,recipient};
   }
-  async function saveDraft(a,input) {
-    strict(input,['prospectId','subject','body','expectedVersion','certification','followupTo','messageAngle','cta']);
+  async function saveDraft(a,input,automatic=false) {
+    strict(input,['prospectId','subject','body','expectedVersion','certification','followupTo','messageAngle','cta','assistanceKind','customerId','expectedInboundDigest']);
     if(input.messageAngle&&!['introduction','project_inquiry','inbound_response','followup','other'].includes(input.messageAngle))fail('invalid-argument','Choose a supported message purpose.');
     if(input.cta&&!['reply','meeting','estimate','website','other'].includes(input.cta))fail('invalid-argument','Choose a supported next step.');
     const subject=text(input.subject,200),body=text(input.body,8000);
     if(/[\r\n]/.test(subject)||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0)fail('invalid-argument','Refresh the saved draft before editing.');
-    const certification=input.certification===true,prospectId=certification?'founder_certification':id(input.prospectId);
+    const assistanceKind=input.assistanceKind||null;
+    if(assistanceKind&&input.certification)fail('invalid-argument','Certification messages cannot use an assistance policy.');
+    const certification=input.certification===true,prospectId=assistanceKind?'crm_'+id(input.customerId):certification?'founder_certification':id(input.prospectId);
     if(certification&&!a.beta.certificationRecipient)fail('permission-denied','A controlled recipient is required.');
     return db.runTransaction(async tx=>{
       const {c}=await current(a,tx);if(!c.permissions?.send)fail('permission-denied','Enable Send approved outreach first.');
-      const p=certification?{recipient:gmail.email(a.beta.certificationRecipient),sourceUrl:null,reason:'Founder-controlled software certification',learningFeatures:{},displayName:'Founder certification'}:await prospect(a,prospectId,tx);
+      const pilotContext=assistanceKind?await pilot.resolve(a,id(input.customerId),assistanceKind,tx):null;
+      const p=pilotContext?{recipient:pilotContext.customer.email,displayName:pilotContext.customer.name,sourceUrl:null,reason:'Owner-authorized email assistance'}:certification?{recipient:gmail.email(a.beta.certificationRecipient),sourceUrl:null,reason:'Founder-controlled software certification',learningFeatures:{},displayName:'Founder certification'}:await prospect(a,prospectId,tx);
       const ref=sub(a.businessId,'drafts',prospectId),old=(await tx.get(ref)).data();
       if((old?.version||0)!==input.expectedVersion)fail('aborted','The draft changed. Review the latest version.');
       const previous=old?.operationId?(await tx.get(sub(a.businessId,'operations',old.operationId))).data():null;
-      if(previous && !(previous.state==='sent'&&!certification&&input.followupTo===old.operationId&&
-        (previous.replyCount>0||now()-previous.requestedAt>=5*86400000)))
+      const inboundParent=input.followupTo&&assistanceKind==='reply'?(await tx.get(sub(a.businessId,'operations',id(input.followupTo)))).data():null;
+      if(inboundParent&&(inboundParent.businessId!==a.businessId||inboundParent.recipient!==p.recipient||inboundParent.crmCustomerId!==input.customerId||!['sent','received'].includes(inboundParent.state)||!(inboundParent.replyCount>0)))fail('permission-denied','Choose this customer’s actual conversation.');
+      const sameConversation=inboundParent&&previous?.providerThreadId&&inboundParent.providerThreadId===previous.providerThreadId&&previous.crmCustomerId===input.customerId;
+      if(previous && !(['sent','received'].includes(previous.state)&&!certification&&(input.followupTo===old.operationId||sameConversation)&&
+        (previous.replyCount>0||inboundParent?.replyCount>0||now()-previous.requestedAt>=5*86400000)))
         fail('failed-precondition','This message already has a send record. Review its outcome before preparing a separate follow-up.');
-      if(input.followupTo&&!previous&&old?.followupTo!==input.followupTo)fail('failed-precondition','Choose the current confirmed conversation.');
+      if(input.followupTo&&!previous&&!inboundParent&&old?.followupTo!==input.followupTo)fail('failed-precondition','Choose the current confirmed conversation.');
       const followupTo=input.followupTo||old?.followupTo||null;
       const inboundDigest=followupTo?await inboundContext(a,followupTo,tx):null;
+      if(assistanceKind==='reply'&&(!followupTo||input.expectedInboundDigest!==inboundDigest))fail('aborted','A newer inbound message requires review before saving this reply.');
       const version=input.expectedVersion+1,operationId=hash([a.businessId,prospectId,version,c.generation,subject,body,p.recipient]);
       const draft={businessId:a.businessId,prospectId,version,operationId,provider:c.provider||'google',providerSubject:c.subject||null,from:c.email,recipient:p.recipient,subject,body,connectionGeneration:c.generation,
         source:p.sourceUrl||null,reason:p.reason||p.qualificationReason||'Review the source and Business fit.',certification,
+        ...(pilotContext?{assistance:pilotContext.binding,automatic}:{}),
         features:{...learning.featuresFor(p),channel:'email',messageAngle:input.messageAngle||'unspecified',cta:input.cta||'unspecified'},
         followupTo,inboundDigest,parentMessageId:previous?.messageId||old?.parentMessageId||null,
-        parentThreadId:previous?.providerThreadId||old?.parentThreadId||null,state:'draft',editedBy:a.actorUid,editedAt:stamp()};
+        parentThreadId:previous?.providerThreadId||inboundParent?.providerThreadId||old?.parentThreadId||null,state:'draft',editedBy:a.actorUid,editedAt:stamp()};
       tx.set(ref,draft);tx.create(sub(a.businessId,'versions',operationId),draft);return draft;
     });
   }
   async function send(a,input) {
-    const requireSend=(actor,draft)=>{
+    const requireSend=async(actor,draft,tx=null,claimed=false)=>{
+      const scoped=draft?.assistance?await pilot.check(actor,draft,tx,{claimed}):null;
       if(project==='scaled-circle'&&draft?.certification===true&&
         !require('./certification').exactProductionMessage(actor.beta,draft,now()))
         fail('failed-precondition','The controlled production message is not authorized. No email was sent.');
-      if(actor.beta.sendEnabled===false&&!(actor.beta.certificationSendEnabled===true&&draft?.certification===true&&draft.prospectId==='founder_certification'&&draft.recipient===gmail.email(actor.beta.certificationRecipient)))
+      if(actor.beta.sendEnabled===false&&!scoped&&!(actor.beta.certificationSendEnabled===true&&draft?.certification===true&&draft.prospectId==='founder_certification'&&draft.recipient===gmail.email(actor.beta.certificationRecipient)))
         fail('failed-precondition','Sending is held. Only the enabled, reviewed controlled test can be sent. No email was sent.');
     };
     strict(input,['prospectId','version','operationId','confirm']);if(input.confirm!==true)fail('failed-precondition','Review the exact message and choose Send Email.');
@@ -225,18 +237,18 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     const claim=await db.runTransaction(async tx=>{
       const existing=(await tx.get(ref)).data();if(existing)return {existing};
       const {c,secret}=await current(a,tx),draft=(await tx.get(draftRef)).data();
-      requireSend(a,draft);
+      await requireSend(a,draft,tx);
       if(!contract.capabilities(c).canSend||!draft||draft.operationId!==input.operationId||draft.version!==input.version||draft.connectionGeneration!==c.generation||draft.from!==c.email)
         fail('failed-precondition','The mailbox or draft changed. Review the latest message.');
       const suppressed=(await tx.get(sub(a.businessId,'suppression',hash(draft.recipient)))).data();
       if(suppressed?.active)fail('failed-precondition','Do not contact this recipient.');
       if(draft.followupTo&&draft.inboundDigest!==await inboundContext(a,draft.followupTo,tx))
         fail('aborted','A new reply arrived. Review the latest conversation and save your response again.');
-      if(!draft.certification) {
+      if(!draft.certification&&!draft.assistance) {
         const latest=await prospect(a,draft.prospectId,tx);
         if(latest.recipient!==draft.recipient)fail('failed-precondition','The contact source changed. Review a new draft.');
       }
-      else if(draft.recipient!==gmail.email(a.beta.certificationRecipient))fail('permission-denied','The controlled recipient changed.');
+      else if(draft.certification&&draft.recipient!==gmail.email(a.beta.certificationRecipient))fail('permission-denied','The controlled recipient changed.');
       const certificationRef=sub(a.businessId,'certificationControl','founder_certification');
       if(draft.certification) {
         const used=(await tx.get(certificationRef)).data();
@@ -246,11 +258,15 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       const hourRef=sub(a.businessId,'deliveryWindows','hour_'+Math.floor(now()/3600000)),dayRef=sub(a.businessId,'deliveryWindows','day_'+Math.floor(now()/86400000));
       const hourly=(await tx.get(hourRef)).data()?.attempts||0,daily=(await tx.get(dayRef)).data()?.attempts||0;
       if(hourly>=5||daily>=20)fail('resource-exhausted','The private beta sending limit has been reached. Wait before sending more; provider limits may be lower.');
+      const pilotCountRef=draft.automatic?sub(a.businessId,'assistanceLimits',hash([draft.assistance.policyDigest,new Intl.DateTimeFormat('en-CA',{timeZone:(await pilot.resolve(a,draft.assistance.customerId,draft.assistance.kind,tx)).saved.policy.timeZone}).format(now())])):null;
+      const pilotCount=pilotCountRef?(await tx.get(pilotCountRef)).data()?.attempts||0:0;
+      if(pilotCountRef&&pilotCount>=(await pilot.resolve(a,draft.assistance.customerId,draft.assistance.kind,tx)).saved.policy.limits.initialPerDay)fail('resource-exhausted','The approved daily email limit has been reached.');
       const contact=!draft.certification?await require('./contact_relationship').reserve({db,tx,businessId:a.businessId,opId:ref.id,recipient:draft.recipient,
         name:draft.displayName,relationshipType:'prospect',source:draft.source,replyTo:draft.followupTo,now:now()}):null;
       const op={...draft,state:'sending',messageId:input.operationId+'@mail.scaledcircle.com',requestedAt:stamp(),approvedBy:a.actorUid,
-        attempts:1,replyCount:0,delivered:false,providerMessageId:null,providerThreadId:null,...(contact?{crmCustomerId:contact.customerId}:{})};
+        approvalSource:draft.automatic?'owner_email_policy':'exact_owner_review',approvalPolicyDigest:draft.assistance?.policyDigest||null,attempts:1,replyCount:0,delivered:false,providerMessageId:null,providerThreadId:null,...(contact?{crmCustomerId:contact.customerId}:{})};
       if(contact)contact.apply();
+      if(pilotCountRef)tx.set(pilotCountRef,{attempts:pilotCount+1});
       if(draft.certification)tx.create(certificationRef,{businessId:a.businessId,operationId:input.operationId,claimedAt:stamp(),actorUid:a.actorUid,maxSends:1});
       tx.set(hourRef,{attempts:hourly+1});tx.set(dayRef,{attempts:daily+1});
       tx.create(ref,op);tx.update(draftRef,{state:'sending'});return {op,secret,c};
@@ -260,7 +276,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     try {
       // Recheck owner/eligibility immediately before the single provider attempt.
       const fresh=await authority({auth:{uid:a.actorUid},data:{businessId:a.businessId}},'send');
-      requireSend(fresh,claim.op);
+      await requireSend(fresh,claim.op,null,true);
       const {c}=await current(fresh);contract.requireOperationProvider(c,claim.op);
       if(c.generation!==claim.c.generation||!contract.capabilities(c).canSend)fail('failed-precondition','The mailbox changed.');
       const restriction=(await sub(a.businessId,'suppression',hash(claim.op.recipient)).get()).data();
@@ -305,12 +321,12 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     const {c,secret}=await current(a);if(!c.permissions?.read)fail('permission-denied','Enable Read leads to check this conversation. No message was resent.');
     contract.requireOperationProvider(c,op);
     const {credentials,onRefresh}=credentialAccess(a,c,secret),p=adapter(a,c.provider);
-    if(op.state!=='sent') {
+    if(!['sent','received'].includes(op.state)) {
       const receipt=await p.reconcileSent(credentials,op,onRefresh,a.beta.otherMailbox);
       if(!receipt)return {state:'needs_reconciliation',retryAllowed:false};
       await recordSent(a,ref,receipt);return {state:'sent',delivered:false};
     }
-    await recordSent(a,ref,{id:op.providerMessageId,threadId:op.providerThreadId});
+    if(op.state==='sent')await recordSent(a,ref,{id:op.providerMessageId,threadId:op.providerThreadId});
     const replies=await p.replies(credentials,op,onRefresh,a.beta.otherMailbox);
     const replyKey=r=>c.provider&&c.provider!=='google'?hash([c.provider,c.subject,r.providerMessageId]):id(r.providerMessageId);
     const replyCount=await db.runTransaction(async tx=>{
@@ -319,8 +335,9 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       const currentConnection=(await current(a,tx)).c;
       if(currentConnection.generation!==c.generation||!currentConnection.permissions?.read||currentConnection.email!==op.from)
         fail('permission-denied','Reconnect the original sending mailbox to check this conversation.');
-      if(latest?.state!=='sent'||latest.providerMessageId!==op.providerMessageId||latest.providerThreadId!==op.providerThreadId||
-        saved.some(s=>s.exists&&(s.data().operationId!==ref.id||s.data().businessId!==a.businessId)))
+      const related=await Promise.all(saved.filter(s=>s.exists&&s.data().operationId!==ref.id).map(s=>tx.get(sub(a.businessId,'operations',id(s.data().operationId)))));
+      if(latest?.state!==op.state||latest.providerMessageId!==op.providerMessageId||latest.providerThreadId!==op.providerThreadId||
+        saved.some(s=>s.exists&&s.data().businessId!==a.businessId)||related.some(s=>s.data()?.businessId!==a.businessId||s.data()?.providerThreadId!==op.providerThreadId||s.data()?.recipient!==op.recipient||s.data()?.crmCustomerId!==op.crmCustomerId))
         fail('failed-precondition','This conversation needs review before its reply can be recorded.');
       const newReplies=replies.filter((_,i)=>!saved[i].exists);
       const actionable=r=>!r.classification||r.classification==='substantive';
@@ -333,7 +350,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       const replyProspect=prospectRef?(await tx.get(prospectRef)).data():null;
       const queuedFollowups=newReplies.length?await tx.get(root(a.businessId).collection('operations').where('recipient','==',op.recipient).limit(101)):null;
       if(queuedFollowups?.size>100)fail('failed-precondition','Contact history needs a bounded review.');
-      const optout=newReplies.find(r=>/^\s*(?:please\s+)?(?:unsubscribe me|remove me from (?:your|the) (?:list|mailing)|do not (?:email|contact)|stop (?:emailing|contacting))/i.test(r.body||''));
+      const optout=newReplies.find(r=>r.classification==='opt_out'||/^\s*(?:please\s+)?(?:unsubscribe me|remove me from (?:your|the) (?:list|mailing)|do not (?:email|contact)|stop (?:emailing|contacting))/i.test(r.body||''));
       const restrictionRef=sub(a.businessId,'suppression',hash(op.recipient));
       if(optout)await tx.get(restrictionRef);
       for(let i=0;i<replies.length;i++)if(!saved[i].exists)tx.create(sub(a.businessId,'replies',replyKey(replies[i])),{
@@ -349,7 +366,12 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       if(count)tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,
         operationId:ref.id,providerThreadId:op.providerThreadId,certification:op.certification===true,state:'replied',updatedAt:stamp()},{merge:true});
       return count;
-    });return {state:'sent',replies:replyCount,delivered:false};
+    });
+    let ownerAlertState='not_requested';
+    try{const alert=await ownerAlerts.enqueue(a.businessId,id(input.operationId));ownerAlertState=alert.queued?'queued':'unchanged';}
+    catch(_){ownerAlertState='needs_review';}
+    if(runInference&&replyCount>0&&op.certification!==true){try{await suggest(a,ref.id);}catch(_){/* Manual replies and alerts remain available. */}}
+    return {state:op.state,replies:replyCount,delivered:false,ownerAlertState};
   }
   async function suppress(a,input) {
     strict(input,['prospectId','reason']);if(!['do_not_contact','unsubscribed','bounced'].includes(input.reason))fail('invalid-argument','Choose a contact restriction.');
@@ -370,8 +392,22 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   async function execute(request) {
     const data=request.data||{};strict(data,['businessId','operation','input']);const op=data.operation||'load',input=data.input||{};
     const a=await authority(request,op);
+    if(op==='loadConversation'){
+      strict(input,['operationId']);const operationId=id(input.operationId),{c}=await current(a);if(!c.permissions?.read)fail('permission-denied','Read permission is required.');
+      const operation=(await sub(a.businessId,'operations',operationId).get()).data();if(operation?.businessId!==a.businessId)fail('permission-denied','Choose this Business conversation.');
+      const context=await require('./shared/email_conversation_context').read({db,businessId:a.businessId,operationId});
+      const availability=(await db.doc(`businessOperations/${a.businessId}/settings/scheduling`).get()).data();
+      const draft=operation.crmCustomerId?(await sub(a.businessId,'drafts','crm_'+id(operation.crmCustomerId)).get()).data():null;
+      const appointments=a.beta.canManageConnection&&operation.crmCustomerId?(await db.collection(`businessOperations/${a.businessId}/items`).where('customerId','==',operation.crmCustomerId).limit(101).get()).docs.filter(d=>d.data().emailLink).map(d=>({id:d.id,...d.data()})):[];
+      if(appointments.length>100)fail('resource-exhausted','This contact has too much appointment history for this view. Open Schedule.');
+      return {appointments,businessId:a.businessId,operation:{id:operationId,...operation},replies:context.rows,inboundDigest:context.digest,availability:availability||null,draft:draft||null,canManage:a.beta.canManageConnection===true};
+    }
+    if(op==='suggestReply'){strict(input,['operationId']);return suggest(a,id(input.operationId));}
+    if(op==='recordAssistanceDataReview')return require('./pilot_enrollment').createEnrollment({db,now}).recordDataReview(a,input);
+    if(op==='prepareAssistanceEnrollment')return require('./pilot_enrollment').createEnrollment({db,now}).prepare(a,input);
     if(op==='loadAssistance')return assistance.load(a);
     if(op==='manageAssistance')return assistance.mutate(a,input);
+    if(op==='recordRecipientPermission')return pilot.recordPermission(a,input);
     if(op==='loadCampaigns'){
       const loaded=await campaigns.load(a);
       return {...loaded,sendingEnabled:a.beta.campaignSendEnabled===true,
@@ -454,23 +490,17 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     }
     fail('invalid-argument','Unsupported Business Email action.');
   }
+  const inquiries=require('./inquiries').createInquiries({db,now,current,adapter,credentialAccess,alerts:ownerAlerts,onInbound:runInference?((a,id)=>suggest(a,id)):null});
+  const dispatch=require('./assistance_dispatch').createDispatch({db,now,pilot,prepare:(a,input)=>saveDraft(a,input,true),send});
+  const replySync=require('./reply_sync').createReplySync({db,root,sub,reconcile,now});
   async function syncReplies(request) {
-    const a=await authority(request,'reconcile'),c=(await root(a.businessId).get()).data();
-    if(c?.status!=='connected'||c.permissions?.read!==true)return {checked:0};
-    const ops=(await root(a.businessId).collection('operations').orderBy('requestedAt','desc').limit(100).get()).docs.map(d=>({id:d.id,...d.data()}))
-      .filter(o=>o.state==='sent'&&now()-o.requestedAt<30*86400000&&now()-(o.lastCheckedAt||0)>=300000)
-      .sort((a,b)=>(a.lastCheckedAt||0)-(b.lastCheckedAt||0)).slice(0,3);
-    let checked=0;
-    for(const op of ops) {
-      // Reserve the bounded read window; retries reconcile existing receipts.
-      const claimed=await db.runTransaction(async tx=>{const ref=sub(a.businessId,'operations',op.id),old=(await tx.get(ref)).data();
-        if(now()-(old.lastCheckedAt||0)<300000)return false;tx.update(ref,{lastCheckedAt:stamp()});return true;});
-      if(!claimed)continue;
-      try{await reconcile(a,{operationId:op.id});checked++;}catch(error){
-        await sub(a.businessId,'operations',op.id).update({replyCheckStatus:error.code==='permission-denied'?'needs_permission':'needs_review'});
-      }
-    }
-    return {checked};
+    const a=await authority(request,'reconcile');
+    const result=await replySync(a);
+    await inquiries(a);
+    await ownerAlerts.drain(a.businessId);
+    await dispatch(a);
+    if(scheduleService)await scheduleService.acceptEmailOffer(request);
+    return result;
   }
   async function syncCampaigns(request){const a=await authority(request,'sendCampaign');return delivery.sync(a);}
   return {execute,callback,syncReplies,syncCampaigns};

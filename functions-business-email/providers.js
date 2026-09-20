@@ -5,7 +5,11 @@ function createRegistry({google,microsoft,other}) {
    authorize:input=>google.authorize(input),exchange:(...args)=>google.exchange(...args),
    send:op=>google.send({...op,refreshToken:op.credentials.refreshToken}),
    reconcileSent:(credentials,op)=>google.reconcileSent(credentials.refreshToken,op),
-   replies:async(credentials,op)=>gmail.replyMessages(await google.thread(credentials.refreshToken,op.providerThreadId),op)},microsoft,other};
+   history:(credentials,input)=>google.history(credentials.refreshToken,input),
+   thread:(credentials,threadId)=>google.thread(credentials.refreshToken,threadId),
+   replies:async(credentials,op)=>{const thread=await google.thread(credentials.refreshToken,op.providerThreadId);
+    if(op.state==='received'){if(thread.id!==op.providerThreadId)throw Error('inquiry_thread_mismatch');return require('./inquiries').messages(thread,op.from,op.requestedAt).filter(m=>m.from===op.recipient);}
+    return gmail.replyMessages(thread,op);}},microsoft,other};
  return {
   get(name='google',beta={}) {
    name=contract.providerId(name);const p=adapters[name];
