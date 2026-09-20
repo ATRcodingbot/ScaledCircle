@@ -25,7 +25,9 @@ test('owner explicitly authorizes exact scope; stale review and other tenant fai
  assert.equal((await service.change(uid,uid,{action:'resume'})).status,'active');
  const audits=await db.collection('socialManagedPolicyAudit').where('businessUid','==',uid).get();assert.equal(audits.size,3);
  const old=(await db.doc('socialManagedPolicies/'+uid).get()).data();
- const cadenceScope=await service.preview(uid,{planId,maxPerWeek:5,cadenceSettings:{mode:'adaptive'}});
+ const laterService=require('../functions-social-operations/social_managed_settings').createSettings({db,environment:'production',now:()=>f.now+86400000});
+ const cadenceScope=await laterService.preview(uid,{planId,maxPerWeek:5,cadenceSettings:{mode:'adaptive'}});
+ assert.equal(cadenceScope.endsAt,old.endsAt);assert.match(cadenceScope.endsAtLabel,/America\/New_York/);
  const change={action:'cadence',planId,maxPerWeek:5,cadenceSettings:{mode:'adaptive'},reviewDigest:cadenceScope.reviewDigest,confirmAutomaticPublishing:true};
  await service.change(uid,uid,change);
  assert.equal((await service.change(uid,uid,change)).reused,true);

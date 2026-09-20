@@ -7,8 +7,8 @@ const safeId=v=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,220}$/.test(v);
 function createSettings({db,environment,now=Date.now}) {
  async function proposal(uid,input,read=ref=>ref.get()) {
   if(!safeId(uid)||!safeId(input.planId))throw Error('Choose your approved strategy.');
-  const [p,b,s,c,h]=await Promise.all(['socialContentPlans/'+input.planId,'businessGrowthProfiles/'+uid,
-   'businessSubscriptions/'+uid,'socialProviderConfigs/'+environment+'_meta','agentHealth/'+uid].map(path=>read(db.doc(path))));
+  const [p,b,s,c,h,existing]=await Promise.all(['socialContentPlans/'+input.planId,'businessGrowthProfiles/'+uid,
+   'businessSubscriptions/'+uid,'socialProviderConfigs/'+environment+'_meta','agentHealth/'+uid,'socialManagedPolicies/'+uid].map(path=>read(db.doc(path))));
   const plan=p.data(),profile=b.data();
   if(plan?.businessUid!==uid||plan.status!=='approved'||plan.approvedVersion!==plan.planVersion)throw Error('Approve the current strategy first.');
   if(!profile?.businessName||profile.businessUid&&profile.businessUid!==uid)throw Error('Complete your Business brand context first.');
@@ -33,15 +33,18 @@ function createSettings({db,environment,now=Date.now}) {
   const zones=[...new Set(cycles.docs.map(d=>d.data().timeZone).filter(cadence.validZone))];
   const timeZone=profile.timeZone||profile.timezone||plan.timeZone||(zones.length===1?zones[0]:'UTC');
   if(!cadence.validZone(timeZone))throw Error('Save the workspace timezone before changing publishing cadence.');
+  const prior=existing.data();
+  const preserveEnd=prior?.businessUid===uid&&prior.planId===input.planId&&prior.strategyDigest===bounded.strategyDigest(plan)&&['active','paused'].includes(prior.status)&&prior.endsAt>now();
+  const endsAt=preserveEnd?prior.endsAt:Math.floor(now()/86400000)*86400000+30*86400000;
   const scope={businessUid:uid,planId:input.planId,planVersion:plan.planVersion,strategyDigest:bounded.strategyDigest(plan),
    businessName:profile.businessName,voice:typeof profile.brandVoice==='string'&&profile.brandVoice.trim()?profile.brandVoice:
      typeof profile.tone==='string'&&profile.tone.trim()?profile.tone:'Helpful, professional Business voice; no unsupported personal or completed-work claims.',
    services,providers,destinations,maxPerWeek,cadenceSettings,timeZone,
-   endsAt:Math.floor(now()/86400000)*86400000+30*86400000};
+   endsAt};
   return {...scope,reviewDigest:hash(scope),plan};
  }
  return {
-  async preview(uid,input){const {plan,...view}=await proposal(uid,input);return view;},
+  async preview(uid,input){const {plan,...view}=await proposal(uid,input);return {...view,endsAtLabel:new Intl.DateTimeFormat('en-US',{timeZone:view.timeZone,dateStyle:'medium',timeStyle:'short'}).format(view.endsAt)+' '+view.timeZone};},
   async change(uid,actorUid,input){
    if(actorUid!==uid)throw Error('Only the Business owner can change automatic publishing authority.');
    if(!['enable','cadence','pause','resume'].includes(input.action))throw Error('Choose a publishing action.');

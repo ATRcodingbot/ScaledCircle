@@ -66,7 +66,7 @@ class _SocialAutomaticPublishingCardState
                     'Destinations: ${(scope['destinations'] as List).join(', ')}',
                   ),
                   Text(
-                    'Through ${DateTime.fromMillisecondsSinceEpoch((scope['endsAt'] as num).toInt()).toLocal().toString().split(' ').first}',
+                    'Authorization ends ${scope['endsAtLabel'] ?? '${DateTime.fromMillisecondsSinceEpoch((scope['endsAt'] as num).toInt(), isUtc: true).toIso8601String()} UTC'}',
                   ),
                   const SizedBox(height: 12),
                   const Text(
