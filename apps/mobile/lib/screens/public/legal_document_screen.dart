@@ -99,9 +99,9 @@ class LegalDocumentScreen extends StatelessWidget {
                         const SizedBox(height: 10),
                         if (kind != LegalDocumentKind.hub &&
                             kind != LegalDocumentKind.support)
-                          const Text(
-                            'Last updated: $lastUpdated',
-                            style: TextStyle(color: Color(0xFF60758A)),
+                          Text(
+                            'Last updated: ${kind == LegalDocumentKind.privacy ? 'September 19, 2026' : lastUpdated}',
+                            style: const TextStyle(color: Color(0xFF60758A)),
                           ),
                         const SizedBox(height: 28),
                         for (final section in document.sections)
@@ -160,7 +160,12 @@ class _LegalSection extends StatelessWidget {
             children: [
               for (final link in section.links)
                 TextButton(
-                  onPressed: () => preserveFlow
+                  onPressed: () => Uri.parse(link.$2).scheme == 'https'
+                      ? launchUrl(
+                          Uri.parse(link.$2),
+                          mode: LaunchMode.externalApplication,
+                        )
+                      : preserveFlow
                       ? openLegalDocument(
                           context,
                           LegalDocumentKind.fromPath(link.$2)!,
@@ -302,6 +307,23 @@ _Document _document(LegalDocumentKind kind) => switch (kind) {
         'With Send permission, ScaledCircle sends messages you explicitly approve, including campaigns approved for later delivery. While connected, background checks can update replies and process approved campaigns. Connecting a mailbox does not itself approve a message or campaign.',
         'Connection credentials are encrypted on our servers. Disconnecting removes ScaledCircle\'s stored connection credential and disables new operations using that credential; it does not delete previously saved records or revoke permission in your Google Account. You can separately manage ScaledCircle access in your Google Account. Contact support to request deletion of stored information, subject to applicable retention requirements.',
       ]),
+      _Section(
+        'Google API data and Limited Use',
+        [
+          'ScaledCircle\'s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including its Limited Use requirements. These limits also apply to information derived from Google data.',
+          'We use Gmail data to provide the connected Business Email features you choose: readable conversations, approved messages, reply reconciliation, contact history, suppression and Business-specific campaign results. Selected message text and reply bodies are saved with their conversation, contact and campaign records in your Business workspace, using Google Cloud and Firebase infrastructure in the United States.',
+          'We retain saved Business communication history while it is needed for those features, your requests, security, disputes or legal obligations. There is no fixed automatic expiry for this history. Disconnecting does not erase it. Deleting an individual account does not automatically delete the Business workspace or its communication history. Contact support to request deletion of saved Gmail data; we review workspace ownership and any required retention before removing records.',
+          'Google processes mailbox authorization, retrieval and delivery. Our hosting and storage service providers process data to operate these features. We limit other transfers to providing or improving the appropriate user-facing features with your consent, security, applicable law, or a business transfer with your explicit prior consent. We do not sell Gmail data, provide it to data brokers, use it to target advertisements, or build unrelated or cross-Business marketing profiles.',
+          'Authorized workspace users may view communication history allowed by their permissions. Privileged operational access is possible, but we restrict staff and service-provider access to specific data you affirmatively authorize them to view, necessary security or abuse investigations, legal requirements, or permitted aggregated internal operations. Connecting a mailbox is not blanket permission for staff to read its contents.',
+          'The current Business Email processing does not send Gmail message content to an external AI or model service or use it to train a general-purpose model. Business-specific results use recorded sends, replies and owner-recorded outcomes; a reply alone is not treated as a sale or other successful outcome.',
+        ],
+        links: [
+          (
+            'Google API Services User Data Policy',
+            'https://developers.google.com/terms/api-services-user-data-policy',
+          ),
+        ],
+      ),
       _Section('Location and evidence', [
         'During an active tracked assignment, the mobile app may collect device location to verify route and work completion. The maintained Android design uses a foreground location service and visible service notification; it does not request ACCESS_BACKGROUND_LOCATION. Tracking is not intended to run between jobs and stops after completion, cancellation, or another terminal session state. Photos or checkpoints are captured only when the user chooses the maintained evidence flow or a campaign requires them. Evidence is used for campaign review, work verification, support, and dispute review where applicable.',
       ]),
