@@ -349,7 +349,23 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                   leading: const Icon(Icons.info_outline),
                   title: Text(
                     (data!['blockerMessages'] as Map?)?[b]?.toString() ??
-                        'Prerequisite needs attention: $b',
+                        const {
+                          'healthy_owned_mailbox_required':
+                              'Connect the authorized mailbox with Read and Send permissions.',
+                          'bounded_authority_required':
+                              'Review the assistance boundaries; suggested replies still require your approval.',
+                          'permitted_audience_required':
+                              'Choose recipients who consented or requested a response.',
+                          'business_content_boundaries_required':
+                              'Complete the Business voice, services, supported facts and destinations.',
+                          'contact_limits_required':
+                              'Set introduction and follow-up limits.',
+                          'sending_window_required':
+                              'Choose permitted sending days and hours.',
+                          'workspace_owner_required':
+                              'The Business owner must manage these settings.',
+                        }[b] ??
+                        'Complete the remaining assistance settings before authorizing.',
                   ),
                 ),
               )),
