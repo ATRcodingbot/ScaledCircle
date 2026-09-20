@@ -20,6 +20,7 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
     const readOnly=['load','loadCampaigns'].includes(operation);
     const connectionAction=['connect','connectOther','callback','disconnect','checkConnection','preferences'].includes(operation);
     if(config.kind==='internal') {
+      config.canManageConnection=true;
       if(config.ownerUid!==uid)deny('Use the maintained internal ScaledCircle workspace.');
       const user=await db.doc('users/'+uid).get();
       if(project==='scaled-circle') {
@@ -38,6 +39,7 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
       }
     } else {
       const a=await ws.authority({uid,businessId,permission:readOnly||operation==='reconcile'?'communicationsRead':'communicationsSend'});
+      config.canManageConnection=a.isOwner;
       if(connectionAction&&!a.isOwner)deny('The Business owner must manage the mailbox connection.');
       const managed=entitlements.hasActiveManagedGrowthEntitlement(a.entitlement);
       const historicalManaged=['managed_growth'].includes(a.entitlement.planId||a.entitlement.plan)&&a.isOwner&&readOnly;

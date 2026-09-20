@@ -264,11 +264,26 @@ test('OAuth attempt reuse, exact mailbox identity, single-use callback and parti
   assert.equal((await call('load')).connection.email,'owner@example.test');
 });
 test('canceled/expired attempts leave recoverable state, forged callback rejected, disconnect removes local authority',async()=>{
-  await call('disconnect');const a=await call('connect',{read:true,send:true});clock+=600001;
+  await call('disconnect',{confirm:true,mailbox:'owner@example.test'});const a=await call('connect',{read:true,send:true});clock+=600001;
   assert.equal((await call('load')).connection.status,'not_connected');
   await assert.rejects(service.callback({state:new URL(a.url).searchParams.get('state'),code:'late'}));
-  await assert.rejects(service.callback({state:'forged'}));await call('disconnect');
+  await assert.rejects(service.callback({state:'forged'}));await call('disconnect',{confirm:true,mailbox:'owner@example.test'});
   assert.equal((await db.doc('businessMailboxes/owner/private/credential').get()).exists,false);
+});
+test('confirmed disconnect invalidates credentials and queued draft without deleting history or revoking provider grant',async()=>{
+  const d=await draft();
+  await db.doc('businessMailboxes/owner/replies/retained').set({body:'Preserved history'});
+  await assert.rejects(call('disconnect',{}),/Confirm the exact/);
+  await assert.rejects(call('disconnect',{confirm:true,mailbox:'another@example.test'}));
+  const result=await call('disconnect',{confirm:true,mailbox:'owner@example.test'});
+  assert.equal(result.credentialsRemoved,true);assert.equal(result.providerRevocation,'not_requested');
+  assert.equal((await db.doc('businessMailboxes/owner/private/credential').get()).exists,false);
+  assert.equal((await db.doc('businessMailboxes/owner/replies/retained').get()).exists,true);
+  assert.equal((await db.doc('businessMailboxes/owner/drafts/'+d.prospectId).get()).exists,true);
+  assert.equal((await db.collection('businessMailboxes/owner/connectionAudit').get()).size,1);
+  await assert.rejects(send(d),/Connect Business Email/);
+  assert.equal((await service.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}})).checked,0);
+  assert.equal(sends,0);
 });
 test('send-only grant cannot read replies and plaintext credentials are never returned',async()=>{
   await credential({read:false,send:true});const d=await draft();await send(d);
@@ -455,3 +470,4 @@ test('Managed Growth owns campaign execution; lower paid plans keep mailbox/Core
   if(plan==='managed_growth')await social({businessUid:'owner',actorUid:'owner',approve:true});else await assert.rejects(social({businessUid:'owner',actorUid:'owner',approve:true}),/Managed Growth/);
  }
 });
+

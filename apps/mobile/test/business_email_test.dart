@@ -87,6 +87,44 @@ class ConversationEmailService extends BusinessEmailService {
 
 void main() {
   testWidgets(
+    'owner disconnect identifies mailbox and retains history and subscription',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessEmailScreen(
+            loadOverride: () async => {
+              'available': true,
+              'configured': true,
+              'canManageConnection': true,
+              'sendEnabled': false,
+              'connection': {
+                'status': 'connected',
+                'email': 'owner@example.test',
+                'read': true,
+                'send': true,
+              },
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Disconnect email'));
+      await tester.pumpAndSettle();
+      expect(find.text('Disconnect email?'), findsOneWidget);
+      expect(
+        find.textContaining('Disconnect owner@example.test'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('does not cancel your Business subscription'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Keep connected'));
+      await tester.pumpAndSettle();
+      expect(find.text('Disconnect email?'), findsNothing);
+    },
+  );
+  testWidgets(
     'invited Google connection enables requested permissions without starting OAuth',
     (tester) async {
       var calls = 0;
@@ -352,16 +390,16 @@ void main() {
         expect(service.calls, isEmpty);
         expect(find.text('From: owner@example.test'), findsOneWidget);
         expect(find.text('To: recipient@example.test'), findsOneWidget);
-        expect(find.text('Send Test Email'), findsNothing);
+        expect(find.text('Approve & Send'), findsNothing);
         await tester.tap(find.text('Review exact email'));
         await tester.pumpAndSettle();
         expect(service.calls, ['saveDraft']);
         final send = tester.widget<FilledButton>(
-          find.widgetWithText(FilledButton, 'Send Test Email'),
+          find.widgetWithText(FilledButton, 'Approve & Send'),
         );
         expect(send.onPressed != null, allowed);
         if (allowed) {
-          await tester.tap(find.text('Send Test Email'));
+          await tester.tap(find.text('Approve & Send'));
           await tester.pumpAndSettle();
           expect(service.calls, ['saveDraft', 'send']);
         }
@@ -513,7 +551,7 @@ void main() {
         );
         expect(sendSwitch.value, false);
         await tester.scrollUntilVisible(
-          find.text('Outreach history'),
+          find.text('Sent — delivery not confirmed'),
           400,
           scrollable: find.byType(Scrollable).first,
         );

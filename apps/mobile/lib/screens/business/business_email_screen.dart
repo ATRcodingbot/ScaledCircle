@@ -101,6 +101,32 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
     }
   }
 
+  Future<void> _disconnect(Map connection) async {
+    final mailbox = connection['email']?.toString() ?? '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Disconnect email?'),
+        content: Text(
+          'Disconnect $mailbox from ScaledCircle?\n\nFurther mailbox reading and sending will stop. Saved CRM and conversation history is retained under the existing policy. This does not cancel your Business subscription.\n\nScaledCircle removes its stored credentials. Google account permissions are not revoked here because revocation can affect the entire app grant. Messages already accepted by the provider cannot be recalled.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Keep connected'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Disconnect email'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _action('disconnect', {'confirm': true, 'mailbox': mailbox});
+    }
+  }
+
   Future<void> _action(
     String op, [
     Map<String, dynamic> input = const {},
@@ -127,6 +153,15 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }
       await _load();
+      if (mounted && op == 'disconnect') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Email disconnected. Stored credentials removed; saved history retained. Google account permissions were not revoked.',
+            ),
+          ),
+        );
+      }
       if (mounted && op == 'checkConnection') {
         ScaffoldMessenger.of(
           context,
@@ -354,6 +389,16 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       ),
                     if (_data!['expectedMailbox'] != null)
                       Text('Authorized mailbox: ${_data!['expectedMailbox']}'),
+                    if (_data!['certificationRecipient'] != null &&
+                        c['send'] == true &&
+                        !(_data!['operations'] as List? ?? [])
+                            .whereType<Map>()
+                            .any((op) => op['certification'] == true))
+                      BusinessEmailDraftButton(
+                        certification: true,
+                        recipient: _data!['certificationRecipient'].toString(),
+                        mailbox: _data!,
+                      ),
                     if (_data!['campaignPrivateBeta'] == true)
                       ListTile(
                         title: const Text('Email Campaigns'),
@@ -369,6 +414,15 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                         ),
                       ),
                     if (c['status'] == 'connected') ...[
+                      if (_data!['canManageConnection'] == true)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: _busy ? null : () => _disconnect(c),
+                            icon: const Icon(Icons.link_off),
+                            label: const Text('Disconnect email'),
+                          ),
+                        ),
                       Text(
                         'Provider: ${c['providerLabel'] ?? 'Google / Gmail / Workspace'}',
                       ),
@@ -468,13 +522,6 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                               : _load,
                           child: const Text('Check connection'),
                         ),
-                        if (c['status'] == 'connected')
-                          TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () => _action('disconnect'),
-                            child: const Text('Disconnect'),
-                          ),
                       ],
                     ),
                     if (c['status'] == 'connected') ...[
@@ -708,16 +755,6 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       Text(
                         '${(learning['followups'] as List).length} conversations have no recorded reply after five days. Review a follow-up; nothing is sent automatically.',
                       ),
-                    if (_data!['certificationRecipient'] != null &&
-                        c['send'] == true &&
-                        !(_data!['operations'] as List? ?? [])
-                            .whereType<Map>()
-                            .any((op) => op['certification'] == true))
-                      BusinessEmailDraftButton(
-                        certification: true,
-                        recipient: _data!['certificationRecipient'].toString(),
-                        mailbox: _data!,
-                      ),
                   ],
                 ],
               ),
@@ -876,14 +913,16 @@ class _DraftDialogState extends State<_DraftDialog> {
       text:
           old?['subject']?.toString() ??
           (widget.certification
-              ? 'ScaledCircle controlled Business Email check'
+              ? (widget.mailbox['certificationDraft']?['subject']?.toString() ??
+                    'ScaledCircle controlled Business Email check')
               : 'A question for ${widget.prospect?['displayName'] ?? 'your team'}'),
     );
     _body = TextEditingController(
       text:
           old?['body']?.toString() ??
           (widget.certification
-              ? 'This is the Founder-approved software certification draft. Please reply so we can verify the Business conversation.'
+              ? (widget.mailbox['certificationDraft']?['body']?.toString() ??
+                    'This is the Founder-approved software certification draft. Please reply so we can verify the Business conversation.')
               : widget.prospect?['draft']?.toString() ?? ''),
     );
   }
@@ -1070,7 +1109,7 @@ class _DraftDialogState extends State<_DraftDialog> {
                 : _saved == null
                 ? 'Review exact email'
                 : widget.certification
-                ? 'Send Test Email'
+                ? 'Approve & Send'
                 : 'Send Email',
           ),
         ),

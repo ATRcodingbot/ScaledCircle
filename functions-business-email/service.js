@@ -55,6 +55,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       replies.some(r=>r.certification===true&&r.businessId===a.businessId&&r.operationId===op.id&&r.from===op.recipient));
     return {available:true,includedWithManagedGrowth:a.beta.includedWithManagedGrowth===true,readOnly:a.beta.readOnly===true,connectionAllowed:a.beta.connectionAllowed!==false,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta,{googleRoundTripVerified}),sendEnabled:a.beta.sendEnabled!==false,
       deliveryLimits:{individualPerHour:5,individualPerDay:20,campaignAudience:25,campaignSending:a.beta.campaignSendEnabled===true},
+      canManageConnection:a.beta.canManageConnection===true,
+      certificationDraft:a.beta.certificationDraft||null,
       certificationSendEnabled:a.beta.certificationSendEnabled===true&&!ops.some(op=>op.certification===true),expectedMailbox:a.beta.mailbox,
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
         provider:c.provider||'google',providerLabel:contract.LABELS[c.provider||'google'],...contract.capabilities(c),
@@ -404,9 +406,16 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       await root(a.businessId).update({landingSender:input.landingSender,automaticSending:false});return {saved:true,automaticSending:false};
     }
     if(op==='disconnect') {
-      await db.runTransaction(async tx=>{const c=(await tx.get(root(a.businessId))).data();if(c?.pendingAttempt)tx.update(sub(a.businessId,'attempts',c.pendingAttempt),{status:'canceled',closedAt:stamp()});
-        tx.delete(sub(a.businessId,'private','credential'));tx.set(root(a.businessId),{status:'not_connected',permissions:{read:false,send:false},pendingAttempt:null,setupLease:null,setupLeaseUntil:0,automaticSending:false,landingSender:'account_notifications',updatedAt:stamp()},{merge:true});});
-      return {disconnected:true};
+      strict(input,['confirm','mailbox']);
+      if(input.confirm!==true||gmail.email(input.mailbox)!==gmail.email(a.beta.mailbox))fail('failed-precondition','Confirm the exact mailbox to disconnect.');
+      await db.runTransaction(async tx=>{const c=(await tx.get(root(a.businessId))).data();
+        if(c?.email&&gmail.email(c.email)!==gmail.email(input.mailbox))fail('failed-precondition','The mailbox changed. Review the current connection.');
+        if(c?.pendingAttempt)tx.update(sub(a.businessId,'attempts',c.pendingAttempt),{status:'canceled',challenge:null,closedAt:stamp()});
+        tx.delete(sub(a.businessId,'private','credential'));
+        tx.set(root(a.businessId),{status:'not_connected',permissions:{read:false,send:false},pendingAttempt:null,generation:null,setupLease:null,setupLeaseUntil:0,automaticSending:false,landingSender:'account_notifications',lastConnectionError:null,health:'not_connected',updatedAt:stamp()},{merge:true});
+        tx.set(sub(a.businessId,'connectionAudit',hash(['disconnect',c?.generation||c?.pendingAttempt||'none'])),{businessId:a.businessId,actorUid:a.actorUid,mailbox:input.mailbox,action:'disconnected',previousGeneration:c?.generation||null,recordedAt:stamp(),credentialsRemoved:true,historyRetained:true,providerRevocation:'not_requested',providerRevocationReason:'Google revocation can revoke the whole app grant; local credentials removed without revoking other Google permissions.'});
+      });
+      return {disconnected:true,credentialsRemoved:true,historyRetained:true,providerRevocation:'not_requested'};
     }
     if(op==='outcome') {
       strict(input,['operationId','outcome','note']);if(!learning.OUTCOMES.includes(input.outcome))fail('invalid-argument','Choose a supported result.');

@@ -1,0 +1,11 @@
+# New-recording Email readiness
+
+The existing owner-only disconnect action now requires confirmation of the exact mailbox. The connected-mailbox section exposes **Disconnect email**, with explicit history/subscription retention copy. The transaction invalidates the generation, cancels pending OAuth, deletes the encrypted credential document, resets permissions and sender preference, and records a connection audit. Subsequent reads, sends and queued campaign deliveries must pass existing current-connection/generation checks. Already provider-accepted mail cannot be recalled.
+
+Google account-level revocation is intentionally **not requested**: it may revoke the entire app grant rather than one scope. This outcome is explicit in the confirmation, result and audit. Local usable credentials are removed. Existing provider client/scopes and the bounded reconnect invitation remain unchanged; OAuth continues to request account selection and consent.
+
+The demo workspace previously had connection authority only: ordinary sending, campaign sending and the certification-send permit were all disabled. The bounded production configuration now enables the maintained single certification send with exact sender, recipient, subject/body digests and the existing invitation expiry. Automatic and ordinary sending remain disabled. The exact approved message is supplied as the server-configured certification draft. After reconnecting, the owner opens **Review Controlled Test Message**, reviews the exact email, then selects **Approve & Send**. Draft preparation is not a send. Duplicate/uncertain attempts retain the existing reconciliation-only rules.
+
+The controlled recipient replies to the actual provider message. The owner uses the existing conversation check and View Conversation actions; no delivery, reply, interest or revenue is inferred before evidence exists. Certification messages are excluded from Growth learning.
+
+Validation: 39 backend tests, including exact confirmation, retained history, credential removal, stopped reads and blocked draft send; 16 Flutter tests including visible owner confirmation and the separate review/send gates. Only the Email callable and Hosting are deployed. Private before/after configuration and readback evidence live under `.firebase/launch-close-20260919/email-reset-*`.
