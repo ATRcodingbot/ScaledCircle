@@ -43,3 +43,7 @@ Final screenshots, final-binary navigation/policy validation, real reviewer acce
 Not frozen. The bounded checkpoint correction is tested but awaits production rollout; one final full regression and matched-binary validation have not run on this source. No additional functional source repair is established by this readback. Autonomous Social has no current-strategy scheduled job yet, so its readiness must remain explicitly unresolved rather than passed. Continue asynchronous evidence collection without waiting or forcing publication. LIVE cash-out stays deferred.
 
 Founder-only: eventual final-build encryption declaration and real-device push checks, maintained reviewer-account access where required, and later separately authorized legitimate earning/cash-out/bank receipt. Google review/CASA and natural agent evidence remain separate external/asynchronous gates. No immediate new consent, recording, message or payment is requested.
+
+## Subsequent repair and release checkpoint
+
+See [launch-closeout-repair-20260920.md](launch-closeout-repair-20260920.md) for the deployed Admin/Social repair, exact candidate, full regression and native preparation. It supersedes the earlier not-deployed/not-frozen statements above; historical observations remain dated evidence.
