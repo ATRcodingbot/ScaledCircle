@@ -5,7 +5,7 @@ Pinned candidate source: **79dda7bc5104eaad444b09fa7e2fcee09e61b2fe**. No applic
 ## Fresh regression
 
 - Maintained backend full suite: 835 cases, 833 passed, 2 opt-in emulator skips, zero failures. The two skipped Story concurrency/preparation cases were subsequently executed against the local demo Firestore emulator and passed in a 16-test run also covering content/image recovery. No skips in that focused run.
-- Flutter full suite: 796 passed, 3 maintained skips, zero failures, APP_ENV=staging. No Flutter bytes changed between the tested checkout and pinned source. Dependency lock SHA256 remains 2d929b3279125c2a0732212aee86ebf51607aaaff76f315c9a0ff51e0bbf8ea94.
+- Flutter full suite: 796 passed, 3 maintained skips, zero failures, APP_ENV=staging. No Flutter bytes changed between the tested checkout and pinned source. Dependency lock SHA256 remains 2d929b3279125c2a0732212aee86ebf51607aaff76f315c9a0ff51e0bbf8ea94.
 - Earlier full attempts are retained as failures: stale endpoint/dependency architecture assertions; missing APP_ENV for Flutter; stale local hook cache. The local hook cache was renamed, not deleted, and regenerated. A separate existing SDK path began initialization during diagnosis and was stopped; the passing run used C:/flutter_sdk_link, not that SDK. No app dependency upgrade or source workaround.
 - Logs: final-current-backend-pass.log, final-current-flutter-staging.log, final-79dda7b-emulator.log under .firebase/launch-close-20260919. The previous 587737b regression is not used to certify this changed source.
 
