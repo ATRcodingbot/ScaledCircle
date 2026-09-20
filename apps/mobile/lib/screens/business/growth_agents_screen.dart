@@ -5,6 +5,8 @@ import '../../services/business_email_service.dart';
 import '../../services/business_workspace_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../widgets/business_email_entry.dart';
+import '../../widgets/growth_prospect_email_action.dart';
+import '../../widgets/growth_relationship_counts.dart';
 import 'business_email_screen.dart';
 import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -161,11 +163,21 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
 
   String _time(dynamic value) {
     final raw = value is num
-        ? DateTime.fromMillisecondsSinceEpoch(value.toInt()).toIso8601String()
+        ? DateTime.fromMillisecondsSinceEpoch(
+            value.toInt(),
+            isUtc: true,
+          ).toIso8601String()
         : value?.toString();
     return DateTime.tryParse(raw ?? '') == null
         ? 'Not recorded'
-        : socialCustomerTime(context, raw);
+        : socialCustomerTime(
+            context,
+            raw,
+            label:
+                _data?['timeLabels']?[DateTime.parse(
+                  raw!,
+                ).toUtc().toIso8601String()],
+          );
   }
 
   Future<void> _research() async {
@@ -307,6 +319,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                         child: const Text('View Evidence'),
                       ),
                       if (_mailbox != null &&
+                          p['emailEligibility'] == 'eligible' &&
                           p['qualified'] == true &&
                           p['doNotContact'] != true &&
                           p['sourceAvailable'] == true &&
@@ -316,6 +329,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                           onChanged: _load,
                           prospect: p,
                         ),
+                      GrowthProspectEmailAction(prospect: p, mailbox: _mailbox),
                       TextButton(
                         onPressed: _busy
                             ? null
@@ -700,6 +714,14 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
+        const BusinessEmailEntry(showUnavailable: true),
+        GrowthRelationshipCounts(
+          prospects: prospects,
+          mailbox: _mailbox,
+          observations: s['observationCount'] is num
+              ? s['observationCount'] as num
+              : null,
+        ),
         if (widget.customer) _researchStatus(d) else _internalResearchStatus(d),
         const Text(
           'Review what your team found and choose the next step. Research does not send messages, launch ads or approve Social posts.',
@@ -995,6 +1017,7 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                           ),
                         const SizedBox(height: 12),
                         if (_mailbox != null &&
+                            p['emailEligibility'] == 'eligible' &&
                             p['doNotContact'] != true &&
                             p['qualified'] == true &&
                             p['email'] is String &&
@@ -1005,6 +1028,10 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                             onChanged: _load,
                             prospect: p,
                           ),
+                        GrowthProspectEmailAction(
+                          prospect: p,
+                          mailbox: _mailbox,
+                        ),
                         Text(
                           p['doNotContact'] == true
                               ? 'Do not contact'
@@ -1050,7 +1077,6 @@ class _GrowthAgentsScreenState extends State<GrowthAgentsScreen> {
                 ),
               ),
         ],
-        const BusinessEmailEntry(),
         const SizedBox(height: 24),
         Text(
           'Completed activity',

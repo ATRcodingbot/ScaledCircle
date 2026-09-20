@@ -14,6 +14,14 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   const sub=(b,c,i)=>root(b).collection(c).doc(id(i));
   const stamp=()=>now();
   const binding=(a)=>'BusinessMailboxV1/'+a.businessId;
+  async function inboundContext(a,operationId,tx=null){
+    const query=root(a.businessId).collection('replies').where('operationId','==',operationId).limit(101);
+    const result=await(tx?tx.get(query):query.get());
+    if(result.size>100)fail('failed-precondition','This conversation needs a bounded review before replying.');
+    const rows=result.docs.map(d=>({id:d.id,...d.data()})).sort((x,y)=>x.id.localeCompare(y.id));
+    if(rows.some(r=>r.businessId!==a.businessId))fail('permission-denied','Choose a conversation from this Business.');
+    return hash(rows.map(r=>[r.id,r.providerMessageId,r.receivedAt,r.body,r.classification||'substantive']));
+  }
   const checkConnection=c=>{if(c?.status!=='connected')fail('failed-precondition','Connect Business Email first.');};
   async function current(a,tx=null) {
     const read=r=>tx?tx.get(r):r.get();
@@ -192,11 +200,13 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
         (previous.replyCount>0||now()-previous.requestedAt>=5*86400000)))
         fail('failed-precondition','This message already has a send record. Review its outcome before preparing a separate follow-up.');
       if(input.followupTo&&!previous&&old?.followupTo!==input.followupTo)fail('failed-precondition','Choose the current confirmed conversation.');
+      const followupTo=input.followupTo||old?.followupTo||null;
+      const inboundDigest=followupTo?await inboundContext(a,followupTo,tx):null;
       const version=input.expectedVersion+1,operationId=hash([a.businessId,prospectId,version,c.generation,subject,body,p.recipient]);
       const draft={businessId:a.businessId,prospectId,version,operationId,provider:c.provider||'google',providerSubject:c.subject||null,from:c.email,recipient:p.recipient,subject,body,connectionGeneration:c.generation,
         source:p.sourceUrl||null,reason:p.reason||p.qualificationReason||'Review the source and Business fit.',certification,
         features:{...learning.featuresFor(p),channel:'email',messageAngle:input.messageAngle||'unspecified',cta:input.cta||'unspecified'},
-        followupTo:input.followupTo||old?.followupTo||null,parentMessageId:previous?.messageId||old?.parentMessageId||null,
+        followupTo,inboundDigest,parentMessageId:previous?.messageId||old?.parentMessageId||null,
         parentThreadId:previous?.providerThreadId||old?.parentThreadId||null,state:'draft',editedBy:a.actorUid,editedAt:stamp()};
       tx.set(ref,draft);tx.create(sub(a.businessId,'versions',operationId),draft);return draft;
     });
@@ -219,6 +229,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
         fail('failed-precondition','The mailbox or draft changed. Review the latest message.');
       const suppressed=(await tx.get(sub(a.businessId,'suppression',hash(draft.recipient)))).data();
       if(suppressed?.active)fail('failed-precondition','Do not contact this recipient.');
+      if(draft.followupTo&&draft.inboundDigest!==await inboundContext(a,draft.followupTo,tx))
+        fail('aborted','A new reply arrived. Review the latest conversation and save your response again.');
       if(!draft.certification) {
         const latest=await prospect(a,draft.prospectId,tx);
         if(latest.recipient!==draft.recipient)fail('failed-precondition','The contact source changed. Review a new draft.');
@@ -243,7 +255,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       tx.create(ref,op);tx.update(draftRef,{state:'sending'});return {op,secret,c};
     });
     if(claim.existing)return {operationId:ref.id,state:claim.existing.state==='sending'?'needs_reconciliation':claim.existing.state,reused:true};
-    let result;
+    let result,providerAttempted=false;
     try {
       // Recheck owner/eligibility immediately before the single provider attempt.
       const fresh=await authority({auth:{uid:a.actorUid},data:{businessId:a.businessId}},'send');
@@ -252,9 +264,16 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       if(c.generation!==claim.c.generation||!contract.capabilities(c).canSend)fail('failed-precondition','The mailbox changed.');
       const restriction=(await sub(a.businessId,'suppression',hash(claim.op.recipient)).get()).data();
       if(restriction?.active)fail('failed-precondition','Do not contact this recipient.');
+      if(claim.op.followupTo&&claim.op.inboundDigest!==await inboundContext(fresh,claim.op.followupTo))
+        fail('aborted','A new reply arrived. Review it before sending.');
+      providerAttempted=true;
       result=await adapter(fresh,claim.op.provider).send({...claim.op,to:claim.op.recipient,...credentialAccess(fresh,c,claim.secret),policy:fresh.beta.otherMailbox});
       if(!result?.id||!result?.threadId)throw Error('provider_receipt_missing');
     } catch(_) {
+      if(!providerAttempted){
+        await require('./contact_relationship').suppressUnsent({db,ref,businessId:a.businessId,reason:'Authority or conversation changed before dispatch. Review the latest saved state.',now:stamp()});
+        return {operationId:ref.id,state:'suppressed',retryAllowed:false};
+      }
       await ref.update({state:'needs_reconciliation',lastCheckedAt:stamp()});
       return {operationId:ref.id,state:'needs_reconciliation',retryAllowed:false};
     }
@@ -303,6 +322,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
         saved.some(s=>s.exists&&(s.data().operationId!==ref.id||s.data().businessId!==a.businessId)))
         fail('failed-precondition','This conversation needs review before its reply can be recorded.');
       const newReplies=replies.filter((_,i)=>!saved[i].exists);
+      const actionable=r=>!r.classification||r.classification==='substantive';
+      const newSubstantive=newReplies.filter(actionable);
       const customerRef=op.crmCustomerId?db.doc('businessOperations/'+a.businessId+'/customers/'+op.crmCustomerId):null;
       const customer=customerRef?(await tx.get(customerRef)).data():null;
       const contactRef=db.doc('businessOperations/'+a.businessId+'/contactAuthority/'+hash(op.recipient));
@@ -317,11 +338,11 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       for(let i=0;i<replies.length;i++)if(!saved[i].exists)tx.create(sub(a.businessId,'replies',replyKey(replies[i])),{
         ...replies[i],provider:c.provider||'google',conversationId:hash([a.businessId,ref.id]),businessId:a.businessId,operationId:ref.id,prospectId:op.prospectId,certification:op.certification===true,
         ...(op.campaignId?{campaignId:op.campaignId,candidateId:op.candidateId}:{})});
-      const count=(latest.replyCount||0)+saved.filter(s=>!s.exists).length;
-      if(customer&&newReplies.length)tx.update(customerRef,{awaitingReply:false,...(['new_lead','discovered','qualified','drafted','contacted','replied'].includes(customer.stage)?{stage:'replied'}:{}),lastInboundAt:Math.max(customer.lastInboundAt||0,...newReplies.map(r=>r.receivedAt)),version:(customer.version||0)+1,updatedAtMs:stamp()});
-      for(const pending of queuedFollowups?.docs||[])if(pending.data().state==='queued'&&pending.data().followupTo)tx.update(pending.ref,{state:'suppressed',suppressionReason:'Reply received — review the conversation',lastCheckedAt:stamp()});
+      const count=(latest.replyCount||0)+newSubstantive.length;
+      if(customer&&newSubstantive.length)tx.update(customerRef,{awaitingReply:false,...(['new_lead','discovered','qualified','drafted','contacted','replied'].includes(customer.stage)?{stage:'replied'}:{}),lastInboundAt:Math.max(customer.lastInboundAt||0,...newSubstantive.map(r=>r.receivedAt)),version:(customer.version||0)+1,updatedAtMs:stamp()});
+      for(const pending of queuedFollowups?.docs||[])if(newReplies.length&&pending.data().state==='queued'&&pending.data().followupTo)tx.update(pending.ref,{state:'suppressed',suppressionReason:'Inbound message received — review before following up',lastCheckedAt:stamp()});
       if(count&&replyProspect?.businessUid===a.businessId)tx.update(prospectRef,{awaitingReply:false,...(['discovered','drafted','qualified','contacted','replied'].includes(replyProspect.lifecycleState)?{lifecycleState:'replied'}:{})});
-      if(count&&contact)tx.update(contactRef,{awaitingReply:false,lastInboundAt:Math.max(contact.lastInboundAt||0,...replies.map(r=>r.receivedAt||stamp())),genericFollowupBlocked:true});
+      if(newSubstantive.length&&contact)tx.update(contactRef,{awaitingReply:false,lastInboundAt:Math.max(contact.lastInboundAt||0,...newSubstantive.map(r=>r.receivedAt||stamp())),genericFollowupBlocked:true});
       if(optout)tx.set(restrictionRef,{businessId:a.businessId,recipient:op.recipient,active:true,reason:'unsubscribed',source:'matched_provider_reply',providerMessageId:optout.providerMessageId,updatedAt:stamp()},{merge:true});
       tx.update(ref,{replyCount:count,lastCheckedAt:stamp(),replyCheckStatus:count?'reply_received':'no_reply_yet'});
       if(count)tx.set(sub(a.businessId,'crm',op.prospectId),{businessId:a.businessId,prospectId:op.prospectId,

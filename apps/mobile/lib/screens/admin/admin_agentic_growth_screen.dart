@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/agentic_growth_service.dart';
+import '../../widgets/agent_evidence_card.dart';
 
 class AdminAgenticGrowthScreen extends StatefulWidget {
   const AdminAgenticGrowthScreen({super.key, this.service});
@@ -96,15 +97,19 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
               const Card(
                 child: ListTile(
                   leading: Icon(Icons.shield_outlined),
-                  title: Text('External actions'),
-                  subtitle: Text('Provider execution routes: 0'),
-                  trailing: Chip(label: Text('Off')),
+                  title: Text('Research and observation'),
+                  subtitle: Text(
+                    'This research surface does not send messages. Business Email and Social use their own connection and owner authorization.',
+                  ),
                 ),
               ),
               _status('AI teammates', _summary!['agentCount']),
               _status('Observation runs', _summary!['runCount']),
               if (_summary!['latestRunId'] != null)
-                _status('Latest review audit ID', _summary!['latestRunId']),
+                AgentEvidenceCard(
+                  label: 'Latest review evidence',
+                  value: '${_summary!['latestRunId']}',
+                ),
               _status(
                 'Evidence state',
                 (_summary!['evidenceStates'] as List? ?? const []).join(', '),
@@ -121,6 +126,16 @@ class _AdminAgenticGrowthScreenState extends State<AdminAgenticGrowthScreen> {
   );
 
   Widget _status(String label, dynamic value) => Card(
-    child: ListTile(title: Text(label), trailing: Text('${value ?? 0}')),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label),
+          const SizedBox(height: 4),
+          Text('${value ?? 0}'),
+        ],
+      ),
+    ),
   );
 }

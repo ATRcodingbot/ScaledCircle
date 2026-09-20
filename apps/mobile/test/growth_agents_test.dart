@@ -11,8 +11,8 @@ void main() {
         MaterialApp(
           home: GrowthAgentsScreen(
             loadOverride: () async => {
-                'summary': <String, dynamic>{},
-                'preferences': {'mode': 'important'},
+              'summary': <String, dynamic>{},
+              'preferences': {'mode': 'important'},
               'researchPaused': false,
               'nextResearchAfter': 1790080000000,
               'runs': [
@@ -179,11 +179,16 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('Individual Scaler candidates: 0'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Priority: Example City → Example County'),
-        150,
-        scrollable: find.byType(Scrollable).first,
-      );
+      final priority = find.text('Priority: Example City → Example County');
+      if (priority.evaluate().isNotEmpty) {
+        await tester.ensureVisible(priority);
+      } else {
+        await tester.scrollUntilVisible(
+          priority,
+          50,
+          scrollable: find.byType(Scrollable).first,
+        );
+      }
       expect(find.text('Discovery by service area'), findsOneWidget);
       expect(
         find.text('Priority: Example City → Example County'),

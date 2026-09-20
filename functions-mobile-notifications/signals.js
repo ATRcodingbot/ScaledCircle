@@ -4,6 +4,7 @@ const {hash,id}=require('./policy');
 // No mailbox send, payment, plan approval or business status is created here.
 function signal(kind,key,before,after){
  if(!after||after.certification===true)return null;
+ if(kind==='reply'&&after.classification&&after.classification!=='substantive')return null;
  // An authoritative autonomy decision removes the human-review signal.
  if(['social','email_draft'].includes(kind)&&after.humanReviewRequired===false)return null;
  let uid,type,link,message;

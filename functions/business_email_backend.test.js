@@ -349,6 +349,25 @@ test('follow-up requires a confirmed prior send and five-day window or actual re
   clock+=5*86400000;const f=await draft({expectedVersion:1,followupTo:d.operationId,subject:'Follow-up question'});
   assert.equal(f.parentThreadId,'google-thread');assert.equal(sends,1);await Promise.all([send(f),send(f)]);assert.equal(sends,2);
 });
+
+test('a new persisted inbound invalidates the exact reviewed follow-up without a provider attempt',async()=>{
+ const d=await draft();await send(d);clock+=5*86400000;
+ const f=await draft({expectedVersion:1,followupTo:d.operationId,subject:'Reply to current context'});
+ await db.doc('businessMailboxes/owner/replies/new_reply').set({businessId:'owner',operationId:d.operationId,providerMessageId:'incoming_new',receivedAt:clock,body:'My request has changed.'});
+ await assert.rejects(send(f),/new reply arrived/);assert.equal(sends,1);
+ assert.equal((await db.doc('businessMailboxes/owner/operations/'+f.operationId).get()).exists,false);
+});
+
+test('an automatic reply is preserved but does not advance CRM or substantive reply count',async()=>{
+ const d=await draft();await send(d);const op=(await db.doc('businessMailboxes/owner/operations/'+d.operationId).get()).data();
+ const thread=exactThread(op);const inbound=thread.messages.find(m=>m.id!==op.providerMessageId);
+ inbound.payload.headers.push({name:'Auto-Submitted',value:'auto-replied'});
+ provider.thread=async()=>thread;
+ const result=await call('reconcile',{operationId:d.operationId});assert.equal(result.replies,0);
+ const replies=await db.collection('businessMailboxes/owner/replies').get();assert.equal(replies.size,1);assert.equal(replies.docs[0].data().classification,'automated_reply');
+ assert.equal((await db.doc('businessMailboxes/owner/crm/prospect').get()).data().state,'contacted');
+ assert.equal(sends,1);
+});
 test('intentional DNC reversal preserves audit; unsubscribe/bounce cannot be casually cleared',async()=>{
   await call('suppress',{prospectId:'prospect',reason:'do_not_contact'});
   await assert.rejects(call('restoreContact',{prospectId:'prospect',reason:'New owner review'}));

@@ -81,8 +81,12 @@ async function growthActor(request) {
 }
 const growthEndpoint=(handler,operation)=>onCall({enforceAppCheck:false,maxInstances:2,timeoutSeconds:180},async request=>{
   await growthActor(request);try{
-    if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle')
-      return await internalBridge.forward({url:process.env.GROWTH_INTERNAL_BRIDGE_URL,actorUid:request.auth.uid,operation,input:request.data,auth:new GoogleAuth()});
+    if((process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT)==='scaled-circle'){
+      const result=await internalBridge.forward({url:process.env.GROWTH_INTERNAL_BRIDGE_URL,actorUid:request.auth.uid,operation,input:request.data,auth:new GoogleAuth()});
+      if(operation!=='load')return result;
+      const [profile,workspace,operations]=await Promise.all(['businessGrowthProfiles/','businessWorkspaces/','businessOperations/'].map(p=>db.doc(p+request.auth.uid).get()));
+      return require('./workspace_presentation').present(result,{profile:profile.data(),workspace:workspace.data(),operations:operations.data()});
+    }
     return await handler(request,growthService());
   }catch(e){console.error('Internal Growth operation failed',{operation,code:e.code||'unavailable',message:e.message});throw new HttpsError(e.code||'unavailable',e.code?e.message:'Research could not finish. Retry to check saved state.');}});
 exports.getGrowthDogfoodWorkspaceV1=growthEndpoint((request,service)=>service.load(),'load');

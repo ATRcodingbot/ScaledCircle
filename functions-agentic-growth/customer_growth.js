@@ -141,7 +141,8 @@ function createService({db,auth,FieldValue,Timestamp,project,readSource,dogfoodB
     projected.premium.ads.noConnectedAccount=adAccounts.every(s=>!s.exists||s.data().status==='not_connected');
     result.prospects=projected.prospects;result.premium={...projected.premium,recommendationReviews:rows(reviews)};
     if(dogfood&&!paid)result.premium.access.lead_generation='Internal dogfood Lead Generation grant';
-    return result;
+    const [workspaceSettings,operationsSettings]=await Promise.all(['businessWorkspaces/','businessOperations/'].map(p=>db.doc(p+a.businessId).get()));
+    return require('./workspace_presentation').present(result,{profile:c.profile,workspace:workspaceSettings.data(),operations:operationsSettings.data()});
   }
   async function execute(request) {
     const a=await authority(request),c=await context(a),data=request.data||{};

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/screens/admin/admin_agentic_growth_screen.dart';
 import 'package:flutter_app/screens/business/agentic_growth_screen.dart';
 import 'package:flutter_app/services/agentic_growth_service.dart';
+import 'package:flutter_app/widgets/agent_evidence_card.dart';
 
 class _FakeAgenticGateway implements AgenticGrowthGateway {
   _FakeAgenticGateway({this.fail = false, this.initialized = true});
@@ -192,13 +193,53 @@ void main() {
         tester,
         AdminAgenticGrowthScreen(service: _FakeAgenticGateway()),
       );
-      expect(find.text('External actions'), findsOneWidget);
-      expect(find.text('Provider execution routes: 0'), findsOneWidget);
-      expect(find.text('Recorded actions'), findsOneWidget);
+      expect(find.text('Research and observation'), findsOneWidget);
+      expect(find.text('Provider execution routes: 0'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Latest review evidence'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('agent_run_one'), findsNothing);
+      await tester.tap(find.text('Latest review evidence'));
+      await tester.pumpAndSettle();
       expect(find.text('agent_run_one'), findsOneWidget);
-      expect(find.text('NO_DATA'), findsOneWidget);
       expect(find.text('client secret'), findsNothing);
       expect(find.text('action hash'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'long audit evidence is collapsed and readable at narrow large text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final reference = 'agent_review_${List.filled(100, 'a').join()}';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: Scaffold(
+              body: ListView(
+                children: [
+                  AgentEvidenceCard(
+                    label: 'Latest review evidence',
+                    value: reference,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text(reference), findsNothing);
+      await tester.tap(find.text('Latest review evidence'));
+      await tester.pumpAndSettle();
+      expect(find.text(reference), findsOneWidget);
+      expect(find.text('Copy reference'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

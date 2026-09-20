@@ -3,7 +3,8 @@ import '../services/business_email_service.dart';
 import '../navigation/app_router.dart';
 
 class BusinessEmailEntry extends StatefulWidget {
-  const BusinessEmailEntry({super.key});
+  const BusinessEmailEntry({super.key, this.showUnavailable = false});
+  final bool showUnavailable;
   @override
   State<BusinessEmailEntry> createState() => _BusinessEmailEntryState();
 }
@@ -28,12 +29,16 @@ class _BusinessEmailEntryState extends State<BusinessEmailEntry> {
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>?>(
     future: _availability,
     builder: (context, snapshot) {
-      if (snapshot.data?['available'] != true) return const SizedBox.shrink();
+      if (snapshot.data?['available'] != true && !widget.showUnavailable) {
+        return const SizedBox.shrink();
+      }
       return ListTile(
         leading: const Icon(Icons.email_outlined),
         title: const Text('Business Email'),
         subtitle: Text(
-          snapshot.data?['includedWithManagedGrowth'] == true
+          snapshot.data?['available'] != true
+              ? 'Open to check your workspace access and mailbox connection'
+              : snapshot.data?['includedWithManagedGrowth'] == true
               ? 'Included with Managed Growth · Email and campaigns'
               : 'Business replies and owner-approved outreach',
         ),
