@@ -396,6 +396,7 @@ test("creative-media-core exclusively owns private Business media processing", (
     "getGeneratedServiceVisualWorkspace", "requestGeneratedServiceVisual",
     "processGeneratedServiceVisual", "approveGeneratedServiceVisual",
     "rejectGeneratedServiceVisual", "getGeneratedMediaOperations",
+    "enrollCreativeOperatingGrantV1", "researchPilotAuthorityV1",
     "updateGeneratedMediaSafetyConfiguration", "runManagedSocialVisualGenerationV1"];
   assert.deepEqual(exportsIn(creativeMediaCore).sort(), [...names].sort());
   for (const name of names) {
