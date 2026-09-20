@@ -4,7 +4,7 @@ const {test,after}=require('node:test'),assert=require('node:assert/strict'),cry
 const {initializeApp,deleteApp}=require('firebase-admin/app'),{getFirestore,Timestamp}=require('firebase-admin/firestore');
 const {createMedia,assertDeliveryAuthority}=require('../functions-social-operations/social_customer_media');
 const social=require('../functions-social-operations/social_operations'),meta=require('../functions-social-operations/social_meta_candidate');
-const app=initializeApp({projectId:'demo-scaledcircle'},'customer-media'),db=getFirestore(app);
+const app=initializeApp({projectId:'demo-customer-media-'+Date.now()},'customer-media'),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app);});
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 test('approved own media preserves a Firestore schedule, is isolated, concurrent-safe, revocable and never publishes',async()=>{

@@ -14,7 +14,7 @@ function candidates(plan,policy) {
   if(result.length>120)throw Error('managed_social_candidate_limit');
   return result;
 }
-function createCycle({db,store,preparation,editor,replenish=false,now=Date.now,leaseMillis=600000}) {
+function createCycle({db,store,preparation,editor,media,replenish=false,now=Date.now,leaseMillis=600000}) {
   return {async run(uid,{limit=2}={}) {
     if(!/^[A-Za-z0-9_-]{1,220}$/.test(uid)||!Number.isInteger(limit)||limit<1||limit>4)throw Error('managed_social_cycle_input');
     const ref=db.doc('socialManagedCycles/'+uid),token=crypto.randomUUID();
@@ -67,6 +67,11 @@ function createCycle({db,store,preparation,editor,replenish=false,now=Date.now,l
         }
         if(preview.creativeNeedsPreparation){
           const prepared=await preparation.prepare(uid,{...input,version:preview.version,action:'auto'});
+          if(prepared?.reviewCandidate&&media){
+            const current=await store.preview(uid,input);
+            await require('./social_managed_creative').authorize({db,uid,input:{...input,version:current.version},policyId:policy.id,candidate:prepared.reviewCandidate,now:now()});
+            await media.attach(uid,{...input,version:current.version,assetId:prepared.reviewCandidate.assetId,revisionId:prepared.reviewCandidate.revisionId,confirmPublicUse:true});
+          }
           if(prepared?.generationRequest){
             const request=prepared.generationRequest;
             const ref=db.doc('socialManagedGenerationRequests/'+crypto.createHash('sha256').update(uid+':'+request.requestId).digest('hex'));

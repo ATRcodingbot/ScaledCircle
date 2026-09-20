@@ -126,6 +126,13 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],planEntitled
       const [bytes]=await storage().file(source.revision.privateOriginalPath,{generation:source.revision.storageGeneration}).download();
       if(bytes.length>20*1024*1024||hash(bytes)!==source.revision.contentHash)throw Error('The image could not be verified.');
       const image=await prepareImage(bytes,undefined,input.provider);
+      if(source.revision.authorizationSource==='approved_strategy'){
+        if(!subjectCheck)throw Error('Managed creative subject verification is unavailable.');
+        const subjectQuality=await subjectCheck({uid,bytes:image.bytes,sha256:image.sha256,service:source.revision.serviceLabel});
+        if(subjectQuality?.status!=='passed'||subjectQuality.checkedSha256!==image.sha256||subjectQuality.reasons?.length!==0)
+          throw Error('Managed creative needs attention before scheduling.');
+        image.preparation={...image.preparation,subjectQuality};
+      }
       const deliveryId=hash(JSON.stringify({uid,assetId:input.assetId,revisionId:input.revisionId,sha256:image.sha256}));
       const path=`customer_social_delivery/${deliveryId}.jpg`;
       await storage().file(path).save(image.bytes,{resumable:false,contentType:'image/jpeg',preconditionOpts:{ifGenerationMatch:0}})
