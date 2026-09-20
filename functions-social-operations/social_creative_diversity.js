@@ -2,6 +2,7 @@
 // Recommendations only. Publication and asset approval retain their own authority.
 const crypto=require('node:crypto');
 const POLICY='SocialCreativeDiversityV1';
+const ideaId=r=>r.recoveryTopic?`${r.itemId}:topic:${r.recoveryTopic}`:r.itemId;
 const key=r=>`${r.itemId}:${r.provider}`;
 const millis=v=>v?.toMillis?v.toMillis():typeof v==='number'?v:Date.parse(v);
 const words=v=>new Set(String(v||'').toLowerCase().replace(/service concept image[^\n]*/g,'').match(/[a-z]{4,}/g)||[]);
@@ -29,7 +30,7 @@ function assetHistory(asset,rows){
   origin:asset.revision?.origin==='generated_service_concept'?'Service concept image':'Real Business photo'};
 }
 function recentUse(asset,row,rows){
- const uses=mediaHistory(rows).filter(r=>r.itemId!==row.itemId&&(r.media?.assetId===asset.id||r.media?.sourceSha256===asset.revision?.contentHash)&&
+ const uses=mediaHistory(rows).filter(r=>ideaId(r)!==ideaId(row)&&(r.media?.assetId===asset.id||r.media?.sourceSha256===asset.revision?.contentHash)&&
    Math.abs(millis(row.scheduledFor)-millis(r.publishedAt||r.scheduledFor))<=30*86400000);
  return {classification:uses.length?'blocked_from_automatic_reuse':'fresh',uses:uses.length,
    samePlatform:uses.some(r=>r.provider===row.provider),reason:uses.length?'This source is already used for another idea in the 30-day strategy window.':'Fresh source for this idea.'};
@@ -51,20 +52,20 @@ function planCreativeMix({uid,rows,assets,services=[],preparations=[]}){
   return !/\b(logo|icon|internal qa|test image)\b/i.test(`${a.title} ${a.revision.altText}`)&&a.purpose!=='logo';}catch{return false;}});
  const frozen=mediaHistory(rows.filter(r=>r.status)),decisions={},selected=[];
  const sorted=[...rows].sort((a,b)=>(millis(a.scheduledFor)-millis(b.scheduledFor))||a.itemId.localeCompare(b.itemId)||a.provider.localeCompare(b.provider));
- const ideas=[...new Set(sorted.map(r=>r.itemId))];
+ const ideas=[...new Set(sorted.map(ideaId))];
  const reservedGenerationIds=new Set(ideas.map(id=>{const request='social_mix_'+crypto.createHash('sha256').update(uid+':'+id+':'+POLICY).digest('hex');
    return 'visual_job_'+crypto.createHash('sha256').update(uid+'\n'+request).digest('hex').slice(0,40);}));
  for(const row of sorted){
   if(row.status)continue;
-  const ordinal=ideas.indexOf(row.itemId),relevant=services.filter(s=>topicMatch(row.copy+' '+row.goal,s));
+  const ordinal=ideas.indexOf(ideaId(row)),relevant=services.filter(s=>topicMatch(row.copy+' '+row.goal,s));
   const service=(relevant.length===1?relevant[0]:services[ordinal%Math.max(1,services.length)])||null;
   const base={policy:POLICY,historyPolicy:'SocialCreativeHistoryV2',service,objective:row.goal||row.pillar,topic:row.pillar,initialCandidateLimit:1,
    evidence:'Initial creative mix; performance has not established a preferred format.'};
-  let requestId='social_mix_'+crypto.createHash('sha256').update(uid+':'+row.itemId+':'+POLICY).digest('hex');
+  let requestId='social_mix_'+crypto.createHash('sha256').update(uid+':'+ideaId(row)+':'+POLICY).digest('hex');
   const jobId='visual_job_'+crypto.createHash('sha256').update(uid+'\n'+requestId).digest('hex').slice(0,40);
   if(intentionalText(row)){decisions[key(row)]={...base,format:'text',label:'Text-only Facebook post',
    reason:'This short question or expectation-setting post invites a clear conversation without a decorative image.'};continue;}
-  const pair=selected.find(r=>r.itemId===row.itemId&&r.provider!==row.provider&&similarity(r.copy,row.copy)>=.65);
+  const pair=selected.find(r=>ideaId(r)===ideaId(row)&&r.provider!==row.provider&&similarity(r.copy,row.copy)>=.65);
   if(pair){decisions[key(row)]={...pair.decision,reason:'The same idea uses one source concept with a separate composition for this platform.'};
    selected.push({...row,decision:decisions[key(row)]});continue;}
   const existing=preparations.find(p=>p.itemId===row.itemId&&p.provider===row.provider&&p.version===row.version);
@@ -90,7 +91,7 @@ function planCreativeMix({uid,rows,assets,services=[],preparations=[]}){
    const description=`${a.title} ${a.revision.altText} ${a.revision.serviceLabel}`;
    if(service&&!topicMatch(description,service))return null;
    const prior=[...frozen,...selected.filter(r=>r.decision.assetId).map(r=>({...r,media:{assetId:r.decision.assetId,sourceSha256:r.decision.sourceHash}}))];
-   const used=prior.filter(r=>(r.media?.assetId===a.id||r.media?.sourceSha256===a.revision.contentHash)&&r.itemId!==row.itemId&&
+   const used=prior.filter(r=>(r.media?.assetId===a.id||r.media?.sourceSha256===a.revision.contentHash)&&ideaId(r)!==ideaId(row)&&
      Math.abs(millis(row.scheduledFor)-millis(r.scheduledFor))<=30*86400000);
    if(used.length)return null;
    const topicUses=frozen.filter(r=>topicMatch(r.copy,a.revision.serviceLabel)).length;
@@ -130,7 +131,7 @@ async function readCreativeContext(db,uid){
   const job=jobRows.find(j=>j.provider===provider&&j.versionId?.startsWith(item.id+'_v'));
   const pending=preparations.find(p=>p.itemId===item.id&&p.provider===provider&&p.version===version);
   if(!job&&pending?.reviewCandidate)media={...pending.reviewCandidate,sourceSha256:pending.reviewCandidate.sourceSha256};
-  rows.push({itemId:item.id,provider,version,copy:variant.copy,mediaRequirement:variant.mediaRequirement,goal:record.goal,pillar:record.pillar,scheduledFor:record.scheduledFor,media,status:job?.status||null});
+  rows.push({itemId:item.id,recoveryTopic:record.recoveryTopic||null,provider,version,copy:variant.copy,mediaRequirement:variant.mediaRequirement,goal:record.goal,pillar:record.pillar,scheduledFor:record.scheduledFor,media,status:job?.status||null});
  }
  for(const job of jobRows){
   const v=(await db.doc('socialContentVersions/'+job.versionId).get()).data();if(v?.businessUid!==uid)throw Error('Creative history binding mismatch.');
@@ -138,7 +139,7 @@ async function readCreativeContext(db,uid){
   const media=variant.mediaRevisionId?(await db.doc(`socialMediaLibraries/${uid}/items/${variant.mediaRevisionId}`).get()).data():null;
   const itemId=job.versionId.replace(/_v\d+$/,'');
   const index=rows.findIndex(r=>r.itemId===itemId&&r.provider===job.provider&&r.version===v.version);
-  const history={itemId,provider:job.provider,version:v.version,copy:variant.copy,goal:v.goal,pillar:v.pillar,mediaRequirement:variant.mediaRequirement,
+  const history={itemId,recoveryTopic:v.recoveryTopic||null,provider:job.provider,version:v.version,copy:variant.copy,goal:v.goal,pillar:v.pillar,mediaRequirement:variant.mediaRequirement,
     media,status:job.status,scheduledFor:job.scheduledFor,publishedAt:job.publishedAt||null,historyJobId:job.historyJobId};
   if(index>=0)rows[index]=history;else rows.push(history);
  }

@@ -98,7 +98,15 @@ function createCycle({db,store,preparation,editor,media,replenish=false,now=Date
               ...(generationState==='needs_attention'?{reasons:[{code:'generation',message:'Creative generation needs attention. Review the saved draft.'}]}:{})});continue;
           }
         }
-        if(editor){const current=await store.preview(uid,input);await editor.assess(uid,{...input,version:current.version});}
+        if(editor){
+          const current=await store.preview(uid,input);
+          const assessment=await editor.assess(uid,{...input,version:current.version});
+          const contentRecovery=require('./social_managed_content_recovery');
+          if(contentRecovery.repeated(assessment)){
+            const replacement=await contentRecovery.recover({db,uid,input:{...input,version:current.version},policyId:policy.id,now:now()});
+            results.push({...input,...replacement});continue;
+          }
+        }
         const result=await store.scheduleManaged(uid,input,policy.id);
         const state={...input,...result,status:result.status==='blocked'?'needs_attention':result.status};
         await db.doc(`socialManagedCycles/${uid}/posts/${input.itemId}_${input.provider}`).set({...state,at:now()});

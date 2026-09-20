@@ -38,6 +38,7 @@ function choose({uid,policy,plan,profile,scope,connections,items,versions,jobs,n
     for(const idea of prepared.record.items){
       const variants=idea.variants.filter(v=>slots.some(s=>s.provider===v.provider)&&
         !duplicate(v.copy,versions.flatMap(x=>(x.variants||[]).filter(y=>y.provider===v.provider).map(y=>y.copy)))&&
+        !social.repetitionAssessment({variant:v,recentVariants:versions.flatMap(x=>(x.variants||[]).filter(y=>y.provider===v.provider))}).repeated&&
         !bounded.internalCopy.test(v.copy)&&!bounded.unsupportedClaim.test(v.copy)&&
         normalize([idea.goal,idea.pillar,v.copy].join(' ')).includes(service)&&
         policy.destinations.includes(v.destinationUrl));
