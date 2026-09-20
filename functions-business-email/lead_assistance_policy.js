@@ -57,7 +57,7 @@ function classifyInbound({headers={},from,subject='',body=''}){
  const h=Object.fromEntries(Object.entries(headers).map(([k,v])=>[k.toLowerCase(),String(v).toLowerCase()]));
  if(h['content-type']?.includes('delivery-status')||/mailer-daemon|postmaster/i.test(from||'')||/^(undeliverable|delivery status notification)/i.test(subject))return 'bounce';
  if(h['list-id']||h['list-unsubscribe']||h.precedence==='bulk'||h.precedence==='list')return 'newsletter';
- if(h['x-scaledcircle-notification']==='true')return 'platform_notification';
+ if(h['x-scaled-circle-notification']||h['x-scaledcircle-notification'])return 'platform_notification';
  if((h['auto-submitted']&&h['auto-submitted']!=='no')||h['x-autoreply']||h['x-autorespond']||/^(automatic reply|out of office|auto.?reply)\b/i.test(subject))return 'automated_reply';
  if(/^\s*(please\s+)?(unsubscribe|remove me|do not (email|contact)|stop (emailing|contacting))/i.test(body))return 'opt_out';
  return 'substantive';

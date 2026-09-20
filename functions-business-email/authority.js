@@ -17,7 +17,7 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
       who.email===config.mailbox&&Number.isSafeInteger(invitation.expiresAt)&&invitation.expiresAt>Date.now()&&
       !!invitation.purpose&&!!invitation.grantedAt&&!!invitation.grantedBy);
     const invited=!!config.mailbox&&config.ownerUid===businessId&&invitationValid;
-    const readOnly=['load','loadCampaigns'].includes(operation);
+    const readOnly=['load','loadCampaigns','loadAssistance'].includes(operation);
     const connectionAction=['connect','connectOther','callback','disconnect','checkConnection','preferences'].includes(operation);
     if(config.kind==='internal') {
       config.canManageConnection=true;
@@ -56,7 +56,8 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
     // The existing internal Admin namespace has no customer Business identity.
     // Normal customer workspaces retain their maintained legal-consent gate.
     if(config.kind!=='internal')await consent.requireCurrent({uid,agreementTypes:['terms','privacy']});
-    if(operation!=='load'&&operation!=='disconnect'&&!configured) {
+    if(['manageAssistance'].includes(operation)&&!config.canManageConnection)deny('The Business owner must manage email assistance.');
+    if(operation!=='load'&&operation!=='loadAssistance'&&operation!=='disconnect'&&!configured) {
       const e=Error('Business Email setup is pending. Existing account emails continue normally.');e.code='failed-precondition';throw e;
     }
     return {businessId,actorUid:uid,actorEmail:who.email,beta:{...config,configured,sendEnabled:config.sendEnabled===true,

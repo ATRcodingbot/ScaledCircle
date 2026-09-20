@@ -86,6 +86,13 @@ test('wrong sender, recipient, thread, earlier date and reference never count as
  ]){const c=conversation();corrupt(c);assert.equal(gmail.replyMessages(c.thread,c.op).length,0);}
 });
 
+test('Gmail preserves the actual transactional notification marker for classification',()=>{
+ const {thread,op,reply}=conversation();
+ reply.payload.headers.push({name:'X-Scaled-Circle-Notification',value:'owner-reply-alert-123'});
+ const messages=gmail.replyMessages(thread,op);
+ assert.equal(messages.length,1);assert.equal(messages[0].classification,'platform_notification');
+});
+
 test('provider response size is bounded while streaming',async()=>{
  const p=gmail.createProvider({clientId:'client',clientSecret:'secret',redirectUri:'https://example.test',fetchImpl:async()=>new Response('x'.repeat(2_000_001))});
  await assert.rejects(p.thread('secret','thread'),/too large/);

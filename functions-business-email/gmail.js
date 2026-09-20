@@ -134,7 +134,7 @@ function replyMessages(thread,operation) {
     repliesTo(m))
     .map(m=>({providerMessageId:m.id,receivedAt:Number(m.internalDate),body:textBody(m.payload).slice(0,8000),
       classification:require('./lead_assistance_policy').classifyInbound({from:header(m,'from'),subject:header(m,'subject'),body:textBody(m.payload),
-        headers:Object.fromEntries((m.payload?.headers||[]).filter(h=>['auto-submitted','x-autoreply','x-autorespond','list-id','list-unsubscribe','precedence','content-type','x-scaledcircle-notification'].includes(h.name.toLowerCase())).map(h=>[h.name,h.value]))}),
+        headers:Object.fromEntries((m.payload?.headers||[]).filter(h=>['auto-submitted','x-autoreply','x-autorespond','list-id','list-unsubscribe','precedence','content-type','x-scaledcircle-notification','x-scaled-circle-notification'].includes(h.name.toLowerCase())).map(h=>[h.name,h.value]))}),
       subject:header(m,'subject').slice(0,250),from:operation.recipient,to:operation.from,
       providerThreadId:operation.providerThreadId,inReplyTo:reference,state:'replied'}));
   return [...new Map(matches.map(m=>[m.providerMessageId,m])).values()];

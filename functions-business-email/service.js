@@ -14,6 +14,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   const sub=(b,c,i)=>root(b).collection(c).doc(id(i));
   const stamp=()=>now();
   const binding=(a)=>'BusinessMailboxV1/'+a.businessId;
+  const assistance=require('./lead_assistance_authority').createAssistanceAuthority({db,now});
   async function inboundContext(a,operationId,tx=null){
     const query=root(a.businessId).collection('replies').where('operationId','==',operationId).limit(101);
     const result=await(tx?tx.get(query):query.get());
@@ -369,6 +370,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   async function execute(request) {
     const data=request.data||{};strict(data,['businessId','operation','input']);const op=data.operation||'load',input=data.input||{};
     const a=await authority(request,op);
+    if(op==='loadAssistance')return assistance.load(a);
+    if(op==='manageAssistance')return assistance.mutate(a,input);
     if(op==='loadCampaigns'){
       const loaded=await campaigns.load(a);
       return {...loaded,sendingEnabled:a.beta.campaignSendEnabled===true,
