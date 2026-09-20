@@ -21,24 +21,28 @@ class _SocialAutomaticPublishingCardState
     extends State<SocialAutomaticPublishingCard> {
   bool _busy = false;
   String? _error;
-  int _cadence = 2;
+  int _cadence = 5;
+  bool _adaptive = false;
   @override
   void initState() {
     super.initState();
+    _adaptive = widget.policy?['cadence']?['mode'] == 'adaptive';
     final saved = widget.policy?['maxPerWeek'];
-    if (saved is int && saved >= 1 && saved <= 7) _cadence = saved;
+    if (saved is int && saved >= 1) _cadence = saved;
   }
+
   Future<void> _change(String action) async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      if (action == 'enable') {
+      if (action == 'enable' || action == 'cadence') {
         final scope = await widget.invoke({
           'action': 'preview',
           'planId': widget.planId,
           'maxPerWeek': _cadence,
+          'cadenceSettings': {'mode': _adaptive ? 'adaptive' : 'fixed'},
         });
         if (!mounted) return;
         final confirmed = await showDialog<bool>(
@@ -52,8 +56,9 @@ class _SocialAutomaticPublishingCardState
                 children: [
                   Text('${scope['businessName']}'),
                   Text('Channels: ${(scope['providers'] as List).join(', ')}'),
+                  Text('Publishing timezone: ${scope['timeZone']}'),
                   Text(
-                    'Up to ${scope['maxPerWeek']} posts per week per channel',
+                    'Starting target: ${scope['maxPerWeek']} posts/week per channel. ${_adaptive ? 'Performance-driven cadence; changes require comparable evidence and remain subject to quality, cost and provider safeguards.' : 'Fixed cadence.'}',
                   ),
                   Text('Voice: ${scope['voice']}'),
                   Text('Services: ${(scope['services'] as List).join(', ')}'),
@@ -84,9 +89,10 @@ class _SocialAutomaticPublishingCardState
         );
         if (confirmed != true) return;
         await widget.invoke({
-          'action': 'enable',
+          'action': action,
           'planId': widget.planId,
           'maxPerWeek': _cadence,
+          'cadenceSettings': {'mode': _adaptive ? 'adaptive' : 'fixed'},
           'reviewDigest': scope['reviewDigest'],
           'confirmAutomaticPublishing': true,
         });
@@ -105,6 +111,13 @@ class _SocialAutomaticPublishingCardState
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  String _date(dynamic value) => value is num
+      ? DateTime.fromMillisecondsSinceEpoch(
+          value.toInt(),
+          isUtc: true,
+        ).toIso8601String()
+      : 'Not evaluated';
 
   @override
   Widget build(BuildContext context) {
@@ -135,20 +148,42 @@ class _SocialAutomaticPublishingCardState
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             if (widget.planId != null) ...[
-              DropdownButton<int>(
-                value: _cadence,
-                isExpanded: true,
-                items: List.generate(
-                  7,
-                  (i) => DropdownMenuItem(
-                    value: i + 1,
-                    child: Text('Up to ${i + 1} posts/week per channel'),
-                  ),
+              TextFormField(
+                initialValue: _cadence.toString(),
+                decoration: const InputDecoration(
+                  labelText: 'Starting posts/week per channel',
                 ),
+                keyboardType: TextInputType.number,
+                enabled: !_busy,
+                onChanged: (value) {
+                  final parsed = int.tryParse(value);
+                  if (parsed != null && parsed > 0) _cadence = parsed;
+                },
+              ),
+              SwitchListTile(
+                title: const Text('Adapt cadence from measured results'),
+                subtitle: const Text(
+                  'Frequency can increase or decrease from comparable results. No extra generation allowance or spending is authorized.',
+                ),
+                value: _adaptive,
                 onChanged: _busy
                     ? null
-                    : (value) => setState(() => _cadence = value!),
+                    : (value) => setState(() {
+                        _adaptive = value;
+                      }),
               ),
+              const Text(
+                'Scheduling preserves at least six hours between posts on each platform. Creative allowance, quality and provider limits may reduce available slots.',
+              ),
+              if (widget.policy?['cadence'] is Map)
+                for (final entry
+                    in ((widget.policy!['cadence'] as Map)['platforms']
+                                as Map? ??
+                            {})
+                        .entries)
+                  Text(
+                    '${entry.key}: ${entry.value['currentPerWeek']} posts/week · ${(widget.policy!['cadence'] as Map)['mode']}\n${entry.value['reason']}\nLast evaluation: ${entry.value['lastEvaluatedLabel'] ?? _date(entry.value['lastEvaluatedAt'])} · Next: ${entry.value['nextEvaluationLabel'] ?? _date(entry.value['nextEvaluationAt'])}',
+                  ),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -173,7 +208,9 @@ class _SocialAutomaticPublishingCardState
                   ),
                   if (widget.policy != null)
                     TextButton(
-                      onPressed: _busy ? null : () => _change('enable'),
+                      onPressed: _busy
+                          ? null
+                          : () => _change(current ? 'cadence' : 'enable'),
                       child: const Text('Change publishing preferences'),
                     ),
                 ],

@@ -22,11 +22,12 @@ function validPolicy(policy, uid, now) {
     Number.isFinite(policy.startsAt) && Number.isFinite(policy.endsAt) &&
     policy.startsAt <= now && policy.endsAt > now &&
     policy.endsAt > policy.startsAt && policy.endsAt - policy.startsAt <= 31 * 86400000 &&
-    Number.isInteger(policy.maxPerWeek) && policy.maxPerWeek >= 1 && policy.maxPerWeek <= 7 &&
+    Number.isSafeInteger(policy.maxPerWeek) && policy.maxPerWeek >= 1 &&
     Array.isArray(policy.services) && policy.services.length > 0 &&
     policy.services.every(s => typeof s === 'string' && s.trim()) &&
     Array.isArray(policy.providers) && policy.providers.length > 0 &&
     policy.providers.every(p => PROVIDERS.includes(p)) &&
+    require('./social_cadence_policy').valid(policy.cadence,policy.providers) &&
     Array.isArray(policy.destinations) && policy.destinations.length > 0 &&
     typeof policy.id === 'string' && policy.id.startsWith('managed_social_');
 }
@@ -34,7 +35,7 @@ function strategyDigest(plan) {
   return hash({businessUid: plan.businessUid, planVersion: plan.planVersion, strategy: plan.strategy});
 }
 function createPolicy({uid, actorUid, planId, plan, services, destinations, providers,
-  maxPerWeek = 2, startsAt, endsAt, now = Date.now()}) {
+  maxPerWeek = 5, startsAt, endsAt, now = Date.now()}) {
   if (!uid || actorUid !== uid || plan?.businessUid !== uid || !planId ||
       plan.status !== 'approved' || plan.approvedVersion !== plan.planVersion) {
     throw Error('Approve the current Business strategy before enabling managed publishing.');
@@ -42,7 +43,7 @@ function createPolicy({uid, actorUid, planId, plan, services, destinations, prov
   const scope = list(services), channels = list(providers);
   if (!scope.length || scope.length > 30 || scope.some(s => s.length > 120) ||
       !channels.length || channels.some(p => !PROVIDERS.includes(p)) ||
-      !Number.isInteger(maxPerWeek) || maxPerWeek < 1 || maxPerWeek > 7) {
+      !Number.isSafeInteger(maxPerWeek) || maxPerWeek < 1) {
     throw Error('Choose the services, supported channels and bounded weekly cadence.');
   }
   // URL paths and query values are case-sensitive; never normalize them as labels.
@@ -94,7 +95,8 @@ function assess({uid, policy, planId, plan, version, provider, quality,
   const week = Math.floor((scheduled - policy.startsAt) / (7 * 86400000));
   const scheduledHistory = history.filter(job => job.businessUid === uid && job.provider === provider &&
     job.status !== 'canceled' && Math.floor((millis(job.scheduledFor) - policy.startsAt) / (7 * 86400000)) === week);
-  if (scheduledHistory.length >= policy.maxPerWeek) add('cadence', 'The approved weekly cadence is already scheduled.');
+  if (scheduledHistory.length >= require('./social_cadence_policy').current(policy,provider)) add('cadence', 'The approved weekly cadence is already scheduled.');
+  if(policy.cadence&&history.some(job=>job.businessUid===uid&&job.provider===provider&&job.status!=='canceled'&&Math.abs(millis(job.scheduledFor)-scheduled)<Math.max(6*3600000,604800000/require('./social_cadence_policy').current(policy,provider)*0.8)))add('cadence_spacing','Spread posts across the week; this time is too close to another post.');
   if (history.some(job => job.businessUid === uid && job.provider === provider && job.status !== 'canceled' &&
       job.binding?.variants?.some(v => normalized(v.copy) === normalized(copy)))) add('duplicate', 'This caption is already in the publication history or upcoming queue.');
   return {ready: reasons.length === 0, reasons, policyId: policy.id};
@@ -109,14 +111,16 @@ function assertRuntimePolicy({uid,policy,approval,plan,now=Date.now()}) {
   }
 }
 function nextSlot({policy,history,provider,now=Date.now(),preferred}) {
+  const target=require('./social_cadence_policy').current(policy,provider);
+  const gap=policy.cadence?Math.max(6*3600000,604800000/target*0.8):6*3600000;
   const jobs=history.filter(j=>j.businessUid===policy.businessUid&&j.provider===provider&&j.status!=='canceled');
   const fits=t=>Number.isFinite(t)&&t>=now+3600000&&t>=policy.startsAt&&t<policy.endsAt&&
-    jobs.filter(j=>Math.floor((millis(j.scheduledFor)-policy.startsAt)/604800000)===Math.floor((t-policy.startsAt)/604800000)).length<policy.maxPerWeek&&
-    jobs.every(j=>Math.abs(millis(j.scheduledFor)-t)>=6*3600000);
+    jobs.filter(j=>Math.floor((millis(j.scheduledFor)-policy.startsAt)/604800000)===Math.floor((t-policy.startsAt)/604800000)).length<target&&
+    jobs.every(j=>Math.abs(millis(j.scheduledFor)-t)>=gap);
   const proposed=millis(preferred);
-  if(fits(proposed))return new Date(proposed).toISOString();
-  const spacing=604800000/policy.maxPerWeek;
-  for(let t=policy.startsAt+3600000;t<policy.endsAt;t+=spacing)if(fits(t))return new Date(t).toISOString();
+  if(!policy.cadence&&fits(proposed))return new Date(proposed).toISOString();
+  const spacing=policy.cadence||target>7?3600000:604800000/target;
+  for(let t=policy.cadence?Math.max(policy.startsAt,Math.ceil(now/3600000)*3600000)+3600000:policy.startsAt+3600000;t<policy.endsAt;t+=spacing)if(fits(t))return new Date(t).toISOString();
   return null;
 }
 module.exports = {POLICY, createPolicy, assess, assertRuntimePolicy, strategyDigest, internalCopy, unsupportedClaim,nextSlot};

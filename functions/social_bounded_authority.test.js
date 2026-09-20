@@ -8,7 +8,7 @@ function fixture() {
   const plan = {businessUid: uid, status: 'approved', planVersion: 3, approvedVersion: 3,
     strategy: {services: ['decks'], cadence: 2}};
   const policy = bounded.createPolicy({uid, actorUid: uid, planId: 'plan', plan,
-    services: ['decks'], destinations: ['https://example.com/decks'], providers: ['facebook'],
+    maxPerWeek:2, services: ['decks'], destinations: ['https://example.com/decks'], providers: ['facebook'],
     startsAt: now, endsAt: now + 30 * 86400000, now});
   const version = {businessUid: uid, contentHash: 'exact-content', goal: 'More decks',
     scheduledFor: new Date(now + 86400000).toISOString(), variants: [{provider: 'facebook',

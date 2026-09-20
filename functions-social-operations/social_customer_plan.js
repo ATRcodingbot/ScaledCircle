@@ -29,7 +29,7 @@ function prepare({uid, planId, profile, scope, connections, now = Date.now()}) {
       responseAssetRequirement:'Measure real provider reach and engagement after approved publication; record attributed inquiry only when response evidence exists.'}))}));
   const plan=social.createContentPlan({businessUid:uid,planId,businessName:name,goal:'Build local service understanding and qualified estimate inquiries over 30 days.',
     pillars:topics.map(t=>t[0]),items,startsOn:start.toISOString(),automationMode:'manual',now});
-  plan.record.strategy={version:VERSION,approvalMode:'approval_required',cadence:'Two proposed posts per week on each connected account.',
+  plan.record.strategy={version:VERSION,approvalMode:'approval_required',cadence:'Proposed starting target: five posts per week per authorized platform. Approved preferences and fresh, quality content control actual scheduling.',
     creativeMix:{policy:'SocialCreativeDiversityV1',planningBasis:'Choose the format for each objective. Prefer relevant real Business photos; rotate approved visuals; prepare a new concept when recent assets repeat. Use text-first Facebook variations for questions and simple updates. Instagram keeps a visual.',
       generationBudget:'One initial candidate per idea. Share a source across platforms only for the same idea, with separate platform compositions.',
       learning:'Hold format frequency changes until compatible publication evidence supports a recommendation.'},

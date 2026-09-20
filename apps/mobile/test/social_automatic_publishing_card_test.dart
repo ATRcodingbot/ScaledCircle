@@ -28,7 +28,8 @@ void main() {
                       'services': ['Decks'],
                       'voice': 'Helpful',
                       'destinations': ['https://example.com'],
-                      'maxPerWeek': 2,
+                      'maxPerWeek': input['maxPerWeek'],
+                      'timeZone': 'America/New_York',
                       'endsAt': 1900000000000,
                       'reviewDigest': 'exact',
                     };
@@ -40,11 +41,15 @@ void main() {
           ),
         ),
       );
+      expect(tester.widget<TextFormField>(find.byType(TextFormField)).initialValue, '5');
+      await tester.enterText(find.byType(TextFormField), '14');
       await tester.ensureVisible(find.text('Review & Authorize Strategy'));
       await tester.tap(find.text('Review & Authorize Strategy'));
       await tester.pumpAndSettle();
       expect(calls.length, 1);
       expect(calls.single['action'], 'preview');
+      expect(calls.single['maxPerWeek'], 14);
+      expect((calls.single['cadenceSettings'] as Map)['mode'], 'fixed');
       expect(
         find.textContaining('you do not need', findRichText: true),
         findsNothing,

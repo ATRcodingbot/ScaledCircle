@@ -59,7 +59,7 @@ class CustomerSocialPlanCard extends StatelessWidget {
                     key == 'cadence' &&
                             strategy['version'] ==
                                 'CustomerSocialDraftStrategyV1'
-                        ? 'Starting cadence: 2 shared content ideas per week, each adapted for the connected platforms. That is 2 posts per week per platform. Recommendations will change only as real performance evidence accumulates.'
+                        ? 'Proposed starting cadence: 5 posts per week per platform. Your approved publishing preferences determine the current target. Adaptive changes require owner authorization and sufficient measured results.'
                         : socialEvidenceText(strategy[key], ''),
                   ),
                 ),

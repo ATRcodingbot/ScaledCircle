@@ -9,7 +9,7 @@ test('owner explicitly authorizes exact scope; stale review and other tenant fai
  const write=(p,d)=>db.doc(p).set(d);
  await Promise.all([write('socialContentPlans/'+planId,{...f.plan,businessUid:uid,strategy:{services:['Decks']},
   items:[{itemKey:'one',variants:[{provider:'facebook',destinationUrl:'https://example.com/Decks'}]}]}),
-  write('businessGrowthProfiles/'+uid,{businessUid:uid,businessName:'Test Business'}),write('businessSubscriptions/'+uid,f.entitlement),
+  write('businessGrowthProfiles/'+uid,{businessUid:uid,businessName:'Test Business',timeZone:'America/New_York'}),write('businessSubscriptions/'+uid,f.entitlement),
   write('socialProviderConfigs/production_meta',f.config),write('agentHealth/'+uid,f.health),
   write(`socialConnections/${uid}/providers/facebook`,{...f.connection,businessUid:uid})]);
  const service=require('../functions-social-operations/social_managed_settings').createSettings({db,environment:'production',now:()=>f.now});
@@ -24,6 +24,20 @@ test('owner explicitly authorizes exact scope; stale review and other tenant fai
  assert.equal((await service.change(uid,uid,{action:'pause'})).status,'paused');
  assert.equal((await service.change(uid,uid,{action:'resume'})).status,'active');
  const audits=await db.collection('socialManagedPolicyAudit').where('businessUid','==',uid).get();assert.equal(audits.size,3);
+ const old=(await db.doc('socialManagedPolicies/'+uid).get()).data();
+ const cadenceScope=await service.preview(uid,{planId,maxPerWeek:5,cadenceSettings:{mode:'adaptive'}});
+ const change={action:'cadence',planId,maxPerWeek:5,cadenceSettings:{mode:'adaptive'},reviewDigest:cadenceScope.reviewDigest,confirmAutomaticPublishing:true};
+ await service.change(uid,uid,change);
+ assert.equal((await service.change(uid,uid,change)).reused,true);
+ const updated=(await db.doc('socialManagedPolicies/'+uid).get()).data();
+ assert.equal(updated.id,old.id);assert.equal(updated.startsAt,old.startsAt);assert.equal(updated.endsAt,old.endsAt);
+ assert.equal(updated.cadence.platforms.facebook.currentPerWeek,5);assert.equal(updated.cadence.mode,'adaptive');
+ assert.equal(updated.cadence.maxPerWeek,undefined);
+ const evaluation=await require('../functions-social-operations/social_cadence_policy').run({db,uid,now:f.now+8*86400000});
+ assert.equal(evaluation.status,'evaluated');
+ assert.equal((await db.doc('socialManagedPolicies/'+uid).get()).data().cadence.platforms.facebook.decision,'HOLD');
+ assert.equal((await require('../functions-social-operations/social_cadence_policy').run({db,uid,now:f.now+8*86400000})).status,'not_due');
+
  await db.doc('socialContentPlans/'+planId).update({'strategy.services':['Roofs']});
  await assert.rejects(service.change(uid,uid,{action:'resume'}));
 });

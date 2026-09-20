@@ -285,6 +285,12 @@ exports.getSocialOperationsWorkspace = onCall(
     const customerPlans=await require('./social_customer_post_projection').load({db,uid:business.uid,
       plans:plans.docs.map(doc=>({id:doc.id,...doc.data()})),store:customerSchedulingStore()});
     const automaticPublishing=(await db.doc('socialManagedPolicies/'+business.uid).get()).data()||null;
+    if(automaticPublishing?.cadence){
+      for(const state of Object.values(automaticPublishing.cadence.platforms||{})){
+        state.lastEvaluatedLabel=require('./social_lifecycle_presentation').timeLabel(state.lastEvaluatedAt,automaticPublishing.cadence.timeZone);
+        state.nextEvaluationLabel=require('./social_lifecycle_presentation').timeLabel(state.nextEvaluationAt,automaticPublishing.cadence.timeZone);
+      }
+    }
     const workspaceTimeZone=profileSnapshot.data()?.timeZone||profileSnapshot.data()?.timezone||customerPlans.find(p=>p.timeZone)?.timeZone||null;
     const cadenceObservations=await db.collection('socialMetaMeasurementSnapshots').where('businessUid','==',business.uid).limit(100).get();
     const cadenceJobs=await db.collection('socialMetaMeasurementJobs').where('businessUid','==',business.uid).limit(100).get();
@@ -296,7 +302,12 @@ exports.getSocialOperationsWorkspace = onCall(
         const variant=valid?q.variantAssessments?.find(v=>v.provider===row.provider):null;
         return {...row,hoursAfterPublication:cadenceJobMap.get(doc.id)?.hoursAfterPublication,
           qualityReady:valid&&q.readyToPublish===true,fatigueObserved:variant?.repetition?.repeated};});
-    const cadenceLearning=['facebook','instagram'].map(provider=>cadence.recommend({uid:business.uid,provider,observations:learningObservations}));
+    const cadenceLearning=['facebook','instagram'].map(provider=>{
+      const evaluated=automaticPublishing?.cadence?.platforms?.[provider];
+      return evaluated?{provider,...evaluated,automaticAdjustmentEnabled:automaticPublishing.cadence.mode==='adaptive',
+        adjustmentPolicy:'performance_evidence'}:
+        cadence.recommend({uid:business.uid,provider,observations:learningObservations});
+    });
     const formatLearning=require('./social_format_learning');
     const creativeLearning=formatLearning.recommend({uid:business.uid,
       observations:await formatLearning.enrich(db,business.uid,learningObservations)});
@@ -3615,6 +3626,7 @@ exports.runManagedSocialPreparationV1=onSchedule({schedule:'every 15 minutes',ti
         const preparation=require('./social_customer_preparation').createPreparation({db,editor,media:customerMediaStore()});
         const owner=await require('firebase-admin/auth').getAuth().getUser(doc.id);
         if(owner.disabled||!owner.emailVerified)throw Error('managed_social_owner_unavailable');
+        await require('./social_cadence_policy').run({db,uid:doc.id});
         const cycle=require('./social_managed_cycle').createCycle({db,store:customerSchedulingStore(),preparation,editor,media:customerMediaStore(),replenish:true});
         const result=await cycle.run(doc.id,{limit:1});
         require('firebase-functions/logger').info('managed_social_preparation',{businessUid:doc.id,status:result.status,results:result.results});
