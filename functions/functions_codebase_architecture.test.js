@@ -405,7 +405,7 @@ test("creative-media-core exclusively owns private Business media processing", (
     assert.doesNotMatch(landingPageCore, new RegExp(`exports\\.${name}\\s*=`));
   }
   assert.deepEqual(Object.keys(creativeMediaPackage.dependencies).sort(), [
-    "firebase-admin", "firebase-functions", "openai", "sharp",
+    "firebase-admin", "firebase-functions", "google-auth-library", "openai", "sharp",
   ]);
   for (const forbidden of ["defineSecret", "OPENAI_IMAGE_PROVIDER_API_KEY", "SMTP_PASSWORD", "STRIPE_",
     "landingPages", "responseAssets", "generativelanguage.googleapis.com",
