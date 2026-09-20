@@ -20,12 +20,30 @@ Evidence (local fixtures, no production messages or model calls):
 
 ## Deployment / activation disposition
 
-At document creation: changes source-tested; not yet deployed. No owner policy, shared grant, model-data review, pilot activation or model inference has been created in production during this work. Preparation action is available to the exact authenticated internal Admin and explicitly says it does not authorize owners or start the clock.
+Production deployment completed September 20, 2026. Server source: `8607f91cb449861b01308935947b40c00623e53a`. Web source including readable setup prerequisites: `e422d9f2d8bbe886a4abfc65a3d5766c5f53c77b`. Production web build, focused UI tests and analysis passed. Hosting released and owner setup/public privacy disclosure were inspected in the real production UI.
 
-Google amendment is authorized but unsent: searches in support@scaledcircle.com and attractiveremodel@gmail.com did not locate the existing verification email thread. Founder has been asked to open the actual thread; no recipient guessed and no new email thread created. Existing verification remains under review and CASA open. Sending the amendment alone is not provider approval or activation authority. See email-pilot-data-review-20260920.md for the actual data-handling assessment.
+Readback at 2026-09-20T20:14:14.607Z found exactly the nine intended Functions changed, all ACTIVE. No unrelated Function metadata updates; Firestore ruleset unchanged. Both existing mailboxes remain connected with identical connection generations and Read/Send permissions.
+
+The authenticated support owner/Admin prepared `founder_email_assistance_20260920` through the maintained UI/server action at 2026-09-20T20:10:19.307Z. Exact two workspace grants are prepared; USD 1 total / 100 requests / seven-day term, no renewal or top-up. Start and expiry remain null. Usage absent, both owner policies absent, model-data review absent: NO activation, NO model processing or sending authorized by this preparation.
+
+Google amendment remains PREPARED/UNSENT. Production Branding confirms developer contact support@scaledcircle.com and user support attractiveremodel@gmail.com; the latter is the human project Owner. Both contact mailboxes searched including Spam/Trash; no genuine review thread located. Existing Google review thread not located; amendment pending verified communication channel. No unspecified mailbox access request remains. Detailed Verification progress now shows a logo identity issue despite the main verified-branding banner; preserved without changes. CASA and applicable provider/data-use requirements remain open. See google-review-amendment-unsent-20260920.md.
+
+Production revisions:
+- businessEmailOperationsV1: businessemailoperationsv1-00012-ras
+- syncBusinessEmailRepliesV1: syncbusinessemailrepliesv1-00006-das
+- businessOperationsV1: businessoperationsv1-00004-duv
+- mobileNotificationsV1: mobilenotificationsv1-00005-zuy
+- queueMobileNotificationV1: queuemobilenotificationv1-00005-lug
+- deliverMobileNotificationsV1: delivermobilenotificationsv1-00005-huc
+- notifyBusinessEmailReplyV1: notifybusinessemailreplyv1-00005-xor
+- sendTransactionalEmailJob: sendtransactionalemailjob-00007-nis
+- retryTransactionalEmailJob: retrytransactionalemailjob-00004-yoq
+
+Disposition: source-tested YES; deployed-but-gated YES; owner-activated NO; live-verified NO. Existing permitted manual replies are not changed into model-processing authorization. No prospect, Google amendment, fixture email or appointment was sent/created by this implementation run.
 
 ## Controlled test prerequisites
 
-Before requesting a live test, finish gated deployment and readback, factual Google amendment/required processing assessment, each owner's explicit assistance consent, label/filter coverage, permitted controlled recipient, reviewed exact copy, availability/timezone and alerts. No screenshot prospect may be contacted. The controlled test must distinguish actual provider delivery/reply from fixture results, and actual device delivery from notification-record creation.
+Before requesting a live test, complete factual Google amendment/required processing assessment, each owner's explicit assistance consent, label/filter coverage, permitted controlled recipient, reviewed exact copy, availability/timezone and alerts. No screenshot prospect may be contacted. The controlled test must distinguish actual provider delivery/reply from fixture results, and actual device delivery from notification-record creation.
 
 Native client delta: assistance setup, conversation/suggestion review, recipient consent, Schedule linkage and privacy disclosure. Existing iOS 29 / Android 27 binaries do not contain these changes. No native rebuild in this batch.
+

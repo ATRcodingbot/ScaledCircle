@@ -24,9 +24,7 @@ Google's Workspace policy lists CRM and generative email assistance among approp
 
 This is an application-level assessment of the bounded feature against published requirements, not an assertion that Google has approved the changed implementation. The existing verification description said no external-model processing. That description must be corrected through the existing verification email thread; do not cancel/resubmit the application or claim CASA completion. The maintained `recordAssistanceDataReview` action records the actual amendment reference and implementation SHA before the pilot can activate. No external Google approval is fabricated by that record. General Gmail onboarding remains gated.
 
-Prepared amendment (not sent by this document):
-
-> ScaledCircle has added a separately opt-in Business Email CRM reply-assistance pilot. With the Business owner's affirmative in-product consent, bounded relevant message text/subject and maintained Business context are processed by OpenAI's gpt-4.1-mini API to prepare a suggested reply for explicit owner review. Mailbox credentials, attachments, unrelated inbox contents and other workspaces are excluded. Requests use store:false, no tools and no automatic retries; this is not Zero Data Retention. Training/data sharing is disabled; default abuse-monitoring retention may apply for up to 30 days subject to documented exceptions. Suggestions cannot send or book independently. Introductions/follow-ups require separately authorized recipient eligibility, suppression checks and exact approved templates. New inquiry monitoring is limited to an owner-selected automatically populated Gmail label; existing linked conversations remain monitored independently. The requested OAuth scopes and clients have not changed. Please add this processing/disclosure update to our current review and identify any additional evidence or assessment changes required. General new-customer Gmail onboarding remains restricted, and CASA is still open.
+The complete current amendment and verified contact readback are saved in [google-review-amendment-unsent-20260920.md](google-review-amendment-unsent-20260920.md). Existing Google review thread not located; amendment pending verified communication channel. The earlier draft is superseded; no amendment has been transmitted.
 
 ## Authorities
 
@@ -39,3 +37,4 @@ Prepared amendment (not sent by this document):
 ## Budget and activation
 
 The approved allowance is USD $1 total shared by the two exact production Email workspaces, 100 requests total and seven days from actual activation, with no renewal/top-up. Preparing enrollment creates no start/expiry. Both owners must independently save authorization against their own connected mailbox, complete all displayed prerequisites and current Schedule settings. Only then can the existing transaction start the shared clock. Reservation accounting includes all attempted model calls; ambiguous usage remains reserved. Social and Research budgets are not touched.
+
