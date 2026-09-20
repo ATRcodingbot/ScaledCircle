@@ -26,6 +26,8 @@ function evaluate(result,sha256,model=MODEL){
     observations:Object.fromEntries([...flags,'subjectFraction','confidence'].map(k=>[k,result[k]]))};
 }
 function createSubjectCheck({db,now=Date.now,clientFactory}){
+ const bounds=require('./generation_paid_bounds');
+ const budget=require('./generation_budget_store').createStore({db,now,resolveBusiness:e=>({eligible:require('./subscription_entitlements').hasActivePaidBusinessEntitlement(e,{nowMillis:now()}),plan:e.planId||e.plan||'',monthlyAllowance:require('./generation_foundation').planMonthlyAllowance(e.planId||e.plan)})});
  return async({uid,bytes,sha256,service})=>{
    if(hash(bytes)!==sha256||!service||service.length>80)throw Error('Image subject identity is invalid.');
    const config=(await db.doc('providerConfigurations/generated-service-visuals').get()).data();
@@ -38,7 +40,11 @@ function createSubjectCheck({db,now=Date.now,clientFactory}){
    const key=hash(JSON.stringify({uid,sha256,service,policy:POLICY,model})),ref=db.doc('socialCreativeVisualAssessments/'+key);
    const existing=(await ref.get()).data();
    if(existing){if(['passed','blocked'].includes(existing.status))return existing.result;
-     if(now()-(existing.startedAt||0)<90000)throw Error('Image review is still being confirmed. Your draft is preserved.');}
+     throw Error('Image review is still being confirmed. Your draft is preserved.');}
+   const metadata=await require('sharp')(bytes).metadata();
+   if(bytes.length>6000000||metadata.width>2048||metadata.height>2048)throw Error('Image review exceeds the bounded request size.');
+   const reservation=await budget.reserve({actor:{uid},jobId:'review_'+key,operation:'review',maximumCostMicros:bounds.REVIEW_RESERVE});
+   if(reservation.idempotentReplay)throw Error('Image review is still being confirmed. Your draft is preserved.');
    const day=new Date(now()).toISOString().slice(0,10),businessRef=db.doc('socialVisualCheckUsage/'+uid+'_'+day),globalRef=db.doc('socialVisualCheckUsage/global_'+day);
    const reserved=await db.runTransaction(async tx=>{
      const [old,b,g]=await Promise.all([tx.get(ref),tx.get(businessRef),tx.get(globalRef)]);
@@ -54,6 +60,7 @@ function createSubjectCheck({db,now=Date.now,clientFactory}){
    let stage='client';
    try{
      const properties=Object.fromEntries(flags.map(k=>[k,{type:'boolean'}]));Object.assign(properties,{subjectFraction:{type:'number'},confidence:{type:'number'}});
+     if(!await budget.claim({reservation}))throw Error('Image review is already being confirmed.');
      stage='provider';
      const response=await client.responses.create({model,store:false,max_output_tokens:1200,
        ...(model==='gpt-5.4-mini'?{reasoning:{effort:'none'}}:{}),
@@ -63,11 +70,16 @@ function createSubjectCheck({db,now=Date.now,clientFactory}){
        text:{format:{type:'json_schema',name:'service_subject_check',strict:true,schema:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}}},
        {maxRetries:0,timeout:30000});
      stage='result';
+     const actualCostMicros=bounds.reviewCost(model,response.usage);
+     if(actualCostMicros===null){await budget.reconcile({reservation,status:'unknown_provider_outcome'});throw Error('Image review cost is still being confirmed.');}
+     await budget.reconcile({reservation,status:'settled',providerAccepted:true,customerConsumed:false,cost:{actualCostMicros},usage:response.usage});
      const result=evaluate(JSON.parse(response.output_text),sha256,model);
      await ref.update({status:result.status,result,responseId:response.id||null,inputTokens:response.usage?.input_tokens||0,
        outputTokens:response.usage?.output_tokens||0,resolvedModel:response.model||model,completedAt:now()});
      return result;
    }catch(error){
+     if(stage==='provider')await budget.reconcile({reservation,status:'unknown_provider_outcome'});
+     else if(stage==='client')await budget.reconcile({reservation,status:'released',definitiveNoCharge:true});
      const label=v=>typeof v==='string'&&/^[A-Za-z0-9_.-]{1,100}$/.test(v)?v:null;
      // Diagnostic codes only: never persist provider response bodies, headers or credentials.
      const diagnostic={stage,category:label(error.category),status:Number.isInteger(error.status)?error.status:null,

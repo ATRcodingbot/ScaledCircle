@@ -74,8 +74,12 @@ async function replenish({db,uid,now=Date.now()}) {
     if(profile?.internalSocialContext){
       const [entitlement,brand,assets,config]=await Promise.all([read(db.doc('businessSubscriptions/'+uid)),read(db.doc('businessBrandProfiles/'+uid)),read(db.collection('businessMediaLibraries/'+uid+'/mediaAssets').limit(201)),read(db.doc('providerConfigurations/generated-service-visuals'))]);
       const constraints=[];
-      if(!require('./subscription_entitlements').hasActiveManagedGrowthEntitlement(entitlement.data(),{nowMillis:now}))constraints.push('No source-concept entitlement is configured for this internal workspace. A concept quota is separate from permission to spend.');
+      const grant=(await read(db.doc("visualGenerationGrants/"+uid))).data();
+      const internalGrant=require("./generation_operating_access").activeGrant(grant,policy,uid,now);
+      if(!internalGrant&&!require('./subscription_entitlements').hasActiveManagedGrowthEntitlement(entitlement.data(),{nowMillis:now}))constraints.push('No source-concept entitlement is configured for this internal workspace. A concept quota is separate from permission to spend.');
       const c=config.data();
+      if(internalGrant){const usage=(await read(db.doc("visualGenerationUsage/grant_"+uid+"_"+grant.id))).data()||{};result.operatingBudget={expiresAt:grant.expiresAt,maximumCostMicros:grant.maximumCostMicros,spentMicros:usage.actualCostMicros||0,reservedMicros:usage.outstandingCostMicros||0,maximumConcepts:grant.maximumConcepts,successfulConcepts:usage.customerConsumedUnits||0};if((usage.actualCostMicros||0)+(usage.outstandingCostMicros||0)>=grant.maximumCostMicros)constraints.push("Creative preparation budget is exhausted or reserved by pending provider outcomes.");}
+      if(c?.paidPreparationHolds?.[uid]||!internalGrant&&c?.paidPreparationAccountingVersion!=="combined_v1")constraints.push("Paid creative preparation is held while earlier provider costs are reconciled. Ready scheduled posts are unchanged.");
       if(c?.providerGenerationEnabled!==true)constraints.push('The generation provider is paused by configuration.');
       if(c?.rolloutMode==='beta_cohort'&&!c.betaCohortBusinessUids?.includes(uid)||c?.rolloutMode==='founder_only'&&!c.authorizedBusinessUids?.includes(uid))constraints.push('This workspace is not enrolled in the current generation cohort. Existing global cost ceilings do not grant workspace spending.');
       if(!brand.data()?.approvedServiceCategories?.length)constraints.push('Creative service categories are not configured in the maintained creative profile.');

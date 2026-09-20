@@ -163,27 +163,30 @@ async function generationAccessPolicy(actor) {
   }
   const business = await generationBusinessBudget(actor);
   return generationFoundation.generationAuthorizationPolicy(business.config, actor?.uid,
-  { eligible: business.eligible, plan: business.plan });
+  { eligible: business.eligible, plan: business.plan, internalGenerationGrant:business.internalGenerationGrant, generationAllowance:business.monthlyAllowance });
 }
 async function generationBusinessBudget(actor) {
-  const [config, entitlementSnapshot] = await Promise.all([generationProviderConfig(),
-  db.collection("businessSubscriptions").doc(actor.uid).get()]);
-  const entitlement = entitlementSnapshot.data() || {};
-  const plan = String(entitlement.planId || entitlement.plan || "").trim().toLowerCase();
-  return { config, entitlement, plan, eligible: subscriptionEntitlements.hasActivePaidBusinessEntitlement(entitlement),
-    monthlyAllowance: generationFoundation.planMonthlyAllowance(plan) };
+ const [config,subscription,grantSnap,policySnap]=await Promise.all([generationProviderConfig(),db.doc('businessSubscriptions/'+actor.uid).get(),db.doc('visualGenerationGrants/'+actor.uid).get(),db.doc('socialManagedPolicies/'+actor.uid).get()]);
+ const entitlement=subscription.data()||{},grant=grantSnap.data(),policy=policySnap.data();
+ const internalGenerationGrant=require('./generation_operating_access').activeGrant(grant,policy,actor.uid);
+ const plan=String(entitlement.planId||entitlement.plan||'').trim().toLowerCase();
+ return {config,entitlement,plan,grant:internalGenerationGrant?grant:null,internalGenerationGrant,
+   eligible:internalGenerationGrant||subscriptionEntitlements.hasActivePaidBusinessEntitlement(entitlement),
+   monthlyAllowance:internalGenerationGrant?grant.maximumConcepts:generationFoundation.planMonthlyAllowance(plan)};
 }
 async function generationBusinessUsageSummary(actor) {
   if (generationIsLocal) return { plan: "scale", used: 0, pending: 0, total: 30, remaining: 30,
     resetAt: generationBudget.monthlyResetAt(), limitReached: false };
-  const business = await generationBusinessBudget(actor);const keys = generationBudget.periodKeys();
+  const business = await generationBusinessBudget(actor);
+ if(business.grant){const usage=(await db.doc('visualGenerationUsage/grant_'+actor.uid+'_'+business.grant.id).get()).data()||{};const used=Number(usage.customerConsumedUnits||0),pending=Number(usage.outstandingUnits||0),spent=Number(usage.actualCostMicros||0),reserved=Number(usage.outstandingCostMicros||0);return {plan:business.plan||null,accessSource:'internal_operating_grant',used,pending,total:business.grant.maximumConcepts,remaining:Math.max(0,business.grant.maximumConcepts-used-pending),resetAt:null,expiresAt:business.grant.expiresAt,spentMicros:spent,reservedMicros:reserved,remainingCostMicros:Math.max(0,business.grant.maximumCostMicros-spent-reserved),limitReached:used+pending>=business.grant.maximumConcepts||spent+reserved>=business.grant.maximumCostMicros};}
+const keys = generationBudget.periodKeys();
   const usage = (await db.collection("visualGenerationUsage").doc(`business_${actor.uid}_${keys.month}`).get()).
   data() || {};
   const used = Math.max(0, Number(usage.customerConsumedUnits || 0));
   const pending = Math.max(0, Number(usage.outstandingUnits ?? usage.reservedUnits ?? 0));
   const total = Math.max(0, Number(business.monthlyAllowance || 0));
   const access = generationFoundation.generationAuthorizationPolicy(business.config, actor.uid,
-  { eligible: business.eligible, plan: business.plan });
+  { eligible: business.eligible, plan: business.plan, internalGenerationGrant:business.internalGenerationGrant, generationAllowance:business.monthlyAllowance });
   return { plan: business.plan || null, used, pending, total,
     remaining: Math.max(0, total - used - pending), resetAt: generationBudget.monthlyResetAt(),
     limitReached: total <= 0 || used + pending >= total, rolloutMode: access.rolloutMode,
@@ -216,7 +219,7 @@ async function generationCommercialOperations() {
       globalBudgetExhaustionCount: Number(globalMonth.globalBudgetExhaustionCount || 0) },
     period: { ...keys, resetAt: generationBudget.monthlyResetAt() } };
 }
-const generationBudgetAuthority = generationBudget.createBudgetAuthority({
+const legacyGenerationBudgetAuthority = generationBudget.createBudgetAuthority({
   readState: async ({ actor, jobId }) => {
     const business = await generationBusinessBudget(actor);const keys = generationBudget.periodKeys();
     const [reservation, businessMonth, globalDay, globalMonth] = await Promise.all([
@@ -306,6 +309,17 @@ const generationBudgetAuthority = generationBudget.createBudgetAuthority({
     });
   }
 });
+const atomicGenerationBudget = require('./generation_budget_store').createStore({db,
+  resolveBusiness: entitlement => ({eligible:subscriptionEntitlements.hasActivePaidBusinessEntitlement(entitlement),
+    plan:entitlement.planId||entitlement.plan||'', monthlyAllowance:generationFoundation.planMonthlyAllowance(entitlement.planId||entitlement.plan)})});
+const generationBudgetAuthority = {
+  reserve: input => atomicGenerationBudget.reserve({...input,maximumCostMicros:require('./generation_paid_bounds').IMAGE_RESERVE}),
+  lookup: async ({actor,jobId}) => {const r=(await db.doc('visualGenerationReservations/'+jobId).get()).data();if(r&&r.businessUid!==actor.uid)throw Error('generation_access_denied');return r;},
+  claim: input => atomicGenerationBudget.claim(input),
+  settle: input => input.reservation.usageIds ? atomicGenerationBudget.reconcile({...input,status:'settled'}) : legacyGenerationBudgetAuthority.settle(input),
+  release: input => input.reservation.usageIds ? atomicGenerationBudget.reconcile({...input,status:'released',definitiveNoCharge:true}) : legacyGenerationBudgetAuthority.release(input),
+  holdUnknown: input => input.reservation.usageIds ? atomicGenerationBudget.reconcile({...input,status:'unknown_provider_outcome'}) : legacyGenerationBudgetAuthority.holdUnknown(input)
+};
 async function reconcileGenerationAccounting(input = {}) {
   const keys = generationBudget.periodKeys();
   const requestedReleaseIds = Array.isArray(input.preProviderJobIds) ?
@@ -314,6 +328,7 @@ async function reconcileGenerationAccounting(input = {}) {
   where("keys.month", "==", keys.month).limit(501).get();
   if (currentReservations.size > 500) throw new Error("generation_reconciliation_bound_exceeded");
   const currentValues = currentReservations.docs.map((doc) => ({ jobId: doc.id, ...doc.data() }));
+  if(currentValues.some(r=>r.usageIds))throw Error("Atomic generation accounting requires per-reservation reconciliation; aggregate rebuild is blocked.");
   const legacyCandidates = currentValues.filter((reservation) => reservation.status === "settled" &&
   reservation.providerAccepted !== true && !reservation.usage && !reservation.cost).slice(0, 20);
   const legacyJobs = legacyCandidates.length === 0 ? [] : await db.getAll(...legacyCandidates.map((reservation) =>
@@ -376,6 +391,7 @@ const generationAdapter = generationIsLocal ? generationFoundation.deterministic
   fixture: generationFixture,
   environment: { projectId: generationProjectId, emulator: true, nodeEnv: "test" }
 }) : openAIImageAdapter.createOpenAIImageAdapter({
+  boundedAccounting:true,
   configProvider: generationProviderConfig,
   clientFactory: async (config) => {
     if (config.providerGenerationEnabled !== true) throw new Error("generation_disabled");
@@ -12601,3 +12617,11 @@ exports.updateGeneratedMediaSafetyConfiguration = onCall(
 // Attribution Foundation V1 extends the maintained Sales lead boundary. Public
 // response traffic can record immutable, privacy-minimized interactions but can
 // never select tenant attribution or create conversions.
+
+exports.enrollCreativeOperatingGrantV1 = onCall({region:'us-east1',enforceAppCheck:false,maxInstances:1},async request=>{
+ const context=await authenticatedUserContext(request,'Admin access is required.');
+ if(context.isAdmin!==true||context.emailVerified!==true)throw new HttpsError('permission-denied','Verified Admin access is required.');
+ const input=request.data||{};
+ if(Object.keys(input).some(k=>!['businessUid','expectedPolicyId','expiresAt','maximumCostMicros','maximumConcepts','authorizationReference'].includes(k)))throw new HttpsError('invalid-argument','Unsupported grant field.');
+ return require('./generation_operating_grant').enroll({db,...input,operator:context.uid});
+});

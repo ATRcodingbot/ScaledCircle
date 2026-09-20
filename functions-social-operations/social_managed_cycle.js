@@ -78,6 +78,8 @@ function createCycle({db,store,preparation,editor,media,replenish=false,now=Date
             const ref=db.doc('socialManagedGenerationRequests/'+crypto.createHash('sha256').update(uid+':'+request.requestId).digest('hex'));
             const generationState=await db.runTransaction(async tx=>{
               const old=await tx.get(ref);
+              const grant=(await tx.get(db.doc("visualGenerationGrants/"+uid))).data();
+              if(old.data()?.status==="needs_attention"&&!old.data().jobId&&grant?.startsAt>old.data().checkedAt&&require("./generation_operating_access").activeGrant(grant,policy,uid,now())){tx.update(ref,{status:"pending",resumedAt:now(),resumeReason:"operating_grant_activated"});return "pending";}
               if(!old.exists)tx.create(ref,{businessUid:uid,policyId:policy.id,planId:policy.planId,input:request,status:'pending',createdAt:now()});
               if(old.data()?.status==='paused'&&old.data().policyId===policy.id){
                 tx.update(ref,{status:'pending',resumedAt:now()});return 'pending';

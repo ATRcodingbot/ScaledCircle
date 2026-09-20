@@ -342,7 +342,6 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       return {jobId: ref.id, status: job.status,
         assetId: job.candidateAssetId, revisionId: job.candidateRevisionId, idempotentReplay: true};
     }
-    await gate(actor);
     if (!adapter) throw new Error("provider_unavailable");
     if (["processing", "unknown_provider_outcome", "failed", "blocked", "rejected"].includes(job.status)) {
       return {jobId: ref.id, status: job.status, idempotentReplay: true};
@@ -393,7 +392,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
           providerRequestTimestamp: result.requestTimestamp || null, providerAttemptState: "settled",
           providerUsage: result.usage || null, estimatedCostMicros: result.cost?.estimatedCostMicros ?? null,
           actualCostMicros: result.cost?.actualCostMicros ?? null,
-          moderation, customerAllowanceConsumed: !budgetAuthority, completedAt: FieldValue.serverTimestamp(),
+          moderation, customerAllowanceConsumed: true, completedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()});
       });
       usableCandidate = true;

@@ -207,7 +207,7 @@ function calculateCostMicros(usage, rates = {}) {
   return Number.isFinite(total) ? Math.round(total * 1_000_000) : null;
 }
 
-function createOpenAIImageAdapter({clientFactory, configProvider, sleep = async () => {}, maxRetries = 2}) {
+function createOpenAIImageAdapter({clientFactory, configProvider, sleep = async () => {}, maxRetries = 2, boundedAccounting = false}) {
   if (typeof clientFactory !== "function" || typeof configProvider !== "function") throw new Error("invalid_openai_adapter_config");
   return Object.freeze({id: "openai_gpt_image", mode: "external", executionMode: "synchronous",
     defaultModel: DEFAULT_MODEL, defaultModelSnapshot: DEFAULT_SNAPSHOT,
@@ -216,21 +216,23 @@ function createOpenAIImageAdapter({clientFactory, configProvider, sleep = async 
       if (config?.providerGenerationEnabled !== true) throw new ProviderAdapterError("generation_disabled");
       const client = await clientFactory(config); const model = config.model || DEFAULT_MODEL;
       const modelSnapshot = config.modelSnapshot || DEFAULT_SNAPSHOT; const requestTimestamp = Date.now();
+      const boundedRequest = boundedAccounting ? require("./generation_paid_bounds").imageRequest(config,buildPrompt(brief)) : null;
       let response; let attempt = 0;
       while (true) {
         try {
-          response = await client.images.generate({model: modelSnapshot, prompt: buildPrompt(brief), n: 1,
+          response = await client.images.generate(boundedRequest || {model: modelSnapshot, prompt: buildPrompt(brief), n: 1,
             size: config.size || DEFAULT_SIZE, quality: config.quality || DEFAULT_QUALITY,
             output_format: config.outputFormat || "webp", moderation: "auto"}, {maxRetries: 0,
             timeout: Number(config.timeoutMs || 120000), headers: {"X-Client-Request-Id": jobId}});
           break;
         } catch (raw) {
           const error = classify(raw);
-          if (error.outcome !== "safe_to_retry" || !RETRYABLE.has(error.category) || attempt >= maxRetries) throw error;
+          if (error.outcome !== "safe_to_retry" || !RETRYABLE.has(error.category) || attempt >= (boundedAccounting ? 0 : maxRetries)) throw error;
           await sleep(Math.min(4000, 250 * (2 ** attempt++)));
         }
       }
-      const usage = normalizeUsage(response.usage); const actualCostMicros = calculateCostMicros(usage, config.pricing);
+      const usage = normalizeUsage(response.usage); const actualCostMicros = boundedAccounting ? require("./generation_paid_bounds").imageCost(response.usage) : calculateCostMicros(usage, config.pricing);
+      if(boundedAccounting && actualCostMicros===null)throw new ProviderAdapterError("generation_cost_unresolved",{outcome:"unknown_provider_outcome",providerAccepted:true,providerRequestId:response?._request_id||null});
       const cost = {estimatedCostMicros: Number(config.estimatedCostMicros || 41000), actualCostMicros};
       const providerRequestId = response?._request_id || null;
       const acceptedError = (category) => new ProviderAdapterError(category, {providerAccepted: true,
@@ -240,8 +242,8 @@ function createOpenAIImageAdapter({clientFactory, configProvider, sleep = async 
       const binary = Buffer.from(encoded, "base64");
       if (!binary.length) throw acceptedError("invalid_output");
       if (config.secondaryModerationEnabled !== false && client.moderations?.create) {
-        const moderation = await client.moderations.create({model: "omni-moderation-latest", input: [{type: "image_url",
-          image_url: {url: `data:image/webp;base64,${encoded}`}}]}, {maxRetries: 0});
+        let moderation; try { moderation = await client.moderations.create({model: "omni-moderation-latest", input: [{type: "image_url",
+          image_url: {url: `data:image/webp;base64,${encoded}`}}]}, {maxRetries: 0}); } catch (_) { throw acceptedError("moderation_unavailable"); }
         if (moderation?.results?.some((value) => value.flagged === true)) throw acceptedError("moderation_blocked");
       }
       return {binary, moderation: {status: "passed", flags: []}, providerRequestReference: providerRequestId,

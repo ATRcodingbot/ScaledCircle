@@ -61,7 +61,7 @@ function generationAuthorizationPolicy(value, businessUid, entitlement = {}) {
   const authorizedBusinessCount = founder === null ? 0 : founder.length;
   const betaCohortCount = beta === null ? 0 : beta.length;
   const plan = clean(entitlement.plan, 40).toLowerCase();
-  const monthlyAllowance = planMonthlyAllowance(plan);
+  const monthlyAllowance = entitlement.internalGenerationGrant === true ? Number(entitlement.generationAllowance || 0) : planMonthlyAllowance(plan);
   const commerciallyEligible = entitlement.eligible === true && monthlyAllowance > 0;
   const uid = String(businessUid || "");
   const configurationValid = founder !== null && beta !== null && beta.length <= betaCohortLimit;
@@ -337,7 +337,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
         const existing = await budgetAuthority.lookup({actor, jobId: ref.id});
         if (["reserved", "unknown_provider_outcome"].includes(existing?.status)) {
           await budgetAuthority.settle({reservation: existing, usage: job.providerUsage || null,
-            cost: {actualCostMicros: Number(job.actualCostMicros || 0)}, providerAccepted: true,
+            cost: {actualCostMicros: job.actualCostMicros ?? null}, providerAccepted: true,
             customerConsumed: true});
           await ref.update({customerAllowanceConsumed: true, updatedAt: FieldValue.serverTimestamp()});
         }
@@ -345,8 +345,9 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
       return {jobId: ref.id, status: job.status,
         assetId: job.candidateAssetId, revisionId: job.candidateRevisionId, idempotentReplay: true};
     }
+    await gate(actor);
     if (!adapter) throw new Error("provider_unavailable");
-    if (["processing", "unknown_provider_outcome"].includes(job.status)) {
+    if (["processing", "unknown_provider_outcome", "failed", "blocked", "rejected"].includes(job.status)) {
       return {jobId: ref.id, status: job.status, idempotentReplay: true};
     }
     let reservation = null;
@@ -367,6 +368,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
     }
     let providerResult = null; let usableCandidate = false;
     try {
+      if (budgetAuthority?.claim && !await budgetAuthority.claim({reservation})) throw Object.assign(Error("unknown_provider_outcome"), {outcome:"unknown_provider_outcome"});
       const result = await adapter.generateServiceConcept({jobId: ref.id, brief: job.safeBrief});
       providerResult = result;
       const moderation = normalizeModeration(result.moderation);
@@ -394,7 +396,7 @@ function createGenerationService({db, FieldValue, Timestamp, FieldPath, adapter 
           providerRequestTimestamp: result.requestTimestamp || null, providerAttemptState: "settled",
           providerUsage: result.usage || null, estimatedCostMicros: result.cost?.estimatedCostMicros ?? null,
           actualCostMicros: result.cost?.actualCostMicros ?? null,
-          moderation, customerAllowanceConsumed: true, completedAt: FieldValue.serverTimestamp(),
+          moderation, customerAllowanceConsumed: !budgetAuthority, completedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp()});
       });
       usableCandidate = true;

@@ -8,7 +8,7 @@ const actor={uid:'owner'},expires=Date.parse('2026-10-20T00:00:00Z');
 beforeEach(async()=>{
  for(const name of ['visualGenerationReservations','visualGenerationUsage','visualGenerationGrants','socialManagedPolicies','providerConfigurations','businessSubscriptions'])await db.recursiveDelete(db.collection(name));
  clock=Date.parse('2026-09-20T12:00:00Z');
- await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:true,authorizedBusinessUids:['owner','other'],businessDailyMaximum:60,globalDailyMaximum:100,globalMonthlyMaximum:300,maximumCostMicros:1000000,globalDailyCostMicros:100000000,globalMonthlyCostMicros:100000000});
+ await db.doc('providerConfigurations/generated-service-visuals').set({providerGenerationEnabled:true,paidPreparationAccountingVersion:"combined_v1",authorizedBusinessUids:['owner','other'],businessDailyMaximum:60,globalDailyMaximum:100,globalMonthlyMaximum:300,maximumCostMicros:1000000,globalDailyCostMicros:100000000,globalMonthlyCostMicros:100000000});
  await db.doc('socialManagedPolicies/owner').set({id:'policy',businessUid:'owner',status:'active',startsAt:clock-1,endsAt:expires});
  await db.doc('visualGenerationGrants/owner').set({id:'grant',businessUid:'owner',policyId:'policy',status:'active',startsAt:clock-1,expiresAt:expires,source:'internal_operating_grant',product:'social_creative_generation',maximumCostMicros:15000000,maximumConcepts:60});
  store=createStore({db,now:()=>clock,resolveBusiness:()=>({eligible:false,monthlyAllowance:0})});
@@ -69,4 +69,12 @@ test('revocation between reserve and dispatch blocks provider claim',async()=>{
  const r=await reserve('before-revoke');await db.doc('visualGenerationGrants/owner').update({revokedAt:clock});
  await assert.rejects(store.claim({reservation:r}),/grant_inactive/);
  assert.equal((await db.doc('visualGenerationReservations/before-revoke').get()).data().dispatchStartedAt,undefined);
+});
+
+test('legacy paid preparation fails closed without resetting entitlement or historical usage',async()=>{
+ await db.doc('providerConfigurations/generated-service-visuals').update({paidPreparationAccountingVersion:admin.firestore.FieldValue.delete()});
+ const paid=createStore({db,now:()=>clock,resolveBusiness:()=>({eligible:true,plan:'managed_growth',monthlyAllowance:60})});
+ await db.doc('visualGenerationUsage/business_other_2026-09').set({actualCostMicros:321,customerConsumedUnits:4});
+ await assert.rejects(paid.reserve({actor:{uid:'other'},jobId:'hold'}),/historical_preparation_accounting_required/);
+ assert.equal((await db.doc('visualGenerationUsage/business_other_2026-09').get()).data().actualCostMicros,321);
 });
