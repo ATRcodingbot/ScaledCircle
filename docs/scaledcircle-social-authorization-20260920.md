@@ -27,3 +27,24 @@ The three old cards are distinct Facebook, Instagram and X channel plans, all ve
 ## Validation
 
 Focused Node suite: 41 passed, including internal-owner atomic authorization, idempotency, owner/tenant denial, unchanged paid entitlement, no jobs/billing from authorization; cadence, lifecycle, provider receipts, grace/overdue handling and Story restoration. Two focused Flutter widget/identity tests passed; changed-screen analyzer clean. Production preview using authoritative records succeeded read-only. Final owner confirmation not exercised by the agent.
+
+## Deployed production readback
+
+Functions/shared Flutter source: eff3013a6bcf24b8df87b36b60422d99a0b307a1. Historical Story asset-only follow-up: b4510bc.
+Observed 2026-09-20T11:14:45.113Z. Hosting sites/scaled-circle/versions/4028e478d3dc84c6. Served main SHA-256 2f1c4f7b58ee37a4fb033267f13be10ec60abcbd92d099c5b875e3cc915c1524.
+247 unrelated Functions unchanged; application environment, secret bindings and Firestore Rules unchanged.
+- previewCustomerSocialPostV1: previewcustomersocialpostv1-00027-viv
+- prepareCustomerSocialPostV1: preparecustomersocialpostv1-00024-veb
+- runCustomerMetaPublisherV1: runcustomermetapublisherv1-00014-foh
+- runManagedSocialPreparationV1: runmanagedsocialpreparationv1-00006-yoz
+- approveAndScheduleCustomerSocialPostV1: approveandschedulecustomersocialpostv1-00023-god
+- getSocialOperationsWorkspace: getsocialoperationsworkspace-00033-wot
+- manageAutomaticSocialPublishingV1: manageautomaticsocialpublishingv1-00004-rel
+
+Historical Story URLs were returning HTML. The three original local JPEGs matched their authoritative SHA-256 records and were restored byte-for-byte; no new creative or publication was made. Attractive Remodel policy deep-equality readback passed. Final UI preview check pending.
+
+Final Hosting after exact historical-asset restoration: sites/scaled-circle/versions/4028e478d3dc84c6. All three production image responses are image/jpeg and SHA-256-identical to their maintained records. Functions remain eff3013; static asset source b4510bc.
+
+Real support owner session: Automatic publishing: Not authorized and the enabled Authorize automatic publishing button verified. Read-only confirmation opened successfully, showing ScaledCircle, exact Meta account names/Instagram handle, reviewed topics/destinations, five/platform adaptive, no extra spending and October 19 8 PM America/New_York expiry. Not now selected; policy remains unaccepted.
+
+Final real-owner UI verification: Calendar shows no upcoming scheduled posts or processing work, and separates overdue history with saved Story images/text and America/New_York timestamps. Published shows receipt-backed history newest first with actual publication time distinct from scheduled time, and exact saved X links. Final readback confirms ScaledCircle policy/profile still absent (Founder confirmation pending), all three old plans preserved, and Attractive Remodel policy unchanged. No post scheduled, retried, canceled or published by the agent.
