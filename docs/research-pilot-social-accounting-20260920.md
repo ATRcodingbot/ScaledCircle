@@ -28,7 +28,9 @@ Read-only inventory at 13:52:36 UTC: 19 historical visual-review attempts; 11 ha
 
 The existing counters/reservation authority receives additive, stable per-attempt records in one transaction. Attempt inventory mismatch fails closed. Repeated reconciliation returns the saved audit and does not duplicate entries, reset concepts, increase allowance, bill the Business or use ScaledCircle's operating grant. Only the Attractive Remodel accounting-ready marker is changed after successful import. Existing ready scheduled publication is unaffected.
 
-The maintained Admin action is deployed in `getGeneratedMediaOperations`. It requires a verified authenticated production Admin. The prepared localhost helper at port 18633 still showed signed out at this checkpoint; no production reconciliation was applied. New paid preparation remains held until this action succeeds. Preserve the helper tab for Founder sign-in; never bypass via ad hoc CLI writes.
+The maintained Admin action in `getGeneratedMediaOperations` was executed once after Founder signed in as the real verified production Admin. Saved reconciliation time: September 20, 2026 14:11:42.643 UTC. Independent Firestore readback at 14:12:16.794 UTC confirmed all 19 historical reservation records and the Attractive Remodel-only `combined_v1` accounting marker. The historical-accounting hold is cleared; all other budget/quality/authority checks remain. Aggregate September usage is $0.308071 accounted plus $4 outstanding, with seven consumed concepts unchanged and comped membership still true. No allowance reset or Business charge occurred. Evidence: `.firebase/launch-close-20260919/ar-accounting-applied-readback.json`.
+
+The non-billable production Admin metadata check returned `{model: gpt-4.1-mini, listed: true, toolExecutionVerified: false}` through the maintained provider identity. This confirms model-catalog access only, not paid search capability or either scheduled runtime's central transport. No paid access request ran and the research grant remains absent. The service-only IAM request above remains pending.
 
 ## ScaledCircle Social
 
