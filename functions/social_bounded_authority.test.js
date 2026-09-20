@@ -79,5 +79,5 @@ test('publication presentation requires actual provider activity and keeps ambig
  assert.equal(publicationPresentation({status:'scheduled'},[],100),'scheduled');
  assert.equal(publicationPresentation({status:'scheduled'},[{leaseUntil:200}],100),'publishing');
  assert.equal(publicationPresentation({status:'scheduled'},[{leaseUntil:50}],100),'reconciliation_required');
- assert.equal(publicationPresentation({status:'published'},[{leaseUntil:200}],100),'published');
+ assert.equal(publicationPresentation({status:'published',providerPostId:'verified-id'},[{leaseUntil:200}],100),'published');
 });

@@ -15,7 +15,7 @@ const messages = {
   paused: 'Publishing is paused by a workspace safety restriction. Your post is preserved.',
 };
 function readiness({uid, plan, item, version, provider, connection, revision, quality,
-  schedulerEnabled = false, health, config, environment, entitlement, conflictingSchedule = false, mediaAuthorityValid=true, creativePreparation=null, now = Date.now()}) {
+  schedulerEnabled = false, internalOwnerAuthorized = false, health, config, environment, entitlement, conflictingSchedule = false, mediaAuthorityValid=true, creativePreparation=null, now = Date.now()}) {
   const reasons = [];
   const add = key => reasons.push({code:key, message:messages[key]});
   if (!plan || plan.businessUid !== uid || !item || item.businessUid !== uid ||
@@ -46,7 +46,7 @@ function readiness({uid, plan, item, version, provider, connection, revision, qu
   if(!hasPublishingScopes(connection,provider) && !reasons.some(r=>r.code==='permission'))add('permission');
   if (quality?.businessUid!==uid || quality.immutableSourceHash!==version.contentHash || quality.readyToPublish!==true) add('quality');
   if (!schedulerEnabled || config?.enabled!==true || config.writeScopesEnabled!==true || config.provider!=='meta' || config.environment!==environment ||
-      !require("./subscription_entitlements").hasActiveManagedGrowthEntitlement(entitlement,{nowMillis:now})) add('scheduler');
+      (!internalOwnerAuthorized && !require("./subscription_entitlements").hasActiveManagedGrowthEntitlement(entitlement,{nowMillis:now}))) add('scheduler');
   if (health?.killSwitchActive===true) add('paused');
   if (conflictingSchedule) add('existing');
   if (!reasons.some(r=>['creative','permission','content'].includes(r.code))) {
@@ -114,7 +114,7 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
       quality={...quality,readyToPublish:checks.passed,reviewChecks:checks};
     }
     return {uid,plan:p.data(),item,version,versionId,itemRef,history:jobs.docs.map(d=>d.data()),creativePreparation:preparation.data(),provider:input.provider,connection:connectionFromOwnedPath(c.data(),uid),quality,
-      conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,schedulerEnabled:enabled(uid,entitlement.data()),now:now()};
+      conflictingSchedule,existingJob,mediaAuthorityValid,health:h.data(),config:config.data(),entitlement:entitlement.data(),environment,revision,internalOwnerAuthorized:!!await require('./social_internal_managed').authority({db,uid,read}),schedulerEnabled:enabled(uid,entitlement.data())||!!await require('./social_internal_managed').authority({db,uid,read}),now:now()};
   }
   return {
     async preview(uid,input,{actorUid=uid}={}) {
@@ -292,7 +292,7 @@ function authorizeRuntime({approval,connection,config,uid,provider,environment,e
   }
 }
 function publicationPresentation(job,steps,now=Date.now()){
-  if(job.status!=='scheduled'||!steps.length)return job.status;
+  if(job.status!=='scheduled'||!steps.length)return require('./social_lifecycle_presentation').state(job,now);
   if(steps.some(s=>!s.receipt&&s.leaseUntil>now))return 'publishing';
   // A durable provider attempt without final job reconciliation is not a fresh
   // scheduled post. Preserve its records and require safe reconciliation.

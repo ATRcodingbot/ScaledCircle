@@ -125,6 +125,7 @@ async function requireSocialOperationsBusiness(request,{allowMember=false}={}) {
   }
   return {
     ...context,
+    internalManagedPublishing: context.isAdmin && context.emailVerified && !!await require('./social_internal_managed').authority({db,uid:context.uid}),
     entitlement: entitlement || {},
     planId: context.isAdmin ? "managed_growth" :
       socialOperations.normalizePlanId(entitlement?.planId || entitlement?.plan),
@@ -166,7 +167,7 @@ async function customerPublishingPresentation(business) {
     if(c.status==='connected_write'&&c.tokenHealth==='healthy'&&c.requiresReconnect!==true){
       label=!require('./social_customer_scheduling').hasPublishingScopes(c,d.id)?'Publishing permission missing':
         config.data()?.enabled!==true||config.data()?.writeScopesEnabled!==true?'Provider publishing unavailable':
-        !enabled?'Scheduling is not available for this workspace yet':health.data()?.killSwitchActive===true&&!legacy?'Connected — publishing paused':
+        !enabled&&!business.internalManagedPublishing?'Scheduling is not available for this workspace yet':health.data()?.killSwitchActive===true&&!legacy?'Connected — publishing paused':
         legacy?'Connected — prepare your post preview':'Connected — owner approval required';
     }
     return [d.id,label];
@@ -175,7 +176,7 @@ async function customerPublishingPresentation(business) {
 function customerPostCallable(method) {
   return onCall({enforceAppCheck:false,maxInstances:3},async request=>{
     const business=await requireSocialOperationsBusiness(request,{allowMember:true});
-    if(business.role!=='business' || !metaCustomer.available(business))
+    if(!metaCustomer.available(business)&&!business.internalManagedPublishing)
       throw new HttpsError('permission-denied','Post scheduling is not available for this Business.');
     try{return await customerSchedulingStore()[method](business.uid,request.data||{},{actorUid:request.auth.uid});}
     catch(error){
@@ -195,7 +196,7 @@ exports.changeScheduledSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3
 
 exports.manageAutomaticSocialPublishingV1=onCall({enforceAppCheck:false,maxInstances:3},async request=>{
   const business=await requireSocialOperationsBusiness(request,{allowMember:true});
-  if(business.role!=='business'||request.auth.uid!==business.uid||!metaCustomer.available(business))
+  if(request.auth.uid!==business.uid||!(metaCustomer.available(business)||business.internalManagedPublishing))
     throw new HttpsError('permission-denied','The Business owner must authorize automatic publishing.');
   const settings=require('./social_managed_settings').createSettings({db,environment:runtimeEnvironment()});
   try{return request.data?.action==='preview'?await settings.preview(business.uid,request.data):
@@ -206,7 +207,7 @@ exports.manageAutomaticSocialPublishingV1=onCall({enforceAppCheck:false,maxInsta
 
 exports.prepareCustomerSocialPostV1=onCall({enforceAppCheck:false,maxInstances:3,concurrency:1,memory:'1GiB',timeoutSeconds:120},async request=>{
   const business=await requireSocialOperationsBusiness(request,{allowMember:true});
-  if(business.role!=='business'||!metaCustomer.available(business))
+  if(!metaCustomer.available(business)&&!business.internalManagedPublishing)
     throw new HttpsError('permission-denied','An active Managed Growth subscription is required for Social Manager.');
   const method=request.data?.action;
   if(!['save','assess','attach','auto','regenerate'].includes(method))throw new HttpsError('invalid-argument','Choose a supported preparation action.');
@@ -330,6 +331,8 @@ exports.getSocialOperationsWorkspace = onCall(
       managedGrowth: business.planId === "managed_growth",
       connections: safeConnections.map(c=>({...c,publishingState:publishingPresentation.providers[c.provider]})),
       managedPublishingAvailable: metaCustomer.available(business),
+      automaticPublishingOwner:request.auth.uid===business.uid&&(metaCustomer.available(business)||business.internalManagedPublishing),
+      internalManagedPreparation:business.internalManagedPublishing===true&&!automaticPublishing,
       publishingState: publishingPresentation,
       automaticPublishing,
       automaticPublishingCycle: (await db.doc('socialManagedCycles/'+business.uid).get()).data()||null,

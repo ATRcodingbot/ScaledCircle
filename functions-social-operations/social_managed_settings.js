@@ -9,10 +9,12 @@ function createSettings({db,environment,now=Date.now}) {
   if(!safeId(uid)||!safeId(input.planId))throw Error('Choose your approved strategy.');
   const [p,b,s,c,h,existing]=await Promise.all(['socialContentPlans/'+input.planId,'businessGrowthProfiles/'+uid,
    'businessSubscriptions/'+uid,'socialProviderConfigs/'+environment+'_meta','agentHealth/'+uid,'socialManagedPolicies/'+uid].map(path=>read(db.doc(path))));
-  const plan=p.data(),profile=b.data();
+  const internal=await require('./social_internal_managed').authority({db,uid,read});
+  const preparation=input.planId==='internal_meta_strategy'&&internal?await require('./social_internal_managed').proposal({db,uid,read,now:now()}):null;
+  const plan=preparation?{...preparation.plan,status:'approved',approvedVersion:preparation.plan.planVersion}:p.data(),profile=preparation?.profile||b.data();
   if(plan?.businessUid!==uid||plan.status!=='approved'||plan.approvedVersion!==plan.planVersion)throw Error('Approve the current strategy first.');
   if(!profile?.businessName||profile.businessUid&&profile.businessUid!==uid)throw Error('Complete your Business brand context first.');
-  if(!require('./social_customer_enrollment').eligible(s.data(),now()))throw Error('An active Managed Growth entitlement is required.');
+  if(!internal&&!require('./social_customer_enrollment').eligible(s.data(),now()))throw Error('An active Managed Growth entitlement is required.');
   if(c.data()?.enabled!==true||c.data()?.writeScopesEnabled!==true||c.data()?.environment!==environment)throw Error('Provider publishing is unavailable.');
   if(h.data()?.killSwitchActive===true)throw Error('Publishing is paused by a separate safety restriction.');
   const services=(plan.strategy?.services||[]).filter(x=>typeof x==='string'&&x.trim());
@@ -36,15 +38,15 @@ function createSettings({db,environment,now=Date.now}) {
   const prior=existing.data();
   const preserveEnd=prior?.businessUid===uid&&prior.planId===input.planId&&prior.strategyDigest===bounded.strategyDigest(plan)&&['active','paused'].includes(prior.status)&&prior.endsAt>now();
   const endsAt=preserveEnd?prior.endsAt:Math.floor(now()/86400000)*86400000+30*86400000;
-  const scope={businessUid:uid,planId:input.planId,planVersion:plan.planVersion,strategyDigest:bounded.strategyDigest(plan),
+  const scope={businessUid:uid,planId:preparation?.plan.id||input.planId,planVersion:plan.planVersion,strategyDigest:bounded.strategyDigest(plan),
    businessName:profile.businessName,voice:typeof profile.brandVoice==='string'&&profile.brandVoice.trim()?profile.brandVoice:
      typeof profile.tone==='string'&&profile.tone.trim()?profile.tone:'Helpful, professional Business voice; no unsupported personal or completed-work claims.',
    services,providers,destinations,maxPerWeek,cadenceSettings,timeZone,
-   endsAt};
+   endsAt,...(preparation?{internalPreparation:preparation,providerAccounts:preparation.accounts,spending:preparation.spending}:{} )};
   return {...scope,reviewDigest:hash(scope),plan};
  }
  return {
-  async preview(uid,input){const {plan,...view}=await proposal(uid,input);return {...view,endsAtLabel:new Intl.DateTimeFormat('en-US',{timeZone:view.timeZone,dateStyle:'medium',timeStyle:'short'}).format(view.endsAt)+' '+view.timeZone};},
+  async preview(uid,input){const {plan,internalPreparation,...view}=await proposal(uid,input);return {...view,strategy:plan.strategy,endsAtLabel:new Intl.DateTimeFormat('en-US',{timeZone:view.timeZone,dateStyle:'medium',timeStyle:'short'}).format(view.endsAt)+' '+view.timeZone};},
   async change(uid,actorUid,input){
    if(actorUid!==uid)throw Error('Only the Business owner can change automatic publishing authority.');
    if(!['enable','cadence','pause','resume'].includes(input.action))throw Error('Choose a publishing action.');
@@ -81,7 +83,19 @@ function createSettings({db,environment,now=Date.now}) {
      return {status:old.status,policyId:old.id,cadence:next};
     }
     const policy=bounded.createPolicy({...scope,uid,actorUid,startsAt:now(),now:now()});
-    const {plan,...reviewedScope}=scope;
+    const {plan,internalPreparation,...reviewedScope}=scope;
+    if(internalPreparation){
+     const planRef=db.doc('socialContentPlans/'+scope.planId),profileRef=db.doc('businessGrowthProfiles/'+uid);
+     const [existingPlan,existingProfile]=await Promise.all([tx.get(planRef),tx.get(profileRef)]);
+     if(existingPlan.exists||existingProfile.exists)throw Error('The saved strategy context changed. Reload before authorizing.');
+     tx.create(profileRef,{...internalPreparation.profile,createdAt:now(),createdByUid:actorUid,source:'owner_reviewed_meta_strategy'});
+     tx.create(planRef,{...plan,approvedByUid:actorUid,approvedAt:now(),updatedAt:now()});
+     const social=require('./social_operations');
+     for(const item of plan.items){const id=scope.planId+'_'+item.itemKey;
+      tx.create(db.doc('socialContentItems/'+id),{schemaVersion:social.SCHEMA_VERSION,businessUid:uid,planId:scope.planId,itemKey:item.itemKey,status:'ready_for_review',currentVersion:1,scheduledFor:item.scheduledFor,createdAt:now(),updatedAt:now()});
+      tx.create(db.doc('socialContentVersions/'+id+'_v1'),social.contentItemVersion({businessUid:uid,planId:scope.planId,item,now:now()}));
+     }
+    }
     tx.set(ref,{...policy,cadence:cadence.initialize({scope,now:now()}),reviewDigest:scope.reviewDigest,reviewedScope});
     tx.create(db.collection('socialManagedPolicyAudit').doc(),{businessUid:uid,actorUid,action:'enable',policyId:policy.id,at:now(),reviewedScope});
     return {status:'active',policyId:policy.id};

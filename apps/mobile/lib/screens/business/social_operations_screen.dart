@@ -1020,13 +1020,35 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     )) {
       if (row['publicationStatus'] != state) continue;
       final card = Card(
-        child: ListTile(
-          title: Text(
-            '${socialProviderName(row['provider']?.toString() ?? '')} · ${socialEvidenceText(row['title'], 'Social post')}',
-          ),
-          subtitle: Text(
-            '${row['reviewedPost']?['variant']?['copy'] ?? ''}\n${socialCustomerTime(context, row['scheduledFor'], label: row['scheduledForLabel'])}',
-          ),
+        child: Column(
+          children: [
+            if (row['historyMediaUrl'] is String)
+              Image.network(
+                row['historyMediaUrl'] as String,
+                height: 220,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) =>
+                    const Text('Saved Story image unavailable.'),
+              ),
+            ListTile(
+              title: Text(
+                '${socialProviderName(row['provider']?.toString() ?? '')} · ${socialEvidenceText(row['title'], 'Social post')}',
+              ),
+              subtitle: Text(
+                '${row['publicationStatus'] == 'needs_attention' ? 'Needs Attention' : row['publicationStatus']} · ${row['authorizationScope'] ?? 'Saved execution history'}\n'
+                '${row['reviewedPost']?['variant']?['copy'] ?? 'Saved preview unavailable'}\n'
+                '${row['lifecycleMessage'] ?? ''}\n'
+                '${state == 'published' ? 'Published: ${row['publishedAtLabel'] ?? 'Actual publication time unavailable'}\n' : ''}'
+                'Scheduled: ${socialCustomerTime(context, row['scheduledFor'], label: row['scheduledForLabel'])}',
+              ),
+            ),
+            if (row['providerPermalink'] is String)
+              TextButton(
+                onPressed: () =>
+                    launchUrl(Uri.parse(row['providerPermalink'] as String)),
+                child: const Text('View published post'),
+              ),
+          ],
         ),
       );
       if (row['jobId'] == widget.initialPublishedJobId &&
@@ -1053,7 +1075,9 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               Text(
                 state == 'scheduled'
                     ? 'Nothing scheduled. Authorize automatic publishing for routine posts, or schedule a finished post individually.'
-                    : 'No ScaledCircle-published posts recorded yet.',
+                    : state == 'published'
+                    ? 'No ScaledCircle-published posts recorded yet.'
+                    : 'No posts in this state.',
               ),
             ]
           : rows,
@@ -1140,7 +1164,20 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
                 ),
               ],
               if (_socialSection == 'Calendar')
-                _section('Scheduled Posts', _history(workspace, 'scheduled')),
+                _section(
+                  'Upcoming Scheduled Posts',
+                  _history(workspace, 'scheduled'),
+                ),
+              if (_socialSection == 'Calendar')
+                _section(
+                  'Processing / awaiting confirmation',
+                  _history(workspace, 'publishing'),
+                ),
+              if (_socialSection == 'Calendar')
+                _section(
+                  'Needs Attention — unresolved history',
+                  _history(workspace, 'needs_attention'),
+                ),
               if (_socialSection == 'Published')
                 _section(
                   'Publication History',
@@ -1936,13 +1973,21 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     final migrationAvailable = alignment?['migrationAvailable'] == true;
     return Column(
       children: [
-        if (workspace.managedPublishingAvailable)
+        if (workspace.data['automaticPublishingOwner'] == true ||
+            (workspace.data['automaticPublishingOwner'] == null &&
+                workspace.managedPublishingAvailable))
           SocialAutomaticPublishingCard(
+            initialAdaptive:
+                workspace.data['internalManagedPreparation'] == true,
             policy: workspace.data['automaticPublishing'] as Map?,
-            planId: workspace.plans
-                .where(socialPlanApproved)
-                .firstOrNull?['id']
-                ?.toString(),
+            planId: workspace.data['internalManagedPreparation'] == true
+                ? 'internal_meta_strategy'
+                : (workspace.data['automaticPublishing'] as Map?)?['planId']
+                          ?.toString() ??
+                      workspace.plans
+                          .where(socialPlanApproved)
+                          .firstOrNull?['id']
+                          ?.toString(),
             invoke: _service.automaticPublishing,
             onChanged: () => _load(quiet: true),
           ),

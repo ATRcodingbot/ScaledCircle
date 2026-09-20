@@ -7,8 +7,10 @@ class SocialAutomaticPublishingCard extends StatefulWidget {
     required this.planId,
     required this.invoke,
     required this.onChanged,
+    this.initialAdaptive = false,
   });
   final Map? policy;
+  final bool initialAdaptive;
   final String? planId;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic>) invoke;
   final Future<void> Function() onChanged;
@@ -26,7 +28,9 @@ class _SocialAutomaticPublishingCardState
   @override
   void initState() {
     super.initState();
-    _adaptive = widget.policy?['cadence']?['mode'] == 'adaptive';
+    _adaptive = widget.policy == null
+        ? widget.initialAdaptive
+        : widget.policy?['cadence']?['mode'] == 'adaptive';
     final saved = widget.policy?['maxPerWeek'];
     if (saved is int && saved >= 1) _cadence = saved;
   }
@@ -56,6 +60,20 @@ class _SocialAutomaticPublishingCardState
                 children: [
                   Text('${scope['businessName']}'),
                   Text('Channels: ${(scope['providers'] as List).join(', ')}'),
+                  for (final account
+                      in (scope['providerAccounts'] as List? ?? const [])
+                          .whereType<Map>())
+                    Text(
+                      '${account['provider']}: ${account['name']}${account['handle'] == null ? '' : ' · @${account['handle']}'}',
+                    ),
+                  if (scope['strategy'] is Map)
+                    Text(
+                      'Audience: ${scope['strategy']['audience'] ?? 'Your maintained Business audience'}\n${scope['strategy']['claims'] ?? ''}',
+                    ),
+                  Text(
+                    scope['spending']?.toString() ??
+                        'Existing creative allowances and provider limits apply. No additional spending or paid upgrades are authorized.',
+                  ),
                   Text('Publishing timezone: ${scope['timeZone']}'),
                   Text(
                     'Starting target: ${scope['maxPerWeek']} posts/week per channel. ${_adaptive ? 'Performance-driven cadence; changes require comparable evidence and remain subject to quality, cost and provider safeguards.' : 'Fixed cadence.'}',
@@ -132,7 +150,11 @@ class _SocialAutomaticPublishingCardState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Automatic publishing',
+              active
+                  ? 'Automatic publishing: Authorized'
+                  : paused
+                  ? 'Automatic publishing: Paused'
+                  : 'Automatic publishing: Not authorized',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Text(
@@ -203,7 +225,7 @@ class _SocialAutomaticPublishingCardState
                           ? 'Pause Publishing'
                           : paused
                           ? 'Resume Publishing'
-                          : 'Review & Authorize Strategy',
+                          : 'Authorize automatic publishing',
                     ),
                   ),
                   if (widget.policy != null)

@@ -41,10 +41,13 @@ void main() {
           ),
         ),
       );
-      expect(tester.widget<TextFormField>(find.byType(TextFormField)).initialValue, '5');
+      expect(
+        tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
+        '5',
+      );
       await tester.enterText(find.byType(TextFormField), '14');
-      await tester.ensureVisible(find.text('Review & Authorize Strategy'));
-      await tester.tap(find.text('Review & Authorize Strategy'));
+      await tester.ensureVisible(find.text('Authorize automatic publishing'));
+      await tester.tap(find.text('Authorize automatic publishing'));
       await tester.pumpAndSettle();
       expect(calls.length, 1);
       expect(calls.single['action'], 'preview');
@@ -55,10 +58,10 @@ void main() {
         findsNothing,
       );
       await tester.ensureVisible(
-        find.widgetWithText(FilledButton, 'Authorize automatic publishing'),
+        find.descendant(of: find.byType(AlertDialog), matching: find.widgetWithText(FilledButton, 'Authorize automatic publishing')),
       );
       await tester.tap(
-        find.widgetWithText(FilledButton, 'Authorize automatic publishing'),
+        find.descendant(of: find.byType(AlertDialog), matching: find.widgetWithText(FilledButton, 'Authorize automatic publishing')),
       );
       await tester.pumpAndSettle();
       expect(calls.last['action'], 'enable');

@@ -13,7 +13,7 @@ function project({jobs, measurements, now = Date.now()}) {
     const pending = owned.filter(j => !j.providerPostId && !j.providerMediaId).filter(j => ["approved", "scheduled", "queued"].includes(j.status))
       .filter(j => iso(j.scheduledFor)).sort((a,b) => Date.parse(iso(a.scheduledFor))-Date.parse(iso(b.scheduledFor)));
     const published = owned.filter(j => j.providerPostId || j.providerMediaId);
-    const failures = owned.filter(j => ["failed", "unknown_outcome", "hold", "reconciliation_required"].includes(j.status));
+    const failures = owned.filter(j => ["failed", "unknown_outcome", "hold", "reconciliation_required", "needs_attention"].includes(j.status));
     const due = pending.filter(j => Date.parse(iso(j.scheduledFor)) <= now);
     const next = pending.find(j => Date.parse(iso(j.scheduledFor)) > now);
     const measurement = measurements.filter(m => (m.provider === provider || (provider === "x" && !m.provider)) && m.status === "pending" && iso(m.scheduledFor))
@@ -70,9 +70,11 @@ async function load(db, uid, context = {}) {
     const jobs = [...rows[0], ...rows[1].map(j => ({...j, story: true})), ...rows[4]];
     // Reuse the exact per-post provider-step readback used by preview.
     for(const job of jobs){
+      await require("./social_execution_evidence").hydrate(db,job,uid);
       job.timeZone=rows[5].find(c=>c.id===job.preparedCycleId)?.timeZone||context.timeZone;
       const check=context.plans?.flatMap(p=>(p.items||[]).flatMap(i=>i.variants||[])).find(v=>v.scheduling?.jobId===job.id)?.scheduling;
       if(check?.publicationStatus)job.status=check.publicationStatus;
+      job.executionStatus=job.status;
       job.status=require('./social_lifecycle_presentation').state(job);
     }
     const lifecycle=require('./social_lifecycle_presentation').project({...context,uid,jobs});

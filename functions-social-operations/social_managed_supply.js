@@ -58,8 +58,11 @@ async function replenish({db,uid,now=Date.now()}) {
       managedPolicyId:policy?.id,managedStrategyDigest:policy?.strategyDigest},now});
     if(!await require('./social_customer_enrollment').authorized({db,uid,read,now}))throw Error('managed_social_entitlement_required');
     const user=(await read(db.doc('users/'+uid))).data();
-    if(user?.role!=='business'||user.active!==true)throw Error('managed_social_active_business_required');
+    if((user?.role!=='business'||user.active!==true)&&!await require('./social_internal_managed').authority({db,uid,read}))throw Error('managed_social_active_business_required');
     const profile=(await read(db.doc('businessGrowthProfiles/'+uid))).data();
+    // The internal software-product strategy must never fall through to the
+    // home-services draft template after its reviewed ideas are exhausted.
+    if(profile?.internalSocialContext)return {status:'reviewed_topics_only',message:'Use the current reviewed strategy ideas; additional fresh topics require strategy preparation.'};
     const geography=(await read(db.doc('discoveryPreferences/'+uid))).data();
     const health=(await read(db.doc('agentHealth/'+uid))).data();
     if(health?.killSwitchActive===true)throw Error('managed_social_safety_hold');

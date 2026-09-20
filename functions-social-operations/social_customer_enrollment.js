@@ -3,7 +3,7 @@ const {hasActiveManagedGrowthEntitlement}=require('./subscription_entitlements')
 const eligible=(entitlement,now=Date.now())=>hasActiveManagedGrowthEntitlement(entitlement,{nowMillis:now});
 async function authorized({db,uid,read=ref=>ref.get(),now=Date.now()}) {
   if(typeof uid!=='string'||!/^[A-Za-z0-9_-]{1,220}$/.test(uid))return false;
-  return eligible((await read(db.doc('businessSubscriptions/'+uid))).data(),now);
+  return eligible((await read(db.doc('businessSubscriptions/'+uid))).data(),now)||!!await require('./social_internal_managed').authority({db,uid,read});
 }
 // Select due owner-approved work, never empty subscribed workspaces. The
 // existing 15-minute execution window and approval records remain authority.
