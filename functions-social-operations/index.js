@@ -336,6 +336,7 @@ exports.getSocialOperationsWorkspace = onCall(
       publishingState: publishingPresentation,
       automaticPublishing,
       automaticPublishingCycle: (await db.doc('socialManagedCycles/'+business.uid).get()).data()||null,
+      automaticContentSupply: (await db.doc('socialManagedSupplyStatus/'+business.uid).get()).data()||null,
       performance: performancePresentation,
       plans: customerPlans,
       cadence: {startingCopy:cadence.startingCopy,platforms:cadenceLearning},

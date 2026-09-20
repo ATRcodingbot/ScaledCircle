@@ -34,7 +34,7 @@ function createCycle({db,store,preparation,editor,media,replenish=false,now=Date
       bounded.assertRuntimePolicy({uid,policy,plan,approval,now:now()});
       let supply=null;
       if(replenish)supply=await require('./social_managed_supply').replenish({db,uid,now:now()});
-      if(['history_incomplete','history_limit','context_changed','fresh_topics_exhausted'].includes(supply?.status)) {
+      if(['history_incomplete','history_limit','context_changed'].includes(supply?.status)) {
         throw Error('managed_social_supply_'+supply.status);
       }
       const extra=await require('./social_managed_supply').supplemental({db,uid,planId:policy.planId});

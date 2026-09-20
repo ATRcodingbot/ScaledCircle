@@ -22,5 +22,14 @@ test('exact internal owner previews without writes then atomically authorizes co
  assert.equal(profile.businessUid,uid);assert.equal(plan.approvedByUid,uid);assert.equal(policy.cadence.mode,'adaptive');assert.equal(policy.maxPerWeek,5);assert.equal(plan.items.length,6);
  assert.equal((await db.collection('socialContentVersions').where('businessUid','==',uid).get()).size,6);
  assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',uid).get()).size,0);assert.equal((await db.doc('businessSubscriptions/'+uid).get()).exists,false);
+ const supply=require('../functions-social-operations/social_managed_supply');
+ const first=await supply.replenish({db,uid,now});assert.equal(first.status,'planning_buffer_covered');assert.equal(first.constraints.length,3);
+ const firstItem=plan.items[0],versionId=policy.planId+'_'+firstItem.itemKey+'_v1';
+ await db.doc('socialGrowthJobs/emulator_'+uid).set({businessUid:uid,provider:'facebook',versionId,status:'published',providerPostId:'emulator-proof',scheduledFor:new Date(now-86400000).toISOString()});
+ const fresh=await supply.replenish({db,uid,now});assert.equal(fresh.status,'draft_created');assert.ok(fresh.topicId.startsWith('scaledcircle:'));
+ assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',uid).get()).size,1);
+ assert.equal((await db.doc('socialManagedSupplyStatus/'+uid).get()).data().constraints.length,3);
+ assert.deepEqual((await db.doc('socialContentPlans/'+policy.planId).get()).data(),plan);
+ assert.equal((await db.doc('businessSubscriptions/'+uid).get()).exists,false);
  assert.equal((await service.change(uid,uid,{action:'pause'})).status,'paused');assert.equal((await service.change(uid,uid,{action:'resume'})).status,'active');
 });

@@ -7,6 +7,7 @@ const {hash}=require('./social_growth_cycle');
 const normalize=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
 const duplicate=(copy,history)=>history.some(x=>normalize(x)===normalize(copy)||normalize(x).startsWith(normalize(copy)+' '));
 function choose({uid,policy,plan,profile,scope,connections,items,versions,jobs,now}) {
+  if(profile?.internalSocialContext)return require('./social_internal_topics').choose({uid,policy,plan,profile,scope,connections,items,versions,jobs,now});
   const draftItems=items.filter(i=>i.planId===policy.planId);
   // Finish the maintained queue first; do not bypass an owner's edit/cancel hold
   // by silently generating a replacement for it.
@@ -60,9 +61,6 @@ async function replenish({db,uid,now=Date.now()}) {
     const user=(await read(db.doc('users/'+uid))).data();
     if((user?.role!=='business'||user.active!==true)&&!await require('./social_internal_managed').authority({db,uid,read}))throw Error('managed_social_active_business_required');
     const profile=(await read(db.doc('businessGrowthProfiles/'+uid))).data();
-    // The internal software-product strategy must never fall through to the
-    // home-services draft template after its reviewed ideas are exhausted.
-    if(profile?.internalSocialContext)return {status:'reviewed_topics_only',message:'Use the current reviewed strategy ideas; additional fresh topics require strategy preparation.'};
     const geography=(await read(db.doc('discoveryPreferences/'+uid))).data();
     const health=(await read(db.doc('agentHealth/'+uid))).data();
     if(health?.killSwitchActive===true)throw Error('managed_social_safety_hold');
@@ -73,18 +71,32 @@ async function replenish({db,uid,now=Date.now()}) {
     }
     const result=choose({uid,policy,plan,profile,scope:require('./growth_geography').serviceAreaScope(geography,uid),connections,
       items:rows.socialContentItems,versions:rows.socialContentVersions,jobs:rows.socialGrowthJobs,now});
-    if(result.status!=='draft_created')return result;
+    if(profile?.internalSocialContext){
+      const [entitlement,brand,assets]=await Promise.all([read(db.doc('businessSubscriptions/'+uid)),read(db.doc('businessBrandProfiles/'+uid)),read(db.collection('businessMediaLibraries/'+uid+'/mediaAssets').where('approvalStatus','==','approved').limit(1))]);
+      const constraints=[];
+      if(!require('./subscription_entitlements').hasActiveManagedGrowthEntitlement(entitlement.data(),{nowMillis:now}))constraints.push('No funded generated-creative allowance is available for this workspace. No additional spending is authorized.');
+      if(!brand.data()?.approvedServiceCategories?.length)constraints.push('Creative service categories are not configured in the maintained creative profile.');
+      if(assets.empty)constraints.push('The Business creative library has no approved asset. Historical post images are not silently reused for unrelated ideas.');
+      result.constraints=constraints;
+    }
+    const supplyRef=db.doc('socialManagedSupplyStatus/'+uid);
+    if(result.status!=='draft_created'){
+      if(profile?.internalSocialContext)tx.set(supplyRef,{businessUid:uid,policyId:policy.id,checkedAt:now,...result});
+      return result;
+    }
     const {itemId,item,service}=result;
     const ref=db.doc('socialContentItems/'+itemId);
     if((await read(ref)).exists)return {status:'existing_drafts'};
     tx.update(db.doc('socialManagedPolicies/'+uid),{lastDraftPreparedAt:now});
     tx.create(ref,{schemaVersion:social.SCHEMA_VERSION,businessUid:uid,planId:policy.planId,itemKey:item.itemKey,
       status:'ready_for_review',currentVersion:1,scheduledFor:item.scheduledFor,createdAt:now,updatedAt:now,
-      managedPolicyId:policy.id,managedStrategyDigest:policy.strategyDigest,managedDraft:item});
+      managedPolicyId:policy.id,managedStrategyDigest:policy.strategyDigest,...(result.topicId?{managedTopicId:result.topicId}:{}),managedDraft:item});
     tx.create(db.doc('socialContentVersions/'+itemId+'_v1'),social.contentItemVersion({businessUid:uid,planId:policy.planId,item,now}));
     tx.create(db.doc('socialManagedDraftAudit/'+itemId),{businessUid:uid,policyId:policy.id,strategyDigest:policy.strategyDigest,
-      itemId,service,createdAt:now,source:'recurring_strategy_preparation',approvalCreated:false,schedulingCreated:false});
-    return {status:'draft_created',itemId};
+      itemId,service,...(result.topicId?{topicId:result.topicId}:{}),createdAt:now,source:'recurring_strategy_preparation',approvalCreated:false,schedulingCreated:false});
+    const saved={status:'draft_created',itemId,...(result.constraints?{constraints:result.constraints}:{}),...(result.topicId?{topicId:result.topicId}:{}),...(result.coverage?{coverage:result.coverage}:{}),message:'One fresh topic prepared. Final creative and quality checks still apply; no post has been scheduled by replenishment.'};
+    if(profile?.internalSocialContext)tx.set(supplyRef,{businessUid:uid,policyId:policy.id,checkedAt:now,...saved});
+    return saved;
   });
 }
 async function supplemental({db,uid,planId}) {

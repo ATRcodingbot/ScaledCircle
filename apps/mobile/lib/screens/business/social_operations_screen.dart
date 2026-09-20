@@ -1991,6 +1991,51 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             invoke: _service.automaticPublishing,
             onChanged: () => _load(quiet: true),
           ),
+        if (workspace.data['automaticPublishing'] is Map &&
+            workspace.data['automaticContentSupply'] is! Map)
+          const Text(
+            'Content coverage will be checked on the next recurring preparation visit. Planned topics still need creative and quality checks.',
+          ),
+        if (workspace.data['automaticPublishing'] is Map &&
+            workspace.data['automaticContentSupply'] is Map)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Content coverage',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  for (final entry
+                      in ((workspace.data['automaticContentSupply']
+                                      as Map)['coverage']?['platforms']
+                                  as Map? ??
+                              {})
+                          .entries)
+                    Text(
+                      '${socialProviderName(entry.key.toString())}: ${entry.value['plannedUnscheduled']} planned versions; ${entry.value['scheduledNextSevenDays']} scheduled in the next 7 days; ${entry.value['scheduledShortfall']} below the current weekly target.',
+                    ),
+                  const Text(
+                    'Planned topics are not ready-to-publish posts. Creative, quality, budget and provider checks still apply.',
+                  ),
+                  for (final reason
+                      in ((workspace.data['automaticContentSupply']
+                                  as Map)['constraints']
+                              as List? ??
+                          const []))
+                    Text(reason.toString()),
+                  if ((workspace.data['automaticContentSupply']
+                          as Map)['status'] ==
+                      'fresh_topics_exhausted')
+                    const Text(
+                      'Distinct reviewed topics are exhausted. More supported context is needed; no filler will be published.',
+                    ),
+                ],
+              ),
+            ),
+          ),
         if (cadence != null)
           Card(
             child: Padding(
