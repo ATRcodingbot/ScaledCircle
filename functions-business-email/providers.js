@@ -14,8 +14,8 @@ function createRegistry({google,microsoft,other}) {
    return p;
   },
   list(beta={},evidence={}) {return Object.entries(contract.LABELS).map(([id,label])=>({id,label,
-   status:id==='google'?(evidence.googleRoundTripVerified===true?'available':'private_beta'):'setup_testing',
-   configured:!!adapters[id]&&adapters[id].configured!==false&&(id==='google'||beta.providers?.[id]===true)&&(id!=='other'||!!beta.otherMailbox),
+   status:id==='google'?(beta.connectionAllowed===false?'connection_limited':evidence.googleRoundTripVerified===true?'available':'private_beta'):'setup_testing',
+   configured:beta.connectionAllowed!==false&&!!adapters[id]&&adapters[id].configured!==false&&(id==='google'||beta.providers?.[id]===true)&&(id!=='other'||!!beta.otherMailbox),
    // Never return credentials or caller-controlled server destinations.
    ...(id==='other'&&beta.otherMailbox?{settings:{email:beta.mailbox,username:beta.otherMailbox.username,imapHost:beta.otherMailbox.imapHost||'',imapPort:993,
      smtpHost:beta.otherMailbox.smtpHost||'',smtpPort:beta.otherMailbox.smtpPort||465}}:{})}));}

@@ -330,7 +330,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                   if (_error != null) Text(_error!),
                   if (_data == null)
                     const Text(
-                      'Business Email is available by private invitation.',
+                      'Business Email requires an eligible membership and permission to read communications. Ask your workspace owner to review your access.',
                     )
                   else ...[
                     Text(
@@ -339,10 +339,24 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                           : 'Connect Business Email',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    Text('Invited mailbox: ${_data!['expectedMailbox']}'),
+                    if (_data!['includedWithManagedGrowth'] == true)
+                      const Text(
+                        'Business Email — Included with Managed Growth',
+                      ),
+                    if (_data!['readOnly'] == true)
+                      const Text(
+                        'Your membership has ended. Saved history remains available; reactivate to use paid Email features.',
+                      ),
+                    if (_data!['connectionAllowed'] == false &&
+                        _data!['readOnly'] != true)
+                      const Text(
+                        'Not connected · Connection temporarily limited. Google verification is pending. Your included Email workspace is available; no email will be sent.',
+                      ),
+                    if (_data!['expectedMailbox'] != null)
+                      Text('Authorized mailbox: ${_data!['expectedMailbox']}'),
                     if (_data!['campaignPrivateBeta'] == true)
                       ListTile(
-                        title: const Text('Email Campaigns · Private Beta'),
+                        title: const Text('Email Campaigns'),
                         subtitle: const Text(
                           'Review contacts, history and a campaign draft',
                         ),

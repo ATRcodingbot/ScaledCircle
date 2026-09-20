@@ -255,6 +255,8 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.ensureVisible(find.text('Check conversation'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Check conversation'));
       await tester.pumpAndSettle();
       expect(service.calls, ['reconcile']);
@@ -345,12 +347,57 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.text('Business Email is available by private invitation.'),
+      find.textContaining('permission to read communications'),
       findsOneWidget,
     );
     expect(find.text('Continue with Google'), findsNothing);
     expect(find.text('Send Email'), findsNothing);
   });
+  testWidgets(
+    'included Managed Growth workspace remains visible while Google connection is held',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessEmailScreen(
+            loadOverride: () async => {
+              'available': true,
+              'includedWithManagedGrowth': true,
+              'connectionAllowed': false,
+              'configured': true,
+              'campaignPrivateBeta': true,
+              'sendEnabled': false,
+              'connection': {
+                'status': 'not_connected',
+                'automaticSending': false,
+              },
+              'providers': [
+                {
+                  'id': 'google',
+                  'label': 'Google',
+                  'status': 'connection_limited',
+                  'configured': false,
+                },
+              ],
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Business Email — Included with Managed Growth'),
+        findsOneWidget,
+      );
+      expect(find.text('Email Campaigns'), findsOneWidget);
+      expect(
+        find.textContaining('Your included Email workspace is available'),
+        findsOneWidget,
+      );
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Continue with Google'),
+      );
+      expect(button.onPressed, isNull);
+    },
+  );
   for (final width in [320.0, 1280.0]) {
     testWidgets(
       'separate permissions and truthful history at $width with large text',

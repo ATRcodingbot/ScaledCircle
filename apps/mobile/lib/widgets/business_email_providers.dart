@@ -133,7 +133,9 @@ class BusinessEmailProviders extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Text(
-                  provider['status'] == 'setup_testing'
+                  provider['status'] == 'connection_limited'
+                      ? 'Connection temporarily limited · Google verification pending'
+                      : provider['status'] == 'setup_testing'
                       ? 'Private Beta — Setup Testing'
                       : provider['status'] == 'available'
                       ? 'Available · Production conversation verified'

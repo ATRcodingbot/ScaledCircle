@@ -32,7 +32,11 @@ class _BusinessEmailEntryState extends State<BusinessEmailEntry> {
       return ListTile(
         leading: const Icon(Icons.email_outlined),
         title: const Text('Business Email'),
-        subtitle: const Text('Business replies and owner-approved outreach'),
+        subtitle: Text(
+          snapshot.data?['includedWithManagedGrowth'] == true
+              ? 'Included with Managed Growth · Email and campaigns'
+              : 'Business replies and owner-approved outreach',
+        ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => AppNavigation.push(context, '/business/email-connection'),
       );

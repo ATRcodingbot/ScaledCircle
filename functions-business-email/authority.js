@@ -9,10 +9,13 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
   return async (request,operation)=>{
     const uid=request.auth?.uid;if(!uid)deny('Sign in to your Business.');
     const who=await ws.actor(uid),businessId=request.data?.businessId||uid;
-    if(!/^[a-zA-Z0-9_-]{1,128}$/.test(businessId)||!beta[businessId]?.mailbox)deny('Business Email is available by private invitation.');
+    if(!/^[a-zA-Z0-9_-]{1,128}$/.test(businessId))deny('Choose a valid Business workspace.');
     const config={...beta[businessId]};
-    if(config.ownerUid!==uid)deny('Only the invited workspace owner can manage this private beta.');
+    const invited=!!config.mailbox&&config.ownerUid===businessId;
+    const readOnly=['load','loadCampaigns'].includes(operation);
+    const connectionAction=['connect','connectOther','callback','disconnect','checkConnection','preferences'].includes(operation);
     if(config.kind==='internal') {
+      if(config.ownerUid!==uid)deny('Use the maintained internal ScaledCircle workspace.');
       const user=await db.doc('users/'+uid).get();
       if(project==='scaled-circle') {
         // Production's existing Admin is the authenticated controller of the
@@ -29,12 +32,19 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
           deny('Use the maintained internal ScaledCircle workspace.');
       }
     } else {
-      const a=await ws.authority({uid,businessId,permission:operation==='load'||operation==='reconcile'?'communicationsRead':'communicationsSend'});
-      if(!a.isOwner)deny('The invited Business owner must approve mailbox actions.');
-      if(!entitlements.hasActivePaidBusinessEntitlement(a.entitlement))deny('An active paid Business plan is required for Business Email.');
+      const a=await ws.authority({uid,businessId,permission:readOnly||operation==='reconcile'?'communicationsRead':'communicationsSend'});
+      if(connectionAction&&!a.isOwner)deny('The Business owner must manage the mailbox connection.');
       const managed=entitlements.hasActiveManagedGrowthEntitlement(a.entitlement);
-      if(!managed && /Campaign/.test(operation) && operation!=='restrictCampaignContact')deny('Managed Growth includes Email Campaigns. Private Beta access is by invitation.');
-      if(!managed){config.campaignReadEnabled=false;config.campaignSendEnabled=false;}
+      const historicalManaged=['managed_growth'].includes(a.entitlement.planId||a.entitlement.plan)&&a.isOwner&&readOnly;
+      // Preserve existing invited lower-plan access; do not expand their packaging.
+      if(!managed&&!historicalManaged&&!(invited&&entitlements.hasActivePaidBusinessEntitlement(a.entitlement)))deny('Business Email is included with an active Managed Growth membership.');
+      if(managed||historicalManaged){config.includedWithManagedGrowth=true;config.campaignReadEnabled=true;}
+      config.readOnly=!entitlements.hasActivePaidBusinessEntitlement(a.entitlement);
+      config.connectionAllowed=invited&&!config.readOnly;
+      if(!invited||config.readOnly){config.sendEnabled=false;config.campaignSendEnabled=false;config.certificationSendEnabled=false;}
+      if(['connect','connectOther','callback'].includes(operation)&&!config.connectionAllowed)deny('Google mailbox connection is temporarily limited while verification is pending. Your included Email workspace remains available.');
+      if(!managed&&!historicalManaged && /Campaign/.test(operation) && operation!=='restrictCampaignContact')deny('Managed Growth includes Email Campaigns.');
+      if(!managed&&!historicalManaged){config.campaignReadEnabled=false;config.campaignSendEnabled=false;}
     }
     // The existing internal Admin namespace has no customer Business identity.
     // Normal customer workspaces retain their maintained legal-consent gate.

@@ -6,6 +6,34 @@ const app=admin.initializeApp({projectId:'demo-business-email'},'mailbox-tests')
 const {createService,hash}=require('../functions-business-email/service'),gmail=require('../functions-business-email/gmail');
 const {createAuthority}=require('../functions-business-email/authority');
 const key=crypto.randomBytes(32).toString('base64');
+test('Managed Growth includes Email independently of provider invitation, cancellation and add-ons',async()=>{
+ const legal=require('./legal_consent');
+ await db.doc('users/owner').set({role:'business',active:true});
+ for(const type of ['terms','privacy'])await db.doc(`legalConsents/owner_${type}_${legal.AGREEMENTS[type]}`).set({uid:'owner',agreementType:type,agreementVersion:legal.AGREEMENTS[type]});
+ const request={auth:{uid:'owner'},data:{businessId:'owner'}};
+ const make=(invites={})=>createAuthority({db,auth:{getUser:async uid=>({uid,email:uid+'@example.test',emailVerified:true})},FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,project:'demo-business-email',beta:invites,configured:true});
+ const authority=make();
+ for(const comped of [false,true]){
+  await db.doc('businessSubscriptions/owner').set({planId:'managed_growth',status:'active',cancelAtPeriodEnd:true,addons:[],comped,source:comped?'internal_qa':'stripe',expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});
+  const a=await authority(request,'load');assert.equal(a.beta.includedWithManagedGrowth,true);assert.equal(a.beta.campaignReadEnabled,true);assert.equal(a.beta.connectionAllowed,false);assert.equal(a.beta.sendEnabled,false);
+  const s=createService({db,key,provider,authority,project:'demo-business-email'});const view=await s.execute({...request,data:{...request.data,operation:'load'}});
+  assert.equal(view.available,true);assert.equal(view.includedWithManagedGrowth,true);assert.equal(view.connection.automaticSending,false);assert.equal(view.providers.find(p=>p.id==='google').configured,false);
+  await authority(request,'loadCampaigns');await assert.rejects(authority(request,'connect'),/verification is pending/);
+ }
+ await db.doc('businessWorkspaces/owner/members/member').set({businessId:'owner',uid:'member',status:'active',seatIndex:1,permissions:['analytics']});
+ await assert.rejects(authority({auth:{uid:'member'},data:{businessId:'owner'}},'load'),/responsibility/);
+ await db.doc('businessWorkspaces/owner/members/member').update({permissions:['communicationsRead']});
+ for(const type of ['terms','privacy'])await db.doc(`legalConsents/member_${type}_${legal.AGREEMENTS[type]}`).set({uid:'member',agreementType:type,agreementVersion:legal.AGREEMENTS[type]});
+ assert.equal((await authority({auth:{uid:'member'},data:{businessId:'owner'}},'load')).businessId,'owner');
+ await assert.rejects(authority({auth:{uid:'member'},data:{businessId:'owner'}},'send'));
+ await assert.rejects(authority({auth:{uid:'stranger'},data:{businessId:'owner'}},'load'));
+ const invitation={ownerUid:'owner',mailbox:'owner@example.test',campaignReadEnabled:true,sendEnabled:false};const before=JSON.stringify(invitation);
+ assert.equal((await make({owner:invitation})(request,'connect')).beta.connectionAllowed,true);assert.equal(JSON.stringify(invitation),before);
+ await db.doc('businessSubscriptions/owner').update({expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()-1000)});
+ assert.equal((await authority(request,'load')).beta.readOnly,true);await authority(request,'loadCampaigns');
+ await assert.rejects(authority(request,'send'));await assert.rejects(make({owner:invitation})(request,'connect'));
+ for(const plan of ['starter','growth','scale']){await db.doc('businessSubscriptions/owner').update({planId:plan,expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});await assert.rejects(authority(request,'load'));}
+});
 let service,provider,clock,sends,beta;
 const call=(operation,input={},uid='owner',businessId='owner')=>service.execute({auth:{uid},data:{businessId,operation,input}});
 async function credential(permissions={read:true,send:true}) {

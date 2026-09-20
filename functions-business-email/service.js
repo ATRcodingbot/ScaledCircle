@@ -53,7 +53,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     const googleRoundTripVerified=project==='scaled-circle'&&healthy&&ops.some(op=>op.certification===true&&op.state==='sent'&&
       (op.provider||'google')==='google'&&op.from===c.email&&op.providerMessageId&&op.providerThreadId&&
       replies.some(r=>r.certification===true&&r.businessId===a.businessId&&r.operationId===op.id&&r.from===op.recipient));
-    return {available:true,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta,{googleRoundTripVerified}),sendEnabled:a.beta.sendEnabled!==false,
+    return {available:true,includedWithManagedGrowth:a.beta.includedWithManagedGrowth===true,readOnly:a.beta.readOnly===true,connectionAllowed:a.beta.connectionAllowed!==false,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta,{googleRoundTripVerified}),sendEnabled:a.beta.sendEnabled!==false,
       deliveryLimits:{individualPerHour:5,individualPerDay:20,campaignAudience:25,campaignSending:a.beta.campaignSendEnabled===true},
       certificationSendEnabled:a.beta.certificationSendEnabled===true&&!ops.some(op=>op.certification===true),expectedMailbox:a.beta.mailbox,
       connection:{status:c.status==='connected'?'connected':active?'connecting':'not_connected',email:c.email||null,
