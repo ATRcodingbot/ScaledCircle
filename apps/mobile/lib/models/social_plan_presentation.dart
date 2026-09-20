@@ -1,5 +1,40 @@
 import 'package:flutter/material.dart';
 
+String socialPlanChannelLabel(Map plan) {
+  final providers =
+      (plan['items'] as List? ?? const [])
+          .whereType<Map>()
+          .expand(
+            (item) => (item['variants'] as List? ?? const []).whereType<Map>(),
+          )
+          .map((variant) => variant['provider']?.toString() ?? '')
+          .where((provider) => provider.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+  return providers
+      .map(
+        (provider) => switch (provider) {
+          'facebook' => 'Facebook',
+          'instagram' => 'Instagram',
+          'x' => 'X',
+          _ => provider,
+        },
+      )
+      .join(' + ');
+}
+
+String socialPlanIdentityLabel(Map plan, {String? currentPlanId}) {
+  final date = DateTime.tryParse(plan['startsOn']?.toString() ?? '')?.toUtc();
+  final day = date == null
+      ? 'Date unavailable'
+      : date.toIso8601String().split('T').first;
+  final state = plan['id'] == currentPlanId
+      ? 'Current automatic strategy'
+      : 'Saved plan';
+  return '$day · Version ${plan['planVersion'] ?? '?'} · $state';
+}
+
 String socialEvidenceText(dynamic raw, String fallback) {
   final value = raw?.toString().trim() ?? '';
   if (value.isEmpty ||

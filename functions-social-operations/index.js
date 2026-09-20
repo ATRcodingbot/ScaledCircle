@@ -325,7 +325,7 @@ exports.getSocialOperationsWorkspace = onCall(
     return {
       schemaVersion: socialOperations.SCHEMA_VERSION,
       canonicalBusinessId: business.uid,
-      canonicalBusinessName: readText(profileSnapshot.data()?.businessName, 240) || null,
+      canonicalBusinessName: readText(profileSnapshot.data()?.businessName, 240) || readText(business.user?.companyName,240) || null,
       planId: business.planId,
       managedGrowth: business.planId === "managed_growth",
       connections: safeConnections.map(c=>({...c,publishingState:publishingPresentation.providers[c.provider]})),

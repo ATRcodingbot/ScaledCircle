@@ -1069,6 +1069,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
           return ListView(
             padding: EdgeInsets.all(wide ? 24 : 16),
             children: [
+              if (workspace.data['canonicalBusinessName'] is String)
+                Text(
+                  workspace.data['canonicalBusinessName'] as String,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               Text(
                 'Plan, publish and improve your social presence.',
                 style: Theme.of(context).textTheme.titleLarge,
@@ -1991,9 +1996,11 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
             if (socialPlanApproved(plan))
               Card(
                 child: ListTile(
-                  title: const Text('30-Day Plan · Approved ✓'),
+                  title: Text(
+                    '${socialPlanChannelLabel(plan)} · 30-Day Plan · Approved ✓',
+                  ),
                   subtitle: Text(
-                    socialEvidenceText(plan['goal'], 'Approved strategy'),
+                    '${socialPlanIdentityLabel(plan, currentPlanId: (workspace.data['automaticPublishing'] as Map?)?['planId']?.toString())}\n${socialEvidenceText(plan['goal'], 'Approved strategy')}',
                   ),
                   trailing: TextButton(
                     onPressed: () =>
