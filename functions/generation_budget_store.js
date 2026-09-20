@@ -28,7 +28,7 @@ function createStore({db, resolveBusiness, now = Date.now}) {
       ]);
       const config = configSnap.data() || {}, grant = grantSnap.data(), policy = policySnap.data();
       if(config.paidPreparationHolds?.[actor.uid])throw Error('paid_preparation_held');
-      if(!grant && config.paidPreparationAccountingVersion!=='combined_v1')throw Error('historical_preparation_accounting_required');
+      if(!grant && config.paidPreparationAccountingVersion!=='combined_v1' && config.paidPreparationAccountingByBusiness?.[actor.uid]!=='combined_v1')throw Error('historical_preparation_accounting_required');
       const business = resolveBusiness(entitlementSnap.data() || {}, at);
       const cohort = [...(config.authorizedBusinessUids || []), ...(config.betaCohortBusinessUids || [])];
       const ordinaryAccess = require('./generation_foundation').generationAuthorizationPolicy(config,actor.uid,business);

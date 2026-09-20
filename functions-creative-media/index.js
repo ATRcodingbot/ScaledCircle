@@ -12476,12 +12476,30 @@ exports.getGeneratedMediaOperations = onCall(
     const context = await authenticatedUserContext(request, "Admin access is required.");
     if (context.isAdmin !== true) throw new HttpsError("permission-denied", "Admin access is required.");
     try {const input = request.data || {};
+      if(input.reconcileHistoricalReviews===true){if(context.emailVerified!==true)throw new HttpsError('permission-denied','Verified Admin required.');return require('./generation_review_reconciliation').reconcile({db,operator:context.uid});}
+      if(input.researchPilotOperation==='metadata'){
+        if(context.emailVerified!==true)throw new HttpsError('permission-denied','Verified Admin required.');
+        return require('./public_web_discovery').accessMetadata(require('./openai_image_adapter').createOpenAIWifClient({config:await generationProviderConfig(),OpenAI:require('openai').OpenAI}));
+      }
       const reconciliation = input.reconcileAccounting === true ? await reconcileGenerationAccounting(input) : null;
       const result = await generationService.operations({ actor: context, input });
       return { ...result, accountingReconciliation: reconciliation };}
     catch (error) {throw generationHttpsError(error);}
   }
 );
+exports.researchPilotAuthorityV1 = onRequest({region:'us-east1',invoker:'private',maxInstances:1,timeoutSeconds:120},async(req,res)=>{
+  if(req.method!=='POST')return res.status(405).end();
+  try{
+    const header=req.get('Authorization')||'';
+    if(!header.startsWith('Bearer '))return res.status(401).end();
+    const audience='https://us-east1-scaled-circle.cloudfunctions.net/researchPilotAuthorityV1';
+    const ticket=await new (require('google-auth-library').OAuth2Client)().verifyIdToken({idToken:header.slice(7),audience});
+    const claims=ticket.getPayload();if(claims?.email_verified!==true)return res.status(403).end();
+    const service=require('./research_pilot_authority').createService({db,clientFactory:async()=>
+      require('./openai_image_adapter').createOpenAIWifClient({config:await generationProviderConfig(),OpenAI:require('openai').OpenAI})});
+    const result=await service.execute({email:claims.email,body:req.body||{}});return res.json(result);
+  }catch(error){const safe=typeof error.message==='string'&&/^research_[a-z_]+$/.test(error.message)?error.message:'research_unavailable';return res.status(403).json({error:safe});}
+});
 exports.updateGeneratedMediaSafetyConfiguration = onCall(
   { region: "us-east1", enforceAppCheck: false, maxInstances: 2 },
   async (request) => {
