@@ -8,6 +8,7 @@ const opportunityPreferences=require('./growth_opportunity_preferences');
 const VERSION='GrowthDogfoodResearchV1';
 const hash=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const day=ms=>new Date(ms).toISOString().slice(0,10);
+const publicHost=value=>{try{return new URL(value).hostname.replace(/^www\./,'');}catch{return null;}};
 const fail=message=>{const e=Error(message);e.code='failed-precondition';throw e;};
 const AGENTS=[['lead_generation','Lead Generator'],['workforce_recruiter','Workforce Recruiter'],['marketing_manager','Social Manager'],['ad_manager','Ad Manager'],['business_assistant','Business Assistant'],['growth_strategist','Growth Manager']];
 function assertScope({project,target,actor}) {
@@ -59,7 +60,7 @@ function report(rows,runs,scope={status:'MISSING_MAINTAINED_GEOGRAPHY',areas:[]}
     ...(outreach?{outreach:{...outreach,evidenceWindow:'Up to 250 recent operations; certification traffic excluded.',attributedRevenue:null}}:{}),
     next:outreach?.followups?.length?'Review suggested follow-ups and local outcome patterns. Nothing is sent automatically.':'Review the sourced decision packages and outreach drafts. No prospect will be contacted automatically.'};
 }
-function createService({db,FieldValue,project,target,readSource=fetchSource,now=Date.now,areaPriorityIds=[],sourceCatalog=sources,customerContext=null}) {
+function createService({db,FieldValue,project,target,readSource=fetchSource,now=Date.now,areaPriorityIds=[],sourceCatalog=sources,customerContext=null,publicResearch=null}) {
   const query=async c=>(await db.collection(c).where('businessUid','==',target).limit(250).get()).docs.map(d=>({id:d.id,...d.data()}));
   const customer=customerContext?.businessUid===target&&customerContext?.authorized===true;
   const origin=customer?'https://scaledcircle.com/#/business/growth-agents':'https://scaledcircle-staging.web.app/#/growth-agents';
@@ -78,6 +79,16 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
     if(duplicate){await makeReport('daily');await makeReport('weekly');return {runId,reused:true};}
     const [scope,existing]=await Promise.all([areaScope(),query('agentProspects')]);
     const discovered=customerContext?.discover?await customerContext.discover(scope,readSource,initialPreferences):{sources:[],checks:[]};
+    // Transport and central research budget are injected only after a separately
+    // authorized pilot. No key, paid client or Social allowance is used here.
+    if(publicResearch){
+      const stateRef=db.doc('publicResearchDiscoveryState/'+target),saved=(await stateRef.get()).data();
+      if(saved&&saved.businessUid!==target)fail('Research workspace binding differs.');
+      const profile=customerContext?.profile||publicResearch.publicProfile;
+      const found=await require('./public_web_discovery').discover({project,businessUid:target,profile:profile||{},scope,opportunityPreferences:initialPreferences,state:saved||{},now:now(),search:publicResearch.search,budget:publicResearch.budget,readPublicSource:publicResearch.readPublicSource});
+      discovered.sources.push(...found.sources);discovered.checks.push(...found.checks);
+      await stateRef.set({...found.state,businessUid:target,updatedAt:now()});
+    }
     const localLearning=await outreachEvidence(existing);
     const restrictions=await db.collection('businessMailboxes/'+target+'/suppression').where('active','==',true).limit(501).get();
     if(restrictions.size>500)fail('The contact restriction inventory needs a bounded review before more research.');
@@ -85,7 +96,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
     const eligible=geography.prioritizeSources([...discovered.sources,...sourceCatalog],scope,existing.map(p=>p.sourceUrl))
       .filter(source=>opportunityPreferences.enabled(source,initialPreferences))
       .filter(source=>!suppressedRecipients.has(source.email?.toLowerCase()));
-    const isPriorProspect=source=>Boolean(customerContext?.researchVersion&&existing.some(p=>p.id==='growth_prospect_'+hash([target,source.key]).slice(0,40)));
+    const isPriorProspect=source=>Boolean((customerContext?.researchVersion||source.publicDiscovery)&&existing.some(p=>p.id==='growth_prospect_'+hash([target,source.key]).slice(0,40)||source.publicDiscovery&&publicHost(source.url)&&publicHost(p.sourceUrl)===publicHost(source.url)));
     const duplicatesExcludedCount=eligible.filter(isPriorProspect).length;
     const selected=eligible.filter(source=>!isPriorProspect(source))
       .map((source,index)=>{const area=scope.areas.findIndex(a=>a.id===geography.matchArea(source,scope)?.id);return {source,index,area:area<0?999:area};})
@@ -112,6 +123,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
         const prospect={businessUid:target,displayName:source.name,kind:source.kind,candidateClassification:partner?'REFERRAL PARTNER':null,geography:source.region,serviceArea:source.serviceArea,category:source.industry,source:'official_website',sourceRecordId:source.url,sourceEvidenceIds:[obsId],provenanceImmutable:true,sourceUrl:source.url,sourceHash:o.sourceHash,discoveredAt:now(),lastCheckedAt:now(),sourceAvailable:o.qualified,email:o.email,phone:o.phone,contactPath:o.contactPath,contactConfidence:o.contactConfidence,confidence:o.confidence,qualified,fit:qualified?'potential_fit':'research_needed',reason:source.reason,useCase:source.useCase,skills:null,transportation:null,availability:null,workInterests:null,doNotContact:false,lifecycleState:qualified?'drafted':'discovered',approvalState:qualified?'awaiting_approval':'research_required',lastAction:'Official source reviewed',result:qualified?'Initial fit supported; interest remains unknown':'Source requires more review',nextAction:qualified?'Founder reviews channel, exact draft and CTA':'Recheck source evidence',recommendedChannel:o.email?'email':'website',recommendedCta:customer?source.cta:partner?'Confirm recruiting-channel eligibility':'Review a short product overview',draft:qualified?draft:null,outreachAuthorized:false,externalMessageSent:false};
         if(customerContext?.researchVersion)Object.assign(prospect,{opportunityType:source.opportunityType||(partner?'recruitment_channel':'partner_channel'),explicitNeed:source.explicitNeed===true,deadline:source.deadline||null,unknowns:source.unknowns||'Current project, budget and willingness to engage are unknown.',sourceRecordId:source.sourceRecordId||source.url});
         if(source.opportunityType)prospect.opportunityType=source.opportunityType;
+        if(source.publicDiscovery)Object.assign(prospect,{publicDiscovery:source.publicDiscovery,explicitNeed:false,unknowns:source.unknowns});
         tx.create(result.ref,prospect);
         if(qualified){const qualification={status:'AVAILABLE',score:70,fit:'medium_fit',reasonCodes:['OFFICIAL_SOURCE','INTEREST_UNKNOWN']};
           const crm=agentic.crmProspectProjection({businessUid:target,prospect:{...prospect,prospectId:id,prospectType:partner?'scaler':'business'},qualification,now:now()});
@@ -122,7 +134,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
 
         }
       }
-      tx.update(ref,{status:'completed',...(customerContext?.researchVersion?{discoveryVersion:customerContext.researchVersion,discoveryChecks:discovered.checks}:{}),serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,newProspectCount:records.filter(r=>r.observation&&!r.old.exists).length,duplicatesExcludedCount:duplicatesExcludedCount+records.filter(r=>r.observation&&r.old.exists).length,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
+      tx.update(ref,{status:'completed',...((customerContext?.researchVersion||publicResearch)?{discoveryVersion:customerContext?.researchVersion||'PublicWebDiscoveryV1',discoveryChecks:discovered.checks}:{}),serviceAreaStatus:scope.status,serviceAreaPriority:scope.areas.map(a=>a.label),geographyPreferenceVersion:scope.preferenceVersion,newProspectCount:records.filter(r=>r.observation&&!r.old.exists).length,duplicatesExcludedCount:duplicatesExcludedCount+records.filter(r=>r.observation&&r.old.exists).length,sourceChecks:results.filter(r=>r.observation).length,unavailableSources:results.filter(r=>r.error).length,completedAt:now(),result:'Research and draft preparation complete; external contact held for approval.',leaseUntil:0});
       tx.set(db.doc('agentHealth/'+target),{researchEnabled:true,nextResearchAfter:customer?null:Date.parse(day(started)+'T13:00:00Z')+86400000,lastResearchRunId:runId,updatedAt:FieldValue.serverTimestamp()},{merge:true});
       if(!pref.exists)tx.create(pref.ref,{businessUid:target,...preferences(),updatedAt:FieldValue.serverTimestamp()});
     });

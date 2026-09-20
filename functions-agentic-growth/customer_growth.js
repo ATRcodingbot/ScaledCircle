@@ -13,7 +13,7 @@ const VERSION='CustomerGrowthWorkspaceV1';
 const fail=(code,message)=>{const error=Error(message);error.code=code;throw error;};
 const clean=(s,max=500)=>typeof s==='string'?s.trim().slice(0,max):'';
 
-function createService({db,auth,FieldValue,Timestamp,project,readSource,dogfoodBusinessUid,now=Date.now}) {
+function createService({db,auth,FieldValue,Timestamp,project,readSource,dogfoodBusinessUid,publicResearch=null,now=Date.now}) {
   const ws=workspace.createWorkspaceService({db,auth,FieldValue,Timestamp,now});
   const consent=legal.createLegalConsentService({db,FieldValue});
   async function leadAllowed(a){
@@ -52,7 +52,7 @@ function createService({db,auth,FieldValue,Timestamp,project,readSource,dogfoodB
         `Hello ${source.name} team, ${clean(profile.businessName,160)} provides ${services.join(', ')}. We found your public contractor information and would like to understand whether these services fit your program. ${source.cta}. We have not assumed a current project, qualification or award. Please direct us to the appropriate published application process.`};
   }
   function research(a,c) {return growth.createService({db,FieldValue,project,target:a.businessId,customerContext:c,
-    sourceCatalog:sources.select(c.profile),readSource,now});}
+    sourceCatalog:sources.select(c.profile),readSource,publicResearch,now});}
   async function initialize(a,c) {
     if(!a.isOwner)fail('permission-denied','The Business owner must activate this workspace.');
     return db.runTransaction(async tx=>{

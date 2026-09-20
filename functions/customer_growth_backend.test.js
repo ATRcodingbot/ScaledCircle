@@ -17,6 +17,22 @@ beforeEach(async()=>{
  reads=0;service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',readSource:async source=>{reads++;return source.signals.join(' ')+' '+(source.email||'');}});
 });
 after(()=>app.delete());
+
+test('fixture public search feeds tenant CRM once and preserves suppression and no-outreach authority across cycles',async()=>{
+ await db.doc('businessSubscriptions/owner').update({expiresAt:Timestamp.fromMillis(Date.now()+7*86400000)});
+ let clock=Date.now(),calls=0;
+ const publicResearch={budget:{reserve:async()=>({id:'fixture'}),claim:async()=>true,reconcile:async()=>{}},search:async()=>{calls++;return {usage:{input_tokens:1000,output_tokens:100},output:[{type:'web_search_call',action:{sources:[{url:'https://example.com/vendors'}]}}],output_text:JSON.stringify({candidates:[{name:'Fixture property organization',url:'https://example.com/vendors',quote:'Our decks vendor program is open.',serviceEvidence:'Our decks vendor program is open.',areaEvidence:'Serving Anne Arundel County, Maryland.'}]})};},readPublicSource:async()=>'<p>Our decks vendor program is open. Serving Anne Arundel County, Maryland.</p>'};
+ service=customer.createService({db,auth,FieldValue,Timestamp,project:'scaled-circle',now:()=>clock,publicResearch,readSource:async source=>source.signals.join(' ')});
+ await call('initialize');await call('research');
+ const first=(await db.collection('agentProspects').where('sourceUrl','==','https://example.com/vendors').get()).docs;
+ assert.equal(first.length,1);const row=first[0].data();assert.equal(row.businessUid,'owner');assert.equal(row.explicitNeed,false);assert.equal(row.outreachAuthorized,false);assert.equal(row.externalMessageSent,false);assert.ok(row.publicDiscovery.evidence.length);
+ assert.ok((await db.collection('agentCrmProspects').where('businessUid','==','owner').get()).size>0);
+ await first[0].ref.update({doNotContact:true,lifecycleState:'suppressed'});
+ clock+=86400000;await call('research');assert.equal((await first[0].ref.get()).data().doNotContact,true);assert.equal((await first[0].ref.get()).data().lifecycleState,'suppressed');
+ assert.equal((await db.collection('agentProspects').where('sourceUrl','==','https://example.com/vendors').get()).size,1);
+ await assert.rejects(call('research','member','other'));assert(calls<=4);
+ for(const c of ['outboundEmailJobs','financialOperations','wallets'])assert.equal((await db.collection(c).get()).size,0);
+});
 test('exact dogfood Lead overlay preserves comped MG and financial records; audited replay and revocation isolate authority',async()=>{
  const grants=require('../functions-agentic-growth/customer_growth_grants'),time=Date.now();
  const base={planId:'managed_growth',status:'active',source:'internal_qa',comped:true,billingStatus:'comped',expiresAt:Timestamp.fromMillis(time+7*86400000)};
