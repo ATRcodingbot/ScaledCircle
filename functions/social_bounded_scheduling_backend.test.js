@@ -67,12 +67,12 @@ test('managed preparation cycle resumes its cursor and preserves already schedul
    preparation:{prepare:async(_,input)=>prepared.push(input.itemId)}});
  const first=await cycle.run(uid,{limit:2});
  assert.equal(first.results[0].preserved,true);
- assert.deepEqual(prepared,[planId+'_two']);
+ assert.deepEqual(prepared,[planId+'_two',planId+'_three']);
  await cycle.run(uid,{limit:1});
- assert.deepEqual(scheduled,[planId+'_two',planId+'_three']);
+ assert.deepEqual(scheduled,[planId+'_two',planId+'_three',planId+'_two']);
  await db.doc('socialManagedPolicies/'+uid).update({status:'paused'});
  await assert.rejects(cycle.run(uid),/authority_changed/);
- assert.equal(scheduled.length,2);
+ assert.equal(scheduled.length,3);
  assert.equal((await db.doc('socialManagedCycles/'+uid).get()).data().status,'needs_attention');
 });
 
@@ -82,4 +82,17 @@ test('unactivated workspace never prepares or schedules content',async()=>{
    store:{preview:async()=>assert.fail('no preview without authority')},
    preparation:{prepare:async()=>assert.fail('no generation without authority')}});
  await assert.rejects(cycle.run(uid),/authority_missing/);
+});
+
+test('twenty terminal historical versions do not consume the one fresh preparation slot',async()=>{
+ const f=fixture(),uid='terminal_scan_'+Date.now(),planId=uid+'_plan';
+ const items=Array.from({length:20},(_,n)=>({itemKey:'old_'+n,variants:[{provider:'facebook'}]}));items.push({itemKey:'fresh',variants:[{provider:'facebook'}]});
+ const plan={...f.plan,businessUid:uid,strategy:{services:['decks']},items};
+ const policy=bounded.createPolicy({uid,actorUid:uid,planId,plan,services:['decks'],destinations:['https://example.com/decks'],providers:['facebook'],startsAt:f.now,endsAt:f.now+86400000,now:f.now});
+ await db.doc('socialContentPlans/'+planId).set(plan);await db.doc('socialManagedPolicies/'+uid).set(policy);
+ const prepared=[],scheduled=[];
+ const cycle=require('../functions-social-operations/social_managed_cycle').createCycle({db,now:()=>f.now,
+  store:{preview:async(_,i)=>({version:1,reasons:[],creativeNeedsPreparation:true,publicationStatus:i.itemId.endsWith('_fresh')?null:'published'}),scheduleManaged:async(_,i)=>{scheduled.push(i.itemId);return {status:'scheduled'};}},
+  preparation:{prepare:async(_,i)=>{prepared.push(i.itemId);}}});
+ const result=await cycle.run(uid,{limit:1});assert.deepEqual(prepared,[planId+'_fresh']);assert.deepEqual(scheduled,prepared);assert.equal(result.results.filter(r=>r.preserved).length,20);assert.equal((await db.doc('socialManagedCycles/'+uid).get()).data().cursor,21);
 });

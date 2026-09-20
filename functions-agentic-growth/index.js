@@ -119,7 +119,10 @@ exports.internalGrowthWorkspaceBridgeV1=onRequest({invoker:process.env.GROWTH_PR
     return res.json({result});
   }catch(e){console.error('Internal workspace bridge failed',{code:e.code||'unavailable',message:e.message});return res.json({error:{code:e.code||'unavailable',message:e.code?e.message:'Internal workspace unavailable. Retry.'}});}
 });
-exports.runScheduledGrowthDogfoodV1=onSchedule({serviceAccount:'research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com',schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async()=>{
+exports.runScheduledGrowthDogfoodV1=onSchedule({serviceAccount:'research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com',schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async event=>{
+  if(['research-pilot-preflight','research-pilot-enable'].includes(event.jobName)){
+    console.info('research_runtime_preflight',await require('./research_runtime_client').preflight({db,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,businessUid:process.env.GROWTH_DOGFOOD_UID,auth:new GoogleAuth(),enable:event.jobName==='research-pilot-enable'}));return;
+  }
   if(process.env.GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
   await growthService({scheduled:true}).run();
 });
@@ -131,7 +134,10 @@ exports.grantCustomerGrowthDogfoodLeadV1=onCall({enforceAppCheck:false,maxInstan
     .grant(request.data,{uid:request.auth.uid,role:'admin',isAdmin:true,emailVerified:true});}
   catch(e){throw new HttpsError(e.code||'unavailable',e.code?e.message:'The dogfood grant could not finish.');}
 });
-exports.runScheduledCustomerGrowthResearchV1=onSchedule({schedule:'every 15 minutes',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:540},async()=>{
+exports.runScheduledCustomerGrowthResearchV1=onSchedule({schedule:'every 15 minutes',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:540},async event=>{
+  if(['research-pilot-preflight','research-pilot-enable'].includes(event.jobName)){
+    console.info('research_runtime_preflight',await require('./research_runtime_client').preflight({db,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,businessUid:process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID,auth:new GoogleAuth(),enable:event.jobName==='research-pilot-enable'}));return;
+  }
   if(process.env.CUSTOMER_GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
   const result=await customerGrowth.createService({db,auth:getAuth(),FieldValue,
     publicResearch:require('./research_runtime_client').create({db,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,businessUid:process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID,auth:new GoogleAuth()}),

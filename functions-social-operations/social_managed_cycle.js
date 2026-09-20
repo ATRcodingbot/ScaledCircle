@@ -41,7 +41,8 @@ function createCycle({db,store,preparation,editor,media,replenish=false,now=Date
       const extra=await require('./social_managed_supply').supplemental({db,uid,planId:policy.planId});
       const known=new Set((plan.items||[]).map(i=>i.itemKey));
       const queue=candidates({...plan,items:[...(plan.items||[]),...extra.filter(i=>!known.has(i.itemKey))]},policy);
-      for(let n=0;n<Math.min(limit,queue.length);n++) {
+      let preparedCount=0;
+      for(let scanned=0;scanned<Math.min(24,queue.length)&&preparedCount<limit;scanned++) {
         const input=queue[cursor%queue.length];cursor++;
         // Pause, revocation and strategy changes are checked between expensive
         // preparations and again transactionally when scheduling.
@@ -51,6 +52,7 @@ function createCycle({db,store,preparation,editor,media,replenish=false,now=Date
         let preview=await store.preview(uid,input);
         if(preview.managedHold){results.push({...input,status:preview.managedHold.status,preserved:true});continue;}
         if(preview.publicationStatus){results.push({...input,status:preview.publicationStatus,preserved:true});continue;}
+        preparedCount++;
         const externalBlockers=preview.reasons.filter(r=>['permission','scheduler','paused','plan','existing'].includes(r.code));
         if(externalBlockers.length){results.push({...input,status:'needs_attention',reasons:externalBlockers});continue;}
         if(editor){
@@ -67,7 +69,13 @@ function createCycle({db,store,preparation,editor,media,replenish=false,now=Date
           }
         }
         if(preview.creativeNeedsPreparation){
-          const prepared=await preparation.prepare(uid,{...input,version:preview.version,action:'auto'});
+          let prepared=await preparation.prepare(uid,{...input,version:preview.version,action:'auto'});
+          if(prepared?.reviewCandidate?.preparation?.subjectQuality?.status==='blocked'){
+            const current=await store.preview(uid,input);
+            const recovery=await require('./social_managed_recovery').recover({db,uid,input:{...input,version:current.version},policyId:policy.id,candidate:prepared.reviewCandidate,preparation,now:now()});
+            if(recovery.exhausted){results.push({...input,status:'needs_attention',reasons:[{code:'creative_recovery_exhausted',message:recovery.reason}]});continue;}
+            prepared=recovery.result;
+          }
           if(prepared?.reviewCandidate&&media){
             const current=await store.preview(uid,input);
             await require('./social_managed_creative').authorize({db,uid,input:{...input,version:current.version},policyId:policy.id,candidate:prepared.reviewCandidate,now:now()});

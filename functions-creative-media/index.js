@@ -12481,6 +12481,10 @@ exports.getGeneratedMediaOperations = onCall(
         if(context.emailVerified!==true)throw new HttpsError('permission-denied','Verified Admin required.');
         return require('./public_web_discovery').accessMetadata(require('./openai_image_adapter').createOpenAIWifClient({config:await generationProviderConfig(),OpenAI:require('openai').OpenAI}));
       }
+      if(input.researchPilotOperation==='activateAndValidate'){
+        if(context.emailVerified!==true)throw new HttpsError('permission-denied','Verified Admin required.');
+        return require('./research_pilot_authority').activateAndValidate({db,operator:context.uid,clientFactory:async()=>require('./openai_image_adapter').createOpenAIWifClient({config:await generationProviderConfig(),OpenAI:require('openai').OpenAI})});
+      }
       const reconciliation = input.reconcileAccounting === true ? await reconcileGenerationAccounting(input) : null;
       const result = await generationService.operations({ actor: context, input });
       return { ...result, accountingReconciliation: reconciliation };}

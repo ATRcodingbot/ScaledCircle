@@ -10,7 +10,12 @@ function createService({db,clientFactory,now=Date.now}){
  return {async execute({email,body}){
   const workspace=bind(email,body),[project,businessUid]=workspace.split('/');
   const client=await clientFactory();
-  if(body.operation==='metadata')return {...await discovery.accessMetadata(client),workspace,ledgerProject:'scaled-circle',grantId:PILOT};
+  if(body.operation==='metadata'){
+   const metadata=await discovery.accessMetadata(client);if(metadata.listed!==true)throw Error('research_model_unavailable');
+   await db.doc('researchRuntimeAccess/'+require('node:crypto').createHash('sha256').update(workspace).digest('hex')).set({workspace,email,at:now(),listed:true,grantId:PILOT});
+   const grant=(await db.doc('researchOperatingGrants/'+PILOT).get()).data();
+   return {...metadata,workspace,ledgerProject:'scaled-circle',grantId:PILOT,recurringEnabled:grant?.recurringEnabled===true&&grant.expiresAt>now()};
+  }
   const grant=(await db.doc('researchOperatingGrants/'+PILOT).get()).data();
   if(grant?.recurringEnabled!==true)throw Error('research_recurring_not_enabled');
   return paid({project,businessUid,attemptId:body.attemptId,query:body.query,client});
@@ -29,4 +34,16 @@ function createService({db,clientFactory,now=Date.now}){
   }catch(error){await budget.reconcile({reservation,status:'unknown_provider_outcome'});throw Error('research_provider_outcome_requires_reconciliation');}
  }
 }
-module.exports={PILOT,WORKSPACES,PRINCIPALS,bind,activate,createService};
+async function activateAndValidate({db,operator,clientFactory,now=Date.now}){
+ for(const [email,workspace]of Object.entries(PRINCIPALS)){
+  const proof=(await db.doc('researchRuntimeAccess/'+require('node:crypto').createHash('sha256').update(workspace).digest('hex')).get()).data();
+  if(proof?.email!==email||proof.workspace!==workspace||proof.listed!==true||now()-proof.at>86400000)throw Error('research_runtime_preflight_required');
+ }
+ const grant=await activate({db,operator,now});
+ if(grant.recurringEnabled===true)return {grant,reused:true};
+ const result=await createService({db,clientFactory,now}).validateAccess({operator,query:'Baltimore Maryland property management vendor program official public website'});
+ if(!result.response?.output?.some(o=>o.type==='web_search_call'))throw Error('research_search_tool_not_verified');
+ await db.doc('researchOperatingGrants/'+PILOT).update({recurringEnabled:true,accessValidatedAt:now(),accessValidationPurpose:result.purpose,accessValidationCostMicros:result.accountedCostMicros});
+ return {grant:{...grant,recurringEnabled:true},purpose:result.purpose,accountedCostMicros:result.accountedCostMicros,discoveriesClaimed:0};
+}
+module.exports={PILOT,WORKSPACES,PRINCIPALS,bind,activate,createService,activateAndValidate};
