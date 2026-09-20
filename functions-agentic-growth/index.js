@@ -119,7 +119,7 @@ exports.internalGrowthWorkspaceBridgeV1=onRequest({invoker:process.env.GROWTH_PR
     return res.json({result});
   }catch(e){console.error('Internal workspace bridge failed',{code:e.code||'unavailable',message:e.message});return res.json({error:{code:e.code||'unavailable',message:e.code?e.message:'Internal workspace unavailable. Retry.'}});}
 });
-exports.runScheduledGrowthDogfoodV1=onSchedule({schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async()=>{
+exports.runScheduledGrowthDogfoodV1=onSchedule({serviceAccount:'research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com',schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async()=>{
   if(process.env.GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
   await growthService({scheduled:true}).run();
 });
