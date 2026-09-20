@@ -11,7 +11,12 @@ function createAuthority({db,auth,FieldValue,Timestamp,project,beta={},configure
     const who=await ws.actor(uid),businessId=request.data?.businessId||uid;
     if(!/^[a-zA-Z0-9_-]{1,128}$/.test(businessId))deny('Choose a valid Business workspace.');
     const config={...beta[businessId]};
-    const invited=!!config.mailbox&&config.ownerUid===businessId;
+    const invitation=config.onboardingInvitation;
+    const invitationValid=!invitation||(invitation.provider==='google'&&invitation.actorUid===uid&&
+      invitation.businessId===businessId&&invitation.mailbox===config.mailbox&&
+      who.email===config.mailbox&&Number.isSafeInteger(invitation.expiresAt)&&invitation.expiresAt>Date.now()&&
+      !!invitation.purpose&&!!invitation.grantedAt&&!!invitation.grantedBy);
+    const invited=!!config.mailbox&&config.ownerUid===businessId&&invitationValid;
     const readOnly=['load','loadCampaigns'].includes(operation);
     const connectionAction=['connect','connectOther','callback','disconnect','checkConnection','preferences'].includes(operation);
     if(config.kind==='internal') {

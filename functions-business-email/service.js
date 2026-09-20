@@ -104,7 +104,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     try {
       if(query.error||typeof query.code!=='string'||query.code.length>4096)fail('permission-denied','The email provider did not complete the connection.');
       const name=contract.providerId(attempt.provider),{verifier}=gmail.unseal(attempt.challenge,key,binding(a)),result=await adapter(a,name).exchange(query.code,verifier);
-      if(gmail.email(result.email)!==attempt.expectedMailbox)fail('permission-denied','Choose the approved Business mailbox.');
+      if(gmail.email(result.email)!==attempt.expectedMailbox||attempt.expectedMailbox!==gmail.email(a.beta.mailbox))fail('permission-denied','Choose the approved Business mailbox.');
       const permissions={read:attempt.permissions.read&&result.permissions.read===true,send:attempt.permissions.send&&result.permissions.send===true};
       if(!permissions.read&&!permissions.send)fail('permission-denied','No requested permission was granted.');
       await authority({auth:{uid:a.actorUid},data:{businessId:a.businessId}},'callback');

@@ -9,7 +9,7 @@ function createRegistry({google,microsoft,other}) {
  return {
   get(name='google',beta={}) {
    name=contract.providerId(name);const p=adapters[name];
-   if(!p||p.configured===false||name!=='google'&&beta.providers?.[name]!==true||name==='other'&&!beta.otherMailbox)
+   if(beta.onboardingInvitation&&name!==beta.onboardingInvitation.provider||!p||p.configured===false||name!=='google'&&beta.providers?.[name]!==true||name==='other'&&!beta.otherMailbox)
      contract.fail('failed-precondition','This provider is in setup testing. A reviewed private test connection is required.');
    return p;
   },

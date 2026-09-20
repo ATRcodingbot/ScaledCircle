@@ -86,6 +86,44 @@ class ConversationEmailService extends BusinessEmailService {
 }
 
 void main() {
+  testWidgets(
+    'invited Google connection enables requested permissions without starting OAuth',
+    (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BusinessEmailProviders(
+              providers: const [
+                {
+                  'id': 'google',
+                  'label': 'Google',
+                  'status': 'private_beta',
+                  'configured': true,
+                },
+              ],
+              connection: const {'status': 'not_connected'},
+              busy: false,
+              read: true,
+              send: true,
+              onConnect: (_, _) async {
+                calls++;
+              },
+            ),
+          ),
+        ),
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Continue with Google'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(calls, 0);
+    },
+  );
   test(
     'legacy production Google connection keeps its exact request contract',
     () {
@@ -388,6 +426,16 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Email Campaigns'), findsOneWidget);
+      expect(
+        find.text(
+          'No mailbox connected. Choose the permissions to request, then connect Google.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Your mailbox is connected for review'),
+        findsNothing,
+      );
       expect(
         find.textContaining('Your included Email workspace is available'),
         findsOneWidget,

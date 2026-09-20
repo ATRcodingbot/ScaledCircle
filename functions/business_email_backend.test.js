@@ -35,6 +35,31 @@ test('Managed Growth includes Email independently of provider invitation, cancel
  for(const plan of ['starter','growth','scale']){await db.doc('businessSubscriptions/owner').update({planId:plan,expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});await assert.rejects(authority(request,'load'));}
 });
 let service,provider,clock,sends,beta;
+test('bounded Google demo invitation binds verified owner, workspace, mailbox and expiry at connect and callback',async()=>{
+ const legal=require('./legal_consent');
+ await db.doc('users/owner').set({role:'business',active:true});
+ await db.doc('businessSubscriptions/owner').set({planId:'managed_growth',status:'active',cancelAtPeriodEnd:true,expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});
+ for(const type of ['terms','privacy'])await db.doc(`legalConsents/owner_${type}_${legal.AGREEMENTS[type]}`).set({uid:'owner',agreementType:type,agreementVersion:legal.AGREEMENTS[type]});
+ const grant={provider:'google',actorUid:'owner',businessId:'owner',mailbox:'owner@example.test',expiresAt:Date.now()+3600000,purpose:'Founder OAuth recording',grantedAt:new Date().toISOString(),grantedBy:'Founder authorization'};
+ const invitation={ownerUid:'owner',mailbox:'owner@example.test',kind:'customer',sendEnabled:false,certificationSendEnabled:false,onboardingInvitation:grant};
+ const make=()=>createAuthority({db,auth:{getUser:async uid=>({uid,email:uid+'@example.test',emailVerified:true})},FieldValue:admin.firestore.FieldValue,Timestamp:admin.firestore.Timestamp,project:'demo-business-email',beta:{owner:invitation},configured:true});
+ const request={auth:{uid:'owner'},data:{businessId:'owner'}};
+ for(const op of ['load','connect','callback']){const a=await make()(request,op);assert.equal(a.beta.connectionAllowed,true);assert.equal(a.beta.sendEnabled,false);assert.equal(a.beta.certificationSendEnabled,false);}
+ for(const [field,value] of [['expiresAt',Date.now()-1],['actorUid','other'],['businessId','other'],['mailbox','other@example.test'],['provider','microsoft']]){
+  const original=grant[field];grant[field]=value;
+  assert.equal((await make()(request,'load')).beta.connectionAllowed,false);
+  for(const op of ['connect','callback'])await assert.rejects(make()(request,op),{code:'permission-denied'});
+  grant[field]=original;
+ }
+ const registry=require('../functions-business-email/providers').createRegistry({google:provider,microsoft:{configured:true}});
+ assert.throws(()=>registry.get('microsoft',{...invitation,providers:{microsoft:true}}));
+ await db.doc('businessMailboxes/owner').delete();
+ const demo=createService({db,key,provider,authority:make(),project:'demo-business-email'});
+ const result=await demo.execute({...request,data:{businessId:'owner',operation:'connect',input:{provider:'google',read:true,send:true}}});
+ grant.expiresAt=Date.now()-1;
+ await assert.rejects(demo.callback({state:new URL(result.url).searchParams.get('state'),code:'test-code'}),{code:'permission-denied'});
+ assert.notEqual((await db.doc('businessMailboxes/owner').get()).data().status,'connected');assert.equal(sends,0);
+});
 const call=(operation,input={},uid='owner',businessId='owner')=>service.execute({auth:{uid},data:{businessId,operation,input}});
 async function credential(permissions={read:true,send:true}) {
   await db.doc('businessMailboxes/owner').set({businessId:'owner',status:'connected',email:'owner@example.test',permissions,generation:'gen',automaticSending:false});

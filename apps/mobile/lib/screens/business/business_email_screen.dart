@@ -378,7 +378,12 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       const Text(
                         'Send reviewed messages from your Business mailbox. Each message needs your approval; automatic sending is off.',
                       ),
-                    if (_data!['sendEnabled'] == false)
+                    if (c['status'] != 'connected')
+                      const Text(
+                        'No mailbox connected. Choose the permissions to request, then connect Google.',
+                      ),
+                    if (c['status'] == 'connected' &&
+                        _data!['sendEnabled'] == false)
                       Text(
                         _data!['certificationSendEnabled'] == true
                             ? 'One reviewed test email to ${_data!['certificationRecipient']} is enabled. Customer and prospect sending is blocked.'
