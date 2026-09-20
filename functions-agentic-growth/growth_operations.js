@@ -85,7 +85,7 @@ function createService({db,FieldValue,project,target,readSource=fetchSource,now=
       const stateRef=db.doc('publicResearchDiscoveryState/'+target),saved=(await stateRef.get()).data();
       if(saved&&saved.businessUid!==target)fail('Research workspace binding differs.');
       const profile=customerContext?.profile||publicResearch.publicProfile;
-      const found=await require('./public_web_discovery').discover({project,businessUid:target,profile:profile||{},scope,opportunityPreferences:initialPreferences,state:saved||{},now:now(),search:publicResearch.search,budget:publicResearch.budget,readPublicSource:publicResearch.readPublicSource});
+      const found=await require('./public_web_discovery').discover({project,businessUid:target,profile:profile||{},scope,opportunityPreferences:initialPreferences,state:saved||{},now:now(),search:publicResearch.search,budget:publicResearch.budget,executeRequest:publicResearch.executeRequest,readPublicSource:publicResearch.readPublicSource});
       discovered.sources.push(...found.sources);discovered.checks.push(...found.checks);
       await stateRef.set({...found.state,businessUid:target,updatedAt:now()});
     }

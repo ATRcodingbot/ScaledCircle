@@ -27,20 +27,23 @@ function cost(response){
 }
 function citations(response){return new Set((response.output||[]).flatMap(o=>o.type==='web_search_call'?(o.action?.sources||[]).map(s=>publicUrl(s.url)):(o.content||[]).flatMap(c=>(c.annotations||[]).filter(a=>a.type==='url_citation').map(a=>publicUrl(a.url)))).filter(Boolean));}
 function text(response){return response.output_text||(response.output||[]).flatMap(o=>o.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('');}
-async function discover({businessUid,project,profile,scope,opportunityPreferences,state={},search,budget,readPublicSource,now=Date.now()}){
+async function discover({businessUid,project,profile,scope,opportunityPreferences,state={},search,budget,executeRequest,readPublicSource,now=Date.now()}){
  const checks=[],sources=[],next={cursor:state.cursor||0,failures:{...(state.failures||{})}};
- if(!search||!budget||!readPublicSource)return {sources,checks:[{status:'research_budget_not_authorized'}],state:next};
+ if((!executeRequest&&(!search||!budget))||!readPublicSource)return {sources,checks:[{status:'research_budget_not_authorized'}],state:next};
  for(const cell of plan({profile,scope,opportunityPreferences,cursor:next.cursor})){
   const attemptId=hash(`${project}/${businessUid}/${new Date(now).toISOString().slice(0,10)}/${cell.slot}`);
   let reservation,response;
   try {
+   if(executeRequest){response=(await executeRequest({workspace:project+'/'+businessUid,operation:'search',attemptId,query:cell.query})).response;}
+   else {
    reservation=await budget.reserve({project,businessUid,attemptId,maximumCostMicros:RESERVATION_MICROS});
    if(!await budget.claim({reservation})){checks.push({status:'prior_attempt_pending_or_complete'});continue;}
    // No SDK or HTTP retry: every future paid attempt needs its own reservation.
    response=await search(request(cell.query),{maxRetries:0});
+   }
    const actualCostMicros=cost(response);
-   if(actualCostMicros===null){await budget.reconcile({reservation,status:'unknown_provider_outcome'});checks.push({status:'usage_unconfirmed'});continue;}
-   await budget.reconcile({reservation,status:'settled',providerAccepted:true,cost:{actualCostMicros,basis:'conservative_usage_plus_search_block',providerUsage:response.usage}});
+   if(actualCostMicros===null){if(reservation)await budget.reconcile({reservation,status:'unknown_provider_outcome'});checks.push({status:'usage_unconfirmed'});continue;}
+   if(reservation)await budget.reconcile({reservation,status:'settled',providerAccepted:true,cost:{actualCostMicros,basis:'conservative_usage_plus_search_block',providerUsage:response.usage}});
    const cited=citations(response),parsed=JSON.parse(text(response));
    let accepted=0;
    for(const item of (Array.isArray(parsed.candidates)?parsed.candidates:[]).slice(0,4)){

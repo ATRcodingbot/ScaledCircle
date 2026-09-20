@@ -61,7 +61,8 @@ exports.queueCustomerGrowthReportEmailV1 = onDocumentCreated({document:'agentRep
   });
 });
 
-function growthService() {return growth.createService({db,FieldValue,
+function growthService({scheduled=false}={}) {return growth.createService({db,FieldValue,
+  publicResearch:scheduled?require('./research_runtime_client').create({db,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,businessUid:process.env.GROWTH_DOGFOOD_UID,auth:new GoogleAuth(),publicProfile:{servicesOffered:[...new Set(require('./growth_sources').map(s=>s.industry).filter(Boolean))]}}):null,
   project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,target:process.env.GROWTH_DOGFOOD_UID,areaPriorityIds:(process.env.GROWTH_RESEARCH_AREA_PRIORITY_IDS||'').split(',').filter(Boolean)});}
 async function growthActor(request) {
   if(!request.auth)throw new HttpsError('unauthenticated','Sign in to inspect ScaledCircle agents.');
@@ -120,7 +121,7 @@ exports.internalGrowthWorkspaceBridgeV1=onRequest({invoker:process.env.GROWTH_PR
 });
 exports.runScheduledGrowthDogfoodV1=onSchedule({schedule:'0 9 * * *',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:180},async()=>{
   if(process.env.GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
-  await growthService().run();
+  await growthService({scheduled:true}).run();
 });
 exports.grantCustomerGrowthDogfoodLeadV1=onCall({enforceAppCheck:false,maxInstances:1},async request=>{
   await growthActor(request);
@@ -133,6 +134,7 @@ exports.grantCustomerGrowthDogfoodLeadV1=onCall({enforceAppCheck:false,maxInstan
 exports.runScheduledCustomerGrowthResearchV1=onSchedule({schedule:'every 15 minutes',timeZone:'America/New_York',maxInstances:1,timeoutSeconds:540},async()=>{
   if(process.env.CUSTOMER_GROWTH_RESEARCH_SCHEDULE_ENABLED!=='true')return;
   const result=await customerGrowth.createService({db,auth:getAuth(),FieldValue,
+    publicResearch:require('./research_runtime_client').create({db,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,businessUid:process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID,auth:new GoogleAuth()}),
     Timestamp:require('firebase-admin/firestore').Timestamp,project:process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT,
     dogfoodBusinessUid:process.env.CUSTOMER_GROWTH_DOGFOOD_BUSINESS_UID}).runScheduledResearch();
   console.info('Customer research schedule completed',result);
