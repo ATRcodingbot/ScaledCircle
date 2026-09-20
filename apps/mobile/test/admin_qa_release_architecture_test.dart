@@ -29,10 +29,10 @@ void main() {
     },
   );
 
-  test('Admin Dashboard exposes the minimum operations command center', () {
+  test('Admin Dashboard exposes the bounded launch operations overview', () {
     final dashboard = source('lib/screens/admin/admin_dashboard_screen.dart');
     final service = source('lib/services/admin_operations_service.dart');
-    expect(dashboard, contains('ScaledCircle Command Center'));
+    expect(dashboard, contains('ScaledCircle Launch Operations'));
     expect(dashboard, contains('Needs attention'));
     expect(dashboard, contains('Operational overview'));
     expect(dashboard, contains('Recent activity'));

@@ -84,8 +84,8 @@ async function load({db,now=Date.now(),paidWorkEnabled=null,project=null}) {
       reconciliationIssues:count(operations,o=>['failed','attention','review_required'].includes(o.state||o.status)),
       moneySummary:'Customer payments, worker reserves and ScaledCircle revenue are separate. See each authoritative payment timeline; no gross-payment revenue total is inferred.'},
     email:{mailboxes:mailboxes?.map(m=>({businessId:m.docId,status:label(m.status),health:label(m.health)}))??null,
-      branding:project==='scaled-circle'?'verified_checkpoint':'unavailable',gmailReview:'external_review_pending',newCustomerOnboarding:'verify_configuration',demoVideo:'required',
-      evidenceKind:'Maintained Google verification checkpoint; external review is not complete'},
+      branding:project==='scaled-circle'?'verified_checkpoint':'unavailable',gmailReview:project==='scaled-circle'?'submitted_under_review':'unavailable',newCustomerOnboarding:'verify_configuration',demoVideo:project==='scaled-circle'?'recorded_submitted':'unavailable',
+      evidenceKind:'September 20, 2026 Google verification checkpoint; data access under review, CASA not complete; not a live provider probe'},
     notificationFailures:count(notifications,n=>['provider_configuration','uncertain'].includes(n.status)||(n.status==='retryable'&&n.attempts>=3)),
     release:project==='scaled-circle'?require('./admin_launch_candidate_evidence'):null};
 }

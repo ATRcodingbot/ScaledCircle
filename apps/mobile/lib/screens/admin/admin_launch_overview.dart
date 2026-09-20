@@ -208,7 +208,7 @@ class AdminLaunchOverview extends StatelessWidget {
                   : 'Google branding: unavailable.',
             ),
             const Text(
-              'Gmail restricted-scope review remains pending. Founder demo video and external review are required before general customer onboarding.',
+              'Gmail data-access approval and any required security assessment must be complete before general customer onboarding. See the maintained provider checkpoint for submission progress.',
             ),
             if (email['mailboxes'] is List)
               for (final mailbox in email['mailboxes'] as List)
