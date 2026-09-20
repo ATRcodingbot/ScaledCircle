@@ -1,5 +1,9 @@
 # Launch close verification — September 19, 2026
 
+## Google review status update — September 20, 2026
+
+**SUBMITTED — DATA ACCESS UNDER REVIEW** in production project `scaled-circle`. A read-only Verification Center check confirms receipt by Google's Trust and Safety team and all seven review categories in progress. Branding is verified and shown. The four exact scopes and saved demo https://youtu.be/uZWplPJ1B6M were read back unchanged. No submission time/reference is exposed. CASA remains open; general new-customer Gmail onboarding stays gated. Included Managed Growth Email access and existing connections are preserved. This supersedes prior “not submitted” / “demo missing” notes. Full readback: [Google verification record](google-oauth-verification-preparation-20260914.md).
+
 Runtime candidate before test synchronization: c67a333a8f0a708ac39f8da2cdcd313505f24741.
 
 ## Research visibility

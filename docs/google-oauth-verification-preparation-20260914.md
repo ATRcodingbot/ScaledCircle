@@ -1,6 +1,16 @@
 # Google Business Email verification preparation
 
-This is a preparation record, not provider approval or store-readiness certification.
+Current status (September 20, 2026): **SUBMITTED — DATA ACCESS UNDER REVIEW**. See the current readback below; earlier entries are historical preparation evidence, not the current submission state. This is not provider approval or store-readiness certification.
+
+## Current production verification readback — September 20
+
+One read-only check of Google Auth Platform for project `scaled-circle` confirmed: “Your branding has been verified and is being shown to users” and “Your app's data access is under review.” View verification progress explicitly says the Trust and Safety team has received the form. This supersedes the earlier Submitted: NO checkpoint taken before the Founder completed submission.
+
+All seven categories are marked in progress: homepage requirements, privacy policy requirements, app functionality, branding guidelines, appropriate data access, request minimum scopes, and additional requirements. The expanded additional-requirements section says it is under review; no specific remediation request is shown. Google says first contact is expected within 3–5 days and review can take 4–6 weeks. The last approved consent screen remains in use.
+
+The saved Data Access page still lists exactly `openid`, `https://www.googleapis.com/auth/userinfo.email`, `https://www.googleapis.com/auth/gmail.readonly`, and `https://www.googleapis.com/auth/gmail.send`, with the existing Email productivity use case and justifications. The saved demo is https://youtu.be/uZWplPJ1B6M. Both Gmail scopes remain marked not yet verified, consistent with review pending rather than approval.
+
+Google displayed no submission timestamp or reference. The readback occurred around 05:12 EDT on September 20; that is an observation time, not an inferred submission time. CASA/security assessment remains open and is not certified complete. General new-customer Gmail onboarding remains gated pending required approval; normal Managed Growth Email product access and existing mailbox connections remain preserved. No resubmission, settings change, consent, disconnect, send, or credential operation was performed.
 
 ## Confirmed mismatch
 
