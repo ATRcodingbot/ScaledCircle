@@ -6,7 +6,7 @@ No IAM mutation, identity creation, deployment, paid access check or pilot activ
 
 Create `research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com` in existing project `scaledcircle-staging`. The service-account inventory contains only App Engine default, Compute default and Firebase Admin SDK identities; no dedicated research identity exists.
 
-Change **only** `scaledcircle-staging/us-east1/runScheduledGrowthDogfoodV1` runtime to this identity. Do not change global options, interactive research endpoints, the internal Growth bridge, Business Email, billing, report-email triggers or Attractive Remodel production research. Keep its existing 09:00 America/New_York schedule and Scheduler OIDC caller unchanged.
+Change **only** `scaledcircle-staging/us-east1/runScheduledGrowthDogfoodV1` runtime to this identity. Do not change global options, interactive research endpoints, the internal Growth bridge, Business Email, billing, report-email triggers or Attractive Remodel production research. Keep its existing 09:00 America/New_York cadence. The installed Firebase CLI's `cloudscheduler.js` uses `endpoint.serviceAccount` for Scheduler OIDC, so the same job's OIDC caller will also become the dedicated identity; include its own service-level invocation permission below.
 
 All requested new bindings:
 
@@ -14,6 +14,7 @@ All requested new bindings:
 |---|---|---|
 | serviceAccount:research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com | proposed custom role `projects/scaledcircle-staging/roles/scaledCircleResearchRuntime` | staging project `scaledcircle-staging` only |
 | same | `roles/run.invoker` | `projects/scaled-circle/locations/us-east1/services/researchpilotauthorityv1` only |
+| same | `roles/run.invoker` | `projects/scaledcircle-staging/locations/us-east1/services/runscheduledgrowthdogfoodv1` only, for the existing Scheduler job's dedicated OIDC caller |
 
 Custom role exact permissions: `datastore.databases.get`, `datastore.databases.getMetadata`, `datastore.entities.get`, `datastore.entities.list`, `datastore.entities.create`, `datastore.entities.update`. No delete, Auth administration, secrets, storage, impersonation or IAM management. This Firestore authority is **staging database-wide**, not document-scoped; the Admin SDK relies on application tenant binding. It does not grant any production Firestore access. No roles are copied from the default account.
 
@@ -27,7 +28,7 @@ Both project ancestry readbacks contain only the project (no organization/folder
 
 - Staging Compute default already has project Editor. The actual role includes `iam.serviceAccounts.actAs`, `cloudfunctions.functions.update`, and `run.services.update`. Consequently, a privileged workload using it could indirectly act through the new identity by changing a runtime. Dedicated identity does **not** eliminate this existing administrative path. No new impersonation privilege is being granted, and no existing Editor binding will be silently removed.
 - Staging Firebase Admin SDK (`firebase-adminsdk-fbsvc@scaledcircle-staging.iam.gserviceaccount.com`) and Pub/Sub service agent (`service-998249478055@gcp-sa-pubsub.iam.gserviceaccount.com`) already have project-wide `roles/iam.serviceAccountTokenCreator`, which would cover the new same-project account. Cloud Functions/Cloud Run service agents also possess required token/actAs permissions. These are existing broader access paths, not newly requested permissions.
-- Scheduler currently invokes the staging research Function as Compute default, with existing invocation permission. That caller remains able to trigger the existing bounded scheduled handler; changing runtime identity does not revoke invocation. It cannot select a different workspace/grant in the handler.
+- Scheduler currently invokes the staging research Function as Compute default, with existing invocation permission. The deployment will select the new dedicated OIDC caller without changing cadence. The old shared caller retains existing broader staging invocation permission and remains able to trigger the bounded handler; the identity change does not revoke that permission. It cannot select a different workspace/grant in the handler.
 
 If elimination of these existing administrative paths is required, stop for a separate reviewed least-privilege/deny change; do not claim isolation that the current project IAM cannot provide or silently migrate unrelated Functions.
 
@@ -37,7 +38,7 @@ The receiving endpoint replaces the staging Compute identity in its verified-tok
 
 Six focused tests pass: dedicated mapping, shared direct caller denial, production caller preservation, tenant/grant/identity substitution denial, disabled transport and no-retry central dispatch. Syntax checks pass. No deployment yet.
 
-After approval, create identity/custom role and apply exactly the two bindings; deploy the mapping and selected runtime only; verify effective IAM and both runtime paths; finish maintained Admin activation/access-check and enable the existing scheduled adapters. Start the seven-day term at actual activation. Count the one paid access check inside the $5/28-request pilot and label it integration validation. Never treat it as natural recurrence or fresh discovery.
+After approval, create identity/custom role and apply exactly the three bindings; deploy the mapping and selected runtime only; verify effective IAM, Scheduler OIDC identity and both runtime paths; finish maintained Admin activation/access-check and enable the existing scheduled adapters. Start the seven-day term at actual activation. Count the one paid access check inside the $5/28-request pilot and label it integration validation. Never treat it as natural recurrence or fresh discovery.
 
 ## Rollback
 
@@ -46,9 +47,10 @@ First disable the pilot adapter through maintained configuration, preserving led
 ```powershell
 gcloud run services remove-iam-policy-binding researchpilotauthorityv1 --project=scaled-circle --region=us-east1 --member="serviceAccount:research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com" --role="roles/run.invoker"
 gcloud projects remove-iam-policy-binding scaledcircle-staging --member="serviceAccount:research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com" --role="projects/scaledcircle-staging/roles/scaledCircleResearchRuntime"
+gcloud run services remove-iam-policy-binding runscheduledgrowthdogfoodv1 --project=scaledcircle-staging --region=us-east1 --member="serviceAccount:research-pilot-runtime@scaledcircle-staging.iam.gserviceaccount.com" --role="roles/run.invoker"
 ```
 
-Restore only `runScheduledGrowthDogfoodV1` to its prior runtime/source with paid adapter disabled. Remove the dedicated endpoint allowlist entry; **do not restore the rejected shared production caller permission**. Keep the now-unused account/role disabled or unbound until safe removal is separately reviewed; no financial/audit deletion. Preserve unrelated bindings and Scheduler settings.
+Restore only `runScheduledGrowthDogfoodV1` to its prior runtime/source and Scheduler OIDC identity with paid adapter disabled and cadence unchanged. Remove the dedicated endpoint allowlist entry; **do not restore the rejected shared production caller permission**. Keep the now-unused account/role disabled or unbound until safe removal is separately reviewed; no financial/audit deletion. Preserve unrelated bindings and Scheduler settings.
 
 ## Social transition trace (one focused read, 14:32:18 UTC)
 
