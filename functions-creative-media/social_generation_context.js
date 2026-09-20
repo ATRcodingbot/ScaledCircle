@@ -16,6 +16,12 @@ const recipes={
   ['Deck construction detail concept','a realistic residential deck board and railing installation detail','close view of straight decking, fastening and sturdy railing connections','warm neutral materials, no people, believable construction, diffuse daylight']
  ]};
 function direction(service,requestId,recent=[]){
+ if(['product explanation','business value','business and scaler roles'].includes(String(service).toLowerCase())){
+  const layouts=['connected steps in a clear visual sequence','paired complementary roles with a shared goal','focused decision point with distinct evidence inputs','organized layers showing planning and observed outcomes'];
+  const start=parseInt(hash(requestId).slice(0,8),16)%layouts.length;
+  const layout=layouts.slice(start).concat(layouts.slice(0,start)).find(l=>!recent.some(r=>r.composition===l))||layouts[start];
+  return {conceptLabel:service+' educational illustration',subject:service,composition:layout,treatment:'polished abstract editorial graphic; no invented UI, result, logo or completed-work scene'};
+ }
  const category=/fenc/i.test(service)?'fence':/deck/i.test(service)?'deck':null;
  const options=recipes[category]||[[`${service} detail concept`, `professional ${service}`, 'subject-focused three-quarter detail with minimal empty background','realistic materials and diffuse daylight']];
  const used=new Set(recent.map(r=>r.conceptLabel));
@@ -45,6 +51,7 @@ async function readContext(db,actor,request){
  const fresh=direction(request.serviceCategory,request.requestId,history);
  return {policy:POLICY,...fresh,post:{itemId:p.itemId,provider:p.provider,version:p.version,contentHash:version.contentHash},
   objective:String(version.goal||'').slice(0,300),topic:String(version.pillar||'').slice(0,200),
+  educationalCopy:String(variant.copy||'').slice(0,1600),
   recent:history.slice(0,12).map(r=>({service:r.service,conceptLabel:r.conceptLabel,composition:r.composition})),
   previousSourceSha256:lease.reviewCandidate?.sourceSha256||lease.regenerationPreviousSourceSha256||null,
   reason:'New concept for the same approved service; vary subject treatment and composition from recent creative. No completed-project claim.'};

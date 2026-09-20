@@ -22,6 +22,12 @@ test('exact internal owner previews without writes then atomically authorizes co
  assert.equal(profile.businessUid,uid);assert.equal(plan.approvedByUid,uid);assert.equal(policy.cadence.mode,'adaptive');assert.equal(policy.maxPerWeek,5);assert.equal(plan.items.length,6);
  assert.equal((await db.collection('socialContentVersions').where('businessUid','==',uid).get()).size,6);
  assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',uid).get()).size,0);assert.equal((await db.doc('businessSubscriptions/'+uid).get()).exists,false);
+ assert.deepEqual((await db.doc('businessBrandProfiles/'+uid).get()).data().approvedServiceCategories,profile.servicesOffered.slice().sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase())));
+ const categories=require('../functions-social-operations/social_managed_categories');
+ await db.doc('businessBrandProfiles/'+uid).delete(); // emulator: simulate pre-repair authorized profile
+ assert.equal((await categories.reconcile({db,uid,now})).status,'configured');
+ assert.equal((await categories.reconcile({db,uid,now})).status,'preserved');
+ assert.deepEqual((await db.doc('socialManagedPolicies/'+uid).get()).data(),policy);
  const supply=require('../functions-social-operations/social_managed_supply');
  const first=await supply.replenish({db,uid,now});assert.equal(first.status,'planning_buffer_covered');assert.equal(first.constraints.length,3);
  const firstItem=plan.items[0],versionId=policy.planId+'_'+firstItem.itemKey+'_v1';
@@ -33,3 +39,5 @@ test('exact internal owner previews without writes then atomically authorizes co
  assert.equal((await db.doc('businessSubscriptions/'+uid).get()).exists,false);
  assert.equal((await service.change(uid,uid,{action:'pause'})).status,'paused');assert.equal((await service.change(uid,uid,{action:'resume'})).status,'active');
 });
+
+

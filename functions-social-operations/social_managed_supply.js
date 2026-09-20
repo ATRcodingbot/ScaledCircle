@@ -72,11 +72,14 @@ async function replenish({db,uid,now=Date.now()}) {
     const result=choose({uid,policy,plan,profile,scope:require('./growth_geography').serviceAreaScope(geography,uid),connections,
       items:rows.socialContentItems,versions:rows.socialContentVersions,jobs:rows.socialGrowthJobs,now});
     if(profile?.internalSocialContext){
-      const [entitlement,brand,assets]=await Promise.all([read(db.doc('businessSubscriptions/'+uid)),read(db.doc('businessBrandProfiles/'+uid)),read(db.collection('businessMediaLibraries/'+uid+'/mediaAssets').where('approvalStatus','==','approved').limit(1))]);
+      const [entitlement,brand,assets,config]=await Promise.all([read(db.doc('businessSubscriptions/'+uid)),read(db.doc('businessBrandProfiles/'+uid)),read(db.collection('businessMediaLibraries/'+uid+'/mediaAssets').limit(201)),read(db.doc('providerConfigurations/generated-service-visuals'))]);
       const constraints=[];
-      if(!require('./subscription_entitlements').hasActiveManagedGrowthEntitlement(entitlement.data(),{nowMillis:now}))constraints.push('No funded generated-creative allowance is available for this workspace. No additional spending is authorized.');
+      if(!require('./subscription_entitlements').hasActiveManagedGrowthEntitlement(entitlement.data(),{nowMillis:now}))constraints.push('No source-concept entitlement is configured for this internal workspace. A concept quota is separate from permission to spend.');
+      const c=config.data();
+      if(c?.providerGenerationEnabled!==true)constraints.push('The generation provider is paused by configuration.');
+      if(c?.rolloutMode==='beta_cohort'&&!c.betaCohortBusinessUids?.includes(uid)||c?.rolloutMode==='founder_only'&&!c.authorizedBusinessUids?.includes(uid))constraints.push('This workspace is not enrolled in the current generation cohort. Existing global cost ceilings do not grant workspace spending.');
       if(!brand.data()?.approvedServiceCategories?.length)constraints.push('Creative service categories are not configured in the maintained creative profile.');
-      if(assets.empty)constraints.push('The Business creative library has no approved asset. Historical post images are not silently reused for unrelated ideas.');
+      if(!assets.docs.some(d=>d.data().approvedRevisionId&&!d.data().removed))constraints.push('The Business creative library has no approved asset. Historical post images are not silently reused for unrelated ideas.');
       result.constraints=constraints;
     }
     const supplyRef=db.doc('socialManagedSupplyStatus/'+uid);

@@ -15,7 +15,7 @@ test('server generation uses exact delegated request without a browser; paused w
   db.doc('socialContentItems/'+uid+'_post').set({businessUid:uid,planId,currentVersion:1}),
   ref.set({businessUid:uid,planId,policyId:policy.id,input,status:'pending'})]);
  let requests=0,processes=0;
- const worker=require('./social_managed_visual_worker').createWorker({db,now:()=>now,auth:{getUser:async()=>({emailVerified:true,disabled:false})},
+ const worker=require('../functions-creative-media/social_managed_visual_worker').createWorker({db,now:()=>now,auth:{getUser:async()=>({emailVerified:true,disabled:false})},
   generation:{request:async args=>{assert.deepEqual(args.input,input);assert.equal(args.actor.managedAuthority.policyId,policy.id);requests++;return {jobId:'job',status:'queued'};},
    process:async()=>{processes++;return {status:'review_required'};}}});
  await worker.run();await worker.run();assert.equal(requests,1);assert.equal(processes,1);assert.equal((await ref.get()).data().status,'prepared');
@@ -25,3 +25,4 @@ test('server generation uses exact delegated request without a browser; paused w
  await db.doc('socialContentItems/'+uid+'_post').update({managedHolds:{facebook:{status:'editing'}}});
  await worker.run();assert.equal(requests,1);assert.equal((await ref.get()).data().status,'needs_attention');
 });
+

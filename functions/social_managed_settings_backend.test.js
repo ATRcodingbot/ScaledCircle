@@ -9,7 +9,7 @@ test('owner explicitly authorizes exact scope; stale review and other tenant fai
  const write=(p,d)=>db.doc(p).set(d);
  await Promise.all([write('socialContentPlans/'+planId,{...f.plan,businessUid:uid,strategy:{services:['Decks']},
   items:[{itemKey:'one',variants:[{provider:'facebook',destinationUrl:'https://example.com/Decks'}]}]}),
-  write('businessGrowthProfiles/'+uid,{businessUid:uid,businessName:'Test Business',timeZone:'America/New_York'}),write('businessSubscriptions/'+uid,f.entitlement),
+  write('businessGrowthProfiles/'+uid,{businessUid:uid,businessName:'Test Business',servicesOffered:['Decks'],timeZone:'America/New_York'}),write('businessSubscriptions/'+uid,f.entitlement),
   write('socialProviderConfigs/production_meta',f.config),write('agentHealth/'+uid,f.health),
   write(`socialConnections/${uid}/providers/facebook`,{...f.connection,businessUid:uid})]);
  const service=require('../functions-social-operations/social_managed_settings').createSettings({db,environment:'production',now:()=>f.now});
@@ -53,3 +53,4 @@ test('cadence slot allocation stays in the authorized window and skips occupied 
  assert.ok(Date.parse(next)-Date.parse(first)>=6*3600000);
  assert.equal(nextSlot({policy:{...policy,endsAt:now+1000},history:[],provider:'facebook',now}),null);
 });
+

@@ -122,6 +122,9 @@ function sanitizeRequest(input, approvedServices = []) {
 function serviceLanguage(value) {
   const canonical = clean(value, 80);
   const lower = canonical.toLowerCase();
+  if(['product explanation','business value','business and scaler roles'].includes(lower))return Object.freeze({
+    canonical,subject:lower,customerProject:'product education',visualSubject:'an abstract editorial illustration explaining '+lower,
+    visualKind:'product_explainer'});
   const singular = lower.replace(/^build\s+/, "").replace(/^install\s+/, "")
     .replace(/\bdecks\b/g, "deck").replace(/\bfences\b/g, "fence")
     .replace(/\bpatios\b/g, "patio").replace(/\bservices\b/g, "service");

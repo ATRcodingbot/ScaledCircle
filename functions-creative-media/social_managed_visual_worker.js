@@ -1,5 +1,12 @@
 'use strict';
 const crypto=require('node:crypto');
+function internalOwner({uid,user,profile,config,policy}){
+ const p=config?.metaDogfood,accounts=policy?.reviewedScope?.providerAccounts;
+ return user?.role==='admin'&&profile?.businessUid===uid&&profile.internalSocialContext?.source==='owner_reviewed_meta_strategy'&&
+ config?.provider==='meta'&&config.environment==='production'&&config.enabled===true&&config.writeScopesEnabled===true&&config.externalPublishingEnabled!==true&&
+ p?.businessUid===uid&&/^\d+$/.test(p.pageId||'')&&/^\d+$/.test(p.instagramId||'')&&
+ Array.isArray(accounts)&&policy.providers.every(provider=>['facebook','instagram'].includes(provider)&&accounts.some(a=>a.provider===provider&&a.accountId===(provider==='facebook'?p.pageId:p.instagramId)));
+}
 function createWorker({db,auth,generation,now=Date.now}) {
  return {async run(){
   const pending=await db.collection('socialManagedGenerationRequests').where('status','==','pending').limit(2).get();
@@ -10,6 +17,11 @@ function createWorker({db,auth,generation,now=Date.now}) {
     const [p,s,u,h]=await Promise.all(['socialManagedPolicies/'+uid,'socialContentPlans/'+request.planId,
       'users/'+uid,'agentHealth/'+uid].map(path=>db.doc(path).get()));
     const policy=p.data(),plan=s.data(),user=u.data();
+    let maintainedInternal=false;
+    if(user?.role==='admin'){
+     const [profile,config]=await Promise.all(['businessGrowthProfiles/'+uid,'socialProviderConfigs/production_meta'].map(p=>db.doc(p).get()));
+     maintainedInternal=internalOwner({uid,user,profile:profile.data(),config:config.data(),policy});
+    }
     if(policy?.id===request.policyId&&policy.status==='paused'){
      await doc.ref.update({status:'paused',checkedAt:now()});
      results.push({businessUid:uid,status:'paused'});continue;
@@ -19,7 +31,7 @@ function createWorker({db,auth,generation,now=Date.now}) {
       policy.id!==request.policyId||policy.planId!==request.planId||policy.status!=='active'||policy.revokedAt!=null||
       !Number.isFinite(policy.startsAt)||!Number.isFinite(policy.endsAt)||policy.endsAt<=now()||policy.startsAt>now()||
       plan?.businessUid!==uid||plan.status!=='approved'||plan.planVersion!==plan.approvedVersion||policy.strategyDigest!==digest||
-      user?.role!=='business'||user.active!==true||h.data()?.killSwitchActive===true)throw Error('managed_generation_authority_unavailable');
+      (!(user?.role==='business'&&user.active===true)&&!maintainedInternal)||h.data()?.killSwitchActive===true)throw Error('managed_generation_authority_unavailable');
     const identity=await auth.getUser(uid);
     if(identity.disabled||!identity.emailVerified)throw Error('managed_generation_owner_unavailable');
     const post=request.input?.socialPost;
@@ -40,4 +52,4 @@ function createWorker({db,auth,generation,now=Date.now}) {
   return results;
  }};
 }
-module.exports={createWorker};
+module.exports={createWorker,internalOwner};

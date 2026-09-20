@@ -43,6 +43,7 @@ function createSettings({db,environment,now=Date.now}) {
      typeof profile.tone==='string'&&profile.tone.trim()?profile.tone:'Helpful, professional Business voice; no unsupported personal or completed-work claims.',
    services,providers,destinations,maxPerWeek,cadenceSettings,timeZone,
    endsAt,...(preparation?{internalPreparation:preparation,providerAccounts:preparation.accounts,spending:preparation.spending}:{} )};
+  require('./social_managed_categories').patch({uid,policy:{services,approvedByUid:uid},profile,brand:(await read(db.doc('businessBrandProfiles/'+uid))).data(),now:now()});
   return {...scope,reviewDigest:hash(scope),plan};
  }
  return {
@@ -84,6 +85,9 @@ function createSettings({db,environment,now=Date.now}) {
     }
     const policy=bounded.createPolicy({...scope,uid,actorUid,startsAt:now(),now:now()});
     const {plan,internalPreparation,...reviewedScope}=scope;
+    const brandRef=db.doc('businessBrandProfiles/'+uid),brand=(await tx.get(brandRef)).data();
+    const growth=internalPreparation?.profile||(await tx.get(db.doc('businessGrowthProfiles/'+uid))).data();
+    const creativeCategories=require('./social_managed_categories').patch({uid,policy,profile:growth,brand,now:now()});
     if(internalPreparation){
      const planRef=db.doc('socialContentPlans/'+scope.planId),profileRef=db.doc('businessGrowthProfiles/'+uid);
      const [existingPlan,existingProfile]=await Promise.all([tx.get(planRef),tx.get(profileRef)]);
@@ -97,6 +101,10 @@ function createSettings({db,environment,now=Date.now}) {
      }
     }
     tx.set(ref,{...policy,cadence:cadence.initialize({scope,now:now()}),reviewDigest:scope.reviewDigest,reviewedScope});
+    if(creativeCategories){
+     tx.set(brandRef,creativeCategories,{merge:true});
+     tx.create(db.collection('socialManagedCreativeConfigurationAudit').doc(),{businessUid:uid,action:'strategy_categories_configured',...creativeCategories.categoryAuthority,categories:creativeCategories.approvedServiceCategories});
+    }
     tx.create(db.collection('socialManagedPolicyAudit').doc(),{businessUid:uid,actorUid,action:'enable',policyId:policy.id,at:now(),reviewedScope});
     return {status:'active',policyId:policy.id};
    });
