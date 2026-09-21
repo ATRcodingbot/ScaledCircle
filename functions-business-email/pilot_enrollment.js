@@ -43,8 +43,17 @@ function createEnrollment({db,now=Date.now,workspaces=WORKSPACES,mailboxes=MAILB
  async function activation(tx,a,saved,readiness){
   if(!workspaces.includes(a.businessId)||readiness.length)fail('Complete every displayed prerequisite before authorization.');
   const grant=(await tx.get(grantRef)).data(),review=(await tx.get(db.doc('emailAssistanceProviderReviews/openai_gmail_v1'))).data();
+  // Non-model owner authorization uses the existing per-workspace pilot access,
+  // without activating or consuming the shared inference allowance.
+  if(saved.policy.modelAssistance!==true){
+   const own=(await tx.get(access(a.businessId))).data(),box=(await tx.get(db.doc('businessMailboxes/'+a.businessId))).data();
+   if(!grant||grant.purpose!=='lead_email_assistance'||!['prepared','active'].includes(grant.status)||grant.revokedAt||!grant.businessIds?.includes(a.businessId)||own?.id!==GRANT||own.businessId!==a.businessId||own.revokedAt||!['prepared','active'].includes(own.status)||own.mailbox!==box?.email||box?.generation!==saved.connectionGeneration||saved.approvedBy!==a.businessId)fail('The existing scoped pilot access must be valid.');
+   const startsAt=own.startsAt||now(),expiresAt=Math.min(own.expiresAt||startsAt+TERM,grant.expiresAt||Infinity);
+   if(expiresAt<=now())fail('The pilot access has expired; authorization does not renew it.');
+   return {activate:true,startsAt,expiresAt,apply(){if(own.status==='prepared'){tx.update(access(a.businessId),{status:'active',startsAt,expiresAt});tx.create(access(a.businessId).collection('audit').doc('non_model_activation'),{actorUid:a.actorUid,action:'owner_authorized_non_model',startsAt,expiresAt,policyDigest:saved.digest,inferenceActivated:false});}}};
+  }
   if(!grant||!['prepared','active'].includes(grant.status)||!require('./provider_review').validReview(review))fail('The prepared grant and model-data review must be ready.');
-  if(grant.status==='active'){if(!valid(grant,a.businessId,now(),workspaces)||grant.dataReviewDigest!==digest(review))fail('The pilot authority expired or its reviewed configuration changed.');return {activate:true,startsAt:grant.startsAt,expiresAt:grant.expiresAt,apply(){}};}
+  if(grant.status==='active'){if(!valid(grant,a.businessId,now(),workspaces)||grant.dataReviewDigest!==digest(review))fail('The pilot authority expired or its reviewed configuration changed.');const own=(await tx.get(access(a.businessId))).data();if(own?.revokedAt||own?.expiresAt<=now())fail('The workspace pilot access expired.');return {activate:true,startsAt:grant.startsAt,expiresAt:Math.min(grant.expiresAt,own?.expiresAt||grant.expiresAt),apply(){}};}
   if(grant.maximumCostMicros!==LIMIT||grant.maximumRequests!==REQUESTS||grant.provider!=='openai'||grant.model!=='gpt-4.1-mini'||grant.renewal!==false||grant.topUp!==false||grant.businessIds?.length!==2||workspaces.some(b=>!grant.businessIds.includes(b))||grant.revokedAt)fail('The exact approved pilot grant changed.');
   const refs=workspaces.map(b=>db.doc(`agentPermissions/${b}_lead_generator/authorizations/business_email`));
   const records=await Promise.all(refs.map(r=>tx.get(r))),grants=await Promise.all(workspaces.map(b=>tx.get(access(b)))),boxes=await Promise.all(workspaces.map(b=>tx.get(db.doc('businessMailboxes/'+b))));
@@ -55,12 +64,13 @@ function createEnrollment({db,now=Date.now,workspaces=WORKSPACES,mailboxes=MAILB
   if(!ready)return {activate:false};
   if(grant.status==='active'&&grant.expiresAt<=now())fail('The pilot has expired. No automatic renewal is permitted.');
   const startsAt=grant.startsAt||now(),expiresAt=grant.expiresAt||startsAt+TERM;
-  return {activate:true,startsAt,expiresAt,apply(){
+  if(grants.some(d=>d.data()?.expiresAt&&d.data().expiresAt<=now()))fail('A workspace pilot term expired; model activation cannot renew it.');
+  return {activate:true,startsAt,expiresAt:Math.min(expiresAt,grants[workspaces.indexOf(a.businessId)].data()?.expiresAt||expiresAt),apply(){
    if(grant.status==='prepared'){
     tx.update(grantRef,{status:'active',startsAt,expiresAt,dataReviewDigest:digest(review)});
     tx.create(grantRef.collection('audit').doc('activated'),{actorUid:a.actorUid,action:'both_owners_authorized',startsAt,expiresAt,policyDigests:policies.map(p=>p.digest),dataReviewDigest:digest(review)});
    }
-   workspaces.forEach((b,i)=>{tx.update(access(b),{status:'active',startsAt,expiresAt});if(b!==a.businessId){const p={...policies[i],status:'active',policy:{...policies[i].policy,expiresAt:Math.min(require('./assistance_term').resolveTerm(policies[i].policy,{...grant,status:'active',expiresAt},now()).expiresAt,expiresAt)},activatedAt:startsAt};p.digest=digest(p);tx.set(refs[i],p);}});
+   workspaces.forEach((b,i)=>{tx.update(access(b),{status:'active',startsAt:grants[i].data()?.startsAt||startsAt,expiresAt:Math.min(grants[i].data()?.expiresAt||expiresAt,expiresAt)});if(b!==a.businessId){const p={...policies[i],status:'active',policy:{...policies[i].policy,expiresAt:Math.min(require('./assistance_term').resolveTerm(policies[i].policy,{...grant,status:'active',expiresAt},now()).expiresAt,expiresAt,grants[i].data()?.expiresAt||expiresAt)},activatedAt:startsAt};p.digest=digest(p);tx.set(refs[i],p);}});
   }};
  }
  return {prepare,activation,recordDataReview};

@@ -63,3 +63,55 @@ test('linked inquiry replies stay monitored after the Gmail label is removed, wi
  const result=await signals.recordEmailReply({db,FieldValue:admin.firestore.FieldValue,businessId:'owner',replyId:'m2',reply,now:()=>at+300001});assert.equal(result.created,true);
  const duplicate=await signals.recordEmailReply({db,FieldValue:admin.firestore.FieldValue,businessId:'owner',replyId:'m2',reply,now:()=>at+300001});assert.equal(duplicate.created,false);
 });
+
+test('whole Inbox requires no label/filter; a fresh request enters CRM and unrelated mail does not',async()=>{
+ const ref=db.doc('agentPermissions/owner_lead_generator/authorizations/business_email');
+ await ref.update({'policy.mailboxMode':'inbox','policy.inquiryLabel':'','policy.inquiryRoutingConfirmed':false,'policy.historyMode':'future'});
+ await reader(actor);assert.ok(queries[0].q.startsWith('in:inbox after:'));
+ assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,1);
+ assert.equal((await db.doc('businessMailboxes/owner/private/inquirySync').get()).data().coverage,'inbox');
+});
+test('whole Inbox skips receipts, security codes and unrelated text without retaining CRM/body records',async()=>{
+ await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email').update({'policy.mailboxMode':'inbox'});
+ rows=[msg('receipt'),msg('random')];rows[0].payload.headers[2].value='Payment receipt';rows[1].payload.body.data=Buffer.from('The weather is lovely today').toString('base64url');rows[1].payload.headers[2].value='Hello';
+ const result=await reader(actor);assert.equal(result.unclassified,1);assert.equal(alerts,0);
+ assert.equal((await db.collection('businessOperations/owner/customers').get()).size,0);assert.equal((await db.collection('businessMailboxes/owner/replies').get()).size,0);
+});
+test('paused, conversation-only and wrong mailbox generation do not begin intake',async()=>{
+ const ref=db.doc('agentPermissions/owner_lead_generator/authorizations/business_email');
+ await ref.update({status:'paused'});await reader(actor);assert.equal(reads,0);
+ await ref.update({status:'active','policy.mailboxMode':'conversations'});await reader(actor);assert.equal(reads,0);
+ await ref.update({'policy.mailboxMode':'inbox',connectionGeneration:'old'});await reader(actor);assert.equal(reads,0);
+});
+test('Inbox archives and pre-authorization history remain excluded',async()=>{
+ await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email').update({'policy.mailboxMode':'inbox'});
+ rows=[msg('archive',{labelIds:[]}),msg('history',{internalDate:String(at-5000)})];await reader(actor);
+ assert.equal((await db.collection('businessOperations/owner/customers').get()).size,0);
+});
+test('bounded fixed query window keeps pagination stable while new mail arrives',async()=>{
+ await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email').update({'policy.mailboxMode':'inbox'});
+ let time=at,n=0;const q=[];
+ const r=createInquiries({db,now:()=>time,current:async()=>({c:mail,secret:{}}),credentialAccess:()=>({credentials:{}}),adapter:()=>({history:async(_,input)=>{q.push(input);return n++===0?{threads:[],nextPageToken:'next'}:{threads:[]};}}),alerts:{enqueue:async()=>{}}});
+ await r(actor);time+=300000;await r(actor);assert.equal(q[0].q,q[1].q);assert.equal(q[1].pageToken,'next');
+ await r(actor);assert.notEqual(q[2].q,q[1].q);assert.ok(q[2].q.includes('after:'+Math.floor((at-1000)/1000)));
+});
+
+
+test('metadata adapter screens automated notices without fetching bodies; late-indexed inquiry remains eligible',async()=>{
+ await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email').update({'policy.mailboxMode':'inbox'});
+ let time=at,full=0,kind='receipt';
+ const registry=require('../functions-business-email/providers').createRegistry({google:{configured:true,
+ history:async()=>({threads:[{id:'thread'}]}),
+ threadMetadata:async(token)=>{assert.equal(token,'fixture');const m=msg('late');m.payload.body={};m.payload.headers[2].value=kind==='receipt'?'Payment receipt':'A genuine inquiry';return {id:'thread',messages:[m]};},
+ thread:async()=>{full++;return {id:'thread',messages:[msg('late')]};}}});
+ const r=createInquiries({db,now:()=>time,current:async()=>({c:mail,secret:{}}),credentialAccess:()=>({credentials:{refreshToken:'fixture'}}),adapter:()=>registry.get('google'),alerts:{enqueue:async()=>alerts++}});
+ await r(actor);assert.equal(full,0);kind='inquiry';time+=300000;await r(actor);await r(actor);
+ assert.equal((await db.collection('businessMailboxes/owner/replies').get()).size,1);assert.equal(alerts,1);
+});
+
+test('wrong workspace and revoked pilot access prevent provider reads',async()=>{
+ await reader({businessId:'other'});assert.equal(reads,0);
+ await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email').update({grantId:'grant'});
+ await db.doc('agentPermissions/owner_lead_generator/authorizations/business_email_pilot_grant').set({id:'grant',businessId:'owner',status:'active',expiresAt:at+10000,revokedAt:at-1});
+ await reader(actor);assert.equal(reads,0);
+});

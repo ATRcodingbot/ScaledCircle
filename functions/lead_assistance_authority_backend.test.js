@@ -25,7 +25,7 @@ test('exact owner may prepare isolated immutable settings without enabling mail 
  for(const id of ['scaledcircle','remodel']){
   const result=await service.mutate(actor(id),prepare());assert.equal(result.status,'prepared');assert.equal(result.automaticSending,false);
   const view=await service.load(actor(id));assert.equal(view.policy.businessId,id);assert.equal(view.sender,id+'@example.test');
-  assert.ok(view.blockers.includes('model_data_review_required'));
+  assert.ok(!view.blockers.includes('model_data_review_required'));
   assert.equal((await db.doc(`agentPermissions/${id}_lead_generator`).get()).data().maySend,false);
   assert.equal((await db.doc('businessMailboxes/'+id).get()).data().automaticSending,false);
  }
@@ -69,7 +69,15 @@ test('relative prepared policy persists no expiry, clock, consent or execution; 
  const draft={...policy(),termMode:'shared_pilot',expiresAt:null,modelDataConsent:false,introductionsEnabled:false};
  const result=await service.mutate(a,{...prepare(),policy:draft});assert.equal(result.status,'prepared');
  const view=await service.load(a);assert.equal(view.policy.policy.expiresAt,null);assert.equal(view.pilotTerm.startsAt,null);assert.equal(view.proposal.values.voice,'Clear');
- assert.ok(!view.blockers.includes('valid_policy_term_required'));assert.ok(view.blockers.includes('model_data_review_required'));
+ assert.ok(!view.blockers.includes('valid_policy_term_required'));assert.ok(!view.blockers.includes('model_data_review_required'));
  assert.equal((await db.doc('emailAssistanceOperatingGrants/shared').get()).data().startsAt,null);
  await assert.rejects(service.mutate(a,{...prepare('bad_term'),expectedVersion:1,policy:{...draft,expiresAt:clock+86400000}}),{code:'invalid-argument'});
+});
+
+
+test('preparing a broader mode retains prior authorized coverage separately, never activates it',async()=>{
+ const a=actor('remodel'),ref=db.doc('agentPermissions/remodel_lead_generator/authorizations/business_email');
+ await ref.set({businessId:'remodel',status:'active',version:1,approvedAt:clock-10000,connectionGeneration:'g1',intakeStartsAt:clock-10000,policy:{...policy(),mailboxMode:'labels',inquiryLabel:'Scoped',newInquiriesEnabled:true},digest:'old'});
+ const result=await service.mutate(a,{...prepare(),expectedVersion:1,policy:{...policy(),mailboxMode:'inbox',historyMode:'future',inquiryLabel:'',newInquiriesEnabled:true}});
+ const saved=(await ref.get()).data();assert.equal(result.status,'prepared');assert.equal(saved.policy.mailboxMode,'inbox');assert.equal(saved.authorizedIntake.mode,'labels');assert.equal(saved.authorizedIntake.label,'Scoped');assert.equal(saved.authorizedIntake.startsAt,clock-10000);
 });

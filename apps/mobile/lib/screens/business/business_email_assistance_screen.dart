@@ -21,7 +21,10 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   Map<String, dynamic>? data;
   final fields = <String, TextEditingController>{};
   final choices = <String, bool>{};
-  bool busy = false, dirty = false;
+  bool busy = false, dirty = false, editingAvailability = false;
+  final panels = List.generate(5, (_) => ExpansibleController());
+  final pageScroll = ScrollController();
+  String mailboxMode = 'conversations';
   String? feedback;
   int section = 0;
   TextEditingController field(String k) =>
@@ -34,6 +37,10 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
 
   @override
   void dispose() {
+    pageScroll.dispose();
+    for (final c in panels) {
+      c.dispose();
+    }
     for (final f in fields.values) {
       f.dispose();
     }
@@ -50,6 +57,14 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         );
         final proposal = result['proposal']?['values'] as Map? ?? {};
         final test = result['proposal']?['controlled'] as Map? ?? {};
+        mailboxMode =
+            p['mailboxMode']?.toString() ??
+            (p.isNotEmpty
+                ? (p['newInquiriesEnabled'] == true
+                      ? 'labels'
+                      : 'conversations')
+                : result['proposal']?['recommendedMailboxMode']?.toString() ??
+                      'conversations');
         for (final k in [
           'businessName',
           'voice',
@@ -89,9 +104,9 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         }
         for (final kind in ['introduction', 'followup']) {
           field('${kind}Subject').text =
-              '${p['templates']?[kind]?['subject'] ?? (kind == 'introduction' ? test['subject'] : null) ?? ''}';
+              '${p['templates']?[kind]?['subject'] ?? proposal['templates']?[kind]?['subject'] ?? (kind == 'introduction' ? test['subject'] : null) ?? ''}';
           field('${kind}Body').text =
-              '${p['templates']?[kind]?['body'] ?? (kind == 'introduction' ? test['body'] : null) ?? ''}';
+              '${p['templates']?[kind]?['body'] ?? proposal['templates']?[kind]?['body'] ?? (kind == 'introduction' ? test['body'] : null) ?? ''}';
         }
         for (final k in [
           'introductionsEnabled',
@@ -136,6 +151,8 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   }
 
   Map<String, dynamic> policy() => {
+    'mailboxMode': mailboxMode,
+    'historyMode': 'future',
     'autonomyMode': 'bounded_managed',
     'replyMode': 'approval_required',
     'termMode': 'shared_pilot',
@@ -210,7 +227,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                 : '$action email assistance?',
           ),
           content: Text(
-            '${data?['workspaceName']} · ${data?['sender']}\nOnly separately permitted recipients are eligible. Suggested replies require exact approval. No Social or subscription changes.',
+            '${data?['workspaceName']} · ${data?['sender']}\nCoverage: $mailboxMode. New messages from authorization only; no historical import, Spam, Trash, Sent or attachments.\nOnly separately permitted recipients are eligible. Suggested replies require exact approval. No Social or subscription changes.',
           ),
           actions: [
             TextButton(
@@ -283,22 +300,23 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     title: Text(title),
     subtitle: Text(detail),
   );
-  Widget origin(String k) => Text(
-    data?['policy'] != null
-        ? 'Saved Email preference; edits need review.'
-        : data?['proposal']?['sources']?[k]?.toString() ??
-              'Proposal / missing value — owner review required.',
-    style: Theme.of(context).textTheme.bodySmall,
-  );
+  Widget origin(String k) => const SizedBox.shrink();
   Widget time(String k, String label) =>
       emailTime(context, label, field(k).text, (v) => setField(k, v));
   Widget panel(int n, String title, String summary, List<Widget> children) =>
       Card(
         child: ExpansionTile(
-          key: ValueKey('section_${n}_$section'),
+          key: ValueKey('section_$n'),
+          controller: panels[n],
+          maintainState: true,
           initiallyExpanded: section == n,
           onExpansionChanged: (v) {
-            if (v) setState(() => section = n);
+            if (v) {
+              for (var i = 0; i < panels.length; i++) {
+                if (i != n && panels[i].isExpanded) panels[i].collapse();
+              }
+              section = n;
+            }
           },
           title: Text(title),
           subtitle: Text(summary),
@@ -406,8 +424,16 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         'Business: ${field('businessName').text}\nSender: ${data?['sender']}',
       ),
       Text(
-        'New inquiry intake: ${on('newInquiriesEnabled')}\nLabel: ${field('inquiryLabel').text}\nFilter: ${field('inquiryFilterDescription').text}\nFilter owner-confirmed: ${choices['inquiryRoutingConfirmed'] == true ? 'Yes' : 'No'}',
+        'Coverage: ${mailboxMode == 'inbox'
+            ? 'Whole Inbox'
+            : mailboxMode == 'labels'
+            ? 'Selected label'
+            : 'Existing conversations only'} · New inquiry intake: ${on('newInquiriesEnabled')}\nFuture messages from authorization; historical Inbox review is not enabled.',
       ),
+      if (mailboxMode == 'labels')
+        Text(
+          'Label: ${field('inquiryLabel').text}\nFilter: ${field('inquiryFilterDescription').text}\nFilter owner-confirmed: ${choices['inquiryRoutingConfirmed'] == true ? 'Yes' : 'No'}',
+        ),
       if (test != null)
         Text('Proposed recipient: $recipient\nPilot permission: $permission'),
       Text(
@@ -423,7 +449,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         'Schedule assistance: ${on('bookingEnabled')}\n${availabilitySummary()}',
       ),
       const Text(
-        'Term: the existing shared seven-day pilot, from actual activation. USD 1 and 100 requests TOTAL across both Businesses. No reset, renewal or top-up. A later setup uses the same remaining term.',
+        'Non-model access: up to seven days from owner authorization, with no renewal and any earlier saved expiry preserved. The separate inference allowance is USD 1 / 100 requests TOTAL across both Businesses over its shared seven-day term; non-model authorization does not start that spending clock.',
       ),
       Text(
         'Earlier owner stop: ${field('ownerStopLocal').text.isEmpty ? 'None proposed' : '${field('ownerStopLocal').text.replaceFirst('T', ' ')} · $zone'}\nSaving does not start the clock.',
@@ -506,7 +532,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   String availabilitySummary() {
     final a = data?['schedulingAvailability']?['settings'] as Map?;
     if (a == null) {
-      return 'Availability not saved. Choose timezone, working hours, staff, duration and buffers.';
+      return 'Availability not saved. Choose timezone, working hours, duration and buffers. Staff is optional.';
     }
     return 'Saved availability: ${emailTimezones[a['timeZone']] ?? a['timeZone']} · ${(a['days'] as List? ?? []).map((d) => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(d as num).toInt() - 1]).join(', ')}\n${emailTimeLabel(context, '${a['opensMinute']}')}–${emailTimeLabel(context, '${a['closesMinute']}')} · ${a['durationMinutes']} minutes · ${a['bufferMinutes']}-minute buffers\nStaff: ${(a['assignedPeople'] as List? ?? []).isEmpty ? 'Assign later' : (data?['schedulingAvailability']?['assignedLabels'] as List? ?? ['${(a['assignedPeople'] as List? ?? []).length} selected']).join(', ')}\nLocation required: ${a['locationRequired'] == true ? 'Yes' : 'No'}. Version ${data?['schedulingAvailability']?['version']}.';
   }
@@ -520,297 +546,394 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                 ? const CircularProgressIndicator()
                 : TextButton(onPressed: load, child: Text(feedback!)),
           )
-        : ListView(
+        : SingleChildScrollView(
+            controller: pageScroll,
             padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                '${data!['workspaceName']} · ${data!['sender'] ?? 'No mailbox connected'}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              Text(
-                'Saved status: ${data!['policy']?['status'] ?? 'Not authorized'}',
-              ),
-              const Text(
-                'Review this editable proposal. Prefilled values do not grant permission or send anything. All new opt-ins remain off.',
-              ),
-              if (feedback != null)
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text(feedback!),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Recommended setup for ${data!['workspaceName']} · ${data!['sender'] ?? 'No mailbox connected'}',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-              if (data!['canManage'] != true)
+                Text(
+                  'Saved status: ${data!['policy']?['status'] ?? 'Not authorized'}',
+                ),
                 const Text(
-                  'Only the authorized Business owner can manage this setup.',
-                )
-              else ...[
-                panel(
-                  0,
-                  'A. Business and monitored mailbox',
-                  '${field('businessName').text} · ${data!['sender']}',
-                  [
-                    origin('businessName'),
-                    input('businessName', 'Business name'),
-                    origin('services'),
-                    input('services', 'Permitted services / topics', lines: 2),
-                    origin('voice'),
-                    input('voice', 'Business voice'),
-                    origin('claims'),
-                    input(
-                      'claims',
-                      'Supported facts — review before use',
-                      lines: 2,
-                    ),
-                    origin('destinations'),
-                    input(
-                      'destinations',
-                      'Approved HTTPS destinations',
-                      lines: 2,
-                    ),
-                    origin('mailingAddress'),
-                    input(
-                      'mailingAddress',
-                      'Authorized PUBLIC Business mailing footer',
-                    ),
-                    const Text(
-                      'Do not use private identity, bank or residential details as a public footer. A missing approved public address remains missing.',
-                    ),
-                    origin('timeZone'),
-                    emailZone(
-                      field('timeZone').text,
-                      (v) => setField('timeZone', v),
-                    ),
-                    toggle(
-                      'newInquiriesEnabled',
-                      'Read new inquiries',
-                      'Only future messages under the selected Gmail label. No whole-inbox or historical import.',
-                    ),
-                    input('inquiryLabel', 'Proposed Gmail label'),
-                    input(
-                      'inquiryFilterDescription',
-                      'Exact proposed Gmail filter',
-                      lines: 2,
-                    ),
-                    const Text(
-                      'One-time owner setup in Gmail: create the label above; open search options, enter the exact sender and subject shown in the filter, choose Create filter → Apply the label. Leave “Also apply to matching conversations” OFF. This routes future matching mail automatically; no manual labeling of each lead. ScaledCircle cannot inspect or change filters with its current scopes. Already-linked replies are checked independently even if their label changes.',
-                    ),
-                    toggle(
-                      'inquiryRoutingConfirmed',
-                      'I saved this automatic Gmail filter',
-                      'Confirm only after you actually create it. Prefilling this proposal does not verify routing.',
-                    ),
-                  ],
+                  'Selected preferences run only after owner authorization and applicable readiness checks. Saving preferences does not activate assistance.',
                 ),
-                panel(
-                  1,
-                  'B. Messages and eligible recipients',
-                  'Introductions ${on('introductionsEnabled')} · Follow-ups ${on('followupsEnabled')}',
-                  [
-                    if (data?['proposal']?['controlled'] != null)
-                      Text(
-                        'Controlled pilot proposal only: ${data!['proposal']['controlled']['recipient']}. Actual permission for this pilot must be separately recorded. Earlier Google-demo consent does not apply.',
-                      ),
-                    OutlinedButton(
-                      onPressed: permissions,
-                      child: const Text(
-                        'Review / record actual recipient permission',
-                      ),
-                    ),
-                    input(
-                      'introductionSubject',
-                      'Proposed introduction subject',
-                    ),
-                    input(
-                      'introductionBody',
-                      'Exact proposed introduction',
-                      lines: 4,
-                    ),
-                    toggle(
-                      'introductionsEnabled',
-                      'Automatic introductions',
-                      'Only the reviewed template and separately consenting/requesting recipients. Saving is not activation.',
-                    ),
-                    input(
-                      'initialPerDay',
-                      'Maximum introductions per day (0–20)',
-                    ),
-                    toggle(
-                      'followupsEnabled',
-                      'Bounded follow-ups',
-                      'Stop on reply or opt-out. No uncertain-send retries.',
-                    ),
-                    if (choices['followupsEnabled'] == true) ...[
+                Text(
+                  'Operating status: ${data?['policy']?['status'] == 'active' ? 'Authorized capabilities are checked by the recurring worker' : 'Not active — preferences are not execution authority'}',
+                ),
+                Text(
+                  'AI suggestions: ${data?['capabilities']?['modelSuggestions']?['ready'] == true ? 'Available only with explicit consent and remaining allowance' : 'Gated; owner-written replies and eligible non-model capabilities remain separate'}',
+                ),
+                if (data?['intakeStatus'] != null)
+                  Text(
+                    'Last intake: ${data!['intakeStatus']['state']} · ${data!['intakeStatus']['considered']} considered · ${data!['intakeStatus']['unclassified']} unclassified. Limited screening does not mean no opportunities.',
+                  ),
+                if (feedback != null)
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(feedback!),
+                  ),
+                if (data!['canManage'] != true)
+                  const Text(
+                    'Only the authorized Business owner can manage this setup.',
+                  )
+                else ...[
+                  panel(
+                    0,
+                    'A. Business and monitored mailbox',
+                    '${field('businessName').text} · ${data!['sender']}',
+                    [
+                      origin('businessName'),
+                      input('businessName', 'Business name'),
+                      origin('services'),
                       input(
-                        'followupsPerContact',
-                        'Maximum follow-ups per contact (0–3)',
+                        'services',
+                        'Permitted services / topics',
+                        lines: 2,
                       ),
-                      DropdownButtonFormField<int>(
-                        initialValue: int.tryParse(
-                          field('followupIntervalHours').text,
-                        ),
+                      origin('voice'),
+                      input('voice', 'Business voice'),
+                      origin('claims'),
+                      input(
+                        'claims',
+                        'Supported facts — review before use',
+                        lines: 2,
+                      ),
+                      origin('destinations'),
+                      input(
+                        'destinations',
+                        'Approved HTTPS destinations',
+                        lines: 2,
+                      ),
+                      origin('mailingAddress'),
+                      input(
+                        'mailingAddress',
+                        'Authorized PUBLIC Business mailing footer',
+                      ),
+                      const Text(
+                        'Do not use private identity, bank or residential details as a public footer. A missing approved public address remains missing.',
+                      ),
+                      origin('timeZone'),
+                      emailZone(
+                        field('timeZone').text,
+                        (v) => setField('timeZone', v),
+                      ),
+                      toggle(
+                        'newInquiriesEnabled',
+                        'Read new inquiries',
+                        'Use the selected coverage after explicit authorization. Linked conversation replies remain independently monitored.',
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: mailboxMode,
                         isExpanded: true,
                         decoration: const InputDecoration(
-                          labelText: 'Wait between follow-ups',
+                          labelText: 'Mailbox coverage',
                         ),
-                        items:
-                            ({
-                                  ...[120, 168, 240, 336],
-                                  int.tryParse(
-                                        field('followupIntervalHours').text,
-                                      ) ??
-                                      120,
-                                }.toList()..sort())
-                                .map(
-                                  (h) => DropdownMenuItem(
-                                    value: h,
-                                    child: Text(
-                                      'Wait at least ${h / 24 == h ~/ 24 ? h ~/ 24 : h / 24} days',
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: (v) {
-                          if (v != null) {
-                            setField('followupIntervalHours', '$v');
-                          }
-                        },
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'inbox',
+                            child: Text('Monitor my whole inbox'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'labels',
+                            child: Text('Monitor selected labels'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'conversations',
+                            child: Text('Only follow existing conversations'),
+                          ),
+                        ],
+                        onChanged: busy
+                            ? null
+                            : (v) => setState(() {
+                                mailboxMode = v!;
+                                choices['newInquiriesEnabled'] =
+                                    v != 'conversations';
+                                dirty = true;
+                              }),
                       ),
-                      input('followupSubject', 'Proposed follow-up subject'),
-                      input(
-                        'followupBody',
-                        'Exact proposed follow-up',
-                        lines: 3,
+                      const Text(
+                        'Future messages only, from authorization. Inbox excludes archived-only mail, Sent, Spam, Trash and attachments. Existing Inbox lookback is not supported in this release. No Gmail messages are moved, marked read or relabeled.',
+                      ),
+                      if (mailboxMode == 'inbox')
+                        const Text(
+                          'No Gmail label or filter setup is required. Non-model screening is conservative; uncertain messages are reported as limited screening, not as no opportunities. Mailbox monitoring does not authorize outbound marketing or booking.',
+                        ),
+                      if (mailboxMode == 'labels') ...[
+                        const Text(
+                          'This narrower mode monitors one selected label.',
+                        ),
+                        input('inquiryLabel', 'Proposed Gmail label'),
+                        input(
+                          'inquiryFilterDescription',
+                          'Exact proposed Gmail filter',
+                          lines: 2,
+                        ),
+                        const Text(
+                          'One-time owner setup in Gmail: create the label above; open search options, enter the exact sender and subject shown in the filter, choose Create filter → Apply the label. Leave “Also apply to matching conversations” OFF. This routes future matching mail automatically; no manual labeling of each lead. ScaledCircle cannot inspect or change filters with its current scopes. Already-linked replies are checked independently even if their label changes.',
+                        ),
+                        toggle(
+                          'inquiryRoutingConfirmed',
+                          'I saved this automatic Gmail filter',
+                          'Confirm only after you actually create it. Prefilling this proposal does not verify routing.',
+                        ),
+                      ],
+                      ExpansionTile(
+                        title: const Text('Sources and proposal details'),
+                        children: [
+                          Text('${data?['proposal']?['sources'] ?? {}}'),
+                        ],
                       ),
                     ],
-                    const Text(
-                      'Proposed sending window — confirm these days and local times.',
-                    ),
-                    emailDays(
-                      field('sendingDays').text,
-                      (v) => setField('sendingDays', v),
-                    ),
-                    time('opensMinute', 'Sending starts'),
-                    time('closesMinute', 'Sending ends'),
-                    Text(zone),
-                  ],
-                ),
-                panel(
-                  2,
-                  'C. Owner alerts and suggested replies',
-                  'Email ${on('email')} · Push ${on('push')} · Suggestions ${on('modelAssistance')}',
-                  [
-                    Text(
-                      'Owner email: ${data!['ownerEmail'] ?? 'Verified owner account'}\nPush: ${data!['pushReady'] == true ? 'Registered device ready for physical test' : 'No ready device registered. In the signed-in app, open Notifications → Notification preferences → Mobile push notifications.'}',
-                    ),
-                    toggle(
-                      'email',
-                      'Owner account-email alerts',
-                      'Minimal account notification to the verified owner. Email readiness is independent of push registration.',
-                    ),
-                    toggle(
-                      'push',
-                      'Owner push alerts',
-                      'Use this owner’s device registration. Opens the authenticated conversation; no private body in alerts.',
-                    ),
-                    time('quietStart', 'Quiet hours start'),
-                    time('quietEnd', 'Quiet hours end'),
-                    const Text(
-                      'Optional model processing: relevant conversation text and necessary Business context are sent to OpenAI gpt-4.1-mini for reply suggestions, with response storage disabled. This is not zero retention. Default abuse-monitoring logs may be retained up to 30 days, with applicable legal/security exceptions; authorized provider personnel may access them. Training sharing is disabled. No public-web search, advertising targeting or unrelated cross-Business training. The model-data / Google review gate remains open. Ordinary permitted manual replies remain available.',
-                    ),
-                    toggle(
-                      'modelAssistance',
-                      'Suggest replies for my approval',
-                      'Every substantive suggested reply needs your approval of the exact current message.',
-                    ),
-                    toggle(
-                      'modelDataConsent',
-                      'I agree to the described model processing',
-                      'Separate explicit opt-in for this workspace only. Saving consent does not bypass the outstanding data review.',
-                    ),
-                  ],
-                ),
-                panel(
-                  3,
-                  'D. Appointment availability',
-                  data?['schedulingAvailability'] == null
-                      ? 'Not configured'
-                      : 'Saved availability',
-                  [
-                    Text(availabilitySummary()),
-                    toggle(
-                      'bookingEnabled',
-                      'Schedule assistance',
-                      'Tentative offers are not confirmed appointments. Clear recipient acceptance and conflict checks are required.',
-                    ),
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              try {
-                                if (await (widget.availabilityEditor ??
-                                    editEmailAvailability)(context, data!)) {
-                                  await load(preserve: true);
-                                  changed();
+                  ),
+                  panel(
+                    1,
+                    'B. Messages and eligible recipients',
+                    'Introductions ${on('introductionsEnabled')} · Follow-ups ${on('followupsEnabled')}',
+                    [
+                      if (data?['proposal']?['controlled'] != null)
+                        Text(
+                          'Controlled pilot proposal only: ${data!['proposal']['controlled']['recipient']}. Actual permission for this pilot must be separately recorded. Earlier Google-demo consent does not apply.',
+                        ),
+                      OutlinedButton(
+                        onPressed: permissions,
+                        child: const Text(
+                          'Review / record actual recipient permission',
+                        ),
+                      ),
+                      input(
+                        'introductionSubject',
+                        'Proposed introduction subject',
+                      ),
+                      input(
+                        'introductionBody',
+                        'Exact proposed introduction',
+                        lines: 4,
+                      ),
+                      toggle(
+                        'introductionsEnabled',
+                        'Automatic introductions',
+                        'Only the reviewed template and separately consenting/requesting recipients. Saving is not activation.',
+                      ),
+                      input(
+                        'initialPerDay',
+                        'Maximum introductions per day (0–20)',
+                      ),
+                      toggle(
+                        'followupsEnabled',
+                        'Bounded follow-ups',
+                        'Stop on reply or opt-out. No uncertain-send retries.',
+                      ),
+                      if (choices['followupsEnabled'] == true) ...[
+                        input(
+                          'followupsPerContact',
+                          'Maximum follow-ups per contact (0–3)',
+                        ),
+                        DropdownButtonFormField<int>(
+                          initialValue: int.tryParse(
+                            field('followupIntervalHours').text,
+                          ),
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Wait between follow-ups',
+                          ),
+                          items:
+                              ({
+                                    ...[120, 168, 240, 336],
+                                    int.tryParse(
+                                          field('followupIntervalHours').text,
+                                        ) ??
+                                        120,
+                                  }.toList()..sort())
+                                  .map(
+                                    (h) => DropdownMenuItem(
+                                      value: h,
+                                      child: Text(
+                                        'Wait at least ${h / 24 == h ~/ 24 ? h ~/ 24 : h / 24} days',
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (v) {
+                            if (v != null) {
+                              setField('followupIntervalHours', '$v');
+                            }
+                          },
+                        ),
+                        input('followupSubject', 'Proposed follow-up subject'),
+                        input(
+                          'followupBody',
+                          'Exact proposed follow-up',
+                          lines: 3,
+                        ),
+                      ],
+                      const Text(
+                        'Proposed sending window — confirm these days and local times.',
+                      ),
+                      emailDays(
+                        field('sendingDays').text,
+                        (v) => setField('sendingDays', v),
+                      ),
+                      time('opensMinute', 'Sending starts'),
+                      time('closesMinute', 'Sending ends'),
+                      Text(zone),
+                    ],
+                  ),
+                  panel(
+                    2,
+                    'C. Owner alerts and suggested replies',
+                    'Email ${on('email')} · Push ${on('push')} · Suggestions ${on('modelAssistance')}',
+                    [
+                      Text(
+                        'Owner email: ${data!['ownerEmail'] ?? 'Verified owner account'}\nPush: ${data!['pushReady'] == true ? 'Registered device ready for physical test' : 'No ready device registered. In the signed-in app, open Notifications → Notification preferences → Mobile push notifications.'}',
+                      ),
+                      toggle(
+                        'email',
+                        'Owner account-email alerts',
+                        'Minimal account notification to the verified owner. Email readiness is independent of push registration.',
+                      ),
+                      toggle(
+                        'push',
+                        'Owner push alerts',
+                        'Use this owner’s device registration. Opens the authenticated conversation; no private body in alerts.',
+                      ),
+                      time('quietStart', 'Quiet hours start'),
+                      time('quietEnd', 'Quiet hours end'),
+                      const Text(
+                        'Optional model processing: relevant conversation text and necessary Business context are sent to OpenAI gpt-4.1-mini for reply suggestions, with response storage disabled. This is not zero retention. Default abuse-monitoring logs may be retained up to 30 days, with applicable legal/security exceptions; authorized provider personnel may access them. Training sharing is disabled. No public-web search, advertising targeting or unrelated cross-Business training. The model-data / Google review gate remains open. Ordinary permitted manual replies remain available.',
+                      ),
+                      toggle(
+                        'modelAssistance',
+                        'Suggest replies for my approval',
+                        'Every substantive suggested reply needs your approval of the exact current message.',
+                      ),
+                      toggle(
+                        'modelDataConsent',
+                        'I agree to the described model processing',
+                        'Separate explicit opt-in for this workspace only. Saving consent does not bypass the outstanding data review.',
+                      ),
+                    ],
+                  ),
+                  panel(
+                    3,
+                    'D. Appointment availability',
+                    data?['schedulingAvailability'] == null
+                        ? 'Not configured'
+                        : 'Saved availability',
+                    [
+                      Text(availabilitySummary()),
+                      toggle(
+                        'bookingEnabled',
+                        'Schedule assistance',
+                        'Tentative offers are not confirmed appointments. Clear recipient acceptance and conflict checks are required.',
+                      ),
+                      OutlinedButton(
+                        onPressed: busy || editingAvailability
+                            ? null
+                            : () async {
+                                final offset = pageScroll.hasClients
+                                    ? pageScroll.offset
+                                    : 0.0;
+                                setState(() => editingAvailability = true);
+                                try {
+                                  if (await (widget.availabilityEditor ??
+                                      editEmailAvailability)(context, data!)) {
+                                    await load(preserve: true);
+                                    changed();
+                                    if (mounted) {
+                                      setState(
+                                        () => feedback =
+                                            'Appointment availability saved. Email assistance activation is unchanged.',
+                                      );
+                                    }
+                                  }
+                                } catch (_) {
                                   if (mounted) {
                                     setState(
                                       () => feedback =
-                                          'Appointment availability saved. Email assistance activation is unchanged.',
+                                          'Availability could not be loaded. Your assistance edits are retained.',
                                     );
                                   }
+                                } finally {
+                                  if (mounted) {
+                                    setState(() => editingAvailability = false);
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (mounted &&
+                                              pageScroll.hasClients) {
+                                            pageScroll.jumpTo(
+                                              offset.clamp(
+                                                0.0,
+                                                pageScroll
+                                                    .position
+                                                    .maxScrollExtent,
+                                              ),
+                                            );
+                                          }
+                                        });
+                                  }
                                 }
-                              } catch (_) {
-                                if (mounted) {
-                                  setState(
-                                    () => feedback =
-                                        'Availability could not be loaded. Your assistance edits are retained.',
-                                  );
-                                }
-                              }
-                            },
-                      child: const Text('Set appointment availability'),
-                    ),
-                    const Text(
-                      'No old proposed date is booked or assumed valid. Choose an actual future slot during the controlled test. Booking confirmation uses an owner-reviewed reply, not an automatic email.',
-                    ),
-                  ],
-                ),
-                panel(
-                  4,
-                  'E. Review and save',
-                  'Prepared preferences are separate from active assistance',
-                  [
-                    const Text(
-                      'Proposed term: end with the existing shared seven-day pilot. The server fixes the common expiry at actual activation; saving does not start it.',
-                    ),
-                    if (data?['pilotTerm']?['expiresAt'] != null)
-                      Text(
-                        'Shared expiry: ${DateTime.fromMillisecondsSinceEpoch((data!['pilotTerm']['expiresAt'] as num).toInt(), isUtc: true)}',
-                      ),
-                    Text(
-                      'Optional earlier stop in $zone: ${field('ownerStopLocal').text.isEmpty ? 'None' : field('ownerStopLocal').text.replaceFirst('T', ' ')}',
-                    ),
-                    Wrap(
-                      children: [
-                        TextButton(
-                          onPressed: earlierStop,
-                          child: const Text('Choose earlier stop'),
+                              },
+                        child: Text(
+                          editingAvailability
+                              ? 'Opening availability…'
+                              : data?['schedulingAvailability'] == null
+                              ? 'Set appointment availability'
+                              : 'Edit appointment availability',
                         ),
-                        if (field('ownerStopLocal').text.isNotEmpty)
-                          TextButton(
-                            onPressed: () => setField('ownerStopLocal', ''),
-                            child: const Text('Use shared expiry'),
-                          ),
-                      ],
-                    ),
-                    ...review().map(
-                      (w) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: w,
                       ),
-                    ),
-                  ],
-                ),
+                      const Text(
+                        'No old proposed date is booked or assumed valid. Choose an actual future slot during the controlled test. Booking confirmation uses an owner-reviewed reply, not an automatic email.',
+                      ),
+                    ],
+                  ),
+                  panel(
+                    4,
+                    'E. Review and save',
+                    'Prepared preferences are separate from active assistance',
+                    [
+                      const Text(
+                        'Review the bounded access term below. Saving preferences starts neither access nor inference. Authorizing non-model features starts only this Business’s existing access term; model processing stays separately gated.',
+                      ),
+                      if (data?['accessTerm']?['expiresAt'] != null)
+                        Text(
+                          'Business access expiry: ${DateTime.fromMillisecondsSinceEpoch((data!['accessTerm']['expiresAt'] as num).toInt(), isUtc: true)}',
+                        ),
+                      if (data?['pilotTerm']?['expiresAt'] != null)
+                        Text(
+                          'Shared expiry: ${DateTime.fromMillisecondsSinceEpoch((data!['pilotTerm']['expiresAt'] as num).toInt(), isUtc: true)}',
+                        ),
+                      Text(
+                        'Optional earlier stop in $zone: ${field('ownerStopLocal').text.isEmpty ? 'None' : field('ownerStopLocal').text.replaceFirst('T', ' ')}',
+                      ),
+                      Wrap(
+                        children: [
+                          TextButton(
+                            onPressed: earlierStop,
+                            child: const Text('Choose earlier stop'),
+                          ),
+                          if (field('ownerStopLocal').text.isNotEmpty)
+                            TextButton(
+                              onPressed: () => setField('ownerStopLocal', ''),
+                              child: const Text('Use shared expiry'),
+                            ),
+                        ],
+                      ),
+                      ...review().map(
+                        (w) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: w,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
   );
 }

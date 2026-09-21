@@ -7,6 +7,7 @@ function createRegistry({google,microsoft,other}) {
    reconcileSent:(credentials,op)=>google.reconcileSent(credentials.refreshToken,op),
    history:(credentials,input)=>google.history(credentials.refreshToken,input),
    thread:(credentials,threadId)=>google.thread(credentials.refreshToken,threadId),
+   ...(google.threadMetadata?{threadMetadata:(credentials,threadId)=>google.threadMetadata(credentials.refreshToken,threadId)}:{}),
    replies:async(credentials,op)=>{const thread=await google.thread(credentials.refreshToken,op.providerThreadId);
     if(op.state==='received'){if(thread.id!==op.providerThreadId)throw Error('inquiry_thread_mismatch');return require('./inquiries').messages(thread,op.from,op.requestedAt).filter(m=>m.from===op.recipient);}
     return gmail.replyMessages(thread,op);}},microsoft,other};

@@ -97,18 +97,23 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text('Fixture Business · owner@example.test'),
-        findsNWidgets(2),
+        findsOneWidget,
       );
       expect(find.text('A. Business and monitored mailbox'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('I saved this automatic Gmail filter'),
-        500,
+        find.text('Only follow existing conversations'),
+        350,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.tap(find.text('Only follow existing conversations'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Monitor my whole inbox').last);
+      await tester.pumpAndSettle();
       expect(
-        find.textContaining('Already-linked replies are checked independently'),
+        find.textContaining('No Gmail label or filter setup is required'),
         findsOneWidget,
       );
+      expect(find.text('I saved this automatic Gmail filter'), findsNothing);
       await tester.scrollUntilVisible(
         find.text('E. Review and save'),
         500,
@@ -223,6 +228,86 @@ void main() {
         findsOneWidget,
       );
       expect(service.submitted, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'saved Edit, Cancel and Save retain section D and unsaved owner edits',
+    (tester) async {
+      final service = FixtureEmail()
+        ..savedAvailability = {
+          'version': 1,
+          'settings': {
+            'timeZone': 'America/New_York',
+            'days': [1, 2, 3, 4, 5],
+            'opensMinute': 540,
+            'closesMinute': 1020,
+            'durationMinutes': 15,
+            'bufferMinutes': 5,
+            'assignedPeople': [],
+            'locationRequired': true,
+          },
+        };
+      var visits = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessEmailAssistanceScreen(
+            service: service,
+            availabilityEditor: (c, d) async {
+              visits++;
+              if (visits == 1) return false;
+              service.savedAvailability = {
+                ...service.savedAvailability!,
+                'version': 2,
+              };
+              return true;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Fixture Business'),
+        'Preserved edit',
+      );
+      await tester.scrollUntilVisible(
+        find.text('D. Appointment availability'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('D. Appointment availability'));
+      await tester.pumpAndSettle();
+      for (var visit = 0; visit < 2; visit++) {
+        await tester.ensureVisible(find.text('Edit appointment availability'));
+        final before = tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .pixels;
+        await tester.tap(find.text('Edit appointment availability'));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .state<ScrollableState>(find.byType(Scrollable).first)
+              .position
+              .pixels,
+          closeTo(before, 1),
+        );
+        expect(
+          find.text('Edit appointment availability').hitTestable(),
+          findsOneWidget,
+        );
+        expect(service.savedAvailability!['version'], visit + 1);
+        expect(service.submitted, isNull);
+      }
+      expect(visits, 2);
+      await tester.scrollUntilVisible(
+        find.text('A. Business and monitored mailbox'),
+        -500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('A. Business and monitored mailbox'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Preserved edit'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

@@ -21,13 +21,13 @@ function policyPreflight({businessId,actorUid,isOwner,mailbox,grant,policy,budge
  if(!isOwner||actorUid!==businessId)blockers.push('workspace_owner_required');
  if(!grant||grant.businessId!==businessId||grant.product!=='lead_email_assistance_pilot'||
     !grant.grantedBy||!grant.reason||!grant.grantedAt||grant.expiresAt<=now)blockers.push('audited_pilot_access_required');
- if(mailbox?.status!=='connected'||mailbox.permissions?.read!==true||mailbox.permissions?.send!==true||
+ if(mailbox?.status!=='connected'||mailbox.permissions?.read!==true||((policy?.introductionsEnabled||policy?.followupsEnabled)&&mailbox.permissions?.send!==true)||
     !mailbox.generation||mailbox.email!==grant?.mailbox)blockers.push('healthy_owned_mailbox_required');
  if(!validZone(policy?.timeZone))blockers.push('workspace_timezone_required');
  if(policy?.autonomyMode!=='bounded_managed'||policy?.replyMode!=='approval_required')blockers.push('bounded_authority_required');
  if(!Number.isSafeInteger(policy?.expiresAt)||policy.expiresAt<=now||policy.expiresAt>grant?.expiresAt)blockers.push('valid_policy_term_required');
  if(!Array.isArray(policy?.audiences)||!policy.audiences.length||policy.audiences.some(x=>!['consented','requested'].includes(x)))blockers.push('permitted_audience_required');
- if(!policy?.services?.length||!policy?.voice||!policy?.destinations?.length||!policy?.claims?.length)blockers.push('business_content_boundaries_required');
+ if((policy?.introductionsEnabled||policy?.followupsEnabled||policy?.modelAssistance)&&(!policy?.services?.length||!policy?.voice||!policy?.destinations?.length||!policy?.claims?.length))blockers.push('business_content_boundaries_required');
  const limits=policy?.limits;
  if(!Number.isInteger(limits?.initialPerDay)||limits.initialPerDay<0||limits.initialPerDay>20||
     !Number.isInteger(limits?.followupsPerContact)||limits.followupsPerContact<0||limits.followupsPerContact>3||

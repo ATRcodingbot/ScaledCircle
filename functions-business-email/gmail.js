@@ -76,6 +76,11 @@ function createProvider({clientId,clientSecret,redirectUri,fetchImpl=fetch}) {
       const access=(await token({grant_type:'refresh_token',refresh_token:refreshToken})).access_token;
       return request('https://gmail.googleapis.com/gmail/v1/users/me/threads/'+threadId+'?format=full',{headers:headers(access)});
     },
+    async threadMetadata(refreshToken,threadId) {
+      if(!/^[a-zA-Z0-9_-]{1,160}$/.test(threadId))fail('invalid-argument','Invalid conversation.');
+      const access=(await token({grant_type:'refresh_token',refresh_token:refreshToken})).access_token;
+      return request('https://gmail.googleapis.com/gmail/v1/users/me/threads/'+threadId+'?format=metadata',{headers:headers(access)});
+    },
     async history(refreshToken,{q,pageToken,maxResults=25}) {
       if(typeof q!=='string'||q.length>1500||!Number.isInteger(maxResults)||maxResults<1||maxResults>50||
         pageToken&&(!/^[A-Za-z0-9_-]{1,512}$/.test(pageToken)))fail('invalid-argument','Choose a bounded mailbox history review.');

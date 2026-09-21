@@ -5,7 +5,7 @@ const app=admin.initializeApp({projectId:'demo-email-enrollment'},'email-enrollm
 const {createEnrollment,GRANT}=require('../functions-business-email/pilot_enrollment');
 let now=Date.parse('2026-09-21T15:00:00Z'),svc;
 const actor=b=>({businessId:b,actorUid:b,beta:{kind:'internal',canManageConnection:true}});
-const policy=b=>({businessId:b,status:'awaiting_pilot_activation',approvedBy:b,approvedAt:now,connectionGeneration:'g1',digest:'fixture-'+b,policy:{expiresAt:now+7*86400000}});
+const policy=b=>({businessId:b,status:'awaiting_pilot_activation',approvedBy:b,approvedAt:now,connectionGeneration:'g1',digest:'fixture-'+b,policy:{modelAssistance:true,expiresAt:now+7*86400000}});
 beforeEach(async()=>{for(const col of ['agentPermissions','emailAssistanceOperatingGrants','emailAssistanceProviderReviews','businessMailboxes'])for(const r of await db.collection(col).listDocuments())await db.recursiveDelete(r);
  svc=createEnrollment({db,now:()=>now,workspaces:['first','second'],mailboxes:['first@example.test','second@example.test']});
  for(const b of ['first','second'])await db.doc('businessMailboxes/'+b).set({status:'connected',email:b+'@example.test',generation:'g1'});
@@ -37,7 +37,7 @@ test('data assessment is audited by the exact Admin, requires a real amendment r
 test('relative owner terms share one activation expiry even when second owner confirms later',async()=>{
  await svc.prepare(actor('first'),{confirm:true});
  await svc.recordDataReview(actor('first'),{confirm:true,sourceSha:'b'.repeat(40),amendmentReference:'fixture-only amendment evidence'});
- const relative=b=>({...policy(b),policy:{termMode:'shared_pilot',expiresAt:null,timeZone:'America/New_York',ownerStopLocal:null}});
+ const relative=b=>({...policy(b),policy:{modelAssistance:true,termMode:'shared_pilot',expiresAt:null,timeZone:'America/New_York',ownerStopLocal:null}});
  const first=relative('first');
  await db.runTransaction(async tx=>{const r=await svc.activation(tx,actor('first'),first,[]);assert.equal(r.activate,false);tx.set(db.doc('agentPermissions/first_lead_generator/authorizations/business_email'),first);});
  now+=3*86400000;
@@ -47,4 +47,13 @@ test('relative owner terms share one activation expiry even when second owner co
  assert.equal(saved.policy.expiresAt,result.expiresAt);assert.equal(saved.status,'active');
  const later=await db.runTransaction(tx=>svc.activation(tx,actor('second'),relative('second'),[]));
  assert.equal(later.expiresAt,result.expiresAt);
+});
+
+test('non-model owner authorization does not require model review or start inference clock and cannot renew access',async()=>{
+ await svc.prepare(actor('first'),{confirm:true});const saved={...policy('first'),policy:{...policy('first').policy,modelAssistance:false}};
+ let result;await db.runTransaction(async tx=>{result=await svc.activation(tx,actor('first'),saved,[]);assert.equal(result.activate,true);result.apply();});
+ assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().status,'prepared');
+ assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
+ now+=1000;const again=await db.runTransaction(tx=>svc.activation(tx,actor('first'),saved,[]));assert.equal(again.expiresAt,result.expiresAt);
+ now=result.expiresAt+1;await assert.rejects(db.runTransaction(tx=>svc.activation(tx,actor('first'),saved,[])),/expired/);
 });
