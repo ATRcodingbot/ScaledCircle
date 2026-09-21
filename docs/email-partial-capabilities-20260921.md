@@ -38,3 +38,5 @@ Server source `4814809b7cecc0547f2239121628d00fa79daaa3`: only businessEmailOper
 Live AR UI independently verified active v4 / Partially active, intake and introductions authorized subject to eligibility, follow-ups OFF, fixed-message mode, push unavailable, AI requested pending, zero considered inquiries and held dispatch. The accessible browser remained AR, not the Founder's separate ScaledCircle session; SC comparison is from authoritative production records, not a claimed rendered SC check.
 
 Final web-only follow-up removes an older contradictory universal “automatic sending is off” sentence from the main Email page when the bounded policy is authorized. It changes no sending authority. Shared Flutter delta remains pending the next matched native pair.
+
+Final web source: 4bcf66ffab57396b27c86b411c7e3e09f502cfe2. Hosting version 18bdf7d4551bda3d, release 1789991186058000 at 2026-09-21T11:46:26.058Z. No further server changes.
