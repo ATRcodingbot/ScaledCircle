@@ -3,6 +3,18 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {readiness,authorizeRuntime}=require('../functions-social-operations/social_customer_scheduling');
 const {recommend}=require('../functions-social-operations/social_customer_cadence');
 const scopes=require('../functions-social-operations/social_oauth').META_PUBLISH_SCOPES;
+test('completed generation resumes the unchanged draft without retrying rejected or pending work',async()=>{
+ const resume=require('../functions-social-operations/social_customer_scheduling').completedCreativeNeedsPreparation;
+ const preparation={businessUid:'owner',version:6,state:'needs_attention',generationStatus:'available',recommendation:{requestId:'same_source'}};
+ let reads=0;let job={businessUid:'owner',status:'review_required',candidateAssetId:'asset',candidateRevisionId:'revision'};
+ const db={doc:path=>{assert.equal(path,'visualGenerationJobs/visual_job_'+require('node:crypto').createHash('sha256').update('owner\nsame_source').digest('hex').slice(0,40));return {get:async()=>{reads++;return {data:()=>job};}};}};
+ const args={db,uid:'owner',preparation,version:6};
+ assert.equal(await resume(args),true);
+ for(const change of [{existingJob:{status:'scheduled'}},{version:7},{uid:'other'},
+  {preparation:{...preparation,state:'creative_review',reviewCandidate:{status:'blocked'}}}])assert.equal(await resume({...args,...change}),false);
+ assert.equal(reads,1);
+ for(const changed of [undefined,{...job,status:'processing'},{...job,businessUid:'other'},{...job,candidateRevisionId:null}]){job=changed;assert.equal(await resume(args),false);}
+});
 test('owned connection path supplies legacy identity but never overrides a conflicting tenant',()=>{
  const {connectionFromOwnedPath}=require('../functions-social-operations/social_customer_scheduling');
  assert.deepEqual(connectionFromOwnedPath({providerUserId:'123'},'owner'),{providerUserId:'123',businessUid:'owner'});

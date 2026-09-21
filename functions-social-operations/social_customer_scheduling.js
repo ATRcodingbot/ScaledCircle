@@ -3,6 +3,18 @@ const growth = require("./social_growth_cycle");
 const meta = require("./social_meta_candidate");
 const {approved} = require("./social_plan_state");
 const SCHEMA = 'CustomerPostApprovalV1';
+// Generation completes asynchronously without changing the draft version.
+// Resume only the exact completed source, never a new generation or a rejected review.
+async function completedCreativeNeedsPreparation({db,uid,preparation,existingJob,version}) {
+  if(existingJob||preparation?.businessUid!==uid||preparation.version!==version||
+    preparation.state!=='needs_attention'||preparation.reviewCandidate||
+    preparation.generationStatus!=='available')return false;
+  const requestId=preparation.generationOverride?.requestId||preparation.recommendation?.requestId;
+  if(!requestId)return false;
+  const id='visual_job_'+require('node:crypto').createHash('sha256').update(uid+'\n'+requestId).digest('hex').slice(0,40);
+  const job=(await db.doc('visualGenerationJobs/'+id).get()).data();
+  return job?.businessUid===uid&&job.status==='review_required'&&!!job.candidateAssetId&&!!job.candidateRevisionId;
+}
 const messages = {
   plan: 'Approve the current 30-Day Plan first.',
   creative: 'Finish or approve the image before scheduling.',
@@ -147,6 +159,8 @@ function createStore({db, now=Date.now, enabledUids=[], planEntitled=false, envi
           result.reviewCandidate=candidate;
       }
       result.creativeNeedsPreparation=!original.existingJob&&(!recommendation||original.creativePreparation.version!==original.version?.version);
+      if(!result.creativeNeedsPreparation)result.creativeNeedsPreparation=await completedCreativeNeedsPreparation({db,uid,
+        preparation:original.creativePreparation,existingJob:original.existingJob,version:original.version?.version});
       if(original.creativePreparation?.reviewCandidate&&!original.creativePreparation.reviewCandidate.preparation?.subjectQuality)result.creativeNeedsPreparation=true;
       if(inline)result.reviewCandidate=inline.candidate;
       if(!original.existingJob){
@@ -298,4 +312,4 @@ function publicationPresentation(job,steps,now=Date.now()){
   // scheduled post. Preserve its records and require safe reconciliation.
   return 'reconciliation_required';
 }
-module.exports={SCHEMA,readiness,createStore,authorizeRuntime,hasPublishingScopes,connectionFromOwnedPath,messages,publicationPresentation};
+module.exports={SCHEMA,readiness,createStore,authorizeRuntime,hasPublishingScopes,connectionFromOwnedPath,messages,publicationPresentation,completedCreativeNeedsPreparation};

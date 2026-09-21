@@ -1051,6 +1051,13 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   }
 
   String preparationLimit() {
+    final preparation = data?['messagePreparation'];
+    if (preparation?['enrollmentReady'] == true &&
+        preparation?['sharedStatus'] == 'prepared') {
+      return 'Purpose and Business-data assessment ready. Shared allowance not started. '
+          'Review message preparation, then confirm the shared seven-day term. '
+          'Gmail reply AI remains separately pending';
+    }
     final value = data?['messagePreparation']?['limitation']?.toString();
     return const {
           'outbound_purpose_extension_required':

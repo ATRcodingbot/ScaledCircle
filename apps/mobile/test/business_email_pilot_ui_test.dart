@@ -10,6 +10,7 @@ class FixtureEmail extends BusinessEmailService {
   Map<String, dynamic>? saved;
   Map<String, dynamic>? savedAvailability;
   Map<String, dynamic>? submitted;
+  Map<String, dynamic>? messagePreparation;
   bool partialAvailable = false, failUpdate = false, failReadback = false;
   List<String> expansions = [];
   final actions = <String>[];
@@ -24,6 +25,7 @@ class FixtureEmail extends BusinessEmailService {
         throw StateError('fixture read failure');
       }
       return {
+        'messagePreparation': messagePreparation,
         'authorizationReview': {
           'partialAvailable': partialAvailable,
           'canRevoke': false,
@@ -115,6 +117,32 @@ class FixtureEmail extends BusinessEmailService {
 }
 
 void main() {
+  testWidgets(
+    'enrolled inactive preparation explains owner action without activation',
+    (tester) async {
+      final service = FixtureEmail()
+        ..messagePreparation = {
+          'enrollmentReady': true,
+          'sharedStatus': 'prepared',
+          'modelReady': false,
+          'limitation': 'outbound_allowance_inactive_or_exhausted',
+        };
+      await tester.pumpWidget(
+        MaterialApp(home: BusinessEmailAssistanceScreen(service: service)),
+      );
+      await tester.pumpAndSettle();
+      final section = find.text('B. Messages and eligible recipients');
+      await tester.ensureVisible(section);
+      await tester.tap(section);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Purpose and Business-data assessment ready.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('has expired or is exhausted'), findsNothing);
+      expect(service.actions, isEmpty);
+    },
+  );
   for (final origin in ['owner', 'prepared']) {
     testWidgets('message preparation preserves owner choice: $origin', (
       tester,
