@@ -1,5 +1,7 @@
 # Approved outbound purpose extension — September 21, 2026
 
+**Release priority superseded:** Founder now requires web/service acceptance before any new native build/upload. The former Codemagic action request below is withdrawn. Preserve its history and existing artifacts; use [web-service-first-20260921.md](web-service-first-20260921.md) for current status and the single client-delta record.
+
 Founder approval: attachment 9bb31fb0-2738-47e2-8dad-466a2fc8d7e9. Extend only the existing founder_email_assistance_20260920 grant to outbound_business_context. Same two production Email workspaces, USD 1 total, 100 requests total, seven days from first actual model-purpose activation; no renewal, top-up or expiry extension. This is not a subscription or revenue record.
 
 ## Data/provider assessment
