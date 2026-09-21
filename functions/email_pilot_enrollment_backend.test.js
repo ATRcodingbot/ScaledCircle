@@ -34,3 +34,17 @@ test('data assessment is audited by the exact Admin, requires a real amendment r
  const doc=(await db.doc('emailAssistanceProviderReviews/openai_gmail_v1').get()).data();assert.equal(doc.zeroDataRetentionVerified,false);assert.equal(doc.securityAssessmentStatus,'open');
  await db.doc('emailAssistanceOperatingGrants/'+GRANT).update({status:'active'});await assert.rejects(svc.recordDataReview(actor('first'),input),/active pilot/);
 });
+test('relative owner terms share one activation expiry even when second owner confirms later',async()=>{
+ await svc.prepare(actor('first'),{confirm:true});
+ await svc.recordDataReview(actor('first'),{confirm:true,sourceSha:'b'.repeat(40),amendmentReference:'fixture-only amendment evidence'});
+ const relative=b=>({...policy(b),policy:{termMode:'shared_pilot',expiresAt:null,timeZone:'America/New_York',ownerStopLocal:null}});
+ const first=relative('first');
+ await db.runTransaction(async tx=>{const r=await svc.activation(tx,actor('first'),first,[]);assert.equal(r.activate,false);tx.set(db.doc('agentPermissions/first_lead_generator/authorizations/business_email'),first);});
+ now+=3*86400000;
+ const result=await db.runTransaction(async tx=>{const r=await svc.activation(tx,actor('second'),relative('second'),[]);assert.equal(r.activate,true);r.apply();return r;});
+ assert.equal(result.startsAt,now);assert.equal(result.expiresAt,now+7*86400000);
+ const saved=(await db.doc('agentPermissions/first_lead_generator/authorizations/business_email').get()).data();
+ assert.equal(saved.policy.expiresAt,result.expiresAt);assert.equal(saved.status,'active');
+ const later=await db.runTransaction(tx=>svc.activation(tx,actor('second'),relative('second'),[]));
+ assert.equal(later.expiresAt,result.expiresAt);
+});

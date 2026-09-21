@@ -50,7 +50,7 @@ function createEnrollment({db,now=Date.now,workspaces=WORKSPACES,mailboxes=MAILB
   const records=await Promise.all(refs.map(r=>tx.get(r))),grants=await Promise.all(workspaces.map(b=>tx.get(access(b)))),boxes=await Promise.all(workspaces.map(b=>tx.get(db.doc('businessMailboxes/'+b))));
   const schedules=await Promise.all(workspaces.map(b=>tx.get(db.doc(`businessOperations/${b}/settings/scheduling`))));
   const policies=records.map((d,i)=>workspaces[i]===a.businessId?saved:d.data());
-  const ready=policies.every((p,i)=>p?.approvedBy===workspaces[i]&&['awaiting_pilot_activation','active'].includes(p.status)&&!p.revokedAt&&p.policy.expiresAt>now()&&
+  const ready=policies.every((p,i)=>p?.approvedBy===workspaces[i]&&['awaiting_pilot_activation','active'].includes(p.status)&&!p.revokedAt&&require('./assistance_term').resolveTerm(p.policy,grant,now()).expiresAt>now()&&
     boxes[i].data()?.status==='connected'&&boxes[i].data()?.generation===p.connectionGeneration&&boxes[i].data()?.email===mailboxes[i]&&grants[i].data()?.id===GRANT&&(!p.policy.bookingEnabled||(schedules[i].data()?.version===p.policy.availabilityRevision&&digest(schedules[i].data()?.settings)===digest(p.policy.schedulingRules))));
   if(!ready)return {activate:false};
   if(grant.status==='active'&&grant.expiresAt<=now())fail('The pilot has expired. No automatic renewal is permitted.');
@@ -60,7 +60,7 @@ function createEnrollment({db,now=Date.now,workspaces=WORKSPACES,mailboxes=MAILB
     tx.update(grantRef,{status:'active',startsAt,expiresAt,dataReviewDigest:digest(review)});
     tx.create(grantRef.collection('audit').doc('activated'),{actorUid:a.actorUid,action:'both_owners_authorized',startsAt,expiresAt,policyDigests:policies.map(p=>p.digest),dataReviewDigest:digest(review)});
    }
-   workspaces.forEach((b,i)=>{tx.update(access(b),{status:'active',startsAt,expiresAt});if(b!==a.businessId){const p={...policies[i],status:'active',policy:{...policies[i].policy,expiresAt:Math.min(policies[i].policy.expiresAt,expiresAt)},activatedAt:startsAt};p.digest=digest(p);tx.set(refs[i],p);}});
+   workspaces.forEach((b,i)=>{tx.update(access(b),{status:'active',startsAt,expiresAt});if(b!==a.businessId){const p={...policies[i],status:'active',policy:{...policies[i].policy,expiresAt:Math.min(require('./assistance_term').resolveTerm(policies[i].policy,{...grant,status:'active',expiresAt},now()).expiresAt,expiresAt)},activatedAt:startsAt};p.digest=digest(p);tx.set(refs[i],p);}});
   }};
  }
  return {prepare,activation,recordDataReview};

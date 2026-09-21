@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/business_operations_service.dart';
+import 'business_email_setup_controls.dart';
 
 Future<bool> editEmailAvailability(BuildContext context, Map data) async {
   final service = BusinessOperationsService(),
@@ -14,12 +15,13 @@ Future<bool> editEmailAvailability(BuildContext context, Map data) async {
       settings = data['schedulingAvailability']?['settings'] as Map? ?? {};
   final fields = <String, TextEditingController>{
     for (final entry in {
-      'timeZone': settings['timeZone'] ?? data['timeZone'] ?? '',
+      'timeZone':
+          settings['timeZone'] ?? data['timeZone'] ?? 'America/New_York',
       'days': (settings['days'] as List? ?? [1, 2, 3, 4, 5]).join(','),
       'opensMinute': settings['opensMinute'] ?? 540,
       'closesMinute': settings['closesMinute'] ?? 1020,
-      'durationMinutes': settings['durationMinutes'] ?? 30,
-      'bufferMinutes': settings['bufferMinutes'] ?? 15,
+      'durationMinutes': settings['durationMinutes'] ?? 15,
+      'bufferMinutes': settings['bufferMinutes'] ?? 5,
     }.entries)
       entry.key: TextEditingController(text: entry.value.toString()),
   };
@@ -38,13 +40,29 @@ Future<bool> editEmailAvailability(BuildContext context, Map data) async {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'These are your maintained Schedule settings. No appointment or email is created.',
+                  'Review timezone, hours and actual staff. Unsaved values are proposals, not approved availability. No appointment or email is created.',
+                ),
+                emailZone(
+                  fields['timeZone']!.text,
+                  (v) => setLocal(() => fields['timeZone']!.text = v),
+                ),
+                emailDays(
+                  fields['days']!.text,
+                  (v) => setLocal(() => fields['days']!.text = v),
+                ),
+                emailTime(
+                  dialog,
+                  'Working hours start',
+                  fields['opensMinute']!.text,
+                  (v) => setLocal(() => fields['opensMinute']!.text = v),
+                ),
+                emailTime(
+                  dialog,
+                  'Working hours end',
+                  fields['closesMinute']!.text,
+                  (v) => setLocal(() => fields['closesMinute']!.text = v),
                 ),
                 for (final entry in {
-                  'timeZone': 'Business timezone',
-                  'days': 'Weekdays: Monday=1 … Sunday=7',
-                  'opensMinute': 'Open: minutes after local midnight',
-                  'closesMinute': 'Close: minutes after local midnight',
                   'durationMinutes': 'Appointment duration (minutes)',
                   'bufferMinutes': 'Buffer before and after (minutes)',
                 }.entries)

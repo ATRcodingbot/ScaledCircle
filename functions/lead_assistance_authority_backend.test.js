@@ -62,3 +62,14 @@ test('preflight exposes missing provider/budget prerequisites without accepting 
  await db.doc('businessMailboxes/scaledcircle').update({status:'disconnected'});
  assert.ok((await service.load(a)).blockers.includes('healthy_owned_mailbox_required'));
 });
+test('relative prepared policy persists no expiry, clock, consent or execution; saved context is workspace scoped',async()=>{
+ const a=actor('remodel');a.beta.leadAssistanceGrant.status='prepared';a.beta.leadAssistanceGrant.inferenceGrantId='shared';
+ await db.doc('emailAssistanceOperatingGrants/shared').set({status:'prepared',termMs:7*86400000,startsAt:null,expiresAt:null});
+ await db.doc('businessGrowthProfiles/remodel').set({businessUid:'remodel',businessName:'Fixture',servicesOffered:['Decks'],brandVoice:'Clear',differentiators:['Profile fact']});
+ const draft={...policy(),termMode:'shared_pilot',expiresAt:null,modelDataConsent:false,introductionsEnabled:false};
+ const result=await service.mutate(a,{...prepare(),policy:draft});assert.equal(result.status,'prepared');
+ const view=await service.load(a);assert.equal(view.policy.policy.expiresAt,null);assert.equal(view.pilotTerm.startsAt,null);assert.equal(view.proposal.values.voice,'Clear');
+ assert.ok(!view.blockers.includes('valid_policy_term_required'));assert.ok(view.blockers.includes('model_data_review_required'));
+ assert.equal((await db.doc('emailAssistanceOperatingGrants/shared').get()).data().startsAt,null);
+ await assert.rejects(service.mutate(a,{...prepare('bad_term'),expectedVersion:1,policy:{...draft,expiresAt:clock+86400000}}),{code:'invalid-argument'});
+});

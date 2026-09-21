@@ -3,7 +3,7 @@
 // does not grant a product, release the send hold, or write mailbox credentials.
 const p=require('./lead_assistance_policy');
 const fail=(code,message)=>{const e=Error(message);e.code=code;throw e;};
-const keys=['autonomyMode','replyMode','timeZone','expiresAt','audiences','services','voice','claims','destinations','limits',
+const keys=['autonomyMode','replyMode','timeZone','expiresAt','termMode','ownerStopLocal','audiences','services','voice','claims','destinations','limits',
  'sendingDays','opensMinute','closesMinute','modelAssistance','modelDataConsent','bookingEnabled','availabilityRevision',
  'schedulingRules','introductionsEnabled','followupsEnabled','notifications','businessName','templates','mailingAddress','newInquiriesEnabled','inquiryLabel','inquiryRoutingConfirmed','inquiryFilterDescription'];
 function cleanPolicy(value){
@@ -15,6 +15,11 @@ function cleanPolicy(value){
  if(value.destinations.some(s=>{try{return new URL(s).protocol!=='https:';}catch(_){return true;}}))fail('invalid-argument','Use valid secure destinations.');
  for(const k of ['modelAssistance','modelDataConsent','bookingEnabled','introductionsEnabled','followupsEnabled'])
   if(typeof value[k]!=='boolean')fail('invalid-argument','Review each assistance capability.');
+ if(value.termMode!=null&&value.termMode!=='shared_pilot')fail('invalid-argument','Choose the approved shared pilot term.');
+ if(value.termMode==='shared_pilot'){
+  if(value.expiresAt!=null)fail('invalid-argument','The shared pilot expiry is resolved by the server.');
+  try{require('./assistance_term').localStop(value.ownerStopLocal,value.timeZone);}catch(e){fail('invalid-argument',e.message);}
+ }
  return JSON.parse(JSON.stringify(value));
 }
 function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
@@ -34,7 +39,7 @@ function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
   const budget=shared?{...shared,expiresAt:expiry,availableMicros:Math.max(0,(shared.maximumCostMicros||0)-(usage?.actualCostMicros||0)-(usage?.outstandingCostMicros||0)),providerDataReviewComplete:reviewed}:null;
   const effectiveGrant=grant?.status==='prepared'?{...grant,expiresAt:now()+7*86400000}:grant;
   const blockers=p.policyPreflight({businessId:a.businessId,actorUid:a.actorUid,isOwner:a.beta.canManageConnection===true,
-   mailbox,grant:effectiveGrant,policy:selected,budget,now:now()});
+   mailbox,grant:effectiveGrant,policy:require('./assistance_term').resolveTerm(selected,shared,now()),budget,now:now()});
   if(!reviewed)blockers.push('model_data_review_required');
   if(!providerReady)blockers.push('model_provider_binding_required');
   if(!shared||!['prepared','active'].includes(shared.status))blockers.push('shared_pilot_enrollment_required');
@@ -51,13 +56,18 @@ function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
   if((selected?.introductionsEnabled||selected?.followupsEnabled)&&!selected?.mailingAddress)blockers.push('public_mailing_address_required');
   if(selected?.newInquiriesEnabled&&!/^[A-Za-z0-9_-]{1,60}$/.test(selected.inquiryLabel||''))blockers.push('inquiry_label_required');
   if(selected?.newInquiriesEnabled&&(selected.inquiryRoutingConfirmed!==true||typeof selected.inquiryFilterDescription!=='string'||selected.inquiryFilterDescription.trim().length<20))blockers.push('automatic_inquiry_filter_confirmation_required');
-  return {saved:saved.data()||null,mailbox,grant,budgetState:shared?.status||'not_prepared',blockers:[...new Set(blockers)]};
+  return {saved:saved.data()||null,mailbox,grant,shared, budgetState:shared?.status||'not_prepared',blockers:[...new Set(blockers)]};
  }
  async function load(a){
   const s=await state(a,null);
-  const [business,profile,availability]=await Promise.all([db.doc('users/'+a.businessId).get(),db.doc('businessGrowthProfiles/'+a.businessId).get(),db.doc('businessOperations/'+a.businessId+'/settings/scheduling').get()]);
+  const [business,profile,availability,brand,social,campaigns,devices]=await Promise.all([
+   db.doc('users/'+a.businessId).get(),db.doc('businessGrowthProfiles/'+a.businessId).get(),db.doc('businessOperations/'+a.businessId+'/settings/scheduling').get(),
+   db.doc('businessBrandProfiles/'+a.businessId).get(),db.doc('socialManagedPolicies/'+a.businessId).get(),
+   db.collection('businessMailboxes/'+a.businessId+'/campaigns').limit(26).get(),
+   db.collection('mobilePushDevices').where('uid','==',a.actorUid).limit(20).get()]);
+  const proposal=require('./assistance_proposal').proposal({businessId:a.businessId,business:business.data(),profile:profile.data(),brand:brand.data(),social:social.data(),campaigns:campaigns.docs.map(d=>d.data())});
   const contacts=a.beta.canManageConnection&&a.actorUid===a.businessId?(await db.collection(`businessOperations/${a.businessId}/customers`).limit(50).get()).docs.map(d=>({id:d.id,name:d.data().name,email:d.data().email,version:d.data().version,permissionStatus:d.data().emailPermission?.status||'not_recorded'})):[];
-  return {contacts,businessId:a.businessId,policy:s.saved||null,canPreparePilot:a.businessId===require('./inference_budget').WORKSPACES[0]&&a.actorUid===a.businessId&&a.beta.kind==='internal'&&a.beta.canManageConnection===true,pilotStatus:s.budgetState,canManage:a.beta.canManageConnection===true&&a.actorUid===a.businessId,
+  return {proposal,ownerEmail:business.data()?.email||null,pushReady:devices.docs.some(d=>d.data().enabled===true&&d.data().environment==='production'&&d.data().expiresAtMs>now()),pilotTerm:{status:s.budgetState,startsAt:s.shared?.startsAt||null,expiresAt:s.shared?.expiresAt||null,termDays:7},contacts,businessId:a.businessId,policy:s.saved||null,canPreparePilot:a.businessId===require('./inference_budget').WORKSPACES[0]&&a.actorUid===a.businessId&&a.beta.kind==='internal'&&a.beta.canManageConnection===true,pilotStatus:s.budgetState,canManage:a.beta.canManageConnection===true&&a.actorUid===a.businessId,
    sender:s.mailbox?.email||null,workspaceName:business.data()?.businessName||business.data()?.companyName||profile.data()?.businessName||'Current Business',timeZone:profile.data()?.timeZone||null,schedulingAvailability:availability.data()||null,
    grantExpiresAt:s.grant?.expiresAt||null,blockers:s.blockers,blockerMessages:{model_data_review_required:'The model-data disclosure and Google-review processing assessment must be completed before pilot activation.',model_provider_binding_required:'The verified provider binding has not been enabled for this Email runtime.',shared_pilot_enrollment_required:'The approved shared pilot must be prepared without starting its clock.',audited_pilot_access_required:'The bounded pilot enrollment has not been activated.',model_consent_and_separate_budget_required:'Model-data review, your explicit consent and the separate shared allowance must be ready.',workspace_timezone_required:'Choose the actual Business timezone.',valid_policy_term_required:'Choose a policy expiry within the approved pilot term.',maintained_schedule_availability_required:'Save staff availability, duration and buffers in Schedule.',approved_message_templates_required:'Review the exact introduction/follow-up copy.',public_mailing_address_required:'Provide the authorized public Business mailing address.'},automaticSending:s.saved?.status==='active'&&s.saved.policy.expiresAt>now()&&s.blockers.length===0&&(s.saved.policy.introductionsEnabled===true||s.saved.policy.followupsEnabled===true)};
  }
@@ -88,7 +98,7 @@ function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
     ...(status==='revoked'?{revokedAt:now()}: {})};
    saved.digest=p.digest(saved);
    let activation=null;
-   if(['activate','resume'].includes(action)){activation=await require('./pilot_enrollment').createEnrollment({db,now}).activation(tx,a,saved,s.blockers);if(activation.activate){status='active';saved.status=status;saved.activatedAt=activation.startsAt;saved.policy={...saved.policy,expiresAt:Math.min(saved.policy.expiresAt,activation.expiresAt)};saved.digest=p.digest(saved);}}
+   if(['activate','resume'].includes(action)){activation=await require('./pilot_enrollment').createEnrollment({db,now}).activation(tx,a,saved,s.blockers);if(activation.activate){status='active';saved.status=status;saved.activatedAt=activation.startsAt;saved.policy={...saved.policy,expiresAt:Math.min(require('./assistance_term').resolveTerm(saved.policy,{status:'active',termMs:7*86400000,expiresAt:activation.expiresAt},now()).expiresAt,activation.expiresAt)};saved.digest=p.digest(saved);}}
    const result={saved:true,version,status,automaticSending:status==='active'&&(saved.policy.introductionsEnabled||saved.policy.followupsEnabled),blockers:s.blockers};
    if(activation?.activate)activation.apply();
    tx.set(ref(a),saved);

@@ -6,6 +6,8 @@ import 'package:flutter_app/screens/business/business_email_conversation_screen.
 
 class FixtureEmail extends BusinessEmailService {
   final calls = <String>[];
+  Map<String, dynamic>? saved;
+  Map<String, dynamic>? submitted;
   @override
   Future<Map<String, dynamic>> call(
     String operation, [
@@ -23,8 +25,23 @@ class FixtureEmail extends BusinessEmailService {
         'blockerMessages': {
           'model_data_review_required': 'Model-data review is pending.',
         },
-        'policy': null,
+        'proposal': {
+          'values': {
+            'businessName': 'Fixture Business',
+            'services': ['Decks'],
+            'voice': 'Clear',
+            'claims': ['Profile fact'],
+            'destinations': ['https://example.test'],
+          },
+          'sources': {'voice': 'Business Profile'},
+        },
+        'policy': saved,
       };
+    }
+    if (operation == 'manageAssistance') {
+      submitted = input;
+      saved = {'status': 'prepared', 'version': 1, 'policy': input['policy']};
+      return {'status': 'prepared'};
     }
     if (operation == 'loadConversation') {
       return {
@@ -78,30 +95,117 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text('Fixture Business · owner@example.test'),
-        findsOneWidget,
+        findsNWidgets(2),
       );
-      expect(find.text('Model-data review is pending.'), findsOneWidget);
+      expect(find.text('A. Business and monitored mailbox'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('I saved this automatic Gmail filter'),
         500,
         scrollable: find.byType(Scrollable).first,
       );
       expect(
-        find.textContaining(
-          'one-time filter routes future matching mail automatically',
-        ),
+        find.textContaining('Already-linked replies are checked independently'),
         findsOneWidget,
       );
       await tester.scrollUntilVisible(
-        find.text('Authorize email assistance'),
+        find.text('E. Review and save'),
         500,
         scrollable: find.byType(Scrollable).first,
       );
-      final authorize = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Authorize email assistance'),
+      await tester.tap(find.text('E. Review and save'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Save preferences'),
+        500,
+        scrollable: find.byType(Scrollable).first,
       );
-      expect(authorize.onPressed, isNull);
+      expect(find.text('Authorize email assistance'), findsNothing);
       expect(service.calls, ['loadAssistance']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'reviewed proposal saves without consent, UTC guessing or activation',
+    (tester) async {
+      final service = FixtureEmail();
+      await tester.pumpWidget(
+        MaterialApp(home: BusinessEmailAssistanceScreen(service: service)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Clear'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('E. Review and save'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('E. Review and save'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Save preferences'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Save preferences'));
+      await tester.pumpAndSettle();
+      final p = service.submitted!['policy'] as Map;
+      expect(service.submitted!['action'], 'prepare');
+      expect(p['expiresAt'], isNull);
+      expect(p['termMode'], 'shared_pilot');
+      expect(p['opensMinute'], 540);
+      expect(p['closesMinute'], 1020);
+      expect(p['sendingDays'], [1, 2, 3, 4, 5]);
+      expect(p['modelDataConsent'], false);
+      expect(p['introductionsEnabled'], false);
+      expect(p['inquiryRoutingConfirmed'], false);
+      expect(service.calls.where((v) => v == 'manageAssistance').length, 1);
+      expect(find.text('Authorize email assistance'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'Schedule return retains unsaved owner values and leaves toggles unchanged',
+    (tester) async {
+      final service = FixtureEmail();
+      var visits = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BusinessEmailAssistanceScreen(
+            service: service,
+            availabilityEditor: (c, d) async {
+              visits++;
+              return true;
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Fixture Business'),
+        'Edited owner name',
+      );
+      await tester.scrollUntilVisible(
+        find.text('D. Appointment availability'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('D. Appointment availability'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Set appointment availability'));
+      await tester.tap(find.text('Set appointment availability'));
+      await tester.pumpAndSettle();
+      expect(visits, 1);
+      await tester.scrollUntilVisible(
+        find.text('A. Business and monitored mailbox'),
+        -500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('A. Business and monitored mailbox'));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(TextField, 'Edited owner name'),
+        findsOneWidget,
+      );
+      expect(service.submitted, isNull);
       expect(tester.takeException(), isNull);
     },
   );
