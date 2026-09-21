@@ -121,4 +121,11 @@ test('explicit available-only authorization preserves AI and OFF choices without
  await assert.rejects(service.mutate(a,{action:'resume',expectedVersion:5,requestId:'resume_new_saved',confirm:true}),{code:'failed-precondition'});
  await db.doc(`businessMailboxes/${a.businessId}/private/credential`).delete();
  await assert.rejects(service.mutate(a,{action:'activate',availableOnly:true,expectedVersion:5,requestId:'no_sender_partial',confirm:true}),/mailbox_credentials_unavailable/);
+ await db.doc(`businessMailboxes/${a.businessId}/private/credential`).set({generation:'g1'});
+ const originalExpiry=saved.policy.expiresAt,oldBoundary=saved.intakeStartsAt,future=clock+60000;
+ const later=require('../functions-business-email/lead_assistance_authority').createAssistanceAuthority({db,now:()=>future});
+ await later.mutate(a,{...prepare('enable_future'),expectedVersion:5,policy:{...desired,newInquiriesEnabled:true}});
+ await later.mutate(a,{action:'activate',availableOnly:true,expectedVersion:6,requestId:'confirm_future',confirm:true});
+ const enabled=(await later.load(a)).policy;assert.ok(enabled.intakeStartsAt>oldBoundary);assert.equal(enabled.intakeStartsAt,future);assert.equal(enabled.policy.expiresAt,originalExpiry);assert.equal(enabled.modelAuthorizationPending,true);
+ assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
 });

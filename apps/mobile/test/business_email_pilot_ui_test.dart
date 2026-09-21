@@ -81,6 +81,46 @@ class FixtureEmail extends BusinessEmailService {
 
 void main() {
   testWidgets(
+    'partial authorization does not describe OFF inbox intake or introductions as operating',
+    (tester) async {
+      final service = FixtureEmail()
+        ..saved = {
+          'status': 'active',
+          'version': 2,
+          'modelAuthorizationPending': true,
+          'policy': {
+            'mailboxMode': 'inbox',
+            'newInquiriesEnabled': false,
+            'introductionsEnabled': false,
+            'followupsEnabled': false,
+            'modelAssistance': true,
+            'expiresAt': DateTime.now()
+                .add(const Duration(days: 1))
+                .millisecondsSinceEpoch,
+          },
+        };
+      await tester.pumpWidget(
+        MaterialApp(home: BusinessEmailAssistanceScreen(service: service)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Partially active'), findsOneWidget);
+      expect(
+        find.text('New-inquiry monitoring: Off — not authorized'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Automatic introductions: Off — not authorized'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Unavailable — no ready device'),
+        findsOneWidget,
+      );
+      expect(service.calls.contains('manageAssistance'), isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'AI blocked keeps review visible and partial operation requires explicit confirmation',
     (tester) async {
       final service = FixtureEmail()

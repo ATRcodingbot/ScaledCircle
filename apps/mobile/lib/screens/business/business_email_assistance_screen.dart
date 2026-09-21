@@ -442,6 +442,36 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         ),
       );
   String on(String k) => choices[k] == true ? 'On' : 'Off';
+  String get requestedAi => choices['modelAssistance'] != true
+      ? 'Off'
+      : data?['capabilities']?['modelSuggestions']?['ready'] != true
+      ? 'Requested — pending model-data / applicable Google review and later authorization'
+      : 'Requested — separate authorization and allowance required';
+  String capabilityState(String key) {
+    final saved = data?['policy'] as Map?;
+    if (saved?['policy']?[key] != true) return 'Off — not authorized';
+    if (saved?['status'] != 'active') {
+      return 'Requested — authorization pending';
+    }
+    final expiry = saved?['policy']?['expiresAt'] as num?;
+    if (expiry == null || expiry <= DateTime.now().millisecondsSinceEpoch) {
+      return 'Not operating — authorization expired';
+    }
+    return 'Authorized — execution remains subject to current eligibility';
+  }
+
+  String get dispatchEvidence => switch (data?['dispatchStatus']?['state']) {
+    'eligibility_held' =>
+      'Checked; recipient or sending prerequisites are not satisfied',
+    'no_eligible_recipient' => 'Checked; no eligible recipient',
+    'sent' => 'A provider accepted a message; delivery is not implied',
+    'needs_review' => 'An execution exception needs review',
+    'needs_reconciliation' =>
+      'Provider outcome needs confirmation; no automatic retry',
+    null => 'No recorded visit',
+    _ => 'A visit is recorded; no confirmed send shown here',
+  };
+
   String hours(String a, String b) =>
       '${emailTimeLabel(context, field(a).text)}–${emailTimeLabel(context, field(b).text)}';
   String get days => field('sendingDays').text
@@ -560,7 +590,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         'Introductions: ${on('introductionsEnabled')}, at most ${field('initialPerDay').text}/day\nFollow-ups: ${on('followupsEnabled')}, at most ${field('followupsPerContact').text}/contact\nSending: $days · ${hours('opensMinute', 'closesMinute')} · $zone\nQuiet hours: ${hours('quietStart', 'quietEnd')}',
       ),
       Text(
-        'Owner email alerts: ${on('email')} → ${data?['ownerEmail'] ?? 'Verified owner account'}\nPush alerts: ${on('push')} · ${data?['pushReady'] == true ? 'Registered device' : 'No ready registered device'}\nSuggested replies: ${on('modelAssistance')} — exact-message approval required\nModel consent: ${on('modelDataConsent')}',
+        'Owner email alerts: ${on('email')} → ${data?['ownerEmail'] ?? 'Verified owner account'}\nPush alerts: ${on('push')} · ${data?['pushReady'] == true ? 'Registered device' : 'No ready registered device'}\nAI suggestions: $requestedAi — exact-message approval required\nModel consent: ${on('modelDataConsent')}',
       ),
       Text(
         'Schedule assistance: ${on('bookingEnabled')}\n${availabilitySummary()}',
@@ -677,7 +707,25 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                   'Selected preferences run only after owner authorization and applicable readiness checks. Saving preferences does not activate assistance.',
                 ),
                 Text(
-                  'Operating status: ${data?['policy']?['status'] == 'active' ? 'Authorized capabilities are checked by the recurring worker' : 'Not active — preferences are not execution authority'}',
+                  'Operating status: ${data?['policy']?['status'] == 'active' ? 'Partially active — only authorized, eligible capabilities may operate' : 'Not active — preferences are not execution authority'}',
+                ),
+                Text(
+                  'New-inquiry monitoring: ${capabilityState('newInquiriesEnabled')}',
+                ),
+                Text(
+                  'Automatic introductions: ${capabilityState('introductionsEnabled')}',
+                ),
+                Text(
+                  'Automatic follow-ups: ${capabilityState('followupsEnabled')}',
+                ),
+                Text(
+                  'Adaptive outreach: ${data?['policy']?['policy']?['adaptiveOutreach']?['enabled'] == true ? 'Selected; requires authorized introductions and eligible evidence' : 'Off — fixed-message mode'}',
+                ),
+                Text(
+                  'Push: ${data?['pushReady'] == true ? 'Device registered; saved owner choice applies' : 'Unavailable — no ready device'}. Owner email alerts remain independent.',
+                ),
+                Text(
+                  'Latest dispatch evidence: $dispatchEvidence. Authorization alone is not proof of a send.',
                 ),
                 Text(
                   'AI suggestions: ${data?['authorizationReview']?['modelPending'] == true
@@ -985,7 +1033,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                   panel(
                     2,
                     'C. Owner alerts and suggested replies',
-                    'Email ${on('email')} · Push ${on('push')} · Suggestions ${on('modelAssistance')}',
+                    'Email ${on('email')} · Push ${on('push')} · AI $requestedAi',
                     [
                       Text(
                         'Owner email: ${data!['ownerEmail'] ?? 'Verified owner account'}\nPush: ${data!['pushReady'] == true ? 'Registered device ready for physical test' : 'No ready device registered. In the signed-in app, open Notifications → Notification preferences → Mobile push notifications.'}',
