@@ -28,3 +28,13 @@ ScaledCircle: A — retain Whole Inbox and explicitly enable Read new inquiries;
 AR: current selected-label non-model authorization is already active; no repeat confirmation is needed to retain it. It is not Whole Inbox monitoring. If changing to Whole Inbox or adaptive commercial outreach, explicitly select that scope, review new exact Business copy/alternative, save and authorize the new version under the same expiry. The currently authorized introduction is a controlled-test message, not a general prospect campaign. Separate recipient permission is required; no implementation send is authorized.
 
 No prospect messages, inference, appointments, Google work or native builds in this readback/repair. Installed native candidates lack this presentation delta.
+
+## Validation and deployment
+
+21 focused authorization/intake backend tests and seven Flutter UI tests passed; focused analysis is clean. Existing grant expiry and inactive inference clock are asserted across OFF → prepare ON → explicit authorization. No production policy, grant, mailbox or budget changes occurred: all eight protected record hashes matched after deployment.
+
+Server source `4814809b7cecc0547f2239121628d00fa79daaa3`: only businessEmailOperationsV1 changed, revision `businessemailoperationsv1-00019-qug`, ACTIVE at 11:43:49 UTC. Runtime identity, environment, secret bindings and Rules unchanged; no unrelated Function changed. Initial web release `4fbe026271a16d8d` at 11:43:53 UTC.
+
+Live AR UI independently verified active v4 / Partially active, intake and introductions authorized subject to eligibility, follow-ups OFF, fixed-message mode, push unavailable, AI requested pending, zero considered inquiries and held dispatch. The accessible browser remained AR, not the Founder's separate ScaledCircle session; SC comparison is from authoritative production records, not a claimed rendered SC check.
+
+Final web-only follow-up removes an older contradictory universal “automatic sending is off” sentence from the main Email page when the bounded policy is authorized. It changes no sending authority. Shared Flutter delta remains pending the next matched native pair.

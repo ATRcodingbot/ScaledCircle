@@ -459,8 +459,10 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       Text(businessEmailHealth(c['connectionHealth'])),
                     ],
                     if (_data!['sendEnabled'] == true && c['send'] == true)
-                      const Text(
-                        'Send reviewed messages from your Business mailbox. Each message needs your approval; automatic sending is off.',
+                      Text(
+                        c['automaticSending'] == true
+                            ? 'Bounded introductions are authorized for eligible recipients. Replies require approval of the exact message.'
+                            : 'Send reviewed messages from your Business mailbox. Each message needs your approval; automatic sending is off.',
                       ),
                     if (c['status'] != 'connected')
                       const Text(
