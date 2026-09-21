@@ -32,3 +32,13 @@ Owner must review facts/draft, record this pilot's actual recipient permission, 
 Google/model-data processing assessment remains open; factual amendment remains prepared/unsent. No Google lookup or write in this repair. Device registration/physical push still required if push is selected; owner email is independently available. No live pilot claim.
 
 Shared Flutter delta belongs in the next matched native pair. Installed iOS29/Android27 do not contain this setup. No native rebuild, number reservation, unrelated deployment or budget change.
+
+## Production readback
+
+Application/source commit: bbcd82d7ab079648afac28f49030a3d215b57e9c, pushed to origin/real-completion-proof. Production Hosting released September 21. Only businessEmailOperationsV1 changed: ACTIVE revision businessemailoperationsv1-00013-fub, update 2026-09-21T08:35:27.783900165Z. At 08:35:42.959Z no unexpected Function changes; Firestore rules unchanged.
+
+Real authenticated Attractive Remodel web session verified: sourced profile/services/voice/facts, owner-approved website and public footer rendered; final review displays exact skotiatrades draft and permission Not recorded, filter not confirmed, all new opt-ins Off, no registered push device, availability not saved, shared relative term and enabled Save preferences. No generic disabled Authorize wall. Left on final review without saving/authorizing.
+
+Both workspace policies remain absent; both mailbox connection generations and permissions unchanged. Shared grant remains prepared, startsAt=null, expiresAt=null, usage absent, model review absent. ScaledCircle's separate workspace/configuration not mutated. No live-message/model/appointment/consent activity during preparation.
+
+Evidence: .firebase/launch-close-20260919/owner-proposal-final-readback.json plus rendered production UI inspection. Existing dependency lock SHA256 remains 2D929B3279125C2A0732212AEE86EBF51607AAFF76F315C9A0FF51E0BBF8EA94.
