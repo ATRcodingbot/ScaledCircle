@@ -39,7 +39,7 @@ function policyPreflight({businessId,actorUid,isOwner,mailbox,grant,policy,budge
     !budget.businessIds?.includes(businessId)||budget.expiresAt<=now||budget.availableMicros<=0||
     policy.modelDataConsent!==true||budget.providerDataReviewComplete!==true))blockers.push('model_consent_and_separate_budget_required');
  if(policy?.bookingEnabled===true&&(!policy?.availabilityRevision||!policy?.schedulingRules?.durationMinutes||
-    !Number.isInteger(policy?.schedulingRules?.bufferMinutes)||!policy?.schedulingRules?.assignedPeople?.length))blockers.push('maintained_schedule_availability_required');
+    !Number.isInteger(policy?.schedulingRules?.bufferMinutes)||!Array.isArray(policy?.schedulingRules?.assignedPeople)))blockers.push('maintained_schedule_availability_required');
  return [...new Set(blockers)];
 }
 function dispatchEligibility({policy,expectedPolicyDigest,mailbox,operation,now,...rest}){

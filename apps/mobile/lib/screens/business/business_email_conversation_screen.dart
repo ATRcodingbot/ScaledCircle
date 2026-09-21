@@ -156,7 +156,7 @@ class _ConversationState extends State<BusinessEmailConversationScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Timezone: ${settings['timeZone']} · ${settings['durationMinutes']} minutes · ${settings['bufferMinutes']} minute buffer\nStaff: ${(settings['assignedPeople'] as List).join(', ')}',
+                  'Timezone: ${settings['timeZone']} · ${settings['durationMinutes']} minutes · ${settings['bufferMinutes']} minute buffer\nStaff: ${(settings['assignedPeople'] as List).isEmpty ? 'Assign later' : (settings['assignedPeople'] as List).join(', ')}',
                 ),
                 TextField(
                   controller: start,
@@ -253,6 +253,13 @@ class _ConversationState extends State<BusinessEmailConversationScreen> {
   }
 
   Future<void> confirmAppointment(Map appointment) async {
+    if ((appointment['assignedPeople'] as List? ?? []).isEmpty) {
+      setState(
+        () => feedback =
+            'This offer is tentative. Assign an available person in Schedule, then reload this conversation before confirming.',
+      );
+      return;
+    }
     final replies =
         (data?['replies'] as List? ?? [])
             .where((r) => r['classification'] == 'substantive')

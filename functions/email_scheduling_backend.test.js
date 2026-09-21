@@ -57,3 +57,43 @@ test('cancel retains same event/history and direct status changes cannot turn a 
  await call('removeItem',{itemId:created.itemId,expectedVersion:1,removalAction:'cancel'});
  const saved=(await db.doc('businessOperations/owner/items/'+created.itemId).get()).data();assert.equal(saved.status,'canceled');assert.equal(saved.emailLink.operationId,'op');
 });
+
+const hours=(assignedPeople=[],locationRequired=false)=>({timeZone:'America/New_York',days:[1,2,3,4,5],opensMinute:540,closesMinute:1020,durationMinutes:15,bufferMinutes:5,assignedPeople,locationRequired});
+test('missing request envelope fails first; optional staff/location persist with readback and idempotency',async()=>{
+ await assert.rejects(svc.execute({auth:{uid:'owner'},data:{businessId:'owner',operation:'saveSchedulingAvailability',input:{expectedVersion:1,settings:hours()}}}),/required fields/);
+ for(const [i,location] of [false,true].entries()) {
+  const input={expectedVersion:i+1,settings:hours([],location)},key='availability_retry_'+i;
+  const result=await call('saveSchedulingAvailability',input,key);
+  assert.equal(result.saved,true);assert.deepEqual(result.availability.settings,hours([],location));assert.equal(result.availability.version,i+2);
+  assert.equal((await call('saveSchedulingAvailability',input,key)).duplicate,true);
+  const loaded=await call('load',{fromMs:at,toMs:at+86400000});assert.deepEqual(loaded.schedulingAvailability.settings,hours([],location));
+ }
+ assert.equal((await db.collection('businessOperations/owner/items').get()).size,0);
+ assert.equal((await db.doc('businessMailboxes/owner').get()).data().status,'connected');
+ assert.equal((await db.collection('agentPermissions').get()).size,0);
+});
+test('staff validation, version conflict, invalid hours and workspace isolation remain enforced',async()=>{
+ const r=await call('saveSchedulingAvailability',{expectedVersion:1,settings:hours(['user:owner'])});assert.deepEqual(r.availability.assignedLabels,['Fixture owner']);
+ await assert.rejects(call('saveSchedulingAvailability',{expectedVersion:1,settings:hours()}),{code:'aborted'});
+ await assert.rejects(call('saveSchedulingAvailability',{expectedVersion:2,settings:hours(['user:other'])}),/no longer active/);
+ await assert.rejects(call('saveSchedulingAvailability',{expectedVersion:2,settings:{...hours(),closesMinute:500}}),/end after/);
+ await assert.rejects(svc.execute({auth:{uid:'other'},data:{businessId:'owner',operation:'saveSchedulingAvailability',input:{expectedVersion:2,settings:hours()},requestId:'cross_workspace_123'}}),{code:'permission-denied'});
+});
+test('unassigned offer stays tentative until real assignment and conflict checks',async()=>{
+ await call('saveSchedulingAvailability',{expectedVersion:1,settings:hours()});
+ const proposal={...item(),durationMinutes:15,assignedPeople:[]},link={...emailConversation(),availabilityVersion:2};
+ const created=await call('saveItem',{expectedVersion:0,item:proposal,emailConversation:link});
+ await assert.rejects(call('saveItem',{itemId:created.itemId,expectedVersion:1,item:{...proposal,status:'scheduled'},emailConversation:{...link,ownerConfirmsAcceptance:true,acceptanceReplyId:'reply'}}),/Assign an available person/);
+ const confirmed=await call('saveItem',{itemId:created.itemId,expectedVersion:1,item:{...proposal,assignedPeople:['user:owner'],status:'scheduled'},emailConversation:{...link,ownerConfirmsAcceptance:true,acceptanceReplyId:'reply'}});
+ assert.equal(confirmed.saved,true);
+ await assert.rejects(call('saveItem',{expectedVersion:0,item:{...proposal,assignedPeople:['user:owner']}}),/already scheduled/);
+});
+test('Schedule editor can save unassigned hours; non-editor cannot save and cannot change staff without assignment permission',async()=>{
+ const member=createService({db,FieldValue:admin.firestore.FieldValue,now:()=>at,authority:async()=>({businessId:'owner',ownerUid:'owner',actorUid:'member',actorName:'Fixture member',isOwner:false,permissions:['scheduleEdit','scheduleView'],activePaid:true,capacity:2})});
+ const request=input=>({auth:{uid:'member'},data:{businessId:'owner',operation:'saveSchedulingAvailability',input,requestId:'member_availability_123'}});
+ await call('saveSchedulingAvailability',{expectedVersion:1,settings:hours()});
+ const result=await member.execute(request({expectedVersion:2,settings:hours([],true)}));assert.equal(result.saved,true);
+ await assert.rejects(member.execute({...request({expectedVersion:3,settings:hours(['user:owner'])}),data:{...request({expectedVersion:3,settings:hours(['user:owner'])}).data,requestId:'member_assignment_456'}}),{code:'permission-denied'});
+ const denied=createService({db,FieldValue:admin.firestore.FieldValue,now:()=>at,authority:async()=>({businessId:'owner',ownerUid:'owner',actorUid:'viewer',actorName:'Fixture viewer',isOwner:false,permissions:['scheduleView'],activePaid:true,capacity:2})});
+ await assert.rejects(denied.execute(request({expectedVersion:3,settings:hours()})),{code:'permission-denied'});
+});

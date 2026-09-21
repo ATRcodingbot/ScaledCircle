@@ -24,7 +24,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
   const a=await authority(request),input=request.data?.input||{};m.strict(input,['fromMs','toMs']);
   const {fromMs,toMs}=input;if(!Number.isSafeInteger(fromMs)||!Number.isSafeInteger(toMs)||toMs<=fromMs||toMs-fromMs>45*86400000)m.fail('invalid-argument','Choose a date range of up to 45 days.');
   if(!['customersView','scheduleView','jobsView','jobsAssigned'].some(p=>can(a,p)))m.fail('permission-denied','Ask your Business owner for Customers or Schedule access.');
-  const [roster,allCustomers,allItems,prefs]=await Promise.all([people(a),can(a,'customersView')?bounded(root(a.businessId).collection('customers')):[],bounded(root(a.businessId).collection('items').where('startMs','>=',fromMs-86400000).where('startMs','<',toMs)),ref(a.businessId,'preferences',a.actorUid).get()]);
+  const [roster,allCustomers,allItems,prefs,scheduling]=await Promise.all([people(a),can(a,'customersView')?bounded(root(a.businessId).collection('customers')):[],bounded(root(a.businessId).collection('items').where('startMs','>=',fromMs-86400000).where('startMs','<',toMs)),ref(a.businessId,'preferences',a.actorUid).get(),ref(a.businessId,'settings','scheduling').get()]);
   const visibleItems=allItems.filter(x=>x.removedAtMs==null&&x.endMs>fromMs&&itemAccess(a,x,roster));
   const full=can(a,'customersView');const labels=Object.fromEntries(roster.map(p=>[p.id,p.name]));
   const linked=new Map(allCustomers.map(c=>[c.id,c]));
@@ -35,7 +35,7 @@ function createService({db,FieldValue,authority,now=Date.now}){
   const inbound=leads.filter(l=>l.leadType==='landing_page_inquiry'&&!imported.has(l.id)).map(l=>({id:l.id,name:l.contactName||'Landing-page inquiry',email:l.contactEmail||'',source:'Landing page'}));
   let emailThreads=[];
   if(can(a,'communicationsRead')){const mailbox=(await db.doc('businessMailboxes/'+a.businessId).get()).data();if(mailbox?.status==='connected'&&mailbox.permissions?.read===true)emailThreads=(await bounded(db.collection(`businessMailboxes/${a.businessId}/operations`).where('state','==','sent'))).filter(o=>o.businessId===a.businessId).map(o=>({id:o.id,recipient:o.recipient,subject:o.subject,prospectId:o.prospectId}));}
-  return {...publicContext(a),customers:allCustomers,items,people:full||can(a,'assignPeople')||can(a,'scheduleView')?roster:roster.filter(x=>x.uid===a.actorUid||items.some(i=>i.assignedPeople.includes(x.id))),inbound,
+  return {...publicContext(a),schedulingAvailability:can(a,'scheduleView')||can(a,'scheduleEdit')?scheduling.data()||null:null,customers:allCustomers,items,people:full||can(a,'assignPeople')||can(a,'scheduleView')?roster:roster.filter(x=>x.uid===a.actorUid||items.some(i=>i.assignedPeople.includes(x.id))),inbound,
    notifications:prefs.data()?.choices||{},counts:{needsResponse:full?allCustomers.filter(c=>c.stage==='new_lead').length+inbound.length:null,needsFollowUp:full?allCustomers.filter(c=>c.stage==='follow_up'||c.stage==='estimate_given').length:null,openTasks:items.filter(i=>i.type==='task'&&i.status==='open').length,unassignedWork:items.filter(i=>['estimate','job'].includes(i.type)&&!['completed','canceled'].includes(i.status)&&!i.assignedPeople.length).length},
    emailThreads,filesSupported:false,externalCalendarSync:false,automaticEmail:false,financialRevenue:null};
  }
@@ -93,12 +93,14 @@ function createService({db,FieldValue,authority,now=Date.now}){
    }
    let result;
    if(operation==='saveSchedulingAvailability'){
-    if(!a.isOwner)m.fail('permission-denied','The Business owner must authorize appointment availability.');
+    requirePermission(a,'scheduleEdit');
     m.strict(input,['expectedVersion','settings']);const scheduling=require('./email_scheduling');
     const r=ref(a.businessId,'settings','scheduling'),old=(await tx.get(r)).data(),value=scheduling.settings(input.settings);
+    if(m.hash(old?.settings?.assignedPeople||[])!==m.hash(value.assignedPeople))requirePermission(a,'assignPeople');
     checkPeople(value.assignedPeople,roster);
-    queue(r,{businessId:a.businessId,settings:value,version:version(old,input.expectedVersion),updatedBy:a.actorUid,updatedAtMs:now()});
-    event(null,'scheduling_availability_saved','Appointment availability updated');result={saved:true};
+    const availability={businessId:a.businessId,settings:value,assignedLabels:value.assignedPeople.map(p=>roster.find(r=>r.id===p).name),version:version(old,input.expectedVersion),updatedBy:a.actorUid,updatedAtMs:now()};
+    queue(r,availability);
+    event(null,'scheduling_availability_saved','Appointment availability updated');result={saved:true,availability};
    }else if(operation==='saveCustomer'){
     m.strict(input,['customerId','expectedVersion','customer']);result=await prepareCustomer(input.customer,input.customerId?m.id(input.customerId):null,input.expectedVersion);
     result={customerId:result.id,saved:true};

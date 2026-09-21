@@ -7,6 +7,7 @@ import 'package:flutter_app/screens/business/business_email_conversation_screen.
 class FixtureEmail extends BusinessEmailService {
   final calls = <String>[];
   Map<String, dynamic>? saved;
+  Map<String, dynamic>? savedAvailability;
   Map<String, dynamic>? submitted;
   @override
   Future<Map<String, dynamic>> call(
@@ -18,6 +19,7 @@ class FixtureEmail extends BusinessEmailService {
       return {
         'businessId': 'fixture',
         'workspaceName': 'Fixture Business',
+        'schedulingAvailability': savedAvailability,
         'sender': 'owner@example.test',
         'canManage': true,
         'contacts': [],
@@ -173,6 +175,19 @@ void main() {
             service: service,
             availabilityEditor: (c, d) async {
               visits++;
+              service.savedAvailability = {
+                'version': 1,
+                'settings': {
+                  'timeZone': 'America/New_York',
+                  'days': [1, 2, 3, 4, 5],
+                  'opensMinute': 540,
+                  'closesMinute': 1020,
+                  'durationMinutes': 15,
+                  'bufferMinutes': 5,
+                  'assignedPeople': [],
+                  'locationRequired': true,
+                },
+              };
               return true;
             },
           ),
@@ -194,6 +209,8 @@ void main() {
       await tester.tap(find.text('Set appointment availability'));
       await tester.pumpAndSettle();
       expect(visits, 1);
+      expect(find.textContaining('Staff: Assign later'), findsOneWidget);
+      expect(find.textContaining('Location required: Yes'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('A. Business and monitored mailbox'),
         -500,

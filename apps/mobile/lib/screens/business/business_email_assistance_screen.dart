@@ -508,7 +508,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     if (a == null) {
       return 'Availability not saved. Choose timezone, working hours, staff, duration and buffers.';
     }
-    return 'Saved availability: ${emailTimezones[a['timeZone']] ?? a['timeZone']} · ${(a['days'] as List? ?? []).map((d) => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(d as num).toInt() - 1]).join(', ')}\n${emailTimeLabel(context, '${a['opensMinute']}')}–${emailTimeLabel(context, '${a['closesMinute']}')} · ${a['durationMinutes']} minutes · ${a['bufferMinutes']}-minute buffers\nStaff: ${(a['assignedPeople'] as List? ?? []).length} selected. Version ${data?['schedulingAvailability']?['version']}.';
+    return 'Saved availability: ${emailTimezones[a['timeZone']] ?? a['timeZone']} · ${(a['days'] as List? ?? []).map((d) => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(d as num).toInt() - 1]).join(', ')}\n${emailTimeLabel(context, '${a['opensMinute']}')}–${emailTimeLabel(context, '${a['closesMinute']}')} · ${a['durationMinutes']} minutes · ${a['bufferMinutes']}-minute buffers\nStaff: ${(a['assignedPeople'] as List? ?? []).isEmpty ? 'Assign later' : (data?['schedulingAvailability']?['assignedLabels'] as List? ?? ['${(a['assignedPeople'] as List? ?? []).length} selected']).join(', ')}\nLocation required: ${a['locationRequired'] == true ? 'Yes' : 'No'}. Version ${data?['schedulingAvailability']?['version']}.';
   }
 
   @override
@@ -750,6 +750,12 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                                     editEmailAvailability)(context, data!)) {
                                   await load(preserve: true);
                                   changed();
+                                  if (mounted) {
+                                    setState(
+                                      () => feedback =
+                                          'Appointment availability saved. Email assistance activation is unchanged.',
+                                    );
+                                  }
                                 }
                               } catch (_) {
                                 if (mounted) {

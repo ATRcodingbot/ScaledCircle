@@ -55,3 +55,10 @@ test('reply approval binds exact inbound and outgoing revisions',()=>{
  assert.ok(!p.replyApprovalCurrent({operation,inbound:{...inbound,id:'reply2'},draft,approval}));
  assert.ok(!p.replyApprovalCurrent({operation,inbound,draft:{...draft,body:'changed'},approval}));
 });
+test('booking preflight accepts explicit assign-later availability without inventing staff',()=>{
+ const f=fixture();f.policy.bookingEnabled=true;f.policy.availabilityRevision=1;
+ f.policy.schedulingRules={durationMinutes:15,bufferMinutes:5,assignedPeople:[]};
+ assert.equal(p.policyPreflight(f).includes('maintained_schedule_availability_required'),false);
+ delete f.policy.schedulingRules.assignedPeople;
+ assert.equal(p.policyPreflight(f).includes('maintained_schedule_availability_required'),true);
+});
