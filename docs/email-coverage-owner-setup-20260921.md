@@ -43,3 +43,25 @@ Readback hashes confirm all eight protected mailbox/policy/access-grant/shared-b
 
 Owner decisions: each owner reviews/chooses coverage and eligible capabilities, saves then authorizes. AR can reuse its preserved facts/templates/footer/hours; optional AI must remain off for non-model activation while review is pending. SC must review its own proposal and supply only actual missing selected-capability context/availability/footer. Both need purpose-specific recipient permission plus exact message/slot for a later controlled test, and a registered production device for push. Ordinary already-permitted manual replies/linked sync remain separate from new automatic sending. No live fresh-inquiry success is claimed.
  Shared Flutter delta must enter the next matched native pair; existing iOS29/Android27 do not contain these bytes.
+
+
+## Superseding owner-save readback — 2026-09-21 09:59:43 UTC
+
+One current production read; no policy writes/activation or mailbox reads. Both sender connections retain Read/Send. Exact production owners remain AR IqRjZYHKOzXYuJcSyL68LYNwtDg1 and SC p1tigN2XE9ascVN4es3RBncw6nf1; staging research identity is not used.
+
+| Field | Attractive Remodel | ScaledCircle |
+|---|---|---|
+| Saved preference version/time | v3, 09:49:11.718Z (05:49:11 EDT) | v1, 09:50:28.312Z (05:50:28 EDT) |
+| Status | prepared; no approval/start | prepared; no approval/start |
+| Coverage | labels; new inquiries ON; SC-Pilot-Inquiries, confirmed controlled sender/subject filter | inbox selected; new inquiries OFF |
+| Introductions / follow-ups | ON, max20/day; follow-ups OFF/0, interval120h | OFF, configured max1/day; follow-ups OFF/0, interval120h |
+| Owner email / push | both selected; no ready device | both selected; no ready device |
+| Suggestions / consent | both selected; model review absent | both selected; model review absent |
+| Schedule | ON; availability v2 exact settings match | ON; availability v1 exact settings match |
+| Availability | Eastern M–F09–17;15min;5minbuffer;assign later;location required | Eastern M–F09–19;15min;5minbuffer;owner assigned;location not required |
+
+Shared inference grant is still prepared with null start/expiry; not activated. Both owners must turn suggested replies OFF for the initial non-model authorization while review remains unresolved; no silent change made. Current AR browser shows the exact model blockers and no Authorize action, so section C was opened for the owner's change. Next is Save preferences → E → existing Authorize/confirmation. AR must consciously retain the narrow label or change coverage. SC must enable Read new inquiries if it intends its selected whole-Inbox mode to perform new intake; leaving it OFF means linked-conversation monitoring only. SC's empty claims/footer do not block non-model read-only intake when introductions/follow-ups/model remain OFF. Email alerts do not depend on push registration; selected push has no ready device. Existing permitted manual replies and linked sync remain independently available. Nothing in this readback asserts newly active automatic operations.
+
+Controlled test preparation only: start AR after owner authorization. Separately approve skotiatrades@gmail.com for this test, compose a NEW conversation (not a reply to old demo) to attractiveremodel@gmail.com. If retaining the label, use the saved matching subject phrase with a unique test suffix and verify the owner-created filter routes it. Confirm one CRM conversation and owner email alert; existing 21:00–08:00 quiet hours apply. Review exact owner-written response inside ScaledCircle before any send. Select a new future availability-valid slot and real location (AR location required); obtain clear fresh acceptance. Assign an actual available person before confirming the one linked appointment; unassigned offers remain tentative. Repeat separately for SC only after its own coverage/authorization/recipient choices. No message, broad Inbox read, appointment, or pilot activation executed. Neither workspace has recorded test-purpose recipient permission (AR9 contacts not_recorded; SC0). Do not reuse prior demonstration consent.
+
+No source/deployment change in this readback. iOS29/Android27 remain without the current Email client batch; use web for initial test. Evidence: .firebase/launch-close-20260919/email-owner-saved-readback.private.json. Prior09:31 setup snapshot is superseded by this table.
