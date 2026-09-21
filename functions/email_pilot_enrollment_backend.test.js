@@ -5,7 +5,7 @@ const app=admin.initializeApp({projectId:'demo-email-enrollment'},'email-enrollm
 const {createEnrollment,GRANT}=require('../functions-business-email/pilot_enrollment');
 let now=Date.parse('2026-09-21T15:00:00Z'),svc;
 const actor=b=>({businessId:b,actorUid:b,beta:{kind:'internal',canManageConnection:true}});
-const policy=b=>({businessId:b,status:'awaiting_pilot_activation',approvedBy:b,approvedAt:now,connectionGeneration:'g1',digest:'fixture-'+b,policy:{modelAssistance:true,expiresAt:now+7*86400000}});
+const policy=b=>({businessId:b,status:'awaiting_pilot_activation',approvedBy:b,approvedAt:now,connectionGeneration:'g1',digest:'fixture-'+b,policy:{modelAssistance:true,modelDataConsent:true,expiresAt:now+7*86400000}});
 beforeEach(async()=>{for(const col of ['agentPermissions','emailAssistanceOperatingGrants','emailAssistanceProviderReviews','businessMailboxes'])for(const r of await db.collection(col).listDocuments())await db.recursiveDelete(r);
  svc=createEnrollment({db,now:()=>now,workspaces:['first','second'],mailboxes:['first@example.test','second@example.test']});
  for(const b of ['first','second'])await db.doc('businessMailboxes/'+b).set({status:'connected',email:b+'@example.test',generation:'g1'});
@@ -37,7 +37,7 @@ test('data assessment is audited by the exact Admin, requires a real amendment r
 test('relative owner terms share one activation expiry even when second owner confirms later',async()=>{
  await svc.prepare(actor('first'),{confirm:true});
  await svc.recordDataReview(actor('first'),{confirm:true,sourceSha:'b'.repeat(40),amendmentReference:'fixture-only amendment evidence'});
- const relative=b=>({...policy(b),policy:{modelAssistance:true,termMode:'shared_pilot',expiresAt:null,timeZone:'America/New_York',ownerStopLocal:null}});
+ const relative=b=>({...policy(b),policy:{modelAssistance:true,modelDataConsent:true,termMode:'shared_pilot',expiresAt:null,timeZone:'America/New_York',ownerStopLocal:null}});
  const first=relative('first');
  await db.runTransaction(async tx=>{const r=await svc.activation(tx,actor('first'),first,[]);assert.equal(r.activate,false);tx.set(db.doc('agentPermissions/first_lead_generator/authorizations/business_email'),first);});
  now+=3*86400000;
@@ -56,4 +56,14 @@ test('non-model owner authorization does not require model review or start infer
  assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
  now+=1000;const again=await db.runTransaction(tx=>svc.activation(tx,actor('first'),saved,[]));assert.equal(again.expiresAt,result.expiresAt);
  now=result.expiresAt+1;await assert.rejects(db.runTransaction(tx=>svc.activation(tx,actor('first'),saved,[])),/expired/);
+});
+
+
+test('non-model approval cannot stand in for the other owner model consent or start the inference clock',async()=>{
+ await svc.prepare(actor('first'),{confirm:true});
+ await svc.recordDataReview(actor('first'),{confirm:true,sourceSha:'c'.repeat(40),amendmentReference:'fixture-only review evidence'});
+ const plain={...policy('first'),status:'active',policy:{...policy('first').policy,modelAssistance:false,modelDataConsent:false}};
+ await db.doc('agentPermissions/first_lead_generator/authorizations/business_email').set(plain);
+ const r=await db.runTransaction(tx=>svc.activation(tx,actor('second'),policy('second'),[]));assert.equal(r.activate,false);
+ assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
 });
