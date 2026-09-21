@@ -43,3 +43,14 @@ Shared Flutter delta: review/partial-authorization, adaptive alternatives/consen
 Validation/deployment evidence is appended after production readback; fixture results are not live pilot certification.
 
 Production UI verification caught an additional relative-expiry clock race: separate Date.now calls could resolve the policy milliseconds later than its prepared grant and falsely report valid_policy_term_required. The owner preflight now captures one instant for grant, budget and policy expiry checks. A moving-clock regression covers this; no saved expiry or owner choice is rewritten. This is server-only and does not change the web build.
+
+## Deployed/read back
+
+- Main application source: `ae14ab43e433554fcee92e47226fa370f9784286`; final server timing correction: `af1069ade4f6d5ac47d77b72f6a857bf339e4725`. Both pushed. Web bytes are unchanged by the latter server-only commit.
+- `businessEmailOperationsV1`: `businessemailoperationsv1-00018-qof`, ACTIVE, updated 2026-09-21T10:50:57.026027228Z.
+- `syncBusinessEmailRepliesV1`: `syncbusinessemailrepliesv1-00009-viy`, ACTIVE, updated 2026-09-21T10:47:01.613092560Z.
+- Hosting: `sites/scaled-circle/versions/febf737b15016b76`, release `1789987648745000`, 2026-09-21T10:47:28.745Z.
+- Readback: no unexpected Functions changed; Rules, runtime service identities, environment configuration and secret bindings preserved. Eight protected mailbox/policy/grant/usage records hash-identical before/after. Both policies still prepared and unapproved; shared inference grant prepared, start null, usage absent.
+- Live AR owner UI: opened Business Email → Email assistance settings → E. Review and save → Review & authorize assistance. Confirmation displays saved v3, label/new intake ON, follow-ups OFF, availability v2, selected AI pending and a real **Authorize available features** button. False expiry blocker absent. Confirmation left unaccepted for Founder; Revoke absent for this never-authorized policy.
+- Tests: 57 focused backend tests passed; latest selection dispatcher suite 8/8; moving-clock authorization suite 8/8; adaptive pure suite 5/5; final projection subset 3/3; Flutter UI 6/6; focused Dart analysis clean; production web build succeeded. Earlier full integrated suite 49/49 includes inquiry intake, independent reply monitoring, owner alerts, exact approved reply, budget and one conflict-checked appointment. No claim that these fixtures prove live delivery, learning improvement or appointment operation.
+- Local evidence: `.firebase/launch-close-20260919/email-adaptive-*` logs/readbacks; private outputs remain ignored. No production prospect send, model call, appointment, activation, subscription change or native rebuild in this batch. The only outgoing message was the separately authorized Google case amendment recorded above.
