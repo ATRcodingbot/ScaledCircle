@@ -420,6 +420,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       return {appointments,businessId:a.businessId,operation:{id:operationId,...operation},replies:context.rows,inboundDigest:context.digest,availability:availability||null,draft:draft||null,canManage:a.beta.canManageConnection===true};
     }
     if(op==='suggestReply'){strict(input,['operationId']);return suggest(a,id(input.operationId));}
+    if(op==='enrollOutboundPreparation')return require('./outbound_enrollment').create({db,now}).enroll(a,input);
     if(op==='recordAssistanceDataReview')return require('./pilot_enrollment').createEnrollment({db,now}).recordDataReview(a,input);
     if(op==='prepareAssistanceEnrollment')return require('./pilot_enrollment').createEnrollment({db,now}).prepare(a,input);
     if(op==='loadAssistance')return assistance.load(a);

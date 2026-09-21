@@ -74,3 +74,35 @@ test('a partial authorization retaining desired AI never satisfies the other wor
  const r=await db.runTransaction(tx=>svc.activation(tx,actor('second'),policy('second'),[]));assert.equal(r.activate,false);
  assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
 });
+
+
+const outbound=()=>require('../functions-business-email/outbound_enrollment').create({db,now:()=>now,workspaces:['first','second']});
+const enrollOutbound=()=>outbound().enroll(actor('first'),{confirm:true,sourceSha:'e'.repeat(40)});
+async function outboundOwner(b){
+ const saved={...policy(b),status:'active',modelAuthorizationPending:true,policy:{...policy(b).policy,messagePreparation:{enabled:true,contextReviewed:true},adaptiveOutreach:{enabled:true,explorationEnabled:true}}};
+ await db.doc(`agentPermissions/${b}_lead_generator/authorizations/business_email_pilot_grant`).update({status:'active',startsAt:now-1000,expiresAt:now+86400000});return saved;
+}
+test('outbound purpose enrollment is exact Admin audited, inactive and independent of pending Gmail review',async()=>{
+ await svc.prepare(actor('first'),{confirm:true});await assert.rejects(outbound().enroll(actor('second'),{confirm:true,sourceSha:'e'.repeat(40)}));
+ const result=await enrollOutbound();assert.equal(result.startsAt,null);assert.equal((await enrollOutbound()).reused,true);
+ assert.equal((await db.doc('emailAssistanceProviderReviews/openai_gmail_v1').get()).exists,false);
+ const g=(await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data();assert.deepEqual(g.allowedPurposes,['outbound_business_context']);assert.equal(g.maximumCostMicros,1000000);assert.equal(g.maximumRequests,100);assert.equal(g.status,'prepared');
+ assert.equal((await outbound().readiness(null,actor('first'))).ready,true);
+});
+test('first outbound owner starts one shared clock, second owner cannot reset it or authorize Gmail',async()=>{
+ await svc.prepare(actor('first'),{confirm:true});await enrollOutbound();const saved=await outboundOwner('first'),originalExpiry=saved.policy.expiresAt;
+ let one;await db.runTransaction(async tx=>{one=await outbound().ownerActivation(tx,actor('first'),saved);one.apply();});
+ now+=1000;const second=await outboundOwner('second');let two;await db.runTransaction(async tx=>{two=await outbound().ownerActivation(tx,actor('second'),second);two.apply();});
+ assert.equal(two.startsAt,one.startsAt);assert.equal(two.expiresAt,one.expiresAt);assert.equal(saved.policy.expiresAt,originalExpiry);assert.equal(saved.modelAuthorizationPending,true);
+ const g=(await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data();assert.equal(g.dataReviewDigest,undefined);assert.ok(g.purposeReviewDigests.outbound_business_context);
+ await assert.rejects(db.runTransaction(tx=>svc.activation(tx,actor('first'),policy('first'),[])),/data review/);
+ now=one.expiresAt+1;await assert.rejects(db.runTransaction(tx=>outbound().ownerActivation(tx,actor('first'),saved)),/readiness/);
+});
+test('later permitted Gmail purpose binds review without restarting outbound term; pending owner remains blocked',async()=>{
+ await svc.prepare(actor('first'),{confirm:true});await enrollOutbound();const saved=await outboundOwner('first');
+ let start;await db.runTransaction(async tx=>{start=await outbound().ownerActivation(tx,actor('first'),saved);start.apply();});
+ now+=1000;await svc.recordDataReview(actor('first'),{confirm:true,sourceSha:'f'.repeat(40),amendmentReference:'fixture-only later independently permitted Gmail review'});
+ await assert.rejects(db.runTransaction(tx=>svc.activation(tx,actor('first'),saved,[])),/Explicit/);
+ let later;await db.runTransaction(async tx=>{later=await svc.activation(tx,actor('first'),{...saved,modelAuthorizationPending:false},[]);later.apply();});
+ assert.equal(later.startsAt,start.startsAt);assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().expiresAt,start.expiresAt);
+});

@@ -32,6 +32,7 @@ function createPreparation({db,now=Date.now,runOutbound=null}){
   if(state?.state==='ready'&&state.policyDigest===saved.digest){const row=(await root.collection('outreachVariants').doc(state.variantId).get()).data();if(row?.validation==='passed')return {ids:{...ids,alternative:state.variantId},alternative:row.template,experimentId:state.experimentId};}
   const trigger=needCandidate(evidence);
   if(!p.messagePreparation?.enabled||!p.messagePreparation.contextReviewed||!p.adaptiveOutreach?.enabled||!p.adaptiveOutreach.explorationEnabled||!trigger.ready||state)return {ids,limitation:state?.state||trigger.reason};
+  if(!saved.outboundAuthorizedAt)return {ids,limitation:'Owner must confirm outbound preparation against the shared term'};
   if(runOutbound?.preflight){const blocked=await runOutbound.preflight(a);if(blocked)return {ids,limitation:blocked};}
   if(!runOutbound)return {ids,limitation:'Outbound model preparation pending provider/data/purpose activation; existing messages preserved'};
   const requestId=digest([a.businessId,strategyId,'bounded_candidate_1']),claim=await db.runTransaction(async tx=>{

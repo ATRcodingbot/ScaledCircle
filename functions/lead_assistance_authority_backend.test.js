@@ -159,3 +159,27 @@ test('saving an expired authorized policy cannot renew it or resume, and other w
  await assert.rejects(service.mutate(a,{action:'resume',expectedVersion:2,requestId:'resume_expired',confirm:true}));
  assert.equal((await db.doc('agentPermissions/remodel_lead_generator/authorizations/business_email').get()).exists,false);
 });
+
+
+test('one focused reviewed update activates outbound shared term while pending Gmail and non-model expiry remain intact',async()=>{
+ const {WORKSPACES}=require('../functions-business-email/inference_budget'),{GRANT,createEnrollment}=require('../functions-business-email/pilot_enrollment'),[id,other]=WORKSPACES;
+ await db.recursiveDelete(db.doc('emailAssistanceOperatingGrants/'+GRANT));
+ await db.recursiveDelete(db.doc('emailAssistanceProviderReviews/openai_business_context_v1'));
+ const mailboxes=['support@scaledcircle.com','attractiveremodel@gmail.com'];
+ for(let i=0;i<2;i++){await db.doc('businessMailboxes/'+WORKSPACES[i]).set({status:'connected',email:mailboxes[i],generation:'g1',permissions:{read:true,send:true}});await db.doc(`businessMailboxes/${WORKSPACES[i]}/private/credential`).set({generation:'g1'});}
+ const a={businessId:id,actorUid:id,beta:{kind:'internal',canManageConnection:true}};
+ await createEnrollment({db,now:()=>clock}).prepare(a,{confirm:true});
+ const grantRef=db.doc(`agentPermissions/${id}_lead_generator/authorizations/business_email_pilot_grant`);await grantRef.update({status:'active',startsAt:clock-1000,expiresAt:clock+86400000});a.beta.leadAssistanceGrant=(await grantRef.get()).data();
+ await require('../functions-business-email/outbound_enrollment').create({db,now:()=>clock}).enroll(a,{confirm:true,sourceSha:'f'.repeat(40)});
+ const svc=createAssistanceAuthority({db,now:()=>clock,providerReady:true}),ref=db.doc(`agentPermissions/${id}_lead_generator/authorizations/business_email`);
+ const original={businessId:id,status:'active',version:1,approvedBy:id,approvedAt:clock-1000,modelAuthorizationPending:true,connectionGeneration:'g1',sender:mailboxes[0],policy:{...policy(),modelAssistance:true,modelDataConsent:true,templates:{introduction:{subject:'Business tools',body:'Reply to discuss Business tools.'}},mailingAddress:'Fixture footer'}};
+ await ref.set(original);
+ const selected={...original.policy,messagePreparation:{enabled:true,contextReviewed:true},adaptiveOutreach:{enabled:true,explorationEnabled:true,objective:'qualified_conversation',alternative:{subject:'Your next step',body:'Which part of your Business workflow would you like to discuss?'}}};
+ const review=await svc.mutate(a,{action:'reviewUpdate',requestId:'review_outbound',expectedVersion:1,policy:selected});assert.ok(review.expansions.some(x=>x.includes('SAME shared')));
+ const input={confirm:true,action:'update',requestId:'update_outbound',expectedVersion:1,policy:selected,changeDigest:review.changeDigest,confirmExpansion:true};
+ await assert.rejects(svc.mutate(a,{...input,changeDigest:'stale'}),{code:'aborted'});
+ const results=await Promise.all([svc.mutate(a,input),svc.mutate(a,input)]);assert.equal(results.filter(x=>x.reused).length,1);
+ const saved=(await ref.get()).data();assert.equal(saved.policy.expiresAt,original.policy.expiresAt);assert.equal(saved.approvedAt,original.approvedAt);assert.equal(saved.modelAuthorizationPending,true);assert.equal(saved.outboundAuthorizedAt,clock);
+ const shared=(await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data();assert.equal(shared.status,'active');assert.equal(shared.startsAt,clock);assert.equal(shared.dataReviewDigest,undefined);
+ assert.equal((await db.doc(`agentPermissions/${other}_lead_generator/authorizations/business_email`).get()).exists,false);
+});

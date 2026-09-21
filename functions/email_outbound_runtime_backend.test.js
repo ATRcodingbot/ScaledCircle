@@ -10,7 +10,8 @@ const input={a,requestId:'one',recheck:async()=>{},context:{businessId,name:'Fix
 beforeEach(async()=>{
  await db.recursiveDelete(grant);calls=0;
  await grant.set({purpose:'lead_email_assistance',status:'active',authorizedBy:'fixture',authorizationReference:'fixture',provider:'openai',model:'gpt-4.1-mini',maximumCostMicros:budget.LIMIT,maximumRequests:100,renewal:false,topUp:false,businessIds:budget.WORKSPACES,startsAt:at,expiresAt:at+budget.TERM,allowedPurposes:[PURPOSE],purposeAuthorization:{[PURPOSE]:{authorizedBy:'fixture',reference:'fixture'}}});
- await db.doc('emailAssistanceProviderReviews/openai_gmail_v1').set({status:'verified',organization:'fixture',project:'fixture',evidenceRef:'fixture',outboundEvidenceRef:'fixture',outboundBusinessContextPermitted:true,gmailProcessingPermitted:false,trainingSharingDisabled:true,loggingMode:'per_call_store_false'});
+ await db.doc('emailAssistanceProviderReviews/openai_business_context_v1').set({status:'verified',organization:require('../functions-business-email/provider_review').ORGANIZATION,project:require('../functions-business-email/provider_review').PROJECT,approvedBy:'fixture',evidenceRef:'fixture',outboundEvidenceRef:'fixture',outboundBusinessContextPermitted:true,gmailProcessingPermitted:false,trainingSharingDisabled:true,loggingMode:'per_call_store_false'});
+ await grant.update({'purposeReviewDigests.outbound_business_context':require('../functions-business-email/lead_assistance_policy').digest((await db.doc('emailAssistanceProviderReviews/openai_business_context_v1').get()).data())});
  run=createRuntime({db,apiKey:'fixture-only',now:()=>at,fetchImpl:async(_url,options)=>{
   calls++;const payload=JSON.parse(options.body);assert.equal(payload.store,false);
   const value=payload.text.format.name==='outbound_quality'?{factsSupported:true,purposeAppropriate:true,distinctApproach:true,publicCopySafe:true}:{subject:'A useful next step',body:'Which part of organizing your Business would you like to discuss?'};
@@ -21,7 +22,7 @@ after(()=>app.delete());
 test('purpose, inactive clock, data assessment and workspace gates prevent provider calls',async()=>{
  await grant.update({allowedPurposes:[]});assert.equal(await run.preflight(a),'outbound_purpose_extension_required');await assert.rejects(run(input));
  await grant.update({allowedPurposes:[PURPOSE],status:'prepared',startsAt:null,expiresAt:null});await assert.rejects(run(input),/inactive/);
- await grant.update({status:'active',startsAt:at,expiresAt:at+budget.TERM});await db.doc('emailAssistanceProviderReviews/openai_gmail_v1').update({outboundBusinessContextPermitted:false});await assert.rejects(run(input),/data_assessment/);
+ await grant.update({status:'active',startsAt:at,expiresAt:at+budget.TERM});await db.doc('emailAssistanceProviderReviews/openai_business_context_v1').update({outboundBusinessContextPermitted:false});await assert.rejects(run(input),/data_assessment/);
  await assert.rejects(run({...input,a:{...a,businessId:'other'}}));assert.equal(calls,0);
 });
 test('generation plus independent review use two shared reservations; replay cannot call provider again',async()=>{

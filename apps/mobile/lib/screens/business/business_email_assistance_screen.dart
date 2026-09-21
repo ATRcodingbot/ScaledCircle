@@ -1329,6 +1329,9 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                       const Text(
                         'Initial proposals use maintained Business context without a model call. You can edit the preview. New model-written approaches require separate outbound-purpose/data readiness and an active shared allowance; reply AI is separate.',
                       ),
+                      const Text(
+                        'Model use: gpt-4.1-mini receives only your reviewed Business facts, services, voice, audiences and templates. No Gmail bodies or prospect identity. Training sharing is disabled; store:false does not mean zero retention. Default abuse-monitoring retention may apply for up to 30 days, with documented exceptions. Generation and review count separately against the SAME shared USD 1 / 100 requests / seven days; no renewal. Starting either model purpose starts that shared clock. Later reply authorization cannot reset it. Your existing Business access expiry remains unchanged.',
+                      ),
                       toggle(
                         'messagePreparation',
                         'Prepare new approaches when evidence supports it',

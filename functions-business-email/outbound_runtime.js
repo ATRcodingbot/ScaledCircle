@@ -17,10 +17,10 @@ function request({businessId,context,conversation}){
 function createRuntime({db,apiKey,now=Date.now,fetchImpl=fetch}){
  async function authority(a){
   const id=a.beta.leadAssistanceGrant?.inferenceGrantId;if(!id)throw Error('outbound_shared_grant_required');
-  const g=(await db.doc('emailAssistanceOperatingGrants/'+id).get()).data(),review=(await db.doc('emailAssistanceProviderReviews/openai_gmail_v1').get()).data();
+  const g=(await db.doc('emailAssistanceOperatingGrants/'+id).get()).data(),review=(await db.doc('emailAssistanceProviderReviews/openai_business_context_v1').get()).data();
   if(!g?.allowedPurposes?.includes(PURPOSE)||!g.purposeAuthorization?.[PURPOSE]?.authorizedBy||!g.purposeAuthorization[PURPOSE].reference)throw Error('outbound_purpose_extension_required');
   if(!budget.valid(g,a.businessId,now()))throw Error('outbound_allowance_inactive_or_exhausted');
-  if(!apiKey||review?.outboundBusinessContextPermitted!==true||!review.outboundEvidenceRef||review.status!=='verified'||review.trainingSharingDisabled!==true||!review.organization||!review.project||!review.evidenceRef||review.loggingMode!=='per_call_store_false')throw Error('outbound_provider_data_assessment_required');
+  if(!apiKey||!require('./outbound_enrollment').reviewValid(review)||g.purposeReviewDigests?.[PURPOSE]!==digest(review))throw Error('outbound_provider_data_assessment_required');
   return {id,review};
  }
  const run=async({a,requestId,recheck,context,existing})=>{

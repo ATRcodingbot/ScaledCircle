@@ -93,7 +93,7 @@ test('mature qualified evidence changes a future real dispatcher assignment, wit
 
 test('bounded candidate joins normal dispatch with immutable lineage; concurrent visits cannot prepare twice',async()=>{
  const adaptive=require('../functions-business-email/adaptive_outreach');
- const saved=(await policyRef().get()).data();saved.version=3;saved.policy.audiences=['consenting enquiries'];
+ const saved=(await policyRef().get()).data();saved.version=3;saved.outboundAuthorizedAt=at;saved.policy.audiences=['consenting enquiries'];
  saved.policy.businessName='Fixture Business';saved.policy.services=['Deck repairs'];saved.policy.claims=[];saved.policy.destinations=[];
  saved.policy.messagePreparation={enabled:true,contextReviewed:true};saved.policy.adaptiveOutreach={enabled:true,explorationEnabled:true,objective:'qualified_conversation',alternative:{subject:'A first question',body:'Which detail would help you first?'}};saved.digest=digest(saved);await policyRef().set(saved);
  let preparations=0;const candidate={subject:'Plan the next step',body:'Tell us which deck repair questions you would like to discuss before planning a visit.'};
