@@ -50,6 +50,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     const emailPolicy=(await db.doc(`agentPermissions/${a.businessId}_lead_generator/authorizations/business_email`).get()).data(),pilotGrant=a.beta.leadAssistanceGrant;
     const assistanceActive=emailPolicy?.status==='active'&&!emailPolicy.revokedAt&&emailPolicy.approvedBy===a.businessId&&emailPolicy.policy.expiresAt>now()&&
       pilotGrant?.status==='active'&&!pilotGrant.revokedAt&&pilotGrant.expiresAt>now()&&c.status==='connected'&&c.permissions?.send===true&&emailPolicy.connectionGeneration===c.generation;
+    const outreachDecisions=(await root(a.businessId).collection('outreachDecisions').orderBy('evaluatedAt','desc').limit(10).get()).docs.map(d=>({id:d.id,...d.data()}));
     const automaticSending=!!(assistanceActive&&(emailPolicy.policy.introductionsEnabled||emailPolicy.policy.followupsEnabled));
     const credential=(await sub(a.businessId,'private','credential').get()).data();
     const healthy=c.status==='connected'&&c.health==='connected'&&credential?.generation===c.generation&&
@@ -65,6 +66,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     const googleRoundTripVerified=project==='scaled-circle'&&healthy&&ops.some(op=>op.certification===true&&op.state==='sent'&&
       (op.provider||'google')==='google'&&op.from===c.email&&op.providerMessageId&&op.providerThreadId&&
       replies.some(r=>r.certification===true&&r.businessId===a.businessId&&r.operationId===op.id&&r.from===op.recipient));
+    const learningView=learning.project({businessId:a.businessId,operations:ops,outcomes:events.docs.map(d=>d.data()),prospects:rows,replies,now:now(),funnel:a.beta.funnel||'services'});
+    learningView.evidence={...learningView.evidence,mode:emailPolicy?.policy?.adaptiveOutreach?.enabled?'adaptive_selected':'fixed_message',adaptiveExecution:assistanceActive&&emailPolicy?.policy?.adaptiveOutreach?.enabled===true,decision:'SEE_SEGMENT_DECISIONS',reason:'Observational counts are bounded; execution decisions are separately evaluated per strategy and segment.',possiblyTruncated:operations.size===100||events.size===250||replies.length===50};
     return {available:true,assistanceSetupAvailable:require('./inference_budget').WORKSPACES.includes(a.businessId)&&a.actorUid===a.businessId,includedWithManagedGrowth:a.beta.includedWithManagedGrowth===true,readOnly:a.beta.readOnly===true,connectionAllowed:a.beta.connectionAllowed!==false,privateBeta:true,campaignPrivateBeta:a.beta.campaignReadEnabled===true&&a.beta.kind!=='internal',configured:!!a.beta.configured,providers:registry.list(a.beta,{googleRoundTripVerified}),sendEnabled:a.beta.sendEnabled!==false,
       deliveryLimits:{individualPerHour:5,individualPerDay:20,campaignAudience:25,campaignSending:a.beta.campaignSendEnabled===true},
       canManageConnection:a.beta.canManageConnection===true,
@@ -78,7 +81,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       evidenceWindow:'Up to 100 recent outreach operations and their recorded outcomes.',operations:ops.sort((a,b)=>b.requestedAt-a.requestedAt),drafts:drafts.docs.map(d=>({id:d.id,...d.data()})),replies,outcomes:events.docs.map(d=>d.data()),restrictions:restrictions.docs.map(d=>({recipient:d.data().recipient,reason:d.data().reason})),
       landingLeads:leadDocs.docs.filter(d=>d.data().leadType==='landing_page_inquiry'&&!d.data().suppressionStatus).map(d=>({id:d.id,email:d.data().contactEmail,displayName:d.data().contactName,
         reason:'An inbound request from your landing page.',draft:'Thank you for your inquiry. We received your request and will review how we can help.',sourceUrl:null})),
-      learning:learning.project({businessId:a.businessId,operations:ops,outcomes:events.docs.map(d=>d.data()),prospects:rows,replies,now:now(),funnel:a.beta.funnel||'services'}),
+      adaptiveOutreach:{selected:emailPolicy?.policy?.adaptiveOutreach?.enabled===true,authorized:assistanceActive&&emailPolicy?.policy?.adaptiveOutreach?.enabled===true,introductionsEnabled:emailPolicy?.policy?.introductionsEnabled===true,decisions:outreachDecisions},
+      learning:learningView,
       certificationRecipient:a.beta.certificationRecipient||null,certificationOnly:a.beta.certificationOnly!==false};
   }
   async function connect(a,input) {
@@ -187,18 +191,29 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     return {...p,recipient};
   }
   async function saveDraft(a,input,automatic=false) {
-    strict(input,['prospectId','subject','body','expectedVersion','certification','followupTo','messageAngle','cta','assistanceKind','customerId','expectedInboundDigest']);
+    strict(input,['prospectId','subject','body','expectedVersion','certification','followupTo','messageAngle','cta','assistanceKind','customerId','expectedInboundDigest','outreachAssignmentId']);
     if(input.messageAngle&&!['introduction','project_inquiry','inbound_response','followup','other'].includes(input.messageAngle))fail('invalid-argument','Choose a supported message purpose.');
     if(input.cta&&!['reply','meeting','estimate','website','other'].includes(input.cta))fail('invalid-argument','Choose a supported next step.');
     const subject=text(input.subject,200),body=text(input.body,8000);
     if(/[\r\n]/.test(subject)||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0)fail('invalid-argument','Refresh the saved draft before editing.');
     const assistanceKind=input.assistanceKind||null;
     if(assistanceKind&&input.certification)fail('invalid-argument','Certification messages cannot use an assistance policy.');
+    if(input.outreachAssignmentId&&(!automatic||assistanceKind!=='introduction'))fail('permission-denied','Adaptive assignment belongs to the maintained dispatcher.');
     const certification=input.certification===true,prospectId=assistanceKind?'crm_'+id(input.customerId):certification?'founder_certification':id(input.prospectId);
     if(certification&&!a.beta.certificationRecipient)fail('permission-denied','A controlled recipient is required.');
     return db.runTransaction(async tx=>{
       const {c}=await current(a,tx);if(!c.permissions?.send)fail('permission-denied','Enable Send approved outreach first.');
       const pilotContext=assistanceKind?await pilot.resolve(a,id(input.customerId),assistanceKind,tx):null;
+      let outreach=null;
+      if(input.outreachAssignmentId){
+       outreach=(await tx.get(sub(a.businessId,'outreachAssignments',id(input.outreachAssignmentId)))).data();
+       const settings=pilotContext.saved.policy,adaptive=require('./adaptive_outreach');
+       if(!outreach||outreach.businessId!==a.businessId||outreach.customerId!==input.customerId||settings.adaptiveOutreach?.enabled!==true||outreach.strategyId!==adaptive.strategy(settings))fail('aborted','Adaptive strategy changed.');
+       const approved=outreach.variant==='alternative'?settings.adaptiveOutreach.alternative:settings.templates.introduction;
+       const link=(await tx.get(sub(a.businessId,'optoutLinks',require('./lead_assistance_policy').digest(pilotContext.customer.email)))).data();
+       const exactBody=approved.body+'\n\n'+settings.mailingAddress+'\nUnsubscribe from these marketing emails: https://us-east1-scaled-circle.cloudfunctions.net/businessEmailUnsubscribeV1?token='+link?.token;
+       if(!link?.token||subject!==approved.subject||body!==exactBody)fail('aborted','Review the exact authorized variant.');
+      }
       const p=pilotContext?{recipient:pilotContext.customer.email,displayName:pilotContext.customer.name,sourceUrl:null,reason:'Owner-authorized email assistance'}:certification?{recipient:gmail.email(a.beta.certificationRecipient),sourceUrl:null,reason:'Founder-controlled software certification',learningFeatures:{},displayName:'Founder certification'}:await prospect(a,prospectId,tx);
       const ref=sub(a.businessId,'drafts',prospectId),old=(await tx.get(ref)).data();
       if((old?.version||0)!==input.expectedVersion)fail('aborted','The draft changed. Review the latest version.');
@@ -216,7 +231,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       const version=input.expectedVersion+1,operationId=hash([a.businessId,prospectId,version,c.generation,subject,body,p.recipient]);
       const draft={businessId:a.businessId,prospectId,version,operationId,provider:c.provider||'google',providerSubject:c.subject||null,from:c.email,recipient:p.recipient,subject,body,connectionGeneration:c.generation,
         source:p.sourceUrl||null,reason:p.reason||p.qualificationReason||'Review the source and Business fit.',certification,
-        ...(pilotContext?{assistance:pilotContext.binding,automatic}:{}),
+        ...(pilotContext?{assistance:pilotContext.binding,automatic}:{}),...(outreach?{outreach}:{}),
         features:{...learning.featuresFor(p),channel:'email',messageAngle:input.messageAngle||'unspecified',cta:input.cta||'unspecified'},
         followupTo,inboundDigest,parentMessageId:previous?.messageId||old?.parentMessageId||null,
         parentThreadId:previous?.providerThreadId||inboundParent?.providerThreadId||old?.parentThreadId||null,state:'draft',editedBy:a.actorUid,editedAt:stamp()};
@@ -478,14 +493,14 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       return {disconnected:true,credentialsRemoved:true,historyRetained:true,providerRevocation:'not_requested'};
     }
     if(op==='outcome') {
-      strict(input,['operationId','outcome','note']);if(!learning.OUTCOMES.includes(input.outcome))fail('invalid-argument','Choose a supported result.');
+      strict(input,['operationId','outcome','note','requestId']);if(!learning.OUTCOMES.includes(input.outcome))fail('invalid-argument','Choose a supported result.');
       // Money and product-activation claims require their own integration.
       if(['paid','activated','approved','first_job','completed','signup'].includes(input.outcome))fail('failed-precondition','This result needs a linked authoritative product or financial record.');
       const operationId=id(input.operationId),record=(await sub(a.businessId,'operations',operationId).get()).data();
       if(record?.businessId!==a.businessId||record.state!=='sent')fail('failed-precondition','A confirmed send is required before recording an outcome.');
       if(['do_not_contact','unsubscribed','bounced'].includes(input.outcome))fail('failed-precondition','Use Do not contact to apply a recipient-wide restriction.');
       const outcome={businessId:a.businessId,operationId,outcome:input.outcome,note:input.note?text(input.note,500):'',actorUid:a.actorUid,recordedAt:stamp(),evidenceType:'owner_reported'};
-      const eventRef=sub(a.businessId,'outcomes',hash([operationId,input.outcome,outcome.note]));
+      const eventRef=sub(a.businessId,'outcomes',hash([operationId,input.requestId?id(input.requestId):null,input.outcome,outcome.note]));
       await db.runTransaction(async tx=>{if(!(await tx.get(eventRef)).exists)tx.create(eventRef,outcome);});return {saved:true};
     }
     fail('invalid-argument','Unsupported Business Email action.');

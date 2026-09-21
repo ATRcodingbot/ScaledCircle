@@ -9,6 +9,7 @@ class FixtureEmail extends BusinessEmailService {
   Map<String, dynamic>? saved;
   Map<String, dynamic>? savedAvailability;
   Map<String, dynamic>? submitted;
+  bool partialAvailable = false;
   @override
   Future<Map<String, dynamic>> call(
     String operation, [
@@ -17,6 +18,10 @@ class FixtureEmail extends BusinessEmailService {
     calls.add(operation);
     if (operation == 'loadAssistance') {
       return {
+        'authorizationReview': {
+          'partialAvailable': partialAvailable,
+          'canRevoke': false,
+        },
         'businessId': 'fixture',
         'workspaceName': 'Fixture Business',
         'schedulingAvailability': savedAvailability,
@@ -75,6 +80,52 @@ class FixtureEmail extends BusinessEmailService {
 }
 
 void main() {
+  testWidgets(
+    'AI blocked keeps review visible and partial operation requires explicit confirmation',
+    (tester) async {
+      final service = FixtureEmail()
+        ..partialAvailable = true
+        ..saved = {
+          'status': 'prepared',
+          'version': 3,
+          'policy': {
+            'modelAssistance': true,
+            'modelDataConsent': true,
+            'mailboxMode': 'inbox',
+            'introductionsEnabled': false,
+            'newInquiriesEnabled': false,
+          },
+        };
+      await tester.pumpWidget(
+        MaterialApp(home: BusinessEmailAssistanceScreen(service: service)),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('E. Review and save'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('E. Review and save'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Review & authorize assistance'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Revoke assistance'), findsNothing);
+      await tester.tap(find.text('Review & authorize assistance'));
+      await tester.pumpAndSettle();
+      expect(find.text('Authorize available features'), findsOneWidget);
+      expect(service.submitted, isNull);
+      expect(find.textContaining('no new-inquiry intake'), findsOneWidget);
+      await tester.tap(find.text('Authorize available features'));
+      await tester.pumpAndSettle();
+      expect(service.submitted!['availableOnly'], true);
+      expect(service.submitted!['expectedVersion'], 3);
+      expect(service.submitted!.containsKey('policy'), false);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'owner setup shows label/filter coverage and independent controls, never authorizes a gated pilot',
     (tester) async {

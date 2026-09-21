@@ -24,7 +24,7 @@ Google's Workspace policy lists CRM and generative email assistance among approp
 
 This is an application-level assessment of the bounded feature against published requirements, not an assertion that Google has approved the changed implementation. The existing verification description said no external-model processing. That description must be corrected through the existing verification email thread; do not cancel/resubmit the application or claim CASA completion. The maintained `recordAssistanceDataReview` action records the actual amendment reference and implementation SHA before the pilot can activate. No external Google approval is fabricated by that record. General Gmail onboarding remains gated.
 
-The complete current amendment and verified contact readback are saved in [google-review-amendment-unsent-20260920.md](google-review-amendment-unsent-20260920.md). Existing Google review thread not located; amendment pending verified communication channel. The earlier draft is superseded; no amendment has been transmitted.
+The amendment was sent once in the verified existing case on September 21 at 6:25 AM Eastern; its exact conversation reference and text are recorded in [google-review-amendment-unsent-20260920.md](google-review-amendment-unsent-20260920.md). The separate earlier CASA-cost question is not that amendment. ADA-CASA AL1 remains required by December 19, 2026. No reviewer response permitting the additional processing has been observed. Delivery does not establish Google approval or complete the maintained processing-permission review; that activation gate remains closed.
 
 ## Authorities
 

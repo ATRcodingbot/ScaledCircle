@@ -58,3 +58,34 @@ test('ordinary owner replies survive model-pilot expiry but cannot release an in
 test('revoked scoped grant cannot authorize automatic or reviewed pilot sending',async()=>{
  const d=await draft();actor.beta.leadAssistanceGrant.status='revoked';await assert.rejects(send(d),/not active/);assert.equal(sends,0);
 });
+
+test('adaptive dispatcher freezes the actual assignment and exact variant without widening send authority',async()=>{
+ const saved=(await policyRef().get()).data();saved.policy.adaptiveOutreach={enabled:true,objective:'qualified_conversation',alternative:{subject:'Which detail would help?',body:'Please reply with the question you want answered first.'}};saved.digest=digest(saved);await policyRef().set(saved);
+ await Promise.all([svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}}),svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}})]);
+ assert.equal(sends,1);
+ const ops=await db.collection('businessMailboxes/owner/operations').get(),op=ops.docs[0].data();
+ assert.ok(op.outreach.strategyId);assert.equal(op.outreach.objective,'qualified_conversation');assert.equal(op.approvalSource,'owner_email_policy');
+ const approved=op.outreach.variant==='alternative'?saved.policy.adaptiveOutreach.alternative:saved.policy.templates.introduction;
+ assert.equal(op.subject,approved.subject);assert.ok(op.body.startsWith(approved.body+'\n\n'));
+ assert.equal((await db.collection('businessMailboxes/owner/outreachAssignments').get()).size,1);
+ assert.equal((await db.collection('businessMailboxes/owner/outreachDecisions').get()).docs[0].data().decision,'HOLD');
+ await assert.rejects(call('saveDraft',{assistanceKind:'introduction',customerId:'contact',subject:'Injected',body:'Injected',expectedVersion:1,outreachAssignmentId:'fabricated'}),/maintained dispatcher/);
+ await svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}});assert.equal(sends,1);
+});
+
+test('mature qualified evidence changes a future real dispatcher assignment, without changing its caps',async()=>{
+ const adaptive=require('../functions-business-email/adaptive_outreach');
+ const saved=(await policyRef().get()).data();saved.policy.adaptiveOutreach={enabled:true,objective:'qualified_conversation',alternative:{subject:'A useful next detail',body:'Which requested detail should we explain first?'}};saved.digest=digest(saved);await policyRef().set(saved);
+ const strategyId=adaptive.strategy(saved.policy),cRef=db.doc('businessOperations/owner/customers/contact'),customer=(await cRef.get()).data();
+ let accountId;for(let i=0;i<10000;i++){const candidate='future-account-'+i,identity=digest(candidate);if(adaptive.choose(identity,strategyId,'HOLD')==='baseline'&&adaptive.choose(identity,strategyId,'PREFER_ALTERNATIVE')==='alternative'){accountId=candidate;break;}}
+ assert.ok(accountId);await cRef.update({accountId});const segmentId=adaptive.segment(customer),batch=db.batch();
+ for(const variant of ['baseline','alternative'])for(let i=0;i<40;i++){
+  const id=variant+i;batch.set(db.doc('businessMailboxes/owner/operations/'+id),{businessId:'owner',state:'sent',requestedAt:at-10*86400000,providerAcceptedAt:at-10*86400000,recipient:id+'@example.test',assistance:{kind:'introduction'},outreach:{strategyId,segmentId,variant,identity:id}});
+  if(variant==='alternative')batch.set(db.doc('businessMailboxes/owner/outcomes/'+id),{businessId:'owner',operationId:id,outcome:'relevant_question',recordedAt:at-86400000});
+ }await batch.commit();
+ await svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}});assert.equal(sends,1);
+ const ops=await db.collection('businessMailboxes/owner/operations').get(),sent=ops.docs.map(d=>d.data()).find(o=>o.automatic);
+ assert.equal(sent.outreach.variant,'alternative');assert.equal(sent.subject,saved.policy.adaptiveOutreach.alternative.subject);
+ assert.equal((await policyRef().get()).data().policy.limits.initialPerDay,1);
+ assert.equal((await db.collection('businessMailboxes/owner/outreachDecisions').get()).docs[0].data().decision,'PREFER_ALTERNATIVE');
+});

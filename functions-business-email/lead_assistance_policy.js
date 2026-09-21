@@ -27,7 +27,11 @@ function policyPreflight({businessId,actorUid,isOwner,mailbox,grant,policy,budge
  if(policy?.autonomyMode!=='bounded_managed'||policy?.replyMode!=='approval_required')blockers.push('bounded_authority_required');
  if(!Number.isSafeInteger(policy?.expiresAt)||policy.expiresAt<=now||policy.expiresAt>grant?.expiresAt)blockers.push('valid_policy_term_required');
  if(!Array.isArray(policy?.audiences)||!policy.audiences.length||policy.audiences.some(x=>!['consented','requested'].includes(x)))blockers.push('permitted_audience_required');
- if((policy?.introductionsEnabled||policy?.followupsEnabled||policy?.modelAssistance)&&(!policy?.services?.length||!policy?.voice||!policy?.destinations?.length||!policy?.claims?.length))blockers.push('business_content_boundaries_required');
+ if(policy?.introductionsEnabled||policy?.followupsEnabled||policy?.modelAssistance){
+  if(!policy?.services?.length)blockers.push('business_services_required');
+  if(!policy?.voice)blockers.push('business_voice_required');
+  if(!policy?.destinations?.length)blockers.push('business_destinations_required');
+ }
  const limits=policy?.limits;
  if(!Number.isInteger(limits?.initialPerDay)||limits.initialPerDay<0||limits.initialPerDay>20||
     !Number.isInteger(limits?.followupsPerContact)||limits.followupsPerContact<0||limits.followupsPerContact>3||

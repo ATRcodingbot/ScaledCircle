@@ -46,6 +46,7 @@ test('concurrent/retried mutations preserve one audit and stale changes cannot r
 test('pause/revoke persist with attribution; incomplete integration cannot activate or resume',async()=>{
  const a=actor('scaledcircle');await service.mutate(a,prepare());
  await assert.rejects(service.mutate(a,{...prepare('activate_1'),action:'activate',expectedVersion:1,confirm:true}),{code:'failed-precondition'});
+ await db.doc('agentPermissions/scaledcircle_lead_generator/authorizations/business_email').update({status:'active',approvedBy:'scaledcircle',approvedAt:clock-1000});
  assert.equal((await service.mutate(a,{action:'pause',expectedVersion:1,requestId:'pause_one',confirm:true})).status,'paused');
  await assert.rejects(service.mutate(a,{action:'resume',expectedVersion:2,requestId:'resume_one',confirm:true}),{code:'failed-precondition'});
  await service.mutate(a,{action:'revoke',expectedVersion:2,requestId:'revoke_one',confirm:true});
@@ -80,4 +81,42 @@ test('preparing a broader mode retains prior authorized coverage separately, nev
  await ref.set({businessId:'remodel',status:'active',version:1,approvedAt:clock-10000,connectionGeneration:'g1',intakeStartsAt:clock-10000,policy:{...policy(),mailboxMode:'labels',inquiryLabel:'Scoped',newInquiriesEnabled:true},digest:'old'});
  const result=await service.mutate(a,{...prepare(),expectedVersion:1,policy:{...policy(),mailboxMode:'inbox',historyMode:'future',inquiryLabel:'',newInquiriesEnabled:true}});
  const saved=(await ref.get()).data();assert.equal(result.status,'prepared');assert.equal(saved.policy.mailboxMode,'inbox');assert.equal(saved.authorizedIntake.mode,'labels');assert.equal(saved.authorizedIntake.label,'Scoped');assert.equal(saved.authorizedIntake.startsAt,clock-10000);
+});
+
+test('activation cannot authorize unsaved selections and review remains available with AI blocked',async()=>{
+ const a=actor('remodel');await service.mutate(a,{...prepare(),policy:{...policy(),claims:[],modelAssistance:true,modelDataConsent:true}});
+ const view=await service.load(a);assert.equal(view.authorizationReview.version,1);assert.equal(view.authorizationReview.canRevoke,false);
+ assert.ok(view.authorizationReview.fullBlockers.includes('model_data_review_required'));
+ assert.ok(!view.blockers.includes('business_content_boundaries_required'));
+ await assert.rejects(service.mutate(a,{action:'activate',expectedVersion:1,requestId:'unsaved_change',confirm:true,policy:policy()}),{code:'aborted'});
+ await assert.rejects(service.mutate(a,{action:'activate',expectedVersion:0,requestId:'stale_review',confirm:true}),{code:'aborted'});
+ assert.equal((await service.load(a)).policy.status,'prepared');
+ await assert.rejects(service.mutate(a,{action:'resume',expectedVersion:1,requestId:'resume_prepared',confirm:true}),{code:'failed-precondition'});
+ await assert.rejects(service.mutate(a,{action:'pause',expectedVersion:1,requestId:'pause_prepared',confirm:true}),{code:'failed-precondition'});
+});
+
+test('explicit available-only authorization preserves AI and OFF choices without starting inference, with safe replay',async()=>{
+ const {WORKSPACES}=require('../functions-business-email/inference_budget'),{createEnrollment,GRANT}=require('../functions-business-email/pilot_enrollment');
+ const boxes=['support@scaledcircle.com','attractiveremodel@gmail.com'];
+ for(let i=0;i<2;i++){
+  await db.doc('businessMailboxes/'+WORKSPACES[i]).set({status:'connected',email:boxes[i],generation:'g1',permissions:{read:true,send:true}});
+  await db.doc(`businessMailboxes/${WORKSPACES[i]}/private/credential`).set({generation:'g1'});
+ }
+ await db.recursiveDelete(db.doc('emailAssistanceOperatingGrants/'+GRANT));
+ const a={businessId:WORKSPACES[0],actorUid:WORKSPACES[0],beta:{kind:'internal',canManageConnection:true}};
+ await createEnrollment({db,now:()=>clock}).prepare(a,{confirm:true});
+ a.beta.leadAssistanceGrant=(await db.doc(`agentPermissions/${a.businessId}_lead_generator/authorizations/business_email_pilot_grant`).get()).data();
+ const desired={...policy(),termMode:'shared_pilot',expiresAt:null,claims:[],modelAssistance:true,modelDataConsent:true,introductionsEnabled:false,followupsEnabled:false,newInquiriesEnabled:false,mailboxMode:'inbox',historyMode:'future'};
+ await service.mutate(a,{...prepare(),policy:desired});const view=await service.load(a);assert.equal(view.authorizationReview.partialAvailable,true);
+ const input={action:'activate',expectedVersion:1,requestId:'partial_confirm',confirm:true,availableOnly:true};
+ const results=await Promise.all([service.mutate(a,input),service.mutate(a,input)]);assert.equal(results.filter(r=>r.reused).length,1);
+ let saved=(await service.load(a)).policy;assert.equal(saved.status,'active');assert.equal(saved.modelAuthorizationPending,true);assert.equal(saved.policy.modelAssistance,true);assert.equal(saved.policy.newInquiriesEnabled,false);assert.equal(saved.policy.introductionsEnabled,false);
+ assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
+ await service.mutate(a,{action:'pause',expectedVersion:2,requestId:'pause_partial',confirm:true});assert.equal((await service.load(a)).policy.modelAuthorizationPending,true);
+ a.beta.leadAssistanceGrant=(await db.doc(`agentPermissions/${a.businessId}_lead_generator/authorizations/business_email_pilot_grant`).get()).data();
+ await service.mutate(a,{action:'resume',expectedVersion:3,requestId:'resume_partial',confirm:true});saved=(await service.load(a)).policy;assert.equal(saved.modelAuthorizationPending,true);assert.equal(saved.policy.modelDataConsent,true);
+ await service.mutate(a,{...prepare('change_saved'),expectedVersion:4,policy:desired});
+ await assert.rejects(service.mutate(a,{action:'resume',expectedVersion:5,requestId:'resume_new_saved',confirm:true}),{code:'failed-precondition'});
+ await db.doc(`businessMailboxes/${a.businessId}/private/credential`).delete();
+ await assert.rejects(service.mutate(a,{action:'activate',availableOnly:true,expectedVersion:5,requestId:'no_sender_partial',confirm:true}),/mailbox_credentials_unavailable/);
 });

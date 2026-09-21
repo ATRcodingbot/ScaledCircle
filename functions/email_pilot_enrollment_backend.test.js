@@ -67,3 +67,10 @@ test('non-model approval cannot stand in for the other owner model consent or st
  const r=await db.runTransaction(tx=>svc.activation(tx,actor('second'),policy('second'),[]));assert.equal(r.activate,false);
  assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
 });
+
+test('a partial authorization retaining desired AI never satisfies the other workspace model approval',async()=>{
+ await svc.prepare(actor('first'),{confirm:true});await svc.recordDataReview(actor('first'),{confirm:true,sourceSha:'d'.repeat(40),amendmentReference:'fixture-only delivered amendment'});
+ await db.doc('agentPermissions/first_lead_generator/authorizations/business_email').set({...policy('first'),status:'active',modelAuthorizationPending:true});
+ const r=await db.runTransaction(tx=>svc.activation(tx,actor('second'),policy('second'),[]));assert.equal(r.activate,false);
+ assert.equal((await db.doc('emailAssistanceOperatingGrants/'+GRANT).get()).data().startsAt,null);
+});

@@ -687,6 +687,28 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                                   ),
                                   items: const [
                                     DropdownMenuItem(
+                                      value: 'relevant_question',
+                                      child: Text('Relevant question'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'appropriate_referral',
+                                      child: Text('Appropriate referral'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'objection',
+                                      child: Text('Objection'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'uncertain',
+                                      child: Text(
+                                        'Uncertain / correct prior assessment',
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'complaint',
+                                      child: Text('Complaint'),
+                                    ),
+                                    DropdownMenuItem(
                                       value: 'interested',
                                       child: Text('Interested'),
                                     ),
@@ -720,6 +742,8 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                                       : (v) => _action('outcome', {
                                           'operationId': op['id'],
                                           'outcome': v,
+                                          'requestId':
+                                              'outcome_${DateTime.now().microsecondsSinceEpoch}',
                                         }),
                                 ),
                               ],
@@ -779,6 +803,10 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text(
+                      _data?['evidenceWindow']?.toString() ??
+                          'Recent bounded records only; not lifetime totals.',
+                    ),
+                    Text(
                       learning['learningBasis']?.toString() ??
                           'No verified outcomes yet.',
                     ),
@@ -786,8 +814,12 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                       'Provider accepted: ${learning['evidence']?['providerAcceptedMessages'] ?? learning['sent'] ?? 0} · Distinct prospects: ${learning['evidence']?['distinctProspects'] ?? 0}',
                     ),
                     if (learning['evidence'] is Map) ...[
-                      const Text(
-                        'Current approach: fixed message. Adaptive execution is not authorized or active.',
+                      Text(
+                        'Current approach: ${_data?["adaptiveOutreach"]?["authorized"] == true
+                            ? "Authorized adaptive selection within reviewed alternatives"
+                            : _data?["adaptiveOutreach"]?["selected"] == true
+                            ? "Adaptive selected — owner authorization pending"
+                            : "Fixed message"}.',
                       ),
                       Text(
                         'Qualified conversations: ${learning['evidence']['qualifiedConversations']} · Recorded appointments: ${learning['evidence']['appointments']} · Recorded estimates: ${learning['evidence']['estimates']}',
@@ -799,9 +831,16 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                         'Mature prospects (7-day window): ${learning['evidence']['matureProspects']} · No response yet: ${learning['evidence']['noResponseYet']} · Uncertain: ${learning['evidence']['uncertainConversations']}',
                       ),
                       const Text(
-                        'HOLD — no comparable authorized experiment is applied. Bookings and owner-reported wins are not verified revenue. Delivery is unknown without a separate receipt.',
+                        'Bookings and owner-reported wins are not verified revenue. Delivery is unknown without a separate receipt. Learning holds when comparable mature evidence is insufficient.',
                       ),
                     ],
+                    for (final decision
+                        in (_data?['adaptiveOutreach']?['decisions'] as List? ??
+                                [])
+                            .whereType<Map>())
+                      Text(
+                        '${decision['decision']}: ${decision['reason']} · Baseline ${decision['groups']?['baseline']?['n'] ?? 0}; alternative ${decision['groups']?['alternative']?['n'] ?? 0} mature recipients. Decisions apply to future assignments; existing assignments stay fixed.',
+                      ),
                     Text((learning['funnel'] as List? ?? []).join(' → ')),
                     for (final p
                         in (learning['patterns'] as List? ?? [])

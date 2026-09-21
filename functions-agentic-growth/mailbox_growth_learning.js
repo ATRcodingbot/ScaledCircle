@@ -2,7 +2,7 @@
 // Only events already attributed to this workspace may enter this projection.
 // No mailbox text, contact information or network data is used as training input.
 const FEATURES=['industry','companyType','geography','serviceFit','prospectType','channel','messageAngle','cta','sourceClass'];
-const OUTCOMES=['interested','not_interested','follow_up_required','meeting','appointment','estimate','won','lost','signup','paid','activated','approved','first_job','completed','do_not_contact','bounced'];
+const OUTCOMES=['interested','relevant_question','appropriate_referral','objection','uncertain','complaint','attended','not_interested','follow_up_required','meeting','appointment','estimate','won','lost','signup','paid','activated','approved','first_job','completed','do_not_contact','bounced'];
 function featuresFor(p) {return {
   industry:typeof p.category==='string'?p.category.slice(0,120):p.industry||'unspecified',companyType:p.opportunityType||'unspecified',
   geography:p.serviceArea?.locality||p.serviceArea?.label||'unspecified',serviceFit:p.fit||'unspecified',prospectType:p.kind||'unspecified',
@@ -28,7 +28,7 @@ function project({businessId,operations=[],outcomes=[],prospects=[],replies=[],n
     recommendation:underperforming(g)?'Review other patterns; recent outcomes are weak':g.sent>=20&&g.positive>=5?'Review similar opportunities; observational evidence only':'Collect more verified outcomes'}));
   return {evidence:evidence({businessId,operations:ops,outcomes:events,replies,now}),sent:ops.filter(o=>o.state==='sent').length,replied:ops.filter(o=>o.replyCount>0).length,patterns,
     outcomeCounts:Object.fromEntries(OUTCOMES.map(o=>[o,[...latest.values()].filter(e=>e.outcome===o).length])),
-    learningBasis:'Provider acceptance is not confirmed delivery. Results below are observational and Business-specific; no adaptive message selection is active.',
+    learningBasis:'Provider acceptance is not confirmed delivery. Results below are observational and Business-specific; adaptive selection, where separately authorized, is recorded on each exact operation.',
     funnel:({services:['Found','Qualified','Contacted','Reply','Appointment','Estimate','Won','Revenue'],business:['Found','Qualified','Contacted','Meeting','Signup','Paid','Activated'],scaler:['Found','Qualified','Contacted','Signup','Approved','First Job','Completed']})[funnel]||[],
     followups:ops.filter(o=>o.state==='sent'&&!o.replyCount&&now-o.requestedAt>=5*86400000&&!latest.has(o.id)&&
       prospects.some(p=>p.id===o.prospectId&&p.businessUid===businessId&&!p.doNotContact&&!p.excludedByGrowthPreferences))

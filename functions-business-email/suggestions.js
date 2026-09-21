@@ -7,7 +7,7 @@ function createSuggestions({db,now=Date.now,runInference,inboundContext,mayPrepa
   const read=async()=>{
    const [op,mail,saved,replies]=await Promise.all([opRef.get(),root.get(),policyRef.get(),root.collection('replies').where('operationId','==',operationId).limit(101).get()]);
    const s=saved.data(),m=mail.data(),o=op.data();
-   if(a.actorUid!==a.businessId||!a.beta.canManageConnection||!['active','paused'].includes(s?.status)||s.revokedAt||s.policy.expiresAt<=now()||!s.policy.modelAssistance||!s.policy.modelDataConsent||
+   if(a.actorUid!==a.businessId||!a.beta.canManageConnection||!['active','paused'].includes(s?.status)||s.revokedAt||s.modelAuthorizationPending===true||s.policy.expiresAt<=now()||!s.policy.modelAssistance||!s.policy.modelDataConsent||
     m?.status!=='connected'||!m.permissions?.read||m.generation!==s.connectionGeneration||o?.businessId!==a.businessId||!['sent','received'].includes(o.state)||o.certification||!o.crmCustomerId||replies.size>100)throw Error('suggestion_authority_required');
    const rows=(await require('./shared/email_conversation_context').read({db,businessId:a.businessId,operationId})).rows;
    if(rows.some(r=>r.businessId!==a.businessId||r.from!==o.recipient))throw Error('suggestion_workspace_mismatch');

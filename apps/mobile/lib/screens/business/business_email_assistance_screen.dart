@@ -126,6 +126,16 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
             '${p['notifications']?['quietStartMinute'] ?? 1260}';
         field('quietEnd').text =
             '${p['notifications']?['quietEndMinute'] ?? 480}';
+        choices['adaptiveOutreach'] = p['adaptiveOutreach']?['enabled'] == true;
+        choices['outreachExploration'] =
+            p['adaptiveOutreach']?['explorationEnabled'] == true;
+        field('outreachObjective').text =
+            p['adaptiveOutreach']?['objective']?.toString() ??
+            'qualified_conversation';
+        field('alternativeSubject').text =
+            p['adaptiveOutreach']?['alternative']?['subject']?.toString() ?? '';
+        field('alternativeBody').text =
+            p['adaptiveOutreach']?['alternative']?['body']?.toString() ?? '';
         dirty = false;
       }
       setState(() => data = result);
@@ -151,6 +161,15 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   }
 
   Map<String, dynamic> policy() => {
+    'adaptiveOutreach': {
+      'enabled': choices['adaptiveOutreach'] == true,
+      'explorationEnabled': choices['outreachExploration'] == true,
+      'objective': field('outreachObjective').text,
+      'alternative': {
+        'subject': field('alternativeSubject').text.trim(),
+        'body': field('alternativeBody').text.trim(),
+      },
+    },
     'mailboxMode': mailboxMode,
     'historyMode': 'future',
     'autonomyMode': 'bounded_managed',
@@ -215,9 +234,106 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         },
     },
   };
-  Future<void> act(String action) async {
+  Future<void> reviewAuthorization() async {
+    if (dirty || data?['policy'] == null) {
+      setState(
+        () => feedback =
+            'Save the current preferences before authorizing their exact version.',
+      );
+      return;
+    }
+    final reviewedVersion = data?['policy']?['version'];
+    await load();
+    if (!mounted) return;
+    if (data?['policy']?['version'] != reviewedVersion) {
+      setState(
+        () => feedback =
+            'Preferences changed. Review the newly loaded saved settings before authorizing.',
+      );
+      return;
+    }
+    final readiness = data?['authorizationReview'] as Map? ?? {};
+    final blocked = data?['blockers'] as List? ?? [];
+    final selected = data?['policy']?['policy'] as Map? ?? {};
+    final decision = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Review & authorize assistance'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${data?['workspaceName']} · ${data?['sender']} · saved version ${data?['policy']?['version']}',
+              ),
+              Text(
+                'Coverage: ${selected['mailboxMode'] ?? 'Existing saved scope'}. New inquiries: ${selected['newInquiriesEnabled'] == true ? 'ON, future messages from authorization only' : 'OFF — no new-inquiry intake, even if Whole Inbox is selected'}. No historical import.',
+              ),
+              Text(
+                'Introductions: ${selected['introductionsEnabled'] == true ? 'ON' : 'OFF'} · Follow-ups: ${selected['followupsEnabled'] == true ? 'ON' : 'OFF'}. Existing recipient, suppression, limits and exact-reply approval checks apply.',
+              ),
+              Text(
+                'Owner email alerts: ${selected['notifications']?['email'] == true ? 'ON' : 'OFF'} · Push: ${data?['pushReady'] == true ? 'Device registered' : 'No ready device — email alerts remain independent'}.',
+              ),
+              Text(
+                'Schedule assistance: ${selected['bookingEnabled'] == true ? 'ON' : 'OFF'} · availability version ${selected['availabilityRevision'] ?? 'not selected'}.',
+              ),
+              Text(
+                'AI suggestions: ${selected['modelAssistance'] == true ? 'Selected' : 'OFF'}. ${blocked.isEmpty ? 'Selected capabilities pass current readiness checks.' : 'Not all selected capabilities are ready.'}',
+              ),
+              Text(
+                'Outreach mode: ${selected['adaptiveOutreach']?['enabled'] == true ? 'Adaptive — reviewed baseline and alternative; objective: ${selected['adaptiveOutreach']?['objective']}' : 'Fixed message'}. Introductions remain OFF when not selected.',
+              ),
+              Text(
+                'Small comparison: ${selected['adaptiveOutreach']?['explorationEnabled'] == true ? 'Authorized 80% baseline / 20% alternative allocation while learning holds; no additional contacts.' : 'OFF — insufficient evidence retains baseline.'}',
+              ),
+              for (final b in blocked)
+                Text(
+                  (data?['blockerMessages'] as Map?)?[b]?.toString() ??
+                      blocker('$b'),
+                ),
+              if (readiness['partialAvailable'] == true)
+                const Text(
+                  'Authorize available features is a partial operation: AI stays selected but pending. It will NOT activate automatically when its requirements clear. A later explicit authorization is required. The inference clock does not start.',
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Back to saved settings'),
+          ),
+          if (blocked.isEmpty)
+            FilledButton(
+              onPressed: () => Navigator.pop(c, 'full'),
+              child: const Text('Confirm authorization'),
+            ),
+          if (readiness['partialAvailable'] == true)
+            FilledButton(
+              onPressed: () => Navigator.pop(c, 'partial'),
+              child: const Text('Authorize available features'),
+            ),
+        ],
+      ),
+    );
+    if (decision != null) {
+      await act(
+        'activate',
+        availableOnly: decision == 'partial',
+        reviewed: true,
+      );
+    }
+  }
+
+  Future<void> act(
+    String action, {
+    bool availableOnly = false,
+    bool reviewed = false,
+  }) async {
     if (busy) return;
-    if (action != 'prepare') {
+    if (action != 'prepare' && !reviewed) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
@@ -250,9 +366,10 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     try {
       final r = await widget.service.call('manageAssistance', {
         'action': action,
+        if (availableOnly) 'availableOnly': true,
         'expectedVersion': data?['policy']?['version'] ?? 0,
         'requestId': 'email_settings_${DateTime.now().microsecondsSinceEpoch}',
-        if (action == 'prepare' || action == 'activate') 'policy': policy(),
+        if (action == 'prepare') 'policy': policy(),
         'confirm': action != 'prepare',
       });
       await load();
@@ -482,13 +599,10 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
             onPressed: busy ? null : () => act('prepare'),
             child: const Text('Save preferences'),
           ),
-          if (data?['policy'] != null &&
-              !dirty &&
-              (data?['blockers'] as List? ?? []).isEmpty)
-            OutlinedButton(
-              onPressed: busy ? null : () => act('activate'),
-              child: const Text('Authorize email assistance'),
-            ),
+          FilledButton(
+            onPressed: busy ? null : reviewAuthorization,
+            child: const Text('Review & authorize assistance'),
+          ),
           if (data?['policy']?['status'] == 'active')
             TextButton(
               onPressed: busy ? null : () => act('pause'),
@@ -501,7 +615,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
               onPressed: busy ? null : () => act('resume'),
               child: const Text('Resume assistance'),
             ),
-          if (data?['policy'] != null)
+          if (data?['authorizationReview']?['canRevoke'] == true)
             TextButton(
               onPressed: busy ? null : () => act('revoke'),
               child: const Text('Revoke assistance'),
@@ -514,7 +628,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   String blocker(String b) =>
       const {
         'business_content_boundaries_required':
-            'Complete Business services, voice, supported facts and destinations in section A.',
+            'Review missing Business services, voice or destinations. An empty optional claims list does not authorize invented claims.',
         'contact_limits_required': 'Review message limits in section B.',
         'sending_window_required':
             'Choose valid sending days and hours in section B.',
@@ -566,7 +680,11 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                   'Operating status: ${data?['policy']?['status'] == 'active' ? 'Authorized capabilities are checked by the recurring worker' : 'Not active — preferences are not execution authority'}',
                 ),
                 Text(
-                  'AI suggestions: ${data?['capabilities']?['modelSuggestions']?['ready'] == true ? 'Available only with explicit consent and remaining allowance' : 'Gated; owner-written replies and eligible non-model capabilities remain separate'}',
+                  'AI suggestions: ${data?['authorizationReview']?['modelPending'] == true
+                      ? 'Selected — pending separate authorization and model-data requirements'
+                      : data?['capabilities']?['modelSuggestions']?['ready'] == true
+                      ? 'Available only with explicit consent and remaining allowance'
+                      : 'Gated; owner-written replies and eligible non-model capabilities remain separate'}',
                 ),
                 if (data?['intakeStatus'] != null)
                   Text(
@@ -705,6 +823,32 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                           'Review / record actual recipient permission',
                         ),
                       ),
+                      if (data?['proposal']?['values']?['templates'] != null)
+                        OutlinedButton(
+                          onPressed: () {
+                            final proposed = data!['proposal']['values'] as Map;
+                            final baseline =
+                                proposed['templates']['introduction'] as Map;
+                            final alternative =
+                                proposed['adaptiveAlternative'] as Map?;
+                            setState(() {
+                              field('introductionSubject').text =
+                                  baseline['subject'] as String;
+                              field('introductionBody').text =
+                                  baseline['body'] as String;
+                              if (alternative != null) {
+                                field('alternativeSubject').text =
+                                    alternative['subject'] as String;
+                                field('alternativeBody').text =
+                                    alternative['body'] as String;
+                              }
+                              dirty = true;
+                            });
+                          },
+                          child: const Text(
+                            'Load proposed messages for my review',
+                          ),
+                        ),
                       input(
                         'introductionSubject',
                         'Proposed introduction subject',
@@ -719,6 +863,61 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                         'Automatic introductions',
                         'Only the reviewed template and separately consenting/requesting recipients. Saving is not activation.',
                       ),
+                      toggle(
+                        'adaptiveOutreach',
+                        'Automatically improve outreach using my Business’s results',
+                        'OFF keeps fixed-message mode. ON compares the reviewed baseline and alternative within the same eligible audience. No additional recipients, contact limits, paid model calls or reply authority.',
+                      ),
+                      if (choices['adaptiveOutreach'] == true) ...[
+                        toggle(
+                          'outreachExploration',
+                          'Allow a small comparison',
+                          'Keep the baseline for about 80% of new eligible recipients and use this reviewed alternative for about 20%. No extra recipients or messages. OFF keeps the baseline while evidence is insufficient.',
+                        ),
+                        DropdownButtonFormField<String>(
+                          initialValue: field('outreachObjective').text,
+                          decoration: const InputDecoration(
+                            labelText: 'Outreach objective',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'qualified_conversation',
+                              child: Text('Qualified conversation'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'appointment',
+                              child: Text('Appointment'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'estimate',
+                              child: Text('Estimate'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'business_signup',
+                              child: Text('Business signup'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'scaler_activation',
+                              child: Text('Scaler activation'),
+                            ),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) setField('outreachObjective', v);
+                          },
+                        ),
+                        input(
+                          'alternativeSubject',
+                          'Alternative subject — owner review',
+                        ),
+                        input(
+                          'alternativeBody',
+                          'Alternative introduction / next step — owner review',
+                          lines: 4,
+                        ),
+                        const Text(
+                          'Only these reviewed approaches are eligible. Each prospect receives one stable approach. The system holds allocation when evidence is insufficient; after comparable mature results it may prefer an approach while retaining baseline and exploration. It cannot invent facts or expand sending authority.',
+                        ),
+                      ],
                       input(
                         'initialPerDay',
                         'Maximum introductions per day (0–20)',
