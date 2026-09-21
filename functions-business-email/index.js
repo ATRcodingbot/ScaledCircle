@@ -20,7 +20,7 @@ function service() {
   const clientSecret=CLIENT_SECRET.value(),key=ENCRYPTION_KEY.value();
   const configured=!!clientId&&!!clientSecret&&!!redirectUri&&Buffer.from(key||'','base64').length===32;
   const beta=JSON.parse(process.env.BUSINESS_EMAIL_PRIVATE_BETA||'{}');
-  return createService({db,key,project,runInference:inferenceEnabled?require('./inference_runtime').createRuntime({db,apiKey:INFERENCE_KEY.value()}):null,scheduleService:require('./schedule_runtime/service').createService({db,FieldValue,authority:require('./schedule_runtime/authority').createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,internalAdminUid:process.env.GROWTH_PRODUCTION_ADMIN_UID||''})}),authority:createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,beta,configured,
+  return createService({db,key,project,runOutbound:inferenceEnabled?require('./outbound_runtime').createRuntime({db,apiKey:INFERENCE_KEY.value()}):null,runInference:inferenceEnabled?require('./inference_runtime').createRuntime({db,apiKey:INFERENCE_KEY.value()}):null,scheduleService:require('./schedule_runtime/service').createService({db,FieldValue,authority:require('./schedule_runtime/authority').createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,internalAdminUid:process.env.GROWTH_PRODUCTION_ADMIN_UID||''})}),authority:createAuthority({db,auth:getAuth(app),FieldValue,Timestamp,project,beta,configured,
     internalAdminUid:process.env.GROWTH_PRODUCTION_ADMIN_UID||''}),
     providers:createRegistry({google:{...gmail.createProvider({clientId,clientSecret,redirectUri}),configured},
       microsoft:require('./microsoft').createProvider({clientId:process.env.BUSINESS_EMAIL_MICROSOFT_CLIENT_ID,

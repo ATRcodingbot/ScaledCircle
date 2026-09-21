@@ -7,7 +7,7 @@ const fail=(code,message)=>{const e=Error(message);e.code=code;throw e;};
 const id=value=>{if(typeof value!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(value))fail('invalid-argument','Choose a saved record.');return value;};
 const strict=(input,keys)=>{if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!keys.includes(k)))fail('invalid-argument','Unsupported action.');};
 const text=(v,max)=>{if(typeof v!=='string'||!v.trim()||v.length>max||v.includes('\0'))fail('invalid-argument','Enter a complete message within the displayed limits.');return v.trim();};
-function createService({db,authority,provider,providers,key,project,now=Date.now,getOwner,runInference,scheduleService}) {
+function createService({db,authority,provider,providers,key,project,now=Date.now,getOwner,runInference,runOutbound,scheduleService}) {
   const registry=providers||createRegistry({google:provider});
   const adapter=(a,name='google')=>registry.get(name,a.beta);
   const root=b=>db.doc('businessMailboxes/'+id(b));
@@ -15,7 +15,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
   const stamp=()=>now();
   const binding=(a)=>'BusinessMailboxV1/'+a.businessId;
   const pilot=require('./pilot_execution').createPilot({db,now});
-  const assistance=require('./lead_assistance_authority').createAssistanceAuthority({db,now,providerReady:!!runInference});
+  const assistance=require('./lead_assistance_authority').createAssistanceAuthority({db,now,providerReady:!!runInference,outboundPreflight:runOutbound?.preflight});
   const ownerAlerts=require('./shared/lead_reply_alert').createAlerts({db,now,getOwner:getOwner||(uid=>require('firebase-admin/auth').getAuth().getUser(uid))});
   async function inboundContext(a,operationId,tx=null){
     return (await require('./shared/email_conversation_context').read({db,businessId:a.businessId,operationId,tx})).digest;
@@ -208,8 +208,10 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       if(input.outreachAssignmentId){
        outreach=(await tx.get(sub(a.businessId,'outreachAssignments',id(input.outreachAssignmentId)))).data();
        const settings=pilotContext.saved.policy,adaptive=require('./adaptive_outreach');
-       if(!outreach||outreach.businessId!==a.businessId||outreach.customerId!==input.customerId||settings.adaptiveOutreach?.enabled!==true||outreach.strategyId!==adaptive.strategy(settings))fail('aborted','Adaptive strategy changed.');
-       const approved=outreach.variant==='alternative'?settings.adaptiveOutreach.alternative:settings.templates.introduction;
+       if(!outreach||outreach.businessId!==a.businessId||outreach.customerId!==input.customerId||(settings.adaptiveOutreach?.enabled!==true&&!(settings.messageOrigin==='prepared'&&outreach.variant==='baseline'))||outreach.strategyId!==adaptive.strategy(settings))fail('aborted','Adaptive strategy changed.');
+       let approved=outreach.variant==='alternative'?settings.adaptiveOutreach.alternative:settings.templates.introduction;
+       if(outreach.variantRecordId){const variant=(await tx.get(sub(a.businessId,'outreachVariants',id(outreach.variantRecordId)))).data();if(!variant||variant.businessId!==a.businessId||variant.strategyId!==outreach.strategyId||variant.validation!=='passed'||variant.authorizationSource!=='owner_strategy'||variant.authorizedBy!==a.businessId||require('./outreach_preparation').validateCopy(variant.template,settings))fail('aborted','Prepared variant is not authorized');approved=variant.template;}
+
        const link=(await tx.get(sub(a.businessId,'optoutLinks',require('./lead_assistance_policy').digest(pilotContext.customer.email)))).data();
        const exactBody=approved.body+'\n\n'+settings.mailingAddress+'\nUnsubscribe from these marketing emails: https://us-east1-scaled-circle.cloudfunctions.net/businessEmailUnsubscribeV1?token='+link?.token;
        if(!link?.token||subject!==approved.subject||body!==exactBody)fail('aborted','Review the exact authorized variant.');
@@ -506,7 +508,8 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
     fail('invalid-argument','Unsupported Business Email action.');
   }
   const inquiries=require('./inquiries').createInquiries({db,now,current,adapter,credentialAccess,alerts:ownerAlerts,onInbound:runInference?((a,id)=>suggest(a,id)):null});
-  const dispatch=require('./assistance_dispatch').createDispatch({db,now,pilot,prepare:(a,input)=>saveDraft(a,input,true),send});
+  const prepareContent=require('./outreach_preparation').createPreparation({db,now,runOutbound});
+  const dispatch=require('./assistance_dispatch').createDispatch({db,now,pilot,prepareContent,prepare:(a,input)=>saveDraft(a,input,true),send});
   const replySync=require('./reply_sync').createReplySync({db,root,sub,reconcile,now});
   async function syncReplies(request) {
     const a=await authority(request,'reconcile');

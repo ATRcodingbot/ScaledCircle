@@ -45,6 +45,17 @@ class FixtureEmail extends BusinessEmailService {
             'voice': 'Clear',
             'claims': ['Profile fact'],
             'destinations': ['https://example.test'],
+            'templates': {
+              'introduction': {
+                'subject': 'Deck help from Fixture Business',
+                'body': 'We can discuss your deck plans.',
+              },
+            },
+            'adaptiveAlternative': {
+              'subject': 'Which deck question comes first?',
+              'body':
+                  'Tell us what you would like to understand before planning a deck.',
+            },
           },
           'sources': {'voice': 'Business Profile'},
         },
@@ -104,6 +115,84 @@ class FixtureEmail extends BusinessEmailService {
 }
 
 void main() {
+  for (final origin in ['owner', 'prepared']) {
+    testWidgets('message preparation preserves owner choice: $origin', (
+      tester,
+    ) async {
+      final service = FixtureEmail()
+        ..saved = {
+          'status': 'active',
+          'version': 4,
+          'policy': {
+            'businessName': 'Fixture Business',
+            'messageOrigin': origin,
+            'templates': {
+              'introduction': {
+                'subject': 'Protected subject',
+                'body': 'My protected owner wording',
+              },
+            },
+            'adaptiveOutreach': {
+              'enabled': true,
+              'explorationEnabled': true,
+              'objective': 'qualified_conversation',
+              'alternative': {'subject': '', 'body': ''},
+            },
+            'expiresAt': DateTime.now()
+                .add(const Duration(days: 1))
+                .millisecondsSinceEpoch,
+          },
+        };
+      await tester.pumpWidget(
+        MaterialApp(home: BusinessEmailAssistanceScreen(service: service)),
+      );
+      await tester.pumpAndSettle();
+      final section = find.text('B. Messages and eligible recipients');
+      await tester.ensureVisible(section);
+      await tester.tap(section);
+      await tester.pumpAndSettle();
+      final prepare = find.text(
+        origin == 'owner'
+            ? 'Suggest an alternative to my message'
+            : 'Prepare messages for my review',
+      );
+      await tester.ensureVisible(prepare);
+      await tester.tap(prepare);
+      await tester.pumpAndSettle();
+      if (origin == 'prepared') {
+        expect(find.text('Replace the current draft copy?'), findsOneWidget);
+        await tester.tap(find.text('Keep my copy'));
+        await tester.pumpAndSettle();
+        expect(
+          find.widgetWithText(TextField, 'My protected owner wording'),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(prepare);
+        await tester.tap(prepare);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Prepare replacement'));
+        await tester.pumpAndSettle();
+      }
+      expect(
+        find.widgetWithText(
+          TextField,
+          origin == 'owner'
+              ? 'My protected owner wording'
+              : 'We can discuss your deck plans.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(TextField, 'Which deck question comes first?'),
+        findsOneWidget,
+      );
+      expect(service.actions, isEmpty);
+      expect(
+        find.textContaining('Baseline and alternative ready for review'),
+        findsOneWidget,
+      );
+    });
+  }
   for (final scenario in ['ordinary', 'expanded', 'conflict', 'readback']) {
     testWidgets('authorized save lifecycle: $scenario', (tester) async {
       final service = FixtureEmail()

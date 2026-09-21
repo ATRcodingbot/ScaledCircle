@@ -27,6 +27,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   final panels = List.generate(5, (_) => ExpansibleController());
   final pageScroll = ScrollController();
   String mailboxMode = 'conversations';
+  String messageOrigin = 'owner';
   String? feedback;
   int section = 0;
   int loadSequence = 0;
@@ -157,6 +158,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     'fields': fields.map((k, v) => MapEntry(k, v.text)),
     'choices': choices,
     'mode': mailboxMode,
+    'messageOrigin': messageOrigin,
   });
   bool get previouslyAuthorized =>
       data?['policy']?['approvedBy'] != null ||
@@ -200,6 +202,11 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         final p = Map<String, dynamic>.from(
           result['policy']?['policy'] as Map? ?? {},
         );
+        messageOrigin = p['messageOrigin']?.toString() ?? 'owner';
+        choices['messagePreparation'] =
+            p['messagePreparation']?['enabled'] == true;
+        choices['preparationContextReviewed'] =
+            p['messagePreparation']?['contextReviewed'] == true;
         final proposal = result['proposal']?['values'] as Map? ?? {};
         final test = result['proposal']?['controlled'] as Map? ?? {};
         mailboxMode =
@@ -315,8 +322,11 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
             .map(blocker)
             .join(' ');
       }
+      if (message.contains('Small comparison requires')) {
+        return 'Small comparison requires adaptive outreach. Enable adaptive outreach or turn comparison off in section B. Your saved settings are unchanged.';
+      }
       if (message.contains('distinct alternative')) {
-        return 'Review the outreach objective and enter a distinct alternative subject and body. Your edits remain unsaved.';
+        return 'Choose Prepare messages for me to fill a baseline and alternative, or add your own distinct alternative in section B. Adaptive execution cannot be saved with an empty alternative. Your saved settings are unchanged.';
       }
       if (message.contains('expanded permissions')) {
         return 'Review and confirm the permission changes before saving.';
@@ -434,7 +444,62 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     });
   }
 
+  Future<void> prepareMessages() async {
+    final proposed = data?['proposal']?['values'] as Map?;
+    final baseline = proposed?['templates']?['introduction'] as Map?;
+    final alternative = proposed?['adaptiveAlternative'] as Map?;
+    if (baseline == null || alternative == null) {
+      setState(
+        () => feedback =
+            'Message preparation needs maintained Business services and context. Existing copy is preserved.',
+      );
+      return;
+    }
+    final replaceBaseline = messageOrigin == 'prepared';
+    if (field('alternativeBody').text.trim().isNotEmpty ||
+        (replaceBaseline && field('introductionBody').text.trim().isNotEmpty)) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Replace the current draft copy?'),
+          content: Text(
+            replaceBaseline
+                ? 'Prepare a new baseline and alternative for your review. This replaces the text in this form only; saved sending authority stays unchanged until Save changes.'
+                : 'Keep your exact baseline and replace only the draft alternative.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Keep my copy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Prepare replacement'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    setState(() {
+      if (replaceBaseline) {
+        field('introductionSubject').text = baseline['subject'];
+        field('introductionBody').text = baseline['body'];
+      }
+      field('alternativeSubject').text = alternative['subject'];
+      field('alternativeBody').text = alternative['body'];
+      dirty = true;
+      feedback =
+          'Baseline and alternative ready for review. Save changes applies your chosen fixed or adaptive mode; nothing has been sent.';
+    });
+  }
+
   Map<String, dynamic> policy() => {
+    'messageOrigin': messageOrigin,
+    'messagePreparation': {
+      'enabled': choices['messagePreparation'] == true,
+      'contextReviewed': choices['preparationContextReviewed'] == true,
+    },
     'adaptiveOutreach': {
       'enabled': choices['adaptiveOutreach'] == true,
       'explorationEnabled': choices['outreachExploration'] == true,
@@ -1199,32 +1264,78 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                           'Review / record actual recipient permission',
                         ),
                       ),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('message-origin-$messageOrigin'),
+                        initialValue: messageOrigin,
+                        decoration: const InputDecoration(
+                          labelText: 'Who prepares the messages?',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'owner',
+                            child: Text('Use my own message'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'prepared',
+                            child: Text('Let ScaledCircle prepare my messages'),
+                          ),
+                        ],
+                        onChanged: busy
+                            ? null
+                            : (v) {
+                                if (v != null) {
+                                  setState(() {
+                                    messageOrigin = v;
+                                    dirty = true;
+                                  });
+                                }
+                              },
+                      ),
+                      Text(
+                        'Saved execution: ${data?['policy']?['policy']?['adaptiveOutreach']?['enabled'] == true ? 'Adaptive selection authorized subject to eligibility' : 'Fixed message'}. ${dirty ? 'The selections below are an unsaved draft.' : 'These are the saved settings.'}',
+                      ),
+                      if (data?['policy']?['policy']?['adaptiveOutreach']?['enabled'] !=
+                              true &&
+                          data?['policy']?['policy']?['adaptiveOutreach']?['explorationEnabled'] ==
+                              true)
+                        const Text(
+                          'Saved comparison is selected while adaptive outreach is OFF. No comparison operates. Enable adaptive with a valid alternative, or turn comparison off, then Save changes.',
+                        ),
                       if (data?['proposal']?['values']?['templates'] != null)
                         OutlinedButton(
-                          onPressed: () {
-                            final proposed = data!['proposal']['values'] as Map;
-                            final baseline =
-                                proposed['templates']['introduction'] as Map;
-                            final alternative =
-                                proposed['adaptiveAlternative'] as Map?;
-                            setState(() {
-                              field('introductionSubject').text =
-                                  baseline['subject'] as String;
-                              field('introductionBody').text =
-                                  baseline['body'] as String;
-                              if (alternative != null) {
-                                field('alternativeSubject').text =
-                                    alternative['subject'] as String;
-                                field('alternativeBody').text =
-                                    alternative['body'] as String;
-                              }
-                              dirty = true;
-                            });
-                          },
-                          child: const Text(
-                            'Load proposed messages for my review',
+                          onPressed: busy ? null : prepareMessages,
+                          child: Text(
+                            messageOrigin == 'prepared'
+                                ? 'Prepare messages for my review'
+                                : 'Suggest an alternative to my message',
                           ),
                         ),
+                      const Text(
+                        'Initial proposals use maintained Business context without a model call. You can edit the preview. New model-written approaches require separate outbound-purpose/data readiness and an active shared allowance; reply AI is separate.',
+                      ),
+                      toggle(
+                        'messagePreparation',
+                        'Prepare new approaches when evidence supports it',
+                        'Separate from adaptive selection. Preserves the baseline; bounded preparation requires reviewed Business context and its own purpose authorization. It cannot increase contacts, caps or spending.',
+                      ),
+                      if (choices['messagePreparation'] == true)
+                        toggle(
+                          'preparationContextReviewed',
+                          'I reviewed the Business context for outbound preparation',
+                          'Use only the reviewed Business profile, services, facts, voice, objective and destinations. Do not include Gmail-derived content or private prospect information. This does not authorize Gmail reply processing.',
+                        ),
+                      Text(
+                        'What we are trying: ${field('outreachObjective').text.replaceAll('_', ' ')} with separately eligible recipients.',
+                      ),
+                      Text(
+                        'What the evidence supports: ${data?['learningDecision']?['decision'] ?? 'HOLD'} — ${data?['learningDecision']?['reason'] ?? 'Insufficient comparable mature evidence'}. Controlled tests do not establish a winner.',
+                      ),
+                      Text(
+                        'What changed: ${data?['messagePreparation']?['latest']?['state'] ?? 'No new model-written approach prepared'}. What happens next: retain usable approved content; prepare at most one new candidate per strategy when both approaches have sufficient mature evidence of poor qualified outcomes and preparation authority is ready.',
+                      ),
+                      Text(
+                        'Model preparation: ${data?['messagePreparation']?['modelReady'] == true ? 'Ready, subject to saved owner authority and remaining allowance' : data?['messagePreparation']?['limitation'] ?? 'Pending outbound purpose and data/cost readiness'}. Exact owner approval is still required for substantive replies.',
+                      ),
                       input(
                         'introductionSubject',
                         'Proposed introduction subject',
@@ -1237,7 +1348,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                       toggle(
                         'introductionsEnabled',
                         'Automatic introductions',
-                        'Only the reviewed template and separately consenting/requesting recipients. Saving is not activation.',
+                        'Only authorized messages and separately consenting/requesting recipients. Save changes uses the existing authorization term and confirms any expanded authority.',
                       ),
                       toggle(
                         'adaptiveOutreach',
@@ -1291,7 +1402,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                           lines: 4,
                         ),
                         const Text(
-                          'Only these reviewed approaches are eligible. Each prospect receives one stable approach. The system holds allocation when evidence is insufficient; after comparable mature results it may prefer an approach while retaining baseline and exploration. It cannot invent facts or expand sending authority.',
+                          'Reviewed approaches and separately authorized bounded preparation are eligible. Each prospect receives one stable approach. The system holds allocation when evidence is insufficient; after comparable mature results it may prefer an approach while retaining baseline and exploration. It cannot invent facts or expand sending authority.',
                         ),
                       ],
                       input(

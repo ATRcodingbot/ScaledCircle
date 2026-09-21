@@ -19,11 +19,11 @@ function request({businessId,context,conversation}){
  if(upperBound>8000)throw Error('inference_context_limit');
  return {payload,upperBound,inputDigest:digest(payload)};
 }
-function createInference({store,fetchImpl=fetch,apiKey,dataReview,recheck}){
+function createInference({store,fetchImpl=fetch,apiKey,dataReview,recheck,prepareRequest=request,validateOutput=null,permitted=null}){
  return async ({businessId,requestId,context,conversation})=>{
   if(dataReview?.status!=='verified'||!dataReview.organization||!dataReview.project||!dataReview.evidenceRef||
-    dataReview.trainingSharingDisabled!==true||dataReview.gmailProcessingPermitted!==true||dataReview.loggingMode!=='per_call_store_false')throw Error('inference_data_review_required');
-  const prepared=request({businessId,context,conversation});
+    dataReview.trainingSharingDisabled!==true||(permitted?!permitted(dataReview):dataReview.gmailProcessingPermitted!==true)||dataReview.loggingMode!=='per_call_store_false')throw Error('inference_data_review_required');
+  const prepared=prepareRequest({businessId,context,conversation});
   await recheck({businessId,inputDigest:prepared.inputDigest});
   const reservation=await store.reserve({businessId,requestId,inputDigest:prepared.inputDigest});
   if(!await store.claim(reservation))return {state:'already_attempted',reservationId:reservation.id};
@@ -41,6 +41,7 @@ function createInference({store,fetchImpl=fetch,apiKey,dataReview,recheck}){
    if(accounting.status!=='settled'||result.status!=='completed')return {state:'needs_review',reservationId:reservation.id};
    const text=(result.output||[]).filter(x=>x.type==='message'&&x.role==='assistant').flatMap(x=>x.content||[]).filter(x=>x.type==='output_text').map(x=>x.text).join('');
    const suggestion=JSON.parse(text);
+   if(validateOutput){if(!validateOutput(suggestion))throw Error('inference_output_invalid');return {state:'prepared',suggestion,reservationId:reservation.id,inputDigest:prepared.inputDigest,providerResponseId:result.id||null};}
    if(Object.keys(suggestion).sort().join(',')!=='body,requiresSchedulingReview,subject,summary'||
      typeof suggestion.summary!=='string'||suggestion.summary.length>1500||typeof suggestion.subject!=='string'||suggestion.subject.length>200||/[\r\n]/.test(suggestion.subject)||
      typeof suggestion.body!=='string'||!suggestion.body.trim()||suggestion.body.length>8000||typeof suggestion.requiresSchedulingReview!=='boolean')throw Error('inference_output_invalid');

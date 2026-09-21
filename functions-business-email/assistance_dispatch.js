@@ -2,8 +2,8 @@
 const crypto=require('node:crypto'),{digest}=require('./lead_assistance_policy');
 // One bounded visit inside the existing reply worker. No new scheduler, model
 // call, retry loop or independent contact authority.
-function createDispatch({db,now=Date.now,pilot,prepare,send}){
- const select=require('./adaptive_outreach').createSelector({db,now});
+function createDispatch({db,now=Date.now,pilot,prepare,send,prepareContent=null}){
+ const select=require('./adaptive_outreach').createSelector({db,now,prepareContent});
  return async a=>{
   const root=db.doc('businessMailboxes/'+a.businessId),state=root.collection('private').doc('assistanceDispatch');
   const policy=(await db.doc(`agentPermissions/${a.businessId}_lead_generator/authorizations/business_email`).get()).data();
@@ -32,7 +32,8 @@ function createDispatch({db,now=Date.now,pilot,prepare,send}){
      if(kind==='followup'&&(previous.replyCount>0||now()-previous.requestedAt<settings.limits.followupIntervalHours*3600000||
        history.docs.filter(d=>d.data().assistance?.kind==='followup').length>=settings.limits.followupsPerContact))continue;
      const selection=kind==='introduction'?await select(a,context,row.id):null;
-     const template=selection?.variant==='alternative'?settings.adaptiveOutreach.alternative:settings.templates?.[kind];
+     const template=selection?.template||(selection?.variant==='alternative'?settings.adaptiveOutreach.alternative:settings.templates?.[kind]);
+     const copyIssue=require('./outreach_preparation').validateCopy(template,settings);if(copyIssue){outcome=copyIssue;continue;}
      if(!template?.subject||!template?.body||!settings.mailingAddress){outcome='approved_message_template_required';continue;}
      // Exact owner-approved copy. Do not invent personalization or free-form
      // instructions from a contact record or an inbound message.

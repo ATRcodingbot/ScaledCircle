@@ -8,7 +8,7 @@ const OBJECTIVES=['qualified_conversation','appointment','estimate','business_si
 function validate(p){
  const a=p?.adaptiveOutreach;if(a==null)return null;
  if(typeof a.enabled!=='boolean'||(a.explorationEnabled!=null&&typeof a.explorationEnabled!=='boolean')||Object.keys(a).some(k=>!['enabled','objective','alternative','explorationEnabled'].includes(k)))return 'adaptive_strategy_required';
- if(!a.enabled)return null;
+ if(!a.enabled)return a.explorationEnabled===true?'comparison_requires_adaptive':null;
  const t=a.alternative,b=p.templates?.introduction;
  if(!OBJECTIVES.includes(a.objective)||!t||Object.keys(t).some(k=>!['subject','body'].includes(k))||
   typeof t.subject!=='string'||!t.subject.trim()||t.subject.length>200||/[\r\n\0]/.test(t.subject)||
@@ -25,7 +25,7 @@ function evaluate({businessId,strategyId,segmentId,objective,operations=[],outco
  const rootId=id=>{const seen=new Set();while(byId.has(id)&&!seen.has(id)){seen.add(id);const o=byId.get(id);if(o.assistance?.kind==='introduction')return id;const parent=o.followupTo||o.assistance?.followupTo;if(!parent)return id;id=parent;}return null;};
  const latest=new Map();for(const e of outcomes.filter(e=>e.businessId===businessId).sort((a,b)=>a.recordedAt-b.recordedAt))latest.set(e.operationId+'|'+(e.itemId||'owner'),e);
  const used=new Set(), weeks={};
- for(const o of operations.filter(o=>o.businessId===businessId&&o.state==='sent'&&commercial(o)&&o.outreach?.strategyId===strategyId&&o.outreach?.segmentId===segmentId&&o.assistance?.kind==='introduction').sort((a,b)=>a.requestedAt-b.requestedAt)){
+ for(const o of operations.filter(o=>o.businessId===businessId&&o.state==='sent'&&commercial(o)&&(o.outreach?.experimentId||o.outreach?.strategyId)===strategyId&&o.outreach?.segmentId===segmentId&&o.assistance?.kind==='introduction').sort((a,b)=>a.requestedAt-b.requestedAt)){
   const age=now-(o.providerAcceptedAt||o.requestedAt);if(age<7*DAY||age>35*DAY)continue;
   const identity=o.outreach.identity;if(!identity||used.has(identity)||!groups[o.outreach.variant])continue;used.add(identity);
   const events=[...latest.values()].filter(e=>rootId(e.operationId)===(o.id||o.operationId)&&!e.retractedAt);
@@ -52,17 +52,22 @@ function choose(identity,strategyId,decision,explorationEnabled=false){const buc
  const cutoff=decision==='PREFER_ALTERNATIVE'?25:decision==='PREFER_BASELINE'?75:explorationEnabled?80:100;
  return bucket<cutoff?'baseline':'alternative';
 }
-function createSelector({db,now=Date.now}){
+function createSelector({db,now=Date.now,prepareContent=null}){
  return async(a,context,customerId)=>{
-  const p=context.saved.policy;if(p.adaptiveOutreach?.enabled!==true)return null;
-  if(validate(p))throw Object.assign(Error('Review adaptive strategy'),{code:'failed-precondition'});
+  const p=context.saved.policy,adaptive=p.adaptiveOutreach?.enabled===true;if(!adaptive&&p.messageOrigin!=='prepared')return null;
+  if(adaptive&&validate(p))throw Object.assign(Error('Review adaptive strategy'),{code:'failed-precondition'});
   const root=db.doc('businessMailboxes/'+a.businessId),strategyId=strategy(p),segmentId=segment(context.customer);
   const identity=digest(context.customer.accountId||context.customer.email.toLowerCase());
   const assignmentRef=root.collection('outreachAssignments').doc(digest([strategyId,identity]));
   const existing=await assignmentRef.get();if(existing.exists)return existing.data();
   const [ops,events]=await Promise.all([root.collection('operations').orderBy('requestedAt','desc').limit(1001).get(),root.collection('outcomes').orderBy('recordedAt','desc').limit(2001).get()]);
-  const decision=evaluate({businessId:a.businessId,strategyId,segmentId,objective:p.adaptiveOutreach.objective,operations:ops.docs.map(d=>({id:d.id,...d.data()})),outcomes:events.docs.map(d=>d.data()),now:now(),truncated:ops.size>1000||events.size>2000});
-  const decisionId=digest(decision),value={businessId:a.businessId,customerId,identity,strategyId,segmentId,objective:p.adaptiveOutreach.objective,variant:choose(identity,strategyId,decision.decision,p.adaptiveOutreach.explorationEnabled===true),decisionId,assignedAt:now(),policyDigest:context.saved.digest};
+  const evidence={businessId:a.businessId,strategyId,segmentId,objective:p.adaptiveOutreach?.objective||'qualified_conversation',operations:ops.docs.map(d=>({id:d.id,...d.data()})),outcomes:events.docs.map(d=>d.data()),now:now(),truncated:ops.size>1000||events.size>2000};
+  let decision=evaluate(evidence);
+  const content=prepareContent?await prepareContent(a,context.saved,strategyId,decision):null;
+  if(content?.experimentId)decision=evaluate({...evidence,strategyId:content.experimentId});
+
+  const selected=adaptive?choose(identity,content?.experimentId||strategyId,decision.decision,p.adaptiveOutreach.explorationEnabled===true):'baseline';
+  const decisionId=digest(decision),value={businessId:a.businessId,customerId,identity,strategyId,segmentId,objective:p.adaptiveOutreach?.objective||'qualified_conversation',variant:selected,...(content?.ids?.[selected]?{variantRecordId:content.ids[selected],template:selected==='alternative'?(content.alternative||p.adaptiveOutreach.alternative):p.templates.introduction,experimentId:content.experimentId||strategyId}:{}),decisionId,assignedAt:now(),policyDigest:context.saved.digest};
   return db.runTransaction(async tx=>{
    const prior=await tx.get(assignmentRef),saved=(await tx.get(db.doc(`agentPermissions/${a.businessId}_lead_generator/authorizations/business_email`))).data();
    const dref=root.collection('outreachDecisions').doc(decisionId),oldDecision=await tx.get(dref);

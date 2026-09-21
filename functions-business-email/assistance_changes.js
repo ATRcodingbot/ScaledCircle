@@ -7,6 +7,7 @@ function review(old,next){
  const prior=old.policy,expanded=[];
  const changes=Object.keys(next).filter(k=>k!=='expiresAt'&&!same(prior[k],next[k]));
  const on=(k,label)=>{if(next[k]&&!prior[k])expanded.push(label);};
+ if(next.messagePreparation?.enabled&&!prior.messagePreparation?.enabled)expanded.push('Permit bounded preparation of new outbound approaches from reviewed Business context. Paid preparation stays gated until its separate purpose, data and cost authority is ready.');
  on('newInquiriesEnabled',`Begin monitoring future ${next.mailboxMode==='inbox'?'Inbox':'selected-scope'} inquiries.`);
  if(next.newInquiriesEnabled&&prior.newInquiriesEnabled&&next.mailboxMode!=='conversations'&&!(prior.mailboxMode==='inbox'&&next.mailboxMode==='labels')&&['mailboxMode','inquiryLabel','inquiryFilterDescription'].some(k=>!same(prior[k],next[k])))expanded.push(`Change future inquiry coverage to ${next.mailboxMode==='inbox'?'Inbox':next.mailboxMode==='labels'?'label '+next.inquiryLabel:'linked conversations'}.`);
  on('introductionsEnabled',`Enable eligible introductions, up to ${next.limits.initialPerDay} per day.`);

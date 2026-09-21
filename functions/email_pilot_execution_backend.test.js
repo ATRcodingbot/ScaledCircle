@@ -89,3 +89,34 @@ test('mature qualified evidence changes a future real dispatcher assignment, wit
  assert.equal((await policyRef().get()).data().policy.limits.initialPerDay,1);
  assert.equal((await db.collection('businessMailboxes/owner/outreachDecisions').get()).docs[0].data().decision,'PREFER_ALTERNATIVE');
 });
+
+
+test('bounded candidate joins normal dispatch with immutable lineage; concurrent visits cannot prepare twice',async()=>{
+ const adaptive=require('../functions-business-email/adaptive_outreach');
+ const saved=(await policyRef().get()).data();saved.version=3;saved.policy.audiences=['consenting enquiries'];
+ saved.policy.businessName='Fixture Business';saved.policy.services=['Deck repairs'];saved.policy.claims=[];saved.policy.destinations=[];
+ saved.policy.messagePreparation={enabled:true,contextReviewed:true};saved.policy.adaptiveOutreach={enabled:true,explorationEnabled:true,objective:'qualified_conversation',alternative:{subject:'A first question',body:'Which detail would help you first?'}};saved.digest=digest(saved);await policyRef().set(saved);
+ let preparations=0;const candidate={subject:'Plan the next step',body:'Tell us which deck repair questions you would like to discuss before planning a visit.'};
+ const runOutbound=async input=>{preparations++;await input.recheck();assert.equal(input.context.businessId,'owner');assert.equal(input.context.services[0],'Deck repairs');assert.equal(input.context.messages,undefined);return {state:'quality_passed',suggestion:candidate,quality:{factsSupported:true,distinctApproach:true},reservationId:'fixture-reservation'};};
+ svc=createService({db,key,provider,project:'demo-email-pilot-execution',now:()=>at,runOutbound,authority:async()=>actor});
+ const strategyId=adaptive.strategy(saved.policy),customer=(await db.doc('businessOperations/owner/customers/contact').get()).data(),segmentId=adaptive.segment(customer),batch=db.batch();
+ for(const variant of ['baseline','alternative'])for(let i=0;i<20;i++){const id=variant+i;batch.set(db.doc('businessMailboxes/owner/operations/'+id),{businessId:'owner',state:'sent',requestedAt:at-10*86400000,providerAcceptedAt:at-10*86400000,recipient:id+'@example.test',assistance:{kind:'introduction'},outreach:{strategyId,segmentId,variant,identity:id}});}await batch.commit();
+ await Promise.all([svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}}),svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}})]);
+ assert.equal(preparations,1);assert.equal(sends,1);
+ const state=(await db.doc('businessMailboxes/owner/outreachPreparation/'+strategyId).get()).data();assert.equal(state.state,'ready');assert.equal(state.attempts,1);
+ const row=(await db.doc('businessMailboxes/owner/outreachVariants/'+state.variantId).get()).data();assert.deepEqual(row.template,candidate);assert.equal(row.origin,'openai_business_context');assert.equal(row.authorizationSource,'owner_strategy');assert.equal(row.policyVersion,3);
+ const ops=await db.collection('businessMailboxes/owner/operations').get(),sent=ops.docs.map(d=>d.data()).find(o=>o.automatic);
+ assert.equal(sent.outreach.experimentId,state.experimentId);assert.ok(sent.outreach.variantRecordId);
+ const sentVariant=(await db.doc('businessMailboxes/owner/outreachVariants/'+sent.outreach.variantRecordId).get()).data();assert.equal(sent.subject,sentVariant.template.subject);assert.ok(sent.body.startsWith(sentVariant.template.body));
+ await svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}});assert.equal(preparations,1);assert.equal(sends,1);
+ assert.equal((await policyRef().get()).data().policy.expiresAt,saved.policy.expiresAt);
+});
+
+
+test('prepared initial copy can stay fixed with immutable attribution and no model calls',async()=>{
+ const saved=(await policyRef().get()).data();saved.policy.messageOrigin='prepared';saved.digest=digest(saved);await policyRef().set(saved);
+ await svc.syncReplies({auth:{uid:'owner'},data:{businessId:'owner'}});assert.equal(sends,1);
+ const sent=(await db.collection('businessMailboxes/owner/operations').get()).docs[0].data();assert.equal(sent.outreach.variant,'baseline');
+ const row=(await db.doc('businessMailboxes/owner/outreachVariants/'+sent.outreach.variantRecordId).get()).data();assert.equal(row.origin,'maintained_business_proposal');assert.equal(sent.subject,row.template.subject);
+ assert.equal((await db.collection('businessMailboxes/owner/outreachPreparation').get()).size,0);
+});
