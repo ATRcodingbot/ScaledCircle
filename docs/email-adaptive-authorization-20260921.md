@@ -41,3 +41,5 @@ ADA-CASA AL1 remains open, due December 19. Review submission/amendment delivery
 Shared Flutter delta: review/partial-authorization, adaptive alternatives/consent, evidence and outcome presentation. Installed iOS 29 / Android 27 do not contain this batch. No native rebuild here.
 
 Validation/deployment evidence is appended after production readback; fixture results are not live pilot certification.
+
+Production UI verification caught an additional relative-expiry clock race: separate Date.now calls could resolve the policy milliseconds later than its prepared grant and falsely report valid_policy_term_required. The owner preflight now captures one instant for grant, budget and policy expiry checks. A moving-clock regression covers this; no saved expiry or owner choice is rewritten. This is server-only and does not change the web build.

@@ -71,6 +71,8 @@ test('relative prepared policy persists no expiry, clock, consent or execution; 
  const result=await service.mutate(a,{...prepare(),policy:draft});assert.equal(result.status,'prepared');
  const view=await service.load(a);assert.equal(view.policy.policy.expiresAt,null);assert.equal(view.pilotTerm.startsAt,null);assert.equal(view.proposal.values.voice,'Clear');
  assert.ok(!view.blockers.includes('valid_policy_term_required'));assert.ok(!view.blockers.includes('model_data_review_required'));
+ let moving=clock;const movingService=require('../functions-business-email/lead_assistance_authority').createAssistanceAuthority({db,now:()=>++moving});
+ const movingView=await movingService.load(a);assert.ok(!movingView.blockers.includes('valid_policy_term_required'),'single preflight instant must bind both relative expiries');
  assert.equal((await db.doc('emailAssistanceOperatingGrants/shared').get()).data().startsAt,null);
  await assert.rejects(service.mutate(a,{...prepare('bad_term'),expectedVersion:1,policy:{...draft,expiresAt:clock+86400000}}),{code:'invalid-argument'});
 });

@@ -36,11 +36,12 @@ function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
   const shared=grantDoc?.data(),review=(await read(db.doc('emailAssistanceProviderReviews/openai_gmail_v1'))).data();
   const usage=grantDoc? (await read(grantDoc.ref.collection('usage').doc('shared'))).data():null;
   const reviewed=require('./provider_review').validReview(review);
-  const pending=shared?.status==='prepared',expiry=pending?now()+7*86400000:shared?.expiresAt;
+  const evaluatedAt=now();
+  const pending=shared?.status==='prepared',expiry=pending?evaluatedAt+7*86400000:shared?.expiresAt;
   const budget=shared?{...shared,expiresAt:expiry,availableMicros:Math.max(0,(shared.maximumCostMicros||0)-(usage?.actualCostMicros||0)-(usage?.outstandingCostMicros||0)),providerDataReviewComplete:reviewed}:null;
-  const effectiveGrant=grant?.status==='prepared'?{...grant,expiresAt:now()+7*86400000}:grant;
+  const effectiveGrant=grant?.status==='prepared'?{...grant,expiresAt:evaluatedAt+7*86400000}:grant;
   const blockers=p.policyPreflight({businessId:a.businessId,actorUid:a.actorUid,isOwner:a.beta.canManageConnection===true,
-   mailbox,grant:effectiveGrant,policy:require('./assistance_term').resolveTerm(selected,grant?.status==='active'?{...shared,status:'active',expiresAt:grant.expiresAt}:shared,now()),budget,now:now()});
+   mailbox,grant:effectiveGrant,policy:require('./assistance_term').resolveTerm(selected,grant?.status==='active'?{...shared,status:'active',expiresAt:grant.expiresAt}:shared,evaluatedAt),budget,now:evaluatedAt});
   if(selected?.modelAssistance&&!reviewed)blockers.push('model_data_review_required');
   if(selected?.modelAssistance&&!providerReady)blockers.push('model_provider_binding_required');
   if(!shared||!['prepared','active'].includes(shared.status))blockers.push('shared_pilot_enrollment_required');
