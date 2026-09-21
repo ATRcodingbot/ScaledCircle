@@ -45,3 +45,22 @@ Before a controlled send, record genuine permission for the exact test recipient
 ## Release disposition
 
 Shared Flutter delta: Messages origin/previews/validation/learning status on top of all earlier Email authorization, access, disconnect, availability and intake work. iOS 29 / Android 27 do not include these changes. Final full regression and new matched native pair remain separate release steps after this bounded batch and its production smoke check. No repeated Google/Stripe/map/Admin work. External review/CASA, natural Social publication, useful research and deferred cash-out remain separate gates.
+
+
+## Deployment and final candidate readback
+
+- Server application source: `b90df01fdb607d6364367a1a0e3b30d875012769`.
+- Final application candidate: `c399e5aeb287df763717e9c7a8d215208749c5b9`, clean and pushed. Only the final two Flutter files differ from the server source: show prepared alternatives in fixed mode and translate the specific model gate into readable copy. Server bytes are identical.
+- `businessEmailOperationsV1`: `businessemailoperationsv1-00021-tob`, ACTIVE, September 21 13:00:22.614715278 UTC.
+- `syncBusinessEmailRepliesV1`: `syncbusinessemailrepliesv1-00010-voj`, ACTIVE, September 21 13:01:44.865172775 UTC.
+- Final Hosting version `aea07743cdaefd40`, release `1789995854266000`, September 21 13:04:14.266 UTC.
+- No unexpected Function changes. Rules, environment variables, secret bindings and runtime service identities unchanged. Eight protected mailbox, policy, grant and shared usage records hash-identical before/after.
+- Production owner UI confirms Attractive Remodel's original active v5, fixed execution, no eligible recipient dispatch, pending model authority, message-origin selector and proposal action. No saved preferences or confirmations clicked during this batch.
+- Fresh full regression on c399e5a: backend 833 pass / 2 opt-in emulator skips / 0 fail; Flutter 815 pass / 3 maintained skips / 0 fail (APP_ENV=staging). Skips: backend Story publisher concurrency and Story preparation immutable replay; Flutter quote debounce, early-access referrer-name dialog, postcard file-picker cancellation. These skips are not passing coverage. Focused new Email emulator tests listed above have no skips.
+- Final focused analysis and production web build pass. The current full suite does not replace the explicit new Email emulator coverage.
+
+## Consolidated native delta from 79dda7b
+
+No native iOS/Android configuration or tracked Flutter dependency lock changes. Shared client changes span Email assistance/setup/availability/permission/conversation, Email connection/entry, Schedule integration, Business Email/Operations services, Growth agent/prospect/evidence/relationship presentation, Admin agentic Growth display and public model-data disclosure. Tests changed alongside these clients. These exact bytes are absent from iOS 29 / Android 27.
+
+The tested application source can be used as a gated candidate; it is not a claim of model activation or live pilot certification. Before another matched pair, dispose of the pending outbound-purpose enrollment/activation source work, then pin one exact source and check actual unused Apple/Play numbers. No number is reserved or claimed verified here. Avoid multiple intermediate rebuilds. The pending scope answer is not permission, and no new paid call is justified by fixture success.
