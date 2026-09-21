@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/services/business_email_service.dart';
 import 'package:flutter_app/screens/business/business_email_assistance_screen.dart';
@@ -9,7 +10,9 @@ class FixtureEmail extends BusinessEmailService {
   Map<String, dynamic>? saved;
   Map<String, dynamic>? savedAvailability;
   Map<String, dynamic>? submitted;
-  bool partialAvailable = false;
+  bool partialAvailable = false, failUpdate = false, failReadback = false;
+  List<String> expansions = [];
+  final actions = <String>[];
   @override
   Future<Map<String, dynamic>> call(
     String operation, [
@@ -17,6 +20,9 @@ class FixtureEmail extends BusinessEmailService {
   ]) async {
     calls.add(operation);
     if (operation == 'loadAssistance') {
+      if (failReadback && actions.contains('update')) {
+        throw StateError('fixture read failure');
+      }
       return {
         'authorizationReview': {
           'partialAvailable': partialAvailable,
@@ -47,6 +53,24 @@ class FixtureEmail extends BusinessEmailService {
     }
     if (operation == 'manageAssistance') {
       submitted = input;
+      actions.add(input['action'] as String);
+      if (input['action'] == 'reviewUpdate') {
+        return {'expansions': expansions, 'changeDigest': 'fixture-digest'};
+      }
+      if (input['action'] == 'update') {
+        if (failUpdate) {
+          throw FirebaseFunctionsException(
+            code: 'aborted',
+            message: 'Concurrent save',
+          );
+        }
+        saved = {
+          ...saved!,
+          'policy': input['policy'],
+          'version': (saved!['version'] as int) + 1,
+        };
+        return {'status': saved!['status'], 'version': saved!['version']};
+      }
       saved = {'status': 'prepared', 'version': 1, 'policy': input['policy']};
       return {'status': 'prepared'};
     }
@@ -80,6 +104,98 @@ class FixtureEmail extends BusinessEmailService {
 }
 
 void main() {
+  for (final scenario in ['ordinary', 'expanded', 'conflict', 'readback']) {
+    testWidgets('authorized save lifecycle: $scenario', (tester) async {
+      final service = FixtureEmail()
+        ..saved = {
+          'status': 'active',
+          'version': 4,
+          'approvedBy': 'fixture',
+          'modelAuthorizationPending': true,
+          'policy': {
+            'businessName': 'Fixture Business',
+            'voice': 'Clear',
+            'services': ['Decks'],
+            'destinations': ['https://example.test'],
+            'mailboxMode': 'inbox',
+            'modelAssistance': true,
+            'modelDataConsent': true,
+            'expiresAt': DateTime.now()
+                .add(const Duration(days: 1))
+                .millisecondsSinceEpoch,
+          },
+        };
+      service.expansions = scenario == 'expanded'
+          ? ['Begin monitoring future Inbox inquiries.']
+          : [];
+      service.failUpdate = scenario == 'conflict';
+      service.failReadback = scenario == 'readback';
+      await tester.pumpWidget(
+        MaterialApp(home: BusinessEmailAssistanceScreen(service: service)),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Fixture Business'),
+        'Reviewed Business name',
+      );
+      await tester.scrollUntilVisible(
+        find.text('E. Review and save'),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('E. Review and save'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Save changes'));
+      expect(find.text('Review & enable assistance'), findsNothing);
+      expect(find.text('View permissions'), findsOneWidget);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      if (scenario == 'expanded') {
+        expect(find.text('Apply these changes?'), findsOneWidget);
+        expect(
+          find.textContaining('Begin monitoring future Inbox'),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(service.saved!['version'], 4);
+        expect(service.actions.contains('update'), isFalse);
+        await tester.ensureVisible(find.text('Save changes'));
+        await tester.tap(find.text('Save changes'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Confirm changes'));
+        await tester.pumpAndSettle();
+        expect(service.submitted!['confirmExpansion'], isTrue);
+      }
+      if (scenario == 'conflict') {
+        expect(service.saved!['version'], 4);
+        expect(
+          find.textContaining('Your edits are retained').hitTestable(),
+          findsWidgets,
+        );
+        expect(find.textContaining('Unsaved edits'), findsOneWidget);
+      } else if (scenario == 'readback') {
+        expect(service.saved!['version'], 5);
+        expect(find.textContaining('Unsaved edits'), findsOneWidget);
+        expect(find.text('Check saved result'), findsOneWidget);
+        service.failReadback = false;
+        await tester.ensureVisible(find.text('Check saved result'));
+        await tester.tap(find.text('Check saved result'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Unsaved edits'), findsNothing);
+        expect(service.actions.where((a) => a == 'update').length, 1);
+      } else {
+        expect(service.saved!['version'], 5);
+        expect(service.saved!['status'], 'active');
+        expect(service.saved!['modelAuthorizationPending'], isTrue);
+        expect(find.textContaining('Unsaved edits'), findsNothing);
+        expect(find.textContaining('All changes saved'), findsWidgets);
+      }
+      expect(service.actions.contains('activate'), isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'partial authorization does not describe OFF inbox intake or introductions as operating',
     (tester) async {
@@ -148,12 +264,12 @@ void main() {
       await tester.tap(find.text('E. Review and save'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Review & authorize assistance'),
+        find.text('Review & enable assistance'),
         500,
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('Revoke assistance'), findsNothing);
-      await tester.tap(find.text('Review & authorize assistance'));
+      await tester.tap(find.text('Review & enable assistance'));
       await tester.pumpAndSettle();
       expect(find.text('Authorize available features'), findsOneWidget);
       expect(service.submitted, isNull);
@@ -213,7 +329,7 @@ void main() {
       await tester.tap(find.text('E. Review and save'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Save preferences'),
+        find.text('Save draft'),
         500,
         scrollable: find.byType(Scrollable).first,
       );
@@ -239,11 +355,11 @@ void main() {
       await tester.tap(find.text('E. Review and save'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Save preferences'),
+        find.text('Save draft'),
         500,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(find.text('Save preferences'));
+      await tester.tap(find.text('Save draft'));
       await tester.pumpAndSettle();
       final p = service.submitted!['policy'] as Map;
       expect(service.submitted!['action'], 'prepare');

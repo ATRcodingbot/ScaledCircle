@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/business_email_service.dart';
 import 'business_email_availability.dart';
 import 'business_email_permission.dart';
@@ -27,6 +29,138 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   String mailboxMode = 'conversations';
   String? feedback;
   int section = 0;
+  int loadSequence = 0;
+  int? editBaseVersion;
+  int? pendingSavedVersion;
+  String? submittedSnapshot;
+  String? loadedSnapshot;
+  String get unsavedSummary {
+    if (loadedSnapshot == null) return 'Current form';
+    final before = jsonDecode(loadedSnapshot!) as Map;
+    final current = jsonDecode(draftSnapshot()) as Map;
+    final groups = <String>{};
+    for (final section in ['fields', 'choices']) {
+      final a = before[section] as Map, b = current[section] as Map;
+      for (final k in b.keys) {
+        if (a[k] == b[k]) continue;
+        if ([
+          'modelAssistance',
+          'modelDataConsent',
+          'push',
+          'email',
+          'quietStart',
+          'quietEnd',
+        ].contains(k)) {
+          groups.add('C. Alerts and AI');
+        } else if ([
+          'businessName',
+          'services',
+          'voice',
+          'claims',
+          'destinations',
+          'mailingAddress',
+          'inquiryLabel',
+          'inquiryFilterDescription',
+          'inquiryRoutingConfirmed',
+          'newInquiriesEnabled',
+        ].contains(k)) {
+          groups.add('A. Business and mailbox');
+        } else if (k == 'bookingEnabled') {
+          groups.add('D. Schedule');
+        } else {
+          groups.add('B. Outreach and limits');
+        }
+      }
+    }
+    if (before['mode'] != current['mode']) groups.add('A. Mailbox coverage');
+    return groups.isEmpty
+        ? 'Current form or availability binding'
+        : groups.join('; ');
+  }
+
+  bool conflicted = false;
+  String get operatingState {
+    final p = data?['policy'];
+    if (p?['revokedAt'] != null || p?['status'] == 'revoked') {
+      return 'Stopped — authorization revoked';
+    }
+    if (p?['policy']?['expiresAt'] is num &&
+        p['policy']['expiresAt'] <= DateTime.now().millisecondsSinceEpoch) {
+      return 'Stopped — authorization expired';
+    }
+    if (p?['status'] == 'paused') {
+      return 'Paused — saving does not resume assistance';
+    }
+    return p?['status'] == 'active'
+        ? 'Partially active — only authorized, eligible capabilities may operate'
+        : 'Not active — preferences are not execution authority';
+  }
+
+  Future<void> checkSavedResult() async {
+    setState(() {
+      busy = true;
+      feedback = 'Checking saved settings…';
+    });
+    final ok = await load(
+      expectedVersion: pendingSavedVersion,
+      preserve: pendingSavedVersion == null,
+    );
+    if (mounted) {
+      setState(() {
+        busy = false;
+        if (ok && pendingSavedVersion != null) {
+          pendingSavedVersion = null;
+          feedback = dirty
+              ? 'Saved result confirmed; newer local edits remain unsaved.'
+              : 'All changes saved. Authorization and expiry preserved.';
+        } else if (ok) {
+          conflicted = true;
+          feedback =
+              'Latest saved status loaded. Your local edits are retained. Review the saved settings before choosing which version to keep.';
+        }
+      });
+    }
+  }
+
+  Future<void> useSavedSettings() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Use the latest saved preferences?'),
+        content: const Text(
+          'This discards the unsaved edits on this screen and loads the authoritative saved preferences. No server settings or authorization will change.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Keep my edits'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Load saved preferences'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      final loaded = await load();
+      if (mounted && loaded) {
+        setState(() {
+          conflicted = false;
+          feedback = 'Saved preferences loaded. No authorization changed.';
+        });
+      }
+    }
+  }
+
+  String draftSnapshot() => jsonEncode({
+    'fields': fields.map((k, v) => MapEntry(k, v.text)),
+    'choices': choices,
+    'mode': mailboxMode,
+  });
+  bool get previouslyAuthorized =>
+      data?['policy']?['approvedBy'] != null ||
+      ['active', 'paused', 'revoked'].contains(data?['policy']?['status']);
   TextEditingController field(String k) =>
       fields.putIfAbsent(k, () => TextEditingController());
   @override
@@ -47,11 +181,22 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     super.dispose();
   }
 
-  Future<void> load({bool preserve = false}) async {
+  Future<bool> load({bool preserve = false, int? expectedVersion}) async {
+    final ticket = ++loadSequence, entered = draftSnapshot();
     try {
       final result = await widget.service.call('loadAssistance');
-      if (!mounted) return;
-      if (!preserve) {
+      if (!mounted || ticket != loadSequence) return false;
+      if (expectedVersion != null &&
+          result['policy']?['version'] != expectedVersion) {
+        throw StateError('Saved version changed before readback');
+      }
+      final keepEdits =
+          preserve ||
+          entered != draftSnapshot() ||
+          (expectedVersion != null &&
+              submittedSnapshot != null &&
+              submittedSnapshot != draftSnapshot());
+      if (!keepEdits) {
         final p = Map<String, dynamic>.from(
           result['policy']?['policy'] as Map? ?? {},
         );
@@ -137,15 +282,144 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         field('alternativeBody').text =
             p['adaptiveOutreach']?['alternative']?['body']?.toString() ?? '';
         dirty = false;
+        editBaseVersion = result['policy']?['version'] as int? ?? 0;
+        loadedSnapshot = draftSnapshot();
       }
       setState(() => data = result);
+      return true;
     } catch (_) {
-      if (mounted) {
+      if (mounted && ticket == loadSequence) {
         setState(
           () => feedback =
               'Settings could not be loaded. Your edits are retained. Try again.',
         );
       }
+      return false;
+    }
+  }
+
+  String saveError(Object e) {
+    if (e is FormatException) {
+      return 'Check the numeric limits and sending times. Your edits have not been saved.';
+    }
+    if (e is FirebaseFunctionsException) {
+      if (e.code == 'aborted') {
+        conflicted = true;
+        return 'The saved settings changed elsewhere. Your edits are retained. Reload the saved version before retrying.';
+      }
+      final message = e.message ?? '';
+      if (message.startsWith('Changes cannot apply: ')) {
+        return message
+            .replaceFirst('Changes cannot apply: ', '')
+            .split(', ')
+            .map(blocker)
+            .join(' ');
+      }
+      if (message.contains('distinct alternative')) {
+        return 'Review the outreach objective and enter a distinct alternative subject and body. Your edits remain unsaved.';
+      }
+      if (message.contains('expanded permissions')) {
+        return 'Review and confirm the permission changes before saving.';
+      }
+    }
+    return 'Changes could not be saved. Your previous authorization is unchanged and your edits are retained. Review required fields or retry.';
+  }
+
+  Future<void> saveChanges() async {
+    if (busy) return;
+    if (!previouslyAuthorized) {
+      await act('prepare');
+      return;
+    }
+    if (!dirty) {
+      setState(() => feedback = 'All changes saved. No update was needed.');
+      return;
+    }
+    setState(() {
+      busy = true;
+      feedback = 'Checking changes…';
+    });
+    bool accepted = false;
+    try {
+      final proposed = policy(),
+          base = editBaseVersion ?? data?['policy']?['version'];
+      final review = await widget.service.call('manageAssistance', {
+        'action': 'reviewUpdate',
+        'policy': proposed,
+        'expectedVersion': base,
+        'requestId': 'review_${DateTime.now().microsecondsSinceEpoch}',
+      });
+      if (!mounted) return;
+      final expansions = review['expansions'] as List? ?? [];
+      if (expansions.isNotEmpty) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: const Text('Apply these changes?'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final change in expansions) Text('• $change'),
+                  const Text(
+                    'Existing expiry, recipient rules and spending limits remain unchanged. Pending AI stays pending; this does not enable model processing.',
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(c, true),
+                child: const Text('Confirm changes'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) {
+          setState(
+            () => feedback =
+                'Changes not applied. Your current authorization remains in effect; edits are retained.',
+          );
+          return;
+        }
+      }
+      submittedSnapshot = draftSnapshot();
+      setState(() => feedback = 'Saving changes…');
+      final result = await widget.service.call('manageAssistance', {
+        'action': 'update',
+        'policy': proposed,
+        'expectedVersion': base,
+        'requestId': 'update_${DateTime.now().microsecondsSinceEpoch}',
+        'confirm': true,
+        'confirmExpansion': expansions.isNotEmpty,
+        'changeDigest': review['changeDigest'],
+      });
+      accepted = true;
+      pendingSavedVersion = result['version'] as int?;
+      final confirmed = await load(expectedVersion: result['version'] as int?);
+      if (confirmed) pendingSavedVersion = null;
+      if (mounted) {
+        setState(
+          () => feedback = confirmed && !dirty
+              ? 'All changes saved. Existing authorization and expiry preserved.'
+              : 'The server accepted the save, but the saved version could not be reconciled. Your edits are retained; reload before another update.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => feedback = accepted
+              ? 'Save may have completed. Your edits are retained; reload the saved version before retrying.'
+              : saveError(e),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -234,8 +508,8 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
         },
     },
   };
-  Future<void> reviewAuthorization() async {
-    if (dirty || data?['policy'] == null) {
+  Future<void> reviewAuthorization({bool viewOnly = false}) async {
+    if (!viewOnly && (dirty || data?['policy'] == null)) {
       setState(
         () => feedback =
             'Save the current preferences before authorizing their exact version.',
@@ -243,9 +517,9 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
       return;
     }
     final reviewedVersion = data?['policy']?['version'];
-    await load();
+    if (!await load(preserve: viewOnly)) return;
     if (!mounted) return;
-    if (data?['policy']?['version'] != reviewedVersion) {
+    if (!viewOnly && data?['policy']?['version'] != reviewedVersion) {
       setState(
         () => feedback =
             'Preferences changed. Review the newly loaded saved settings before authorizing.',
@@ -258,7 +532,9 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     final decision = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Review & authorize assistance'),
+        title: Text(
+          viewOnly ? 'Saved permissions' : 'Review & authorize assistance',
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -305,12 +581,12 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
             onPressed: () => Navigator.pop(c),
             child: const Text('Back to saved settings'),
           ),
-          if (blocked.isEmpty)
+          if (!viewOnly && blocked.isEmpty)
             FilledButton(
               onPressed: () => Navigator.pop(c, 'full'),
               child: const Text('Confirm authorization'),
             ),
-          if (readiness['partialAvailable'] == true)
+          if (!viewOnly && readiness['partialAvailable'] == true)
             FilledButton(
               onPressed: () => Navigator.pop(c, 'partial'),
               child: const Text('Authorize available features'),
@@ -361,31 +637,40 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     }
     setState(() {
       busy = true;
-      feedback = null;
+      feedback = action == 'prepare' ? 'Saving draft…' : 'Applying $action…';
     });
     try {
+      submittedSnapshot = draftSnapshot();
       final r = await widget.service.call('manageAssistance', {
         'action': action,
         if (availableOnly) 'availableOnly': true,
-        'expectedVersion': data?['policy']?['version'] ?? 0,
+        'expectedVersion': editBaseVersion ?? data?['policy']?['version'] ?? 0,
         'requestId': 'email_settings_${DateTime.now().microsecondsSinceEpoch}',
         if (action == 'prepare') 'policy': policy(),
         'confirm': action != 'prepare',
       });
-      await load();
+      final keepDraft = dirty && action != 'prepare';
+      pendingSavedVersion = r['version'] as int?;
+      final reconciled = await load(
+        expectedVersion: pendingSavedVersion,
+        preserve: keepDraft,
+      );
+      if (reconciled) {
+        pendingSavedVersion = null;
+        if (keepDraft) editBaseVersion = r['version'] as int?;
+      }
       if (mounted) {
         setState(
-          () => feedback = r['status'] == 'prepared'
+          () => feedback = !reconciled
+              ? 'The server accepted the change, but readback is pending. Edits are retained; reload before retrying.'
+              : r['status'] == 'prepared'
               ? 'Preferences saved — assistance is not active.'
               : 'Saved state: ${r['status']}',
         );
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        setState(
-          () => feedback =
-              'Could not save this change. Your edits are retained. Check the required Business fields and try again.',
-        );
+        setState(() => feedback = saveError(e));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -395,6 +680,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
   Widget input(String k, String title, {int lines = 1}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
     child: TextField(
+      enabled: !busy,
       controller: field(k),
       minLines: lines,
       maxLines: lines + 3,
@@ -604,9 +890,19 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
       Text(
         'Saved state: ${data?['policy']?['status'] ?? 'Not saved'}${dirty ? ' · Unsaved edits' : ''}',
       ),
+      if (dirty) Text('Unsaved changes: $unsavedSummary'),
+      Semantics(
+        liveRegion: true,
+        child: Text(
+          feedback ??
+              (dirty
+                  ? 'Current edits have not taken effect. The saved authorization remains in effect.'
+                  : 'All changes saved.'),
+        ),
+      ),
       if (data?['policy'] == null || dirty)
         const Text(
-          'Save your reviewed preferences first. Activation readiness will then be checked against the saved version.',
+          'Save changes to apply your edits. Any expanded permissions will be summarized before confirmation.',
         ),
       if (data?['policy'] != null && !dirty)
         ...((data?['blockers'] as List? ?? []).map(
@@ -621,26 +917,60 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
       const Text(
         'Model-data review / applicable Google requirements remain required. Saving is not provider approval, recipient consent or device registration.',
       ),
+      if (pendingSavedVersion != null || conflicted)
+        Wrap(
+          children: [
+            TextButton(
+              onPressed: busy ? null : checkSavedResult,
+              child: const Text('Check saved result'),
+            ),
+            if (conflicted)
+              TextButton(
+                onPressed: busy ? null : useSavedSettings,
+                child: const Text('Use saved preferences'),
+              ),
+          ],
+        ),
       Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
           FilledButton(
-            onPressed: busy ? null : () => act('prepare'),
-            child: const Text('Save preferences'),
+            onPressed: busy ? null : saveChanges,
+            child: Text(
+              busy
+                  ? 'Saving…'
+                  : previouslyAuthorized
+                  ? 'Save changes'
+                  : 'Save draft',
+            ),
           ),
-          FilledButton(
-            onPressed: busy ? null : reviewAuthorization,
-            child: const Text('Review & authorize assistance'),
-          ),
+          if (!previouslyAuthorized)
+            FilledButton(
+              onPressed: busy ? null : reviewAuthorization,
+              child: const Text('Review & enable assistance'),
+            ),
+          if (previouslyAuthorized)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () => reviewAuthorization(viewOnly: true),
+              child: const Text('View permissions'),
+            ),
+          if (previouslyAuthorized &&
+              data?['authorizationReview']?['modelPending'] == true &&
+              data?['capabilities']?['modelSuggestions']?['ready'] == true &&
+              !dirty)
+            TextButton(
+              onPressed: busy ? null : reviewAuthorization,
+              child: const Text('Review AI authorization'),
+            ),
           if (data?['policy']?['status'] == 'active')
             TextButton(
               onPressed: busy ? null : () => act('pause'),
               child: const Text('Pause assistance'),
             ),
-          if (data?['policy']?['status'] == 'paused' &&
-              !dirty &&
-              (data?['blockers'] as List? ?? []).isEmpty)
+          if (data?['policy']?['status'] == 'paused' && !dirty)
             TextButton(
               onPressed: busy ? null : () => act('resume'),
               child: const Text('Resume assistance'),
@@ -706,9 +1036,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                 const Text(
                   'Selected preferences run only after owner authorization and applicable readiness checks. Saving preferences does not activate assistance.',
                 ),
-                Text(
-                  'Operating status: ${data?['policy']?['status'] == 'active' ? 'Partially active — only authorized, eligible capabilities may operate' : 'Not active — preferences are not execution authority'}',
-                ),
+                Text('Operating status: $operatingState'),
                 Text(
                   'New-inquiry monitoring: ${capabilityState('newInquiriesEnabled')}',
                 ),
@@ -1141,7 +1469,9 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                   panel(
                     4,
                     'E. Review and save',
-                    'Prepared preferences are separate from active assistance',
+                    previouslyAuthorized
+                        ? 'Save updates without restarting authorization'
+                        : 'Prepared preferences are separate from active assistance',
                     [
                       const Text(
                         'Review the bounded access term below. Saving preferences starts neither access nor inference. Authorizing non-model features starts only this Business’s existing access term; model processing stays separately gated.',

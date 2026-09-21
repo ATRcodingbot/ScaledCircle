@@ -77,14 +77,14 @@ function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
  }
  async function mutate(a,input){
   owner(a);
-  if(!input||Object.keys(input).some(k=>!['action','expectedVersion','requestId','policy','confirm','availableOnly'].includes(k))||
-    !['prepare','activate','pause','revoke','resume'].includes(input.action)||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0||
+  if(!input||Object.keys(input).some(k=>!['action','expectedVersion','requestId','policy','confirm','availableOnly','changeDigest','confirmExpansion'].includes(k))||
+    !['prepare','reviewUpdate','update','activate','pause','revoke','resume'].includes(input.action)||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0||
     typeof input.requestId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(input.requestId))fail('invalid-argument','Review the assistance action.');
   const action=input.action;
-  if(action!=='prepare'&&input.confirm!==true)fail('failed-precondition','Confirm the exact assistance action.');
-  if(!['prepare','activate'].includes(action)&&input.policy)fail('invalid-argument','Change preferences before confirming a new policy.');
-  const policy=input.policy!=null&&['prepare','activate'].includes(action)?cleanPolicy(input.policy):null;
-  if(action==='prepare'&&!policy)fail('invalid-argument','Save preferences first.');
+  if(!['prepare','reviewUpdate'].includes(action)&&input.confirm!==true)fail('failed-precondition','Confirm the exact assistance action.');
+  if(!['prepare','activate','reviewUpdate','update'].includes(action)&&input.policy)fail('invalid-argument','Change preferences before confirming a new policy.');
+  const policy=input.policy!=null&&['prepare','activate','reviewUpdate','update'].includes(action)?cleanPolicy(input.policy):null;
+  if(['prepare','update','reviewUpdate'].includes(action)&&!policy)fail('invalid-argument','Review complete preferences first.');
   return db.runTransaction(async tx=>{
    const desired=await state(a,tx,policy),old=desired.saved;
    const availableOnly=input.availableOnly===true||action==='resume'&&old?.modelAuthorizationPending===true;
@@ -94,6 +94,24 @@ function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
    const fingerprint=p.digest({actor:a.actorUid,business:a.businessId,input});
    if(prior.exists){if(prior.data().fingerprint!==fingerprint)fail('already-exists','This action identifier was already used.');return {...prior.data().result,reused:true};}
    if((old?.version||0)!==input.expectedVersion)fail('aborted','Email settings changed. Reload the saved assistance policy.');
+   if(['reviewUpdate','update'].includes(action)||action==='prepare'&&old?.approvedBy){
+    if(!old?.approvedBy)fail('failed-precondition','Use initial owner authorization first.');
+    const changes=require('./assistance_changes').review(old,policy);
+    if(action==='reviewUpdate')return {...changes,baseVersion:old.version,status:old.status};
+    if(action==='update'&&input.changeDigest!==changes.changeDigest)fail('aborted','The proposed changes differ from the reviewed version.');
+    if(changes.expansions.length&&input.confirmExpansion!==true)fail('failed-precondition','Review and confirm the expanded permissions before saving.');
+    const instant=now(),effective={...policy,expiresAt:Math.min(old.policy.expiresAt||0,require('./assistance_term').resolveTerm(policy,{status:'active',termMs:7*86400000,expiresAt:old.policy.expiresAt},instant).expiresAt||0)};
+    const operating=['active','paused'].includes(old.status)&&!old.revokedAt&&effective.expiresAt>instant;
+    if(operating){const ready=await state(a,tx,{...effective,modelAssistance:false,modelDataConsent:false});const unavailable=new Set(['healthy_owned_mailbox_required','mailbox_credentials_unavailable','shared_pilot_enrollment_required','audited_pilot_access_required']);const blocking=changes.expansions.length?ready.blockers:ready.blockers.filter(b=>!unavailable.has(b));if(blocking.length)fail('failed-precondition','Changes cannot apply: '+blocking.join(', '));}
+    const sameCoverage=old.policy.newInquiriesEnabled&&policy.newInquiriesEnabled&&old.policy.mailboxMode===policy.mailboxMode&&old.policy.inquiryLabel===policy.inquiryLabel&&old.policy.inquiryFilterDescription===policy.inquiryFilterDescription;
+    const boundary=policy.newInquiriesEnabled&&!sameCoverage?instant:old.intakeStartsAt;
+    const updated={...old,policy:effective,version:old.version+1,configurationRevision:(old.configurationRevision||old.version)+1,updatedAt:instant,updatedBy:a.actorUid,
+     modelAuthorizationPending:policy.modelAssistance===true&&(old.modelAuthorizationPending===true||old.policy.modelAssistance!==true),
+     intakeStartsAt:boundary||null,authorizedIntake:{mode:require('./mailbox_coverage').mode(policy),label:policy.inquiryLabel||null,generation:old.connectionGeneration||null,startsAt:boundary||null,enabled:policy.newInquiriesEnabled===true}};
+    updated.digest=p.digest({...updated,digest:null});
+    const result={saved:true,version:updated.version,status:updated.status,updated:true,modelPending:updated.modelAuthorizationPending,expiresAt:effective.expiresAt};
+    tx.set(ref(a),updated);tx.create(event,{businessId:a.businessId,actorUid:a.actorUid,action:'update',at:instant,fingerprint,baseVersion:old.version,changedFields:changes.changedFields,expansions:changes.expansions,expansionConfirmed:input.confirmExpansion===true,policySnapshot:updated,result});return result;
+   }
    if(action==='activate'){
     if(!old)fail('failed-precondition','Save preferences before authorizing.');
     const comparable=v=>({...v,expiresAt:v?.termMode==='shared_pilot'?null:v?.expiresAt});
@@ -115,7 +133,7 @@ function createAssistanceAuthority({db,now=Date.now,providerReady=false}){
     policy:policy||old.policy,updatedBy:a.actorUid,updatedAt:now(),sender:s.mailbox?.email||null,
     connectionGeneration:s.mailbox?.generation||null,grantId:s.grant?.id||null,
     ...(old?.approvedBy?{approvedBy:old.approvedBy,approvedAt:old.approvedAt}:{}),
-    ...(['activate','resume'].includes(action)?{approvedBy:a.actorUid,approvedAt:now()}:{}),
+    ...(action==='activate'?{approvedBy:a.actorUid,approvedAt:now()}:{}),
     ...(status==='revoked'?{revokedAt:now()}: {})};
    saved.digest=p.digest(saved);
    let activation=null;
