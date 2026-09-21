@@ -133,8 +133,8 @@ void main() {
               },
             },
             'adaptiveOutreach': {
-              'enabled': true,
-              'explorationEnabled': true,
+              'enabled': origin == 'owner',
+              'explorationEnabled': origin == 'owner',
               'objective': 'qualified_conversation',
               'alternative': {'subject': '', 'body': ''},
             },

@@ -1050,6 +1050,22 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
     ];
   }
 
+  String preparationLimit() {
+    final value = data?['messagePreparation']?['limitation']?.toString();
+    return const {
+          'outbound_purpose_extension_required':
+              'Pending approval to use the existing allowance for outbound messages',
+          'outbound_allowance_inactive_or_exhausted':
+              'Shared allowance has not started, has expired or is exhausted',
+          'outbound_provider_data_assessment_required':
+              'Pending the outbound Business-data processing assessment',
+          'outbound_shared_grant_required':
+              'The maintained shared allowance is not bound to this workspace',
+        }[value] ??
+        value ??
+        'Pending purpose, data and cost readiness';
+  }
+
   String blocker(String b) =>
       const {
         'business_content_boundaries_required':
@@ -1334,7 +1350,7 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                         'What changed: ${data?['messagePreparation']?['latest']?['state'] ?? 'No new model-written approach prepared'}. What happens next: retain usable approved content; prepare at most one new candidate per strategy when both approaches have sufficient mature evidence of poor qualified outcomes and preparation authority is ready.',
                       ),
                       Text(
-                        'Model preparation: ${data?['messagePreparation']?['modelReady'] == true ? 'Ready, subject to saved owner authority and remaining allowance' : data?['messagePreparation']?['limitation'] ?? 'Pending outbound purpose and data/cost readiness'}. Exact owner approval is still required for substantive replies.',
+                        'Model preparation: ${data?['messagePreparation']?['modelReady'] == true ? 'Ready, subject to saved owner authority and remaining allowance' : preparationLimit()}. Exact owner approval is still required for substantive replies.',
                       ),
                       input(
                         'introductionSubject',
@@ -1392,6 +1408,10 @@ class _AssistanceState extends State<BusinessEmailAssistanceScreen> {
                             if (v != null) setField('outreachObjective', v);
                           },
                         ),
+                      ],
+                      if (choices['adaptiveOutreach'] == true ||
+                          messageOrigin == 'prepared' ||
+                          field('alternativeBody').text.isNotEmpty) ...[
                         input(
                           'alternativeSubject',
                           'Alternative subject — owner review',
