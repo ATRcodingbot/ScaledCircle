@@ -783,8 +783,25 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                           'No verified outcomes yet.',
                     ),
                     Text(
-                      'Sent: ${learning['sent'] ?? 0} · Replied: ${learning['replied'] ?? 0}',
+                      'Provider accepted: ${learning['evidence']?['providerAcceptedMessages'] ?? learning['sent'] ?? 0} · Distinct prospects: ${learning['evidence']?['distinctProspects'] ?? 0}',
                     ),
+                    if (learning['evidence'] is Map) ...[
+                      const Text(
+                        'Current approach: fixed message. Adaptive execution is not authorized or active.',
+                      ),
+                      Text(
+                        'Qualified conversations: ${learning['evidence']['qualifiedConversations']} · Recorded appointments: ${learning['evidence']['appointments']} · Recorded estimates: ${learning['evidence']['estimates']}',
+                      ),
+                      Text(
+                        'Not interested: ${learning['evidence']['notInterested']} · Opt-outs: ${learning['evidence']['optOut']} · Bounces: ${learning['evidence']['bounces']}',
+                      ),
+                      Text(
+                        'Mature prospects (7-day window): ${learning['evidence']['matureProspects']} · No response yet: ${learning['evidence']['noResponseYet']} · Uncertain: ${learning['evidence']['uncertainConversations']}',
+                      ),
+                      const Text(
+                        'HOLD — no comparable authorized experiment is applied. Bookings and owner-reported wins are not verified revenue. Delivery is unknown without a separate receipt.',
+                      ),
+                    ],
                     Text((learning['funnel'] as List? ?? []).join(' → ')),
                     for (final p
                         in (learning['patterns'] as List? ?? [])

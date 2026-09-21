@@ -29,11 +29,11 @@ test('local outcome learning excludes cross tenant, unsigned product outcomes an
 test('shared workspace and consent authority remain byte-identical to maintained source',()=>{
   for(const name of ['business_workspace.js','legal_consent.js','subscription_entitlements.js'])assert.equal(fs.readFileSync(path.join(__dirname,name),'utf8'),fs.readFileSync(path.join(__dirname,'../functions-business-email/shared',name),'utf8'));
 });
-test('test traffic cannot train real Growth results, and negative samples change priority without claiming causation',()=>{
+test('test traffic cannot train real Growth results and early non-response holds discovery priority',()=>{
   const ops=Array.from({length:6},(_,i)=>({id:'o'+i,businessId:'owner',state:'sent',requestedAt:0,replyCount:0,features:{industry:'directories'}}));
   const result=learning.project({businessId:'owner',operations:[...ops,{...ops[0],id:'cert',certification:true,replyCount:1}],now:7*86400000});
   assert.equal(result.sent,6);assert.equal(result.replied,0);assert.equal(result.patterns[0].noReplyAfterFiveDays,6);
-  assert.ok(learning.priority({industry:'directories'},result.patterns)<0);assert.equal(learning.priority({industry:'different'},result.patterns),0);
+  assert.equal(learning.priority({industry:'directories'},result.patterns),0);assert.equal(learning.priority({industry:'different'},result.patterns),0);
 });
 test('reconciliation verifies the exact provider message, not only a searchable Message-ID',async()=>{
   const op={messageId:'id@mail.scaledcircle.com',from:'owner@example.test',recipient:'recipient@example.test',subject:'Subject',body:'Message'};

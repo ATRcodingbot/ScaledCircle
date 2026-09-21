@@ -78,7 +78,7 @@ function createService({db,authority,provider,providers,key,project,now=Date.now
       evidenceWindow:'Up to 100 recent outreach operations and their recorded outcomes.',operations:ops.sort((a,b)=>b.requestedAt-a.requestedAt),drafts:drafts.docs.map(d=>({id:d.id,...d.data()})),replies,outcomes:events.docs.map(d=>d.data()),restrictions:restrictions.docs.map(d=>({recipient:d.data().recipient,reason:d.data().reason})),
       landingLeads:leadDocs.docs.filter(d=>d.data().leadType==='landing_page_inquiry'&&!d.data().suppressionStatus).map(d=>({id:d.id,email:d.data().contactEmail,displayName:d.data().contactName,
         reason:'An inbound request from your landing page.',draft:'Thank you for your inquiry. We received your request and will review how we can help.',sourceUrl:null})),
-      learning:learning.project({businessId:a.businessId,operations:ops,outcomes:events.docs.map(d=>d.data()),prospects:rows,now:now(),funnel:a.beta.funnel||'services'}),
+      learning:learning.project({businessId:a.businessId,operations:ops,outcomes:events.docs.map(d=>d.data()),prospects:rows,replies,now:now(),funnel:a.beta.funnel||'services'}),
       certificationRecipient:a.beta.certificationRecipient||null,certificationOnly:a.beta.certificationOnly!==false};
   }
   async function connect(a,input) {
