@@ -27,6 +27,20 @@ function cost(response){
 }
 function citations(response){return new Set((response.output||[]).flatMap(o=>o.type==='web_search_call'?(o.action?.sources||[]).map(s=>publicUrl(s.url)):(o.content||[]).flatMap(c=>(c.annotations||[]).filter(a=>a.type==='url_citation').map(a=>publicUrl(a.url)))).filter(Boolean));}
 function text(response){return response.output_text||(response.output||[]).flatMap(o=>o.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('');}
+function parseCandidates(response){
+ if(response?.status==='incomplete')throw Error('research_response_incomplete');
+ const raw=text(response).trim(),fenced=/^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(raw);
+ let parsed;try{parsed=JSON.parse(fenced?fenced[1]:raw);}catch{throw Error('research_response_invalid');}
+ if(!parsed||!Array.isArray(parsed.candidates))throw Error('research_response_invalid');
+ return parsed;
+}
+function failureStatus(error,response,reservation){
+ const reason=error?.response?.data?.error||error?.message;
+ const known=new Set(['research_budget_exhausted','research_total_call_limit','research_daily_call_limit',
+  'research_not_authorized','research_pilot_not_enabled','research_attempt_already_dispatched',
+  'research_provider_outcome_requires_reconciliation','research_response_invalid','research_response_incomplete']);
+ return known.has(reason)?reason:response?'research_evidence_processing_failed':reservation?'search_or_evidence_unavailable':'research_transport_unavailable';
+}
 async function discover({businessUid,project,profile,scope,opportunityPreferences,state={},search,budget,executeRequest,readPublicSource,now=Date.now()}){
  const checks=[],sources=[],next={cursor:state.cursor||0,failures:{...(state.failures||{})}};
  if((!executeRequest&&(!search||!budget))||!readPublicSource)return {sources,checks:[{status:'research_budget_not_authorized'}],state:next};
@@ -44,7 +58,7 @@ async function discover({businessUid,project,profile,scope,opportunityPreference
    const actualCostMicros=cost(response);
    if(actualCostMicros===null){if(reservation)await budget.reconcile({reservation,status:'unknown_provider_outcome'});checks.push({status:'usage_unconfirmed'});continue;}
    if(reservation)await budget.reconcile({reservation,status:'settled',providerAccepted:true,cost:{actualCostMicros,basis:'conservative_usage_plus_search_block',providerUsage:response.usage}});
-   const cited=citations(response),parsed=JSON.parse(text(response));
+   const cited=citations(response),parsed=parseCandidates(response);
    let accepted=0;
    for(const item of (Array.isArray(parsed.candidates)?parsed.candidates:[]).slice(0,4)){
     const url=publicUrl(item.url);if(!url||!cited.has(url)||/\.(gov|mil)(\/|$)/i.test(url))continue;
@@ -62,7 +76,8 @@ async function discover({businessUid,project,profile,scope,opportunityPreference
    checks.push({status:'search_completed',attemptId,accepted,accountedCostMicros:actualCostMicros,costBasis:'conservative_usage_plus_search_block'});
   }catch(error){
    if(reservation&&!response)await budget.reconcile({reservation,status:'unknown_provider_outcome'});
-   checks.push({status:reservation?'search_or_evidence_unavailable':'research_budget_unavailable'});
+   checks.push({status:failureStatus(error,response,reservation),attemptId,
+    ...(response?{accountedCostMicros:cost(response),costBasis:'conservative_usage_plus_search_block'}:{})});
   }finally{next.cursor++;}
  }
  // Backoff storage is bounded and records only public-domain hashes.
@@ -71,4 +86,4 @@ async function discover({businessUid,project,profile,scope,opportunityPreference
 }
 function createSearch(client){return async(input)=>client.responses.create(input,{maxRetries:0,timeout:60000});}
 async function accessMetadata(client){const models=await client.models.list({maxRetries:0,timeout:10000});return {model:MODEL,listed:(models.data||[]).some(m=>m.id===MODEL),toolExecutionVerified:false};}
-module.exports={MODEL,RESERVATION_MICROS,publicUrl,plan,request,cost,discover,createSearch,accessMetadata};
+module.exports={MODEL,RESERVATION_MICROS,publicUrl,plan,request,cost,discover,createSearch,accessMetadata,parseCandidates,failureStatus};
