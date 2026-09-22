@@ -3,8 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_app/models/social_plan_presentation.dart';
 import 'package:flutter_app/widgets/customer_social_review_queue.dart';
 import 'package:flutter_app/widgets/social_plan_overview.dart';
+import 'package:flutter_app/widgets/social_runtime_status_card.dart';
 
 void main() {
+  testWidgets('status card retains progress beside exceptions and opens the exception action', (t) async {
+    var opened = false;
+    await t.pumpWidget(MaterialApp(home: Scaffold(body: SocialRuntimeStatusCard(
+      status: {'available': true, 'summary': {'title': 'Needs Attention', 'counters': {'scheduled': 10, 'published': 6, 'needsAttention': 2}}},
+      onRefresh: () {}, onNeedsAttention: () => opened = true,
+    ))));
+    expect(find.text('10 scheduled · 6 published · 2 need attention'), findsOneWidget);
+    await t.tap(find.text('View Needs Attention'));
+    expect(opened, isTrue);
+    expect(socialQualityLabel('keep'), 'No content changes recommended');
+  });
   final runtime = <String, dynamic>{
     'available': true,
     'summary': {

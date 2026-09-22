@@ -33,3 +33,11 @@ test('recent adjustment holds while its results mature; fixed does not silently 
 test('quality/fatigue and weaker measured business response prevent increase',()=>{
  for(const rows of [observations().map(r=>({...r,qualityReady:false})),observations().map(r=>({...r,fatigueObserved:true})),observations().map((r,i)=>({...r,metrics:r.metrics.map(m=>m.name==='link_clicks'&&i<8?{...m,value:0}:m)}))])assert.equal(c.evaluate({uid:'owner',provider:'facebook',policy:policy(),observations:rows,now}).decision,'HOLD');
 });
+test('stale comparable results and mixed provider accounts hold rather than adjusting cadence',()=>{
+ const old=observations().map(r=>({...r,observedAt:new Date(Date.parse(r.observedAt)-86400000).toISOString()}));
+ const stale=c.evaluate({uid:'owner',provider:'facebook',policy:policy(),observations:old,now});
+ assert.equal(stale.decision,'HOLD');assert.match(stale.reason,/seven days old/);
+ const mixed=observations().map((r,i)=>({...r,providerAccountId:i<8?'new-account':'old-account'}));
+ const result=c.evaluate({uid:'owner',provider:'facebook',policy:policy(),observations:mixed,now});
+ assert.equal(result.decision,'HOLD');assert.match(result.reason,/different provider accounts/);
+});

@@ -1128,6 +1128,7 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
               if (_socialSection == 'Content') ...[
                 SocialRuntimeStatusCard(
                   onReviewPosts: () => _reviewSavedPlans(workspace),
+                  onNeedsAttention: () => _reviewSavedPlans(workspace, initialGroup: 'Needs Attention'),
                   status: _approvalReadback.pending
                       ? {
                           'available': true,
@@ -1638,11 +1639,13 @@ class _SocialOperationsScreenState extends State<SocialOperationsScreen> {
     SocialOperationsWorkspace workspace, {
     bool strategyOnly = false,
     bool scheduledOnly = false,
+    String? initialGroup,
   }) {
     if (!strategyOnly && !scheduledOnly) {
       return Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => CustomerSocialReviewQueue(
+            initialGroup: initialGroup,
             workspace: workspace,
             service: _service,
             onSchedule: _schedulePost,

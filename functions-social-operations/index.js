@@ -286,17 +286,15 @@ exports.getSocialOperationsWorkspace = onCall(
     const customerPlans=await require('./social_customer_post_projection').load({db,uid:business.uid,
       plans:plans.docs.map(doc=>({id:doc.id,...doc.data()})),store:customerSchedulingStore()});
     const automaticPublishing=(await db.doc('socialManagedPolicies/'+business.uid).get()).data()||null;
-    if(automaticPublishing?.cadence){
-      for(const state of Object.values(automaticPublishing.cadence.platforms||{})){
-        state.lastEvaluatedLabel=require('./social_lifecycle_presentation').timeLabel(state.lastEvaluatedAt,automaticPublishing.cadence.timeZone);
-        state.nextEvaluationLabel=require('./social_lifecycle_presentation').timeLabel(state.nextEvaluationAt,automaticPublishing.cadence.timeZone);
-      }
-    }
     const [workspaceSettings,schedulingSettings]=await Promise.all([
       db.doc('businessWorkspaces/'+business.uid).get(),
       db.doc('businessOperations/'+business.uid+'/settings/scheduling').get()]);
     const workspaceTimeZone=require('./workspace_presentation').zone(profileSnapshot.data()||{},
       workspaceSettings.data()||{},schedulingSettings.data()||{})||automaticPublishing?.cadence?.timeZone||customerPlans.find(p=>p.timeZone)?.timeZone||null;
+    for(const state of Object.values(automaticPublishing?.cadence?.platforms||{})){
+      state.lastEvaluatedLabel=require('./social_lifecycle_presentation').timeLabel(state.lastEvaluatedAt,workspaceTimeZone);
+      state.nextEvaluationLabel=require('./social_lifecycle_presentation').timeLabel(state.nextEvaluationAt,workspaceTimeZone);
+    }
     const cadenceObservations=await db.collection('socialMetaMeasurementSnapshots').where('businessUid','==',business.uid).limit(100).get();
     const cadenceJobs=await db.collection('socialMetaMeasurementJobs').where('businessUid','==',business.uid).limit(100).get();
     const cadenceJobMap=new Map(cadenceJobs.docs.map(doc=>[doc.id,doc.data()]));

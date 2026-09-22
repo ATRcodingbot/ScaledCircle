@@ -92,10 +92,12 @@ class CustomerSocialReviewQueue extends StatefulWidget {
     required this.workspace,
     required this.service,
     required this.onSchedule,
+    this.initialGroup,
   });
   final SocialOperationsWorkspace workspace;
   final SocialOperationsService service;
   final Future<void> Function(Map<String, dynamic>) onSchedule;
+  final String? initialGroup;
   @override
   State<CustomerSocialReviewQueue> createState() =>
       _CustomerSocialReviewQueueState();
@@ -111,12 +113,12 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
   );
   final _scroll = ScrollController();
   final Set<String> _attempted = {};
-  String? _group;
+  late String? _group = widget.initialGroup;
   bool _preparing = false;
   @override
   void initState() {
     super.initState();
-    if (!_automatic) {
+    if (!_automatic && widget.initialGroup == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
     }
     if (_automatic) {

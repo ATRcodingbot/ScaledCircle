@@ -8,11 +8,13 @@ class SocialRuntimeStatusCard extends StatelessWidget {
     required this.onRefresh,
     this.compact = false,
     this.onReviewPosts,
+    this.onNeedsAttention,
   });
   final Map<String, dynamic> status;
   final VoidCallback onRefresh;
   final bool compact;
   final VoidCallback? onReviewPosts;
+  final VoidCallback? onNeedsAttention;
 
   String _time(BuildContext context, dynamic raw, dynamic label) => raw == null
       ? 'Not scheduled'
@@ -65,6 +67,12 @@ class SocialRuntimeStatusCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               Text(summary['description']?.toString() ?? ''),
+              if (summary['counters'] is Map)
+                Text('${summary['counters']['scheduled'] ?? 0} scheduled · '
+                    '${summary['counters']['published'] ?? 0} published · '
+                    '${summary['counters']['needsAttention'] ?? 0} need attention'),
+              if ((summary['counters']?['needsAttention'] ?? 0) > 0 && onNeedsAttention != null)
+                TextButton(onPressed: onNeedsAttention, child: const Text('View Needs Attention')),
             ],
             if (status['available'] != true)
               const Padding(
