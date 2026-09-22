@@ -8,6 +8,7 @@ function signal(kind,key,before,after){
  // An authoritative autonomy decision removes the human-review signal.
  if(['social','email_draft'].includes(kind)&&after.humanReviewRequired===false)return null;
  let uid,type,link,message;
+ if(kind==='social_exception'&&id(after.businessUid)&&id(after.itemId)&&['facebook','instagram'].includes(after.provider)&&after.message){uid=after.businessUid;type='social_approval_required';link={destination:'social_draft',itemId:after.itemId,provider:after.provider};message=after.message;}
  if(kind==='reply'&&id(after.businessId)&&id(after.operationId)&&after.providerMessageId){uid=after.businessId;type='business_email_reply';link={destination:'business_email',operationId:after.operationId};message='A customer replied to your Business email. Open the conversation to review it.';}
  if(kind==='social'&&after.readyToPublish===true&&before?.readyToPublish!==true&&id(after.businessUid)&&id(after.contentItemId)&&['facebook','instagram'].includes(after.provider)){uid=after.businessUid;type='social_drafts_ready';link={destination:'social_draft',itemId:after.contentItemId,provider:after.provider};message='A Social draft is ready for your review. Nothing has been approved or scheduled.';}
  if(kind==='published'&&['needs_attention','authority_review_required','reconciliation_required'].includes(after.status)&&before?.status!==after.status&&after.customerApproval===true&&id(after.businessUid)){uid=after.businessUid;type='social_publishing_failed';link={destination:'social_review'};message='An approved Social post needs attention. Review its current publishing status.';}
@@ -24,21 +25,27 @@ function signal(kind,key,before,after){
  if(!type||!uid)return null;
  const sourceKey=kind==='social'?[after.businessUid,after.contentItemId,after.provider,after.contentVersion||after.versionId||after.version||after.contentHash||'ready'].join(':'):key;
  const identity='event_'+hash([kind,sourceKey,kind==='email_draft'?after.version:kind==='payout'||kind==='billing'||kind==='published'?after.state||after.status:'created'].join(':'));
- return {identity,userId:uid,businessId:['reply','social','published','email_draft','billing'].includes(kind)?uid:null,type,title:type==='social_publishing_failed'?'Social publishing needs attention':{reply:'Customer reply received',social:'Social review ready',published:'Social post published',email_draft:'Email campaign review ready',payout:'Cash-out update',billing:'Membership needs attention'}[kind],message,deepLink:link,source:{kind,key},read:false};
+ return {identity,userId:uid,businessId:['reply','social','social_exception','published','email_draft','billing'].includes(kind)?uid:null,type,title:type==='social_publishing_failed'?'Social publishing needs attention':{social_exception:'Social post needs attention',reply:'Customer reply received',social:'Social review ready',published:'Social post published',email_draft:'Email campaign review ready',payout:'Cash-out update',billing:'Membership needs attention'}[kind],message,deepLink:link,source:{kind,key},read:false};
 }
-async function record({db,FieldValue,kind,key,before,after,now=Date.now}){const data=signal(kind,key,before,after);if(!data)return {created:false};
+async function record({db,FieldValue,kind,key,before,after,now=Date.now}){
+ if(kind==='social'&&id(after?.businessUid)&&id(after?.contentItemId)){
+  const item=(await db.doc('socialContentItems/'+after.contentItemId).get()).data();
+  if(await require('./social_state').managed(db,after.businessUid,item,after.provider,now()))return {created:false,reason:'strategy_authorized_routine'};
+ }
+ const data=signal(kind,key,before,after);if(!data)return {created:false};
  const grouped=['social','email_draft','reply'].includes(kind);
  const at=now(),windowMs=300000,window=Math.floor(at/windowMs);
- const notificationId=grouped?'summary_'+hash([data.userId,data.businessId,kind,kind==='reply'?after.operationId:'review',window].join(':')):data.identity;
+ const notificationId=grouped?'summary_'+hash([data.userId,data.businessId,kind,kind==='reply'?after.operationId:kind==='social'?after.provider:'review',window].join(':')):data.identity;
  const ref=db.doc('notifications/'+notificationId),receipt=db.doc('mobileNotificationSignalReceipts/'+data.identity);
  return db.runTransaction(async tx=>{
   const [seen,old,legacy]=await Promise.all([tx.get(receipt),tx.get(ref),grouped?tx.get(db.doc('notifications/'+data.identity)):Promise.resolve(null)]);
   if(seen.exists||legacy?.exists||(!grouped&&old.exists))return {created:false};
-  const count=(old.data()?.aggregateCount||0)+1;
+  const reviewItems=kind==='social'?{...(old.data()?.reviewItems||{}),[hash(after.contentItemId+':'+after.provider)]:{itemId:after.contentItemId,provider:after.provider,version:Number(after.contentVersion||after.version||String(after.versionId||'').match(/v(\d+)$/)?.[1])||null}}:null;
+  const count=reviewItems?Object.keys(reviewItems).length:(old.data()?.aggregateCount||0)+1;
   const title=kind==='social'?`${count} Social post${count===1?'':'s'} ready for your review`:kind==='reply'?`${count} customer repl${count===1?'y':'ies'} received`:kind==='email_draft'?`${count} email campaign${count===1?'':'s'} ready for review`:data.title;
   const version=Number(after.contentVersion||after.version||String(after.versionId||'').match(/v(\d+)$/)?.[1])||null;
   const value={...data,identity:notificationId,title,aggregateCount:count,
-   ...(kind==='social'?{reviewItems:{...(old.data()?.reviewItems||{}),[hash(after.contentItemId+':'+after.provider)]:{itemId:after.contentItemId,provider:after.provider,version}}}:{}),
+   ...(kind==='social'?{reviewItems}:{}),
    ...(grouped?{aggregateWindowEndMs:(window+1)*windowMs,aggregationKind:kind}:{}),
    ...(kind==='social'?{deepLink:{destination:'social_review'},message:'Review the prepared posts. Nothing has been approved or scheduled.'}:{}),
    ...(kind==='email_draft'?{deepLink:{destination:'business_email_campaign'},message:'Review your prepared campaigns before sending.'}:{}),
@@ -55,4 +62,17 @@ async function recordEmailReply({db,FieldValue,businessId,replyId,reply,now=Date
  if(!['sent','received'].includes(op?.state)||op.certification===true||op.businessId!==businessId)return {created:false};
  return record({db,FieldValue,kind:'reply',key:`businessMailboxes/${businessId}/replies/${replyId}`,after:reply,now});
 }
-module.exports={signal,record,recordEmailReply};
+async function recordManagedException({db,FieldValue,businessId,after,now=Date.now}){
+ if(after?.status!=='needs_attention'||!id(businessId)||!id(after.itemId)||!['facebook','instagram'].includes(after.provider))return {created:false};
+ const item=(await db.doc('socialContentItems/'+after.itemId).get()).data();
+ if(item?.businessUid!==businessId)return {created:false};
+ const reasons=(after.reasons||[]).filter(r=>['creative_recovery_exhausted','creative','generation','permission','plan','scheduler','quality'].includes(r.code));
+ if(!reasons.length)return {created:false};
+ const version=item.platformVersions?.[after.provider]??item.currentVersion;
+ const v=(await db.doc('socialContentVersions/'+after.itemId+'_v'+version).get()).data();
+ const variant=v?.variants?.find(x=>x.provider===after.provider);
+ const key=hash(JSON.stringify([businessId,after.itemId,after.provider,reasons.map(r=>[r.code,r.message]),variant?.copy||'',variant?.mediaAssetId||'']));
+ return record({db,FieldValue,kind:'social_exception',key,now,after:{businessUid:businessId,itemId:after.itemId,provider:after.provider,
+  message:reasons.map(r=>r.message).filter(Boolean).join(' ').slice(0,600)||'Open this post to resolve its current preparation exception.'}});
+}
+module.exports={signal,record,recordEmailReply,recordManagedException};

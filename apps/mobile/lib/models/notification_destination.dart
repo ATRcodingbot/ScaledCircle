@@ -103,7 +103,7 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
   if (destination == 'social_review') {
     return const NotificationDestination(
       'route',
-      'Review Content',
+      'View Social',
       route: '/business/social-operations?review=posts',
     );
   }
@@ -114,7 +114,7 @@ NotificationDestination? notificationDestination(Map<String, dynamic> data) {
     }
     return NotificationDestination(
       'route',
-      'Review Social Draft',
+      'View Social Post',
       route: Uri(
         path: AppRoutes.businessSocialOperations,
         queryParameters: {

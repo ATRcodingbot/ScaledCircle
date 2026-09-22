@@ -16,6 +16,35 @@ async function fixture(){const uid='push_user_'+(++serial),other='push_other_'+s
  const notice=async(type='job_assignment',extra={})=>{const n=db.doc('notifications/'+uid+'_'+Math.random().toString(16).slice(2));await n.set({userId:uid,type,createdAt:Timestamp.fromMillis(clock.value),read:false,...extra});await svc.enqueue(n.id);return n;};
  return {uid,other,secret,token,clock,sent,identity,svc,input,notice};}
 const t=(name,fn)=>test(name,{skip:!enabled},fn);
+t('Social original summary resolves current exact post, preserves history and denies foreign targets',async()=>{
+ const f=await fixture(),itemId='social_'+f.uid;
+ await db.doc('socialContentItems/'+itemId).set({businessUid:f.uid,planId:'plan',currentVersion:3,platformApprovals:{instagram:{version:3,jobId:'job_'+f.uid}}});
+ await db.doc('socialGrowthJobs/job_'+f.uid).set({businessUid:f.uid,status:'scheduled'});
+ const n=await f.notice('social_drafts_ready',{businessId:f.uid,title:'Original review',deepLink:{destination:'social_review'},reviewItems:{one:{itemId,provider:'instagram',version:2}}});
+ const original=(await n.get()).data(),r=await f.svc.open(f.uid,n.id);
+ assert.equal(r.currentState,'scheduled');assert.equal(r.deepLink.itemId,itemId);assert.equal(r.deepLink.provider,'instagram');
+ assert.deepEqual((await n.get()).data(),original);assert.equal((await f.svc.open(f.other,n.id)).available,false);
+ await db.doc('socialContentItems/'+itemId).update({businessUid:f.other});assert.equal((await f.svc.open(f.uid,n.id)).available,false);
+ await db.doc('socialContentItems/'+itemId).delete();assert.equal((await f.svc.open(f.uid,n.id)).currentState,'target_unavailable');
+ const legacy=await f.notice('social_drafts_ready',{businessId:f.uid,deepLink:{destination:'social_draft',itemId:'gone',provider:'facebook'}});
+ assert.equal((await f.svc.open(f.uid,legacy.id)).deepLink.destination,'social_review');
+});
+t('automatic preparation is silent; manual reviews remain; unchanged exceptions dedupe across visits',async()=>{
+ const f=await fixture(),signals=require('../functions-mobile-notifications/signals'),itemId='auto_'+f.uid;
+ await db.doc('socialContentItems/'+itemId).set({businessUid:f.uid,planId:'plan',currentVersion:1});
+ await db.doc('socialManagedPolicies/'+f.uid).set({businessUid:f.uid,planId:'plan',approvedByUid:f.uid,status:'active',endsAt:f.clock.value+86400000,providers:['instagram']});
+ const args={db,FieldValue,kind:'social',key:'quality',now:()=>f.clock.value,after:{businessUid:f.uid,contentItemId:itemId,provider:'instagram',readyToPublish:true,version:1}};
+ assert.equal((await signals.record(args)).reason,'strategy_authorized_routine');
+ const exception={db,FieldValue,businessId:f.uid,now:()=>f.clock.value,after:{itemId,provider:'instagram',status:'needs_attention',reasons:[{code:'creative_recovery_exhausted',message:'Automated reviewer confidence below threshold; choose another approved asset.'}]}};
+ await Promise.all([signals.recordManagedException(exception),signals.recordManagedException(exception)]);
+ f.clock.value+=3600000;await signals.recordManagedException(exception);
+ let records=await db.collection('notifications').where('userId','==',f.uid).get();assert.equal(records.size,1);
+ await db.doc('socialContentItems/'+itemId+'_second').set({businessUid:f.uid,planId:'plan',currentVersion:1});
+ await signals.recordManagedException({...exception,after:{...exception.after,itemId:itemId+'_second'}});
+ records=await db.collection('notifications').where('userId','==',f.uid).get();assert.equal(records.size,2);
+ await db.doc('socialManagedPolicies/'+f.uid).update({status:'paused'});assert.equal((await signals.record(args)).created,true);
+ assert.equal(f.sent.length,0);
+});
 t('registration is bounded to authenticated user, environment and unique installation',async()=>{const f=await fixture();await assert.rejects(f.svc.register(f.uid,{...f.input,environment:'production'}),{code:'invalid-argument'});await assert.rejects(f.svc.register(f.other,{...f.input,installationSecret:hash('other')}),{code:'failed-precondition'});await f.svc.register(f.other,f.input);assert.equal((await db.doc('mobilePushDevices/'+hash(f.secret)).get()).data().uid,f.other);await f.svc.unregister({installationSecret:f.secret});assert.equal((await db.doc('mobilePushDevices/'+hash(f.secret)).get()).exists,false);});
 t('same notification and Function retries produce one send per device',async()=>{const f=await fixture(),n=await f.notice();await Promise.all([f.svc.enqueue(n.id),f.svc.enqueue(n.id)]);await f.svc.sendGroup([await n.get()]);await f.svc.sendGroup([await n.get()]);assert.equal(f.sent.length,1);assert.equal((await n.get()).data().push.status,'provider_accepted');});
 t('concurrent workers and overlapping digest sets cannot repeat notification delivery',async()=>{const f=await fixture(),a=await f.notice('agent_daily_brief'),b=await f.notice('agent_weekly_report');const docs=[await a.get(),await b.get()];await Promise.all([f.svc.sendGroup(docs),f.svc.sendGroup(docs)]);assert.equal(f.sent.length,1);await f.svc.sendGroup([await b.get()]);assert.equal(f.sent.length,1);assert.equal(f.sent[0].notification.body.startsWith('2 updates'),true);});

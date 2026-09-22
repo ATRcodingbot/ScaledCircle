@@ -63,6 +63,11 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
    const op=(await db.doc(`businessMailboxes/${business}/operations/${opId}`).get()).data();if(!['sent','received'].includes(op?.state)||op.businessId!==business)return {available:false};
   }
   if(n.type==='landing_page_inquiry'&&p.id(n.entityId))data.deepLink={destination:'business_inquiry',leadId:n.entityId,businessId:business};
+  if(n.type?.startsWith('social_')){
+   const social=await require('./social_state').resolve({db,n,business,now:now()});
+   if(social.available===false)return {available:false};
+   Object.assign(data,social);
+  }
   return {available:true,notificationId,...data};
  }
  async function check(uid,input){await actor(uid);const deviceId=installation(input),device=(await ref('mobilePushDevices',deviceId).get()).data();if(device?.uid!==uid||device.environment!==environment||!device.enabled)fail('failed-precondition','Enable notifications on this device first.');const notificationId='push_check_'+p.hash([uid,deviceId,Math.floor(now()/300000)].join(':')),n=ref('notifications',notificationId);await db.runTransaction(async tx=>{if((await tx.get(n)).exists)return;tx.create(n,{userId:uid,type:'mobile_push_check',title:'Notification check',message:'This is your requested device notification check. No work or payment was created.',read:false,createdAt:stamp(),deepLink:{destination:'notification_check'},source:{kind:'self_requested_device_check',actorUid:uid},targetDeviceId:deviceId});});return {notificationId};}
@@ -79,6 +84,7 @@ function createService({db,auth,messaging,FieldValue,Timestamp,project,environme
    if(!p.id(entry.itemId)||!['facebook','instagram'].includes(entry.provider))continue;
    const item=(await ref('socialContentItems',entry.itemId).get()).data();
    if(item?.businessUid!==business||item.humanReviewRequired===false)continue;
+   if(await require('./social_state').managed(db,business,item,entry.provider,now()))continue;
    const version=item.platformVersions?.[entry.provider]??item.currentVersion;
    if(entry.version&&entry.version!==version)continue;
    const approval=item.platformApprovals?.[entry.provider];

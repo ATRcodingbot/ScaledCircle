@@ -26,6 +26,110 @@ class _Snapshot implements QuerySnapshot {
 }
 
 void main() {
+  for (final width in [390.0, 1280.0]) {
+    testWidgets(
+      'Social card and CTA open current authorized state with Back at $width',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        var receipts = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            onGenerateRoute: (settings) {
+              expect(
+                settings.name,
+                '/business/social-operations?item=post&provider=instagram',
+              );
+              return MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  appBar: AppBar(title: const Text('Current post')),
+                  body: const Text('Scheduled'),
+                ),
+              );
+            },
+            home: NotificationsScreen(
+              currentUserId: 'owner',
+              resolveNotification: (_) async => {
+                'available': true,
+                'type': 'social_drafts_ready',
+                'title': 'Instagram post — scheduled',
+                'message': 'Current post state',
+                'deepLink': {
+                  'destination': 'social_draft',
+                  'itemId': 'post',
+                  'provider': 'instagram',
+                },
+              },
+              markNotificationRead: (_) async {
+                receipts++;
+                throw StateError('receipt offline');
+              },
+              notificationsStream: Stream.value(
+                _Snapshot([
+                  _Document({
+                    'type': 'social_drafts_ready',
+                    'title': 'Old review',
+                    'read': false,
+                    'deepLink': {'destination': 'social_review'},
+                  }),
+                ]),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Old review'), findsNothing);
+        await tester.tap(find.text('Instagram post — scheduled'));
+        await tester.pumpAndSettle();
+        expect(find.text('Scheduled'), findsOneWidget);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('View Social Post'));
+        await tester.pumpAndSettle();
+        expect(find.text('Scheduled'), findsOneWidget);
+        expect(receipts, 2);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('Notifications'), findsOneWidget);
+      },
+    );
+  }
+  testWidgets('failed route is retryable without an opened receipt', (
+    tester,
+  ) async {
+    var receipts = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        onGenerateRoute: (_) => throw StateError('route unavailable'),
+        home: NotificationsScreen(
+          currentUserId: 'owner',
+          resolveNotification: (_) async => {
+            'available': true,
+            'deepLink': {'destination': 'social_review'},
+          },
+          markNotificationRead: (_) async {
+            receipts++;
+          },
+          notificationsStream: Stream.value(
+            _Snapshot([
+              _Document({
+                'title': 'Open notice',
+                'read': false,
+                'deepLink': {'destination': 'social_review'},
+              }),
+            ]),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open notice'));
+    await tester.pumpAndSettle();
+    expect(receipts, 0);
+    expect(find.text('Retry'), findsOneWidget);
+  });
   test(
     'verified work opens Earnings without requiring campaign/private logistics reads',
     () {

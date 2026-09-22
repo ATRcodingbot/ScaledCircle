@@ -40,6 +40,10 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool initialOpened = false;
   bool opening = false;
+  final Map<String, Future<Map<String, dynamic>>> _socialStates = {};
+  Future<Map<String, dynamic>> _resolve(String id) =>
+      widget.resolveNotification?.call(id) ??
+      MobileNotificationsService.instance.call('open', {'notificationId': id});
   String? get currentUserId => widget.currentUserId;
   Stream<QuerySnapshot>? get notificationsStream => widget.notificationsStream;
   Map<String, dynamic>? get workspace => widget.workspace;
@@ -95,12 +99,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final data = notification.data() as Map<String, dynamic>;
     try {
       // In-app and physical push use the same recipient/access authority.
-      final resolved =
-          resolvedData ??
-          await (widget.resolveNotification?.call(notification.id) ??
-              MobileNotificationsService.instance.call('open', {
-                'notificationId': notification.id,
-              }));
+      final resolved = resolvedData ?? await _resolve(notification.id);
       if (!context.mounted ||
           uid != (currentUserId ?? FirebaseAuth.instance.currentUser?.uid)) {
         return;
@@ -115,33 +114,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         );
         return;
       }
-      if (data['read'] != true) {
-        // A read receipt is best effort; it must not block an authorized destination.
-        try {
-          if (widget.markNotificationRead != null) {
-            await widget.markNotificationRead!(notification);
-          } else {
-            await _markAsRead(notification.reference);
-          }
-        } catch (_) {}
-      }
       if (!context.mounted ||
           uid != (currentUserId ?? FirebaseAuth.instance.currentUser?.uid)) {
         return;
       }
+      Future<dynamic> navigation;
       if (target.kind == 'earnings') {
-        await Navigator.push(
+        navigation = Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const ScalerWalletScreen()),
         );
       } else if (target.kind == 'weather') {
-        await Navigator.push(
+        navigation = Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const WeatherAlertsScreen()),
         );
       } else if (target.kind == 'route') {
         // Keep Notifications on the real Navigator stack for visible/system Back.
-        await Navigator.of(context).pushNamed(target.route!);
+        navigation = Navigator.of(context).pushNamed(target.route!);
       } else if (target.kind == 'applicants') {
         final campaign = await FirebaseFirestore.instance
             .collection('campaigns')
@@ -152,16 +142,41 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           _showMessage(context, 'This campaign is no longer available.');
           return;
         }
-        await Navigator.push(
+        navigation = Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => CampaignApplicantsScreen(campaign: campaign),
           ),
         );
+      } else {
+        return;
       }
+      // Start navigation first. A failed route must not acquire an open receipt,
+      // and an unavailable receipt must not block the authorized destination.
+      if (data['read'] != true) {
+        try {
+          if (widget.markNotificationRead != null) {
+            await widget.markNotificationRead!(notification);
+          } else {
+            await _markAsRead(notification.reference);
+          }
+        } catch (_) {}
+      }
+      await navigation;
+      if (mounted) setState(() => _socialStates.clear());
     } catch (_) {
       if (context.mounted) {
-        _showMessage(context, "We couldn't open this notification. Try again.");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              "We couldn't load this notification. Your place is saved.",
+            ),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () => _openNotification(context, notification),
+            ),
+          ),
+        );
       }
     } finally {
       opening = false;
@@ -319,6 +334,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
               final data = notification.data() as Map<String, dynamic>;
 
+              if ((data['type']?.toString() ?? '').startsWith('social_')) {
+                final key =
+                    '${notification.id}:${data['updatedAt']}:${data['read']}';
+                return FutureBuilder<Map<String, dynamic>>(
+                  future: _socialStates.putIfAbsent(
+                    key,
+                    () => _resolve(notification.id),
+                  ),
+                  builder: (context, state) => _notificationCard(
+                    context,
+                    notification,
+                    {
+                      ...data,
+                      if (state.data?['available'] == true)
+                        ...state.data!
+                      else ...{
+                        'title': 'Earlier Social notification',
+                        'message': state.hasError
+                            ? 'Current status could not be loaded. Open to retry.'
+                            : 'Open to check the current post status.',
+                      },
+                    },
+                  ),
+                );
+              }
               return _notificationCard(context, notification, data);
             },
           );
