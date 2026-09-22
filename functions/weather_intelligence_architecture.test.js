@@ -20,7 +20,7 @@ test("Weather Intelligence keeps deterministic facts and adds the shared model t
   assert.match(mainSource, /modelVersion: "weather-opportunity-v1"/);
   assert.match(weatherSource, /combined\.includes\("heat"\)/);
   assert.deepEqual(Object.keys(weatherPackage.dependencies).sort(), [
-    "firebase-admin", "firebase-functions",
+    "firebase-admin", "firebase-functions", "polygon-clipping",
   ]);
   assert.match(mainSource, /scaledCircleIntelligence/);
   assert.match(mainSource, /exports\.analyzeScaleIntelligence/);
