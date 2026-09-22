@@ -158,6 +158,8 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],planEntitled
         if(item.data()?.businessUid!==uid||(item.data()?.platformVersions?.[input.provider]??item.data()?.currentVersion)!==input.version)throw Error('The post changed. Reload it.');
         const current=(await tx.get(db.doc(`${'socialContentVersions'}/${input.itemId}_v${input.version}`))).data();
         if(current?.businessUid!==uid||!current.variants?.some(v=>v.provider===input.provider))throw Error('Post unavailable.');
+        const preparationRef=db.doc('socialCreativePreparation/'+require('./social_creative_diversity').leaseId(uid,input));
+        const preparation=(await tx.get(preparationRef)).data();
         const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
         if(jobs.size>100||jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))
           throw Error('Review the existing scheduled post before replacing its image.');
@@ -173,6 +175,17 @@ function createMedia({db,bucket,project,now=Date.now,enabledUids=[],planEntitled
         if(!existingMedia.exists)tx.create(db.doc(`socialMediaLibraries/${uid}/items/${prepared.id}`),prepared);
         tx.create(db.doc(`socialContentVersions/${input.itemId}_v${next.version}`),next);
         tx.update(itemRef,{currentVersion:next.version,platformVersions:require('./social_customer_editor').platformVersions(item.data(),current,input.provider,next.version),updatedAt:now()});
+        const candidate=preparation?.reviewCandidate;
+        if(preparation?.businessUid===uid&&preparation.itemId===input.itemId&&preparation.provider===input.provider&&
+          preparation.version===input.version&&preparation.state==='creative_review'&&
+          candidate?.assetId===input.assetId&&candidate.revisionId===input.revisionId&&
+          candidate.sourceSha256===source.revision.contentHash&&candidate.sha256===image.sha256&&
+          candidate.preparation?.subjectQuality?.status==='passed'&&candidate.preparation.subjectQuality.checkedSha256===image.sha256){
+          // Retain the assessment and source evidence; attachment completes this
+          // exact preparation in the same transaction as its immutable revision.
+          tx.update(preparationRef,{state:'prepared',version:next.version,attachedFromVersion:input.version,
+            attachedMediaRevisionId:prepared.id,attachedAt:now(),leaseUntil:0});
+        }
         return {status:'ready_for_review',version:next.version,contentHash:next.contentHash,approved:false,scheduled:false};
       });
     },
