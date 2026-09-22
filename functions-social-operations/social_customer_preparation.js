@@ -81,6 +81,11 @@ function createPreparation({db,editor,media,now=Date.now}) {
      if(old?.state==='prepared'&&old.version===input.version&&old.recommendation?.policy===diversity.POLICY&&old.recommendation?.historyPolicy==='SocialCreativeHistoryV2'&&JSON.stringify(old.recommendation)===JSON.stringify(planned))return 'prepared';
      const infrastructureRecoveryAttempts=require('./social_preparation_recovery').claim(old);
      tx.set(lease,{businessUid:uid,itemId:input.itemId,provider:input.provider,infrastructureRecoveryAttempts,attempt,state:'preparing',leaseUntil:now()+180000,startedAt:now(),generationOverride:old?.generationOverride||(require('./social_preparation_recovery').eligible(old)?old.recommendation:null)||null,
+       // The planner needs the candidate's original recommendation to recognize
+       // an already-approved source after attachment. Dropping it here sent an
+       // approved revision back through the pending-source validation path.
+       recommendation:old?.recommendation||null,
+       previousPreparationFailure:old?.failureReason?{reason:old.failureReason,stage:old.failureStage||null,finishedAt:old.finishedAt||null}:old?.previousPreparationFailure||null,
        reviewCandidate:old?.reviewCandidate||null,version:input.version,regenerationSequence:old?.regenerationSequence||0,regenerationPreviousSourceSha256:old?.regenerationPreviousSourceSha256||null});
      return 'claimed';
    });
@@ -141,7 +146,9 @@ function createPreparation({db,editor,media,now=Date.now}) {
      const jobs=await tx.get(db.collection('socialGrowthJobs').where('businessUid','==',uid).limit(101));
      if(item?.businessUid!==uid||(item.platformVersions?.[input.provider]??item.currentVersion)!==version.version||jobs.size>100||
        jobs.docs.some(d=>d.data().provider===input.provider&&d.data().versionId?.startsWith(input.itemId+'_v')&&d.data().status!=='canceled'))throw Error('The post changed. Reopen its review.');
-     if(old?.attempt===attempt)tx.update(lease,{state:reviewCandidate?'creative_review':creativeStatus==='needs_creative'?'needs_attention':'prepared',reviewCandidate,generationStatus,version:version.version,finishedAt:now(),leaseUntil:0,failureReason:null});});
+     const retainedCandidate=!reviewCandidate&&creativeStatus==='approved_service_concept'&&old?.reviewCandidate?.assetId===recommendation.assetId&&
+       old.reviewCandidate.revisionId===recommendation.revisionId&&old.reviewCandidate.sourceSha256===recommendation.sourceHash?old.reviewCandidate:null;
+     if(old?.attempt===attempt)tx.update(lease,{state:reviewCandidate?'creative_review':creativeStatus==='needs_creative'?'needs_attention':'prepared',reviewCandidate:reviewCandidate||retainedCandidate,generationStatus,version:version.version,finishedAt:now(),leaseUntil:0,failureReason:null});});
    return result;
    }catch(error){
      await db.runTransaction(async tx=>{const old=(await tx.get(lease)).data();if(old?.attempt===attempt)tx.update(lease,{state:old.reviewCandidate?'creative_review':'needs_attention',finishedAt:now(),leaseUntil:0,
