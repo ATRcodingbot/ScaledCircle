@@ -12,7 +12,12 @@ async function collect({job,receipt,approval,session,fetchImpl=globalThis.fetch}
   const body=await response.json();
   if(!response.ok||body.error) {
    if(response.status===400&&body.error?.code===100&&/metric.*(?:invalid|unsupported)|(?:invalid|unsupported).*metric/i.test(body.error.message||""))return {unsupported:true};
-   throw Error("meta_post_insights_unavailable");
+   const error=Error('meta_post_insights_unavailable');
+   error.safeDetails={stage:edge==='insights'?'post_metrics':'post_ownership',httpStatus:response.status,
+     providerCode:Number.isInteger(body.error?.code)?body.error.code:null,
+     providerSubcode:Number.isInteger(body.error?.error_subcode)?body.error.error_subcode:null,
+     correlationId:/^[A-Za-z0-9_-]{1,150}$/.test(body.error?.fbtrace_id||'')?body.error.fbtrace_id:null};
+   throw error;
   }
   return body;
  }

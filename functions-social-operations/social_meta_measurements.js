@@ -66,8 +66,14 @@ function createCollector({db,readEvidence,now=Date.now}) {
   }catch(error){
    await db.runTransaction(async tx=>{const current=(await tx.get(ref)).data();
     if(current?.status!=="reading"||current.attempts!==claim.attempts)return;
-    const reason=/^meta_measurement_[a-z_]+$/.test(error?.message||'')?error.message:'post_measurement_unavailable';
-    tx.update(ref,{status:claim.attempts>=2?"failed":"pending",leaseUntil:0,nextAttemptAt:now()+1800000,lastFailure:reason});});
+    const reason=/^(?:meta_measurement|meta_post|meta_credential|social_oauth)_[a-z_]+$/.test(error?.message||'')?error.message:'post_measurement_unavailable';
+    const details=error?.safeDetails;
+    const safe=details&&['post_metrics','post_ownership'].includes(details.stage)?{
+      stage:details.stage,httpStatus:Number.isInteger(details.httpStatus)?details.httpStatus:null,
+      providerCode:Number.isInteger(details.providerCode)?details.providerCode:null,
+      providerSubcode:Number.isInteger(details.providerSubcode)?details.providerSubcode:null,
+      correlationId:/^[A-Za-z0-9_-]{1,150}$/.test(details.correlationId||'')?details.correlationId:null}:null;
+    tx.update(ref,{status:claim.attempts>=2?"failed":"pending",leaseUntil:0,nextAttemptAt:now()+1800000,lastFailure:reason,lastFailureDetails:safe});});
   }
  };
 }

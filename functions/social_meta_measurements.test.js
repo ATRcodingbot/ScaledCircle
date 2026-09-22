@@ -10,6 +10,16 @@ function fixture(provider="facebook") {
  const evidence={provider,providerAccountId:"123",providerPostId:"123_456",scope:"post",metrics:[{name:"views",value:0,status:"OBSERVED",period:"day",providerEndTime:"2030-01-02T00:00:00Z",complete:false}]};
  return {approval,job,receipt,evidence,observedAt:"2030-01-01T12:00:00Z"};
 }
+test('provider failure retains safe stage and correlation, excluding provider message and tokens',async()=>{
+ const f=fixture();
+ await assert.rejects(require('../functions-social-operations/social_meta_post_insights').collect({...f,
+   session:{businessUid:'owner',providerUserId:'123',accessToken:'private-fixture'},
+   fetchImpl:async()=>({ok:false,status:400,json:async()=>({error:{code:190,error_subcode:463,fbtrace_id:'trace_123',message:'must not retain private provider detail'}})})}),error=>{
+   assert.equal(error.message,'meta_post_insights_unavailable');
+   assert.deepEqual(error.safeDetails,{stage:'post_ownership',httpStatus:400,providerCode:190,providerSubcode:463,correlationId:'trace_123'});
+   assert.doesNotMatch(JSON.stringify(error),/private|retain/);return true;
+ });
+});
 test("Meta measurements bind deterministic 24h/week observations to exact immutable receipt",()=>{
  const f=fixture();const jobs=measurement.plan(f.job,f.receipt,f.approval);
  assert.deepEqual(jobs,measurement.plan(f.job,f.receipt,f.approval));assert.equal(jobs.length,2);
