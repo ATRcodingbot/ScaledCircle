@@ -1,3 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../navigation/context_back_button.dart';
+import '../../services/business_workspace_service.dart';
 import 'package:flutter/material.dart';
 import 'appointment_offer_dialog.dart';
 import '../../services/business_email_service.dart';
@@ -39,13 +42,13 @@ class _ConversationState extends State<BusinessEmailConversationScreen> {
         'operationId': widget.operationId,
       });
       if (!mounted) return;
-      setState(() => data = value);
-    } catch (_) {
+      setState(() {
+        data = value;
+        feedback = null;
+      });
+    } catch (error) {
       if (mounted) {
-        setState(
-          () => feedback =
-              'The conversation could not be loaded. Your edited text is preserved.',
-        );
+        setState(() => feedback = businessEmailLoadError(error));
       }
     }
   }
@@ -258,12 +261,33 @@ class _ConversationState extends State<BusinessEmailConversationScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Business conversation')),
+    appBar: AppBar(
+      leading: const ContextBackButton(fallback: '/business/email-connection'),
+      title: const Text('Business conversation'),
+    ),
     body: data == null
         ? Center(
-            child: TextButton(
-              onPressed: load,
-              child: Text(feedback ?? 'Loading conversation…'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(feedback ?? 'Loading conversation…'),
+                if (feedback != null)
+                  TextButton(onPressed: load, child: const Text('Retry')),
+                if (feedback != null)
+                  TextButton(
+                    onPressed: () async {
+                      final destination =
+                          '/business/email-connection?operation=${Uri.encodeQueryComponent(widget.operationId)}';
+                      await FirebaseAuth.instance.signOut();
+                      BusinessWorkspaceSession.clear();
+                      if (context.mounted)
+                        Navigator.of(
+                          context,
+                        ).pushNamedAndRemoveUntil(destination, (_) => false);
+                    },
+                    child: const Text('Sign in with another account'),
+                  ),
+              ],
             ),
           )
         : ListView(

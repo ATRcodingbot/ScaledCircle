@@ -57,3 +57,12 @@ test('controlled operational alert remains eligible; unclaimed packaging failure
  assert.equal((await db.collection('businessMailboxes/owner/ownerAlertReceipts').get()).size,1);
  await d.ref.update({status:'queued',attempts:1});await alerts.drain('owner');assert.equal((await d.ref.get()).data().status,'queued');
 });
+
+test('new intake uses inquiry wording; later replies retain reply classification and never include content',async()=>{
+ await db.doc('businessMailboxes/owner/operations/op').update({state:'received',source:'authorized_inbox_inquiry'});
+ await alerts.enqueue('owner','op');clock=Date.parse('2026-09-21T12:01:00Z');await alerts.drain('owner');
+ const job=(await db.collection('outboundEmailJobs').get()).docs[0].data();assert.equal(job.subject,'New Business inquiry received');assert(!job.text.includes('PRIVATE'));
+ await db.doc('businessMailboxes/owner/replies/reply2').set({businessId:'owner',operationId:'op',classification:'substantive',receivedAt:clock,body:'PRIVATE'});
+ await alerts.enqueue('owner','op');clock+=300001;await alerts.drain('owner');
+ assert.deepEqual((await db.collection('outboundEmailJobs').get()).docs.map(d=>d.data().subject).sort(),['A customer replied','New Business inquiry received'].sort());
+});

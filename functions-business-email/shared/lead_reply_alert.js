@@ -33,7 +33,7 @@ function createAlerts({db,getOwner,now=Date.now}){
    const alertId=hash([businessId,operationId,Math.floor(now()/300000)]),ref=root(businessId).collection('ownerAlerts').doc(alertId),old=await tx.get(ref);
    // A burst of replies has one notification email, with no private message
    // body in the transactional queue. The exact conversation is authenticated.
-   if(!old.exists)tx.create(ref,{businessId,operationId,alertId,ownerEmail:identity.email.toLowerCase(),state:'pending',createdAt:now(),notBefore:Math.max(now()+300000,quietUntil(latest.policy.notifications,latest.policy.timeZone,now()))});
+   if(!old.exists)tx.create(ref,{businessId,operationId,alertId,ownerEmail:identity.email.toLowerCase(),state:'pending',inboundKind:op.state==='received'&&['authorized_inbox_inquiry','authorized_inquiry_label'].includes(op.source)&&seen.every(d=>!d.exists)?'new_inquiry':'reply',createdAt:now(),notBefore:Math.max(now()+300000,quietUntil(latest.policy.notifications,latest.policy.timeZone,now()))});
    rows.forEach((d,i)=>{if(!seen[i].exists)tx.create(receipts[i],{alertId,operationId,recordedAt:now()});});
    return {queued:!old.exists,alertId};
   });
@@ -62,8 +62,8 @@ function createAlerts({db,getOwner,now=Date.now}){
     const jobId='email_reply_'+v.alertId,job=db.doc('outboundEmailJobs/'+jobId),old=await tx.get(job);
     if(old.data()?.status==='held_quiet'&&(old.data().attempts||0)===0)tx.update(job,{status:'retry_requested'});
     if(!old.exists)tx.create(job,{template:TEMPLATE,businessUid:businessId,operationId:v.operationId,alertId:v.alertId,to:v.ownerEmail,ownerEmail:v.ownerEmail,
-     fromAddress:'support@scaledcircle.com',subject:'A Business email reply needs your review',
-     text:'A reply is ready in your Business conversation. Review it securely in ScaledCircle:\nhttps://scaledcircle.com/#/business/email-connection?operation='+encodeURIComponent(v.operationId)+'\nOpening this link does not send or approve a message.',
+     fromAddress:'support@scaledcircle.com',subject:v.inboundKind==='new_inquiry'?'New Business inquiry received':'A customer replied',
+     text:(v.inboundKind==='new_inquiry'?'A new inquiry was received.':'A customer replied.')+' Open the saved conversation securely in ScaledCircle:\nhttps://scaledcircle.com/#/business/email-connection?operation='+encodeURIComponent(v.operationId)+'\nOpening this link does not send or approve a message.',
      status:'queued',attempts:0,connectionGeneration:mail.data().generation,createdAtMs:now()});
     tx.update(d.ref,{state:'queued',jobId,queuedAt:now()});queued++;
    });

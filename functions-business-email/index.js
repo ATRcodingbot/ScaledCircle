@@ -28,7 +28,7 @@ function service() {
       other:require('./other_mail').createProvider()})});
 }
 const options={region:'us-east1',maxInstances:2,timeoutSeconds:120,secrets:[CLIENT_SECRET,ENCRYPTION_KEY,...(inferenceEnabled?[INFERENCE_KEY]:[]),...(microsoftEnabled?[MICROSOFT_SECRET]:[])]};
-exports.businessEmailOperationsV1=onCall({...options,enforceAppCheck:false},async request=>{
+exports.businessEmailOperationsV1=onCall({...options,memory:'512MiB',enforceAppCheck:false},async request=>{
   try{return await service().execute(request);}catch(error){
     console.warn('Business Email action held',{code:error.code||'unavailable'});
     throw new HttpsError(error.code||'unavailable',error.code?error.message:'This action needs checking. No automatic retry was made.');

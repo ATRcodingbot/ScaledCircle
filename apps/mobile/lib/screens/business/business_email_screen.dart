@@ -38,7 +38,7 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.initialOperationId == null) _load();
   }
 
   @override
@@ -93,11 +93,11 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
       if (data?['connection']?['pending'] == true) {
         _timer = Timer(const Duration(seconds: 5), _load);
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'Connection status could not be checked. Try again.';
+          _error = businessEmailLoadError(error);
         });
       }
     }
@@ -366,6 +366,12 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.initialOperationId != null) {
+      return BusinessEmailConversationScreen(
+        service: _service,
+        operationId: widget.initialOperationId!,
+      );
+    }
     final c = _data?['connection'] as Map? ?? {},
         learning = _data?['learning'] as Map? ?? {};
     return Scaffold(
@@ -380,11 +386,13 @@ class _BusinessEmailScreenState extends State<BusinessEmailScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (_error != null) Text(_error!),
-                  if (_data == null)
+                  if (_error != null)
+                    TextButton(onPressed: _load, child: const Text('Retry')),
+                  if (_data == null && _error == null)
                     const Text(
                       'Business Email requires an eligible membership and permission to read communications. Ask your workspace owner to review your access.',
-                    )
-                  else ...[
+                    ),
+                  if (_data != null) ...[
                     Text(
                       c['status'] == 'connected'
                           ? 'Connected: ${c['email']}'

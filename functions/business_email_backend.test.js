@@ -490,3 +490,14 @@ test('Managed Growth owns campaign execution; lower paid plans keep mailbox/Core
  }
 });
 
+
+test('exact stored conversation ignores live provider and sending/model readiness, enforces original tenant',async()=>{
+ await credential({read:true,send:false});
+ await db.doc('businessMailboxes/owner/operations/inquiry').set({businessId:'owner',state:'received',from:'owner@example.test',recipient:'recipient@example.test',subject:'Pricing',providerThreadId:'controlled',controlledTest:true});
+ await db.doc('businessMailboxes/owner/replies/inbound').set({businessId:'owner',operationId:'inquiry',providerThreadId:'controlled',from:'recipient@example.test',to:'owner@example.test',body:'Controlled pricing inquiry',classification:'substantive'});
+ provider.thread=async()=>{throw Error('provider unavailable');};beta.sendEnabled=false;
+ const view=await call('loadConversation',{operationId:'inquiry'});assert.equal(view.operation.controlledTest,true);assert.equal(view.replies.length,1);assert.equal(sends,0);
+ await assert.rejects(service.execute({auth:{uid:'other'},data:{businessId:'owner',operation:'loadConversation',input:{operationId:'inquiry'}}}),/denied/);
+ await assert.rejects(call('loadConversation',{operationId:'missing'}),/Choose this Business conversation/);
+ assert.equal((await db.collection('businessMailboxes/owner/operations').get()).size,1);
+});

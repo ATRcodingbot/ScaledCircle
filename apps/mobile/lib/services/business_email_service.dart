@@ -32,18 +32,7 @@ class BusinessEmailService {
   }
 
   Future<Map<String, dynamic>?> availability() async {
-    try {
-      return await call('load');
-    } on FirebaseFunctionsException catch (e) {
-      if ([
-        'permission-denied',
-        'not-found',
-        'unimplemented',
-      ].contains(e.code)) {
-        return null;
-      }
-      rethrow;
-    }
+    return await call('load');
   }
 }
 
@@ -83,3 +72,18 @@ String businessEmailOutcome(dynamic state) => switch (state) {
   'bounced' => 'Bounced / invalid address',
   _ => 'Needs evidence review',
 };
+
+String businessEmailLoadError(Object error) {
+  final code = error is FirebaseFunctionsException ? error.code : '';
+  return switch (code) {
+    'unauthenticated' => 'Sign in to open this Business conversation.',
+    'permission-denied' =>
+      'This account cannot open this Business conversation. Switch to the authorized Business account or ask its owner to review your access.',
+    'not-found' =>
+      'This conversation is unavailable. The original link has been retained.',
+    'failed-precondition' =>
+      'The mailbox connection needs attention. Your saved conversation has not been deleted. Open Business Email to review the connection.',
+    _ =>
+      'Business Email is temporarily unavailable. Retry to open the same conversation. No message was sent.',
+  };
+}
