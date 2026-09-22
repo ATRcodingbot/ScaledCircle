@@ -153,3 +153,14 @@ test('regenerating an attached approved image carries its original source into t
  assert.deepEqual((await db.doc('socialContentVersions/'+s.itemId+'_v1').get()).data(),version);
  assert.equal((await db.collection('socialGrowthApprovals').where('businessUid','==',s.uid).get()).size,0);
 });
+
+test('inline review uses full revision history beyond 100 without overriding low confidence',async()=>{
+ const s=await setup('inline_history');const batch=db.batch();
+ for(let n=0;n<101;n++)batch.set(db.doc('socialContentVersions/'+s.uid+'_archive'+n),{businessUid:s.uid,variants:[{provider:'facebook',copy:'Historical unrelated notice '+n}]});
+ await batch.commit();assert.equal((await s.store.preview(s.uid,s.input)).ready,true);
+ const subject={policy:'SocialSubjectVisibilityV1',checkedSha256:s.candidate.sha256,status:'blocked',reasons:['The image subject needs a clearer review before approval.'],observations:{confidence:.7}};
+ await s.lease.update({reviewCandidate:{...s.candidate,preparation:{...s.candidate.preparation,subjectQuality:subject}}});
+ const held=await s.store.preview(s.uid,s.input);assert.equal(held.ready,false);await assert.rejects(s.store.approve(s.uid,s.input));
+ assert.deepEqual((await s.lease.get()).data().reviewCandidate.preparation.subjectQuality,subject);
+ assert.equal((await db.collection('socialGrowthJobs').where('businessUid','==',s.uid).get()).size,0);
+});

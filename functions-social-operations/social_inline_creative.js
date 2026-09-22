@@ -40,8 +40,7 @@ async function proposal({db,ctx,read=ref=>ref.get()}) {
   const version=social.contentItemVersion({businessUid:uid,planId:ctx.version.planId,previousVersion:ctx.item.currentVersion,now:ctx.version.createdAt,
     item:{...ctx.version,variants:ctx.version.variants.map(v=>v.provider===provider?{...v,mediaAssetId:c.assetId,mediaRevisionId:media.id,
       mediaRequirement:'approved_image',format:'feed',altText:source.altText,copy:v.copy}:v)}});
-  const recent=await read(db.collection('socialContentVersions').where('businessUid','==',uid).limit(101));
-  if(recent.size>100)throw Error('Content history needs review.');
+  const recent=await require('./social_version_history').readVersions({db,uid,read});
   const checks=require('./social_customer_quality').reviewChecks({variant:version.variants.find(v=>v.provider===provider),revision:media,mediaAuthorityValid:true,
     recentVariants:recent.docs.filter(d=>!d.id.startsWith(ctx.itemRef.id+'_v')).flatMap(d=>d.data().variants||[])});
   // Assess the prospective revision itself. A prior draft's score cannot confer

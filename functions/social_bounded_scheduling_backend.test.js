@@ -96,3 +96,16 @@ test('twenty terminal historical versions do not consume the one fresh preparati
   preparation:{prepare:async(_,i)=>{prepared.push(i.itemId);}}});
  const result=await cycle.run(uid,{limit:1});assert.deepEqual(prepared,[planId+'_fresh']);assert.deepEqual(scheduled,prepared);assert.equal(result.results.filter(r=>r.preserved).length,20);assert.equal((await db.doc('socialManagedCycles/'+uid).get()).data().cursor,21);
 });
+
+test('exhausted creative remains an exception while the next visit advances a different authorized topic',async()=>{
+ const f=fixture(),uid='exhausted_queue_'+Date.now(),planId=uid+'_plan',items=['blocked','eligible'].map(itemKey=>({itemKey,variants:[{provider:'facebook'}]}));
+ const plan={...f.plan,businessUid:uid,strategy:{services:['decks']},items};
+ const policy=bounded.createPolicy({uid,actorUid:uid,planId,plan,services:['decks'],destinations:['https://example.com/decks'],providers:['facebook'],startsAt:f.now,endsAt:f.now+86400000,now:f.now});
+ await db.doc('socialContentPlans/'+planId).set(plan);await db.doc('socialManagedPolicies/'+uid).set(policy);
+ const key=require('crypto').createHash('sha256').update([uid,policy.id,planId+'_blocked','facebook'].join(':')).digest('hex');
+ const audit={businessUid:uid,policyId:policy.id,attempts:1,status:'replacement_requested'};await db.doc('socialManagedRecovery/'+key).set(audit);
+ const prepared=[],scheduled=[];const cycle=require('../functions-social-operations/social_managed_cycle').createCycle({db,now:()=>f.now,store:{preview:async()=>({version:1,reasons:[],creativeNeedsPreparation:true}),scheduleManaged:async(_,input)=>{scheduled.push(input.itemId);return {status:'scheduled'};}},preparation:{prepare:async(_,input)=>{prepared.push(input.itemId);if(input.itemId.endsWith('_blocked'))return {reviewCandidate:{sha256:'hash',preparation:{subjectQuality:{status:'blocked',checkedSha256:'hash'}}}};}}});
+ const first=await cycle.run(uid,{limit:1});assert.equal(first.results[0].reasons[0].code,'creative_recovery_exhausted');
+ await cycle.run(uid,{limit:1});assert.deepEqual(scheduled,[planId+'_eligible']);assert.deepEqual(prepared,[planId+'_blocked',planId+'_eligible']);
+ assert.deepEqual((await db.doc('socialManagedRecovery/'+key).get()).data(),audit);
+});
