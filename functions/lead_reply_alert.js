@@ -38,11 +38,26 @@ function createAlerts({db,getOwner,now=Date.now}){
    return {queued:!old.exists,alertId};
   });
  }
+ async function reconcileDelivery(businessId,alertId){
+  const ref=root(businessId).collection('ownerAlerts').doc(alertId);
+  return db.runTransaction(async tx=>{
+   const saved=await tx.get(ref),v=saved.data();
+   if(!v||v.businessId!==businessId||v.alertId!==alertId||v.jobId!=='email_reply_'+alertId)return false;
+   // Read current delivery authority, never an event snapshot that may arrive late.
+   const job=(await tx.get(db.doc('outboundEmailJobs/'+v.jobId))).data();
+   if(!validJob(job)||job.businessUid!==businessId||job.alertId!==alertId||job.operationId!==v.operationId||job.to!==v.ownerEmail)return false;
+   if(job.status!=='sent'||!job.sentAt)return false;
+   if(v.state==='sent'&&v.deliveryStatus==='sent'&&v.providerAcceptedAt===job.sentAt)return true;
+   tx.update(ref,{state:'sent',enqueueState:'queued',deliveryStatus:'sent',providerAcceptedAt:job.sentAt,deliveryReconciledAt:now()});
+   return true;
+  });
+ }
  async function drain(businessId){
   // Recover a delivery handler failure before it acquired any send lease. Reuse
   // the original job and receipt; never replay an attempted or uncertain send.
   const stranded=await root(businessId).collection('ownerAlerts').where('state','==','queued').limit(30).get();
   for(const d of stranded.docs){
+   if(await reconcileDelivery(businessId,d.id))continue;
    const v=d.data();if(v.jobId!=='email_reply_'+v.alertId||now()-(v.queuedAt||now())<600000)continue;
    const ref=db.doc('outboundEmailJobs/'+v.jobId),snapshot=await ref.get(),job=snapshot.data();
    if(!job||job.status!=='queued'||job.attempts!==0||job.preclaimRecoveryAt||!await permitted(job,{ignoreQuiet:true}))continue;
@@ -52,7 +67,7 @@ function createAlerts({db,getOwner,now=Date.now}){
    });
   }
   const rows=await root(businessId).collection('ownerAlerts').where('state','==','pending').limit(30).get();let queued=0;
-  for(const d of rows.docs){if(d.data().notBefore>now())continue;
+  for(const d of rows.docs){if(await reconcileDelivery(businessId,d.id))continue;if(d.data().notBefore>now())continue;
    const identity=await getOwner(businessId);
    await db.runTransaction(async tx=>{
     const [alert,saved,mail]=await Promise.all([tx.get(d.ref),tx.get(policy(businessId)),tx.get(root(businessId))]);const v=alert.data(),p=saved.data();
@@ -82,6 +97,6 @@ function createAlerts({db,getOwner,now=Date.now}){
   await db.runTransaction(async tx=>{const r=await tx.get(reference);if(!['queued','retry_requested'].includes(r.data()?.status)||(r.data()?.attempts||0)!==0)return;
    tx.update(reference,{status:'held_quiet'});tx.update(root(job.businessUid).collection('ownerAlerts').doc(job.alertId),{state:'pending',notBefore:due});});
  }
- return {enqueue,drain,permitted,defer};
+ return {enqueue,drain,permitted,defer,reconcileDelivery};
 }
 module.exports={TEMPLATE,quietUntil,validJob,createAlerts};

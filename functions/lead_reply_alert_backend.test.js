@@ -66,3 +66,19 @@ test('new intake uses inquiry wording; later replies retain reply classification
  await alerts.enqueue('owner','op');clock+=300001;await alerts.drain('owner');
  assert.deepEqual((await db.collection('outboundEmailJobs').get()).docs.map(d=>d.data().subject).sort(),['A customer replied','New Business inquiry received'].sort());
 });
+
+test('sent child reconciles parent once without replay; late reconciliation uses current authority',async()=>{
+ clock=Date.parse('2026-09-21T15:00:00Z');await db.doc('businessMailboxes/owner/replies/reply').update({receivedAt:clock-1});
+ const {alertId}=await alerts.enqueue('owner','op');clock+=300001;await alerts.drain('owner');
+ const parent=db.doc('businessMailboxes/owner/ownerAlerts/'+alertId),job=db.doc('outboundEmailJobs/email_reply_'+alertId);
+ const before=(await parent.get()).data();assert.equal(await alerts.reconcileDelivery('owner',alertId),false);
+ await job.update({status:'sent',attempts:1,sentAt:'2026-09-21T15:05:01Z',providerResult:'accepted'});
+ clock+=600001;await Promise.all([alerts.drain('owner'),alerts.reconcileDelivery('owner',alertId)]);
+ const reconciled=(await parent.get()).data();assert.equal(reconciled.state,'sent');assert.equal(reconciled.enqueueState,'queued');assert.equal(reconciled.queuedAt,before.queuedAt);
+ assert.equal(reconciled.providerAcceptedAt,'2026-09-21T15:05:01Z');clock+=600001;
+ // Delayed/repeated calls and quiet-hour deferral cannot regress a completed delivery.
+ await alerts.reconcileDelivery('owner',alertId);await alerts.defer({...((await job.get()).data()),status:'queued',attempts:0},job);await alerts.drain('owner');
+ assert.deepEqual((await parent.get()).data(),reconciled);assert.equal((await job.get()).data().attempts,1);
+ assert.equal((await db.collection('outboundEmailJobs').get()).size,1);assert.equal((await alerts.enqueue('owner','op')).queued,false);
+ assert.equal(await alerts.reconcileDelivery('other',alertId),false);
+});
