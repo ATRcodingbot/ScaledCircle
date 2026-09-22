@@ -8,8 +8,16 @@ function ring(raw){
  if(points[0][0]!==points.at(-1)[0]||points[0][1]!==points.at(-1)[1])points.push([...points[0]]);
  return points;
 }
-function geometry(value){
- if(value?.geometry?.type)return geometry(value.geometry);
+function geometry(value,depth=0){
+ if(depth>8)throw Error('weather_geometry_unresolved');
+ if(value?.geometry?.type)return geometry(value.geometry,depth+1);
+ if(value?.type==='GeometryCollection'){
+   if(!Array.isArray(value.geometries)||!value.geometries.length||value.geometries.length>100)throw Error('weather_geometry_unresolved');
+   // NWS county boundaries may contain multiple polygon collections, including
+   // offshore islands. Preserve their complete official footprint and holes.
+   const parts=value.geometries.map(member=>geometry(member,depth+1));
+   return clipping.union(...parts);
+ }
  if(value?.type==='Polygon')return [value.coordinates.map(ring)];
  if(value?.type==='MultiPolygon')return value.coordinates.map(p=>p.map(ring));
  const area=decode(value);

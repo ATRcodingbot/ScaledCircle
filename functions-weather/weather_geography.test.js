@@ -18,3 +18,20 @@ test('polygon authority is retained even when affected county is broader; prefer
  const a=await g.alertGeometry({geometry:box(0,0),properties:{geocode:{UGC:['MDC003']}}},async()=>{throw Error('must not broaden polygon');});
  assert.equal(g.matches(g.coverage({preferences:{areas:[saved('changed',10)]}}),a).length,0);
 });
+
+test('NWS county GeometryCollection preserves disconnected multipolygons and holes',async()=>{
+ const withHole=box(0,0,4);withHole.coordinates.push(box(1,1).coordinates[0]);
+ const collection={type:'GeometryCollection',geometries:[{type:'MultiPolygon',coordinates:[withHole.coordinates,box(10,0).coordinates]},{type:'MultiPolygon',coordinates:[box(20,0).coordinates]}]};
+ const original=JSON.stringify(collection);
+ const result=await g.alertGeometry({geometry:null,properties:{geocode:{UGC:['MDC003']}}},async()=>({geometry:collection}));
+ assert.equal(g.within(g.geometry(box(.1,.1,.1)),result.geometry),true);
+ assert.equal(g.within(g.geometry(box(1.1,1.1,.1)),result.geometry),false);
+ assert.equal(g.within(g.geometry(box(10.1,.1,.1)),result.geometry),true);
+ assert.equal(g.within(g.geometry(box(20.1,.1,.1)),result.geometry),true);
+ assert.equal(g.within(g.geometry(box(8,0)),result.geometry),false);
+ assert.equal(JSON.stringify(collection),original);
+ assert.throws(()=>g.geometry({type:'GeometryCollection',geometries:[]}),/unresolved/);
+ assert.throws(()=>g.geometry({type:'GeometryCollection',geometries:[{type:'Point',coordinates:[0,0]}]}),/unresolved/);
+ let deep=box(0,0);for(let i=0;i<10;i++)deep={type:'GeometryCollection',geometries:[deep]};
+ assert.throws(()=>g.geometry(deep),/unresolved/);
+});

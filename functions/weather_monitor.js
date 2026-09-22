@@ -135,7 +135,7 @@ function createService({db,getOwner,now=Date.now,fetchImpl=fetch,providerBoundar
      let url='https://api.weather.gov/alerts?area=MD&limit=500&start='+encodeURIComponent(new Date(now()-48*3600000).toISOString());
      for(let page=0;url&&page<6;page++){const response=await nws(url);if(!Array.isArray(response.features))throw Error('weather_provider_response_invalid');features.push(...response.features);url=response.pagination?.next||null;}
      if(url)throw Error('weather_provider_response_incomplete');
-   }catch{for(const uid of ids)await db.doc('weatherMonitoringState/'+uid).set({status:'provider_unavailable',checkedAt:now()},{merge:true});return {status:'provider_unavailable'};}
+   }catch(error){const reason=/^weather_[a-z_]+$/.test(error.message)?error.message:'weather_check_unavailable';for(const uid of ids)await db.doc('weatherMonitoringState/'+uid).set({status:'provider_unavailable',checkedAt:now(),reason},{merge:true});return {status:'provider_unavailable',reason};}
    for(const uid of ids){try{await monitorUser(uid,features);}catch(error){await db.doc('weatherMonitoringState/'+uid).set({status:'coverage_or_provider_unavailable',checkedAt:now(),reason:/^weather_[a-z_]+$/.test(error.message)?error.message:'weather_check_unavailable'},{merge:true});}}
    await resumeDeferred();return {status:'checked',workspaces:ids.length};
  }
