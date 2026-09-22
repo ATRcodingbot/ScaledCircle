@@ -353,7 +353,9 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
-                'Recommended mix for remaining posts: ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'text').length} text posts · ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] != 'text').length} image posts. Platform versions may share a concept for the same idea.',
+                _rows.every((r) => r['publicationStatus'] != null)
+                    ? 'No unscheduled items remain in this batch. Future content still depends on recurring preparation, quality checks and your allowance; see Content coverage in Social Manager.'
+                    : 'Recommended mix for unscheduled items in this batch: ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] == 'text').length} text posts · ${_rows.where((r) => r['publicationStatus'] == null && r['creativeRecommendation']?['format'] != 'text').length} image posts. Platform versions may share a concept for the same idea.',
               ),
             ),
           if (_rows.where((r) => r['creativeSupply'] is Map).isNotEmpty)
@@ -415,11 +417,11 @@ class _CustomerSocialReviewQueueState extends State<CustomerSocialReviewQueue> {
                           row['title'].toString(),
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        Text(
-                          socialEvidenceText(
-                            row['strategyTitle'],
-                            'Social strategy',
-                          ),
+                        if (row['reviewedPost']?['variant']?['copy'] is String)
+                          Text(row['reviewedPost']['variant']['copy'], maxLines: 5, overflow: TextOverflow.ellipsis),
+                        ExpansionTile(
+                          title: const Text('Strategy context'),
+                          children: [Text(socialEvidenceText(row['strategyTitle'], 'Social strategy'))],
                         ),
                         if (row['reviewCandidate'] is Map)
                           SocialCandidatePreview(
